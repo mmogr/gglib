@@ -23,7 +23,7 @@ fn test_new_model_serialization() {
         Utc::now(),
     );
     original_model.architecture = Some("llama".to_string());
-    original_model.quantization = Some("Q4_0".to_string());
+    original_model.variant_label = Some("Q4_0".to_string());
     original_model.context_length = Some(4096);
     original_model.metadata = metadata.clone();
 
@@ -38,7 +38,7 @@ fn test_new_model_serialization() {
     assert_eq!(deserialized.name, original_model.name);
     assert_eq!(deserialized.param_count_b, original_model.param_count_b);
     assert_eq!(deserialized.architecture, original_model.architecture);
-    assert_eq!(deserialized.quantization, original_model.quantization);
+    assert_eq!(deserialized.variant_label, original_model.variant_label);
     assert_eq!(deserialized.context_length, original_model.context_length);
     assert_eq!(deserialized.metadata, original_model.metadata);
 }

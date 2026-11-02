@@ -17,7 +17,7 @@ fn model(name: &str, file: &str, quantization: Option<&str>) -> NewModel {
         7.0,
         Utc::now(),
     );
-    new.quantization = quantization.map(str::to_owned);
+    new.variant_label = quantization.map(str::to_owned);
     new
 }
 

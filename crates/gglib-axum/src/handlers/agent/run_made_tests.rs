@@ -45,7 +45,7 @@ async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
         7.0,
         chrono::Utc::now(),
     );
-    entry.quantization = Some("Q4_K_M".to_owned());
+    entry.variant_label = Some("Q4_K_M".to_owned());
     let model_id = state.core.models().add(entry).await.unwrap().id;
     let server = ServerInfo {
         model_id,

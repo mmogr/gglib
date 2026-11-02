@@ -69,10 +69,15 @@ pub struct ModelDetailDto {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub architecture: Option<String>,
-    /// Quantization type (e.g. `"Q4_K_M"`, `"F16"`).
+    /// The label the model's type is shown by (`"Q4_K_M"`, `"UD-Q4_K_XL"`):
+    /// see [`Model::quant_label`](crate::domain::Model::quant_label).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quantization: Option<String>,
+    /// The bits each weight takes on average, read from the tensor data.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bits_per_weight: Option<f64>,
     /// Maximum context length in tokens.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -193,6 +198,7 @@ impl ModelDetailDto {
     /// contexts where serving state is not relevant (e.g. the CLI).
     pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
         let image_input = model.image_input();
+        let quantization = model.quant_label().map(str::to_owned);
         let missing_components = model.missing_components();
         Self {
             id: model.id,
@@ -207,7 +213,8 @@ impl ModelDetailDto {
                 .map(|path| path.to_string_lossy().to_string()),
             param_count_b: model.param_count_b,
             architecture: model.architecture,
-            quantization: model.quantization,
+            quantization,
+            bits_per_weight: model.bits_per_weight,
             context_length: model.context_length,
             expert_count: model.expert_count,
             expert_used_count: model.expert_used_count,

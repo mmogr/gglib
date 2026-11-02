@@ -207,6 +207,9 @@ impl ModelRepository for SqliteModelRepository {
         }
     }
 
+    /// A re-registration whose header gave its type or its bits per weight
+    /// replaces both, so an old type is never paired with new bits; one that
+    /// gave neither keeps the pair stored.
     async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError> {
         let metadata_json = serde_json::to_string(&model.metadata)
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
@@ -250,11 +253,10 @@ impl ModelRepository for SqliteModelRepository {
         // bound when it has one, so an update takes no id from the sequence.
         let _result = sqlx::query(
             r"INSERT INTO models (
-                id, name, file_path, projector_path, param_count_b, architecture, quantization,
-                context_length, expert_count, expert_used_count, expert_shared_count,
-                metadata, added_at, hf_repo_id, hf_commit_sha,
-                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec, image_family
-            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id, name, file_path, projector_path, param_count_b, architecture,
+                variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count,
+                metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec, image_family
+            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 -- Coalesced, not assigned. A re-registration that carries no
@@ -268,7 +270,9 @@ impl ModelRepository for SqliteModelRepository {
                 -- Coalesced as the projector is: a re-registration whose
                 -- table read no family never erases the one stored.
                 image_family = COALESCE(excluded.image_family, models.image_family),
-                quantization = COALESCE(excluded.quantization, models.quantization),
+                variant_label = COALESCE(excluded.variant_label, models.variant_label),
+                file_type = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.file_type, excluded.file_type),
+                bits_per_weight = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.bits_per_weight, excluded.bits_per_weight),
                 context_length = COALESCE(excluded.context_length, models.context_length),
                 expert_count = COALESCE(excluded.expert_count, models.expert_count),
                 expert_used_count = COALESCE(excluded.expert_used_count, models.expert_used_count),
@@ -292,7 +296,9 @@ impl ModelRepository for SqliteModelRepository {
         .bind(model.projector_path.as_deref().map(normalized_file_path_string))
         .bind(model.param_count_b)
         .bind(&model.architecture)
-        .bind(&model.quantization)
+        .bind(&model.variant_label)
+        .bind(model.file_type.map(|file_type| i64::from(file_type.0)))
+        .bind(model.bits_per_weight)
         .bind(model.context_length.map(context_length_column))
         .bind(model.expert_count.map(i64::from))
         .bind(model.expert_used_count.map(i64::from))
@@ -371,7 +377,7 @@ impl ModelRepository for SqliteModelRepository {
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ?, image_family = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, variant_label = ?, file_type = ?, bits_per_weight = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ?, image_family = ? WHERE id = ?"
         )
             .bind(&model.name)
             // Normalised exactly as `insert` does. `find_by_path` is a plain
@@ -383,7 +389,9 @@ impl ModelRepository for SqliteModelRepository {
             .bind(model.projector_path.as_deref().map(normalized_file_path_string))
             .bind(model.param_count_b)
             .bind(&model.architecture)
-            .bind(&model.quantization)
+            .bind(&model.variant_label)
+            .bind(model.file_type.map(|file_type| i64::from(file_type.0)))
+            .bind(model.bits_per_weight)
             .bind(model.context_length.map(context_length_column))
             .bind(&metadata_json)
             .bind(&model.hf_repo_id)
@@ -1080,3 +1088,7 @@ mod listed_id_tests;
 #[cfg(test)]
 #[path = "sqlite_model_repository_component_files_tests.rs"]
 mod component_files_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_header_facts_tests.rs"]
+mod header_facts_tests;

@@ -319,8 +319,8 @@ fn show_changes_preview(existing: &Model, updated: &Model) {
     );
     show_field_change(
         "Quantization",
-        &format_option(existing.quantization.as_deref()),
-        &format_option(updated.quantization.as_deref()),
+        &format_option(existing.quant_label()),
+        &format_option(updated.quant_label()),
     );
     show_field_change(
         "Context Length",

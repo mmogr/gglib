@@ -50,7 +50,7 @@ async fn library(linked: Option<&str>) -> Library {
     let mut model = NewModel::new("zeta".to_string(), weights, 8.0, chrono::Utc::now());
     model.hf_repo_id = Some(REPO.to_string());
     model.hf_commit_sha = Some(RECORDED.to_string());
-    model.quantization = Some("Q8_0".to_string());
+    model.variant_label = Some("Q8_0".to_string());
     model.tags = vec!["mine".to_string()];
     model.inference_defaults = Some(InferenceConfig {
         temperature: Some(0.3),
@@ -194,6 +194,6 @@ async fn the_model_keeps_its_row_and_its_owners_fields_set_during_the_download()
     assert_eq!(model.tags, ["mine"]);
     let defaults = model.inference_defaults.as_ref().expect("its defaults");
     assert_eq!(defaults.temperature, Some(0.3));
-    assert_eq!(model.quantization.as_deref(), Some("Q8_0"));
+    assert_eq!(model.quant_label(), Some("Q8_0"));
     assert_eq!(model.hf_commit_sha.as_deref(), Some(NEWER));
 }

@@ -295,7 +295,7 @@ mod tests {
                 7.0,
                 chrono::Utc::now(),
             );
-            new.quantization = Some(quantization.to_owned());
+            new.variant_label = Some(quantization.to_owned());
             ctx.app.models().add(new).await.unwrap()
         };
         let q4 = add("qwen3", "q4.gguf", "Q4_K_M").await;

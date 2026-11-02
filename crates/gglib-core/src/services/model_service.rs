@@ -429,7 +429,7 @@ impl ModelService {
         // Collect distinct quantizations
         let mut quantizations: Vec<String> = models
             .iter()
-            .filter_map(|m| m.quantization.clone())
+            .filter_map(|m| m.quant_label().map(str::to_owned))
             .filter(|q| !q.is_empty())
             .collect::<HashSet<_>>()
             .into_iter()
@@ -1153,7 +1153,7 @@ mod tests {
             7.0,
             Utc::now(),
         );
-        model1.quantization = Some("Q4_K_M".to_string());
+        model1.variant_label = Some("Q4_K_M".to_string());
         model1.context_length = Some(4096);
 
         let mut model2 = NewModel::new(
@@ -1162,7 +1162,7 @@ mod tests {
             13.0,
             Utc::now(),
         );
-        model2.quantization = Some("Q8_0".to_string());
+        model2.variant_label = Some("Q8_0".to_string());
         model2.context_length = Some(8192);
 
         let mut model3 = NewModel::new(
@@ -1171,7 +1171,7 @@ mod tests {
             70.0,
             Utc::now(),
         );
-        model3.quantization = Some("Q4_K_M".to_string()); // Duplicate quant
+        model3.variant_label = Some("Q4_K_M".to_string()); // Duplicate quant
         // No context_length set
 
         service.add(model1).await.unwrap();

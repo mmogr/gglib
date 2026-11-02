@@ -44,7 +44,7 @@ fn service(
 ) -> ModelVerificationService {
     let mut new = NewModel::new("zeta".to_owned(), dir.join(FIRST), 27.0, Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
-    new.quantization = Some("BF16".to_owned());
+    new.variant_label = Some("BF16".to_owned());
     let hub = FakeHub {
         weights: vec![hub_file(FIRST, 1, "a"), hub_file(SECOND, 1, "b")],
         projectors: vec![hub_file(PROJECTOR, 1, "p")],

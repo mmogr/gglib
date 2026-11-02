@@ -73,9 +73,14 @@ paramCountB: number,
  */
 architecture?: string, 
 /**
- * Quantization type (e.g. `"Q4_K_M"`, `"F16"`).
+ * The label the model's type is shown by (`"Q4_K_M"`, `"UD-Q4_K_XL"`):
+ * see [`Model::quant_label`](crate::domain::Model::quant_label).
  */
 quantization?: string, 
+/**
+ * The bits each weight takes on average, read from the tensor data.
+ */
+bitsPerWeight?: number, 
 /**
  * Maximum context length in tokens.
  */

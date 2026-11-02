@@ -113,7 +113,7 @@ fn example() {
 
     println!("Architecture: {:?}", metadata.architecture);
     println!("Context size: {}", metadata.context_length.unwrap_or(0));
-    println!("Quantization: {:?}", metadata.quantization);
+    println!("Type: {:?}", metadata.file_type);
 }
 ```
 

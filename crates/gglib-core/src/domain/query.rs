@@ -187,8 +187,8 @@ fn matches_query(m: &Model, query: &ModelListQuery) -> bool {
     // Quantization allowlist
     if let Some(quants) = &query.quantizations {
         if !quants.is_empty() {
-            match &m.quantization {
-                Some(q) if quants.contains(q) => {}
+            match m.quant_label() {
+                Some(q) if quants.iter().any(|listed| listed == q) => {}
                 _ => return false,
             }
         }
@@ -266,7 +266,7 @@ mod tests {
     }
 
     fn with_quant(mut m: Model, quant: &str) -> Model {
-        m.quantization = Some(quant.to_string());
+        m.variant_label = Some(quant.to_string());
         m
     }
 
@@ -326,11 +326,21 @@ mod tests {
         };
         let result = apply_query(models(), &query);
         assert_eq!(result.len(), 2);
-        assert!(
-            result
-                .iter()
-                .all(|m| m.quantization.as_deref() == Some("Q4_K_M"))
-        );
+        assert!(result.iter().all(|m| m.quant_label() == Some("Q4_K_M")));
+    }
+
+    /// A model with no label is filtered by the type its header states.
+    #[test]
+    fn quantization_filter_reads_a_header_type_where_there_is_no_label() {
+        let mut typed = make_model(7, "typed", 8.0);
+        typed.file_type = Some(crate::domain::FileType(18));
+        let query = ModelListQuery {
+            quantizations: Some(vec!["Q6_K".to_string()]),
+            ..Default::default()
+        };
+        let result = apply_query(vec![typed, make_model(8, "untyped", 8.0)], &query);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "typed");
     }
 
     #[test]

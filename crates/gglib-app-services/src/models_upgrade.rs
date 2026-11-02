@@ -49,9 +49,10 @@ impl ModelOps {
     /// quantization it downloads again.
     fn upgrade_source(model: &gglib_core::Model) -> Result<(String, String), GuiError> {
         let repo = Self::hf_repo(model)?;
-        let quant = model.quantization.clone().ok_or_else(|| {
-            GuiError::ValidationFailed("Model has no quantization info stored".into())
-        })?;
+        let quant = model
+            .variant_label
+            .clone()
+            .ok_or_else(|| GuiError::ValidationFailed(gglib_core::domain::NO_HUB_LABEL.into()))?;
         Ok((repo, quant))
     }
 

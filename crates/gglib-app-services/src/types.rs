@@ -33,7 +33,13 @@ pub struct GuiModel {
     pub file_path: String,
     pub param_count_b: f64,
     pub architecture: Option<String>,
+    /// The label the model's type is shown by: see `Model::quant_label`.
     pub quantization: Option<String>,
+    /// The bits each weight takes on average, read from the tensor data;
+    /// omitted when the header could not measure them.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bits_per_weight: Option<f64>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub context_length: Option<u64>,
     // ── MoE topology (omitted for dense models) ───────────────────────────────
@@ -109,6 +115,8 @@ impl GuiModel {
     /// Convert a domain Model to `GuiModel` format.
     pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
         Self {
+            quantization: model.quant_label().map(str::to_owned),
+            bits_per_weight: model.bits_per_weight,
             image_input: model.image_input(),
             missing_components: model.missing_components(),
             image_family: model.image_family,
@@ -117,7 +125,6 @@ impl GuiModel {
             file_path: model.file_path.to_string_lossy().to_string(),
             param_count_b: model.param_count_b,
             architecture: model.architecture,
-            quantization: model.quantization,
             context_length: model.context_length,
             expert_count: model.expert_count,
             expert_used_count: model.expert_used_count,

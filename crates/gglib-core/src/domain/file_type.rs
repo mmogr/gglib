@@ -12,8 +12,11 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 /// A `general.file_type` value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct FileType(pub u32);
 
 impl FileType {

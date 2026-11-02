@@ -111,13 +111,12 @@ fn the_type_is_the_headers_and_never_the_names() {
         .parse(&typed(dir.path(), "model-Q4_K_M.gguf", Some(7)))
         .unwrap();
     assert_eq!(renamed.file_type, Some(FileType(7)));
-    assert_eq!(renamed.quantization.as_deref(), Some("Q8_0"));
+    assert_eq!(renamed.file_type.and_then(FileType::name), Some("Q8_0"));
 
     let unstated = parser
         .parse(&typed(dir.path(), "model-UD-Q4_K_XL.gguf", None))
         .unwrap();
     assert_eq!(unstated.file_type, None);
-    assert_eq!(unstated.quantization, None);
 }
 
 /// Bits per weight are the bytes after the aligned table over the elements

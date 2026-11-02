@@ -8,7 +8,7 @@
 use anyhow::{Context, Result};
 use sqlx::{SqliteConnection, SqlitePool};
 
-use super::add_column_if_missing;
+use super::{add_column_if_missing, drop_column_if_present};
 
 /// The `CREATE TABLE` statement for `models`, naming the table `table`.
 ///
@@ -25,7 +25,9 @@ fn models_ddl(table: &str) -> String {
             projector_path TEXT,
             param_count_b REAL NOT NULL,
             architecture TEXT,
-            quantization TEXT,
+            variant_label TEXT,
+            file_type INTEGER,
+            bits_per_weight REAL,
             context_length INTEGER,
             inference_defaults TEXT,
             defaults_origin TEXT,
@@ -91,6 +93,15 @@ pub(super) async fn create_models_table(pool: &SqlitePool) -> Result<()> {
     // column holds no image model gglib could draw with, and `gglib model
     // retag` fills a NULL from the file wherever one does.
     add_column_if_missing(pool, "models", "image_family", "TEXT").await?;
+
+    // Migration: a model's type comes from its header, never a name, so
+    // `quantization` (a string read from either) goes, carrying nothing
+    // over. Dropped in place: every id, and every row that references one,
+    // stays.
+    drop_column_if_present(pool, "models", "quantization").await?;
+    add_column_if_missing(pool, "models", "variant_label", "TEXT").await?;
+    add_column_if_missing(pool, "models", "file_type", "INTEGER").await?;
+    add_column_if_missing(pool, "models", "bits_per_weight", "REAL").await?;
 
     Ok(())
 }

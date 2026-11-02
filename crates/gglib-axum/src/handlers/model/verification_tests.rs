@@ -81,7 +81,7 @@ impl Library {
         std::fs::write(&path, bytes).unwrap();
         let mut model = NewModel::new("zeta".to_owned(), path, 7.0, chrono::Utc::now());
         model.hf_repo_id = Some(REPO.to_owned());
-        model.quantization = Some("Q8_0".to_owned());
+        model.variant_label = Some("Q8_0".to_owned());
         let id = self.state.core.models().add(model).await.unwrap().id;
         let oid = Some(HEALTHY_OID.to_owned());
         let row = NewModelFile::new(id, WEIGHTS.to_owned(), 0, 7, oid);

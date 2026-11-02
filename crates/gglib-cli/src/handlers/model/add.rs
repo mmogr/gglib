@@ -84,8 +84,8 @@ pub(crate) async fn execute(
     if let Some(params) = gguf_metadata.param_count_b {
         println!("  Parameters: {params:.1}B");
     }
-    if let Some(ref quant) = gguf_metadata.quantization {
-        println!("  Quantization: {quant}");
+    if let Some(file_type) = gguf_metadata.file_type {
+        println!("  Quantization: {file_type}");
     }
     if let Some(context) = gguf_metadata.context_length {
         println!("  Context Length: {context}");

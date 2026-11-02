@@ -13,7 +13,7 @@ use super::model_components::{link_components, link_downloaded_components};
 use super::model_import::fetch_published_sampling;
 use super::model_links::resolved_or_literal;
 use super::model_projector::{link_downloaded_projector, link_projector};
-use super::{HfOrigin, ModelOrigin, build_new_model};
+use super::{HfOrigin, ModelOrigin, build_new_model, header_facts};
 use crate::domain::{Model, NewModelFile};
 use crate::ports::huggingface::HfClientPort;
 use crate::ports::{
@@ -115,7 +115,8 @@ impl ModelRegistrarPort for ModelRegistrar {
             repo_id: &download.repo_id,
             commit_sha: &download.commit_sha,
             hf_tags: &download.hf_tags,
-            quantization_fallback: download.quantization,
+            variant_label: (!download.quantization.is_unknown())
+                .then(|| download.quantization.to_string()),
             file_paths: download.file_paths.as_deref(),
             published_sampling: published.as_ref(),
         });
@@ -183,7 +184,19 @@ impl ModelRegistrarPort for ModelRegistrar {
         model.hf_commit_sha = Some(download.commit_sha.clone());
         model.last_update_check = Some(Utc::now());
 
+        // The new revision's files may be a new quantization of the same
+        // name; what their headers say replaces what the old ones said.
         let parser = self.gguf_parser.as_ref();
+        let gguf = parser.parse(&model.file_path).ok();
+        let facts = header_facts(
+            &model.file_path,
+            gguf.as_ref(),
+            download.file_paths.as_deref(),
+            parser,
+        );
+        model.file_type = facts.file_type;
+        model.bits_per_weight = facts.bits_per_weight;
+
         let projector_refusal = match download.projector_path.as_deref() {
             Some(projector) => {
                 let held = model.projector_path.clone();
@@ -296,6 +309,10 @@ mod projector_tests;
 mod components_tests;
 
 #[cfg(test)]
+#[path = "model_registrar_upgrade_tests.rs"]
+mod upgrade_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::{Model, NewModel};
@@ -305,13 +322,13 @@ mod tests {
     use std::sync::Mutex;
 
     /// Mock model repository for testing.
-    struct MockModelRepo {
+    pub(super) struct MockModelRepo {
         models: Mutex<Vec<Model>>,
         next_id: Mutex<i64>,
     }
 
     impl MockModelRepo {
-        fn new() -> Self {
+        pub(super) fn new() -> Self {
             Self {
                 models: Mutex::new(Vec::new()),
                 next_id: Mutex::new(1),
@@ -420,7 +437,11 @@ mod tests {
         assert_eq!(model.name, "model");
         assert_eq!(model.hf_repo_id, Some("test/model".to_string()));
         assert_eq!(model.hf_commit_sha, Some("abc123".to_string()));
-        assert_eq!(model.quantization, Some("Q4_K_M".to_string()));
+        assert_eq!(model.variant_label.as_deref(), Some("Q4_K_M"));
+        assert_eq!(
+            model.file_type, None,
+            "the label is never taken for the type"
+        );
     }
 
     #[tokio::test]
@@ -452,7 +473,7 @@ mod tests {
         assert!(result.is_ok());
 
         let model = result.unwrap().model;
-        assert_eq!(model.quantization, Some("Q8_0".to_string()));
+        assert_eq!(model.variant_label.as_deref(), Some("Q8_0"));
         assert_eq!(model.name, "llama");
     }
 }

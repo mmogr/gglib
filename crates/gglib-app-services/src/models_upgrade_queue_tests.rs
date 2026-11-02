@@ -39,7 +39,7 @@ async fn library() -> Library {
     );
     model.hf_repo_id = Some(REPO.to_string());
     model.hf_commit_sha = Some(RECORDED.to_string());
-    model.quantization = Some("Q8_0".to_string());
+    model.variant_label = Some("Q8_0".to_string());
     let id = core.models().add(model).await.expect("a model").id;
     Library { core, calls, id }
 }
@@ -139,5 +139,31 @@ async fn a_served_model_is_refused_and_nothing_is_queued() {
     let refused = ops.queue_upgrade_with(library.id, check).await.unwrap_err();
 
     assert!(matches!(refused, GuiError::Conflict(_)), "{refused}");
+    assert!(library.calls().is_empty(), "{:?}", library.calls());
+}
+
+/// A model added before its label was kept is refused before the Hub is
+/// asked, though its header names a type: `Q8_0` from the header could be a
+/// download of `UD-Q8_K_XL`, and an upgrade would fetch other files.
+#[tokio::test]
+async fn a_model_with_no_label_is_refused_and_its_header_type_is_not_asked_for() {
+    let library = library().await;
+    let mut model = crate::helpers::resolve_model(library.core.models(), library.id)
+        .await
+        .unwrap();
+    model.variant_label = None;
+    model.file_type = Some(gglib_core::domain::FileType(7));
+    library.core.models().update(&model).await.unwrap();
+    let ops = library.ops(Arc::new(NoopModelRuntime));
+
+    let check = |_, _, _| -> std::future::Ready<anyhow::Result<UpdateCheckResult>> {
+        panic!("the Hub was asked about a model with no label")
+    };
+    let refused = ops.queue_upgrade_with(library.id, check).await.unwrap_err();
+
+    assert!(
+        matches!(&refused, GuiError::ValidationFailed(why) if why == gglib_core::domain::NO_HUB_LABEL),
+        "{refused}"
+    );
     assert!(library.calls().is_empty(), "{:?}", library.calls());
 }

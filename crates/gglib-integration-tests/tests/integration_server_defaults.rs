@@ -163,7 +163,7 @@ async fn test_server_defaults_omitted_key_is_noop() {
     // save back — server_defaults should be preserved because it was read
     // from DB and written back.
     let mut modified = repo.get_by_id(model.id).await.unwrap();
-    modified.quantization = Some("Q8_0".to_string());
+    modified.variant_label = Some("Q8_0".to_string());
     service.update(&modified).await.unwrap();
 
     // Verify server_defaults is untouched
@@ -173,7 +173,7 @@ async fn test_server_defaults_omitted_key_is_noop() {
         Some(4096),
         "server_defaults should be preserved when only quantization changes"
     );
-    assert_eq!(fetched.quantization, Some("Q8_0".to_string()));
+    assert_eq!(fetched.variant_label, Some("Q8_0".to_string()));
 }
 
 /// (e) Two sequential PATCH requests to the same model; verify last-writer-wins.

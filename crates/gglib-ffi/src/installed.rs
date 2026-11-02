@@ -24,8 +24,8 @@ pub struct InstalledModel {
     /// request names it with: the name, or `name@QUANT` (`name@<id>`) when
     /// another model shares the name (#1648).
     pub listed_id: String,
-    /// Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
-    /// recorded one.
+    /// The label its type is shown by (`Q4_K_M`, `UD-Q4_K_XL`), when it has
+    /// one: its download's label, else the type its header states.
     pub quantization: Option<String>,
     /// The Hugging Face repository it was downloaded from
     /// (`unsloth/Qwen3-8B-GGUF`), when it came from one.
@@ -55,6 +55,7 @@ pub(crate) async fn installed(
         .map(|(model, listed_id)| {
             let weights = Some(total_model_bytes(&model.file_path));
             let (verdict, _) = ModelShape::of_model(&model).judge(weights, budget);
+            let quantization = model.quant_label().map(str::to_owned);
             InstalledModel {
                 id: model.id,
                 bytes: resident_bytes(&model),
@@ -70,7 +71,7 @@ pub(crate) async fn installed(
                 verdict,
                 name: model.name,
                 listed_id,
-                quantization: model.quantization,
+                quantization,
                 repo: model.hf_repo_id,
             }
         })

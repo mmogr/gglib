@@ -119,7 +119,7 @@ async fn a_turns_replies_are_named_for_its_model_and_its_quantisation() {
     let path = dir.path().join("qwen3.gguf");
     let mut entry =
         gglib_core::domain::NewModel::new("qwen3".to_owned(), path, 8.0, chrono::Utc::now());
-    entry.quantization = Some("Q4_K_M".to_owned());
+    entry.variant_label = Some("Q4_K_M".to_owned());
     let id = ctx.app.models().add(entry).await.expect("registered").id;
     let here = Target::Local.resolve_turn(&ctx, id.to_string()).await;
     let mut there = found(3, "far-qwen", None);

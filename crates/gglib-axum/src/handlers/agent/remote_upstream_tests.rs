@@ -73,7 +73,7 @@ async fn catalogued(state: &AppState, quantization: Option<&str>) -> i64 {
         7.0,
         chrono::Utc::now(),
     );
-    model.quantization = quantization.map(ToOwned::to_owned);
+    model.variant_label = quantization.map(ToOwned::to_owned);
     state.core.models().add(model).await.expect("added").id
 }
 

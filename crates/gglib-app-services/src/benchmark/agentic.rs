@@ -340,7 +340,7 @@ pub(crate) async fn run_agentic_eval(
 
     let report = AgenticEvalReport {
         model_name: model.name.clone(),
-        quantization: model.quantization.clone(),
+        quantization: model.quant_label().map(str::to_owned),
         param_count_b: model.param_count_b,
         ctx_size: served_ctx,
         raw,

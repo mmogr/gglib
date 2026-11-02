@@ -257,7 +257,7 @@ impl ModelRuntimePort for Admits {
 /// Model `id`, named `name`, in `quantization`.
 fn quantized(id: u32, name: &str, quantization: &str) -> Model {
     Model {
-        quantization: Some(quantization.to_owned()),
+        variant_label: Some(quantization.to_owned()),
         ..StaticCatalog::row(id, name)
     }
 }

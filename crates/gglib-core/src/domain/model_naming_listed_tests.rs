@@ -183,3 +183,24 @@ fn an_id_that_is_another_models_name_is_not_used() {
         assert_eq!(looked_up(id, &models), Some(model.id), "{id} in {ids:?}");
     }
 }
+
+/// A model with no label is named by the type its header states, and
+/// `name@<that type>` reads back to it.
+#[test]
+fn a_model_with_only_a_header_type_is_named_and_found_by_it() {
+    use crate::domain::{FileType, Model, NewModel};
+    let stored = |id, file_type| {
+        let mut new = NewModel::new(
+            "qwen3".to_owned(),
+            std::path::PathBuf::from(format!("/m/{id}.gguf")),
+            8.0,
+            chrono::Utc::now(),
+        );
+        new.file_type = Some(FileType(file_type));
+        Model::stored(id, &new)
+    };
+    let models = [stored(4, 15), stored(9, 18)];
+    let listed: Vec<ListedModel<'_>> = models.iter().map(ListedModel::from).collect();
+    assert_eq!(openai_model_ids(&listed), ["qwen3@Q4_K_M", "qwen3@Q6_K"]);
+    assert_eq!(resolve_listed_id("qwen3@Q6_K", &listed), Some(9));
+}

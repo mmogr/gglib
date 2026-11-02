@@ -56,7 +56,7 @@ pub mod thinking;
 
 // Re-export model types at the domain level for convenience
 pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
-pub use model::{Model, ModelComponent, ModelFilterOptions, NewModel};
+pub use model::{Model, ModelComponent, ModelFilterOptions, NO_HUB_LABEL, NewModel};
 pub use model_detail::{ComponentLinkDto, ModelDetailDto, ModelLookup};
 pub use model_file::{ModelFile, ModelFolder, NewModelFile};
 

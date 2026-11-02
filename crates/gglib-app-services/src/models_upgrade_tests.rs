@@ -41,7 +41,7 @@ async fn library_asking_as(token: Option<&str>) -> (Arc<AppCore>, ModelOps, i64)
     );
     model.hf_repo_id = Some(REPO.to_string());
     model.hf_commit_sha = Some(RECORDED.to_string());
-    model.quantization = Some("Q8_0".to_string());
+    model.variant_label = Some("Q8_0".to_string());
     let id = core.models().add(model).await.expect("a model").id;
 
     let ops = ops_asking(&core, Arc::new(NoopModelRuntime));
@@ -202,7 +202,7 @@ async fn another_model(core: &AppCore, edit: impl FnOnce(&mut NewModel)) -> i64 
 #[tokio::test]
 async fn a_model_with_no_stored_quantization_is_checked_and_not_upgraded() {
     let (core, ops, _) = library_asking_as(Some(FAKE_TOKEN)).await;
-    let id = another_model(&core, |model| model.quantization = None).await;
+    let id = another_model(&core, |model| model.variant_label = None).await;
 
     let check = ops
         .check_update_with(id, |repo, recorded, token| {
@@ -267,7 +267,7 @@ async fn model_on_disk(core: &AppCore, dir: &std::path::Path) -> (i64, PathBuf) 
     let weights = weights.canonicalize().expect("its canonical path");
     let id = another_model(core, |model| {
         model.file_path = weights.clone();
-        model.quantization = Some("Q8_0".to_string());
+        model.variant_label = Some("Q8_0".to_string());
     })
     .await;
     (id, weights)

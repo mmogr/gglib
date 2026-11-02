@@ -38,21 +38,29 @@ pub(super) fn legacy_ddl(table: &str) -> String {
     )
 }
 
+/// The columns the legacy table shares with today's: all but its
+/// `quantization`, which today's has not.
+const LEGACY_SHARED_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, \
+    context_length, inference_defaults, defaults_origin, server_defaults, expert_count, \
+    expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, \
+    hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, \
+    capabilities, dialect_spec, template_caps, image_family";
+
 /// Turns today's `models` back into the legacy table, running `extra` while
 /// foreign keys are off. Every other table keeps the definition it has today,
 /// which is the one every older build made too.
 pub(super) async fn make_legacy(pool: &SqlitePool, extra: &str) {
     sqlx::raw_sql(&format!(
         "PRAGMA foreign_keys = OFF;
-         ALTER TABLE models DROP COLUMN projector_path;
          {legacy};
-         INSERT INTO legacy SELECT * FROM models;
+         INSERT INTO legacy ({shared}) SELECT {shared} FROM models;
          DROP TABLE models;
          ALTER TABLE legacy RENAME TO models;
          DELETE FROM sqlite_sequence WHERE name = 'models';
          {extra};
          PRAGMA foreign_keys = ON;",
         legacy = legacy_ddl("legacy"),
+        shared = LEGACY_SHARED_COLUMNS,
     ))
     .execute(pool)
     .await

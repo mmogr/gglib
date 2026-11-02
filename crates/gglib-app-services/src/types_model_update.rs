@@ -74,7 +74,7 @@ impl UpdateModelRequest {
             model.name.clone_from(name);
         }
         if let Some(quantization) = &self.quantization {
-            model.quantization = Some(quantization.clone());
+            model.variant_label = Some(quantization.clone());
         }
         if let Some(file_path) = &self.file_path {
             model.file_path = PathBuf::from(file_path);

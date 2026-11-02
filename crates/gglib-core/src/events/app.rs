@@ -59,7 +59,7 @@ impl From<&crate::domain::Model> for ModelSummary {
             name: model.name.clone(),
             file_path: model.file_path.to_string_lossy().into_owned(),
             architecture: model.architecture.clone(),
-            quantization: model.quantization.clone(),
+            quantization: model.quant_label().map(str::to_owned),
         }
     }
 }

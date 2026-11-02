@@ -46,9 +46,6 @@ async fn local_import_takes_the_type_from_the_header_not_the_name() {
 
     let parser = GgufParser::new();
     let import = |path| service.import_from_file(path, &parser, None, ImportMode::Fresh);
-    assert_eq!(
-        import(&named).await.unwrap().quantization.as_deref(),
-        Some("Q8_0")
-    );
-    assert_eq!(import(&unstated).await.unwrap().quantization, None);
+    assert_eq!(import(&named).await.unwrap().quant_label(), Some("Q8_0"));
+    assert_eq!(import(&unstated).await.unwrap().quant_label(), None);
 }
