@@ -18,7 +18,7 @@ pub(super) fn hub_client(token: Option<String>) -> DefaultHfClient {
 }
 
 /// List a repository's variants, each with what the head of its first file
-/// says it is (read with `parser`), and its projectors apart.
+/// says it is (read with `parser`), its projectors apart.
 pub async fn list_quantizations(
     model_id: &str,
     token: Option<String>,
@@ -34,14 +34,10 @@ pub async fn list_quantizations(
             println!("Commit SHA: {sha}");
             println!("\nSearching for GGUF files using HuggingFace API...");
 
-            let listed = tokio::try_join!(
-                HfClientPort::list_quantizations(&client, model_id),
-                HfClientPort::list_projectors(&client, model_id),
-            );
-            match listed {
-                Ok((variants, projectors)) => {
+            match HfClientPort::list_quantizations(&client, model_id).await {
+                Ok(variants) => {
                     let variants = read_roles(&client, parser, model_id, variants).await;
-                    print!("{}", quant_listing(model_id, &variants, &projectors));
+                    print!("{}", quant_listing(model_id, &variants));
                 }
                 Err(e) => println!("Failed to fetch quantizations: {e}"),
             }

@@ -1,14 +1,11 @@
 //! Putting a resolved download group on the queue.
 
-use std::sync::Arc;
-
 use gglib_core::download::{CompletionKey, DownloadError, DownloadId};
 use gglib_core::ports::{QuantizationResolver, Resolution};
 use gglib_core::utils::shard_filename::base_shard_filename;
 
 use super::DownloadManagerImpl;
 use crate::queue::Upgrade;
-use crate::resolver::HfQuantizationResolver;
 
 impl DownloadManagerImpl {
     /// Queue the upgrade of model `model_id`, its files from `repo_id` at
@@ -29,8 +26,11 @@ impl DownloadManagerImpl {
         model_id: i64,
         commit: String,
     ) -> Result<DownloadId, DownloadError> {
-        let resolver = HfQuantizationResolver::weights_only(Arc::clone(&self.hf_client));
-        let resolution = resolver.resolve(repo_id, quantization).await?;
+        let resolution = self
+            .resolver
+            .own_files()
+            .resolve(repo_id, quantization)
+            .await?;
         let id = DownloadId::new(repo_id, Some(&resolution.label));
         let upgrade = Upgrade { model_id, commit };
 

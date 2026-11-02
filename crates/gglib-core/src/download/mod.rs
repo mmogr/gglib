@@ -5,7 +5,6 @@ pub(crate) mod errors;
 pub(crate) mod events;
 pub(crate) mod file_role;
 pub(crate) mod format;
-pub(crate) mod projector_choice;
 pub mod queue;
 pub(crate) mod rate;
 pub(crate) mod row;
@@ -25,7 +24,6 @@ pub use errors::DownloadError;
 pub use events::DownloadEvent;
 pub use file_role::GgufFileRole;
 pub use format::{format_duration, format_rate, format_size};
-pub use projector_choice::choose_projector;
 pub use queue::{DownloadOutcome, FINISHED_LIMIT, FinishedDownload, QueueSnapshot};
 pub use rate::RateEstimator;
 pub use row::{

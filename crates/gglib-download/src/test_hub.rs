@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use gglib_core::domain::{ImageFamily, TensorInfo, TensorTable, WeightsFormat};
 use gglib_core::download::GgufFileRole;
+use gglib_core::ports::huggingface::fake_hub::{PROJECTOR_HEAD, RoleParser};
 use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult, match_variant, variants_of,
@@ -141,7 +142,7 @@ impl HfClientPort for RepoHub {
         unimplemented!("a file list is all this hub answers")
     }
     async fn list_gguf_files(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        unimplemented!("a file list is all this hub answers")
+        Ok(self.files.clone())
     }
     async fn get_commit_sha(&self, _model_id: &str) -> HfPortResult<String> {
         unimplemented!("a file list is all this hub answers")
@@ -164,6 +165,13 @@ impl HfClientPort for RepoHub {
         let mut asked = self.heads_asked.lock().unwrap();
         asked.push((model_id.to_string(), path.to_string()));
         drop(asked);
+        if self
+            .of_role(GgufFileRole::Projector)
+            .iter()
+            .any(|p| p.path == path)
+        {
+            return Ok(PROJECTOR_HEAD.to_vec());
+        }
         let known = self.files.iter().any(|file| file.path == path);
         self.head
             .clone()
@@ -264,9 +272,13 @@ impl GgufParserPort for ImageHeadParser {
         Ok(table)
     }
 
-    /// A head that names a family holds an image model's whole header,
-    /// which states no type; any other is no GGUF header.
-    fn parse_head(&self, head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+    /// A projector's head is its whole header, as [`RoleParser`] reads it;
+    /// a head that names a family holds an image model's whole header, which
+    /// states no type; any other is no GGUF header.
+    fn parse_head(&self, head: &[u8], file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        if head == PROJECTOR_HEAD {
+            return RoleParser.parse_head(head, file_name);
+        }
         self.tensor_table_of_head(head)?;
         Ok(HeadMetadata {
             complete: true,

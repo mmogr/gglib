@@ -11,7 +11,7 @@ mod variant_match;
 mod variants;
 
 pub use client::{HfClientPort, SNIFF_HEAD_BYTES, hub_file_url};
-pub use download_group::{DownloadGroup, download_group, projector_fetched_with};
+pub use download_group::{DownloadGroup, download_group, largest_projector, repository_projector};
 pub use error::{HfPortError, HfPortResult};
 pub use image_companions::{Companion, image_companions};
 pub use types::{

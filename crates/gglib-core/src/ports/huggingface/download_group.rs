@@ -1,14 +1,16 @@
 //! The files one download of a model fetches.
 //!
 //! [`download_group`] is asked by everything that needs that answer: the
-//! resolver that queues a download, and a repair.
-//! [`projector_fetched_with`] is the projector half of it, for a listing that
-//! already holds the repository's projectors.
+//! resolver that queues a download, and a repair. [`largest_projector`] is
+//! the projector half of it, for a listing whose variants' roles are read.
 
 use super::client::HfClientPort;
 use super::error::HfPortResult;
-use super::types::HfFileInfo;
-use crate::download::{Quantization, choose_projector};
+use super::types::{HfFileInfo, HfQuantInfo};
+use super::variant_heads::read_roles;
+use super::variants::variants_of;
+use crate::download::GgufFileRole;
+use crate::ports::GgufParserPort;
 
 /// What a download of one variant of a repository fetches.
 #[derive(Debug, Clone)]
@@ -27,8 +29,11 @@ impl DownloadGroup {
 }
 
 /// The files a download of the variant labelled `label` from `model_id`
-/// fetches: the variant's weights, and the projector [`choose_projector`]
-/// picks among the repository's.
+/// fetches.
+///
+/// They are the variant's weights, and the repository's projector
+/// ([`repository_projector`]), read with `parser`. With no parser no head
+/// can be read, and no projector is fetched.
 ///
 /// # Errors
 ///
@@ -36,31 +41,52 @@ impl DownloadGroup {
 /// has no variant of is the client's `QuantizationNotFound`.
 pub async fn download_group(
     client: &dyn HfClientPort,
+    parser: Option<&dyn GgufParserPort>,
     model_id: &str,
     label: &str,
 ) -> HfPortResult<DownloadGroup> {
     let weights = client.get_quantization_files(model_id, label).await?;
-    let projectors = client.list_projectors(model_id).await?;
-    Ok(DownloadGroup {
-        weights,
-        projector: projector_fetched_with(label, &projectors).cloned(),
-    })
+    let projector = match parser {
+        Some(parser) => repository_projector(client, parser, model_id).await?,
+        None => None,
+    };
+    Ok(DownloadGroup { weights, projector })
 }
 
-/// The projector a download of the variant labelled `label` fetches, among
-/// `projectors`, the repository's: the one [`choose_projector`] picks for
-/// the quantization the label names.
+/// The projector every download of `model_id` fetches: the largest of its
+/// files whose head, read with `parser`, says it is a projector. `None` when
+/// none does.
 ///
-/// A listing that says which projector comes with a variant asks this, so
-/// it names the file the download fetches.
+/// Each variant's first file has its head read, four at once.
+///
+/// # Errors
+///
+/// Whatever the client answers for the repository's listing.
+pub async fn repository_projector(
+    client: &dyn HfClientPort,
+    parser: &dyn GgufParserPort,
+    model_id: &str,
+) -> HfPortResult<Option<HfFileInfo>> {
+    let files = client.list_gguf_files(model_id).await?;
+    let variants = variants_of(files.iter().map(|file| (file.path.as_str(), file.size)));
+    let variants = read_roles(client, parser, model_id, variants).await;
+    let first = largest_projector(&variants).and_then(|projector| projector.file_paths.first());
+    Ok(first.and_then(|path| files.into_iter().find(|file| &file.path == path)))
+}
+
+/// The projector a download fetches among `variants`, whose roles are read:
+/// the largest whose header says it is a projector, the first by label of
+/// two the same size.
 #[must_use]
-pub fn projector_fetched_with<'a>(
-    label: &str,
-    projectors: &'a [HfFileInfo],
-) -> Option<&'a HfFileInfo> {
-    let quantization = Quantization::from_filename(label);
-    let path = choose_projector(quantization, projectors.iter().map(|p| p.path.as_str()))?;
-    projectors.iter().find(|p| p.path == path)
+pub fn largest_projector(variants: &[HfQuantInfo]) -> Option<&HfQuantInfo> {
+    variants
+        .iter()
+        .filter(|variant| variant.role == Some(GgufFileRole::Projector))
+        .max_by(|a, b| {
+            a.total_size
+                .cmp(&b.total_size)
+                .then_with(|| b.label.cmp(&a.label))
+        })
 }
 
 #[cfg(test)]

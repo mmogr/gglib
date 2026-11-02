@@ -94,7 +94,7 @@ async fn queued(files: &[(&str, u64)], refusal: Option<&str>) -> Fixture {
         Arc::new(RepoHub::new(files)),
         announced.clone(),
         DownloadManagerConfig::default(),
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     );
     manager
         .queue_download_smart(REPO, Some("Q8_0".to_string()), None)

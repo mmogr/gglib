@@ -27,7 +27,7 @@ fn manager_that_cannot_write(dir: &Path) -> Arc<DownloadManagerImpl> {
             models_directory: Some(blocked),
             ..DownloadManagerConfig::default()
         },
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     ))
 }
 
@@ -117,7 +117,7 @@ async fn a_quantization_asked_for_by_its_name_is_the_one_queued() {
             Arc::new(RepoHub::new(&files)),
             Arc::new(NoopEmitter::new()),
             DownloadManagerConfig::default(),
-            Arc::new(gglib_core::ports::NoopGgufParser),
+            Arc::new(crate::test_hub::ImageHeadParser),
         );
 
         let id = manager

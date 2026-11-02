@@ -105,7 +105,7 @@ fn manager() -> Fixture {
         Arc::new(RepoHub::new(&FILES)),
         updated.clone(),
         config,
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     );
     Fixture {
         manager,

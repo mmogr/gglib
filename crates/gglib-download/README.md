@@ -110,8 +110,8 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
 - **Shard Handling** — Automatic detection and download of sharded models
 - **Projectors** — A download from a repository that has projectors fetches
   one with the model, as one more file of its group after the weights: the
-  one whose name carries the download's quantization, else the `F16` one,
-  else the first by name (`choose_projector`). At completion the projector
+  largest file whose header says it is a projector, whichever variant is
+  downloaded (`repository_projector`). At completion the projector
   is handed to the registrar apart from the weights, and the model is linked
   to it when the file's header says it is a projector; a model the library
   already holds with a link keeps that link. A projector is never counted as
@@ -162,15 +162,11 @@ use gglib_download::{build_download_manager, DownloadManagerDeps, DownloadManage
 let manager: Arc<dyn DownloadManagerPort> = Arc::new(build_download_manager(deps));
 
 // Queue a download. It answers the download's ID, and starts the runner.
-// - Explicit quant → validates it exists
-// - No quant, single one available → auto-picks it
-// - No quant, several → uses default preference (Q5_K_M, Q4_K_M, etc.)
-//
-// Note: Unsloth Dynamic ("UD-") quants (e.g. "UD-Q6_K") are always distinct,
-// separately selectable entries from their plain counterparts ("Q6_K") -- they
-// are never picked by the default preference list, so request them explicitly.
+// - A named variant → looked up by its label
+// - None named → the largest quantized variant that fits `budget`, the
+//   device's memory; with no budget, the smallest
 let id = Arc::clone(&manager)
-    .queue_smart("user/model".to_string(), Some("Q8_0".to_string()))
+    .queue_smart("user/model".to_string(), None, budget)
     .await?;
 
 // Monitor progress via events or poll status

@@ -3,12 +3,19 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use std::path::Path;
+
 use async_trait::async_trait;
 
 use super::client::HfClientPort;
 use super::error::{HfPortError, HfPortResult};
 use super::types::{HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult};
 use super::variants::variants_of;
+use crate::domain::TensorTable;
+use crate::download::GgufFileRole;
+use crate::ports::{
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, NoopGgufParser,
+};
 
 /// One repository: the weights files of its one variant, and its
 /// projectors. Every label asked for answers the same weights.
@@ -21,8 +28,8 @@ pub struct FakeHub {
     pub weights: Vec<HfFileInfo>,
     /// The repository's projectors.
     pub projectors: Vec<HfFileInfo>,
-    /// How many times the projectors were listed.
-    pub projector_listings: AtomicUsize,
+    /// How many times the repository's files were listed.
+    pub file_listings: AtomicUsize,
     /// The quantization each request for weights named, oldest first.
     pub quantizations_asked: Mutex<Vec<String>>,
     /// The bytes a file's head is read as, by its path in any repository. A
@@ -33,6 +40,42 @@ pub struct FakeHub {
     pub heads_asked: Mutex<Vec<(String, String, u64)>>,
     /// Files looked up by repository and path.
     pub files_at: Vec<(String, HfFileInfo)>,
+}
+
+/// The head [`FakeHub`] gives a projector, which [`RoleParser`] reads as
+/// one.
+pub const PROJECTOR_HEAD: &[u8] = b"projector";
+
+/// Reads [`PROJECTOR_HEAD`] as a projector's whole header, and any other head
+/// as a model's.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RoleParser;
+
+impl GgufParserPort for RoleParser {
+    fn parse(&self, path: &Path) -> Result<GgufMetadata, GgufParseError> {
+        NoopGgufParser.parse(path)
+    }
+    fn detect_capabilities(&self, metadata: &GgufMetadata) -> GgufCapabilities {
+        NoopGgufParser.detect_capabilities(metadata)
+    }
+    fn tensor_table(&self, path: &Path) -> Result<TensorTable, GgufParseError> {
+        NoopGgufParser.tensor_table(path)
+    }
+    fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        NoopGgufParser.tensor_table_of_head(head)
+    }
+    fn parse_head(&self, head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        let role = if head == PROJECTOR_HEAD {
+            GgufFileRole::Projector
+        } else {
+            GgufFileRole::Weights
+        };
+        Ok(HeadMetadata {
+            complete: true,
+            role: Some(role),
+            ..HeadMetadata::default()
+        })
+    }
 }
 
 /// A GGUF file of the listing, with an OID.
@@ -65,7 +108,6 @@ impl HfClientPort for FakeHub {
         Ok(self.weights.clone())
     }
     async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        self.projector_listings.fetch_add(1, Ordering::Relaxed);
         Ok(self.projectors.clone())
     }
     async fn search(&self, _options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
@@ -79,8 +121,15 @@ impl HfClientPort for FakeHub {
                 .map(|file| (file.path.as_str(), file.size)),
         ))
     }
+    /// The weights files, then the projectors.
     async fn list_gguf_files(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        unimplemented!("a listing is all this hub answers")
+        self.file_listings.fetch_add(1, Ordering::Relaxed);
+        Ok(self
+            .weights
+            .iter()
+            .chain(&self.projectors)
+            .cloned()
+            .collect())
     }
     async fn get_commit_sha(&self, _model_id: &str) -> HfPortResult<String> {
         unimplemented!("a listing is all this hub answers")
@@ -88,19 +137,23 @@ impl HfClientPort for FakeHub {
     async fn get_model_info(&self, _model_id: &str) -> HfPortResult<HfRepoInfo> {
         unimplemented!("a listing is all this hub answers")
     }
-    /// The head held for `path`, cut at `max_bytes`.
+    /// The head held for `path`, cut at `max_bytes`; a projector's, when
+    /// none is held for it, is [`PROJECTOR_HEAD`].
     async fn read_head(&self, model_id: &str, path: &str, max_bytes: u64) -> HfPortResult<Vec<u8>> {
         let mut asked = self.heads_asked.lock().unwrap();
         asked.push((model_id.to_owned(), path.to_owned(), max_bytes));
         drop(asked);
-        let (_, head) = self
-            .heads
-            .iter()
-            .find(|(held, _)| held == path)
-            .ok_or_else(|| HfPortError::FileNotFound {
-                model_id: model_id.to_owned(),
-                path: path.to_owned(),
-            })?;
+        let stored = self.heads.iter().find(|(held, _)| held == path);
+        let head: &[u8] = match stored {
+            Some((_, head)) => head,
+            None if self.projectors.iter().any(|file| file.path == path) => PROJECTOR_HEAD,
+            None => {
+                return Err(HfPortError::FileNotFound {
+                    model_id: model_id.to_owned(),
+                    path: path.to_owned(),
+                });
+            }
+        };
         let cap = usize::try_from(max_bytes).unwrap_or(usize::MAX);
         Ok(head[..head.len().min(cap)].to_vec())
     }

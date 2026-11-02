@@ -12,11 +12,14 @@ use gglib_core::ports::{
 };
 
 /// Resolver that uses the `HuggingFace` client port.
+#[derive(Clone)]
 pub(crate) struct HfQuantizationResolver {
     hf_client: Arc<dyn HfClientPort>,
-    /// Reads the head of the weights, to know an image model and bring its
-    /// companions. `None` resolves the repository's own files alone.
-    head_reader: Option<Arc<dyn GgufParserPort>>,
+    /// Reads the heads of the repository's files, to know its projector and
+    /// an image model.
+    head_reader: Arc<dyn GgufParserPort>,
+    /// Whether an image model's companions are brought.
+    companions: bool,
 }
 
 impl HfQuantizationResolver {
@@ -25,16 +28,17 @@ impl HfQuantizationResolver {
     pub(crate) fn new(hf_client: Arc<dyn HfClientPort>, parser: Arc<dyn GgufParserPort>) -> Self {
         Self {
             hf_client,
-            head_reader: Some(parser),
+            head_reader: parser,
+            companions: true,
         }
     }
 
-    /// Create a resolver that resolves the repository's own files alone,
-    /// the weights and the projector, and reads no head.
-    pub(crate) fn weights_only(hf_client: Arc<dyn HfClientPort>) -> Self {
+    /// This resolver, resolving the repository's own files alone: the
+    /// weights and the projector, without an image model's companions.
+    pub(crate) fn own_files(&self) -> Self {
         Self {
-            hf_client,
-            head_reader: None,
+            companions: false,
+            ..self.clone()
         }
     }
 }
@@ -55,11 +59,16 @@ impl QuantizationResolver for HfQuantizationResolver {
 
         // The weights of this variant, and the projector fetched with them
         // when the repository has one
-        let group = download_group(self.hf_client.as_ref(), repo_id, label)
-            .await
-            .map_err(|e| {
-                DownloadError::resolution_failed(format!("Failed to get quantization files: {e}"))
-            })?;
+        let group = download_group(
+            self.hf_client.as_ref(),
+            Some(self.head_reader.as_ref()),
+            repo_id,
+            label,
+        )
+        .await
+        .map_err(|e| {
+            DownloadError::resolution_failed(format!("Failed to get quantization files: {e}"))
+        })?;
 
         if group.weights.is_empty() {
             return Err(DownloadError::resolution_failed(format!(
@@ -75,10 +84,10 @@ impl QuantizationResolver for HfQuantizationResolver {
         // An image model's family, from the head of its first weights file,
         // and the companions its recipe draws with, each from its own
         // repository. Anything else has none.
-        let image = match &self.head_reader {
-            Some(parser) => image_companions(
+        let image = if self.companions {
+            image_companions(
                 self.hf_client.as_ref(),
-                parser.as_ref(),
+                self.head_reader.as_ref(),
                 repo_id,
                 &group.weights[0],
             )
@@ -87,8 +96,9 @@ impl QuantizationResolver for HfQuantizationResolver {
                 DownloadError::resolution_failed(format!(
                     "Failed to find the image model's companions: {e}"
                 ))
-            })?,
-            None => None,
+            })?
+        } else {
+            None
         };
         let (image_family, companions) = image
             .map_or((None, Vec::new()), |(family, companions)| {
@@ -129,15 +139,15 @@ impl QuantizationResolver for HfQuantizationResolver {
             .map_err(|e| DownloadError::resolution_failed(format!("Failed to list variants: {e}")))
     }
 
-    /// Read from the head of the variant's first file when the resolver has
-    /// a parser; one that reads no head takes every variant for a model.
+    /// Read from the head of the variant's first file.
     async fn role_of(&self, repo_id: &str, variant: &HfQuantInfo) -> GgufFileRole {
-        match &self.head_reader {
-            Some(parser) => {
-                variant_role(self.hf_client.as_ref(), parser.as_ref(), repo_id, variant).await
-            }
-            None => GgufFileRole::Weights,
-        }
+        variant_role(
+            self.hf_client.as_ref(),
+            self.head_reader.as_ref(),
+            repo_id,
+            variant,
+        )
+        .await
     }
 }
 

@@ -50,8 +50,9 @@ impl HfClientPort for OneQuantHf {
     async fn search(&self, _options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
         unimplemented!("not reached by queue_download_smart")
     }
-    async fn list_gguf_files(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        unimplemented!("not reached by queue_download_smart")
+    /// The one weights file, as the projector is looked for among them.
+    async fn list_gguf_files(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
+        self.get_quantization_files(model_id, "Q8_0").await
     }
     async fn get_commit_sha(&self, _model_id: &str) -> HfPortResult<String> {
         unimplemented!("not reached by queue_download_smart")

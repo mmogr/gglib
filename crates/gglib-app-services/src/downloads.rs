@@ -216,11 +216,6 @@ impl DownloadOps {
             quants,
         )
         .await;
-        let projectors = self
-            .hf_client
-            .list_projectors(model_id)
-            .await
-            .map_err(failed)?;
 
         let models_dir = self
             .models_directory
@@ -235,7 +230,7 @@ impl DownloadOps {
         )
         .await;
 
-        Ok(quantizations_response(model_id, quants, &projectors, image))
+        Ok(quantizations_response(model_id, quants, image))
     }
 
     /// Check if a `HuggingFace` model supports tool/function calling.

@@ -18,9 +18,12 @@ system. No I/O, networking, or runtime dependencies allowed.
   quantization), read from its file name (`GgufFileRole::classify`), and which of
   a model's own files are projectors (`GgufFileRole::projectors_among`). `gglib-gguf`
   reports the same type from the file's header.
-- `projector_choice` - Which of a repository's projectors a download fetches
-  (`choose_projector`): the one of the download's own quantization, else the `F16` one,
-  else the first by name.
+- `auto_pick` - Which variant a download takes when none is asked for
+  (`pick_variant`): the largest quantized weights variant that fits the memory
+  budget (`MemoryFit`, a launch's own fit), each judged from its head and only a
+  fitting one's type read from its whole header; else the largest that fits; else,
+  or with no budget, the smallest. A variant whose header shows a draft, helper or
+  projector is never taken.
 - `shard_info` - One file's place in its download group (`ShardInfo`), as the queue
   records it. A group is the model's weights followed by the projector fetched with them
   and an image model's companions; shards are numbered among the weights alone, and the

@@ -1,7 +1,7 @@
 //! Tests that a projector and a sidecar are their own variants, never a
 //! shard of the weights, and that the projectors are listed apart.
 
-use gglib_core::download::{GgufFileRole, Quantization, choose_projector};
+use gglib_core::download::GgufFileRole;
 use gglib_core::ports::huggingface::HfQuantInfo;
 
 use super::*;
@@ -122,19 +122,6 @@ fn the_files_a_label_names_in_the_real_listing() {
         "the one label holding F16 is the projector's, which its header refuses"
     );
     assert!(variant_files(&files, "Q4_K").is_none(), "several hold it");
-}
-
-/// What a `Q8_0` download of the real repository fetches with its weights.
-#[test]
-fn a_q8_download_of_the_real_listing_takes_the_f16_projector() {
-    let projectors = projectors_among(&qwen_files());
-
-    let chosen = choose_projector(
-        Quantization::Q8_0,
-        projectors.iter().map(|p| p.path.as_str()),
-    );
-
-    assert_eq!(chosen, Some("mmproj-F16.gguf"));
 }
 
 /// The sidecars' names, which the role a header gives replaces wherever a

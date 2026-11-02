@@ -20,7 +20,7 @@ fn manager() -> DownloadManagerImpl {
         ])),
         Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     )
 }
 

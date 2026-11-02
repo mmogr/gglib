@@ -147,8 +147,10 @@ async fn a_projector_of_the_same_quantization_is_the_projector_not_a_shard() {
 
 // ── Which projector ──────────────────────────────────────────────────────
 
+/// The largest file whose head says projector is fetched, whatever its
+/// name or the variant's; of two the same size, the first by label.
 #[tokio::test]
-async fn the_projector_is_chosen_by_the_one_rule() {
+async fn the_largest_projector_is_fetched_with_every_variant() {
     let weights = ("zeta.Q8_0.gguf", 1_000);
     let chosen = |projectors: &[(&'static str, u64)]| {
         let mut files = vec![weights];
@@ -159,13 +161,11 @@ async fn the_projector_is_chosen_by_the_one_rule() {
         }
     };
 
-    let same_quant = chosen(&[("mmproj-F16.gguf", 3), ("zeta.mmproj-Q8_0.gguf", 2)]).await;
-    let f16 = chosen(&[("mmproj-BF16.gguf", 3), ("mmproj-F16.gguf", 2)]).await;
-    let first = chosen(&[("mmproj-Q4_0.gguf", 3), ("mmproj-BF16.gguf", 2)]).await;
+    let larger = chosen(&[("mmproj-F16.gguf", 3), ("zeta.mmproj-Q8_0.gguf", 2)]).await;
+    let tied = chosen(&[("mmproj-F16.gguf", 3), ("mmproj-BF16.gguf", 3)]).await;
 
-    assert_eq!(same_quant.as_deref(), Some("zeta.mmproj-Q8_0.gguf"));
-    assert_eq!(f16.as_deref(), Some("mmproj-F16.gguf"));
-    assert_eq!(first.as_deref(), Some("mmproj-BF16.gguf"));
+    assert_eq!(larger.as_deref(), Some("mmproj-F16.gguf"));
+    assert_eq!(tied.as_deref(), Some("mmproj-BF16.gguf"));
 }
 
 // ── What is not a download ───────────────────────────────────────────────
@@ -421,7 +421,8 @@ async fn a_flux2_klein_download_brings_the_flux2_vae_and_qwen3_4b() {
 }
 
 /// A chat model's head names no family: its download is what it always
-/// was, and the head of its first weights file was asked once.
+/// was. The head of its first weights file is asked twice: for its role, as
+/// the repository's projector is looked for, and for its family.
 #[tokio::test]
 async fn a_chat_models_download_has_no_family_and_no_companion() {
     let hub = Arc::new(RepoHub::new(&THREE_SHARDS));
@@ -432,31 +433,33 @@ async fn a_chat_models_download_has_no_family_and_no_companion() {
     assert_eq!(resolution.image_family, None);
     assert_eq!(resolution.components().count(), 0);
     assert_eq!(resolution.files.len(), 3);
-    assert_eq!(
-        *hub.heads_asked.lock().unwrap(),
-        [(
-            REPO.to_string(),
-            "zeta.Q8_0-00001-of-00003.gguf".to_string()
-        )]
+    let first = (
+        REPO.to_string(),
+        "zeta.Q8_0-00001-of-00003.gguf".to_string(),
     );
+    assert_eq!(*hub.heads_asked.lock().unwrap(), [first.clone(), first]);
 }
 
-/// A resolver of the repository's own files reads no head and brings no
-/// companion, whatever the weights are.
+/// A resolver of the repository's own files, as an upgrade and a forced
+/// update use, brings the projector and no image companion.
 #[tokio::test]
-async fn a_weights_only_resolver_reads_no_head() {
+async fn an_own_files_resolver_brings_the_projector_and_no_companion() {
     let hub = Arc::new(RepoHub::image(
         ImageFamily::Flux1,
-        &[("flux1-schnell-q8_0.gguf", 1_000)],
+        &[("flux1-schnell-q8_0.gguf", 1_000), ("mmproj-F16.gguf", 30)],
         10,
     ));
-    let resolver = HfQuantizationResolver::weights_only(Arc::clone(&hub) as _);
+    let resolver =
+        HfQuantizationResolver::new(Arc::clone(&hub) as _, Arc::new(ImageHeadParser)).own_files();
 
     let resolution = resolver.resolve(FLUX_REPO, "Q8_0").await.unwrap();
 
-    assert_eq!(paths(&resolution), ["flux1-schnell-q8_0.gguf"]);
+    assert_eq!(
+        paths(&resolution),
+        ["flux1-schnell-q8_0.gguf", "mmproj-F16.gguf"]
+    );
     assert_eq!(resolution.image_family, None);
-    assert!(hub.heads_asked.lock().unwrap().is_empty());
+    assert_eq!(resolution.components().count(), 0);
 }
 
 // ── The quantizations on offer ───────────────────────────────────────────
