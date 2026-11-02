@@ -1958,8 +1958,8 @@ public struct InstalledModel: Equatable, Hashable {
      */
     public var listedId: String
     /**
-     * Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
-     * recorded one.
+     * The label its type is shown by (`Q4_K_M`, `UD-Q4_K_XL`), when it has
+     * one: its download's label, else the type its header states.
      */
     public var quantization: String?
     /**
@@ -2002,8 +2002,8 @@ public struct InstalledModel: Equatable, Hashable {
          * another model shares the name (#1648).
          */listedId: String, 
         /**
-         * Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
-         * recorded one.
+         * The label its type is shown by (`Q4_K_M`, `UD-Q4_K_XL`), when it has
+         * one: its download's label, else the type its header states.
          */quantization: String?, 
         /**
          * The Hugging Face repository it was downloaded from
