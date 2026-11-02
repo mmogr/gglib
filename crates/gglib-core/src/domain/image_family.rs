@@ -169,7 +169,7 @@ pub struct Recipe {
     /// (`runs/*.log` in the image-gen handoff): Flux.1 6,657 MB, SDXL
     /// 7,680 MB, Qwen-Image 2.1 8,650 MB; and on 2026-10-11 Z-Image Turbo
     /// 6,657 MB, the same VAE's decode as Flux.1's. FLUX.3 Image Klein's is
-    /// a placeholder, not a reading (its recipe says why).
+    /// Flux.1's, kept after a run (its recipe says why).
     pub compute_margin_bytes: u64,
 }
 
@@ -393,10 +393,12 @@ const FLUX2_VAE: ComponentSpec = ComponentSpec {
 /// transformer, sampled faster in a third of the buffer (log-0018,
 /// 2026-10-11), and it keeps flash attention out of the FLUX.2 VAE, whose
 /// attention reads the switch (`src/model/vae/auto_encoder_kl.hpp:145`) and
-/// has never run here. Neither choice has run with FLUX.3.
+/// had never run here; the run in log-0018 (2026-11-02) drew with both.
 ///
-/// The compute margin is unmeasured: 7 GiB, Flux.1's VAE decode, is a
-/// placeholder until a 1024x1024 render's log is read.
+/// The compute margin is Flux.1's 7 GiB. The pinned sd-server no longer
+/// logs its compute buffers; a 1024x1024 render peaked at a 10.4 GiB
+/// footprint with 9.9 GiB of weights loaded (log-0018, 2026-11-02), well
+/// inside it.
 const FLUX3_KLEIN: Recipe = Recipe {
     placement: Placement::DiffusionOnly,
     components: &[
@@ -416,8 +418,8 @@ const FLUX3_KLEIN: Recipe = Recipe {
 /// FLUX.3 Image Klein, the distilled model: 16 steps at guidance 1.0 with
 /// `euler`, as the guide runs it and the server recipe defaults to; `euler`
 /// is sd.cpp's default sampler for it too (`default_sample_method`,
-/// `src/model/integrations/flux3.cpp:30`). Nothing here has drawn a picture
-/// yet.
+/// `src/model/integrations/flux3.cpp:30`). Drew a 1024x1024 picture in 166 s
+/// on Metal (log-0018, 2026-11-02).
 const FLUX3_KLEIN_SAMPLING: Sampling = Sampling {
     steps: 16,
     cfg: 1.0,

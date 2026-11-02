@@ -59,8 +59,7 @@ The residency launch starts `sd-server` (`process::residency`): it checks
 the binary and every component before the queue, places the model by its
 files plus its family's compute margin (`Recipe::compute_margin_bytes`, the
 1024x1024 VAE decode buffer rounded up: Flux.1 7 GiB, SDXL 8 GiB,
-Qwen-Image 2.1 9 GiB, Z-Image 7 GiB; FLUX.3 Image Klein's 7 GiB is a
-placeholder until a run reads its buffers), spawns
+Qwen-Image 2.1 9 GiB, Z-Image 7 GiB, FLUX.3 Image Klein 7 GiB), spawns
 with `server/spawn.rs`, and narrates the build from
 `sd-config.json` (`binary_install::recorded_release`).
 
