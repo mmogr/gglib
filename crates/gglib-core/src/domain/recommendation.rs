@@ -93,9 +93,12 @@ pub fn budget_covering(bytes: u64) -> u64 {
 pub struct ModelCandidate {
     /// Hugging Face repository id, passed verbatim to the download queue.
     pub repo: &'static str,
-    /// Quantization to request from that repository.
-    pub quantization: &'static str,
-    /// Size of the quantized weights, in bytes.
+    /// The quantization to request from that repository, for a caller that
+    /// must name one: a phone's download does. `None` asks for none, and
+    /// the download takes the largest quantization that fits the machine.
+    pub quantization: Option<&'static str>,
+    /// Size of the `Q4_K_M` weights, in bytes: the size the row is checked
+    /// at. A download that names no quantization may take a larger one.
     pub weights_bytes: u64,
     /// Per-token KV cache element counts, derived from the model's config.
     pub kv_elems_per_token: KvElemsPerToken,
@@ -189,7 +192,7 @@ pub struct Recommendation {
 static SHORTLIST: &[ModelCandidate] = &[
     ModelCandidate {
         repo: "unsloth/Qwen3-30B-A3B-GGUF",
-        quantization: "Q4_K_M",
+        quantization: None,
         weights_bytes: 18_556_686_912,
         // 48 layers x 4 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken {
@@ -203,7 +206,7 @@ static SHORTLIST: &[ModelCandidate] = &[
     },
     ModelCandidate {
         repo: "bartowski/Qwen2.5-Coder-14B-Instruct-GGUF",
-        quantization: "Q4_K_M",
+        quantization: None,
         weights_bytes: 8_988_111_072,
         // 48 layers x 8 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken {
@@ -217,7 +220,7 @@ static SHORTLIST: &[ModelCandidate] = &[
     },
     ModelCandidate {
         repo: "bartowski/Qwen2.5-Coder-7B-Instruct-GGUF",
-        quantization: "Q4_K_M",
+        quantization: None,
         weights_bytes: 4_683_074_336,
         // 28 layers x 4 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken {
@@ -231,7 +234,7 @@ static SHORTLIST: &[ModelCandidate] = &[
     },
     ModelCandidate {
         repo: "bartowski/Qwen2.5-Coder-3B-Instruct-GGUF",
-        quantization: "Q4_K_M",
+        quantization: None,
         weights_bytes: 1_929_903_360,
         // 36 layers x 2 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken { k: 9_216, v: 9_216 },
@@ -267,7 +270,7 @@ static SHORTLIST: &[ModelCandidate] = &[
 pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
     ModelCandidate {
         repo: "unsloth/Qwen3-4B-GGUF",
-        quantization: "Q4_K_M",
+        quantization: Some("Q4_K_M"),
         // Revision 22c9fc8a8c7700b76a1789366280a6a5a1ad1120.
         weights_bytes: 2_497_281_312,
         // 36 layers x 8 KV heads x 128 head dim.
@@ -282,7 +285,7 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
     },
     ModelCandidate {
         repo: "bartowski/Llama-3.2-3B-Instruct-GGUF",
-        quantization: "Q4_K_M",
+        quantization: Some("Q4_K_M"),
         // Revision 5ab33fa94d1d04e903623ae72c95d1696f09f9e8.
         weights_bytes: 2_019_377_696,
         // 28 layers x 8 KV heads x 128 head dim.
@@ -297,7 +300,7 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
     },
     ModelCandidate {
         repo: "unsloth/Qwen3-1.7B-GGUF",
-        quantization: "Q4_K_M",
+        quantization: Some("Q4_K_M"),
         // Revision d7f544eead698dbd1f15126ef60b45a1e1933222.
         weights_bytes: 1_107_409_472,
         // 28 layers x 8 KV heads x 128 head dim.
@@ -311,7 +314,7 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
     },
     ModelCandidate {
         repo: "bartowski/Llama-3.2-1B-Instruct-GGUF",
-        quantization: "Q4_K_M",
+        quantization: Some("Q4_K_M"),
         // Revision 067b946cf014b7c697f3654f621d577a3e3afd1c.
         weights_bytes: 807_694_464,
         // 16 layers x 8 KV heads x 64 head dim.
@@ -323,7 +326,7 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
     },
     ModelCandidate {
         repo: "unsloth/gemma-3-1b-it-GGUF",
-        quantization: "Q4_K_M",
+        quantization: Some("Q4_K_M"),
         // Revision f0b45be0aac41bd6a100a4b5734cad5f67255bfb.
         weights_bytes: 806_058_272,
         // 26 layers x 1 KV head x 256 head dim. The file says
@@ -338,7 +341,7 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
     },
     ModelCandidate {
         repo: "unsloth/Qwen3-0.6B-GGUF",
-        quantization: "Q4_K_M",
+        quantization: Some("Q4_K_M"),
         // Revision 50968a4468ef4233ed78cd7c3de230dd1d61a56b.
         weights_bytes: 396_705_472,
         // 28 layers x 8 KV heads x 128 head dim.

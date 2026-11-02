@@ -116,10 +116,10 @@ async fn download_recommended(
     }
 
     let repo = rec.candidate.repo.to_string();
-    let quant = rec.candidate.quantization.to_string();
+    let quant = rec.candidate.quantization.map(str::to_owned);
     println!();
     Arc::clone(&ctx.downloads)
-        .queue_smart(repo.clone(), Some(quant))
+        .queue_smart(repo.clone(), quant)
         .await?;
     run_interactive_monitor(Arc::clone(&ctx.downloads), Arc::clone(&ctx.console)).await?;
 
@@ -127,6 +127,10 @@ async fn download_recommended(
     // catalog — not its return value — is what says whether this worked.
     find_downloaded(ctx, &repo).await
 }
+
+/// The note beside `size`: the shortlist is checked at `Q4_K_M`, and the
+/// download takes the largest quantization that fits, which may be larger.
+const SIZE_NOTE: &str = "at Q4_K_M; the download takes the largest quant that fits";
 
 /// What the `context` row says, since it cannot say a number.
 const SERVED_CONTEXT: &str = "sized at launch";
@@ -157,16 +161,10 @@ fn needs_note(context: u64) -> String {
 fn print_recommendation(rec: &Recommendation) {
     let c = rec.candidate;
     println!();
-    println!(
-        "  {}{}{}  {}",
-        sgr(BOLD),
-        c.repo,
-        sgr(RESET),
-        c.quantization
-    );
+    println!("  {}{}{}", sgr(BOLD), c.repo, sgr(RESET));
     println!("  {}", c.rationale);
     println!();
-    row("size", &format_gib(c.weights_bytes), Some("download"));
+    row("size", &format_gib(c.weights_bytes), Some(SIZE_NOTE));
     row(
         "needs",
         &format!(

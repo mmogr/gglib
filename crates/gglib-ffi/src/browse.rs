@@ -124,7 +124,7 @@ pub(crate) fn suggestions(budget: Option<u64>) -> Vec<Suggestion> {
                 ModelShape::of_candidate(row).judge(Some(row.weights_bytes), budget);
             Suggestion {
                 repo: row.repo.to_owned(),
-                quantization: row.quantization.to_owned(),
+                quantization: row.quantization.unwrap_or_default().to_owned(),
                 bytes: row.weights_bytes,
                 verdict,
                 why,

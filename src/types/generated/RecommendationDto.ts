@@ -7,7 +7,7 @@
  * model in the shortlist fits this machine" is a real answer and the UI has
  * to say so, not show a recommendation card with blanks in it.
  */
-export type RecommendationDto = { repo: string, quantization: string, 
+export type RecommendationDto = { repo: string, 
 /**
  * Why this model, in the user's terms.
  */
