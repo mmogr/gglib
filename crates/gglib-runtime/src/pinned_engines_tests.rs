@@ -4,7 +4,8 @@
 //!
 //! The flags are gathered from gglib's own builders, not kept in a list:
 //! `llama-server`'s from `build_command` with every option on, `sd-server`'s
-//! from `sd_server_args` for every image family with every component, and
+//! from `sd_server_args` for every image family's every variant with every
+//! component, and
 //! `llama-bench`'s from the benchmark's `.arg("…")` literals. Two checks here
 //! hold the builders' own flag literals to what was gathered, so a flag added
 //! to a builder as a literal is caught. `--version`, which gglib runs both
@@ -113,14 +114,19 @@ fn llama_server_uses() -> Uses {
     uses
 }
 
-/// `sd-server`'s, from every image family with a file in every role.
+/// `sd-server`'s, from every image family with a file in every role, under a
+/// plain name and a Turbo one, since the name picks a variant's sampling
+/// (`ImageFamily::sampling`).
 fn sd_server_uses() -> Uses {
     let mut uses = Uses::new();
-    for family in ImageFamily::ALL {
+    for (family, file) in ImageFamily::ALL
+        .into_iter()
+        .flat_map(|family| ["model.gguf", "model-turbo.gguf"].map(|file| (family, file)))
+    {
         let config = SdServerConfig {
             model_id: 1,
             model_name: "m".to_owned(),
-            model_path: PathBuf::from("/m/model.gguf"),
+            model_path: Path::new("/m").join(file),
             family,
             components: ComponentRole::ALL
                 .into_iter()
@@ -389,6 +395,8 @@ fn every_flag_the_sd_server_builder_names_is_gathered() {
         gathered["--sampling-method"].contains("euler_a"),
         "{gathered:?}"
     );
+    assert!(gathered["--sigmas"].contains("qwen-image-2.1-turbo"));
+    assert!(gathered.contains_key("--linear-scale"), "{gathered:?}");
 }
 
 /// The benchmark names each flag in its own `.arg("…")`, which is all the

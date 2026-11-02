@@ -103,8 +103,8 @@ crates/gglib-core/src/domain/chat.rs 337
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 382
 crates/gglib-core/src/domain/hub_chats_tests.rs 481
-crates/gglib-core/src/domain/image_family.rs 589
-crates/gglib-core/src/domain/image_family_tests.rs 943
+crates/gglib-core/src/domain/image_family.rs 661
+crates/gglib-core/src/domain/image_family_tests.rs 979
 crates/gglib-core/src/domain/inference.rs 1611
 crates/gglib-core/src/domain/inference_tests.rs 1283
 crates/gglib-core/src/domain/kv_estimate.rs 341
@@ -257,7 +257,7 @@ crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 541
 crates/gglib-runtime/src/llama/detect/cuda.rs 303
 crates/gglib-runtime/src/llama/download/mod.rs 714
-crates/gglib-runtime/src/pinned_engines_tests.rs 452
+crates/gglib-runtime/src/pinned_engines_tests.rs 460
 crates/gglib-runtime/src/ports_impl/llm_completion/drawn_picture_tests.rs 471
 crates/gglib-runtime/src/ports_impl/llm_completion/first_call_tests.rs 374
 crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 346
@@ -287,7 +287,7 @@ crates/gglib-runtime/src/sd/install/install_tests.rs 320
 crates/gglib-runtime/src/sd/install/release_tests.rs 350
 crates/gglib-runtime/src/sd/server/job.rs 396
 crates/gglib-runtime/src/sd/server/job_leave_tests.rs 537
-crates/gglib-runtime/src/sd/server/job_tests.rs 1014
+crates/gglib-runtime/src/sd/server/job_tests.rs 999
 crates/gglib-runtime/src/system/gpu.rs 331
 crates/gglib-runtime/src/system/mod.rs 640
 crates/gglib-runtime/src/unified_server_config.rs 465
