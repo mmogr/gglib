@@ -1,16 +1,17 @@
 //! The projector files a surface offers when a model is being linked to one.
 //!
 //! [`projector_choices`] holds the rule once: the files other models already
-//! load, and the model's own files that are named as projectors.
+//! load, and the model's own files whose headers say they are projectors.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use super::ModelVerificationService;
+use super::model_row_roles::header_role;
 use crate::domain::{Model, ModelFile, ModelFolder};
 use crate::download::GgufFileRole;
 use crate::paths::canonical_model_path;
-use crate::ports::RepositoryError;
+use crate::ports::{GgufParserPort, RepositoryError};
 
 impl ModelVerificationService {
     /// The files the library records for model `model_id`, in file order.
@@ -40,14 +41,24 @@ impl ModelVerificationService {
 ///
 /// Two sources. Every projector a model in `library` is linked to is offered,
 /// because one projector serves every build of its base model. And each of
-/// `files`, the model's own rows, that is named as a projector and is on disk
-/// is offered under its canonical path, the form a link is stored in; a row's
-/// name is read in the model's [`ModelFolder`].
+/// `files`, the model's own rows, whose header `gguf_parser` reads as a
+/// projector's is offered under its canonical path, the form a link is
+/// stored in; a row's name is read in the model's [`ModelFolder`]. A file
+/// whose header cannot be read, one not on disk among them, is not offered,
+/// since linking it would be refused. The weights themselves are never read.
 #[must_use]
-pub fn projector_choices(model: &Model, files: &[ModelFile], library: &[Model]) -> Vec<PathBuf> {
+pub fn projector_choices(
+    model: &Model,
+    files: &[ModelFile],
+    library: &[Model],
+    gguf_parser: &dyn GgufParserPort,
+) -> Vec<PathBuf> {
     let folder = ModelFolder::of(&model.file_path, files);
-    let names = files.iter().map(|file| &file.file_path);
-    let own = GgufFileRole::projectors_among(&model.file_path, &folder, names)
+    let own = files
+        .iter()
+        .map(|file| folder.file(&file.file_path))
+        .filter(|path| *path != model.file_path)
+        .filter(|path| header_role(path, gguf_parser).is_some_and(GgufFileRole::is_projector))
         .filter_map(|path| canonical_model_path(&path).ok());
     let in_use = library
         .iter()
