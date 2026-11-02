@@ -4,12 +4,15 @@
 
 use std::path::Path;
 
+use gglib_core::domain::gguf::GgufValue;
+
 use crate::format::GGUF_MAGIC;
 
 /// The metadata value type of a string.
 const STRING: u32 = 8;
 
-/// The ggml type every fixture tensor declares (`F32`); nothing reads it.
+/// The ggml type every fixture tensor declares (`F32`); nothing reads it:
+/// a file's bits per weight come from its data's length, not its types.
 const F32: u32 = 0;
 
 /// Write a GGUF v3 file at `path` holding only `pairs` as string metadata,
@@ -40,19 +43,38 @@ pub fn write_string_gguf(path: &Path, pairs: &[(&str, &str)]) {
 ///
 /// When the file cannot be written.
 pub fn write_tensor_gguf(path: &Path, pairs: &[(&str, &str)], tensors: &[(&str, &[u64])]) {
-    let string = |text: &str| {
-        let mut bytes = (text.len() as u64).to_le_bytes().to_vec();
-        bytes.extend_from_slice(text.as_bytes());
-        bytes
-    };
+    let pairs: Vec<(&str, GgufValue)> = pairs
+        .iter()
+        .map(|(key, value)| (*key, GgufValue::String((*value).to_owned())))
+        .collect();
+    write_gguf(path, &pairs, tensors, 0);
+}
+
+/// Write a GGUF v3 file at `path` of typed `pairs`, `tensors` and
+/// `data_bytes` of tensor data.
+///
+/// The data is zero bytes after the table, padded to the alignment the
+/// pairs set in `general.alignment`, or to ggml's default of 32. The layout is [`write_tensor_gguf`]'s, with each value written as its
+/// type: an array as its element type, its length as `u64` and its
+/// elements, the element type taken from the first (`u8` when empty).
+///
+/// # Panics
+///
+/// When the file cannot be written.
+pub fn write_gguf(
+    path: &Path,
+    pairs: &[(&str, GgufValue)],
+    tensors: &[(&str, &[u64])],
+    data_bytes: u64,
+) {
     let mut bytes = GGUF_MAGIC.to_vec();
     bytes.extend_from_slice(&3_u32.to_le_bytes());
     bytes.extend_from_slice(&(tensors.len() as u64).to_le_bytes());
     bytes.extend_from_slice(&(pairs.len() as u64).to_le_bytes());
     for (key, value) in pairs {
         bytes.extend(string(key));
-        bytes.extend_from_slice(&STRING.to_le_bytes());
-        bytes.extend(string(value));
+        bytes.extend_from_slice(&value_type(value).to_le_bytes());
+        bytes.extend(encode(value));
     }
     for (name, shape) in tensors {
         bytes.extend(string(name));
@@ -64,7 +86,72 @@ pub fn write_tensor_gguf(path: &Path, pairs: &[(&str, &str)], tensors: &[(&str, 
         bytes.extend_from_slice(&F32.to_le_bytes());
         bytes.extend_from_slice(&0_u64.to_le_bytes());
     }
+    if data_bytes > 0 {
+        let alignment = pairs
+            .iter()
+            .find(|(key, _)| *key == "general.alignment")
+            .and_then(|(_, value)| value.as_u64())
+            .map_or(32, |alignment| {
+                usize::try_from(alignment).expect("a small alignment")
+            });
+        bytes.resize(bytes.len().next_multiple_of(alignment), 0);
+        let data = usize::try_from(data_bytes).expect("a fixture's data is small");
+        bytes.resize(bytes.len() + data, 0);
+    }
     std::fs::write(path, bytes).expect("the fixture is written");
+}
+
+/// A string as GGUF writes one: its length as `u64`, then its UTF-8 bytes.
+fn string(text: &str) -> Vec<u8> {
+    let mut bytes = (text.len() as u64).to_le_bytes().to_vec();
+    bytes.extend_from_slice(text.as_bytes());
+    bytes
+}
+
+/// GGUF's number for the type of `value`.
+const fn value_type(value: &GgufValue) -> u32 {
+    match value {
+        GgufValue::U8(_) => 0,
+        GgufValue::I8(_) => 1,
+        GgufValue::U16(_) => 2,
+        GgufValue::I16(_) => 3,
+        GgufValue::U32(_) => 4,
+        GgufValue::I32(_) => 5,
+        GgufValue::F32(_) => 6,
+        GgufValue::Bool(_) => 7,
+        GgufValue::String(_) => STRING,
+        GgufValue::Array(_) => 9,
+        GgufValue::U64(_) => 10,
+        GgufValue::I64(_) => 11,
+        GgufValue::F64(_) => 12,
+    }
+}
+
+/// The bytes of `value`, after its type.
+fn encode(value: &GgufValue) -> Vec<u8> {
+    match value {
+        GgufValue::U8(v) => v.to_le_bytes().to_vec(),
+        GgufValue::I8(v) => v.to_le_bytes().to_vec(),
+        GgufValue::U16(v) => v.to_le_bytes().to_vec(),
+        GgufValue::I16(v) => v.to_le_bytes().to_vec(),
+        GgufValue::U32(v) => v.to_le_bytes().to_vec(),
+        GgufValue::I32(v) => v.to_le_bytes().to_vec(),
+        GgufValue::F32(v) => v.to_le_bytes().to_vec(),
+        GgufValue::Bool(v) => vec![u8::from(*v)],
+        GgufValue::String(v) => string(v),
+        GgufValue::Array(items) => {
+            let element = items.first().map_or(0, value_type);
+            let mut bytes = element.to_le_bytes().to_vec();
+            bytes.extend_from_slice(&(items.len() as u64).to_le_bytes());
+            for item in items {
+                bytes.extend(encode(item));
+            }
+            bytes
+        }
+        GgufValue::U64(v) => v.to_le_bytes().to_vec(),
+        GgufValue::I64(v) => v.to_le_bytes().to_vec(),
+        GgufValue::F64(v) => v.to_le_bytes().to_vec(),
+    }
 }
 
 /// Write a safetensors file at `path` whose header names each tensor in

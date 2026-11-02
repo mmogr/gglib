@@ -15,6 +15,7 @@ mod defects_agent;
 pub mod device_budget;
 pub mod dialect;
 pub mod engine_pins;
+mod file_type;
 pub mod folder;
 pub(crate) mod generation_config;
 pub mod gguf;
@@ -153,10 +154,11 @@ pub use chat::{
 pub use thinking::Thinking;
 
 // Re-export GGUF types at the domain level for convenience
+pub use file_type::FileType;
 pub use gguf::{
     CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, HeadMetadata, RawMetadata,
 };
-pub use tensor_table::{TensorInfo, TensorTable, WeightsFormat};
+pub use tensor_table::{TensorInfo, TensorPayload, TensorTable, WeightsFormat};
 
 // Re-export image-model types at the domain level for convenience
 pub use image_family::{

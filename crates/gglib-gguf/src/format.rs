@@ -6,24 +6,6 @@
 /// GGUF magic number (4 bytes): "GGUF" in little-endian.
 pub(crate) const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
 
-/// Known quantization types and their file type codes.
-pub(crate) mod quantization {
-    /// Map GGUF file type number to quantization string.
-    #[must_use]
-    pub(crate) const fn from_file_type(file_type: u32) -> Option<&'static str> {
-        match file_type {
-            0 => Some("F32"),
-            1 => Some("F16"),
-            2 => Some("Q4_0"),
-            3 => Some("Q4_1"),
-            6 => Some("Q5_0"),
-            7 => Some("Q5_1"),
-            8 => Some("Q8_0"),
-            _ => None,
-        }
-    }
-}
-
 /// Architecture-specific context length metadata keys.
 ///
 /// Ordered by popularity for optimized lookup.

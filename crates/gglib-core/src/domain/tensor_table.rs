@@ -53,9 +53,91 @@ impl TensorTable {
     }
 }
 
+/// The tensor data of a GGUF file, or of every shard of one model: its bytes,
+/// and the weights they encode.
+///
+/// The bytes are what follows the tensor-info table, from the aligned start
+/// of the data to the end of the file; the weights are the elements of every
+/// tensor the table declares. Their ratio is the file's bits per weight,
+/// which needs no table of what each tensor type costs and counts every
+/// tensor a recipe kept at another type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TensorPayload {
+    /// The bytes of tensor data.
+    pub bytes: u64,
+    /// The elements of every tensor.
+    pub elements: u64,
+}
+
+impl TensorPayload {
+    /// The bits each weight takes on average, to a thousandth, when there
+    /// are weights and bytes holding them.
+    #[must_use]
+    pub fn bits_per_weight(self) -> Option<f64> {
+        if self.bytes == 0 || self.elements == 0 {
+            return None;
+        }
+        let millibits = u128::from(self.bytes) * 8_000 / u128::from(self.elements);
+        u32::try_from(millibits)
+            .ok()
+            .map(|millibits| f64::from(millibits) / 1_000.0)
+    }
+}
+
+impl std::ops::Add for TensorPayload {
+    type Output = Self;
+
+    /// One model's payload from two of its shards.
+    fn add(self, other: Self) -> Self {
+        Self {
+            bytes: self.bytes.saturating_add(other.bytes),
+            elements: self.elements.saturating_add(other.elements),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bits_per_weight_is_the_payload_over_the_weights() {
+        let payload = TensorPayload {
+            bytes: 17_923_393_664,
+            elements: 27_310_000_000,
+        };
+        let bpw = payload.bits_per_weight().unwrap();
+        assert!((bpw - 5.25).abs() < 0.01, "{bpw}");
+    }
+
+    #[test]
+    fn a_payload_with_no_bytes_or_no_weights_has_no_bits_per_weight() {
+        assert_eq!(TensorPayload::default().bits_per_weight(), None);
+        let no_bytes = TensorPayload {
+            bytes: 0,
+            elements: 10,
+        };
+        assert_eq!(no_bytes.bits_per_weight(), None);
+    }
+
+    #[test]
+    fn shards_add_to_one_payload() {
+        let one = TensorPayload {
+            bytes: 10,
+            elements: 20,
+        };
+        let two = TensorPayload {
+            bytes: 30,
+            elements: 60,
+        };
+        assert_eq!(
+            one + two,
+            TensorPayload {
+                bytes: 40,
+                elements: 80
+            }
+        );
+    }
 
     fn table(names: &[&str]) -> TensorTable {
         TensorTable {
