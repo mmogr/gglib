@@ -12,8 +12,9 @@
 //!
 //! # A report, not a conservative baseline
 //!
-//! Five of the nine bools default `true` upstream (`caps.h:11-14,23`), so an
-//! absent field must never be read as `false` — which is why every field here
+//! Five of the nine bools default `true` upstream (`caps.h:12-15,27` at
+//! `b11960`), so an
+//! absent field must never be read as `false` — which is why every bool here
 //! is `Option<bool>` and none carries a `#[serde(default)]`-to-`false`. On
 //! the measured pinned build (`b1-10bf611`) the distinction never arises on
 //! the wire: all nine keys are serialized verbatim with explicit
@@ -34,18 +35,20 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The nine bools of `chat_template_caps`, as `GET /props` reports them.
+/// The nine bools of `chat_template_caps`, and the one list, as `GET /props`
+/// reports them.
 ///
 /// Field names are byte-for-byte the wire keys measured on the pinned build
-/// (`b1-10bf611`) — `template_caps_tests` pins the full list against a
-/// fixture transcribed from that measurement, so an upstream rename or
-/// addition fails loudly rather than silently reading as absent.
+/// (the bools on `b1-10bf611`, `reasoning_effort_levels` on `b11960`) —
+/// `template_caps_tests` pins the full list against a fixture transcribed
+/// from those measurements, so an upstream rename or addition fails loudly
+/// rather than silently reading as absent.
 ///
-/// Every field is `Option<bool>`: `None` means the server did not report the
-/// key, which — five defaults being `true` upstream — licenses no conclusion
-/// in either direction. Unknown fields in the body are ignored (no
-/// `deny_unknown_fields`): a future build adding a tenth cap must not make
-/// the nine known ones unreadable.
+/// Every field is an `Option`: `None` means the server did not report the
+/// key, which — five bool defaults being `true` upstream — licenses no
+/// conclusion in either direction. Unknown fields in the body are ignored
+/// (no `deny_unknown_fields`): a future build adding an eleventh cap must
+/// not make the ten known ones unreadable.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TemplateCaps {
     /// Whether the template reads `tools`. Upstream default: `true`.
@@ -79,6 +82,13 @@ pub struct TemplateCaps {
     /// Whether tool-call arguments may be a JSON object rather than a
     /// string. Upstream default: `false`.
     pub supports_object_arguments: Option<bool>,
+    /// The `reasoning_effort` values, among `minimal`, `low`, `medium`,
+    /// `high`, `xhigh` and `max`, that the template renders distinctly,
+    /// lowest to highest (`caps.cpp:593-643` at `b11960`). `[]` when none
+    /// does, and whenever `supports_reasoning_effort` is `false`, because the
+    /// probe then never runs. Added on `b11960` (llama.cpp#31271); a build
+    /// before it reports no key, so `None`.
+    pub reasoning_effort_levels: Option<Vec<String>>,
 }
 
 /// What gglib currently holds about a model's template caps.
