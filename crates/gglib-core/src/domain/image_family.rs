@@ -449,11 +449,11 @@ const FLUX3_KLEIN_SAMPLING: Sampling = Sampling {
 /// Flash attention is on in the diffusion model alone, as FLUX.3 Image
 /// Klein's: the guide passes no flag, which is sd.cpp's per-backend `auto`,
 /// and this mode drew FLUX.3 Image Klein's picture through this same VAE
-/// (log-0018, 2026-11-02). It has not run with FLUX.2.
+/// (log-0018, 2026-11-02), and FLUX.2 klein's too.
 ///
-/// The compute margin is FLUX.3 Image Klein's 7 GiB, borrowed, not read:
-/// the same VAE decodes the same 1024x1024 latents. A run gives the
-/// footprint.
+/// The compute margin is FLUX.3 Image Klein's 7 GiB: the same VAE decodes
+/// the same 1024x1024 latents, and a render peaked at a 9.6 GiB footprint
+/// with 8.1 GiB of weights loaded (log-0018, 2026-11-02).
 const FLUX2_KLEIN: Recipe = Recipe {
     placement: Placement::DiffusionOnly,
     components: &[
