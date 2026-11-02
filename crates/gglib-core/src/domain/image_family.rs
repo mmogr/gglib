@@ -295,7 +295,7 @@ const QWEN_IMAGE_21_SAMPLING: Sampling = Sampling {
 
 /// Qwen-Image 2.1 Turbo as stable-diffusion.cpp's guide runs it: its fixed
 /// schedule (`--sigmas qwen-image-2.1-turbo`, nine sigmas, so 8 steps) at
-/// guidance 1.0 with `euler`. Nothing here has drawn a picture yet.
+/// guidance 1.0 with `euler`; drew in 135 s on Metal (log-0018, 2026-11-02).
 const QWEN_IMAGE_21_TURBO_SAMPLING: Sampling = Sampling {
     steps: 8,
     cfg: 1.0,
@@ -341,9 +341,9 @@ const Z_IMAGE_TURBO_SAMPLING: Sampling = Sampling {
 /// Base Z-Image: guidance 5.0 as the guide runs it, which names no step
 /// count; 28 is the low end of Tongyi's 28 to 50. Its `Q8_0` file drew blank
 /// white on Metal, an f16 overflow in the quantized matmuls, and drew in
-/// `sd-cli` with `--linear-scale 0.000244140625` (log-0018, 2026-10-12);
-/// whether the scale stays is for a run through gglib, which has not been
-/// made.
+/// `sd-cli` with `--linear-scale 0.000244140625` (log-0018, 2026-10-12).
+/// With the scale its `Q8_0` and `BF16` files draw alike, in about 12
+/// minutes on Metal (log-0018, 2026-11-02).
 const Z_IMAGE_BASE_SAMPLING: Sampling = Sampling {
     steps: 28,
     cfg: 5.0,
