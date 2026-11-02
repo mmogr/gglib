@@ -144,7 +144,7 @@ jobs:
         run: make enforce
 
   # Each reading an ADR's criterion names, in contracts/upstream/llama's
-  # observed.json, against its hand-kept approval. It reads two committed
+  # observed.json, against its approval. It reads two committed
   # files and never starts an engine, so a recorder that fails cannot turn it
   # red; a reading that moved, or one nobody has approved, does.
   adr-readings:

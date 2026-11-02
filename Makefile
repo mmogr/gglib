@@ -392,7 +392,7 @@ enforce: ## Run the architecture enforcement checks
 	@# one names a type or a .rs file the code no longer has.
 	@./scripts/check_diagram_names.py --check
 
-# The ADR readings in contracts/upstream against their hand-kept approvals. Not
+# The ADR readings in contracts/upstream against their approvals. Not
 # in `enforce`: CI runs it as a job of its own, `ADR criterion moved`, so one
 # moved reading is one red row.
 adr-readings: ## Check each ADR reading in contracts/upstream against its approval
