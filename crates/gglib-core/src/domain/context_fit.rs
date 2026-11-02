@@ -33,6 +33,10 @@ use crate::settings::DEFAULT_CONTEXT_SIZE;
 /// point is stability, not squeezing out the last few thousand tokens.
 const RUNGS: [u64; 6] = [4096, 8192, 16_384, 32_768, 65_536, 131_072];
 
+/// The rung above the lowest: a model trained for fewer tokens than this, and
+/// more than the lowest, is fitted at the lowest, short of its whole window.
+pub(crate) const SECOND_RUNG: u64 = RUNGS[1];
+
 // The ladder starts at the built-in default, so a fitted value can never be
 // worse than serving no fit at all. Compile-time because both operands are
 // constants and the mistake would be a source edit.

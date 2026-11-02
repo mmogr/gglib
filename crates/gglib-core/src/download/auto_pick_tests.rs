@@ -557,6 +557,40 @@ fn a_model_trained_for_no_more_than_the_lowest_rung_fits_its_whole_window() {
     }
 }
 
+/// A model trained for more than the lowest rung and fewer than the next is
+/// fitted at the lowest, short of its window: it fits once its weights and
+/// the KV cache of its whole trained context do, as one trained for fewer
+/// does.
+#[test]
+fn a_model_trained_between_the_lowest_two_rungs_fits_its_whole_window() {
+    for trained in [6144, 8191] {
+        let mut model = qwen3_4b();
+        model.context_length = Some(trained);
+        let kv =
+            estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref()).unwrap();
+        let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+        let window = QWEN3_4B_Q4_K_M + per_token * trained;
+
+        let at_edge = MemoryFit {
+            budget_bytes: budget_covering(window),
+        };
+        let short = MemoryFit {
+            budget_bytes: budget_covering(window) - 1,
+        };
+
+        assert_eq!(
+            at_edge.fit(&model, false, QWEN3_4B_Q4_K_M),
+            Fit::Fits,
+            "{trained}"
+        );
+        assert_eq!(
+            short.fit(&model, false, QWEN3_4B_Q4_K_M),
+            Fit::DoesNotFit,
+            "{trained}"
+        );
+    }
+}
+
 #[test]
 fn the_weights_alone_fit_the_share_the_fit_spends() {
     let fit = MemoryFit {

@@ -190,6 +190,7 @@ pub use capabilities::infer_from_chat_template;
 pub use capabilities::{
     ChatMessage, MessageContent, ModelCapabilities, transform_messages_for_capabilities,
 };
+pub(crate) use context_fit::SECOND_RUNG;
 pub use context_fit::{FitInputs, fit_context, fit_context_explained};
 pub use generation_config::generation_config_candidates;
 pub use generation_config::parse_generation_config;

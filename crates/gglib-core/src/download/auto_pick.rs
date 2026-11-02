@@ -19,9 +19,10 @@ use async_trait::async_trait;
 use super::file_role::GgufFileRole;
 use crate::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V};
 use crate::domain::FileType;
+use crate::domain::SECOND_RUNG;
 use crate::domain::gguf::{GgufMetadata, HeadMetadata};
 use crate::domain::kv_estimate::{
-    estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
+    KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
 };
 use crate::domain::phone_fit::{FitVerdict, MissingInput, fit_verdict};
 use crate::domain::recommendation::usable_share;
@@ -90,8 +91,9 @@ pub trait FitJudge: Send + Sync {
 /// A chat model fits when the verdict is [`FitVerdict::Fits`]: a context
 /// above the lowest rung. [`FitVerdict::Tight`] counts only when that rung is
 /// the whole context the model was trained for. A model trained for fewer
-/// tokens than the lowest rung, which the ladder never serves, fits when its
-/// weights and the KV cache of its whole trained context do. Its trained
+/// tokens than the lowest rung, which the ladder never serves, or for fewer
+/// than the next, which it serves only at the lowest, fits when its weights
+/// and the KV cache of its whole trained context do. Its trained
 /// context and KV shape come from its metadata, as a phone's fit reads them
 /// from a head, and a missing trained context or KV shape is
 /// [`Fit::CannotTell`]. An image model fits when its weights fit the share of
@@ -113,6 +115,16 @@ impl MemoryFit {
     }
 }
 
+impl MemoryFit {
+    /// Whether `weights_bytes` of weights and the KV cache of all `trained`
+    /// tokens, at the default KV types, fit the share of the budget a fit
+    /// spends.
+    fn whole_window(self, weights_bytes: u64, trained: u64, kv: KvElemsPerToken) -> Fit {
+        let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+        self.holds(weights_bytes.saturating_add(estimate_kv_bytes_for_context(per_token, trained)))
+    }
+}
+
 impl FitJudge for MemoryFit {
     fn fit(&self, metadata: &GgufMetadata, image: bool, weights_bytes: u64) -> Fit {
         if image {
@@ -125,14 +137,15 @@ impl FitJudge for MemoryFit {
             (FitVerdict::Fits { .. }, ..) => Fit::Fits,
             // The lowest rung is all the model was trained for.
             (FitVerdict::Tight { ctx }, Some(trained), _) if ctx >= trained => Fit::Fits,
-            // The ladder starts above the trained context: the whole of it.
+            // The ladder starts above the trained context, or its next rung
+            // does: the whole of it.
             (FitVerdict::TooBig { .. }, Some(trained), Some(kv))
                 if trained < DEFAULT_CONTEXT_SIZE =>
             {
-                let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
-                self.holds(
-                    weights_bytes.saturating_add(estimate_kv_bytes_for_context(per_token, trained)),
-                )
+                self.whole_window(weights_bytes, trained, kv)
+            }
+            (FitVerdict::Tight { .. }, Some(trained), Some(kv)) if trained < SECOND_RUNG => {
+                self.whole_window(weights_bytes, trained, kv)
             }
             (
                 FitVerdict::Unknown {
