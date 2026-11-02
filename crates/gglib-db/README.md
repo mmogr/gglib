@@ -82,12 +82,15 @@ This crate is in the **Infrastructure Layer** — it implements the repository p
 ```rust,no_run
 use gglib_db::setup_database;
 use gglib_db::repositories::SqliteModelRepository;
-use gglib_core::ports::ModelRepository;
+use gglib_core::ports::{ModelRepository, NoopGgufParser};
 use std::path::Path;
 
 async fn example() {
-    // Initialize database
-    let pool = setup_database(Path::new("gglib.db")).await.unwrap();
+    // Initialize database. The parser reads a model file's header where a
+    // migration asks what the file is; the daemon passes the real one.
+    let pool = setup_database(Path::new("gglib.db"), &NoopGgufParser)
+        .await
+        .unwrap();
 
     // Use repository via trait
     let repo = SqliteModelRepository::new(pool);

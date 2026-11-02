@@ -40,16 +40,19 @@ impl ModelOps {
     }
 
     /// The projectors the picker offers for model `id`: those already in use
-    /// by any model, and the model's own files that are named as projectors.
+    /// by any model, and the model's own files whose headers say they are
+    /// projectors.
     pub async fn projector_choices(&self, id: i64) -> Result<Vec<ProjectorChoice>, GuiError> {
         let core = &self.deps.core;
         let model = resolve_model(core.models(), id).await?;
         let library = core.models().list().await?;
         let files = core.verification().files_of(id).await?;
-        Ok(projector_choices(&model, &files, &library)
-            .iter()
-            .map(|path| file_choice(path))
-            .collect())
+        Ok(
+            projector_choices(&model, &files, &library, self.deps.gguf_parser.as_ref())
+                .iter()
+                .map(|path| file_choice(path))
+                .collect(),
+        )
     }
 }
 

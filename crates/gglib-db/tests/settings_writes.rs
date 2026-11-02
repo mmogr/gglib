@@ -34,8 +34,12 @@ async fn two_writers() -> (
 ) {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
-    let first = setup_database(&path).await.expect("the first pool");
-    let second = setup_database(&path).await.expect("the second pool");
+    let first = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the first pool");
+    let second = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the second pool");
     (
         dir,
         Arc::new(SqliteSettingsRepository::new(first)),

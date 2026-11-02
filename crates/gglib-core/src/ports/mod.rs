@@ -11,6 +11,8 @@ mod download_manager_fixture;
 pub(crate) mod event_emitter;
 pub(crate) mod generation_gate;
 pub(crate) mod gguf_parser;
+#[cfg(any(test, feature = "test-utils"))]
+mod gguf_parser_fixture;
 pub(crate) mod hub_chats;
 pub mod huggingface;
 pub(crate) mod image_generation;
@@ -72,6 +74,8 @@ pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, NoopGgufParser,
     TensorTable,
 };
+#[cfg(any(test, feature = "test-utils"))]
+pub use gguf_parser_fixture::FirstBytesParser;
 pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{
     HfClientPort, HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
@@ -128,7 +132,7 @@ pub use usage_sink::UsageSink;
 ///
 /// // In gglib-bootstrap:
 /// let repos = gglib_db::CoreFactory::build_repos(pool);
-/// let core = AppCore::new(repos, hf_client, downloads);
+/// let core = AppCore::new(repos, hf_client, downloads, gguf_parser);
 /// ```
 #[derive(Clone)]
 pub struct Repos {

@@ -130,14 +130,26 @@ impl CoreBootstrap {
         hf_client: Arc<dyn HfClientPort>,
         emitter: Arc<dyn AppEventEmitter>,
     ) -> Result<BuiltCore> {
-        let pool = setup_database(&config.db_path).await?;
+        // The GGUF parser, shared: the database's own setup reads headers
+        // with it, as do the model registrar, the download manager's head
+        // read of an image model's weights, capability detection, and what
+        // verification reads each of a model's files to be.
+        let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
+        let pool = setup_database(&config.db_path, gguf_parser.as_ref()).await?;
 
         let Holders {
             client_config: _,
             download_config,
             core_token,
         } = holders;
-        let built = wire(pool, hf_client, download_config, core_token, emitter);
+        let built = wire(
+            pool,
+            hf_client,
+            gguf_parser,
+            download_config,
+            core_token,
+            emitter,
+        );
 
         tracing::debug!(
             db_path = %config.db_path.display(),
@@ -153,6 +165,7 @@ impl CoreBootstrap {
 fn wire(
     pool: SqlitePool,
     hf_client: Arc<dyn HfClientPort>,
+    gguf_parser: Arc<dyn GgufParserPort>,
     download_config: DownloadManagerConfig,
     core_token: Option<String>,
     emitter: Arc<dyn AppEventEmitter>,
@@ -161,11 +174,7 @@ fn wire(
     //    registrar and the verification service share.
     let repos = CoreFactory::build_repos(pool.clone());
 
-    // 4. GGUF parser (shared: model registrar, the download manager's head
-    //    read of an image model's weights, and capability detection)
-    let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
-
-    // 5. Model registrar — composes model repository + GGUF parser so that
+    // 4. Model registrar — composes model repository + GGUF parser so that
     //    both GUI and CLI download paths use the identical registration
     //    logic. It holds the Hub client to look up a model author's
     //    published sampling recipe at import time.
@@ -178,7 +187,7 @@ fn wire(
         .with_hf_client(hf_client.clone()),
     );
 
-    // 6. Download manager
+    // 5. Download manager
     let downloads: Arc<dyn DownloadManagerPort> =
         Arc::new(build_download_manager(DownloadManagerDeps {
             model_registrar,
@@ -188,12 +197,16 @@ fn wire(
             gguf_parser: gguf_parser.clone(),
         }));
 
-    // 7. AppCore, whose verification service checks for updates against the
+    // 6. AppCore, whose verification service checks for updates against the
     //    HF client and queues a repair's download on that same manager
     let app = Arc::new(
-        AppCore::new(repos.clone(), hf_client.clone(), Arc::clone(&downloads))
-            .with_hf_token(core_token)
-            .with_gguf_parser(gguf_parser.clone()),
+        AppCore::new(
+            repos.clone(),
+            hf_client.clone(),
+            Arc::clone(&downloads),
+            gguf_parser.clone(),
+        )
+        .with_hf_token(core_token),
     );
 
     BuiltCore {

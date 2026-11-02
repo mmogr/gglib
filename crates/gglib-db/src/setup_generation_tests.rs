@@ -35,9 +35,12 @@ async fn stamped_file(path: &Path, generation: i64) {
 #[tokio::test]
 async fn a_new_database_is_stamped_with_this_generation() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let pool = setup_database(&dir.path().join("gglib.db"))
-        .await
-        .expect("setup");
+    let pool = setup_database(
+        &dir.path().join("gglib.db"),
+        &gglib_core::ports::NoopGgufParser,
+    )
+    .await
+    .expect("setup");
     assert_eq!(generation(&pool).await, SCHEMA_GENERATION);
 }
 
@@ -47,7 +50,7 @@ async fn a_database_from_a_newer_build_is_refused_and_left_as_it_was() {
     let path = dir.path().join("gglib.db");
     stamped_file(&path, SCHEMA_GENERATION + 1).await;
 
-    let err = setup_database(&path)
+    let err = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await
         .expect_err("a newer file must be refused");
     assert!(err.to_string().contains("newer gglib"), "{err}");
@@ -71,7 +74,9 @@ async fn a_database_from_an_older_build_is_brought_up_and_restamped() {
     let path = dir.path().join("gglib.db");
     stamped_file(&path, SCHEMA_GENERATION - 1).await;
 
-    let pool = setup_database(&path).await.expect("an older file opens");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("an older file opens");
     assert_eq!(generation(&pool).await, SCHEMA_GENERATION);
 }
 

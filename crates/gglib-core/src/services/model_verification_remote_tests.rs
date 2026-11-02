@@ -10,8 +10,8 @@ use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::domain::{Model, NewModel, NewModelFile};
-use crate::ports::huggingface::fake_hub::{FakeHub, RoleParser, hub_file};
-use crate::ports::{AskedDownloads, ModelFilesRepositoryPort};
+use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
+use crate::ports::{AskedDownloads, FirstBytesParser, ModelFilesRepositoryPort};
 use crate::services::model_projector::tests::OneModelRepo;
 
 pub(super) const REPO: &str = "owner/zeta-GGUF";
@@ -56,12 +56,14 @@ pub(super) fn row(index: i32, name: &str, oid: &str) -> ModelFile {
 
 /// Model 1, a download of [`REPO`]'s [`WEIGHTS`] stored with the variant
 /// label `quantization`, or none when it is empty, whose weights are in
-/// `dir`.
+/// `dir` and which links [`PROJECTOR`] there, as the download that fetched
+/// it did.
 fn model_in(dir: &Path, quantization: &str) -> Model {
     let mut new = NewModel::new("zeta".to_owned(), dir.join(WEIGHTS), 7.0, Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
     new.hf_filename = Some(WEIGHTS.to_owned());
     new.variant_label = (!quantization.is_empty()).then(|| quantization.to_owned());
+    new.projector_path = Some(dir.join(PROJECTOR));
     Model::stored(1, &new)
 }
 
@@ -100,8 +102,8 @@ pub(super) fn fixture_queueing_on(
         store,
         hub.clone(),
         queued.clone(),
-    )
-    .with_gguf_parser(Arc::new(RoleParser));
+        Arc::new(FirstBytesParser),
+    );
     Fixture {
         service,
         hub,
@@ -176,10 +178,11 @@ async fn a_model_without_a_projector_row_checks_its_weights_alone() {
 // ── Repair ───────────────────────────────────────────────────────────────
 
 /// A directory holding healthy weights and a projector whose bytes no longer
-/// match its row, and the rows for both.
+/// match its row, though its header still says what it is, and the rows for
+/// both.
 fn corrupt_projector_on_disk(dir: &Path) -> Vec<ModelFile> {
     std::fs::write(dir.join(WEIGHTS), "weights").unwrap();
-    std::fs::write(dir.join(PROJECTOR), "damaged").unwrap();
+    std::fs::write(dir.join(PROJECTOR), "projector, damaged").unwrap();
     vec![
         row(0, WEIGHTS, &sha256("weights")),
         row(1, PROJECTOR, &sha256("projector")),
@@ -211,7 +214,7 @@ async fn a_corrupt_projector_is_deleted_and_its_group_is_queued_again() {
         [(REPO.to_owned(), Some("Q8_0".to_owned()))]
     );
     // What was queued is a group that holds the projector.
-    let group = download_group(f.hub.as_ref(), Some(&RoleParser), REPO, "Q8_0")
+    let group = download_group(f.hub.as_ref(), Some(&FirstBytesParser), REPO, "Q8_0")
         .await
         .unwrap();
     assert!(group.files().any(|file| file.path == PROJECTOR));

@@ -14,10 +14,9 @@ system. No I/O, networking, or runtime dependencies allowed.
   values from their plain counterparts (`Q6_K`), since `HuggingFace` repos frequently
   publish both with the same bit-depth suffix.
 - `file_role` - What a GGUF file is for (`GgufFileRole`): a model's weights, a
-  multimodal projector, or a sidecar (an importance matrix or an MTP head, never a
-  quantization), read from its file name (`GgufFileRole::classify`), and which of
-  a model's own files are projectors (`GgufFileRole::projectors_among`). `gglib-gguf`
-  reports the same type from the file's header.
+  multimodal projector, or a sidecar (an importance matrix, an adapter or a draft
+  model's head, never a quantization). `gglib-gguf` reads it from the file's
+  header; a file's name is never read for it.
 - `auto_pick` - Which variant a download takes when none is asked for
   (`pick_variant`): the largest quantized weights variant that fits the memory
   budget (`MemoryFit`, a launch's own fit), each judged from its head and only a

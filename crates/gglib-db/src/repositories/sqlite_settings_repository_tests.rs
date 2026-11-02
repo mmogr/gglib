@@ -288,7 +288,9 @@ async fn an_existing_database_opens_with_its_settings_table_and_rows_unchanged()
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("gglib.db");
 
-    let pool = crate::setup_database(&path).await.unwrap();
+    let pool = crate::setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     let repo = SqliteSettingsRepository::new(pool.clone());
     repo.save(&Settings {
         proxy_port: Some(9191),
@@ -299,7 +301,9 @@ async fn an_existing_database_opens_with_its_settings_table_and_rows_unchanged()
     let (sql, stored) = (table_sql(&pool).await, repo.load().await.unwrap());
     pool.close().await;
 
-    let pool = crate::setup_database(&path).await.unwrap();
+    let pool = crate::setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     assert_eq!(table_sql(&pool).await, sql);
     let reopened = SqliteSettingsRepository::new(pool).load().await.unwrap();
     assert_eq!(reopened, stored);

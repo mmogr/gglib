@@ -36,9 +36,12 @@ fn now_secs() -> u64 {
 /// threads counted are compared with the scans written plus those lost.
 async fn one_round() -> (i64, i64, i64) {
     let dir = tempfile::tempdir().expect("tempdir");
-    let pool = setup_database(&dir.path().join("gglib.db"))
-        .await
-        .expect("the database");
+    let pool = setup_database(
+        &dir.path().join("gglib.db"),
+        &gglib_core::ports::NoopGgufParser,
+    )
+    .await
+    .expect("the database");
     let writer = LoopGuardTripWriter::spawn(pool.clone());
     let stop = Arc::new(AtomicBool::new(false));
     let recorded = Arc::new(AtomicU64::new(0));

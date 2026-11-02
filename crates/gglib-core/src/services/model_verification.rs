@@ -17,6 +17,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 
+use super::model_row_roles::row_roles;
 use crate::domain::{ModelFile, ModelFolder};
 use crate::download::GgufFileRole;
 use crate::ports::{
@@ -89,27 +90,27 @@ pub enum VerifiedFileKind {
 }
 
 impl VerifiedFileKind {
-    /// The kind of each of `files`, a model's rows in file order: a row named
-    /// as a projector is the projector, a row holding an absolute path a
-    /// companion, and every other row a weights shard.
+    /// The kind of each of `files`, a model's rows in file order, whose
+    /// roles are `roles`, in the same order: a row holding an absolute path
+    /// is a companion, a row whose role is projector the projector, and every
+    /// other row a weights shard.
     #[must_use]
-    pub fn of_rows(files: &[ModelFile]) -> Vec<Self> {
-        let kind_of = |file: &ModelFile| {
-            let path = Path::new(&file.file_path);
-            if path.is_absolute() {
+    pub fn of_rows(files: &[ModelFile], roles: &[GgufFileRole]) -> Vec<Self> {
+        let kind_of = |(file, role): (&ModelFile, &GgufFileRole)| {
+            if Path::new(&file.file_path).is_absolute() {
                 Some(Self::Companion)
-            } else if GgufFileRole::classify(path).is_projector() {
+            } else if role.is_projector() {
                 Some(Self::Projector)
             } else {
                 None
             }
         };
-        let of = files.iter().filter(|file| kind_of(file).is_none()).count();
+        let rows = || files.iter().zip(roles);
+        let of = rows().filter(|&row| kind_of(row).is_none()).count();
         let mut number = 0;
-        files
-            .iter()
-            .map(|file| {
-                kind_of(file).unwrap_or_else(|| {
+        rows()
+            .map(|row| {
+                kind_of(row).unwrap_or_else(|| {
                     number += 1;
                     Self::Shard { number, of }
                 })
@@ -341,37 +342,32 @@ pub struct ModelVerificationService {
     pub(super) hf_client: Arc<dyn HfClientPort>,
     /// The download queue a repair fetches its files through.
     pub(super) downloads: Arc<dyn DownloadManagerPort>,
-    /// Reads the heads of a repository's files, to know which projector a
-    /// download fetches. `None` knows of none.
-    pub(super) gguf_parser: Option<Arc<dyn GgufParserPort>>,
+    /// What reads each file's header, which says what the file is, and the
+    /// heads of a repository's files, to know which projector a repair's
+    /// download fetches.
+    pub(super) gguf_parser: Arc<dyn GgufParserPort>,
     /// Concurrency control.
     pub(super) operation_lock: ModelOperationLock,
 }
 
 impl ModelVerificationService {
-    /// Create a new verification service.
+    /// Create a new verification service, which reads what each of a
+    /// model's files is from its header with `gguf_parser`.
     pub fn new(
         model_repo: Arc<dyn ModelRepository>,
         model_files_repo: Arc<dyn ModelFilesRepositoryPort>,
         hf_client: Arc<dyn HfClientPort>,
         downloads: Arc<dyn DownloadManagerPort>,
+        gguf_parser: Arc<dyn GgufParserPort>,
     ) -> Self {
         Self {
             model_repo,
             model_files_repo,
             hf_client,
             downloads,
-            gguf_parser: None,
+            gguf_parser,
             operation_lock: ModelOperationLock::new(),
         }
-    }
-
-    /// This service, reading the heads of a repository's files with
-    /// `parser` to know which projector a repair's download fetches.
-    #[must_use]
-    pub fn with_gguf_parser(mut self, parser: Arc<dyn GgufParserPort>) -> Self {
-        self.gguf_parser = Some(parser);
-        self
     }
 
     /// Verify the integrity of a model by computing SHA256 hashes.
@@ -417,7 +413,8 @@ impl ModelVerificationService {
 
         // The folder the download wrote the files in, where each row is read.
         let folder = ModelFolder::of(&model.file_path, &model_files);
-        let kinds = VerifiedFileKind::of_rows(&model_files);
+        let roles = row_roles(&model, &folder, &model_files, self.gguf_parser.as_ref());
+        let kinds = VerifiedFileKind::of_rows(&model_files, &roles);
 
         let total_shards = model_files.len();
 

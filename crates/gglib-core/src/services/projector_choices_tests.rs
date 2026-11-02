@@ -6,6 +6,7 @@ use chrono::Utc;
 
 use super::*;
 use crate::domain::NewModel;
+use crate::ports::FirstBytesParser;
 
 fn model(id: i64, weights: &Path, projector: Option<&Path>) -> Model {
     let mut new = NewModel::new(format!("m{id}"), weights.to_path_buf(), 7.0, Utc::now());
@@ -33,12 +34,17 @@ fn a_models_own_projector_file_is_offered_and_its_weights_are_not() {
     let dir = dir.path().canonicalize().unwrap();
     let weights = dir.join("X.Q8_0.gguf");
     let projector = dir.join("X.mmproj-Q8_0.gguf");
-    std::fs::write(&weights, b"w").unwrap();
-    std::fs::write(&projector, b"p").unwrap();
+    std::fs::write(&weights, b"weights").unwrap();
+    std::fs::write(&projector, b"projector").unwrap();
     let files = [file(0, "X.Q8_0.gguf"), file(1, "X.mmproj-Q8_0.gguf")];
     let this = model(3, &weights, None);
 
-    let choices = projector_choices(&this, &files, std::slice::from_ref(&this));
+    let choices = projector_choices(
+        &this,
+        &files,
+        std::slice::from_ref(&this),
+        &FirstBytesParser,
+    );
 
     assert_eq!(choices, vec![projector]);
 }
@@ -49,10 +55,15 @@ fn a_models_own_projector_file_is_offered_and_its_weights_are_not() {
 fn an_own_projector_that_is_not_on_disk_is_not_offered() {
     let dir = tempfile::tempdir().unwrap();
     let weights = dir.path().join("X.Q8_0.gguf");
-    std::fs::write(&weights, b"w").unwrap();
+    std::fs::write(&weights, b"weights").unwrap();
     let this = model(3, &weights, None);
 
-    let choices = projector_choices(&this, &[file(1, "X.mmproj-Q8_0.gguf")], &[]);
+    let choices = projector_choices(
+        &this,
+        &[file(1, "X.mmproj-Q8_0.gguf")],
+        &[],
+        &FirstBytesParser,
+    );
 
     assert!(choices.is_empty(), "{choices:?}");
 }
@@ -65,8 +76,8 @@ fn projectors_in_use_are_offered_each_once() {
     let dir = dir.path().canonicalize().unwrap();
     let weights = dir.join("X.Q8_0.gguf");
     let own = dir.join("X.mmproj-Q8_0.gguf");
-    std::fs::write(&weights, b"w").unwrap();
-    std::fs::write(&own, b"p").unwrap();
+    std::fs::write(&weights, b"weights").unwrap();
+    std::fs::write(&own, b"projector").unwrap();
     let elsewhere = Path::new("/elsewhere/mmproj-F16.gguf");
     let this = model(3, &weights, Some(&own));
     let library = [
@@ -76,9 +87,38 @@ fn projectors_in_use_are_offered_each_once() {
         model(4, Path::new("/c/c.gguf"), None),
     ];
 
-    let choices = projector_choices(&this, &[file(1, "X.mmproj-Q8_0.gguf")], &library);
+    let choices = projector_choices(
+        &this,
+        &[file(1, "X.mmproj-Q8_0.gguf")],
+        &library,
+        &FirstBytesParser,
+    );
 
     let mut expected = vec![elsewhere.to_path_buf(), own];
     expected.sort();
     assert_eq!(choices, expected);
+}
+
+/// What a file is comes from its header: a projector named like weights is
+/// offered, and weights named like a projector are not.
+#[test]
+fn an_own_file_is_offered_by_its_header_whatever_its_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir = dir.path().canonicalize().unwrap();
+    let weights = dir.join("X.Q8_0.gguf");
+    let renamed = dir.join("vision-F16.gguf");
+    let misnamed = dir.join("mmproj-Q4_K_M.gguf");
+    std::fs::write(&weights, b"weights").unwrap();
+    std::fs::write(&renamed, b"projector").unwrap();
+    std::fs::write(&misnamed, b"weights").unwrap();
+    let files = [
+        file(0, "X.Q8_0.gguf"),
+        file(1, "vision-F16.gguf"),
+        file(2, "mmproj-Q4_K_M.gguf"),
+    ];
+    let this = model(3, &weights, None);
+
+    let choices = projector_choices(&this, &files, &[], &FirstBytesParser);
+
+    assert_eq!(choices, vec![renamed]);
 }

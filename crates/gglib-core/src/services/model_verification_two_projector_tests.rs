@@ -11,8 +11,9 @@ use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
 async fn of_two_corrupt_projectors_only_the_fetched_one_is_deleted() {
     let (fetched, other) = ("a.mmproj-Q8_0.gguf", "b.mmproj-Q8_0.gguf");
     let dir = tempfile::tempdir().unwrap();
-    for name in [WEIGHTS, fetched, other] {
-        std::fs::write(dir.path().join(name), "damaged").unwrap();
+    std::fs::write(dir.path().join(WEIGHTS), "damaged").unwrap();
+    for name in [fetched, other] {
+        std::fs::write(dir.path().join(name), "projector, damaged").unwrap();
     }
     let rows = vec![
         row(0, WEIGHTS, &sha256("damaged")),
@@ -41,7 +42,7 @@ async fn projectors_no_download_fetches_are_all_named_and_left_in_place() {
     let (first, second) = ("a.mmproj-Q8_0.gguf", "b.mmproj-Q8_0.gguf");
     let dir = tempfile::tempdir().unwrap();
     for name in [first, second] {
-        std::fs::write(dir.path().join(name), "damaged").unwrap();
+        std::fs::write(dir.path().join(name), "projector, damaged").unwrap();
     }
     let rows = vec![
         row(1, first, &sha256("projector")),

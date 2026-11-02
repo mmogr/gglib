@@ -20,7 +20,7 @@
 use anyhow::{Result, bail};
 use sqlx::SqlitePool;
 
-/// The generation of the schema [`super::create_schema`] builds.
+/// The generation of the schema [`super::create_schema_reading`] builds.
 ///
 /// Raise it by one whenever that schema changes in any way: a table, a
 /// column, an index, or a new step on the `user_version` ladder. Then

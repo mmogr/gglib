@@ -44,7 +44,9 @@ async fn the_database_is_not_readable_by_other_users() {
     let root = tempfile::tempdir().expect("tempdir");
     let db = root.path().join("data").join("gglib.db");
 
-    let pool = setup_database(&db).await.expect("setup");
+    let pool = setup_database(&db, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("setup");
     // Held, because the last connection to close removes the `-wal` and `-shm`.
     let _held = pool.acquire().await.expect("connection");
 
@@ -59,7 +61,9 @@ async fn the_data_directory_is_not_listable_by_other_users() {
     let root = tempfile::tempdir().expect("tempdir");
     let data = root.path().join("data");
 
-    setup_database(&data.join("gglib.db")).await.expect("setup");
+    setup_database(&data.join("gglib.db"), &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("setup");
 
     assert_eq!(mode(&data) & 0o077, 0, "{:o}", mode(&data));
 }
@@ -73,7 +77,9 @@ async fn a_database_an_older_build_left_readable_is_tightened_with_its_wal_and_s
     let root = tempfile::tempdir().expect("tempdir");
     let data = root.path().join("data");
     let db = data.join("gglib.db");
-    let daemon = setup_database(&db).await.expect("the first open");
+    let daemon = setup_database(&db, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the first open");
     let _held = daemon.acquire().await.expect("connection");
     set_mode(&data, 0o755);
     for file in files_of(&db) {
@@ -85,7 +91,9 @@ async fn a_database_an_older_build_left_readable_is_tightened_with_its_wal_and_s
         set_mode(&file, 0o644);
     }
 
-    let _pool = setup_database(&db).await.expect("the second open");
+    let _pool = setup_database(&db, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the second open");
 
     assert_eq!(mode(&data), 0o700, "{}", data.display());
     for file in files_of(&db) {

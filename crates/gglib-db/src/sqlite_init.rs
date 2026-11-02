@@ -43,9 +43,12 @@ mod tests {
     #[tokio::test]
     async fn setup_database_initialises_sqlite() {
         let dir = tempfile::tempdir().unwrap();
-        crate::setup_database(&dir.path().join("gglib.db"))
-            .await
-            .unwrap();
+        crate::setup_database(
+            &dir.path().join("gglib.db"),
+            &gglib_core::ports::NoopGgufParser,
+        )
+        .await
+        .unwrap();
         assert!(INITIALISED.initialized());
     }
 

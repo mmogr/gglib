@@ -10,8 +10,8 @@ use chrono::Utc;
 use super::tests::{REPO, Rows, WEIGHTS, row, sha256};
 use super::*;
 use crate::domain::{FileType, NewModel};
-use crate::ports::AskedDownloads;
 use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
+use crate::ports::{AskedDownloads, FirstBytesParser};
 use crate::services::model_projector::tests::OneModelRepo;
 
 /// Model 1, a download of [`REPO`] with no label and a `Q8_0` header, over
@@ -30,6 +30,7 @@ fn unlabelled(
         Arc::new(Rows(vec![row(0, WEIGHTS, &sha256("weights"))])),
         hub,
         queued,
+        Arc::new(FirstBytesParser),
     )
 }
 
@@ -85,6 +86,7 @@ async fn an_unlabelled_model_is_checked_at_the_variant_holding_its_file() {
         Arc::new(Rows(vec![row(0, WEIGHTS, "w-oid")])),
         Arc::clone(&hub) as Arc<_>,
         Arc::new(AskedDownloads::default()),
+        Arc::new(FirstBytesParser),
     );
 
     let checked = service.check_for_updates(1).await.unwrap();

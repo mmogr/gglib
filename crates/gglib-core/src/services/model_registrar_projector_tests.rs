@@ -9,8 +9,8 @@ use chrono::{DateTime, Utc};
 use super::*;
 use crate::domain::{Model, ModelFile, NewModel};
 use crate::paths::canonical_model_path;
+use crate::ports::FirstBytesParser;
 use crate::ports::ResolvedFile;
-use crate::services::model_projector::tests::FirstBytesParser;
 
 /// Stores what is inserted, under id 1, and finds it by the path it holds,
 /// as the `SQLite` repository does by the resolved one. A link the stored

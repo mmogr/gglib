@@ -13,6 +13,7 @@ mod model_import;
 mod model_links;
 mod model_projector;
 mod model_registrar;
+mod model_row_roles;
 mod model_service;
 mod model_verification;
 mod model_verification_remote;

@@ -349,7 +349,9 @@ async fn a_database_holding_two_servers_of_one_name_opens_and_lists_both() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("gglib.db");
 
-    let pool = setup_database(&path).await.unwrap();
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     let repo = SqliteMcpRepository::new(pool.clone());
     for command in ["one", "two"] {
         repo.insert(NewMcpServer::new_stdio("twin", command, vec![], None))
@@ -358,7 +360,7 @@ async fn a_database_holding_two_servers_of_one_name_opens_and_lists_both() {
     }
     pool.close().await;
 
-    let reopened = setup_database(&path)
+    let reopened = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await
         .expect("a database with two servers of one name opens");
     let repo = SqliteMcpRepository::new(reopened);
