@@ -3,21 +3,33 @@
 # workflow, or with `gh workflow run promote.yml -R mmogr/gglib`, any time
 # after the candidate has released. main need not stand still.
 #
-# The stable version is made from the candidate's tag, not from main. The
-# candidate's commit is checked out, the version moved, and the result
-# committed on top of it and pushed as the tag vX.Y.Z. Nothing lands on
-# main, so merging while a candidate is out does not force another
+# The stable version is made from the candidate's tag, not from its branch.
+# The candidate's commit is checked out, the version moved, and the result
+# committed on top of it and pushed as the tag vX.Y.Z. Nothing lands on the
+# branch, so merging while a candidate is out does not force another
 # candidate, and the code that ships is exactly the code that was tested.
 # The tag, the release and the build are made here, as release-tag.yml
 # makes a candidate's; a promotion never passes through release-tag.yml.
-# main's CHANGELOG.md gets no heading for the stable version: the tag's copy
-# has it, and so does the release page.
+# The branch's CHANGELOG.md gets no heading for the stable version: the
+# tag's copy has it, and so does the release page.
+#
+# A candidate comes from main, the next minor's, or from a maintenance line
+# release/X.Y.x, that version's next patch (CONTRIBUTING, "Maintenance
+# lines"); a promotion is the same either way, and it is tag-driven, so
+# nothing here asks which. Two things do change with two lines out, and
+# scripts/release_lines.py decides both. A blank candidate is refused when
+# more than one version has candidates waiting, since "the newest" would be
+# a guess. And a version below the newest stable is never promoted: the
+# stable channels (apt, dnf, pacman, the AUR, Homebrew and the docs site)
+# each carry one version, and release.yml would replace the newer with the
+# older. That is the rule that only the newest stable line is maintained.
 #
 # release-please cannot do this: with no commit since the candidate's tag it
 # opens no pull request. And once a stable version has shipped this way, the
 # release PR it next opens proposes rc.N+1 of that same version;
-# release-please.yml refuses that and names the two Release-As lines, the
-# next minor's or the next patch's rc.1, that can start the next cycle.
+# release-please.yml refuses that and names the Release-As line that starts
+# the next cycle: on main the next minor's rc.1 (or the next patch's, while
+# the version has no line of its own), on a line its next patch's.
 #
 # The push uses the GitHub App token, as release-tag.yml's tag does:
 # GITHUB_TOKEN may create a ref only at the run's own commit. The release and
@@ -29,7 +41,7 @@ on:
   workflow_dispatch:
     inputs:
       candidate:
-        description: 'The candidate to promote, vX.Y.Z-rc.N; blank takes the newest'
+        description: 'The candidate to promote, vX.Y.Z-rc.N; blank takes the newest, when one version alone has candidates out'
         required: false
         default: ''
         type: string
@@ -81,59 +93,47 @@ jobs:
         run: git fetch --force --tags
 
       # A stable release ships its last candidate, so an older candidate of
-      # the same version is refused here with the newest one named.
-      # check_rc_promotion.sh checks the same thing on the tree, later.
+      # the same version is refused here with the newest one named, as is a
+      # candidate of a version that has shipped, and a blank candidate while
+      # two versions have candidates out; scripts/release_lines.py says each.
+      # check_rc_promotion.sh checks the first on the tree, later. Then the
+      # stable version this promotion makes is held to the newest: a version
+      # below the newest stable is refused, since the stable channels would be
+      # downgraded. Both before anything is checked out or changed. The
+      # script also names the stable version before this one, which the
+      # release's notes and the CHANGELOG.md heading start from: the newest
+      # below it, not the newest overall, once a line's patch and main's
+      # minor interleave.
       - name: Choose the candidate
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE: ${{ inputs.candidate }}
         run: |
-          if [ -n "$CANDIDATE" ]; then
-            if ! [[ "$CANDIDATE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
-              echo "::error::$CANDIDATE is not a candidate's tag, vX.Y.Z-rc.N"
-              exit 1
-            fi
-            if ! git rev-parse -q --verify "refs/tags/$CANDIDATE" > /dev/null; then
-              echo "::error::$CANDIDATE is not tagged. CI tags a candidate once it passes on main; wait for that, or re-run CI's release job if it failed."
-              exit 1
-            fi
-          else
-            CANDIDATE=$(git tag -l 'v*-rc.*' | sort -V | tail -n1)
-            if [ -z "$CANDIDATE" ]; then
-              echo "::error::no candidate is tagged. Merge the release PR to cut one, let it release, then run Promote."
-              exit 1
-            fi
-          fi
-          STABLE=${CANDIDATE%-rc.*}
-          newest=$(git tag -l "${STABLE}-rc.*" | sort -V | tail -n1)
-          if [ "$newest" != "$CANDIDATE" ]; then
-            echo "::error::$CANDIDATE is not the newest candidate of ${STABLE#v}; $newest is. A stable release ships the last candidate: promote $newest, or leave the candidate blank for the newest."
-            exit 1
-          fi
-          if git rev-parse -q --verify "refs/tags/$STABLE" > /dev/null; then
-            previous=$(git tag -l 'v*' | grep -v -- - | grep -vx "$STABLE" | sort -V | tail -n1)
-            echo "::error::${STABLE#v} has shipped already: $STABLE is tagged. If an earlier run tagged it and then failed, finish by hand: gh release create $STABLE --title 'Release $STABLE' --generate-notes --notes-start-tag $previous --verify-tag, then gh workflow run release.yml --ref main -f tag=$STABLE."
-            exit 1
-          fi
+          git tag -l 'v*' > "$RUNNER_TEMP/tags.txt"
+          scripts/release_lines.py candidate --input "$CANDIDATE" --tags "$RUNNER_TEMP/tags.txt" > "$RUNNER_TEMP/candidate.txt"
+          cat "$RUNNER_TEMP/candidate.txt" >> "$GITHUB_OUTPUT"
+          CANDIDATE=$(sed -n 's/^candidate=//p' "$RUNNER_TEMP/candidate.txt")
+          STABLE=$(sed -n 's/^stable=//p' "$RUNNER_TEMP/candidate.txt")
+          scripts/release_lines.py previous --stable "$STABLE" --tags "$RUNNER_TEMP/tags.txt" >> "$GITHUB_OUTPUT"
           if ! gh release view "$CANDIDATE" > /dev/null 2>&1; then
             echo "::error::$CANDIDATE is tagged but has no release, so it was never built. Re-run the failed jobs of the CI run that tagged it, then run Promote again."
             exit 1
           fi
-          echo "candidate=$CANDIDATE" >> "$GITHUB_OUTPUT"
-          echo "✓ promoting $CANDIDATE"
+          echo "✓ promoting $CANDIDATE to $STABLE"
 
       - name: Check out the candidate
         env:
           CANDIDATE: ${{ steps.candidate.outputs.candidate }}
         run: git checkout --detach "refs/tags/$CANDIDATE"
 
+      # The tree is the candidate's, so promote.py is the candidate's copy;
+      # `previous` was chosen above, from the tags.
       - name: Promote the version
         id: promote
-        run: |
-          PREVIOUS=$(git tag -l 'v*' | grep -v -- - | sort -V | tail -n1)
-          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
-          python3 scripts/promote.py --previous "$PREVIOUS" | tee -a "$GITHUB_OUTPUT"
+        env:
+          PREVIOUS: ${{ steps.candidate.outputs.previous }}
+        run: python3 scripts/promote.py --previous "$PREVIOUS" | tee -a "$GITHUB_OUTPUT"
 
       # As release-please.yml locks a candidate's version.
       - name: Lock the stable version
@@ -196,17 +196,20 @@ jobs:
           git push origin "HEAD:refs/tags/v$STABLE"
           echo "✓ tagged v$STABLE"
 
-      # The notes run from the last stable version, sorted by
+      # The notes run from the stable version before this one, sorted by
       # .github/release.yml. --notes-start-tag pins the range to that tag,
-      # where GitHub starts a stable release's notes anyway.
+      # where GitHub starts a stable release's notes anyway. --latest says
+      # outright what the candidate step made sure of: this is the newest
+      # stable version, so it is the one the release page and the badges
+      # point at (GitHub's default weighs the date and the version).
       - name: Create GitHub Release
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
           STABLE: ${{ steps.promote.outputs.stable }}
-          PREVIOUS: ${{ steps.promote.outputs.previous }}
+          PREVIOUS: ${{ steps.candidate.outputs.previous }}
         run: |
-          gh release create "v$STABLE" --title "Release v$STABLE" --generate-notes --notes-start-tag "$PREVIOUS" --verify-tag
+          gh release create "v$STABLE" --title "Release v$STABLE" --generate-notes --notes-start-tag "$PREVIOUS" --verify-tag --latest
           echo "✓ released v$STABLE, with notes since $PREVIOUS"
 
       # From main, whose release.yml is the current one and whose ref the

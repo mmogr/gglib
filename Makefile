@@ -368,6 +368,10 @@ enforce: ## Run the architecture enforcement checks
 	@# promote.py runs only when someone presses Promote, so a break in it would
 	@# first show in a stable release. Its fixtures run here instead.
 	@./scripts/promote.py --self-test
+	@# release_lines.py decides, in the release workflows alone, what main and
+	@# a maintenance line may each release; its fixtures run here for the same
+	@# reason as promote.py's.
+	@./scripts/release_lines.py --self-test
 	@./scripts/doc_workspace.py --self-test
 	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
 	@# between the generated bindings and a new class of lie: i64 becomes a

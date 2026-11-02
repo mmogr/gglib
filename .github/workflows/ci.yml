@@ -1,24 +1,29 @@
 name: CI
 
+# main, and the maintenance lines, release/X.Y.x, each cut from a stable
+# version's tag to carry that version's patches (CONTRIBUTING, "Maintenance
+# lines"). A push to either runs `release`, which tags a candidate. A line
+# runs this file as the line holds it, so a line cut from a tag older than a
+# change here does not have the change.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
 
 # A pull request's runs share one group, and a newer run cancels the older:
 # after a force-push or an `@dependabot rebase` the older run is testing a
 # commit nobody will merge.
 #
-# A push to main gets a group of its own, named by its SHA, so no other CI
-# run ever joins it. GitHub keeps at most one run pending in a group and
-# cancels the older pending run when a newer one arrives, whatever
-# `cancel-in-progress` says, so one group shared by main's pushes would drop
-# runs merged in quick succession, and the push run is the one that runs
-# `release`, which tags. The builds it dispatches run in release.yml under
-# a group of the tag's own, out of this workflow's reach.
+# A push to main or a line gets a group of its own, named by its SHA, so no
+# other CI run ever joins it. GitHub keeps at most one run pending in a group
+# and cancels the older pending run when a newer one arrives, whatever
+# `cancel-in-progress` says, so one group shared by a branch's pushes would
+# drop runs merged in quick succession, and the push run is the one that
+# runs `release`, which tags. The builds it dispatches run in release.yml
+# under a group of the tag's own, out of this workflow's reach.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-main-{0}', github.sha) }}
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-push-{0}', github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Read only. A job that needs more says so: `scope`, `cache-prune` and
@@ -246,7 +251,9 @@ jobs:
         uses: actions/checkout@v7
 
       # A shared-key per build configuration, and only main saves; the
-      # rust-prelude action says why. `large-packages` stays off because this
+      # rust-prelude action says why. A maintenance line restores main's
+      # entries, as a pull request does, and saves none of its own: its few
+      # runs would crowd main's out. `large-packages` stays off because this
       # job installs the GTK and appindicator packages it would purge.
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
@@ -822,10 +829,10 @@ jobs:
   # nothing else.
   #
   # A pull request is the merge commit against its first parent. A push is
-  # compared with the commit main was at before it, since one push can carry
-  # several commits; `before` is all zeros only when a branch is created, and
-  # then the commit's parent stands in. The pull request count is for an
-  # admin's direct push, which no pull request CI has seen.
+  # compared with the commit its branch was at before it, since one push can
+  # carry several commits; `before` is all zeros only when a branch is
+  # created, and then the commit's parent stands in. The pull request count
+  # is for an admin's direct push, which no pull request CI has seen.
   scope:
     name: Scope
     runs-on: ubuntu-24.04
@@ -1019,6 +1026,7 @@ jobs:
   #
   # After the jobs that save on most pushes, so their new entries are
   # counted; an entry the macOS jobs save later is pruned by the next push.
+  # main only, since only main saves.
   cache-prune:
     name: Prune the Rust caches
     runs-on: ubuntu-24.04
@@ -1109,10 +1117,12 @@ jobs:
               print(f"::error::{line}")
           sys.exit(1 if bad else 0)
 
+  # On a push to main or to a maintenance line, release/X.Y.x: each cuts its
+  # own candidates, and release-tag.yml holds each to its own versions.
   release:
     name: Release
     needs: [ci-success]
-    if: always() && needs.ci-success.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && needs.ci-success.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     # A called workflow cannot exceed the caller's grant: these are exactly
     # what release-tag.yml's create-release job asks for. The two secrets
     # are the App's, which makes the tag; nothing else is passed.
