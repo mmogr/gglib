@@ -8,24 +8,20 @@
 [![AUR](https://img.shields.io/aur/version/gglib-bin?label=AUR&logo=archlinux)](https://aur.archlinux.org/packages/gglib-bin)
 [![apt · dnf · pacman](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fmmogr.github.io%2Fgglib%2Fapt%2Fdists%2Fstable%2Fmain%2Fbinary-amd64%2FPackages&search=Version%3A%20%28%5CS%2B%29&replace=%241&label=apt%20%C2%B7%20dnf%20%C2%B7%20pacman&logo=linux&logoColor=white&color=A81D33)](#linux-debian-ubuntu-arch-fedora)
 
-**The local model runtime that makes llama.cpp behave like an API provider.**  
-Every GGUF you own, as one endpoint, on every device you own.
+**gglib is a library and server for the GGUF models you run with llama.cpp.**  
+Every model you own in one place, served to any client as one
+OpenAI-compatible endpoint, and reachable from your laptop and your phone
+over an encrypted link.
 
-Running llama.cpp directly gives you the current engine and every flag.
-It also gives you the chores: launch flags that differ per model, the right
-chat template, the right sampling, GGUFs spread across folders, a client
-that wants a different setup every time, and nothing that reaches your
-phone.
+Switching models on demand is the easy part. gglib reads each model and
+launches it the way you would have, with no preset to write, and keeps going
+from there: your sampling wins over the client's, a broken tool call is
+repaired and a looping agent is stopped before you see it, and the endpoint
+on your phone is the same one your editor uses.
 
-gglib does those chores. It reads each GGUF and launches llama-server the
-way you would have, keeps your models as a library, and serves the whole
-library as one OpenAI-compatible endpoint. `gglib remote` puts that
-endpoint on your other machines and your phone over an encrypted
-peer-to-peer link, with no VPN and no account.
-
-It is still llama.cpp. Every sampling value gglib resolves is shown with the
-layer that set it, and you can override any of them per model, per profile
-or per request.
+It is still llama.cpp, and it shows its work. Every sampling value gglib
+resolves is shown with the layer that set it, and you can override any of
+them per model, per profile or per request.
 
 <p align="center">
   <img src="docs/assets/cli-up.gif" alt="gglib up: from nothing to a working endpoint, then a log piped into gglib q" width="800">
