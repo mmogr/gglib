@@ -1,7 +1,7 @@
 //! The measured files' tensor tables, from `testdata/image_families/`, for
 //! the tests of whatever reads a family or a component from one. The
-//! FLUX.3 Image Klein files' were cut from their headers alone, read over
-//! HTTP; nothing has drawn with them.
+//! FLUX.3 Image Klein and FLUX.2 klein files' were cut from their headers
+//! alone, read over HTTP.
 
 use super::tensor_table::{TensorInfo, TensorTable, WeightsFormat};
 
@@ -19,6 +19,11 @@ pub(crate) enum Golden {
     Flux3KleinQ8,
     Flux2Vae,
     Qwen3Vl4bQ8,
+    Flux2Klein4bQ8,
+    /// `unsloth/Qwen3-4B-GGUF`'s file, the original Qwen3 4B FLUX.2 klein's
+    /// guide names; not Z-Image's 2507 instruct model, which
+    /// [`StandIn::Qwen34bQ8`] stands in for.
+    Qwen34bOriginalQ8,
 }
 
 impl Golden {
@@ -36,6 +41,8 @@ impl Golden {
             Self::Flux3KleinQ8 => "flux3-image-klein-Q8_0.gguf",
             Self::Flux2Vae => "flux2-vae.safetensors",
             Self::Qwen3Vl4bQ8 => "Qwen3VL-4B-Instruct-Q8_0.gguf",
+            Self::Flux2Klein4bQ8 => "flux-2-klein-4b-Q8_0.gguf",
+            Self::Qwen34bOriginalQ8 => "Qwen3-4B-Q8_0.gguf",
         }
     }
 
@@ -68,6 +75,12 @@ impl Golden {
             }
             Self::Qwen3Vl4bQ8 => {
                 include_str!("testdata/image_families/Qwen3VL-4B-Instruct-Q8_0.gguf.tsv")
+            }
+            Self::Flux2Klein4bQ8 => {
+                include_str!("testdata/image_families/flux-2-klein-4b-Q8_0.gguf.tsv")
+            }
+            Self::Qwen34bOriginalQ8 => {
+                include_str!("testdata/image_families/Qwen3-4B-Q8_0.gguf.tsv")
             }
         }
     }

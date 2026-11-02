@@ -6,8 +6,8 @@
 //! ([`resolve_image_model`]): the one named, else the default image model
 //! the settings name, else the only complete image model on this machine.
 //! A variant gglib does not draw is refused by its file name
-//! (`ImageFamily::refusal`: FLUX.3 Image Klein base). Its family's recipe
-//! judges the size; one to four images.
+//! (`ImageFamily::refusal`: FLUX.3 Image Klein base, FLUX.2 klein base).
+//! Its family's recipe judges the size; one to four images.
 //!
 //! A request with a picture to draw from ([`Source`]) is drawn at the
 //! picture's size, which the same rule judges: a picture one family drew is

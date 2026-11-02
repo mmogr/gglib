@@ -70,6 +70,9 @@ Amended on 2026-10-11: there are four families. Decision 18 adds `z-image`.
 Amended on 2026-11-02: there are five. `flux3-klein`, FLUX.3 Image Klein,
 is added ([log-0018](log-0018.md#2026-11-02-flux3-image-klein-is-a-family-read-from-its-headers)).
 
+Amended on 2026-11-02: there are six. `flux2-klein`, FLUX.2 klein 4B, is
+added ([log-0018](log-0018.md#2026-11-02-flux2-klein-is-a-family-read-from-its-headers)).
+
 ### 2. The files beside the weights are linked by role, through the one link rule
 
 A family's recipe (`ImageFamily::recipe`) names the roles it draws with:
@@ -100,6 +103,10 @@ Amended on 2026-10-11: Z-Image's recipe is decision 18's: 8 steps, 1.0,
 Amended on 2026-11-02: FLUX.3 Image Klein's is 16 steps, 1.0, `euler`,
 flash attention in the diffusion model alone, and a multiple of 16; a Klein
 base file is refused by name ([log-0018](log-0018.md#2026-11-02-flux3-image-klein-is-a-family-read-from-its-headers)).
+
+Amended on 2026-11-02: FLUX.2 klein's is 4 steps, 1.0, `euler`, flash
+attention in the diffusion model alone, and a multiple of 16; a klein base
+file is refused by name ([log-0018](log-0018.md#2026-11-02-flux2-klein-is-a-family-read-from-its-headers)).
 
 Amended on 2026-10-12: a request still cannot choose its steps, but a
 request drawn from a picture (decision 20) is not sent the recipe's count:
@@ -150,6 +157,10 @@ Amended on 2026-10-11: Z-Image is budgeted at 7 GiB, read that day
 
 Amended on 2026-11-02: FLUX.3 Image Klein is budgeted at 7 GiB, Flux.1's;
 its 1024x1024 render peaked well inside it ([log-0018](log-0018.md#2026-11-02-flux3-image-klein-is-a-family-read-from-its-headers)).
+
+Amended on 2026-11-02: FLUX.2 klein is budgeted at 7 GiB, FLUX.3 Image
+Klein's, since it decodes with the same VAE; its render peaked well inside
+it ([log-0018](log-0018.md#2026-11-02-flux2-klein-is-a-family-read-from-its-headers)).
 
 ### 7. The GPU is given in turns: one render, or the chats
 
@@ -934,6 +945,9 @@ Its controls now sit beside the picture in a window from the `md` width up.
   each with its own settings ([log-0018](log-0018.md#2026-11-02-a-model-is-drawn-by-its-variant-read-from-its-file-name)).
   Amended on 2026-11-02: FLUX.3 Image Klein is a fifth family
   ([log-0018](log-0018.md#2026-11-02-flux3-image-klein-is-a-family-read-from-its-headers)); families beyond those five are out.
+  Amended on 2026-11-02: FLUX.2 klein 4B is a sixth family
+  ([log-0018](log-0018.md#2026-11-02-flux2-klein-is-a-family-read-from-its-headers)); families beyond those six are out, klein 9B and FLUX.2
+  dev among them.
 - Steps, guidance or a sampler per request or per model.
 - CUDA, Vulkan and ROCm: their assets are matched by name only.
 - Sizes above 1024²: the compute margins were read there.

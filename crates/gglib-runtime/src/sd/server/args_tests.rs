@@ -4,8 +4,8 @@
 //! flag added, dropped or moved fails here. The values are the recipes' and
 //! samplings' own (`gglib_core::domain::ImageFamily::recipe` and
 //! `::sampling`), which match the measured 2026-10-09 runs; Z-Image's,
-//! Qwen-Image 2.1 Turbo's and FLUX.3 Image Klein's are their guides', and no
-//! run through gglib has used them.
+//! Qwen-Image 2.1 Turbo's, FLUX.3 Image Klein's and FLUX.2 klein's are their
+//! guides' (log-0018 records which have drawn since).
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -187,6 +187,30 @@ fn flux3_klein_loads_its_vae_and_language_model_at_16_steps() {
             "--diffusion-model /models/flux3-image-klein-Q8_0.gguf --vae V --llm L \
              --listen-ip 127.0.0.1 --listen-port 9123 \
              --steps 16 --cfg-scale 1 --sampling-method euler \
+             --flash-attn off,diffusion=on --conv-direct off"
+        )
+    );
+}
+
+/// FLUX.2 klein as stable-diffusion.cpp's guide runs it: the diffusion
+/// model, the FLUX.2 VAE, Qwen3 4B as `--llm`, 4 steps at guidance 1 with
+/// `euler`, and flash attention in the diffusion model alone.
+#[test]
+fn flux2_klein_loads_its_vae_and_language_model_at_4_steps() {
+    let mut klein = config(
+        ImageFamily::Flux2Klein,
+        vec![
+            component(ComponentRole::Llm, "L"),
+            component(ComponentRole::Vae, "V"),
+        ],
+    );
+    klein.model_path = PathBuf::from("/models/flux-2-klein-4b-Q8_0.gguf");
+    assert_eq!(
+        argv(&klein),
+        words(
+            "--diffusion-model /models/flux-2-klein-4b-Q8_0.gguf --vae V --llm L \
+             --listen-ip 127.0.0.1 --listen-port 9123 \
+             --steps 4 --cfg-scale 1 --sampling-method euler \
              --flash-attn off,diffusion=on --conv-direct off"
         )
     );
