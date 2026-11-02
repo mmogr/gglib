@@ -15,12 +15,13 @@
 # new observed.json that an ADR's criterion names and that differs from its
 # entry in approvals.json, with the criterion as observed.json quotes it,
 # checked against the ADR file. Then one line of what else the recording saw,
-# the tier-3 probes (contracts/upstream/llama/tier3/), and the upstream
-# commits in the range that touch a file an ADR in docs/adr/ cites, read with
-# `gh api`. A stable-diffusion.cpp body adds the real picture to take, and
-# has no tier 3; its commit list also covers sd-server's folder,
-# examples/server/, less its frontend, which no ADR cites by file. Nothing in
-# it fails: a part that cannot be read says so.
+# the tier-3 probes (contracts/upstream/llama/tier3/), what upstream did near
+# each gglib feature contracts/upstream/overlaps.json names
+# (engine_pin_overlaps.sh), and the upstream commits in the range that touch a
+# file an ADR in docs/adr/ cites, read with `gh api`. A stable-diffusion.cpp
+# body adds the real picture to take, and has no tier 3; its commit list also
+# covers sd-server's folder, examples/server/, less its frontend, which no ADR
+# cites by file. Nothing in it fails: a part that cannot be read says so.
 #
 # Backticks in the printf formats below are Markdown, not command substitution.
 # shellcheck disable=SC2016
@@ -341,6 +342,10 @@ inproc_line
 if [ "$ENGINE" = llama ]; then
   tier3_line
 fi
+# What upstream did near each feature contracts/upstream/overlaps.json names,
+# then every commit touching a file an ADR cites.
+"$ROOT_DIR/scripts/engine_pin_overlaps.sh" "$ENGINE" "$CURRENT" "$CANDIDATE" "$BEFORE" "$AFTER" \
+  || printf 'The overlap reading did not run; read the run.\n\n'
 commits_section
 
 printf 'Push fixes onto this branch: a closed candidate is not proposed again, and nothing newer is proposed while this is open. Opened by the Engine pins workflow: %s\n' "$RUN_URL"
