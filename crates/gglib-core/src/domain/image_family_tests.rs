@@ -790,10 +790,7 @@ fn names_round_trip_through_serde_from_str_and_display() {
 fn the_recipes_are_the_measured_ones() {
     let flux = ImageFamily::Flux1.recipe();
     assert_eq!(flux.placement, Placement::DiffusionOnly);
-    assert_eq!(
-        (flux.steps, flux.sampler, flux.flash_attention),
-        (4, "euler", FlashAttention::Off)
-    );
+    assert_eq!(flux.flash_attention, FlashAttention::Off);
     assert_eq!(
         flux.size,
         SizeRule {
@@ -806,16 +803,12 @@ fn the_recipes_are_the_measured_ones() {
     let sdxl = ImageFamily::Sdxl.recipe();
     assert_eq!(sdxl.placement, Placement::AllInOne);
     assert!(sdxl.components.is_empty());
-    assert_eq!((sdxl.steps, sdxl.sampler), (20, "euler_a"));
     assert_eq!(sdxl.flash_attention, FlashAttention::Off);
     assert_eq!(FlashAttention::Off.mode(), "off");
     assert_eq!(FlashAttention::Everywhere.mode(), "on");
     assert_eq!(FlashAttention::DiffusionOnly.mode(), "off,diffusion=on");
     let qwen = ImageFamily::QwenImage21.recipe();
-    assert_eq!(
-        (qwen.steps, qwen.sampler, qwen.flash_attention),
-        (20, "euler", FlashAttention::Everywhere)
-    );
+    assert_eq!(qwen.flash_attention, FlashAttention::Everywhere);
     assert_eq!(qwen.size.step, 32);
     let roles = |r: &Recipe| r.components.iter().map(|c| c.role).collect::<Vec<_>>();
     assert_eq!(
@@ -829,16 +822,14 @@ fn the_recipes_are_the_measured_ones() {
     assert_eq!(roles(qwen), [ComponentRole::Vae, ComponentRole::Llm]);
 }
 
-/// Z-Image's recipe is stable-diffusion.cpp's guide for Z-Image Turbo, not a
-/// measurement: 8 steps at guidance 1.0, the Flux.1 VAE and Qwen3 4B.
+/// Z-Image's recipe is stable-diffusion.cpp's guide for it, not a
+/// measurement: the Flux.1 VAE and Qwen3 4B, flash attention in the
+/// diffusion model alone.
 #[test]
-fn the_z_image_recipe_is_turbos() {
+fn the_z_image_recipe_is_its_guides() {
     let z = ImageFamily::ZImage.recipe();
     assert_eq!(z.placement, Placement::DiffusionOnly);
-    assert_eq!(
-        (z.steps, z.cfg, z.sampler, z.flash_attention),
-        (8, 1.0, "euler", FlashAttention::DiffusionOnly)
-    );
+    assert_eq!(z.flash_attention, FlashAttention::DiffusionOnly);
     assert_eq!(
         z.size,
         SizeRule {
@@ -864,27 +855,72 @@ fn the_z_image_recipe_is_turbos() {
     assert_eq!(z.components[0].path, "ae.safetensors");
 }
 
-/// Only Z-Image Turbo is drawn: a Z-Image file whose name lacks "turbo", in
-/// any case, is refused; no other family is refused by name.
-#[test]
-fn a_z_image_file_not_named_turbo_is_refused() {
-    let refused = ImageFamily::ZImage.refusal("z-image-Q8_0.gguf");
-    assert_eq!(
-        refused,
-        Some(
-            "Only Z-Image Turbo is supported: base Z-Image needs other steps and guidance, \
-             and its Q8_0 file draws blank on Metal (stable-diffusion.cpp #2074)"
-        )
-    );
-    assert_eq!(ImageFamily::ZImage.refusal("z_image_turbo-Q8_0.gguf"), None);
-    assert_eq!(ImageFamily::ZImage.refusal("Z-Image-TURBO-q4_0.gguf"), None);
-    for family in [
-        ImageFamily::Flux1,
-        ImageFamily::Sdxl,
-        ImageFamily::QwenImage21,
-    ] {
-        assert_eq!(family.refusal("z-image-Q8_0.gguf"), None, "{family}");
+const fn plain(steps: u32, cfg: f32, sampler: &'static str) -> Sampling {
+    Sampling {
+        steps,
+        cfg,
+        sampler,
+        sigmas: None,
+        linear_scale: None,
     }
+}
+
+/// Flux.1, SDXL and base Qwen-Image 2.1 are sampled as the 2026-10-09 runs
+/// were, whatever the file is named: "turbo" in an SDXL name changes nothing.
+#[test]
+fn the_measured_samplings_are_the_measured_runs() {
+    for name in ["m.gguf", "sdxl-turbo.safetensors"] {
+        assert_eq!(*ImageFamily::Flux1.sampling(name), plain(4, 1.0, "euler"));
+        assert_eq!(*ImageFamily::Sdxl.sampling(name), plain(20, 7.0, "euler_a"));
+    }
+    assert_eq!(
+        *ImageFamily::QwenImage21.sampling("qwen-image-2.1-Q8_0.gguf"),
+        plain(20, 6.0, "euler")
+    );
+}
+
+/// Qwen-Image 2.1 Turbo, named so in any case, is sampled as
+/// stable-diffusion.cpp's guide runs it: the `qwen-image-2.1-turbo` preset's
+/// nine sigmas, so 8 steps, at guidance 1.0 with `euler`.
+#[test]
+fn a_qwen_image_file_named_turbo_is_sampled_by_its_sigma_preset() {
+    let turbo = Sampling {
+        steps: 8,
+        cfg: 1.0,
+        sampler: "euler",
+        sigmas: Some("qwen-image-2.1-turbo"),
+        linear_scale: None,
+    };
+    for name in [
+        "qwen-image-2.1-turbo-Q8_0.gguf",
+        "Qwen-Image-2.1-TURBO.gguf",
+    ] {
+        assert_eq!(*ImageFamily::QwenImage21.sampling(name), turbo, "{name}");
+    }
+}
+
+/// Z-Image Turbo, named so in any case, is drawn at 8 steps and guidance 1.0;
+/// a Z-Image file whose name lacks "turbo" is base, drawn at 28 steps and
+/// guidance 5.0 with the linear scale that drew its `Q8_0` file in `sd-cli`.
+#[test]
+fn a_z_image_file_is_turbo_by_name_and_base_otherwise() {
+    for name in ["z_image_turbo-Q8_0.gguf", "Z-Image-TURBO-q4_0.gguf"] {
+        assert_eq!(
+            *ImageFamily::ZImage.sampling(name),
+            plain(8, 1.0, "euler"),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        *ImageFamily::ZImage.sampling("z-image-Q8_0.gguf"),
+        Sampling {
+            steps: 28,
+            cfg: 5.0,
+            sampler: "euler",
+            sigmas: None,
+            linear_scale: Some(0.000_244_140_625),
+        }
+    );
 }
 
 /// Each measured family's compute margin is its measured 1024x1024 VAE decode

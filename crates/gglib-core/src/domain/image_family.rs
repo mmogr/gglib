@@ -1,5 +1,5 @@
-//! An image model's family, read from its tensor names, and the recipe that
-//! family is drawn with.
+//! An image model's family, read from its tensor names, the recipe that
+//! family is drawn with, and the sampling each of its variants is drawn at.
 //!
 //! An image model's GGUF has no metadata (the measured Flux schnell and
 //! Qwen-Image 2.1 files hold no key-value pairs), so a family is known only
@@ -7,7 +7,10 @@
 //! them with the rules stable-diffusion.cpp loads by (`src/model_loader.cpp`),
 //! and [`ComponentRole::fits`] checks a file offered as one of a family's
 //! components the same way. [`ImageFamily::recipe`] is the one table of what
-//! each family needs beside its main file and how it is drawn.
+//! each family needs beside its main file and how it is placed and drawn;
+//! [`ImageFamily::sampling`] picks the steps, guidance and sampler of the
+//! variant a file is, which stable-diffusion.cpp cannot tell apart where two
+//! variants share their tensors.
 
 use std::fmt;
 use std::str::FromStr;
@@ -28,11 +31,10 @@ pub enum ImageFamily {
     /// Stable Diffusion XL.
     #[serde(rename = "sdxl")]
     Sdxl,
-    /// Qwen-Image 2.1.
+    /// Qwen-Image 2.1, base or Turbo ([`ImageFamily::sampling`]).
     #[serde(rename = "qwen-image-2.1")]
     QwenImage21,
-    /// Z-Image (Turbo; a base file is refused by name,
-    /// [`ImageFamily::refusal`]).
+    /// Z-Image, base or Turbo ([`ImageFamily::sampling`]).
     #[serde(rename = "z-image")]
     ZImage,
 }
@@ -143,20 +145,15 @@ impl fmt::Display for SizeRule {
     }
 }
 
-/// How a family is drawn: what it needs beside its main file, and its
-/// defaults.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// How a family is drawn whatever its variant: what it needs beside its main
+/// file, and how it is placed and run. A variant's steps and guidance are its
+/// [`Sampling`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Recipe {
     /// How the main file holds the model.
     pub placement: Placement,
     /// The components it needs, each with its default source.
     pub components: &'static [ComponentSpec],
-    /// Sampling steps.
-    pub steps: u32,
-    /// Classifier-free guidance scale.
-    pub cfg: f32,
-    /// The stable-diffusion.cpp sampler name.
-    pub sampler: &'static str,
     /// Where flash attention is on.
     pub flash_attention: FlashAttention,
     /// The sizes it draws.
@@ -168,6 +165,26 @@ pub struct Recipe {
     /// 7,680 MB, Qwen-Image 2.1 8,650 MB; and on 2026-10-11 Z-Image Turbo
     /// 6,657 MB, the same VAE's decode as Flux.1's.
     pub compute_margin_bytes: u64,
+}
+
+/// How one variant of a family is sampled, by the `sd-server` flags it is
+/// given at launch.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Sampling {
+    /// Sampling steps (`--steps`). With [`Self::sigmas`] set it is the
+    /// preset's own count, since stable-diffusion.cpp samples one step per
+    /// sigma after the first whatever it is asked for.
+    pub steps: u32,
+    /// Classifier-free guidance scale (`--cfg-scale`).
+    pub cfg: f32,
+    /// The stable-diffusion.cpp sampler name (`--sampling-method`).
+    pub sampler: &'static str,
+    /// A sigma schedule preset (`--sigmas`), or `None` for the model's own
+    /// scheduler.
+    pub sigmas: Option<&'static str>,
+    /// The linear input scale (`--linear-scale`), or `None` for the model's
+    /// own. An `f64`, so the flag reads as the number written here.
+    pub linear_scale: Option<f64>,
 }
 
 /// One GiB, for the compute margins.
@@ -211,28 +228,41 @@ const FLUX1: Recipe = Recipe {
             size: 9_787_841_024,
         },
     ],
-    steps: 4,
-    cfg: 1.0,
-    sampler: "euler",
     flash_attention: FlashAttention::Off,
     size: sizes(64),
     compute_margin_bytes: 7 * GIB,
 };
 
-/// SDXL: the checkpoint holds everything; `euler_a` is what the measured run
-/// logged (stable-diffusion.cpp's default).
+/// Flux.1 schnell, as measured on 2026-10-09.
+const FLUX1_SAMPLING: Sampling = Sampling {
+    steps: 4,
+    cfg: 1.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// SDXL: the checkpoint holds everything.
 const SDXL: Recipe = Recipe {
     placement: Placement::AllInOne,
     components: &[],
-    steps: 20,
-    cfg: 7.0,
-    sampler: "euler_a",
     flash_attention: FlashAttention::Off,
     size: sizes(64),
     compute_margin_bytes: 8 * GIB,
 };
 
-/// Qwen-Image 2.1: sizes step by 32, per stable-diffusion.cpp's guide.
+/// SDXL as measured on 2026-10-09; `euler_a` is what the run logged
+/// (stable-diffusion.cpp's default).
+const SDXL_SAMPLING: Sampling = Sampling {
+    steps: 20,
+    cfg: 7.0,
+    sampler: "euler_a",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// Qwen-Image 2.1, base and Turbo: sizes step by 32, per stable-diffusion.cpp's
+/// guide (`docs/qwen_image_2.1.md`), which draws Turbo with base's files.
 const QWEN_IMAGE_21: Recipe = Recipe {
     placement: Placement::DiffusionOnly,
     components: &[
@@ -249,24 +279,38 @@ const QWEN_IMAGE_21: Recipe = Recipe {
             size: 8_709_519_456,
         },
     ],
-    steps: 20,
-    cfg: 6.0,
-    sampler: "euler",
     flash_attention: FlashAttention::Everywhere,
     size: sizes(32),
     compute_margin_bytes: 9 * GIB,
 };
 
-/// Z-Image Turbo: 8 steps at guidance 1.0, as stable-diffusion.cpp's guide
-/// (`docs/z_image.md`) runs it; a base Z-Image file is refused
-/// ([`ImageFamily::refusal`]). `euler` is stable-diffusion.cpp's default
-/// sampler for a diffusion transformer; the guide names none. Flash attention is on in the diffusion model alone
-/// (`--flash-attn off,diffusion=on`), as `--diffusion-fa` did, which the
-/// guide passed until master-995: `on` would turn it on in the Flux.1 VAE
-/// too, where it has never run. Sizes step by 16: the VAE's 8
-/// times the model's patch of 2.
-/// The text encoder is Qwen3 4B, sizes checked against the Hub on
-/// 2026-10-11. Nothing here has drawn a picture yet.
+/// Qwen-Image 2.1 base, as measured on 2026-10-09.
+const QWEN_IMAGE_21_SAMPLING: Sampling = Sampling {
+    steps: 20,
+    cfg: 6.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// Qwen-Image 2.1 Turbo as stable-diffusion.cpp's guide runs it: its fixed
+/// schedule (`--sigmas qwen-image-2.1-turbo`, nine sigmas, so 8 steps) at
+/// guidance 1.0 with `euler`. Nothing here has drawn a picture yet.
+const QWEN_IMAGE_21_TURBO_SAMPLING: Sampling = Sampling {
+    steps: 8,
+    cfg: 1.0,
+    sampler: "euler",
+    sigmas: Some("qwen-image-2.1-turbo"),
+    linear_scale: None,
+};
+
+/// Z-Image, base and Turbo, as stable-diffusion.cpp's guide (`docs/z_image.md`)
+/// loads them: one model with the same files. Flash attention is on in the
+/// diffusion model alone (`--flash-attn off,diffusion=on`), as
+/// `--diffusion-fa` did, which the guide passed until master-995: `on` would
+/// turn it on in the Flux.1 VAE too, where it has never run. Sizes step by
+/// 16: the VAE's 8 times the model's patch of 2. The text encoder is Qwen3
+/// 4B, sizes checked against the Hub on 2026-10-11.
 const Z_IMAGE: Recipe = Recipe {
     placement: Placement::DiffusionOnly,
     components: &[
@@ -278,12 +322,34 @@ const Z_IMAGE: Recipe = Recipe {
             size: 4_280_405_600,
         },
     ],
-    steps: 8,
-    cfg: 1.0,
-    sampler: "euler",
     flash_attention: FlashAttention::DiffusionOnly,
     size: sizes(16),
     compute_margin_bytes: 7 * GIB,
+};
+
+/// Z-Image Turbo: 8 steps at guidance 1.0, as the guide runs it. `euler` is
+/// stable-diffusion.cpp's default sampler for a diffusion transformer; the
+/// guide names none.
+const Z_IMAGE_TURBO_SAMPLING: Sampling = Sampling {
+    steps: 8,
+    cfg: 1.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// Base Z-Image: guidance 5.0 as the guide runs it, which names no step
+/// count; 28 is the low end of Tongyi's 28 to 50. Its `Q8_0` file drew blank
+/// white on Metal, an f16 overflow in the quantized matmuls, and drew in
+/// `sd-cli` with `--linear-scale 0.000244140625` (log-0018, 2026-10-12);
+/// whether the scale stays is for a run through gglib, which has not been
+/// made.
+const Z_IMAGE_BASE_SAMPLING: Sampling = Sampling {
+    steps: 28,
+    cfg: 5.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: Some(0.000_244_140_625),
 };
 
 impl ImageFamily {
@@ -313,7 +379,7 @@ impl ImageFamily {
         }
     }
 
-    /// How this family is drawn.
+    /// How this family is drawn, whatever its variant.
     #[must_use]
     pub const fn recipe(self) -> &'static Recipe {
         match self {
@@ -324,16 +390,22 @@ impl ImageFamily {
         }
     }
 
-    /// Why a main file named `file_name` of this family is not drawn, or
-    /// `None` when it is. stable-diffusion.cpp loads base and Turbo Z-Image
-    /// as one model, so the name is what tells them apart: a Z-Image file
-    /// whose name lacks "turbo", in any case, is refused.
+    /// How a main file named `file_name` of this family is sampled. Base and
+    /// Turbo Qwen-Image 2.1, and base and Turbo Z-Image, share their tensors,
+    /// so stable-diffusion.cpp loads each pair as one model and the name is
+    /// what tells them apart: a name holding "turbo", in any case, is Turbo.
+    /// Flux.1 and SDXL have one sampling each, whatever the name.
     #[must_use]
-    pub fn refusal(self, file_name: &str) -> Option<&'static str> {
-        (self == Self::ZImage && !file_name.to_ascii_lowercase().contains("turbo")).then_some(
-            "Only Z-Image Turbo is supported: base Z-Image needs other steps and guidance, \
-             and its Q8_0 file draws blank on Metal (stable-diffusion.cpp #2074)",
-        )
+    pub fn sampling(self, file_name: &str) -> &'static Sampling {
+        let turbo = file_name.to_ascii_lowercase().contains("turbo");
+        match (self, turbo) {
+            (Self::Flux1, _) => &FLUX1_SAMPLING,
+            (Self::Sdxl, _) => &SDXL_SAMPLING,
+            (Self::QwenImage21, false) => &QWEN_IMAGE_21_SAMPLING,
+            (Self::QwenImage21, true) => &QWEN_IMAGE_21_TURBO_SAMPLING,
+            (Self::ZImage, false) => &Z_IMAGE_BASE_SAMPLING,
+            (Self::ZImage, true) => &Z_IMAGE_TURBO_SAMPLING,
+        }
     }
 
     /// The family a main weights file belongs to, from its tensor names and

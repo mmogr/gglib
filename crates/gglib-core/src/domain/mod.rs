@@ -160,8 +160,8 @@ pub use tensor_table::{TensorInfo, TensorTable, WeightsFormat};
 
 // Re-export image-model types at the domain level for convenience
 pub use image_family::{
-    ComponentRole, ComponentSpec, FlashAttention, ImageFamily, Placement, Recipe, SizeRule,
-    UnknownName,
+    ComponentRole, ComponentSpec, FlashAttention, ImageFamily, Placement, Recipe, Sampling,
+    SizeRule, UnknownName,
 };
 pub use runtime_kind::RuntimeKind;
 
