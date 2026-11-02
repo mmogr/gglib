@@ -17,9 +17,9 @@ use gglib_core::ports::{
 };
 
 /// One repository, whose files are grouped and labelled into variants as
-/// the Hub's listing is. A variant's role, which the Hub's header would
-/// give, is read from its first file's name by [`GgufFileRole::classify`];
-/// a file's OID is `oid-<path>`.
+/// the Hub's listing is. A file named with `mmproj` holds a projector's
+/// header, [`PROJECTOR_HEAD`], and any other a model's; a variant's role is
+/// what its first file's header says. A file's OID is `oid-<path>`.
 ///
 /// An image repository's weights also have a head, which
 /// [`ImageHeadParser`] reads as the family's tensor table, and its family's
@@ -82,30 +82,29 @@ impl RepoHub {
         }
     }
 
-    /// The repository's variants, each with the role its first file's name
-    /// gives.
+    /// The repository's variants, each with the role its first file's
+    /// header says.
     fn variants(&self) -> Vec<HfQuantInfo> {
         let mut variants = variants_of(self.files.iter().map(|f| (f.path.as_str(), f.size)));
         for variant in &mut variants {
-            variant.role = variant
-                .file_paths
-                .first()
-                .map(|first| GgufFileRole::classify(Path::new(first)));
+            variant.role = variant.file_paths.first().map(|first| {
+                if holds_a_projector(first) {
+                    GgufFileRole::Projector
+                } else {
+                    GgufFileRole::Weights
+                }
+            });
         }
         variants
     }
+}
 
-    /// The files of one role, by path.
-    fn of_role(&self, role: GgufFileRole) -> Vec<HfFileInfo> {
-        let mut files: Vec<HfFileInfo> = self
-            .files
-            .iter()
-            .filter(|f| GgufFileRole::classify(Path::new(&f.path)) == role)
-            .cloned()
-            .collect();
-        files.sort_by(|a, b| a.path.cmp(&b.path));
-        files
-    }
+/// Whether the file at `path` holds a projector's header in this fake: a
+/// test names its projectors with `mmproj`, as uploaders do. This is the
+/// fake's own data, standing in for the bytes of the file; what is under
+/// test reads the header [`RepoHub`] serves for it.
+fn holds_a_projector(path: &str) -> bool {
+    path.contains("mmproj")
 }
 
 #[async_trait]
@@ -150,8 +149,9 @@ impl HfClientPort for RepoHub {
             model_id: model_id.to_string(),
         })
     }
-    /// An image repository's head, for any of its files; any other file's
-    /// cannot be read.
+    /// [`PROJECTOR_HEAD`] for a file holding a projector, an image
+    /// repository's head for any other of its files, and no head for any
+    /// other file.
     async fn read_head(
         &self,
         model_id: &str,
@@ -161,14 +161,10 @@ impl HfClientPort for RepoHub {
         let mut asked = self.heads_asked.lock().unwrap();
         asked.push((model_id.to_string(), path.to_string()));
         drop(asked);
-        if self
-            .of_role(GgufFileRole::Projector)
-            .iter()
-            .any(|p| p.path == path)
-        {
+        let known = self.files.iter().any(|file| file.path == path);
+        if known && holds_a_projector(path) {
             return Ok(PROJECTOR_HEAD.to_vec());
         }
-        let known = self.files.iter().any(|file| file.path == path);
         self.head
             .clone()
             .filter(|_| known)

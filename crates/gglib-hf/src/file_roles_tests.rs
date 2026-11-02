@@ -1,9 +1,6 @@
 //! Tests that a projector and a sidecar are their own variants, never a
 //! shard of the weights.
 
-use std::path::Path;
-
-use gglib_core::download::GgufFileRole;
 use gglib_core::ports::huggingface::HfQuantInfo;
 
 use super::*;
@@ -111,21 +108,6 @@ fn the_files_a_label_names_in_the_real_listing() {
         "the one label holding F16 is the projector's, which its header refuses"
     );
     assert!(variant_files(&files, "Q4_K").is_none(), "several hold it");
-}
-
-/// The sidecars' names, which the role a header gives replaces wherever a
-/// variant is judged.
-#[test]
-fn the_real_listing_names_two_sidecars() {
-    let sidecars: Vec<HfFileEntry> = qwen_files()
-        .into_iter()
-        .filter(|file| GgufFileRole::classify(Path::new(&file.path)) == GgufFileRole::Sidecar)
-        .collect();
-
-    assert_eq!(
-        paths(&sidecars),
-        ["MTP/mtp-Qwen3.8-27B-Q4_0.gguf", "imatrix_unsloth.gguf"]
-    );
 }
 
 // ── The shapes a repository takes ────────────────────────────────────────
