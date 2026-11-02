@@ -12,6 +12,8 @@ use sqlx::{
 use std::path::Path;
 use std::time::Duration;
 
+use gglib_core::ports::GgufParserPort;
+
 pub use attachments::sweep_unlinked_attachments;
 
 #[path = "setup_attachments.rs"]
@@ -140,6 +142,9 @@ async fn column_present(pool: &SqlitePool, table: &str, column: &str) -> Result<
 /// # Arguments
 ///
 /// * `db_path` - Path to the `SQLite` database file
+/// * `gguf_parser` - What reads a model file's header, for the one migration
+///   that asks what a file is: linking an older library's models to their
+///   projectors
 ///
 /// # Returns
 ///
@@ -154,16 +159,20 @@ async fn column_present(pool: &SqlitePool, table: &str, column: &str) -> Result<
 /// # Example
 ///
 /// ```rust,no_run
+/// use gglib_core::ports::NoopGgufParser;
 /// use gglib_db::setup_database;
 /// use std::path::Path;
 ///
 /// # async fn example() -> anyhow::Result<()> {
 /// let db_path = Path::new("/path/to/gglib.db");
-/// let pool = setup_database(db_path).await?;
+/// let pool = setup_database(db_path, &NoopGgufParser).await?;
 /// # Ok(())
 /// # }
 /// ```
-pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
+pub async fn setup_database(
+    db_path: &Path,
+    gguf_parser: &dyn GgufParserPort,
+) -> Result<SqlitePool> {
     // Private before SQLite opens it; `database_file::prepare` says why then.
     crate::database_file::prepare(db_path)?;
     crate::sqlite_init::ensure_initialised().await?;
@@ -181,7 +190,7 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
         .await?;
 
     generation::refuse_newer(&pool).await?; // before anything is created or altered
-    create_schema(&pool).await?;
+    create_schema_reading(&pool, gguf_parser).await?;
     generation::stamp(&pool).await?;
 
     settings::reclaim_auto_tune(&pool).await?;
@@ -218,7 +227,16 @@ pub async fn cleanup_zombie_benchmark_runs(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-/// Creates the complete database schema.
+/// [`create_schema_reading`] with a parser that reads every file as weights,
+/// so an older library's models are linked to no projector. A fresh
+/// database has the projector column from the start and nothing to link.
+#[cfg(any(test, feature = "test-utils"))]
+async fn create_schema(pool: &SqlitePool) -> Result<()> {
+    create_schema_reading(pool, &gglib_core::ports::NoopGgufParser).await
+}
+
+/// Creates the complete database schema, reading a model file's header with
+/// `gguf_parser` where a migration asks what the file is.
 ///
 /// This function creates all tables and indexes required by the application.
 /// It is safe to call multiple times as all operations use IF NOT EXISTS.
@@ -226,7 +244,7 @@ pub async fn cleanup_zombie_benchmark_runs(pool: &SqlitePool) -> Result<()> {
     clippy::too_many_lines,
     reason = "the schema's steps in the order they must run, most of them one CREATE each; the order is the point"
 )]
-async fn create_schema(pool: &SqlitePool) -> Result<()> {
+async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPort) -> Result<()> {
     models::create_models_table(pool).await?;
     models::create_model_indexes(&mut *pool.acquire().await?).await?;
 
@@ -257,7 +275,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     }
 
     model_files::create_model_files_table(pool).await?;
-    model_files::add_projector_column(pool).await?;
+    model_files::add_projector_column(pool, gguf_parser).await?;
     model_components::create_model_components_table(pool).await?;
 
     // The settings table, from the one place that defines it. Here and not

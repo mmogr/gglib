@@ -52,7 +52,9 @@ async fn an_image_stored_before_the_daemon_starts_is_still_there_for_its_turn() 
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("gglib.db");
-    let cli = crate::setup_database(&path).await.unwrap();
+    let cli = crate::setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     let store = SqliteAttachmentStore::new(cli.clone());
     let bytes = b"the image as it is on disk".to_vec();
     let image = AttachmentInfo {
@@ -63,7 +65,9 @@ async fn an_image_stored_before_the_daemon_starts_is_still_there_for_its_turn() 
     };
     store.put(&image, &bytes).await.unwrap();
 
-    let daemon = crate::setup_database(&path).await.unwrap();
+    let daemon = crate::setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     repair_at_daemon_start(&daemon).await;
 
     assert_eq!(store.blob(&image.id).await.unwrap().unwrap().data, bytes);

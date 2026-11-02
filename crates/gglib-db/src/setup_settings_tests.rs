@@ -34,7 +34,9 @@ pub(super) async fn left_by_an_older_build(
     version: i64,
     rows: &[(&str, &str)],
 ) -> PathBuf {
-    let pool = setup_database(path).await.expect("a fresh database");
+    let pool = setup_database(path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("a fresh database");
     for (key, value) in rows {
         plant(&pool, key, value).await;
     }
@@ -133,7 +135,9 @@ async fn every_stored_pair_answers_once_folded_what_it_answered_before() {
         let path = dir.path().join(format!("{case}.db"));
         left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &stored).await;
 
-        let pool = setup_database(&path).await.expect("the boot");
+        let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+            .await
+            .expect("the boot");
 
         let pair = format!("switch {switch:?}, mode {mode:?}");
         assert_eq!(answer(&pool).await, *answered, "{pair}");
@@ -153,7 +157,9 @@ async fn a_database_never_stamped_is_folded_too() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = left_by_an_older_build(&dir.path().join("gglib.db"), 0, &[(SWITCH, "false")]).await;
 
-    let pool = setup_database(&path).await.expect("the boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the boot");
 
     assert_eq!(answer(&pool).await, Off);
     // At least the fold's stamp: later passes stamp higher still.
@@ -167,7 +173,9 @@ async fn a_database_never_stamped_is_folded_too() {
 async fn the_fold_runs_once_and_a_switch_written_after_it_is_not_folded() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
-    let pool = setup_database(&path).await.expect("a fresh database");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("a fresh database");
     assert!(
         user_version(&pool).await.expect("a version") >= LOOP_GUARD_MODE_SCHEMA_VERSION,
         "a fresh database is stamped as it is made"
@@ -175,7 +183,9 @@ async fn the_fold_runs_once_and_a_switch_written_after_it_is_not_folded() {
     plant(&pool, SWITCH, "false").await;
     pool.close().await;
 
-    let pool = setup_database(&path).await.expect("the second boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the second boot");
 
     assert_eq!(rows(&pool).await, [text_row(SWITCH, "false", "then")]);
     assert_eq!(answer(&pool).await, Note);
@@ -188,7 +198,9 @@ async fn a_second_pass_over_a_folded_record_writes_nothing() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
     left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &[(SWITCH, "false")]).await;
-    let pool = setup_database(&path).await.expect("the boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the boot");
     sqlx::query("UPDATE settings_kv SET updated_at = 'folded'")
         .execute(&pool)
         .await
@@ -225,7 +237,9 @@ async fn the_fold_writes_the_mode_and_the_switch_and_no_other_row() {
     let stored = [OTHERS, &[(SWITCH, "false")]].concat();
     left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &stored).await;
 
-    let pool = setup_database(&path).await.expect("the boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the boot");
 
     let (mode, others): (Vec<_>, Vec<_>) = rows(&pool)
         .await
@@ -256,7 +270,9 @@ async fn a_stored_mode_keeps_its_row_byte_for_byte_when_the_switch_goes() {
     let stored = [OTHERS, &[mode, (SWITCH, "false")]].concat();
     left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &stored).await;
 
-    let pool = setup_database(&path).await.expect("the boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the boot");
 
     let mut kept: Vec<_> = [OTHERS, &[mode]]
         .concat()
@@ -275,7 +291,9 @@ async fn the_auto_tune_row_is_reclaimed_as_a_database_opens() {
     let stored = [("auto_tune", "true"), ("proxy_port", "9191")];
     left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &stored).await;
 
-    let pool = setup_database(&path).await.expect("the boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the boot");
 
     assert_eq!(rows(&pool).await, [text_row("proxy_port", "9191", "then")]);
 }

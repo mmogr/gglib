@@ -13,7 +13,9 @@ async fn left_by_an_older_build(
     servers: &[(&str, &str)],
     settings: &[(&str, &str)],
 ) -> SqlitePool {
-    let pool = setup_database(path).await.expect("a fresh database");
+    let pool = setup_database(path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("a fresh database");
     for (name, kind) in servers {
         sqlx::query("INSERT INTO mcp_servers (name, type) VALUES (?, ?)")
             .bind(name)
@@ -238,9 +240,12 @@ async fn the_step_runs_once() {
 #[tokio::test]
 async fn a_fresh_database_is_stamped_and_flags_nothing() {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let pool = setup_database(&dir.path().join("gglib.db"))
-        .await
-        .expect("a fresh database");
+    let pool = setup_database(
+        &dir.path().join("gglib.db"),
+        &gglib_core::ports::NoopGgufParser,
+    )
+    .await
+    .expect("a fresh database");
 
     assert_eq!(flagged(&pool).await, []);
     assert_eq!(version(&pool).await, REMOTE_GRANT_SCHEMA_VERSION);
@@ -261,7 +266,9 @@ async fn a_boot_runs_the_step() {
     .close()
     .await;
 
-    let pool = setup_database(&path).await.expect("the boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the boot");
 
     assert_eq!(flagged(&pool).await, [stdio("tavily")]);
 }

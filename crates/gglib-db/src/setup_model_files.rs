@@ -7,9 +7,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use gglib_core::GgufFileRole;
 use gglib_core::domain::ModelFolder;
 use gglib_core::paths::canonical_model_path_string;
+use gglib_core::ports::GgufParserPort;
 use sqlx::{Row, SqliteConnection, SqlitePool};
 
 /// Creates `model_files`, the per-file rows a downloaded model is verified
@@ -46,7 +46,8 @@ pub(super) async fn create_model_files_table(pool: &SqlitePool) -> Result<()> {
 /// A download from before the column stored a repository's projector as one
 /// more file of the model: a `model_files` row, an entry of `file_paths_json`,
 /// or both. Such a model has the file and no link to it, so it launches
-/// without `--mmproj`. The link is made here, once, in the transaction that
+/// without `--mmproj`. Which file is the projector is read from its header
+/// with `gguf_parser`. The link is made here, once, in the transaction that
 /// adds the column: a library that already has the column is left exactly as
 /// it is, so a model its user has since unlinked stays unlinked.
 ///
@@ -57,13 +58,16 @@ pub(super) async fn create_model_files_table(pool: &SqlitePool) -> Result<()> {
 /// Two processes opening one old library at once both get this far. `BEGIN
 /// IMMEDIATE` lets one write at a time and the shape is asked again inside the
 /// transaction, so the second finds the column there and changes nothing.
-pub(super) async fn add_projector_column(pool: &SqlitePool) -> Result<()> {
+pub(super) async fn add_projector_column(
+    pool: &SqlitePool,
+    gguf_parser: &dyn GgufParserPort,
+) -> Result<()> {
     let mut conn = pool.acquire().await?;
     if has_projector_column(&mut conn).await? {
         return Ok(());
     }
     sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await?;
-    let outcome = add_and_link(&mut conn).await;
+    let outcome = add_and_link(&mut conn, gguf_parser).await;
     let end = if outcome.is_ok() {
         "COMMIT"
     } else {
@@ -97,7 +101,10 @@ async fn has_projector_column(conn: &mut SqliteConnection) -> Result<bool> {
 
 /// The column and the links, inside the transaction `conn` holds. Answers how
 /// many models were linked.
-async fn add_and_link(conn: &mut SqliteConnection) -> Result<usize> {
+async fn add_and_link(
+    conn: &mut SqliteConnection,
+    gguf_parser: &dyn GgufParserPort,
+) -> Result<usize> {
     if has_projector_column(conn).await? {
         return Ok(0);
     }
@@ -120,7 +127,7 @@ async fn add_and_link(conn: &mut SqliteConnection) -> Result<usize> {
         .fetch_all(&mut *conn)
         .await?;
 
-        let Some(projector) = own_projector(&weights, listed.as_deref(), &rows) else {
+        let Some(projector) = own_projector(&weights, listed.as_deref(), &rows, gguf_parser) else {
             continue;
         };
         sqlx::query("UPDATE models SET projector_path = ? WHERE id = ?")
@@ -133,22 +140,35 @@ async fn add_and_link(conn: &mut SqliteConnection) -> Result<usize> {
     Ok(linked)
 }
 
-/// The first of a model's own files that is named as a projector and is on
-/// disk.
+/// The first of a model's own files whose header `gguf_parser` reads as a
+/// projector's.
 ///
 /// `listed` is the model's `file_paths_json`, absolute paths; a value that is
 /// not a JSON list of strings adds nothing. `rows` are its `model_files`
-/// names, read in the model's [`ModelFolder`]. [`GgufFileRole::projectors_among`]
-/// says which of the two lists' files are projectors, the listed ones first.
-/// A file that is not there is passed over: a link to it would fail a launch
-/// that succeeds without one.
-fn own_projector(weights: &Path, listed: Option<&str>, rows: &[String]) -> Option<PathBuf> {
+/// names, read in the model's [`ModelFolder`]. The listed files are asked
+/// first. `weights` itself is never one, and its header is not read. A file
+/// whose header cannot be read, one that is not there among them, is passed
+/// over: a link to it would fail a launch that succeeds without one.
+fn own_projector(
+    weights: &Path,
+    listed: Option<&str>,
+    rows: &[String],
+    gguf_parser: &dyn GgufParserPort,
+) -> Option<PathBuf> {
     let listed: Vec<String> = listed
         .and_then(|json| serde_json::from_str(json).ok())
         .unwrap_or_default();
     let folder = ModelFolder::new(weights, rows.first().map(String::as_str));
-    GgufFileRole::projectors_among(weights, &folder, listed.iter().chain(rows))
-        .find(|file| file.is_file())
+    listed
+        .iter()
+        .chain(rows)
+        .map(|name| folder.file(name))
+        .filter(|file| file != weights)
+        .find(|file| {
+            gguf_parser
+                .parse(file)
+                .is_ok_and(|header| header.role.is_projector())
+        })
 }
 
 #[cfg(test)]

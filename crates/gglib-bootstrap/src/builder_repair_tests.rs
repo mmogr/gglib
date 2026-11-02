@@ -23,7 +23,10 @@ const HEALTHY_OID: &str = "9a129038d9a00aed0cf6a7ea059ca50a813449061ab87848cf1a1
 #[tokio::test]
 async fn a_repair_leaves_a_running_download() {
     let dir = tempfile::tempdir().unwrap();
-    let pool = setup_database(&dir.path().join("gglib.db")).await.unwrap();
+    let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
+    let pool = setup_database(&dir.path().join("gglib.db"), gguf_parser.as_ref())
+        .await
+        .unwrap();
     let models_dir = dir.path().join("models");
     std::fs::write(&models_dir, "a file where the models directory would be").unwrap();
     let hub = FakeHub {
@@ -33,6 +36,7 @@ async fn a_repair_leaves_a_running_download() {
     let built = wire(
         pool,
         Arc::new(hub),
+        gguf_parser,
         DownloadManagerConfig {
             models_directory: Some(models_dir),
             ..DownloadManagerConfig::default()

@@ -10,9 +10,12 @@ use crate::setup::setup_database;
 /// The settings store over a fresh database file in `dir`, and its pool for
 /// writing rows by hand.
 async fn store(dir: &tempfile::TempDir) -> (SqliteSettingsRepository, SqlitePool) {
-    let pool = setup_database(&dir.path().join("gglib.db"))
-        .await
-        .expect("the database opens");
+    let pool = setup_database(
+        &dir.path().join("gglib.db"),
+        &gglib_core::ports::NoopGgufParser,
+    )
+    .await
+    .expect("the database opens");
     (SqliteSettingsRepository::new(pool.clone()), pool)
 }
 

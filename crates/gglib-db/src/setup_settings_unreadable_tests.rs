@@ -46,7 +46,7 @@ async fn a_record_that_cannot_be_read_is_left_as_found_and_the_boot_goes_on() {
             .collect();
         found.sort();
 
-        let pool = setup_database(&path)
+        let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
             .await
             .unwrap_or_else(|refused| panic!("{what}: the boot failed: {refused:#}"));
 
@@ -68,7 +68,9 @@ async fn all_but_the_switches_that_are_json_are_records_this_build_cannot_load()
     for (case, (what, stored)) in UNREADABLE.iter().enumerate() {
         let path = dir.path().join(format!("{case}.db"));
         left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, stored).await;
-        let pool = setup_database(&path).await.expect("the boot");
+        let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+            .await
+            .expect("the boot");
 
         let loaded = SqliteSettingsRepository::new(pool.clone()).load().await;
 
@@ -83,7 +85,9 @@ async fn all_but_the_switches_that_are_json_are_records_this_build_cannot_load()
 async fn a_switch_stored_as_a_blob_is_left_as_found_and_the_boot_goes_on() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
-    let pool = setup_database(&path).await.expect("a fresh database");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("a fresh database");
     sqlx::query("INSERT INTO settings_kv (key, value, updated_at) VALUES (?, ?, 'then')")
         .bind(SWITCH)
         .bind(&b"false"[..])
@@ -93,7 +97,9 @@ async fn a_switch_stored_as_a_blob_is_left_as_found_and_the_boot_goes_on() {
     stamp(&pool, CANONICAL_PATH_SCHEMA_VERSION).await;
     pool.close().await;
 
-    let pool = setup_database(&path).await.expect("the boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the boot");
 
     let blob = (
         SWITCH.to_owned(),
@@ -114,7 +120,9 @@ async fn a_database_stamped_before_the_lock_was_held_is_neither_folded_nor_resta
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
     left_by_an_older_build(&path, LATER, &[(SWITCH, "false")]).await;
-    let pool = setup_database(&path).await.expect("the boot");
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("the boot");
 
     fold_and_stamp(&pool).await.expect("the pass");
 

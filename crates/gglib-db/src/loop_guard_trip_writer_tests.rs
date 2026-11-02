@@ -85,7 +85,9 @@ async fn stopping_writes_every_trip_and_every_scan_recorded_before_it() {
 async fn a_trip_outlives_the_database_connection_that_wrote_it() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("gglib.db");
-    let pool = setup_database(&path).await.unwrap();
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     let writer = LoopGuardTripWriter::spawn(pool.clone());
     writer.record_scan("qwen", LoopGuardMode::Refuse, now_secs());
     writer.record_trip(
@@ -100,7 +102,9 @@ async fn a_trip_outlives_the_database_connection_that_wrote_it() {
     writer.shutdown().await;
     pool.close().await;
 
-    let reopened = setup_database(&path).await.unwrap();
+    let reopened = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     let days = today(&reopened).await;
     assert_eq!(days.len(), 1, "{days:?}");
     assert_eq!(days[0].mode, LoopGuardMode::Refuse);

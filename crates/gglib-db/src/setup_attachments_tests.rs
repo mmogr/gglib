@@ -130,11 +130,15 @@ async fn the_sweep_leaves_an_unlinked_image_stored_within_the_last_day() {
 async fn opening_the_database_again_sweeps_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("gglib.db");
-    let pool = setup_database(&path).await.unwrap();
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     put(&pool, "just-uploaded").await;
     pool.close().await;
 
-    let pool = setup_database(&path).await.unwrap();
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .unwrap();
     assert_eq!(stored(&pool).await, ["just-uploaded"]);
     pool.close().await;
 }
@@ -145,7 +149,12 @@ async fn opening_the_database_again_sweeps_nothing() {
 #[tokio::test]
 async fn the_database_pool_enforces_the_links_foreign_keys() {
     let dir = tempfile::tempdir().unwrap();
-    let pool = setup_database(&dir.path().join("gglib.db")).await.unwrap();
+    let pool = setup_database(
+        &dir.path().join("gglib.db"),
+        &gglib_core::ports::NoopGgufParser,
+    )
+    .await
+    .unwrap();
     put(&pool, "stored").await;
     let conversation = message_with(&pool, &["stored"]).await;
     let message: i64 = sqlx::query_scalar("SELECT id FROM chat_messages")

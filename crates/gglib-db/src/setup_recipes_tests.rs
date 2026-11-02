@@ -10,7 +10,9 @@ use crate::setup_database;
 /// A database as the build before this pass left it: this build's schema,
 /// stamped at the loop guard's version.
 async fn left_by_an_older_build(path: &std::path::Path) -> SqlitePool {
-    let pool = setup_database(path).await.expect("a fresh database");
+    let pool = setup_database(path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("a fresh database");
     sqlx::query("PRAGMA user_version = 2")
         .execute(&pool)
         .await
