@@ -19,8 +19,9 @@
 # each gglib feature contracts/upstream/overlaps.json names
 # (engine_pin_overlaps.sh), and the upstream commits in the range that touch a
 # file an ADR in docs/adr/ cites, read with `gh api`. A stable-diffusion.cpp
-# body adds the real picture to take, and
-# has no tier 3. Nothing in it fails: a part that cannot be read says so.
+# body adds the real picture to take, and has no tier 3; its commit list also
+# covers sd-server's folder, examples/server/, less its frontend, which no ADR
+# cites by file. Nothing in it fails: a part that cannot be read says so.
 #
 # Backticks in the printf formats below are Markdown, not command substitution.
 # shellcheck disable=SC2016
@@ -32,11 +33,14 @@ ENGINE=$1 CURRENT=$2 CANDIDATE=$3 BEFORE=$4 AFTER=$5 RECORDER=$6 RUN_URL=$7 INPR
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TICK='`'
 
+# CITED matches an upstream path an ADR cites, with at most one character
+# before it that is not part of a path. SERVER is the engine's server folder,
+# read whole beside the cited files, or empty.
 case $ENGINE in
   llama) CONSTANT=PINNED_LLAMA_RELEASE PRODUCT=llama.cpp REPO=ggml-org/llama.cpp
-         CITED='(tools/server|tools/mtmd|common)/[A-Za-z0-9_./-]+\.(cpp|h|hpp)' ;;
+         CITED='(tools/server|tools/mtmd|common)/[A-Za-z0-9_./-]+\.(cpp|h|hpp)' SERVER='' ;;
   sd)    CONSTANT=PINNED_SD_RELEASE PRODUCT=stable-diffusion.cpp REPO=leejet/stable-diffusion.cpp
-         CITED='(^|[^A-Za-z0-9_/])src/[A-Za-z0-9_./-]+\.(cpp|h|hpp)' ;;
+         CITED='(^|[^A-Za-z0-9_/])src/[A-Za-z0-9_./-]+\.(cpp|h|hpp)' SERVER='examples/server' ;;
   *) echo "engine must be llama or sd, not $ENGINE" >&2; exit 2 ;;
 esac
 
@@ -225,11 +229,33 @@ inproc_line() {
   echo
 }
 
-# --- upstream commits that touch a file an ADR cites -----------------------
+# --- upstream commits that touch a file an ADR cites, or the server --------
+
+# The files an ADR cites, one per line, and the server folder when there is
+# one; a cited file under that folder is covered by it.
+cited_paths() {
+  local paths
+  paths=$(grep -ohE "$CITED" "$ROOT_DIR"/docs/adr/*.md | sed -E 's|^[^A-Za-z0-9_/]||' | sort -u | head -40)
+  if [ -n "$SERVER" ]; then
+    paths=$(grep -v "^$SERVER/" <<<"$paths"; echo "$SERVER")
+  fi
+  grep . <<<"$paths" || true
+}
+
+# Whether a commit changes a file of the server folder outside its frontend:
+# a folder is asked whole, and `sync: update frontend` would otherwise fill
+# the list. Returns 2 when the commit could not be read.
+touches_server_code() {
+  local answer
+  answer=$(gh api "repos/$REPO/commits/$1" \
+    --jq "[.files[].filename | select(startswith(\"$SERVER/\") and (test(\"^$SERVER/(frontend|webui)(/|$)\") | not))] | length > 0" \
+    2> "$TMP/gh.err") || return 2
+  [ "$answer" = true ]
+}
 
 commits_section() {
   local paths since list
-  paths=$(grep -ohE "$CITED" "$ROOT_DIR"/docs/adr/*.md | sed -E 's|^[^s]*src/|src/|' | sort -u | head -40)
+  paths=$(cited_paths)
   if [ -z "$paths" ]; then return; fi
   local own
   if ! own=$(gh api "repos/$REPO/commits/$CURRENT" --jq '.sha + " " + .commit.committer.date' 2> "$TMP/gh.err"); then
@@ -238,13 +264,31 @@ commits_section() {
   fi
   since=${own#* } own=${own%% *}
   : > "$TMP/commits"
+  local what rc
   while read -r path; do
-    if ! gh api "repos/$REPO/commits?sha=$CANDIDATE&path=$path&since=$since&per_page=100" \
+    what="files the ADRs cite"
+    [ -n "$SERVER" ] && [ "$path" = "$SERVER" ] && what="$SERVER/"
+    if ! gh api --paginate "repos/$REPO/commits?sha=$CANDIDATE&path=$path&since=$since&per_page=100" \
         --jq ".[] | [.commit.committer.date, .sha, (.commit.message | split(\"\n\")[0]), .html_url, \"$path\"] | @tsv" \
-        >> "$TMP/commits" 2> "$TMP/gh.err"; then
-      printf 'The %s commits that touch files the ADRs cite were not read: %s\n\n' "$PRODUCT" "$(head -1 "$TMP/gh.err")"
+        > "$TMP/commits.path" 2> "$TMP/gh.err"; then
+      printf 'The %s commits that touch %s were not read: %s\n\n' "$PRODUCT" "$what" "$(head -1 "$TMP/gh.err")"
       return
     fi
+    if [ -n "$SERVER" ] && [ "$path" = "$SERVER" ]; then
+      : > "$TMP/commits.server"
+      while IFS=$'\t' read -r date sha rest; do
+        [ -n "$sha" ] || continue
+        rc=0
+        touches_server_code "$sha" || rc=$?
+        case $rc in
+          0) printf '%s\t%s\t%s\n' "$date" "$sha" "$rest" >> "$TMP/commits.server" ;;
+          2) printf 'The %s commits that touch %s were not read: %s\n\n' "$PRODUCT" "$what" "$(head -1 "$TMP/gh.err")"
+             return ;;
+        esac
+      done < "$TMP/commits.path"
+      mv "$TMP/commits.server" "$TMP/commits.path"
+    fi
+    cat "$TMP/commits.path" >> "$TMP/commits"
   done <<<"$paths"
   # One line per commit, newest first, with every cited file it touches. A
   # subject goes in a code span with its #N made plain, so the body neither
@@ -260,11 +304,13 @@ commits_section() {
   list=$(grep -v "/commit/$own)" <<<"$list" || true)
   local count
   count=$(grep -c . <<<"$list" || true)
+  what="files the ADRs cite"
+  [ -n "$SERVER" ] && what="files the ADRs cite or $SERVER/"
   if [ "$count" -eq 0 ]; then
-    printf 'No %s commit from %s to %s touches a file the ADRs cite.\n\n' "$PRODUCT" "$CURRENT" "$CANDIDATE"
+    printf 'No %s commit from %s to %s touches %s.\n\n' "$PRODUCT" "$CURRENT" "$CANDIDATE" "$what"
     return
   fi
-  printf '<details><summary>%s %s commits touch files the ADRs cite</summary>\n\n' "$count" "$PRODUCT"
+  printf '<details><summary>%s %s commits touch %s</summary>\n\n' "$count" "$PRODUCT" "$what"
   head -50 <<<"$list"
   [ "$count" -gt 50 ] && printf -- '- … and %s more\n' $((count - 50))
   printf '\n</details>\n\n'
