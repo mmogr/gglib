@@ -141,6 +141,25 @@ fn a_quantization_two_twins_share_resolves_to_nothing() {
     assert_eq!(resolve_listed_id("qwen3", &models), None);
 }
 
+/// A label after the `@` is read as a request for a Hub variant is: exactly
+/// ignoring case, else as the one label holding it as a whole token.
+#[test]
+fn a_label_suffix_is_matched_as_a_request_is() {
+    let models = [
+        listed(1, "qwen3", Some("UD-Q4_K_XL")),
+        listed(2, "qwen3", Some("Q6_K_P")),
+        listed(3, "qwen3", Some("Q4_K_M")),
+    ];
+    assert_eq!(resolve_listed_id("qwen3@ud-q4_k_xl", &models), Some(1));
+    assert_eq!(resolve_listed_id("qwen3@Q4_K_XL", &models), Some(1));
+    assert_eq!(resolve_listed_id("qwen3@q6_k_p", &models), Some(2));
+    assert_eq!(
+        resolve_listed_id("qwen3@Q6_K", &models),
+        None,
+        "Q6_K is no token of Q6_K_P"
+    );
+}
+
 /// What `get_by_identifier` finds for `identifier`, in its order: a number
 /// is an id, then the exact name (its lowest row), then an `@` form.
 fn looked_up(identifier: &str, models: &[ListedModel<'_>]) -> Option<i64> {
