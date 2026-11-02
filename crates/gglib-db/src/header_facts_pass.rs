@@ -81,3 +81,7 @@ pub async fn fill_header_facts_once(
     write_row(&mut conn, READ_KEY, Some(&Value::Bool(true)), &now()).await?;
     Ok(Some(filled))
 }
+
+#[cfg(test)]
+#[path = "header_facts_pass_tests.rs"]
+mod tests;
