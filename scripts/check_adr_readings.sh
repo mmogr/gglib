@@ -6,8 +6,10 @@
 # (`crates/gglib-runtime/src/engine_contract_tests.rs`) from what the pinned
 # llama-server answered. Each leaf an ADR names carries `adr`, the
 # `criterion` quoted from that ADR, `how_read` and `if_moved`.
-# `contracts/upstream/llama/approvals.json` is written by hand, one entry per
-# such leaf: `{"approved": <the value>, "note": "<why>"}` and nothing else.
+# `contracts/upstream/llama/approvals.json` holds one entry per such leaf,
+# `{"approved": <the value>, "note": "<why>"}` and nothing else, written by
+# scripts/approve_reading.sh from a `/approve <key> <note>` comment on the
+# pull request (approve-reading.yml).
 #
 # This fails when:
 #   - a reading differs from its approval, or has none;
@@ -72,7 +74,7 @@ check() {
     # list what came and went.
     | def brief: if type == "array" then "a list of \(length)" else tojson end;
       def how_to_approve($k; $v):
-        "To approve, set in \($file):%0A  \($k | tojson): {\"approved\": \(if ($v | type) == "array" then "<the list observed.json records>" else ($v | tojson) end), \"note\": \"deleting <stage> (#<issue>)\"}%0Aor a note starting \"keeping, because …\" or \"probe changed in this PR\".";
+        "To approve at \($v | brief), comment on the pull request:%0A  /approve \($k) deleting <stage> (#<issue>)%0Aor with the note \"keeping, because <reason>\", \"probe changed in this PR\" or \"first reading, <tag>\"; that writes \($file).";
       def moved_from($old; $new):
         if ($old | type) == "array" and ($new | type) == "array" then
           "now lists \($new | length) (\(
@@ -90,7 +92,7 @@ check() {
       ( $a | to_entries[]
         | .key as $k
         | select($named | has($k) | not)
-        | "::error title=ADR criterion moved::\($file) approves \($k), which observed.json does not record as an ADR reading. Remove the entry, or restore the reading." ),
+        | "::error title=ADR criterion moved::\($file) approves \($k), which observed.json does not record as an ADR reading. Comment `/approve \($k) remove` on the pull request, or restore the reading." ),
       ( $a | to_entries[]
         | select((.value | type) != "object"
             or (.value | keys) != ["approved", "note"]
