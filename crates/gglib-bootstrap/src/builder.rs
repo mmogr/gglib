@@ -162,7 +162,8 @@ fn wire(
     let repos = CoreFactory::build_repos(pool.clone());
 
     // 4. GGUF parser (shared: model registrar, the download manager's head
-    //    read of an image model's weights, and capability detection)
+    //    read of an image model's weights, capability detection, and what
+    //    verification reads each of a model's files to be)
     let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
 
     // 5. Model registrar — composes model repository + GGUF parser so that
@@ -191,9 +192,13 @@ fn wire(
     // 7. AppCore, whose verification service checks for updates against the
     //    HF client and queues a repair's download on that same manager
     let app = Arc::new(
-        AppCore::new(repos.clone(), hf_client.clone(), Arc::clone(&downloads))
-            .with_hf_token(core_token)
-            .with_gguf_parser(gguf_parser.clone()),
+        AppCore::new(
+            repos.clone(),
+            hf_client.clone(),
+            Arc::clone(&downloads),
+            gguf_parser.clone(),
+        )
+        .with_hf_token(core_token),
     );
 
     BuiltCore {

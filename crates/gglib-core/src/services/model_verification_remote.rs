@@ -10,13 +10,13 @@
 //! one: the file lives in its own repository's folder, and other models may
 //! draw with it.
 
-use std::path::Path;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use super::model_links::resolved_or_literal;
+use super::model_row_roles::row_roles;
 use super::model_verification::{
     FilePlace, ModelVerificationService, OperationType, ShardHealth, ShardUpdate,
     UpdateCheckResult, UpdateDetails, VerifiedFileKind,
@@ -26,9 +26,12 @@ use crate::download::{DownloadId, GgufFileRole};
 use crate::ports::RepositoryError;
 use crate::ports::huggingface::{download_group, stored_label};
 
-/// Whether a model's file row is its projector's.
-fn is_projector(file: &ModelFile) -> bool {
-    GgufFileRole::classify(Path::new(&file.file_path)).is_projector()
+/// Whether `file` is a projector, among `rows` whose roles are `roles`, in
+/// the same order.
+fn is_projector(rows: &[ModelFile], roles: &[GgufFileRole], file: &ModelFile) -> bool {
+    rows.iter()
+        .zip(roles)
+        .any(|(row, role)| row.file_path == file.file_path && role.is_projector())
 }
 
 /// The component `model` links to the file of `row`, read in `folder`, when
@@ -170,14 +173,17 @@ impl ModelVerificationService {
         };
 
         // Get remote file metadata from HuggingFace. The variant's files
-        // are weights alone, so a model with a projector row also asks for
-        // the repository's files, its projector found among them by path.
+        // are weights alone, so a model with a projector row, by its header
+        // or its link, also asks for the repository's files, its projector
+        // found among them by path.
         let mut remote_files = self
             .hf_client
             .get_quantization_files(repo_id, &label)
             .await
             .map_err(fetch_failed)?;
-        if local_files.iter().any(is_projector) {
+        let folder = ModelFolder::of(&model.file_path, &local_files);
+        let roles = row_roles(&model, &folder, &local_files, self.gguf_parser.as_ref());
+        if roles.iter().any(|role| role.is_projector()) {
             let files = self.hf_client.list_gguf_files(repo_id).await;
             remote_files.extend(files.map_err(fetch_failed)?);
         }
@@ -282,32 +288,17 @@ impl ModelVerificationService {
         // The folder the download wrote the files in, where each row is read.
         let folder = ModelFolder::of(&model.file_path, &model_files);
 
+        // What each file is, read before anything is deleted.
+        let roles = row_roles(&model, &folder, &model_files, self.gguf_parser.as_ref());
+
         // Determine which files to repair
         let to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
             #[allow(clippy::cast_sign_loss)]
             let filter_fn = |f: &&ModelFile| indices.contains(&(f.file_index as usize));
             model_files.iter().filter(filter_fn).collect()
         } else {
-            // Verify all files to find unhealthy ones
-            let mut unhealthy = Vec::new();
-            let kinds = VerifiedFileKind::of_rows(&model_files);
-            for (index, (file, kind)) in model_files.iter().zip(kinds).enumerate() {
-                // Nobody reads this progress. The receiver is dropped here so
-                // each send fails at once; kept alive, the channel fills
-                // after one message and the hashing thread waits forever.
-                let (tx, _) = mpsc::channel(1);
-                let resolved_path = folder.file(&file.file_path);
-                let place = FilePlace {
-                    index,
-                    total: model_files.len(),
-                    kind,
-                };
-                let health = Self::verify_shard(file, &resolved_path, model_id, place, &tx).await;
-                if matches!(health, ShardHealth::Corrupt { .. } | ShardHealth::Missing) {
-                    unhealthy.push(file);
-                }
-            }
-            unhealthy
+            let kinds = VerifiedFileKind::of_rows(&model_files, &roles);
+            Self::unhealthy(model_id, &folder, &model_files, kinds).await
         };
 
         if to_repair.is_empty() {
@@ -324,6 +315,7 @@ impl ModelVerificationService {
 
         // A projector is deleted only when that download fetches that same
         // file. Each one is judged on its own.
+        let is_projector = |file: &ModelFile| is_projector(&model_files, &roles, file);
         if to_repair.iter().any(|file| is_projector(file)) {
             let (repaired, left): (Vec<&ModelFile>, Vec<&ModelFile>) =
                 to_repair.into_iter().partition(|file| {
@@ -381,6 +373,34 @@ impl ModelVerificationService {
         }
     }
 
+    /// The rows of `files`, model `model_id`'s read in `folder`, whose
+    /// files are corrupt or missing, each verified as `kinds` names it.
+    async fn unhealthy<'a>(
+        model_id: i64,
+        folder: &ModelFolder,
+        files: &'a [ModelFile],
+        kinds: Vec<VerifiedFileKind>,
+    ) -> Vec<&'a ModelFile> {
+        let mut unhealthy = Vec::new();
+        for (index, (file, kind)) in files.iter().zip(kinds).enumerate() {
+            // Nobody reads this progress. The receiver is dropped here so
+            // each send fails at once; kept alive, the channel fills after
+            // one message and the hashing thread waits forever.
+            let (tx, _) = mpsc::channel(1);
+            let resolved_path = folder.file(&file.file_path);
+            let place = FilePlace {
+                index,
+                total: files.len(),
+                kind,
+            };
+            let health = Self::verify_shard(file, &resolved_path, model_id, place, &tx).await;
+            if matches!(health, ShardHealth::Corrupt { .. } | ShardHealth::Missing) {
+                unhealthy.push(file);
+            }
+        }
+        unhealthy
+    }
+
     /// The path of the projector a download of the variant labelled `label`
     /// from `repo_id` fetches, when one comes with it.
     async fn fetched_projector(
@@ -390,7 +410,7 @@ impl ModelVerificationService {
     ) -> Result<Option<String>, String> {
         let group = download_group(
             self.hf_client.as_ref(),
-            self.gguf_parser.as_deref(),
+            Some(self.gguf_parser.as_ref()),
             repo_id,
             label,
         )

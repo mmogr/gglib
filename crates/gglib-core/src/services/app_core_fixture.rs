@@ -9,15 +9,16 @@ use super::AppCore;
 use crate::download::DownloadError;
 use crate::ports::huggingface::HfPortResult;
 use crate::ports::{
-    AskedDownloads, DownloadManagerPort, HfClientPort, HfFileInfo, HfQuantInfo, HfRepoInfo,
-    HfSearchOptions, HfSearchResult, Repos,
+    AskedDownloads, DownloadManagerPort, FirstBytesParser, HfClientPort, HfFileInfo, HfQuantInfo,
+    HfRepoInfo, HfSearchOptions, HfSearchResult, Repos,
 };
 
 impl AppCore {
     /// A core over `repos` with nothing else behind it. Its verification
-    /// service reads the models and file rows of `repos`, and has no Hub to
-    /// check for updates against and no queue to repair through: a test of
-    /// either builds its core with [`AppCore::new`] and doubles of its own.
+    /// service reads the models and file rows of `repos`, and each file's
+    /// role with [`FirstBytesParser`], and has no Hub to check for updates
+    /// against and no queue to repair through: a test of either builds its
+    /// core with [`AppCore::new`] and doubles of its own.
     #[must_use]
     pub fn bare(repos: Repos) -> Self {
         let no_queue = DownloadError::other("a bare core has no download queue");
@@ -27,7 +28,12 @@ impl AppCore {
     /// [`AppCore::bare`], whose downloads queue on `downloads`.
     #[must_use]
     pub fn queueing_on(repos: Repos, downloads: Arc<dyn DownloadManagerPort>) -> Self {
-        Self::new(repos, Arc::new(NoHub), downloads)
+        Self::new(
+            repos,
+            Arc::new(NoHub),
+            downloads,
+            Arc::new(FirstBytesParser),
+        )
     }
 }
 

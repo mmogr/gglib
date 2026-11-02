@@ -21,7 +21,7 @@ use super::{
 ///
 /// ```ignore
 /// let repos = Repos::new(models, model_files, settings, mcp_servers, chat_history, attachments);
-/// let core = AppCore::new(repos, hf_client, downloads);
+/// let core = AppCore::new(repos, hf_client, downloads, gguf_parser);
 ///
 /// // Access services
 /// let models = core.models().list().await?;
@@ -38,12 +38,14 @@ pub struct AppCore {
 
 impl AppCore {
     /// Create a new `AppCore` with the given repositories. Its verification
-    /// service asks `hf_client` for updates, and a repair queues its download
-    /// on `downloads`.
+    /// service asks `hf_client` for updates, a repair queues its download on
+    /// `downloads`, and what each of a model's files is comes from its header,
+    /// read with `gguf_parser`.
     pub fn new(
         repos: Repos,
         hf_client: Arc<dyn HfClientPort>,
         downloads: Arc<dyn DownloadManagerPort>,
+        gguf_parser: Arc<dyn GgufParserPort>,
     ) -> Self {
         Self {
             verification: ModelVerificationService::new(
@@ -51,6 +53,7 @@ impl AppCore {
                 repos.model_files,
                 hf_client,
                 downloads,
+                gguf_parser,
             ),
             secrets: SecretsService::new(Arc::clone(&repos.settings), repos.mcp_servers),
             settings: SettingsService::new(repos.settings).with_models(Arc::clone(&repos.models)),
@@ -107,14 +110,6 @@ impl AppCore {
     #[must_use]
     pub fn downloads(&self) -> Arc<dyn DownloadManagerPort> {
         Arc::clone(&self.verification.downloads)
-    }
-
-    /// This core, whose repairs read the heads of a repository's files with
-    /// `parser` to know which projector their download fetches.
-    #[must_use]
-    pub fn with_gguf_parser(mut self, parser: Arc<dyn GgufParserPort>) -> Self {
-        self.verification = self.verification.with_gguf_parser(parser);
-        self
     }
 
     /// This core, holding the token its process asks the Hub with.

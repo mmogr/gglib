@@ -8,7 +8,7 @@ use axum::response::IntoResponse;
 use gglib_core::domain::{NewModel, NewModelFile};
 use gglib_core::download::DownloadError;
 use gglib_core::ports::huggingface::fake_hub::{FakeHub, hub_file};
-use gglib_core::ports::{AskedDownloads, ModelFilesRepositoryPort};
+use gglib_core::ports::{AskedDownloads, FirstBytesParser, ModelFilesRepositoryPort};
 use gglib_core::services::AppCore;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -57,7 +57,12 @@ async fn library_queueing_on(queue: AskedDownloads) -> Library {
     let files = Arc::clone(&repos.model_files);
     let queue = Arc::new(queue);
     let mut state = Arc::into_inner(state).expect("the only holder");
-    state.core = Arc::new(AppCore::new(repos, Arc::new(hub()), queue.clone()));
+    state.core = Arc::new(AppCore::new(
+        repos,
+        Arc::new(hub()),
+        queue.clone(),
+        Arc::new(FirstBytesParser),
+    ));
     Library {
         state: Arc::new(state),
         files,

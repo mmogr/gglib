@@ -9,8 +9,9 @@ use chrono::Utc;
 
 use super::tests::{REPO, Rows, row, sha256};
 use crate::domain::{Model, ModelFile, NewModel};
-use crate::ports::AskedDownloads;
+use crate::download::GgufFileRole;
 use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
+use crate::ports::{AskedDownloads, FirstBytesParser};
 use crate::services::model_projector::tests::OneModelRepo;
 use crate::services::{
     ModelVerificationService, OverallHealth, ShardHealth, ShardProgress, VerifiedFileKind,
@@ -21,16 +22,17 @@ const SECOND: &str = "BF16/zeta-BF16-00002-of-00002.gguf";
 const PROJECTOR: &str = "mmproj-BF16.gguf";
 
 /// A `BF16` download of [`REPO`] into `dir`, as a download writes it: the
-/// two shards under `BF16/`, the projector at the root. Each file holds its
-/// own name, and its row holds that content's hash.
+/// two shards under `BF16/`, the projector at the root. Each shard holds its
+/// own name, the projector a projector's header, and each row holds its
+/// content's hash.
 fn downloaded_into(dir: &Path) -> Vec<ModelFile> {
     std::fs::create_dir_all(dir.join("BF16")).unwrap();
-    [FIRST, SECOND, PROJECTOR]
+    [(FIRST, FIRST), (SECOND, SECOND), (PROJECTOR, "projector")]
         .into_iter()
         .zip(0..)
-        .map(|(name, index)| {
-            std::fs::write(dir.join(name), name).unwrap();
-            row(index, name, &sha256(name))
+        .map(|((name, content), index)| {
+            std::fs::write(dir.join(name), content).unwrap();
+            row(index, name, &sha256(content))
         })
         .collect()
 }
@@ -55,6 +57,7 @@ fn service(
         Arc::new(Rows(rows)),
         Arc::new(hub),
         queued,
+        Arc::new(FirstBytesParser),
     )
 }
 
@@ -132,7 +135,13 @@ fn a_projector_and_a_companion_are_no_shards_and_shards_count_from_one() {
         row(2, "/models/other/vae.gguf", "c"),
     ];
 
-    let kinds = VerifiedFileKind::of_rows(&rows);
+    let roles = [
+        GgufFileRole::Weights,
+        GgufFileRole::Projector,
+        GgufFileRole::Weights,
+    ];
+
+    let kinds = VerifiedFileKind::of_rows(&rows, &roles);
 
     assert_eq!(
         kinds,

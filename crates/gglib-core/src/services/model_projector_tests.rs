@@ -8,10 +8,9 @@ use chrono::Utc;
 
 use super::*;
 use crate::domain::NewModel;
-use crate::download::GgufFileRole;
 use crate::ports::{
-    CoreError, GgufCapabilities, GgufMetadata, GgufParseError, HeadMetadata, ModelRepository,
-    RepositoryError, TensorTable,
+    CoreError, FirstBytesParser, GgufCapabilities, GgufMetadata, GgufParseError, HeadMetadata,
+    ModelRepository, RepositoryError, TensorTable,
 };
 use crate::services::LinkError;
 
@@ -46,40 +45,6 @@ impl ModelRepository for OneModelRepo {
     }
     async fn delete(&self, _id: i64) -> Result<(), RepositoryError> {
         Ok(())
-    }
-}
-
-/// Reads a file's role from its first bytes, as the real parser reads it from
-/// the header: `projector`, `weights`, or anything else for "not a GGUF".
-pub(crate) struct FirstBytesParser;
-
-impl GgufParserPort for FirstBytesParser {
-    fn parse(&self, file_path: &Path) -> Result<GgufMetadata, GgufParseError> {
-        let bytes = std::fs::read(file_path).map_err(|e| GgufParseError::Io(e.to_string()))?;
-        let role = if bytes.starts_with(b"projector") {
-            GgufFileRole::Projector
-        } else if bytes.starts_with(b"weights") {
-            GgufFileRole::Weights
-        } else {
-            return Err(GgufParseError::InvalidFormat("no GGUF magic".to_owned()));
-        };
-        Ok(GgufMetadata {
-            role,
-            ..Default::default()
-        })
-    }
-    fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
-        GgufCapabilities::empty()
-    }
-    fn tensor_table(&self, _path: &Path) -> Result<TensorTable, GgufParseError> {
-        Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
-    }
-    fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
-        Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
-    }
-
-    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
-        Err(GgufParseError::InvalidFormat("no head is read".to_owned()))
     }
 }
 

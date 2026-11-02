@@ -10,8 +10,8 @@ use super::tests::{REPO, Rows, WEIGHTS, row, sha256};
 use super::*;
 use crate::domain::{ComponentRole, ImageFamily, ModelComponent, NewModel};
 use crate::paths::canonical_model_path;
-use crate::ports::AskedDownloads;
 use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
+use crate::ports::{AskedDownloads, FirstBytesParser};
 use crate::services::model_projector::tests::OneModelRepo;
 
 /// A Flux.1 model in `dir`, downloaded from [`REPO`] at `Q8_0`, whose VAE
@@ -39,6 +39,7 @@ fn service(
         Arc::new(Rows(rows)),
         Arc::new(hub),
         queued.clone(),
+        Arc::new(FirstBytesParser),
     )
 }
 

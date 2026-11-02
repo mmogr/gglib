@@ -238,7 +238,8 @@ pub(crate) async fn with_unreadable_catalogue(dir: &tempfile::TempDir) -> CliCon
     let mut repos = gglib_db::CoreFactory::build_repos(pool);
     repos.models = Arc::new(Unreadable);
     let (hf, downloads) = (Arc::clone(&ctx.hf_client), Arc::clone(&ctx.downloads));
-    ctx.app = Arc::new(AppCore::new(repos, hf, downloads));
+    let parser = Arc::clone(&ctx.gguf_parser);
+    ctx.app = Arc::new(AppCore::new(repos, hf, downloads, parser));
     ctx
 }
 

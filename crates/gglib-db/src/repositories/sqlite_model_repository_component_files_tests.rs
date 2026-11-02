@@ -133,7 +133,13 @@ async fn a_repair_after_an_unlink_deletes_nothing_in_the_companions_folder() {
         ..FakeHub::default()
     };
     let queued = Arc::new(AskedDownloads::default());
-    let service = ModelVerificationService::new(repo, files, Arc::new(hub), queued.clone());
+    let service = ModelVerificationService::new(
+        repo,
+        files,
+        Arc::new(hub),
+        queued.clone(),
+        Arc::new(NoopGgufParser),
+    );
 
     let _ = service.repair_model(id, None).await;
 
