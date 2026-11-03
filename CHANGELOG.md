@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1-rc.1](https://github.com/mmogr/gglib/compare/v0.30.0-rc.3...v0.30.1-rc.1) (2026-11-03)
+
+
+### What it stopped getting wrong
+
+* **release:** the Fedora install check disables the Cisco repository by id ([#1742](https://github.com/mmogr/gglib/issues/1742)) ([ec67898](https://github.com/mmogr/gglib/commit/ec67898624fd4de504a6b8e5e5f32176f2a986ae))
+
 ## [0.30.0-rc.3](https://github.com/mmogr/gglib/compare/v0.30.0-rc.2...v0.30.0-rc.3) (2026-11-02)
 
 
