@@ -58,11 +58,14 @@ on archlinux:base-devel '
 '
 
 on fedora:latest '
-  # Fedora ships an openh264 repository hosted by Cisco; the desktop
-  # libraries take the stub in Fedora'"'"'s own repository instead, so this
-  # check does not hang on a host it has no stake in. Weak dependencies
-  # are left out for the same reason, and for the download.
-  sed -i "s/^enabled=1/enabled=0/" /etc/yum.repos.d/fedora-cisco-openh264.repo
+  # Fedora ships an openh264 repository hosted by Cisco, enabled; the
+  # desktop libraries take the stub in Fedora'"'"'s own repository instead,
+  # so this check does not hang on a host it has no stake in. It is
+  # disabled by repository id, through dnf: where Fedora keeps the repo
+  # file is Fedora'"'"'s business, and dnf fails loudly should the id go.
+  # Weak dependencies are left out for the same reason, and for the
+  # download.
+  dnf -y config-manager setopt fedora-cisco-openh264.enabled=0
   echo install_weak_deps=False >> /etc/dnf/dnf.conf
   sh /site/install.sh
   gglib --version
