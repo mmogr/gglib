@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.30.1](https://github.com/mmogr/gglib/compare/v0.30.0...v0.30.1) (2026-11-03)
+
+0.30.1-rc.1, promoted unchanged. The candidates below make up this release.
+
 ## [0.30.1-rc.1](https://github.com/mmogr/gglib/compare/v0.30.0-rc.3...v0.30.1-rc.1) (2026-11-03)
 
 
