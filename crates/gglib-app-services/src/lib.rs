@@ -15,6 +15,7 @@ mod hub_chats;
 
 pub mod benchmark;
 mod downloads;
+pub mod launch_explain;
 pub mod launch_options;
 mod mcp;
 mod models;
@@ -42,6 +43,7 @@ pub use error::GuiError;
 pub use benchmark::BenchmarkOps;
 pub use downloads::{DownloadDeps, DownloadOps, download_budget, search_hf_models};
 pub use hub_chats::HubChats;
+pub use launch_explain::LaunchExplanationDto;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;

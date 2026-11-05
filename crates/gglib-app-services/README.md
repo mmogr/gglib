@@ -61,6 +61,7 @@ This crate is a **Shared Facade** — sitting between adapters and infrastructur
 - **`runs/`** — `RunRegistry`: a run, one reply the daemon owns from start to end, held in memory and served through `RunsPort`
 - **`proxy.rs`** — `ProxyOps` OpenAI-compatible proxy lifecycle management
 - **`residency_events.rs`** — `ResidencyEvents`, the daemon's `ResidencyObserver`: `server_started` and `server_stopped` for every load and unload, whoever caused it, and the health watch between them
+- **`launch_explain.rs`** — `LaunchExplanationDto`, what `gglib model explain` prints and `GET /api/models/{id}/explain` serves: the launch the runtime plans, and the sampling
 - **`servers.rs`** — `ServerOps` model server lifecycle management (a stop names the model, in whichever slot it sits; the load and the unload are announced by the runtime, not here)
 - **`service_graph.rs`** — `build_service_graph`, which builds the ops types and the run registry once over one shared runtime and hands them back as `AppServices`
 - **`settings.rs`** — `SettingsOps` application settings persistence
@@ -132,7 +133,7 @@ handwritten mock structs in `src/test_support.rs` (no external mocking framework
 | Module | Tests |
 |--------|-------|
 | `downloads.rs` | 14 — queue snapshot, a queued download's id, cancel (by id, not found), remove, reorder, cancel-all; and the Hub search: what it asks for, chat models by default, the browser's search, a repository by its id, a refused search |
-| `models.rs` | 29 — list empty, get not-found, add+list, a file already in the library, a forced re-download, a sibling shard refused, missing file, remove not-found, the broadcasts on add, update, remove, tag and retag (and none on a blocked remove or a retag that changes nothing), the parameter count, a removal blocked or forced through the shared runtime, one running check per listing, tags, server defaults, and `explain_sampling` |
+| `models.rs` | 30 — list empty, get not-found, add+list, a file already in the library, a forced re-download, a sibling shard refused, missing file, remove not-found, the broadcasts on add, update, remove, tag and retag (and none on a blocked remove or a retag that changes nothing), the parameter count, a removal blocked or forced through the shared runtime, one running check per listing, tags, server defaults, and `explain`: the sampling, and the launch as the runtime plans it |
 | `settings.rs` | 22 — get defaults, profiles through the API (round trip, an unrelated update, an invalid one, the templates, camel case), the retired loop detection key, memory threshold (Some/None), nulls in an update, the models directory: saved and read back, its default, a refused path; and the drawing settings |
 | `mcp.rs` | 20 — list empty, add+list, an SSE server refused on add, a stored SSE server listed as unsupported and refused a run and an edit, invalid type, remove, a taken name on add and on rename, a server named `builtin`, servers already sharing a name, a failed test, a test of a missing server, a server opened to devices; and environment values, never answered with a value |
 | `setup.rs` | 4 — smoke test (get_status returns Ok), the memory floor and the directory and memory shapes the status shares with the settings routes, and where llama stands |

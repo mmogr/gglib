@@ -24,7 +24,10 @@ use super::config::SdServerConfig;
 /// came with master-995, and no recipe has drawn with it.
 ///
 /// [`ImageFamily::sampling`]: gglib_core::domain::ImageFamily::sampling
-pub(crate) fn sd_server_args(config: &SdServerConfig, port: u16) -> Vec<OsString> {
+pub(crate) fn sd_server_args(
+    config: &SdServerConfig,
+    port: impl std::fmt::Display,
+) -> Vec<OsString> {
     let recipe = config.family.recipe();
     let file_name = config.model_path.file_name().unwrap_or_default();
     let sampling = config.family.sampling(&file_name.to_string_lossy());

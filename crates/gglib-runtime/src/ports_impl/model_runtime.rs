@@ -5,10 +5,10 @@
 
 use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::AdmissionSnapshot;
+use gglib_core::domain::{AdmissionSnapshot, LaunchPlan};
 use gglib_core::ports::{
-    Admission, AdmissionLease, AdmitObserver, LaunchOverrides, ModelRuntimeError, ModelRuntimePort,
-    ProcessHandle, RunningTarget,
+    Admission, AdmissionLease, AdmitObserver, LaunchOverrides, ModelLaunchSpec, ModelRuntimeError,
+    ModelRuntimePort, ProcessHandle, RunningTarget,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -103,6 +103,22 @@ impl ModelRuntimePort for RuntimePortImpl {
 
     fn admission_snapshot(&self) -> AdmissionSnapshot {
         self.mgr.admission_snapshot()
+    }
+
+    fn plan(
+        &self,
+        spec: &ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<LaunchPlan, ModelRuntimeError> {
+        // This instance's standing cache-RAM setting applies as it does to
+        // a launch, when the caller states none.
+        let mut overrides = overrides.clone();
+        if overrides.cache_ram.is_none() {
+            overrides.cache_ram = self.cache_ram_override;
+        }
+        self.mgr.plan(spec, num_ctx, default_ctx, &overrides)
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {

@@ -24,10 +24,11 @@ use thiserror::Error;
 
 use crate::cache_config::CacheRamSetting;
 use crate::domain::{
-    AdmissionSnapshot, CacheRamHealth, ComponentRole, LaunchNarration, ModelSamplingDefaults,
-    RuntimeKind,
+    AdmissionSnapshot, CacheRamHealth, ComponentRole, LaunchNarration, LaunchPlan,
+    ModelSamplingDefaults, RuntimeKind,
 };
 use crate::ports::ProcessHandle;
+use crate::ports::model_catalog::ModelLaunchSpec;
 pub use crate::ports::pinned::PinnedSpec;
 use crate::server_config::ServerConfigOptions;
 
@@ -651,6 +652,34 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         let _ = observer;
         self.admit(model_name, num_ctx, default_ctx, overrides)
             .await
+    }
+
+    /// The launch [`Self::admit`] would make for `spec` now, without making
+    /// it: the program and its arguments, each with the decision behind it,
+    /// the narration and the context fit. `gglib model explain` prints it
+    /// and `GET /api/models/{id}/explain` serves it, so a person reads the
+    /// launch before loading, in the words the launch itself uses.
+    ///
+    /// `num_ctx`, `default_ctx` and `overrides` as [`Self::admit`] takes
+    /// them. The plan reads nothing from disk and checks no pin: it says
+    /// what a load would be.
+    ///
+    /// # Errors
+    ///
+    /// A runtime that cannot say (a test double) answers
+    /// [`ModelRuntimeError::Internal`]; the daemon's and a one-shot
+    /// command's both can.
+    fn plan(
+        &self,
+        spec: &ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<LaunchPlan, ModelRuntimeError> {
+        let _ = (spec, num_ctx, default_ctx, overrides);
+        Err(ModelRuntimeError::Internal(
+            "this runtime does not plan launches".to_owned(),
+        ))
     }
 
     /// What the admission queue and the VRAM resident set look like right now.

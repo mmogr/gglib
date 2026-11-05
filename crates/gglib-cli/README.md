@@ -74,7 +74,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model add <path>` | Add a GGUF model to the library; `--component <role>=<path>` links an image model's component as it is added |
 | `model list` | List all models with metadata, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
 | `model inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
-| `model explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
+| `model explain <id\|name> [--profile <name>]` | Show the launch gglib would make for the model, each argument with whose choice it was and why, the context fit, and every resolved inference parameter with the layer that supplied it |
 | `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |
 | `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
 | `model retag [<id\|name>] [--all] [--full]` | Re-derive auto-tags from the stored GGUF metadata; additive unless `--full` |

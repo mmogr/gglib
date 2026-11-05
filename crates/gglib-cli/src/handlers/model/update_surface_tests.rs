@@ -248,7 +248,7 @@ async fn clearing_an_edited_reasoning_model_gives_back_its_import() {
         argv.extend_from_slice(flags);
         argv
     };
-    let explained = || ops.explain_sampling(model.id, None);
+    let explained = || async { ops.explain(model.id, None).await.map(|e| e.sampling) };
 
     let fresh = explained().await.expect("explain");
     let recipe = InferenceConfig::reasoning_profile();

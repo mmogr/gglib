@@ -18,12 +18,12 @@ import type {
   SamplingExplanation,
 } from '../../../src/types';
 import { resolvedConfig } from '../fixtures/inference';
-import { samplingExplanation } from '../fixtures/explain';
+import { launchExplanation, samplingExplanation } from '../fixtures/explain';
 
-const explainModelSampling = vi.fn();
+const explainModel = vi.fn();
 
 vi.mock('../../../src/services/transport/api/models/local', () => ({
-  explainModelSampling: (...args: unknown[]) => explainModelSampling(...args),
+  explainModel: (...args: unknown[]) => explainModel(...args),
 }));
 
 /** The seven entries the server always sends, in its display order. */
@@ -61,8 +61,8 @@ function profile(name: string): InferenceProfile {
 }
 
 beforeEach(() => {
-  explainModelSampling.mockReset();
-  explainModelSampling.mockResolvedValue(explanation());
+  explainModel.mockReset();
+  explainModel.mockResolvedValue(launchExplanation(explanation()));
 });
 
 describe('SamplingProvenanceSection', () => {
@@ -101,7 +101,7 @@ describe('SamplingProvenanceSection', () => {
     expect(await screen.findByText(/Operator flags/)).toBeInTheDocument();
     expect(screen.getByText(/Client sampling is ignored/)).toBeInTheDocument();
 
-    explainModelSampling.mockResolvedValue(explanation({ trustClientSampling: true }));
+    explainModel.mockResolvedValue(launchExplanation(explanation({ trustClientSampling: true })));
     render(<SamplingProvenanceSection modelId={2} profiles={[]} />);
 
     expect(await screen.findByText(/Client sampling is trusted/)).toBeInTheDocument();
@@ -118,15 +118,15 @@ describe('SamplingProvenanceSection', () => {
     render(<SamplingProvenanceSection modelId={1} profiles={[profile('coding')]} />);
 
     const select = await screen.findByLabelText('Inference profile');
-    expect(explainModelSampling).toHaveBeenCalledWith(1, undefined);
+    expect(explainModel).toHaveBeenCalledWith(1, undefined);
 
     await userEvent.selectOptions(select, 'coding');
 
-    await waitFor(() => expect(explainModelSampling).toHaveBeenCalledWith(1, 'coding'));
+    await waitFor(() => expect(explainModel).toHaveBeenCalledWith(1, 'coding'));
   });
 
   it('falls back to a notice rather than stale rows when the fetch fails', async () => {
-    explainModelSampling.mockRejectedValue(new Error('boom'));
+    explainModel.mockRejectedValue(new Error('boom'));
     render(<SamplingProvenanceSection modelId={1} profiles={[]} />);
 
     expect(await screen.findByText('Sampling provenance unavailable.')).toBeInTheDocument();

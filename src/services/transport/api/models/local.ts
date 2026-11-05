@@ -14,7 +14,7 @@ import type {
   ModelFilterOptions,
   ModelsDirectoryInfo,
   RetagResponse,
-  SamplingExplanation,
+  LaunchExplanation,
   SetCapabilitiesRequest,
   SystemMemoryInfo,
   UpgradeCheck,
@@ -77,7 +77,8 @@ export async function getModelDetail(id: ModelId): Promise<ModelDetail | null> {
 }
 
 /**
- * Get a model's resolved sampling parameters and the layer that supplied each.
+ * The launch gglib would make for a model now, flag by flag, and its
+ * resolved sampling parameters with the layer that supplied each.
  *
  * `profile` names a configured inference profile to apply on top of the
  * model's own defaults; an unknown name is a 400 from the server rather than a
@@ -85,13 +86,13 @@ export async function getModelDetail(id: ModelId): Promise<ModelDetail | null> {
  *
  * Returns null if the model is not found (instead of throwing).
  */
-export async function explainModelSampling(
+export async function explainModel(
   id: ModelId,
   profile?: string,
-): Promise<SamplingExplanation | null> {
+): Promise<LaunchExplanation | null> {
   const query = profile ? `?profile=${encodeURIComponent(profile)}` : '';
   try {
-    return await get<SamplingExplanation>(`/api/models/${id}/explain${query}`);
+    return await get<LaunchExplanation>(`/api/models/${id}/explain${query}`);
   } catch (error) {
     if (TransportError.hasCode(error, 'NOT_FOUND')) {
       return null;

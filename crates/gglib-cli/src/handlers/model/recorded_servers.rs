@@ -6,10 +6,15 @@
 //! to ask, so it reads the records.
 
 use async_trait::async_trait;
+use gglib_core::cache_config::CacheRamSetting;
+use gglib_core::domain::LaunchPlan;
 use gglib_core::ports::{
-    Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, ProcessHandle, RunningTarget,
+    Admission, LaunchOverrides, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
+    ProcessHandle, RunningTarget,
 };
+use gglib_core::server_config::ServerConfigOptions;
 use gglib_runtime::pidfile::{list_pidfiles, server_runtime};
+use gglib_runtime::process::residency::explain::plan_launch;
 
 /// The model servers recorded under this data root that are still running.
 ///
@@ -44,6 +49,28 @@ impl ModelRuntimePort for RecordedServers {
         Err(ModelRuntimeError::Internal(
             "a one-shot command starts no model".to_string(),
         ))
+    }
+
+    /// The launch the daemon would make, planned here as the daemon plans
+    /// it (`plan_launch`), with what a one-shot command knows: the standing
+    /// template and no other model loaded, so the RAM cache is sized as if
+    /// alone. The daemon's plan nets out the models it has loaded.
+    fn plan(
+        &self,
+        spec: &ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<LaunchPlan, ModelRuntimeError> {
+        plan_launch(
+            spec.clone(),
+            &ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+            num_ctx,
+            default_ctx,
+            overrides,
+            &[],
+        )
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {

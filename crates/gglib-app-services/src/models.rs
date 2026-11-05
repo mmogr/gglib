@@ -12,10 +12,12 @@ use gglib_core::{
 };
 
 use crate::error::GuiError;
-use crate::sampling_explain::{self, SamplingExplanationDto};
+use crate::launch_explain::LaunchExplanationDto;
+use crate::launch_options::plan_bare_launch;
+use crate::sampling_explain;
 use crate::types::{
     AddModelRequest, GuiModel, RemoveModelRequest, RetagResponse, SetCapabilitiesRequest,
-    UpdateModelRequest,
+    StartServerRequest, UpdateModelRequest,
 };
 
 /// Dependencies for model operations.
@@ -152,21 +154,24 @@ impl ModelOps {
         Ok(ModelDetailDto::from_model(model, is_serving, port))
     }
 
-    /// Resolve a model's sampling parameters and report which layer supplied
-    /// each one.
+    /// The launch gglib would make for model `id` now, and the sampling it
+    /// resolves to, with where each value came from.
     ///
     /// The shared data source for the CLI `model explain` command and the
-    /// `GET /api/models/:id/explain` route. `profile` names a configured
+    /// `GET /api/models/:id/explain` route. The launch is the runtime's own
+    /// plan of a bare start (`plan_bare_launch`, as `ServerOps::start` runs
+    /// it with nothing asked for), so a terminal and the inspector read the
+    /// command a Load would run. `profile` names a configured
     /// [`InferenceProfile`] to apply on top of the model's own defaults;
     /// an unknown name is a [`GuiError::ValidationFailed`] rather than a
     /// silent fall back to the unprofiled resolution.
     ///
     /// [`InferenceProfile`]: gglib_core::domain::InferenceProfile
-    pub async fn explain_sampling(
+    pub async fn explain(
         &self,
         id: i64,
         profile: Option<&str>,
-    ) -> Result<SamplingExplanationDto, GuiError> {
+    ) -> Result<LaunchExplanationDto, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         let settings = self.deps.core.settings().get().await?;
 
@@ -175,8 +180,18 @@ impl ModelOps {
                 sampling_explain::find_profile(name, settings.inference_profiles.as_deref())
             })
             .transpose()?;
+        let sampling = sampling_explain::explain(&model, &settings, selected);
 
-        Ok(sampling_explain::explain(&model, &settings, selected))
+        let (default_ctx, overrides) =
+            plan_bare_launch(&model, &settings, &StartServerRequest::default());
+        let spec = gglib_core::services::model_to_launch_spec(model);
+        let plan = self
+            .deps
+            .runtime
+            .plan(&spec, None, default_ctx, &overrides)
+            .map_err(|e| GuiError::Internal(format!("could not plan the launch: {e}")))?;
+
+        Ok(LaunchExplanationDto { plan, sampling })
     }
 
     /// Import the GGUF file `request` names: the one add, for `POST

@@ -236,6 +236,11 @@ fn mtp_decision(inputs: &NarrationInputs<'_>) -> Option<LaunchDecision> {
     if !mtp.enabled {
         return None;
     }
+    // The command line omits the flags under the switch, so the line says
+    // so too: the narration and the arguments are one launch.
+    if crate::command::mtp_disabled_via_env() {
+        return Some(LaunchDecision::new("mtp", "off", "GGLIB_DISABLE_MTP"));
+    }
     let source = match mtp.source {
         MtpResolutionSource::Explicit => "explicit",
         MtpResolutionSource::MtpTag => "mtp tag",

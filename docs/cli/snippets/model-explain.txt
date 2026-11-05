@@ -1,5 +1,29 @@
 $ gglib model explain Qwen3-4B-Instruct-2507
 
+  Launch for Qwen3-4B-Instruct-2507 (id 2)
+  llama-server -m /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 131072 --jinja --reasoning-format deepseek --cache-ram 100813 --cache-type-k q8_0 --cache-type-v q8_0
+
+  -m                  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf ← model author: the weights, as published
+  --host              127.0.0.1    ← gglib: loopback only; the endpoint is the address you share
+  --port              auto         ← gglib: the next free port above the base when it loads; the endpoint's port does not move
+  --metrics                        ← gglib: the dashboard reads them
+  --parallel          1            ← gglib: one request at a time per model, so each gets the whole context; the queue holds the rest
+  -c                  131072       ← gglib: the largest rung that fits beside the weights on this machine
+  --jinja                          ← gglib: tagged agent: tool calls need the model's own template
+  --reasoning-format  deepseek     ← gglib: tagged reasoning: thinking is split from the answer
+  --cache-ram         100813       ← gglib: sized when loaded: free RAM after the weights, the KV cache and the other loaded models
+  --cache-type-k      q8_0         ← gglib: q8_0 halves the KV cache at no measured cost
+  --cache-type-v      q8_0         ← gglib: q8_0 halves the KV cache at no measured cost
+
+Context
+  serves at              131072 (fitted to hardware)
+  fitted to hardware     131072
+    device budget        96.00 GiB
+    weights              3.99 GiB
+    kv bytes/token       78336
+    trained window       262144
+    before snapping      262144
+
   Sampling for Qwen3-4B-Instruct-2507 (id 2)
 -------------------------------------------------------------------------------------
   temperature             1.0     ← per-model defaults (auto-detected: reasoning tag)
@@ -23,12 +47,3 @@ $ gglib model explain Qwen3-4B-Instruct-2507
   Operator flags (gglib proxy --temperature, ...) outrank every layer above.
   Client sampling is ignored, except max_tokens, reasoning_budget_tokens.
 
-
-Context
-  serves at              131072 (fitted to hardware)
-  fitted to hardware     131072
-    device budget        96.00 GiB
-    weights              3.99 GiB
-    kv bytes/token       78336
-    trained window       262144
-    before snapping      262144

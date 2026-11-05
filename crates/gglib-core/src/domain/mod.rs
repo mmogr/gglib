@@ -28,6 +28,7 @@ pub mod inference_profile;
 pub(crate) mod kv_estimate;
 pub(crate) mod kv_memory;
 pub(crate) mod launch_narration;
+pub mod launch_plan;
 pub mod loop_guard_log;
 mod machine;
 pub mod mcp;
@@ -104,6 +105,7 @@ pub use model_sampling::{
 
 // Re-export launch narration types at the domain level for convenience
 pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};
+pub use launch_plan::{ChoiceSource, ContextFit, LaunchArg, LaunchPlan};
 
 // Re-export the first-run model recommendation at the domain level.
 pub use recommendation::BUDGET_UTILISATION;
