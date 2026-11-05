@@ -50,6 +50,7 @@ pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
+pub mod state_words;
 pub(crate) mod template_caps;
 pub mod tensor_table;
 pub mod thinking;
@@ -85,6 +86,7 @@ pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};
+pub use state_words::{EndpointState, ReachState, ResidencyState};
 
 // Re-export the template-capability self-report (ADR 0007) at the domain level
 pub use template_caps::{

@@ -64,14 +64,15 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
             match handle.proxy_status().await {
                 Ok(proxy) if proxy.running => {
                     eprintln!(
-                        "  Proxy:   running on port {}",
+                        "  Proxy:   {}, port {}",
+                        proxy.state,
                         proxy.port.map_or_else(|| "?".into(), |p| p.to_string())
                     );
                     if let Some(pinned) = proxy.pinned_model {
                         eprintln!("  Pinned:  {pinned}");
                     }
                 }
-                Ok(_) => eprintln!("  Proxy:   stopped"),
+                Ok(proxy) => eprintln!("  Proxy:   {}", proxy.state),
                 Err(e) => eprintln!("  Proxy:   status unavailable ({e})"),
             }
         }

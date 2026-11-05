@@ -163,7 +163,10 @@ pub(in crate::handlers) async fn started(
     let port = listener.local_addr().expect("its address").port();
     let daemon = std::thread::spawn(move || {
         let (request, mut stream) = blocking::accept(&listener).expect("the request");
-        let reply = serde_json::json!({ "running": answer.is_some(), "port": answer }).to_string();
+        let state = if answer.is_some() { "on" } else { "off" };
+        let reply =
+            serde_json::json!({ "running": answer.is_some(), "state": state, "port": answer })
+                .to_string();
         let _ = write!(
             stream,
             "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\

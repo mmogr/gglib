@@ -25,6 +25,7 @@ function slot(overrides: Partial<ResidentSlotSnapshot> = {}): ResidentSlotSnapsh
     model_id: 1,
     port: 8080,
     inflight: 0,
+    state: 'loaded',
     is_primary: true,
     resident_for_secs: 12,
     runtime: 'llama',

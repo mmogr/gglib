@@ -55,6 +55,9 @@ pub(crate) struct StartProxyBody {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ProxyStatusDto {
     pub running: bool,
+    /// Required: a daemon that does not say it is older than this CLI, and the
+    /// build-mismatch warning says so; a guessed word would be a wrong one.
+    pub state: gglib_core::domain::EndpointState,
     pub port: Option<u16>,
     #[serde(default)]
     pub pinned_model: Option<String>,

@@ -147,8 +147,29 @@ fn a_crashed_proxy_reports_as_stopped() {
     let status = to_api_status(&RuntimeProxyStatus::Crashed, Some("qwen".to_owned()));
 
     assert!(!status.running);
+    assert_eq!(status.state, gglib_core::domain::EndpointState::Off);
     assert_eq!(status.port, None);
     assert_eq!(status.pinned_model, None);
+}
+
+/// A listening proxy says `on`, or `pinned` when a model is pinned: the one
+/// word every surface shows, agreeing with `running` and `pinned_model`.
+#[test]
+fn a_listening_proxy_says_on_or_pinned() {
+    use gglib_core::domain::EndpointState;
+    let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
+
+    let open = to_api_status(&RuntimeProxyStatus::Running { address }, None);
+    assert!(open.running);
+    assert_eq!(open.state, EndpointState::On);
+    assert_eq!(open.port, Some(8080));
+
+    let pinned = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        Some("qwen".to_owned()),
+    );
+    assert_eq!(pinned.state, EndpointState::Pinned);
+    assert_eq!(pinned.pinned_model.as_deref(), Some("qwen"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
