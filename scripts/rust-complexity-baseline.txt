@@ -261,7 +261,7 @@ crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 541
 crates/gglib-runtime/src/llama/detect/cuda.rs 303
 crates/gglib-runtime/src/llama/download/mod.rs 714
-crates/gglib-runtime/src/pinned_engines_tests.rs 460
+crates/gglib-runtime/src/pinned_engines_tests.rs 470
 crates/gglib-runtime/src/ports_impl/llm_completion/drawn_picture_tests.rs 471
 crates/gglib-runtime/src/ports_impl/llm_completion/first_call_tests.rs 374
 crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 346
