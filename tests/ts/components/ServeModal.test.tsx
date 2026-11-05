@@ -96,3 +96,13 @@ describe('ServeModal — the Context Length placeholder', () => {
     expect(renderModal(model, null).getAttribute('placeholder')).not.toContain('262,144');
   });
 });
+
+describe("ServeModal: the model's own launch defaults", () => {
+  it("describes Auto as the model's own default when one is stored", () => {
+    renderModal(
+      guiModel({ serverDefaults: { contextLength: null, jinja: false, mtp: false } }),
+      appSettings(),
+    );
+    expect(screen.getByText("Off — --no-jinja, this model's own default")).toBeInTheDocument();
+  });
+});

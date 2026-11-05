@@ -17,13 +17,13 @@ fn model_ctx(context_length: usize) -> ServerConfig {
 fn resolve_launch_opts_carries_the_models_own_jinja_and_mtp_and_never_the_templates() {
     let stale_template = ServerConfigOptions {
         model_jinja: Some(true),
-        model_mtp: Some(true),
+        model_mtp: Some(false),
         ..Default::default()
     };
     let own = ServerConfig {
         context_length: None,
         jinja: Some(false),
-        mtp: None,
+        mtp: Some(true),
     };
 
     let (opts, _, _) = resolve_launch_opts(
@@ -34,8 +34,10 @@ fn resolve_launch_opts_carries_the_models_own_jinja_and_mtp_and_never_the_templa
         None,
         Some(&own),
     );
-    assert_eq!(opts.model_jinja, Some(false));
-    assert_eq!(opts.model_mtp, None, "not inherited from the template");
+    assert_eq!(
+        (opts.model_jinja, opts.model_mtp),
+        (Some(false), Some(true))
+    );
 
     let (none, _, _) = resolve_launch_opts(
         &stale_template,

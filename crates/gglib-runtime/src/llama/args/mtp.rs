@@ -206,5 +206,9 @@ mod tests {
         assert!(launch.enabled);
         assert_eq!(launch.draft_n_max, 4);
         assert_eq!(launch.source, MtpResolutionSource::Explicit);
+
+        let off = resolve_mtp_args(Some(0), None, Some(true), &[]);
+        assert!(!off.enabled);
+        assert_eq!(off.source, MtpResolutionSource::Explicit);
     }
 }

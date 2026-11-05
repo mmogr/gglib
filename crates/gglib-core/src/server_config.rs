@@ -629,7 +629,7 @@ mod tests {
         ServerConfigOptions {
             context_size: Some(u64::from(marker)),
             model_server_ctx: Some(usize::from(marker)),
-            model_jinja: Some(true),
+            model_jinja: Some(marker.is_multiple_of(2)),
             model_mtp: Some(marker.is_multiple_of(2)),
             global_default_ctx: Some(u64::from(marker)),
             fitted_ctx: Some(u64::from(marker)),
@@ -655,6 +655,10 @@ mod tests {
 
         assert_eq!(merged.context_size, Some(2));
         assert_eq!(merged.model_server_ctx, Some(2));
+        assert_eq!(
+            (merged.model_jinja, merged.model_mtp),
+            (Some(true), Some(true))
+        );
         assert_eq!(merged.global_default_ctx, Some(2));
         assert_eq!(merged.port, Some(2));
         assert_eq!(merged.jinja, Some(true));
@@ -678,6 +682,10 @@ mod tests {
 
         assert_eq!(merged.context_size, Some(1));
         assert_eq!(merged.model_server_ctx, Some(1));
+        assert_eq!(
+            (merged.model_jinja, merged.model_mtp),
+            (Some(false), Some(false))
+        );
         assert_eq!(merged.global_default_ctx, Some(1));
         assert_eq!(merged.port, Some(1));
         assert_eq!(merged.jinja, Some(true));

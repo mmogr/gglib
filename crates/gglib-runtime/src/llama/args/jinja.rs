@@ -182,5 +182,9 @@ mod tests {
         let launch = resolve_jinja_flag(Some(true), Some(false), &[]);
         assert_eq!(launch.mode, JinjaMode::On);
         assert_eq!(launch.source, JinjaResolutionSource::ExplicitTrue);
+
+        let off = resolve_jinja_flag(Some(false), Some(true), &[]);
+        assert_eq!(off.mode, JinjaMode::Off);
+        assert_eq!(off.source, JinjaResolutionSource::ExplicitFalse);
     }
 }

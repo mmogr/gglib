@@ -711,6 +711,33 @@ mod tests {
 
     /// Deferring is not a flag, so it is not a line. Claiming one would
     /// misreport the command line gglib actually built.
+    /// A default stored on the model is the model's, not an explicit choice
+    /// of this launch, and the line says which.
+    #[test]
+    fn flags_and_mtp_lines_name_the_models_own_default() {
+        let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
+        let mut c = caps();
+        c.jinja = JinjaResolution {
+            mode: JinjaMode::Off,
+            source: JinjaResolutionSource::ModelDefault,
+        };
+        c.mtp = MtpResolution {
+            enabled: true,
+            draft_n_max: 2,
+            draft_p_min: 0.75,
+            source: MtpResolutionSource::ModelDefault,
+        };
+        let n = narrate(&inputs(&s, &c, &r));
+        assert_eq!(
+            n.decision("flags").unwrap().value,
+            "--no-jinja (model default)"
+        );
+        assert_eq!(
+            n.decision("mtp").unwrap().source.as_deref(),
+            Some("model default")
+        );
+    }
+
     #[test]
     fn flags_line_stays_silent_when_jinja_is_deferred() {
         let (s, c, r) = (
