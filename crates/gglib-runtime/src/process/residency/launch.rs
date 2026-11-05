@@ -19,7 +19,8 @@ use gglib_core::domain::{
 };
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
-    AdmissionLease, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, RunningTarget,
+    AdmissionLease, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ProcessHandle,
+    ResidencyObserver, RunningTarget,
 };
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
@@ -80,9 +81,10 @@ pub(super) async fn run(
     core: Arc<RwLock<GuiProcessCore>>,
     queue: Arc<AdmissionQueue>,
     catalog: Arc<dyn ModelCatalogPort>,
+    observer: Arc<dyn ResidencyObserver>,
     request: LaunchRequest,
 ) -> Result<(RunningTarget, AdmissionLease), ModelRuntimeError> {
-    match launch(&core, &queue, &request).await {
+    match launch(&core, &queue, &observer, &request).await {
         Ok(outcome) => {
             // The one moment ADR 0007's observation can be taken: a fresh
             // spawn is health-ready, so its /props describes exactly this
@@ -155,6 +157,7 @@ struct Planned {
 async fn launch(
     core: &Arc<RwLock<GuiProcessCore>>,
     queue: &Arc<AdmissionQueue>,
+    observer: &Arc<dyn ResidencyObserver>,
     request: &LaunchRequest,
 ) -> Result<(RunningTarget, AdmissionLease), ModelRuntimeError> {
     let LaunchRequest {
@@ -179,6 +182,9 @@ async fn launch(
     // refused its relaunch until the daemon restarted.
     if let Some(model_id) = evict {
         info!(model_id = %model_id, slot = %slot, "Stopping resident model for swap");
+        // The queue forgot this resident when it granted the launch; its
+        // unload is announced here, before the kill, as a stop announces one.
+        observer.unloaded(*model_id);
         let mut core_w = core.write().await;
         if let Err(e) = core_w.kill(*model_id).await {
             warn!(error = %e, "Failed to stop displaced model cleanly, continuing");
@@ -223,12 +229,12 @@ async fn launch(
     // mean a second lock acquisition with an `await` between it and the spawn
     // — a suspension point at which the child exists and nothing owns it,
     // which is the leak this whole commit is about.
-    let (port, mut child) = {
+    let (port, pid, mut child) = {
         let mut core_w = core.write().await;
         let (port, pid) = core_w
             .spawn(config)
             .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
-        (port, SpawnedChild::arm(core, spec.id, pid))
+        (port, pid, SpawnedChild::arm(core, spec.id, pid))
     };
 
     // From here until `queue.install` the child exists and nothing else owns
@@ -329,6 +335,19 @@ async fn launch(
             resident_since: tokio::time::Instant::now(),
             weights_bytes: spec.file_size_bytes,
         },
+    );
+    // Announced as the queue now records it, by the handle `list_running`
+    // would hand out for it: with its pid, so a watcher can tell a dead
+    // process from a slow one.
+    observer.loaded(
+        ProcessHandle::new(
+            i64::from(spec.id),
+            spec.name.clone(),
+            Some(pid),
+            port,
+            started_at_secs(),
+        )
+        .with_runtime(runtime),
     );
 
     // The queue owns the process now: eviction, recycling and shutdown can all
@@ -503,6 +522,14 @@ fn plan_sd(request: &LaunchRequest) -> Result<Planned, ModelRuntimeError> {
         slot_restore_supported: false,
         cache_ram_health: CacheRamHealth::LlamaDefault,
     })
+}
+
+/// Seconds since the Unix epoch, as a resident's handle records when it
+/// started.
+fn started_at_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Remove stale slot files for the given model from `slot_dir`.

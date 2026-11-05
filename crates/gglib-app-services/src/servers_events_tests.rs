@@ -1,16 +1,21 @@
-//! Tests for what [`super::ServerOps`] puts on the event bus when a model
-//! starts, stops, or fails at either: the frames as `/api/events` sends
-//! them, key order included.
+//! Tests for what [`super::ServerOps`] puts on the event bus: a start or a
+//! stop the runtime refuses sends `server_error`, as `/api/events` sends
+//! it, key order included; one the runtime performs sends nothing from
+//! here, because the runtime's observer announces the load and the unload
+//! themselves (`residency_events.rs`), and a model already resident would
+//! otherwise be announced started twice.
 //!
-//! The runtime is scripted, so nothing is launched. A start still brings a
-//! real proxy up, on a loopback port of its own, because the start path
-//! begins with `ensure_running`.
+//! The runtime is scripted, so nothing is launched and nothing is
+//! announced by it. A start still brings a real proxy up, on a loopback
+//! port of its own, because the start path begins with `ensure_running`.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::domain::RuntimeKind;
-use gglib_core::ports::{Admission, LaunchOverrides, ModelRuntimePort, RunningTarget};
+use gglib_core::ports::{
+    Admission, LaunchOverrides, ModelRuntimePort, ProcessHandle, RunningTarget,
+};
 use gglib_core::{NewModel, SettingsUpdate};
 use gglib_db::{CoreFactory, setup_test_database};
 
@@ -193,20 +198,20 @@ impl Fixture {
         }
     }
 
-    /// The lifecycle frames sent so far. Health changes are left out: the
-    /// monitor a start spawns reports on its own clock.
+    /// The frames sent so far.
     fn frames(&self) -> Vec<String> {
         self.emitter
             .events()
             .iter()
-            .filter(|event| !matches!(event, AppEvent::ServerHealthChanged { .. }))
             .map(|event| serde_json::to_string(event).expect("an event serializes"))
             .collect()
     }
 }
 
+/// The runtime announces the load once the model is healthy; a model
+/// already resident is served as it stands. Either way nothing is said here.
 #[tokio::test]
-async fn starting_a_model_sends_server_started_with_its_id_name_and_port() {
+async fn a_start_the_runtime_performs_announces_nothing_from_here() {
     let fx = Fixture::new(None, None).await;
 
     let started = fx
@@ -220,13 +225,7 @@ async fn starting_a_model_sends_server_started_with_its_id_name_and_port() {
         .expect("the proxy the start brought up");
 
     assert_eq!(started.expect("the start succeeds").port, fx.model_port);
-    assert_eq!(
-        frames,
-        [format!(
-            r#"{{"type":"server_started","modelId":{},"modelName":"test-model","port":{}}}"#,
-            fx.model_id, fx.model_port
-        )]
-    );
+    assert_eq!(frames, Vec::<String>::new());
 }
 
 #[tokio::test]
@@ -254,19 +253,15 @@ async fn a_start_the_runtime_refuses_sends_server_error_and_no_server_started() 
     );
 }
 
+/// The runtime announces the unload before it stops the process; nothing
+/// is said here.
 #[tokio::test]
-async fn stopping_a_model_sends_server_stopped_with_its_id_and_name() {
+async fn a_stop_the_runtime_performs_announces_nothing_from_here() {
     let fx = Fixture::new(None, None).await;
 
     fx.ops.stop(fx.model_id).await.expect("the stop succeeds");
 
-    assert_eq!(
-        fx.frames(),
-        [format!(
-            r#"{{"type":"server_stopped","modelId":{},"modelName":"test-model"}}"#,
-            fx.model_id
-        )]
-    );
+    assert_eq!(fx.frames(), Vec::<String>::new());
 }
 
 #[tokio::test]
@@ -329,82 +324,12 @@ async fn a_model_gone_by_the_time_it_is_stopped_is_not_running() {
 }
 
 /// An image model beside a chat model is not the primary, and a Stop still
-/// reaches it, by id.
+/// reaches it, by id: the scripted runtime stops only the model named.
 #[tokio::test]
 async fn stopping_an_image_model_in_the_second_slot_stops_it_by_id() {
     let fx = Fixture::serving(None, None, Some(free_port().await)).await;
 
     fx.ops.stop(fx.model_id).await.expect("the stop succeeds");
 
-    assert_eq!(
-        fx.frames(),
-        [format!(
-            r#"{{"type":"server_stopped","modelId":{},"modelName":"test-model"}}"#,
-            fx.model_id
-        )]
-    );
-}
-
-/// A stand-in `sd-server` on a loopback port: `/v1/models` answers with
-/// sd-server's model, and anything else, `/health` included, is a 404. Each
-/// request is read whole before the answer.
-async fn fake_sd_server() -> u16 {
-    use tokio::io::AsyncWriteExt;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-    tokio::spawn(async move {
-        while let Ok(incoming) = gglib_test_http::incoming(&listener).await {
-            tokio::spawn(async move {
-                let Ok((request, mut socket)) = incoming.request().await else {
-                    return;
-                };
-                let body = r#"{"object":"list","data":[{"id":"sd-cpp-local","object":"model"}]}"#;
-                let reply = if request.line().starts_with("GET /v1/models ") {
-                    format!(
-                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                        body.len()
-                    )
-                } else {
-                    "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
-                        .to_owned()
-                };
-                let _ = socket.write_all(reply.as_bytes()).await;
-            });
-        }
-    });
-    port
-}
-
-/// The health monitor a start spawns asks the server the way its runtime
-/// answers: an `sd-server`, which has no `/health`, reads as healthy.
-#[tokio::test]
-async fn a_started_image_model_is_monitored_as_sd_server() {
-    let fx = Fixture::serving(None, None, Some(fake_sd_server().await)).await;
-
-    fx.ops
-        .start(fx.model_id, StartServerRequest::default())
-        .await
-        .expect("the start succeeds");
-    let mut first = None;
-    for _ in 0..100 {
-        first = fx
-            .emitter
-            .events()
-            .into_iter()
-            .find_map(|event| match event {
-                AppEvent::ServerHealthChanged { status, .. } => Some(status),
-                _ => None,
-            });
-        if first.is_some() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
-    fx.ops.stop(fx.model_id).await.expect("the stop succeeds");
-    fx.proxy
-        .stop()
-        .await
-        .expect("the proxy the start brought up");
-
-    assert_eq!(first, Some(ServerHealthStatus::Healthy));
+    assert_eq!(fx.frames(), Vec::<String>::new());
 }

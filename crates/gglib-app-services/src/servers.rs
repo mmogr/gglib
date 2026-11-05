@@ -1,21 +1,11 @@
 //! Server lifecycle operations for GUI backend.
 
-use std::collections::HashMap;
-use std::pin::pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures_util::StreamExt;
-use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 use gglib_core::events::AppEvent;
-use gglib_core::ports::{
-    AppEventEmitter, ModelRuntimeError, ProcessHandle, ServerHealthStatus, ToolSupportDetectorPort,
-};
+use gglib_core::ports::{AppEventEmitter, ModelRuntimeError, ToolSupportDetectorPort};
 use gglib_core::services::AppCore;
 
 use crate::error::GuiError;
@@ -34,120 +24,22 @@ pub struct ServerDeps {
     /// with the proxy for the GPU by running a second llama-server alongside
     /// it.
     pub proxy: Arc<ProxyOps>,
-    /// Where every server event goes: started, stopped, error and health.
+    /// Where a start or stop the runtime refuses is announced. The load and
+    /// the unload themselves are announced by the runtime's observer
+    /// (`ResidencyEvents`), whoever caused them, so nothing here says
+    /// `server_started` or `server_stopped`.
     pub emitter: Arc<dyn AppEventEmitter>,
     pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
-}
-
-/// Handle for a running health monitor task.
-struct MonitorHandle {
-    join_handle: JoinHandle<()>,
-    cancel_token: CancellationToken,
-    model_id: i64,
-}
-
-/// Registry for tracking active server health monitors.
-///
-/// Manages lifecycle of monitoring tasks with unique server IDs.
-struct ServerMonitorRegistry {
-    monitors: HashMap<i64, MonitorHandle>,
-    next_server_id: AtomicI64,
-}
-
-impl ServerMonitorRegistry {
-    fn new() -> Self {
-        Self {
-            monitors: HashMap::new(),
-            next_server_id: AtomicI64::new(1),
-        }
-    }
-
-    /// Generate a unique server instance ID.
-    fn generate_server_id(&self) -> i64 {
-        self.next_server_id.fetch_add(1, Ordering::SeqCst)
-    }
-
-    /// Add a monitor to the registry.
-    fn add(
-        &mut self,
-        server_id: i64,
-        join_handle: JoinHandle<()>,
-        cancel_token: CancellationToken,
-        port: u16,
-        model_id: i64,
-    ) {
-        self.monitors.insert(
-            server_id,
-            MonitorHandle {
-                join_handle,
-                cancel_token,
-                model_id,
-            },
-        );
-        debug!(
-            server_id,
-            model_id, port, "Added server monitor to registry"
-        );
-    }
-
-    /// Find monitor by `model_id` (for stop operations).
-    fn find_by_model_id(&self, model_id: i64) -> Option<i64> {
-        self.monitors
-            .iter()
-            .find(|(_, handle)| handle.model_id == model_id)
-            .map(|(server_id, _)| *server_id)
-    }
-
-    /// Cancel and remove a monitor from the registry.
-    async fn cancel(&mut self, server_id: i64) -> Result<(), GuiError> {
-        if let Some(handle) = self.monitors.remove(&server_id) {
-            debug!(server_id, "Cancelling server monitor");
-            handle.cancel_token.cancel();
-
-            // Wait for monitor task to finish (with timeout)
-            match tokio::time::timeout(std::time::Duration::from_secs(2), handle.join_handle).await
-            {
-                Ok(Ok(())) => {
-                    debug!(server_id, "Monitor task completed");
-                    Ok(())
-                }
-                Ok(Err(e)) => {
-                    warn!(server_id, error = %e, "Monitor task panicked");
-                    Err(GuiError::Internal(format!("Monitor task panicked: {e}")))
-                }
-                Err(_) => {
-                    warn!(server_id, "Monitor task cancellation timed out");
-                    Ok(()) // Continue anyway, task will be dropped
-                }
-            }
-        } else {
-            Ok(()) // Already removed or never existed
-        }
-    }
-}
-
-impl Drop for ServerMonitorRegistry {
-    fn drop(&mut self) {
-        // Cancel all monitors on drop
-        for (server_id, handle) in self.monitors.drain() {
-            debug!(server_id, "Cancelling monitor during registry drop");
-            handle.cancel_token.cancel();
-        }
-    }
 }
 
 /// Server operations handler.
 pub struct ServerOps {
     deps: ServerDeps,
-    monitors: Arc<Mutex<ServerMonitorRegistry>>,
 }
 
 impl ServerOps {
     pub fn new(deps: ServerDeps) -> Self {
-        Self {
-            deps,
-            monitors: Arc::new(Mutex::new(ServerMonitorRegistry::new())),
-        }
+        Self { deps }
     }
 
     /// Start serving a model.
@@ -182,6 +74,8 @@ impl ServerOps {
         // The lease is dropped as soon as the model is up: this is a "start
         // this model" request, not a request being served. The model stays
         // resident until admission control gives its slot to something else.
+        // A launch announces itself once healthy; a model already resident
+        // is served as it stands and announces nothing.
         let target = self
             .deps
             .proxy
@@ -198,85 +92,12 @@ impl ServerOps {
 
         debug!(model_id = %id, port = %target.port, "Server started successfully");
 
-        self.deps
-            .emitter
-            .emit(AppEvent::server_started(id, &model.name, target.port));
-
-        // The monitor asks the server the way its runtime answers: an
-        // `sd-server` has no `/health`, and is asked `/v1/models` instead.
-        let handle = ProcessHandle::new(id, model.name.clone(), None, target.port, now_secs())
-            .with_runtime(target.runtime);
-        self.spawn_health_monitor(handle, id).await;
-
         // The llama-server port, not the proxy's: existing GUI flows talk to
         // the model directly, and the proxy runs alongside for observability.
         Ok(StartServerResponse {
             port: target.port,
             message: format!("Server started on port {}", target.port),
         })
-    }
-
-    /// Spawn a health monitoring task for a server.
-    async fn spawn_health_monitor(&self, handle: ProcessHandle, model_id: i64) {
-        let server_id = {
-            let registry = self.monitors.lock().await;
-            registry.generate_server_id()
-        };
-
-        let cancel_token = CancellationToken::new();
-        let emitter = Arc::clone(&self.deps.emitter);
-        let port = handle.port;
-
-        // Create monitor with 10-second check interval
-        let monitor = gglib_runtime::ServerHealthMonitor::new(
-            handle,
-            std::time::Duration::from_secs(10),
-            cancel_token.clone(),
-        );
-
-        // Spawn monitoring task
-        let join_handle = tokio::spawn(async move {
-            let stream = monitor.monitor();
-            let mut stream = pin!(stream);
-
-            while let Some(status) = stream.next().await {
-                let timestamp = u64::try_from(
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_millis(),
-                )
-                .unwrap_or(u64::MAX);
-
-                let detail = match &status {
-                    ServerHealthStatus::Degraded { reason } => Some(reason.clone()),
-                    ServerHealthStatus::Unreachable { last_error } => Some(last_error.clone()),
-                    _ => None,
-                };
-
-                debug!(
-                    server_id,
-                    model_id,
-                    port,
-                    ?status,
-                    "Health status changed, emitting event"
-                );
-
-                emitter.emit(AppEvent::ServerHealthChanged {
-                    server_id,
-                    model_id,
-                    status,
-                    detail,
-                    timestamp,
-                });
-            }
-
-            debug!(server_id, model_id, "Health monitor task completed");
-        });
-
-        // Register the monitor
-        let mut registry = self.monitors.lock().await;
-        registry.add(server_id, join_handle, cancel_token, port, model_id);
     }
 
     /// Stop serving a model, in whichever slot it sits: the primary, or the
@@ -296,16 +117,7 @@ impl ServerOps {
 
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
-        // Cancel monitoring first, so a shutdown is not reported as a health
-        // regression.
-        let server_id = {
-            let registry = self.monitors.lock().await;
-            registry.find_by_model_id(id)
-        };
-        if let Some(server_id) = server_id {
-            self.monitors.lock().await.cancel(server_id).await?;
-        }
-
+        // The runtime announces the unload, before it stops the process.
         let stopped = self
             .deps
             .proxy
@@ -323,10 +135,6 @@ impl ServerOps {
         if !stopped {
             return Err(not_running());
         }
-
-        self.deps
-            .emitter
-            .emit(AppEvent::server_stopped(id, &model.name));
 
         Ok(format!("Server for model {id} stopped"))
     }
@@ -426,13 +234,6 @@ impl ServerOps {
     }
 }
 
-/// Seconds since the Unix epoch, for process-handle timestamps.
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
-}
-
 /// Classify a spawn failure as a llama-server availability problem.
 ///
 /// Returns the `reason` for [`GuiError::LlamaServerNotInstalled`], or `None`
@@ -494,133 +295,6 @@ fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{Duration, timeout};
-
-    /// Helper to check if registry contains a `server_id`
-    impl ServerMonitorRegistry {
-        #[cfg(test)]
-        fn contains(&self, server_id: i64) -> bool {
-            self.monitors.contains_key(&server_id)
-        }
-    }
-
-    #[tokio::test]
-    async fn registry_add_cancel_removes_entry() {
-        let mut reg = ServerMonitorRegistry::new();
-
-        let token = CancellationToken::new();
-        let task_token = token.clone();
-        let handle = tokio::spawn(async move {
-            task_token.cancelled().await;
-        });
-
-        let server_id = reg.generate_server_id();
-        reg.add(server_id, handle, token, 8080, 1);
-
-        assert!(reg.contains(server_id));
-
-        // Cancel should remove entry
-        let result = reg.cancel(server_id).await;
-        assert!(result.is_ok());
-        assert!(!reg.contains(server_id));
-    }
-
-    #[tokio::test]
-    async fn registry_cancel_is_idempotent() {
-        let mut reg = ServerMonitorRegistry::new();
-
-        // Cancel non-existent entry should not panic
-        let result = reg.cancel(999).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn registry_cancel_completes_quickly() {
-        let mut reg = ServerMonitorRegistry::new();
-
-        let token = CancellationToken::new();
-        let task_token = token.clone();
-        let handle = tokio::spawn(async move {
-            task_token.cancelled().await;
-        });
-
-        let server_id = reg.generate_server_id();
-        reg.add(server_id, handle, token, 8080, 1);
-
-        // Cancel should complete within timeout
-        let res = timeout(Duration::from_secs(3), reg.cancel(server_id)).await;
-        assert!(res.is_ok());
-    }
-
-    #[tokio::test]
-    async fn registry_find_by_model_id_works() {
-        let mut reg = ServerMonitorRegistry::new();
-
-        let token = CancellationToken::new();
-        let task_token = token.clone();
-        let handle = tokio::spawn(async move {
-            task_token.cancelled().await;
-        });
-
-        let server_id = reg.generate_server_id();
-        let model_id = 42;
-        reg.add(server_id, handle, token, 8080, model_id);
-
-        // Should find by model_id
-        assert_eq!(reg.find_by_model_id(model_id), Some(server_id));
-
-        // Should not find unknown model_id
-        assert_eq!(reg.find_by_model_id(999), None);
-
-        // Cleanup
-        let _ = reg.cancel(server_id).await;
-    }
-
-    #[tokio::test]
-    async fn registry_generate_server_id_is_unique() {
-        let reg = ServerMonitorRegistry::new();
-
-        let id1 = reg.generate_server_id();
-        let id2 = reg.generate_server_id();
-        let id3 = reg.generate_server_id();
-
-        assert_ne!(id1, id2);
-        assert_ne!(id2, id3);
-        assert_ne!(id1, id3);
-    }
-
-    #[tokio::test]
-    async fn registry_drop_cancels_all_monitors() {
-        // This test verifies that Drop implementation cancels tokens
-        let token1 = CancellationToken::new();
-        let token2 = CancellationToken::new();
-
-        let check_token1 = token1.clone();
-        let check_token2 = token2.clone();
-
-        {
-            let mut reg = ServerMonitorRegistry::new();
-
-            let task_token1 = token1.clone();
-            let handle1 = tokio::spawn(async move {
-                task_token1.cancelled().await;
-            });
-
-            let task_token2 = token2.clone();
-            let handle2 = tokio::spawn(async move {
-                task_token2.cancelled().await;
-            });
-
-            reg.add(1, handle1, token1, 8080, 1);
-            reg.add(2, handle2, token2, 8081, 2);
-
-            // reg goes out of scope here, triggering Drop
-        }
-
-        // After drop, tokens should be cancelled
-        assert!(check_token1.is_cancelled());
-        assert!(check_token2.is_cancelled());
-    }
 
     // =========================================================================
     // DB-backed ServerOps tests

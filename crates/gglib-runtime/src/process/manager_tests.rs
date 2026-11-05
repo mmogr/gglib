@@ -16,6 +16,7 @@ fn manager() -> ProcessManager {
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
+        Arc::new(gglib_core::ports::NoopResidencyObserver),
     )
 }
 
@@ -314,6 +315,7 @@ async fn a_running_sd_server_is_listed_with_its_runtime() {
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
+        Arc::new(gglib_core::ports::NoopResidencyObserver),
     );
 
     let sd = SdServerConfig {

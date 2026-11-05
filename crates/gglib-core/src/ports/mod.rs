@@ -34,6 +34,7 @@ mod model_summary_fixture;
 pub(crate) mod pinned;
 pub(crate) mod process_runner;
 pub(crate) mod remote_gateway;
+pub(crate) mod residency_observer;
 pub(crate) mod retry_observer;
 pub(crate) mod runs;
 pub(crate) mod server_health;
@@ -103,6 +104,7 @@ pub use model_runtime::{
 };
 pub use process_runner::{ProcessHandle, ServerConfig};
 pub use remote_gateway::RemoteGatewayPort;
+pub use residency_observer::{NoopResidencyObserver, ResidencyObserver};
 pub use retry_observer::RetryObserver;
 pub use runs::{Created, RunEvent, RunEvents, RunScope, RunsError, RunsPort};
 pub use server_health::ServerHealthStatus;

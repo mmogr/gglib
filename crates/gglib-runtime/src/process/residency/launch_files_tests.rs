@@ -88,7 +88,7 @@ async fn an_admission_with_a_missing_projector_is_refused_before_any_spawn() {
     let dir = tempfile::tempdir().unwrap();
     let weights = file(&dir, "qwen.Q8_0.gguf");
     let projector = dir.path().join("qwen.mmproj-Q8_0.gguf");
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(OneModel(spec(&weights, Some(&projector)))),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
@@ -142,7 +142,7 @@ async fn a_launch_starts_the_server_with_the_models_projector() {
         id: 999_101,
         ..spec(&weights, Some(&projector))
     };
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(OneModel(linked)),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

@@ -355,6 +355,7 @@ pub(crate) fn test_core_and_proxy_over(
         catalog,
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
+        Arc::new(gglib_core::ports::NoopResidencyObserver),
     ))));
     test_core_and_proxy_on(repos, runtime)
 }

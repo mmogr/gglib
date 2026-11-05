@@ -29,7 +29,8 @@ use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{
     AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GenerationGate, GgufParserPort,
     HfClientPort, ImageGenerationPort, LoopGuardTripSink, ModelCatalogPort, ModelRepository,
-    ModelRuntimePort, RemoteGatewayPort, Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
+    ModelRuntimePort, RemoteGatewayPort, Repos, ResidencyObserver, RunsPort, SystemProbePort,
+    ToolSupportDetectorPort,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use gglib_core::services::{AppCore, CatalogPortImpl};
@@ -45,6 +46,7 @@ use crate::mcp::{McpDeps, McpOps};
 use crate::models::{ModelDeps, ModelOps};
 use crate::proxy::{ProxyDeps, ProxyOps};
 use crate::remote::{RemoteGateway, RemoteOps};
+use crate::residency_events::ResidencyEvents;
 use crate::runs::RunRegistry;
 use crate::servers::{ServerDeps, ServerOps};
 use crate::settings::{SettingsDeps, SettingsOps};
@@ -180,6 +182,10 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
 
     // The one manager. Everything that drives a model shares it, which is what
     // makes "one llama-server at a time" an invariant rather than a hope.
+    // Every load and unload, whoever caused it, reaches the clients from
+    // here: `server_started`, `server_stopped`, and the health watch between.
+    let residency_events: Arc<dyn ResidencyObserver> =
+        Arc::new(ResidencyEvents::new(Arc::clone(&emitter)));
     let process_manager = Arc::new(ProcessManager::new(
         base_port,
         RuntimeBinaries {
@@ -190,6 +196,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         ServerConfigOptions::default(),
         // Parity with the CLI proxy: auto-size the host-RAM prompt cache.
         CacheRamSetting::Auto,
+        residency_events,
     ));
     let runtime: Arc<dyn ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));

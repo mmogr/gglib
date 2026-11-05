@@ -13,8 +13,8 @@ use std::time::Duration;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::RuntimeKind;
 use gglib_core::ports::{
-    Admission, AdmitObserver, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec,
-    ModelRuntimeError, PinnedSpec, RunningTarget,
+    Admission, AdmitObserver, CatalogError, GenerationTurn, LaunchOverrides, ModelCatalogPort,
+    ModelLaunchSpec, ModelRuntimeError, PinnedSpec, ResidencyObserver, RunningTarget,
 };
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
@@ -75,6 +75,10 @@ pub struct ResidentSet {
     /// the daemon owns one long-lived manager, and `gglib serve` pins it over
     /// HTTP for the lifetime of one proxy run.
     pinned: std::sync::RwLock<Option<PinnedSpec>>,
+    /// Told of every load and unload once the queue has recorded it, with
+    /// no lock held: the daemon's announcement to its clients. See
+    /// [`ResidencyObserver`].
+    observer: Arc<dyn ResidencyObserver>,
 }
 
 /// Removes a ticket from the queue on every exit path.
@@ -99,6 +103,7 @@ impl ResidentSet {
         catalog: Arc<dyn ModelCatalogPort>,
         launch_overrides: ServerConfigOptions,
         cache_ram: CacheRamSetting,
+        observer: Arc<dyn ResidencyObserver>,
     ) -> Self {
         Self {
             catalog,
@@ -106,7 +111,24 @@ impl ResidentSet {
             launch_overrides,
             cache_ram,
             pinned: std::sync::RwLock::new(None),
+            observer,
         }
+    }
+
+    /// [`Self::new`] with nobody told of loads and unloads: the tests' way
+    /// in, where what is announced is not the question.
+    #[cfg(test)]
+    pub(super) fn unobserved(
+        catalog: Arc<dyn ModelCatalogPort>,
+        launch_overrides: ServerConfigOptions,
+        cache_ram: CacheRamSetting,
+    ) -> Self {
+        Self::new(
+            catalog,
+            launch_overrides,
+            cache_ram,
+            Arc::new(gglib_core::ports::NoopResidencyObserver),
+        )
     }
 
     /// The admission queue, for callers that only need to read or evict.
@@ -554,6 +576,7 @@ impl ResidentSet {
         // Along for one purpose: recording the fresh spawn's template-caps
         // observation on the model row once it is health-ready (ADR 0007).
         let catalog = Arc::clone(&self.catalog);
+        let observer = Arc::clone(&self.observer);
         let launch_request = LaunchRequest {
             spec: request.spec.clone(),
             opts: request.opts.clone(),
@@ -581,7 +604,7 @@ impl ResidentSet {
         let handle = tokio::spawn(async move {
             tokio::time::timeout(
                 budget,
-                run_launch(core, Arc::clone(&queue), catalog, launch_request),
+                run_launch(core, Arc::clone(&queue), catalog, observer, launch_request),
             )
             .await
             .unwrap_or_else(|_| {
@@ -615,6 +638,9 @@ impl ResidentSet {
         core: &Arc<RwLock<GuiProcessCore>>,
     ) -> Result<(), ModelRuntimeError> {
         if let Some(previous) = self.queue.evict_unheld(slot)? {
+            // Told before the kill, so a watcher stops looking at the server
+            // before it goes.
+            self.observer.unloaded(previous.model_id);
             let mut core_w = core.write().await;
             if let Err(e) = core_w.kill(previous.model_id).await {
                 warn!(error = %e, "Failed to stop resident model cleanly, continuing");
@@ -651,6 +677,8 @@ impl ResidentSet {
             // A render that was drawing retired the model itself.
             return Ok(asked);
         };
+        // Told before the kill, as a recycle tells it.
+        self.observer.unloaded(previous.model_id);
         let mut core_w = core.write().await;
         core_w
             .kill(previous.model_id)
@@ -708,6 +736,24 @@ impl ResidentSet {
         }
         Ok(())
     }
+
+    /// Retire a render's model once its process was killed, emptying its
+    /// slot only while the slot still holds it
+    /// ([`AdmissionQueue::retire_render`]), and announce the unload when it
+    /// did. After the kill, of necessity: whether the slot was still the
+    /// render's is known only once it is emptied.
+    pub(super) async fn retire_render(
+        &self,
+        turn: GenerationTurn,
+        model_id: u32,
+        kill: impl Future<Output = ()>,
+    ) -> Option<Resident> {
+        let retired = self.queue.retire_render(turn, model_id, kill).await;
+        if let Some(resident) = &retired {
+            self.observer.unloaded(resident.model_id);
+        }
+        retired
+    }
 }
 
 /// Project a resident onto the routing type callers outside this crate speak.
@@ -725,6 +771,9 @@ fn target_of(resident: Resident) -> RunningTarget {
     .with_runtime(resident.runtime)
 }
 
+#[cfg(test)]
+#[path = "announce_tests.rs"]
+mod announce_tests;
 #[cfg(test)]
 #[path = "hold_tests.rs"]
 mod hold_tests;
