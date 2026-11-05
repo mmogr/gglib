@@ -8,7 +8,7 @@ crates/gglib-app-services/src/benchmark/agentic.rs 753
 crates/gglib-app-services/src/benchmark/mapper.rs 534
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1390
 crates/gglib-app-services/src/downloads.rs 345
-crates/gglib-app-services/src/hf_image_preview_tests.rs 317
+crates/gglib-app-services/src/hf_image_preview_tests.rs 319
 crates/gglib-app-services/src/hf_quantizations.rs 376
 crates/gglib-app-services/src/mcp.rs 330
 crates/gglib-app-services/src/mcp_tests.rs 329
