@@ -219,5 +219,12 @@ fn a_runtime_with_its_own_cache_setting_plans_with_it() {
     let cache = none.args.iter().find(|a| a.flag == "--cache-ram").unwrap();
     assert_eq!(cache.value.as_deref(), Some("0"));
     assert_eq!(cache.source, gglib_core::domain::ChoiceSource::You);
-    assert_ne!(value_of(&auto, "--cache-ram"), Some("0"), "{auto:?}");
+    // The auto size depends on the machine's RAM (0 on a small runner), so
+    // its source is what says it was sized rather than set.
+    let sized = auto.args.iter().find(|a| a.flag == "--cache-ram").unwrap();
+    assert_eq!(
+        sized.source,
+        gglib_core::domain::ChoiceSource::Gglib,
+        "{auto:?}"
+    );
 }
