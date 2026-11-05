@@ -213,17 +213,7 @@ impl ResidentSet {
         default_ctx: Option<u64>,
         overrides: &LaunchOverrides,
     ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
-        // Planned as a launch into the primary slot, so the RAM cache is
-        // sized after the other slots' residents, as `launch` sizes it with
-        // `request.slot`: a model in the primary now would be the one
-        // displaced.
-        let others: Vec<Resident> = self
-            .queue
-            .residents()
-            .into_iter()
-            .filter(|(slot, _)| *slot != PRIMARY_SLOT)
-            .map(|(_, r)| r)
-            .collect();
+        let others = others_for_a_primary_launch(self.queue.residents(), spec.id);
         explain::plan_launch(
             spec.clone(),
             &self.template_for(spec.id),
@@ -798,6 +788,21 @@ fn prepare(
         },
         fit: Some(fit.unwrap_or_else(|| (None, gglib_core::domain::FitInputs::default()))),
     }
+}
+
+/// The residents a plan of model `planned` sizes its RAM cache after.
+///
+/// Planned as a launch into the primary slot, so the other slots' residents
+/// count, as `launch` counts them with `request.slot`: a model in the
+/// primary now would be the one displaced. The planned model itself never
+/// counts: resident, it would be served from its own slot, not launched
+/// beside itself.
+fn others_for_a_primary_launch(residents: Vec<(usize, Resident)>, planned: u32) -> Vec<Resident> {
+    residents
+        .into_iter()
+        .filter(|(slot, r)| *slot != PRIMARY_SLOT && r.model_id != planned)
+        .map(|(_, r)| r)
+        .collect()
 }
 
 /// Project a resident onto the routing type callers outside this crate speak.
