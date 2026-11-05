@@ -33,6 +33,8 @@ pub(crate) struct ResidencyEvents {
     watched: Mutex<HashMap<u32, Watch>>,
     /// Numbers each watch: `ServerHealthChanged.server_id`.
     next_server_id: AtomicI64,
+    /// How often each watch asks.
+    check_interval: Duration,
 }
 
 /// One loaded model: the name it was announced with, and the token that
@@ -44,10 +46,16 @@ struct Watch {
 
 impl ResidencyEvents {
     pub(crate) fn new(emitter: Arc<dyn AppEventEmitter>) -> Self {
+        Self::with_check_interval(emitter, HEALTH_CHECK_INTERVAL)
+    }
+
+    /// [`Self::new`], asking each loaded server every `check_interval`.
+    fn with_check_interval(emitter: Arc<dyn AppEventEmitter>, check_interval: Duration) -> Self {
         Self {
             emitter,
             watched: Mutex::new(HashMap::new()),
             next_server_id: AtomicI64::new(1),
+            check_interval,
         }
     }
 
@@ -57,6 +65,12 @@ impl ResidencyEvents {
         let mut ids: Vec<u32> = self.lock().keys().copied().collect();
         ids.sort_unstable();
         ids
+    }
+
+    /// The token that ends model `model_id`'s watch, while it is watched.
+    #[cfg(test)]
+    pub(crate) fn watch_token(&self, model_id: u32) -> Option<CancellationToken> {
+        self.lock().get(&model_id).map(|w| w.cancel.clone())
     }
 
     /// The watches, recovering from a poisoned lock: a panic in one short
@@ -105,7 +119,13 @@ impl ResidencyObserver for ResidencyEvents {
             &server.model_name,
             server.port,
         ));
-        tokio::spawn(watch(server, server_id, cancel, Arc::clone(&self.emitter)));
+        tokio::spawn(watch(
+            server,
+            server_id,
+            cancel,
+            self.check_interval,
+            Arc::clone(&self.emitter),
+        ));
     }
 
     fn unloaded(&self, model_id: u32) {
@@ -131,13 +151,13 @@ async fn watch(
     server: ProcessHandle,
     server_id: i64,
     cancel: CancellationToken,
+    check_interval: Duration,
     emitter: Arc<dyn AppEventEmitter>,
 ) {
     let (model_id, port) = (server.model_id, server.port);
     // Asked the way its runtime answers: an `sd-server` has no `/health`,
     // and is asked `/v1/models` instead.
-    let monitor =
-        gglib_runtime::ServerHealthMonitor::new(server, HEALTH_CHECK_INTERVAL, cancel.clone());
+    let monitor = gglib_runtime::ServerHealthMonitor::new(server, check_interval, cancel.clone());
     let mut stream = pin!(monitor.monitor());
     while let Some(status) = stream.next().await {
         // A check that was in flight when the model was unloaded says

@@ -317,6 +317,24 @@ async fn launch(
         "model became healthy"
     );
 
+    // Announced before the queue records it, and with no await between:
+    // a slot still `Loading` cannot be evicted, so the load is always told
+    // before any unload of it. Told after `install`, a waiter woken by it
+    // could recycle the resident, and its unload would be told of a model
+    // never announced loaded. The handle is the one `list_running` would
+    // report: with its pid, so a watcher can tell a dead process from a
+    // slow one.
+    observer.loaded(
+        ProcessHandle::new(
+            i64::from(spec.id),
+            spec.name.clone(),
+            Some(pid),
+            port,
+            started_at_secs(),
+        )
+        .with_runtime(runtime),
+    );
+
     let lease = queue.install(
         *slot,
         Resident {
@@ -336,20 +354,6 @@ async fn launch(
             weights_bytes: spec.file_size_bytes,
         },
     );
-    // Announced as the queue now records it, by the handle `list_running`
-    // would hand out for it: with its pid, so a watcher can tell a dead
-    // process from a slow one.
-    observer.loaded(
-        ProcessHandle::new(
-            i64::from(spec.id),
-            spec.name.clone(),
-            Some(pid),
-            port,
-            started_at_secs(),
-        )
-        .with_runtime(runtime),
-    );
-
     // The queue owns the process now: eviction, recycling and shutdown can all
     // reach it, so the guard must not.
     child.disarm();

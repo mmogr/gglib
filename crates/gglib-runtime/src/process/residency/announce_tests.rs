@@ -41,6 +41,7 @@ const DISPLACED_ID: u32 = 999_504;
 const LATE_ID: u32 = 999_505;
 const PLACED_ID: u32 = 999_506;
 const RENDERING_ID: u32 = 999_507;
+const MOVED_ON_ID: u32 = 999_508;
 
 /// What the observer was told, in order.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -429,4 +430,40 @@ async fn a_retired_render_announces_its_model_unloaded() {
         }]
     );
     assert!(queue.slot(1).is_none());
+}
+
+/// A render whose slot was emptied under it before it retired (a Stop or a
+/// recycle got there first, and announced the unload then) retires nothing
+/// and announces nothing: the unload is said once.
+#[tokio::test]
+async fn a_retire_whose_slot_moved_on_announces_nothing() {
+    gglib_core::paths::isolate_data_root();
+    let dir = tempfile::tempdir().unwrap();
+    let (binary, _) = sleeper(dir.path(), "server");
+    let (set, core, told) = observed(launch_spec(MOVED_ON_ID, "flux"), 19_610, &binary, &binary);
+    running(
+        &set,
+        &core,
+        dir.path(),
+        (MOVED_ON_ID, "flux", 1, RuntimeKind::StableDiffusion),
+    )
+    .await;
+    let queue = Arc::clone(set.queue());
+    let lease = queue.lease(1).expect("the render's lease");
+    let turn = queue
+        .generation_gate()
+        .render_turn(lease, None)
+        .await
+        .expect("nothing else generates");
+    // Emptied past the set, so nothing is announced for it here.
+    assert!(queue.evict(1).is_some());
+    let kill = async {
+        core.write().await.kill(MOVED_ON_ID).await.unwrap();
+    };
+
+    let retired = set.retire_render(turn, MOVED_ON_ID, kill).await;
+
+    assert!(retired.is_none());
+    assert_eq!(told.all(), []);
+    assert!(!core.read().await.is_running(MOVED_ON_ID));
 }

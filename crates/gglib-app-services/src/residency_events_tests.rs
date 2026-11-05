@@ -3,8 +3,11 @@
 //! runs from a load to its unload.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use gglib_core::domain::RuntimeKind;
+use tokio::sync::Notify;
 
 use super::*;
 use crate::test_support::RecordingEmitter;
@@ -72,14 +75,19 @@ async fn a_model_never_announced_loaded_is_not_announced_stopped() {
     assert_eq!(frames(&emitter), Vec::<String>::new());
 }
 
+/// Loaded again with no unload between: the earlier watch is ended, so
+/// one model is never reported on by two.
 #[tokio::test]
-async fn a_model_loaded_twice_keeps_one_watch() {
+async fn a_model_loaded_twice_keeps_one_watch_and_ends_the_other() {
     let (events, _emitter) = events();
-
     events.loaded(handle(42, "test-model", 9001));
+    let first = events.watch_token(42).expect("watched");
+
     events.loaded(handle(42, "test-model", 9002));
 
     assert_eq!(events.watched(), [42]);
+    assert!(first.is_cancelled(), "the first watch was ended");
+    assert!(!events.watch_token(42).unwrap().is_cancelled());
 }
 
 /// A stand-in `sd-server` on a loopback port: `/v1/models` answers with
@@ -110,6 +118,82 @@ async fn fake_sd_server() -> u16 {
         }
     });
     port
+}
+
+/// A stand-in `sd-server` that holds every request open until `release` is
+/// notified, counting each in `arrived`, then answers `/v1/models` as
+/// sd-server does.
+async fn held_sd_server() -> (u16, Arc<Notify>, Arc<AtomicUsize>) {
+    use tokio::io::AsyncWriteExt;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let release = Arc::new(Notify::new());
+    let arrived = Arc::new(AtomicUsize::new(0));
+    let (task_release, task_arrived) = (Arc::clone(&release), Arc::clone(&arrived));
+    tokio::spawn(async move {
+        while let Ok(incoming) = gglib_test_http::incoming(&listener).await {
+            let (release, arrived) = (Arc::clone(&task_release), Arc::clone(&task_arrived));
+            tokio::spawn(async move {
+                let Ok((_request, mut socket)) = incoming.request().await else {
+                    return;
+                };
+                arrived.fetch_add(1, Ordering::SeqCst);
+                release.notified().await;
+                let body = r#"{"object":"list","data":[{"id":"sd-cpp-local","object":"model"}]}"#;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    (port, release, arrived)
+}
+
+/// Wait up to five seconds for `condition`.
+async fn eventually(mut condition: impl FnMut() -> bool) -> bool {
+    for _ in 0..100 {
+        if condition() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    condition()
+}
+
+/// A check that was in flight when the model was unloaded says nothing: no
+/// `server_health_changed` follows `server_stopped`.
+#[tokio::test]
+async fn a_check_in_flight_at_the_unload_sends_nothing_after_server_stopped() {
+    let emitter = Arc::new(RecordingEmitter::default());
+    let events = ResidencyEvents::with_check_interval(
+        Arc::clone(&emitter) as Arc<dyn AppEventEmitter>,
+        Duration::from_millis(20),
+    );
+    let (port, release, arrived) = held_sd_server().await;
+
+    events.loaded(handle(42, "flux", port).with_runtime(RuntimeKind::StableDiffusion));
+    assert!(
+        eventually(|| arrived.load(Ordering::SeqCst) >= 1).await,
+        "the first check reached the server"
+    );
+    events.unloaded(42);
+    release.notify_one();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let sent = emitter.events();
+    let stopped_at = sent
+        .iter()
+        .position(|e| matches!(e, AppEvent::ServerStopped { .. }))
+        .expect("server_stopped was sent");
+    assert!(
+        !sent[stopped_at..]
+            .iter()
+            .any(|e| matches!(e, AppEvent::ServerHealthChanged { .. })),
+        "{sent:?}"
+    );
+    assert_eq!(arrived.load(Ordering::SeqCst), 1, "the watch asked no more");
 }
 
 /// The watch asks a loaded server the way its runtime answers: an
