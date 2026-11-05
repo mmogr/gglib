@@ -261,8 +261,6 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: peter-evans/create-pull-request
         update-types: ["version-update:semver-major"]
-      - dependency-name: googleapis/release-please-action
-        update-types: ["version-update:semver-major"]
       - dependency-name: actions/github-script
         update-types: ["version-update:semver-major"]
     groups:
