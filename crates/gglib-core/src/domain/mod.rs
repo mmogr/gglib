@@ -53,6 +53,7 @@ pub mod slot_eviction;
 pub(crate) mod template_caps;
 pub mod tensor_table;
 pub mod thinking;
+pub mod variant_fit;
 
 // Re-export model types at the domain level for convenience
 pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
@@ -113,6 +114,7 @@ pub use recommendation::{
 
 // Re-export a model's fit on a phone at the domain level for convenience
 pub use phone_fit::{FitVerdict, MissingInput, fit_verdict};
+pub use variant_fit::VariantFit;
 
 // Re-export admission-control telemetry at the domain level for convenience
 pub use admission::{

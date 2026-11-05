@@ -1,39 +1,27 @@
 import { FC } from 'react';
 import { AlertTriangle, CheckCircle2, HelpCircle, XCircle } from 'lucide-react';
-import { HfQuantization, FitStatus } from '../../types';
+import { HfQuantization, VariantFit } from '../../types';
 import { formatBytes } from '../../utils/format';
-import { useSystemMemory } from '../../hooks/useSystemMemory';
 import { useSettings } from '../../hooks/useSettings';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
 
-// Fit indicator component
-interface FitIndicatorProps {
-  sizeBytes: number;
-  checkFit: (sizeBytes: number) => FitStatus;
-  getTooltip: (sizeBytes: number) => string;
-}
-
-const FitIndicator: FC<FitIndicatorProps> = ({ sizeBytes, checkFit, getTooltip }) => {
-  const status = checkFit(sizeBytes);
-  const tooltip = getTooltip(sizeBytes);
-
-  const iconMap: Record<FitStatus, { icon: typeof CheckCircle2; className: string }> = {
+/**
+ * The daemon's verdict on a variant, drawn: a shape per kind, and the
+ * daemon's own words as the title. Nothing is judged here.
+ */
+const FitIndicator: FC<{ fit: VariantFit; word: string }> = ({ fit, word }) => {
+  const iconMap: Record<VariantFit['kind'], { icon: typeof CheckCircle2; className: string }> = {
     fits: { icon: CheckCircle2, className: '' },
     tight: { icon: AlertTriangle, className: '' },
-    wont_fit: { icon: XCircle, className: '' },
+    too_big: { icon: XCircle, className: '' },
     unknown: { icon: HelpCircle, className: 'grayscale opacity-60' },
   };
-
-  const { icon, className } = iconMap[status];
+  const { icon, className } = iconMap[fit.kind];
 
   return (
-    <span 
-      className={cn('text-base cursor-help', className)}
-      title={tooltip}
-      aria-label={tooltip}
-    >
+    <span className={cn('text-base cursor-help', className)} title={word} aria-label={word}>
       <Icon icon={icon} size={14} />
     </span>
   );
@@ -59,9 +47,9 @@ interface QuantizationTableProps {
 
 /**
  * The variant table: one row per variant, by its uploader's label, with its
- * size, shard count, memory fit and download button. One row is the
- * selected one. The size and shard count are the weights alone; the fit
- * counts the projector fetched with them too, since both are loaded. A
+ * size, shard count, the daemon's fit verdict and download button. One row
+ * is the selected one. The size and shard count are the weights alone; the
+ * daemon's fit counts the projector fetched with them too. A
  * draft or helper is marked as one, and its download is disabled.
  */
 export const QuantizationTable: FC<QuantizationTableProps> = ({
@@ -72,8 +60,6 @@ export const QuantizationTable: FC<QuantizationTableProps> = ({
   downloadsDisabled,
   disabledReason,
 }) => {
-  // Memory fit checking
-  const { checkFit, getTooltip, loading: memoryLoading } = useSystemMemory();
   const { settings } = useSettings();
   const showFitIndicators = settings?.showMemoryFitIndicators ?? true;
 
@@ -83,9 +69,7 @@ export const QuantizationTable: FC<QuantizationTableProps> = ({
         <span>Quant</span>
         <span>Size</span>
         <span>Shards</span>
-        {showFitIndicators && !memoryLoading && (
-          <span>Fit</span>
-        )}
+        {showFitIndicators && <span>Fit</span>}
         <span></span>
       </div>
       <div className="flex flex-col max-h-[300px] overflow-y-auto">
@@ -115,13 +99,11 @@ export const QuantizationTable: FC<QuantizationTableProps> = ({
             <span className="text-sm text-text-secondary text-center">
               {quant.is_sharded ? quant.shard_count : 1}
             </span>
-            {showFitIndicators && !memoryLoading && (
+            {showFitIndicators && (
               <span className="text-center">
-                <FitIndicator
-                  sizeBytes={quant.size_bytes + (quant.projector?.size_bytes ?? 0)}
-                  checkFit={checkFit}
-                  getTooltip={getTooltip}
-                />
+                {quant.fit && quant.fit_word && (
+                  <FitIndicator fit={quant.fit} word={quant.fit_word} />
+                )}
               </span>
             )}
             <span className="text-right">

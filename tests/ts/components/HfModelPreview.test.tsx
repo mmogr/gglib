@@ -9,7 +9,7 @@
  * companions add to a download; nothing for any other repository.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
@@ -20,7 +20,6 @@ const MIB = 1024 * 1024;
 
 const listing: { current: HfQuantization[] } = { current: [] };
 const imageListing: { current: HfImagePreview | null } = { current: null };
-const checkFit = vi.fn((_bytes: number) => 'fits' as const);
 /** A repository whose listing never answers, as one still loading. */
 const STILL_LOADING = 'owner/Still-Loading-GGUF';
 
@@ -40,9 +39,6 @@ vi.mock('../../../src/services/transport', () => ({
 }));
 vi.mock('../../../src/hooks/useSettings', () => ({
   useSettings: () => ({ settings: null }),
-}));
-vi.mock('../../../src/hooks/useSystemMemory', () => ({
-  useSystemMemory: () => ({ checkFit, getTooltip: () => 'fit', loading: false }),
 }));
 
 import { HfModelPreview } from '../../../src/components/HfModelPreview';
@@ -74,6 +70,9 @@ function quant(
     is_sharded: false,
     shard_count: null,
     projector,
+    // The daemon's verdict; a projector or helper row carries none.
+    fit: role === 'Weights' ? { kind: 'fits', ctx: 32768 } : null,
+    fit_word: role === 'Weights' ? 'fits with 32K' : null,
   };
 }
 
@@ -90,10 +89,6 @@ async function preview(quantizations: HfQuantization[], image: HfImagePreview | 
 }
 
 describe('HfModelPreview — the projector that comes with a download', () => {
-  beforeEach(() => {
-    checkFit.mockClear();
-  });
-
   it('shows the first quantization\'s projector: its file name, its size and its cost', async () => {
     await preview([quant('Q4_K_M', 16000, F16), quant('Q8_0', 28000, Q8)]);
 
@@ -168,11 +163,14 @@ describe('HfModelPreview — the projector that comes with a download', () => {
     expect(screen.queryByTestId('quant-row-mmproj-BF16')).not.toBeInTheDocument();
   });
 
-  it('judges the fit with the projector counted, since both are loaded', async () => {
-    await preview([quant('Q8_0', 28000, Q8), quant('Q9', 30000, null)]);
+  it("shows the daemon's verdict on each model in its own words, and none for a helper", async () => {
+    await preview([
+      { ...quant('Q8_0', 28000, Q8), fit: { kind: 'too_big', need_bytes: 2, have_bytes: 1 }, fit_word: 'too big' },
+      quant('draft', 300, null, 'Sidecar'),
+    ]);
 
-    expect(checkFit).toHaveBeenCalledWith((28000 + 629) * MIB);
-    expect(checkFit).toHaveBeenCalledWith(30000 * MIB);
+    expect(within(screen.getByTestId('quant-row-Q8_0')).getByLabelText('too big')).toBeInTheDocument();
+    expect(within(screen.getByTestId('quant-row-draft')).queryByLabelText(/fits|too big|tight|unknown/)).toBeNull();
   });
 });
 

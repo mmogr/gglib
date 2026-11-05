@@ -17,6 +17,8 @@ pub use image_companions::{Companion, image_companions};
 pub use types::{
     HfFileInfo, HfModelKind, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, HfSortField,
 };
-pub use variant_heads::{VARIANT_HEAD_BYTES, read_roles, stored_label, variant_head, variant_role};
+pub use variant_heads::{
+    VARIANT_HEAD_BYTES, read_heads, read_roles, stored_label, variant_head, variant_role,
+};
 pub use variant_match::{LabelMismatch, label_refusal, match_label, match_variant};
 pub use variants::{HELPER_FILES_REFUSAL, variants_of};

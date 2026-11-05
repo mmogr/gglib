@@ -28,7 +28,7 @@ import type { GgufModel, AppSettings } from '../../../types';
  * no fit at all and fall through to the 4096 floor. Saying "fitted to this
  * machine" would be a false promise to every one of those users, on the
  * surface this module exists to stop making false promises. `gpuMemoryBytes`
- * would answer the hardware half — `useSystemMemory` already reads it — but
+ * would answer the hardware half — the launch explanation reads it — but
  * none of the rest, so the honest claim is the one that holds everywhere:
  * the server decides.
  */

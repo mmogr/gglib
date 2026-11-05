@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gglib_core::download::{DownloadId, QueueSnapshot};
 use gglib_core::paths::resolve_models_dir;
-use gglib_core::ports::huggingface::read_roles;
+use gglib_core::ports::huggingface::read_heads;
 use gglib_core::ports::{
     DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, ToolSupportDetectorPort,
 };
@@ -209,13 +209,15 @@ impl DownloadOps {
             .list_quantizations(model_id)
             .await
             .map_err(failed)?;
-        let quants = read_roles(
+        let quants = read_heads(
             self.hf_client.as_ref(),
             self.gguf_parser.as_ref(),
             model_id,
             quants,
         )
         .await;
+        let infos: Vec<gglib_core::ports::HfQuantInfo> =
+            quants.iter().map(|(q, _)| q.clone()).collect();
 
         let models_dir = self
             .models_directory
@@ -225,12 +227,20 @@ impl DownloadOps {
             self.hf_client.as_ref(),
             self.gguf_parser.as_ref(),
             model_id,
-            &quants,
+            &infos,
             models_dir.as_deref(),
         )
         .await;
+        // The budget the picker chooses a variant by, so the Fit column and
+        // the download it leads to agree.
+        let budget_bytes = download_budget().await;
 
-        Ok(quantizations_response(model_id, quants, image))
+        Ok(quantizations_response(
+            model_id,
+            quants,
+            image,
+            budget_bytes,
+        ))
     }
 
     /// Check if a `HuggingFace` model supports tool/function calling.

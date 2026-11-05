@@ -242,6 +242,14 @@ export type PublishedDefault = PublishedDefaultDto & {
 import type { ServerConfig } from './generated/ServerConfig';
 export type { ServerConfig };
 
+/**
+ * Whether a Hugging Face variant fits this machine, as the daemon judges it
+ * for the listing (`HfQuantization.fit`); its words travel beside it as
+ * `fit_word`.
+ */
+export type { VariantFit } from './generated/VariantFit';
+export type { MissingInput } from './generated/MissingInput';
+
 // ============================================================================
 // Model Types
 // ============================================================================
@@ -393,26 +401,6 @@ export type UpdateSettingsRequest = Omit<
   inferenceProfiles?: SparseInferenceProfile[] | null;
 };
 
-// ============================================================================
-// System Memory Types (for "Will it fit?" indicators)
-// ============================================================================
-
-/**
- * What the host has to run a model on — `GET /api/config/system/memory`, and
- * the `systemMemory` of the setup status, which is the same Rust type.
- *
- * `gpuMemoryBytes` is optional and *not* nullable, which is the correction:
- * it is the one field carrying `skip_serializing_if`, so a machine with no
- * readable GPU memory omits the key rather than sending `null`. The mirror
- * admitted both, so a reader had two absent-shapes to handle and only one
- * could ever arrive.
- */
-export type { SystemMemoryInfo } from './generated/SystemMemoryInfo';
-
-/**
- * Fit status for a model quantization based on available memory.
- */
-export type FitStatus = 'fits' | 'tight' | 'wont_fit' | 'unknown';
 
 // ============================================================================
 // Server Health Types (for monitoring server lifecycle)
