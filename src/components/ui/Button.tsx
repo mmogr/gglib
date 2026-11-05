@@ -31,7 +31,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   // Demoted destructive action — reveals intent on hover without spending red at rest.
   dangerGhost: "bg-transparent text-text-muted hover:text-danger hover:bg-danger-subtle",
   // Inline text link — no background, no border.
-  link: "bg-transparent text-primary h-auto p-0 hover:underline hover:text-primary-hover",
+  link: "bg-transparent text-primary h-auto p-0 underline underline-offset-2 hover:text-text-secondary",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

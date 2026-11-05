@@ -7,12 +7,14 @@
      Color Palette
      ================== */
 
-  /* Primary Colors */
-  --color-primary: #f08c26;
-  --color-primary-hover: #de7d1b;
-  --color-primary-light: #f7a950;
-  --color-primary-subtle: rgba(240, 140, 38, 0.12);
-  --color-primary-border: rgba(240, 140, 38, 0.35);
+  /* Primary is ink: the highest-contrast neutral, paper on graphite. One
+     inverted button per screen is the action; selection and focus share it.
+     Amber is no longer an action colour, only attention (--color-warning). */
+  --color-primary: #edece8;
+  --color-primary-hover: #d2d1cc;
+  --color-primary-light: #ffffff;
+  --color-primary-subtle: rgba(237, 236, 232, 0.1);
+  --color-primary-border: rgba(237, 236, 232, 0.3);
 
   /* Status Colors — hues at least 60° apart so no two can be confused:
      success ≈150° (On, Loaded, Connected), warning ≈40° (attention, Away),
