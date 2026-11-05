@@ -83,7 +83,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
             onClick={() => onSelectModel(model.id!)}
           >
             <div className="flex flex-col gap-xs w-full">
-              <div className="font-medium text-sm flex items-center gap-sm w-full break-words">
+              <div className="font-semibold text-sm flex items-center gap-sm w-full break-words">
                 {model.name}
                 {isRunning && (
                   <span className="inline-flex items-center gap-xs text-xs text-text-muted shrink-0">

@@ -140,14 +140,14 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
           <Icon icon={installing ? Loader2 : AlertTriangle} size={28} className={installing ? 'animate-spin' : ''} />
         </div>
         <div>
-          <h2 className="m-0 text-lg font-semibold text-text">llama-server Not Installed</h2>
-          <p className="mt-1 mb-0 text-text-secondary text-base">{metadata?.reason}</p>
+          <h2 className="m-0 text-base font-semibold text-text">llama-server Not Installed</h2>
+          <p className="mt-1 mb-0 text-text-secondary text-sm">{metadata?.reason}</p>
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
         <p className="m-0 text-text-secondary leading-normal">The llama-server binary was not found at:</p>
-        <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-base text-text break-all">{metadata?.expectedPath}</code>
+        <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-sm text-text break-all">{metadata?.expectedPath}</code>
       </div>
 
       {error ? <Banner variant="danger">{error}</Banner> : null}
@@ -163,15 +163,14 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
           <Icon
             icon={isCompleted ? CheckCircle2 : installError ? XCircle : AlertCircle}
             size={28}
-            className={installing ? 'animate-pulse' : ''}
           />
         </div>
         <div>
-          <h2 className="m-0 text-lg font-semibold text-text">
+          <h2 className="m-0 text-base font-semibold text-text">
             {isCompleted ? 'Installation complete' : update ? 'llama.cpp update' : 'llama.cpp required'}
           </h2>
           {!installing && !isCompleted && (
-            <p className="mt-1 mb-0 text-text-secondary text-base">
+            <p className="mt-1 mb-0 text-text-secondary text-sm">
               {update
                 ? `llama.cpp ${update.installed} is installed; gglib now uses ${update.target}. The update downloads it.`
                 : canDownload

@@ -30,7 +30,7 @@ const FitIndicator: FC<FitIndicatorProps> = ({ sizeBytes, checkFit, getTooltip }
 
   return (
     <span 
-      className={cn('text-base cursor-help', className)}
+      className={cn('text-sm cursor-help', className)}
       title={tooltip}
       aria-label={tooltip}
     >
@@ -104,7 +104,7 @@ export const QuantizationTable: FC<QuantizationTableProps> = ({
             )}
           >
             <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-medium text-text">{quant.label}</span>
+              <span className="font-semibold text-text">{quant.label}</span>
               {helper && (
                 <span className="ml-sm text-xs text-text-secondary" title={HELPER_FILES_REFUSAL}>
                   draft or helper

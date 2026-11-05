@@ -8,7 +8,7 @@ const baseStyles = "w-full rounded-md border bg-background-input text-text text-
 const sizeStyles: Record<SelectSize, string> = {
   sm: "h-7 px-2 pr-7 text-xs",
   base: "h-8 px-3 pr-9 text-sm",
-  lg: "h-9 px-3.5 pr-10 text-base",
+  lg: "h-9 px-3.5 pr-10 text-sm",
 };
 
 const variantStyles: Record<SelectVariant, string> = {

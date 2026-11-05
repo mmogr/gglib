@@ -155,15 +155,15 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
       )}
       <ProxyControl
         compact
-        buttonClassName="relative text-base w-auto h-auto py-xs px-sm gap-xs inline-flex"
+        buttonClassName="relative text-sm w-auto h-auto py-xs px-sm gap-xs inline-flex"
         statusDotClassName="absolute top-[2px] right-[2px] w-[6px] h-[6px] rounded-full bg-transparent"
-        statusDotActiveClassName="bg-success animate-pulse"
+        statusDotActiveClassName="bg-success"
       />
       <RemoteControl
         compact
-        buttonClassName="relative text-base w-auto h-auto py-xs px-sm gap-xs inline-flex"
+        buttonClassName="relative text-sm w-auto h-auto py-xs px-sm gap-xs inline-flex"
         statusDotClassName="absolute top-[2px] right-[2px] w-[6px] h-[6px] rounded-full bg-transparent"
-        statusDotActiveClassName="bg-success animate-pulse"
+        statusDotActiveClassName="bg-success"
       />
     </>
   );

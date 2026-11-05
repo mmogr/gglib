@@ -162,7 +162,7 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
       >
         <Icon icon={Wrench} size={14} />
         {enabledTools.size > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 text-[9px] font-semibold leading-[14px] text-center text-white bg-accent rounded-full">{enabledTools.size}</span>
+          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 text-xs font-semibold leading-[14px] text-center text-white bg-accent rounded-full">{enabledTools.size}</span>
         )}
       </Button>
 
@@ -173,7 +173,7 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
               <Icon icon={Wrench} size={14} />
               <span className="ml-1.5">Tools</span>
             </span>
-            <span className="text-2xs text-text-secondary bg-surface px-2 py-[2px] rounded-full">
+            <span className="text-xs text-text-secondary bg-surface px-2 py-[2px] rounded-full">
               {enabledTools.size}/{tools.length} active
             </span>
           </div>
@@ -181,7 +181,7 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
           {tools.length === 0 ? (
             <div className="px-[14px] py-6 text-center">
               <p className="m-0 text-text-secondary text-sm">No tools registered</p>
-              <p className="mt-2 text-2xs text-text-muted">
+              <p className="mt-2 text-xs text-text-muted">
                 Tools can be added via the tool registry API.
               </p>
             </div>
@@ -226,8 +226,8 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
                               <Icon icon={icon} size={14} />
                             </span>
                             <span className="flex-1 min-w-0">
-                              <span className="block text-sm font-medium text-text-primary mb-[2px]">{displayName}</span>
-                              <span className="block text-2xs text-text-secondary leading-[1.4] line-clamp-2">{description}</span>
+                              <span className="block text-sm font-semibold text-text-primary mb-[2px]">{displayName}</span>
+                              <span className="block text-xs text-text-secondary leading-[1.4] line-clamp-2">{description}</span>
                             </span>
                           </span>
                         }
@@ -242,7 +242,7 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
           <AgentLimitsSection effortSupport={effortSupport} />
 
           <div className="px-[14px] py-2 border-t border-border bg-surface-elevated">
-            <span className="text-2xs text-text-muted italic">
+            <span className="text-xs text-text-muted italic">
               Enabled tools are sent to the model for function calling.
             </span>
           </div>

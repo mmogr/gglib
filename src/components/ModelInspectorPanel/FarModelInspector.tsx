@@ -86,7 +86,7 @@ export const FarModelInspector: FC<FarModelInspectorProps> = ({ model, paired, o
   return (
     <div className="flex flex-col overflow-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
       <div className="p-md border-b border-border-light shrink-0 flex items-center gap-sm">
-        <h2 className="m-0 text-lg font-semibold truncate">{detail?.name ?? `Model ${model.id}`}</h2>
+        <h2 className="m-0 text-base font-semibold truncate">{detail?.name ?? `Model ${model.id}`}</h2>
         <Chip size="sm" leftIcon={<Icon icon={Server} size={11} />}>{paired.name}</Chip>
         {sees && <VisionChip />}
       </div>

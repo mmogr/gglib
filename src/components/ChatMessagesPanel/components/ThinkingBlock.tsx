@@ -122,7 +122,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
           className={cn('text-text-muted transition-transform duration-200 shrink-0', isExpanded && 'rotate-90')}
         />
         <Icon icon={Brain} size={14} className="text-text-muted shrink-0" />
-        <span className="text-sm font-medium text-text-muted font-mono tabular-nums">{getLabel()}</span>
+        <span className="text-sm font-semibold text-text-muted font-mono tabular-nums">{getLabel()}</span>
         {isStreaming && <span className="w-[12px] h-[12px] border-2 border-text-muted border-t-transparent rounded-full animate-spin-360 ml-auto shrink-0" />}
       </div>
       

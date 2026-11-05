@@ -198,7 +198,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
       <div className="max-h-[440px] overflow-y-auto py-sm px-md">
         {/* Sort Section */}
         <div className="py-sm border-b border-border">
-          <span className="block text-sm font-medium text-text mb-xs">Sort By</span>
+          <span className="block text-sm font-semibold text-text mb-xs">Sort By</span>
           <div className="flex flex-wrap gap-xs mt-xs">
             {SORT_OPTIONS.map(([value, label]) => (
               <Chip
@@ -288,7 +288,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
         {/* Quantizations */}
         {hasQuantizations && (
           <div className={cn("py-sm border-b border-border last:border-b-0", !quantizationsHaveVariety && "opacity-50")}>
-            <span className="block text-sm font-medium text-text mb-xs">Quantization</span>
+            <span className="block text-sm font-semibold text-text mb-xs">Quantization</span>
             {quantizationsHaveVariety ? (
               <Stack gap="xs" className="mt-xs">
                 {filterOptions!.quantizations.map(quant => (
@@ -310,7 +310,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
         {/* Tags */}
         {hasTags && (
           <div className="py-sm border-b border-border last:border-b-0">
-            <span className="block text-sm font-medium text-text mb-xs">Tags</span>
+            <span className="block text-sm font-semibold text-text mb-xs">Tags</span>
             <div className="flex flex-wrap gap-xs mt-xs">
               {tags.map(tag => (
                 <Chip

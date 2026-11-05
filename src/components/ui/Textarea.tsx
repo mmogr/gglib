@@ -6,7 +6,7 @@ const baseStyles = "w-full rounded-md border bg-background-input text-text text-
 const sizeStyles: Record<TextareaSize, string> = {
   sm: "min-h-[80px] p-2 text-xs",
   base: "min-h-[100px] p-3 text-sm",
-  lg: "min-h-[120px] p-4 text-base",
+  lg: "min-h-[120px] p-4 text-sm",
 };
 
 const variantStyles: Record<TextareaVariant, string> = {

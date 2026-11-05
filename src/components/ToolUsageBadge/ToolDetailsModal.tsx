@@ -103,7 +103,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
         </span>
         <div>
           <p className="m-0 text-text font-semibold">Tool calls</p>
-          <p className="mt-[0.2rem] mb-0 text-text-secondary text-base">Inspect arguments and results from each tool execution.</p>
+          <p className="mt-[0.2rem] mb-0 text-text-secondary text-sm">Inspect arguments and results from each tool execution.</p>
         </div>
       </div>
 
@@ -166,7 +166,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                     {copiedId === argsId ? 'Copied' : 'Copy'}
                   </Button>
                 </div>
-                {argsExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-base leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedArgs}</pre>}
+                {argsExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-sm leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedArgs}</pre>}
               </Stack>
 
               <ToolResultDisplay toolName={call.toolName} result={result} toolCallId={call.toolCallId} />

@@ -39,14 +39,14 @@ export const InspectorHeader: FC<InspectorHeaderProps> = ({
       {isEditMode ? (
         <Input
           type="text"
-          className="w-full m-0 text-lg font-semibold"
+          className="w-full m-0 text-base font-semibold"
           value={editedName}
           onChange={(e) => onEditedNameChange(e.target.value)}
           placeholder="Model name"
         />
       ) : (
         <div className="flex items-center gap-sm min-w-0">
-          <h2 className="m-0 text-lg font-semibold truncate">{model.name}</h2>
+          <h2 className="m-0 text-base font-semibold truncate">{model.name}</h2>
           {canSee(model) && <VisionChip />}
           <DrawsChip model={model} />
         </div>

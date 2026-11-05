@@ -38,7 +38,7 @@ export function ToolSupportIndicator({
     return (
       <span
         className={cn(
-          'inline-flex items-center gap-1 py-[2px] px-2 text-2xs font-medium rounded-full shrink-0',
+          'inline-flex items-center gap-1 py-[2px] px-2 text-xs font-semibold rounded-full shrink-0',
           'bg-success-subtle text-success',
           className,
         )}
@@ -57,7 +57,7 @@ export function ToolSupportIndicator({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 py-[2px] px-2 text-2xs font-medium rounded-full shrink-0',
+        'inline-flex items-center gap-1 py-[2px] px-2 text-xs font-semibold rounded-full shrink-0',
         'bg-warning-subtle text-warning',
         className,
       )}

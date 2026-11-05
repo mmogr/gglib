@@ -65,7 +65,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
       onKeyDown={(e) => e.key === 'Escape' && handleDismiss()}
     >
       <span className={cn(
-        'text-base font-bold shrink-0 w-5 h-5 flex items-center justify-center',
+        'text-sm font-semibold shrink-0 w-5 h-5 flex items-center justify-center',
         toast.type === 'success' && 'text-success',
         toast.type === 'error' && 'text-danger',
         toast.type === 'info' && 'text-primary',

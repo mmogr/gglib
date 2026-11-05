@@ -152,7 +152,7 @@ export const AssistantMessageBubble: React.FC = () => {
                 <ToolExecutionProgress previews={previews} />
               </div>
             )}
-            <div className="text-base leading-relaxed text-text">
+            <div className="text-sm leading-relaxed text-text">
               {contentText && <MarkdownMessageContent text={contentText} />}
               {!thinkingText && !contentText && isStreaming && (
                 <span className="text-text-muted animate-blink" aria-hidden>…</span>
@@ -221,7 +221,7 @@ export const UserMessageBubble: React.FC = () => {
         body={
           <>
             <MessageImages />
-            <div className="text-base leading-relaxed text-text-secondary">
+            <div className="text-sm leading-relaxed text-text-secondary">
               <MarkdownMessageContent />
             </div>
             <ActionBarPrimitive.Root className={ACTION_BAR}>
@@ -281,13 +281,13 @@ export const EditComposer: React.FC = () => {
             <ComposerPrimitive.Input
               aria-label={reply ? 'Edit reply' : 'Edit message'}
               addAttachmentOnPaste={!reply && imageInput.offered}
-              className="w-full min-h-[60px] p-sm bg-background-input border border-border rounded-md text-text font-[inherit] text-base resize-y focus:outline-none focus:border-primary"
+              className="w-full min-h-[60px] p-sm bg-background-input border border-border rounded-md text-text font-[inherit] text-sm resize-y focus:outline-none focus:border-primary"
             />
             <div className="flex justify-end gap-sm">
               <ComposerPrimitive.Cancel className="py-xs px-md rounded-sm text-sm cursor-pointer transition-all duration-150 bg-transparent border border-border text-text-muted hover:bg-surface-hover hover:text-text">
                 Cancel
               </ComposerPrimitive.Cancel>
-              <ComposerPrimitive.Send className="py-xs px-md rounded-base text-sm cursor-pointer transition-all duration-150 bg-primary border-none text-text-inverse font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
+              <ComposerPrimitive.Send className="py-xs px-md rounded-base text-sm cursor-pointer transition-all duration-150 bg-primary border-none text-text-inverse font-semibold hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
                 {reply ? 'Save' : 'Send'}
               </ComposerPrimitive.Send>
             </div>

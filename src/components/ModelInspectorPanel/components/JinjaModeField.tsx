@@ -59,7 +59,7 @@ export const JinjaModeField: FC<JinjaModeFieldProps> = ({
 }) => (
   <div className="mb-lg">
     <div className="flex items-center justify-between gap-sm">
-      <label htmlFor="jinja-mode" className="block mb-0 font-medium text-text">
+      <label htmlFor="jinja-mode" className="block mb-0 font-semibold text-text">
         Jinja Templates
       </label>
       <span className="text-sm text-text-muted">{describeLaunch(value, hasAgentTag)}</span>

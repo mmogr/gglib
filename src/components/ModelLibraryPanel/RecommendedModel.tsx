@@ -74,7 +74,7 @@ export const RecommendedModel: FC<RecommendedModelProps> = ({ onUseRepo }) => {
           Suggested for this machine:{' '}
           <span className="font-mono text-text">{recommendation.repo}</span>
         </p>
-        <p className="m-0 text-2xs text-text-muted">
+        <p className="m-0 text-xs text-text-muted">
           {recommendation.rationale}. Needs{' '}
           <span className="font-mono tabular-nums">
             {formatMemorySize(recommendation.requiredBytes)}

@@ -58,7 +58,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantiza
   if (!canPick) {
     return (
       <>
-        <span className="font-mono text-sm font-medium text-text-secondary">{modelName}</span>
+        <span className="font-mono text-sm font-semibold text-text-secondary">{modelName}</span>
         {quant}
       </>
     );
@@ -97,7 +97,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantiza
         value={modelId}
         onChange={(event) => void handleChange(event)}
         disabled={starting !== null}
-        className="font-mono font-medium text-text-secondary bg-transparent border-transparent max-w-[220px] truncate"
+        className="font-mono font-semibold text-text-secondary bg-transparent border-transparent max-w-[220px] truncate"
       >
         <option value={modelId}>{modelName}</option>
         {running.length > 0 && (

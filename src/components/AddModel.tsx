@@ -56,7 +56,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
 
   return (
     <div className="bg-surface rounded-md p-xl max-w-[800px]">
-      <h2 className="text-lg font-semibold text-text mb-lg">Add local model</h2>
+      <h2 className="text-base font-semibold text-text mb-lg">Add local model</h2>
 
       <form onSubmit={handleSubmit} className="add-model-form">
         <div className="mb-lg">

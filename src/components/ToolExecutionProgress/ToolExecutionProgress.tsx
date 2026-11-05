@@ -144,7 +144,7 @@ const ToolRow: React.FC<{ row: ToolRowData }> = ({ row }) => (
       <Icon icon={XCircle} size={13} className="flex-shrink-0" />
     )}
 
-    <span className="font-medium truncate">{row.displayLabel}</span>
+    <span className="font-semibold truncate">{row.displayLabel}</span>
 
     {row.state === 'error' && row.errorSummary && (
       <span className="ml-1 text-text-muted truncate max-w-[160px]">
@@ -153,7 +153,7 @@ const ToolRow: React.FC<{ row: ToolRowData }> = ({ row }) => (
     )}
 
     {row.durationMs !== undefined && (
-      <span className="ml-auto font-mono text-2xs text-text-muted flex-shrink-0">
+      <span className="ml-auto font-mono text-xs text-text-muted flex-shrink-0">
         {formatDuration(row.durationMs)}
       </span>
     )}
