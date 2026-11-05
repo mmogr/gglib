@@ -59,6 +59,12 @@ pub struct GuiModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_shared_count: Option<u32>,
     pub added_at: String,
+    /// The id `/v1/models` lists this model under, which a client sends:
+    /// its name, unless another model shares it (`openai_model_ids`). A
+    /// fact about the whole catalogue, so it is set by the listing and by
+    /// `ModelOps::get`, and `None` on a row built from one model alone (the
+    /// answer to an add or an update).
+    pub openai_id: Option<String>,
     pub hf_repo_id: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
@@ -130,6 +136,7 @@ impl GuiModel {
             expert_used_count: model.expert_used_count,
             expert_shared_count: model.expert_shared_count,
             added_at: model.added_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            openai_id: None,
             hf_repo_id: model.hf_repo_id,
             tags: model.tags,
             is_serving,

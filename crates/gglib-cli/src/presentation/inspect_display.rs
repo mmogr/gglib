@@ -8,7 +8,7 @@ use gglib_core::domain::{DefaultsOrigin, MODEL_SAMPLING_KEYS, ModelDetailDto};
 
 use crate::presentation::capability_flags::capability_lines;
 use crate::presentation::sampling_values::stated_parameters;
-use crate::presentation::{first_chars, format_relative_time, print_separator};
+use crate::presentation::{format_relative_time, print_separator};
 
 const SEP_WIDTH: usize = 60;
 
@@ -70,9 +70,9 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
         if let Some(filename) = &dto.hf_filename {
             println!("  Filename       : {filename}");
         }
-        if let Some(sha) = &dto.hf_commit_sha {
-            // Show first 12 chars — enough to identify, not overwhelming.
-            println!("  Commit SHA     : {}", first_chars(sha, 12));
+        if let Some(revision) = &dto.revision {
+            // A sha short, a ref whole: the one shortening every surface prints.
+            println!("  Revision       : {}", revision.short);
         }
         if let Some(dl) = &dto.download_date {
             println!("  Downloaded     : {dl} ({})", format_relative_time(dl));

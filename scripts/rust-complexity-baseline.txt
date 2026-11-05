@@ -10,7 +10,7 @@ crates/gglib-app-services/src/benchmark/tune/mod.rs 1390
 crates/gglib-app-services/src/downloads.rs 334
 crates/gglib-app-services/src/mcp.rs 330
 crates/gglib-app-services/src/mcp_tests.rs 329
-crates/gglib-app-services/src/models.rs 422
+crates/gglib-app-services/src/models.rs 453
 crates/gglib-app-services/src/models_tests.rs 897
 crates/gglib-app-services/src/models_upgrade.rs 326
 crates/gglib-app-services/src/models_upgrade_tests.rs 373
@@ -26,7 +26,7 @@ crates/gglib-app-services/src/settings_tests.rs 327
 crates/gglib-app-services/src/setup.rs 363
 crates/gglib-app-services/src/setup_engines_tests.rs 529
 crates/gglib-app-services/src/test_support.rs 396
-crates/gglib-app-services/src/types.rs 583
+crates/gglib-app-services/src/types.rs 590
 crates/gglib-app-services/src/types_model_dto_tests.rs 313
 crates/gglib-axum/src/error.rs 331
 crates/gglib-axum/src/handlers/agent/compose.rs 375
@@ -69,7 +69,7 @@ crates/gglib-cli/src/handlers/inference/agent_question.rs 303
 crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 361
 crates/gglib-cli/src/handlers/mcp_cli.rs 405
 crates/gglib-cli/src/handlers/model/download/interactive.rs 400
-crates/gglib-cli/src/handlers/model/list_tests.rs 315
+crates/gglib-cli/src/handlers/model/list_tests.rs 345
 crates/gglib-cli/src/handlers/model/update.rs 618
 crates/gglib-cli/src/handlers/model/update_surface_tests.rs 304
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 362
@@ -110,6 +110,7 @@ crates/gglib-core/src/domain/inference_tests.rs 1283
 crates/gglib-core/src/domain/kv_estimate.rs 341
 crates/gglib-core/src/domain/mcp/types.rs 601
 crates/gglib-core/src/domain/model.rs 484
+crates/gglib-core/src/domain/model_detail.rs 305
 crates/gglib-core/src/domain/model_naming.rs 370
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 418

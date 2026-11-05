@@ -8,8 +8,6 @@ use std::ffi::OsStr;
 use std::io::IsTerminal;
 
 use anyhow::Result;
-use gglib_core::Model;
-use gglib_core::domain::{ListedModel, openai_model_ids};
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
@@ -101,32 +99,17 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // Step 5: prove it. The warm request loads the model through the very
     // endpoint the user is about to point their client at, by the id that
     // endpoint lists it under.
-    let listed = listed_id(ctx, &model).await;
+    let listed = crate::handlers::model::one_shot_model_ops(ctx)
+        .openai_id(model.id)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| model.name.clone());
     warm::run(proxy_port, listed, model.id, api_key).await;
     for line in warm::render_next_steps(proxy_port, model.id, use_color()) {
         println!("{line}");
     }
     Ok(())
-}
-
-/// The id `/v1/models` lists `model` under, which is what a client sends: its
-/// name, unless another model in the catalogue shares it
-/// ([`openai_model_ids`]). The name when the catalogue cannot be read, as
-/// before twins were listed apart.
-async fn listed_id(ctx: &CliContext, model: &Model) -> String {
-    match ctx.app.models().list().await {
-        Ok(all) => {
-            let listed: Vec<ListedModel<'_>> = all.iter().map(ListedModel::from).collect();
-            all.iter()
-                .zip(openai_model_ids(&listed))
-                .find_map(|(m, id)| (m.id == model.id).then_some(id))
-                .unwrap_or_else(|| model.name.clone())
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "could not list the catalogue; naming the model by its name");
-            model.name.clone()
-        }
-    }
 }
 
 // ─── Shared output helpers ───────────────────────────────────────────────────
@@ -282,8 +265,9 @@ mod tests {
         );
     }
 
-    /// `up` warms, and prints, the id the endpoint lists the model under:
-    /// the name, unless another model has it.
+    /// `up` warms, and prints, the id the endpoint lists the model under,
+    /// read from the one listing that names every model: the name, unless
+    /// another model has it.
     #[tokio::test]
     async fn the_model_is_named_by_the_id_the_endpoint_lists_it_under() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -302,9 +286,16 @@ mod tests {
         let q6 = add("qwen3", "q6.gguf", "Q6_K").await;
         let mistral = add("mistral", "mistral.gguf", "Q4_K_M").await;
 
-        assert_eq!(listed_id(&ctx, &q4).await, "qwen3@Q4_K_M");
-        assert_eq!(listed_id(&ctx, &q6).await, "qwen3@Q6_K");
-        assert_eq!(listed_id(&ctx, &mistral).await, "mistral");
+        let ops = crate::handlers::model::one_shot_model_ops(&ctx);
+        let listed = async |id: i64| ops.openai_id(id).await.unwrap().unwrap();
+        assert_eq!(listed(q4.id).await, "qwen3@Q4_K_M");
+        assert_eq!(listed(q6.id).await, "qwen3@Q6_K");
+        assert_eq!(listed(mistral.id).await, "mistral");
+        assert_eq!(
+            ops.openai_id(999).await.unwrap(),
+            None,
+            "not in the catalogue"
+        );
     }
 
     #[test]

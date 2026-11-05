@@ -111,6 +111,8 @@ infrastructure concerns (database, filesystem, etc.).
   was reached from as the reason
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
+- `revision` - The revision a model's files came from, a commit sha or a
+  ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine
   (`recommend`, `Recommendation`)
 - `residency` - Whether a second model may stay resident in VRAM beside the

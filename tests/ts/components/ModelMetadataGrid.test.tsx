@@ -11,6 +11,7 @@ vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
+import { farDetail } from '../fixtures/fakeFarDaemon';
 import {
   ModelMetadataGrid,
   type MetadataModel,
@@ -35,5 +36,31 @@ describe('ModelMetadataGrid quantization row', () => {
   it('shows no row when neither is known', () => {
     render(<ModelMetadataGrid model={model({})} />);
     expect(screen.queryByText('Quantization')).not.toBeInTheDocument();
+  });
+});
+
+describe('ModelMetadataGrid revision row', () => {
+  it('shows a commit sha short, with the whole sha on hover', () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567';
+    render(
+      <ModelMetadataGrid
+        model={model({})}
+        detail={farDetail(3, 'qwen', { revision: { kind: 'sha', value: sha, short: '0123456789ab' } })}
+      />,
+    );
+    expect(screen.getByText('Commit')).toBeInTheDocument();
+    expect(screen.getByTitle(sha)).toHaveTextContent('0123456789ab');
+  });
+
+  it('shows a ref whole, never sliced to a sha', () => {
+    render(
+      <ModelMetadataGrid
+        model={model({})}
+        detail={farDetail(3, 'qwen', { revision: { kind: 'ref', value: 'main', short: 'main' } })}
+      />,
+    );
+    expect(screen.getByText('Revision')).toBeInTheDocument();
+    expect(screen.getByText('main')).toBeInTheDocument();
+    expect(screen.queryByText('rev:mai')).toBeNull();
   });
 });
