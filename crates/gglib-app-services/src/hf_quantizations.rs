@@ -69,14 +69,18 @@ fn variant_fit(
             missing: MissingInput::Budget,
         };
     };
+    let fit = MemoryFit { budget_bytes };
+    // An image model is judged by its files alone, header or no header: its
+    // header holds no trained context to miss.
+    if is_image {
+        return fit.files_only(weights_bytes).1;
+    }
     let Some(head) = head else {
         return VariantFit::Unknown {
             missing: MissingInput::TrainedContext,
         };
     };
-    MemoryFit { budget_bytes }
-        .judge(&head.metadata, is_image, weights_bytes)
-        .1
+    fit.judge(&head.metadata, false, weights_bytes).1
 }
 
 #[cfg(test)]
@@ -322,6 +326,18 @@ mod tests {
         };
 
         assert_eq!(judged(1 << 30), Some(VariantFit::Fits { ctx: None }));
+        // With no header read at all, the same: an image model needs none.
+        let headless = quantizations_response(
+            "o/r",
+            vec![(quant("Q8_0", 1, 1 << 30), None)],
+            true,
+            None,
+            Some(16 << 30),
+        )
+        .quantizations
+        .remove(0)
+        .fit;
+        assert_eq!(headless, Some(VariantFit::Fits { ctx: None }));
         assert!(matches!(
             judged(15 << 30),
             Some(VariantFit::TooBig {

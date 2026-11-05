@@ -175,7 +175,11 @@ impl MemoryFit {
     }
 
     /// The files alone against the budget's usable share: an image model.
-    fn files_only(self, bytes: u64) -> (Fit, VariantFit) {
+    /// An image model's answer: its files alone, with no context to size.
+    /// Public because a listing judges an image model whose header holds no
+    /// chat metadata by this and nothing else, as [`Self::judge`] does.
+    #[must_use]
+    pub fn files_only(self, bytes: u64) -> (Fit, VariantFit) {
         let fit = self.holds(bytes);
         let verdict = if fit == Fit::Fits {
             VariantFit::Fits { ctx: None }

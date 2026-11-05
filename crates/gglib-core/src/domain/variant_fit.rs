@@ -28,7 +28,8 @@ pub enum VariantFit {
     },
     /// It does not fit: `need_bytes` is the least memory budget whose
     /// usable share holds what it loads (its weights, and for a chat model
-    /// the KV cache of the smallest window it is judged at), and
+    /// the KV cache of the window that did not fit: the lowest rung, or
+    /// the whole trained window when that is below the second rung), and
     /// `have_bytes` this machine's budget, so the two compare as like with
     /// like whichever way the verdict was reached.
     TooBig {

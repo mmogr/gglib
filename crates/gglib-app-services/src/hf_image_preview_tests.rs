@@ -277,3 +277,43 @@ async fn the_listing_served_carries_the_image_preview() {
     assert_eq!(image.companions.len(), 3);
     assert_eq!(listed.quantizations.len(), 1);
 }
+
+/// A repository whose companions are not listed is still an image model to
+/// the listing: no preview, and a fit judged by its files alone rather than
+/// the chat judgement, which would ask the head for a trained context and a
+/// KV shape it has none of. The weights here are a byte, so any machine
+/// whose memory can be read says they fit.
+#[tokio::test]
+async fn a_listing_without_the_companions_still_judges_an_image_model_by_its_files() {
+    use crate::downloads::{DownloadDeps, DownloadOps};
+    use crate::test_support::{MockDownloadManager, MockToolSupportDetector};
+    use gglib_core::domain::{MissingInput, VariantFit};
+
+    let mut unlisted = hub("flux1-schnell-q8_0.gguf");
+    unlisted.files_at.pop();
+    let ops = DownloadOps::new(DownloadDeps {
+        downloads: Arc::new(MockDownloadManager::new()),
+        hf: Arc::new(unlisted),
+        tool_detector: Arc::new(MockToolSupportDetector),
+        gguf_parser: Arc::new(HeadParser),
+        models_directory: None,
+    });
+
+    let listed = ops.get_model_quantizations(REPO).await.unwrap();
+
+    assert!(listed.image.is_none(), "no preview without the companions");
+    assert_eq!(listed.quantizations.len(), 1);
+    let fit = listed.quantizations[0].fit;
+    assert!(
+        matches!(
+            fit,
+            Some(
+                VariantFit::Fits { ctx: None }
+                    | VariantFit::Unknown {
+                        missing: MissingInput::Budget
+                    }
+            )
+        ),
+        "judged by its files alone, as an image model: {fit:?}"
+    );
+}
