@@ -13,6 +13,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
+use gglib_core::domain::KeyState;
 use gglib_core::ports::{
     AgentRunStarter, HubChatsPort, ImageGenerationPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, RemoteGatewayPort, RunsPort, UsageSink,
@@ -23,6 +24,7 @@ use gglib_runtime::proxy::{ProxyConfig, ProxyStatus, ProxySupervisor, Supervisor
 use tokio_util::sync::CancellationToken;
 
 use crate::error::GuiError;
+use crate::remote::key::enforced;
 
 /// Dependencies for proxy operations.
 pub struct ProxyDeps {
@@ -151,6 +153,20 @@ impl ProxyOps {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
+    }
+
+    /// Whether a request to the running proxy must carry the API key right
+    /// now: the rule the tunnel and the run door apply
+    /// ([`crate::remote::key::enforced`]), so the status says what the proxy
+    /// does. The key it was started with, else the stored `proxy_api_key`,
+    /// which a proxy started open picks up once one is stored.
+    pub async fn key_state(&self) -> KeyState {
+        let stored = self.core.settings().get().await.ok();
+        let demanded = enforced(
+            self.effective_api_key(),
+            stored.as_ref().and_then(|s| s.proxy_api_key.as_deref()),
+        );
+        KeyState::of(demanded.is_some())
     }
 
     /// Resolve a pinned-launch plan for a model — the same cascade

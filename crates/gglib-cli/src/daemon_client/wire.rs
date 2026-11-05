@@ -13,7 +13,9 @@
 //! in `wire_tests.rs` pin `StartProxyBody`, `StartServerBody` and
 //! `StartServerDto`, the test of the queue request in `calls.rs` reads
 //! `QueueDownloadBody` as it was sent, and `repair_tests.rs` reads
-//! `RepairBody` so. `ProxyStatusDto` is not pinned. The answers to a queue
+//! `RepairBody` so. `ProxyStatusDto` is read against the status's own key
+//! list, `PROXY_STATUS_FIELDS`, which the daemon's test holds its struct to.
+//! The answers to a queue
 //! request and to a repair have no twin here: the CLI reads the daemon's own
 //! `gglib_app_services::types::QueueDownloadResponse` and
 //! `gglib_core::services::RepairStarted`.
@@ -30,6 +32,7 @@
 use serde::{Deserialize, Serialize};
 
 use gglib_app_services::types::StartServerRequest;
+use gglib_core::domain::KeyState;
 use gglib_core::ports::PinnedSpec;
 
 /// Body for `POST /api/proxy/start` — the client-side twin of
@@ -59,6 +62,11 @@ pub(crate) struct ProxyStatusDto {
     /// build-mismatch warning says so; a guessed word would be a wrong one.
     pub state: gglib_core::domain::EndpointState,
     pub port: Option<u16>,
+    /// Where a client reaches it, `http://<address>/v1`; `None` while not
+    /// listening.
+    pub base_url: Option<String>,
+    /// Whether a request must carry the API key; `None` while not listening.
+    pub key: Option<KeyState>,
     #[serde(default)]
     pub pinned_model: Option<String>,
 }

@@ -7,7 +7,7 @@ use std::io::{IsTerminal as _, Write as _};
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, Absent, DaemonProbe};
+use crate::daemon_client::{self, Absent, DaemonProbe, ProxyStatusDto};
 use crate::presentation::style;
 use crate::target::Target;
 use gglib_axum::{DaemonLock, DaemonOptions, SHUTDOWN_WATCHDOG, run_daemon};
@@ -50,6 +50,23 @@ pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<(
     outcome
 }
 
+/// The report's lines for the proxy: its state and, while it listens, where
+/// a client reaches it, whether a request needs the key, and the model it
+/// is pinned to. Every word is the daemon's.
+fn proxy_lines(proxy: &ProxyStatusDto) -> Vec<String> {
+    let mut lines = vec![proxy.base_url.as_ref().map_or_else(
+        || format!("  Proxy:   {}", proxy.state),
+        |url| format!("  Proxy:   {} at {url}", proxy.state),
+    )];
+    if let Some(key) = proxy.key {
+        lines.push(format!("  API key: {key}"));
+    }
+    if let Some(pinned) = &proxy.pinned_model {
+        lines.push(format!("  Pinned:  {pinned}"));
+    }
+    lines
+}
+
 /// Execute `gglib daemon status`.
 pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
     style::print_info_banner("Daemon", "\u{2139}\u{fe0f}");
@@ -62,17 +79,11 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
                 eprintln!("  PID:     {}", holder.pid);
             }
             match handle.proxy_status().await {
-                Ok(proxy) if proxy.running => {
-                    eprintln!(
-                        "  Proxy:   {}, port {}",
-                        proxy.state,
-                        proxy.port.map_or_else(|| "?".into(), |p| p.to_string())
-                    );
-                    if let Some(pinned) = proxy.pinned_model {
-                        eprintln!("  Pinned:  {pinned}");
+                Ok(proxy) => {
+                    for line in proxy_lines(&proxy) {
+                        eprintln!("{line}");
                     }
                 }
-                Ok(proxy) => eprintln!("  Proxy:   {}", proxy.state),
                 Err(e) => eprintln!("  Proxy:   status unavailable ({e})"),
             }
         }

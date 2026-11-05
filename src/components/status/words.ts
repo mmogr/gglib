@@ -8,6 +8,7 @@
  */
 
 import type { EndpointState } from '../../types/generated/EndpointState';
+import type { KeyState } from '../../types/generated/KeyState';
 import type { ReachState } from '../../types/generated/ReachState';
 import type { ResidencyState } from '../../types/generated/ResidencyState';
 
@@ -34,4 +35,10 @@ export const REACH_WORDS: Readonly<Record<ReachState, string>> = {
   connected: 'Connected',
   away: 'Away',
   disconnected: 'Disconnected',
+};
+
+/** Whether a request to the endpoint must carry the API key. */
+export const KEY_WORDS: Readonly<Record<KeyState, string>> = {
+  required: 'Required',
+  none_needed: 'None needed',
 };

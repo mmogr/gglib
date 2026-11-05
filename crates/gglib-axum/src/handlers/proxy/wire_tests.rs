@@ -4,7 +4,10 @@
 //! the 300-line budget with a new contract test due.
 
 use super::*;
-use gglib_core::contracts::http::daemon::{PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS};
+use gglib_core::contracts::http::daemon::{
+    PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS, PROXY_STATUS_FIELDS,
+};
+use gglib_core::domain::KeyState;
 use gglib_core::settings::DEFAULT_PROXY_PORT;
 
 /// An omitted port must come from settings, not from the compile-time
@@ -141,14 +144,21 @@ fn default_context_is_the_context_somebody_chose() {
 }
 
 /// A crashed proxy must not look reachable. It reports stopped, with no
-/// port for a client to be handed and no pin left standing.
+/// port or address for a client to be handed, no key demanded and no pin
+/// left standing.
 #[test]
 fn a_crashed_proxy_reports_as_stopped() {
-    let status = to_api_status(&RuntimeProxyStatus::Crashed, Some("qwen".to_owned()));
+    let status = to_api_status(
+        &RuntimeProxyStatus::Crashed,
+        Some("qwen".to_owned()),
+        KeyState::Required,
+    );
 
     assert!(!status.running);
     assert_eq!(status.state, gglib_core::domain::EndpointState::Off);
     assert_eq!(status.port, None);
+    assert_eq!(status.base_url, None);
+    assert_eq!(status.key, None);
     assert_eq!(status.pinned_model, None);
 }
 
@@ -159,17 +169,64 @@ fn a_listening_proxy_says_on_or_pinned() {
     use gglib_core::domain::EndpointState;
     let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
 
-    let open = to_api_status(&RuntimeProxyStatus::Running { address }, None);
+    let open = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        None,
+        KeyState::NoneNeeded,
+    );
     assert!(open.running);
     assert_eq!(open.state, EndpointState::On);
     assert_eq!(open.port, Some(8080));
+    assert_eq!(open.base_url.as_deref(), Some("http://127.0.0.1:8080/v1"));
+    assert_eq!(open.key, Some(KeyState::NoneNeeded));
 
     let pinned = to_api_status(
         &RuntimeProxyStatus::Running { address },
         Some("qwen".to_owned()),
+        KeyState::Required,
     );
     assert_eq!(pinned.state, EndpointState::Pinned);
     assert_eq!(pinned.pinned_model.as_deref(), Some("qwen"));
+    assert_eq!(pinned.key, Some(KeyState::Required));
+}
+
+/// A proxy bound to every interface is reached on loopback: the status says
+/// where a client reaches it, not where it is bound.
+#[test]
+fn a_wildcard_bind_is_reported_at_loopback() {
+    let address: std::net::SocketAddr = "0.0.0.0:8080".parse().unwrap();
+
+    let status = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        None,
+        KeyState::NoneNeeded,
+    );
+
+    assert_eq!(status.base_url.as_deref(), Some("http://127.0.0.1:8080/v1"));
+}
+
+/// The keys the status puts on the wire are the shared list the CLI reads
+/// its `ProxyStatusDto` against, so the two ends meet in the contract.
+#[test]
+fn the_status_sends_exactly_the_contract_fields() {
+    let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let status = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        Some("qwen".to_owned()),
+        KeyState::Required,
+    );
+
+    let json = serde_json::to_value(&status).expect("the status serialises");
+    let mut keys: Vec<&str> = json
+        .as_object()
+        .expect("a JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    let mut want = PROXY_STATUS_FIELDS.to_vec();
+    want.sort_unstable();
+    assert_eq!(keys, want);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
