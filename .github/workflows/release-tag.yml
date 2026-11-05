@@ -237,10 +237,10 @@ jobs:
         if: steps.tag.outputs.tagged == 'true'
         run: gh workflow run release.yml --ref main -f tag="v$VERSION"
 
-      # release-please.yml never tags (it runs with skip-github-release), so it
-      # cannot see that the release PR it opened has been released, and it
-      # opens no other while a merged release PR is labelled
-      # `autorelease: pending`. Swapping that label for `autorelease: tagged`
+      # release-please.yml never tags (it runs only release-please's
+      # `release-pr` command), so it cannot see that the release PR it opened
+      # has been released, and it opens no other while a merged release PR is
+      # labelled `autorelease: pending`. Swapping that label for `autorelease: tagged`
       # is how a release tells it. Only the merged PR titled for this version
       # on this branch is touched (release-please titles it
       # `chore(<branch>): release <version>`); a promotion has no such PR, and

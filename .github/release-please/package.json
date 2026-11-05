@@ -1,0 +1,8 @@
+{
+  "name": "gglib-release-please",
+  "private": true,
+  "description": "The release-please CLI that release-please.yml runs, pinned here so Dependabot tracks it",
+  "dependencies": {
+    "release-please": "17.6.0"
+  }
+}
