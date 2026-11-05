@@ -6,7 +6,7 @@ src/components/FilterPopover/FilterPopover.tsx 340
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 354
 src/components/McpServersPanel.tsx 482
 src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 346
-src/components/ModelInspectorPanel/components/ServeModal.tsx 378
+src/components/ModelInspectorPanel/components/ServeModal.tsx 380
 src/components/ProxyControl.tsx 358
 src/components/ProxySamplingPanel.tsx 403
 src/components/SettingsModal.tsx 361

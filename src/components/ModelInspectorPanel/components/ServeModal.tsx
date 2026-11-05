@@ -268,14 +268,16 @@ export const ServeModal: FC<ServeModalProps> = ({
               </div>
               <Checkbox
                 id="mtp-toggle"
+                aria-label="MTP speculative decoding"
                 wrapperClassName="mt-sm"
                 checked={effectiveMtpEnabled}
                 onChange={(e) => {
                   if (!e.target.checked) {
                     onMtpNMaxChange(0);
                   } else {
-                    // Restore to auto (tag) or default explicit n=2
-                    onMtpNMaxChange(hasMtpTag ? null : 2);
+                    // Back to auto when auto is on (the model's own default,
+                    // else the tag); otherwise an explicit two draft tokens.
+                    onMtpNMaxChange(mtpByDefault ? null : 2);
                   }
                 }}
                 disabled={isServing}

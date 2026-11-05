@@ -709,8 +709,6 @@ mod tests {
         assert_eq!(n.decision("flags").unwrap().value, "--no-jinja (explicit)");
     }
 
-    /// Deferring is not a flag, so it is not a line. Claiming one would
-    /// misreport the command line gglib actually built.
     /// A default stored on the model is the model's, not an explicit choice
     /// of this launch, and the line says which.
     #[test]
@@ -738,6 +736,8 @@ mod tests {
         );
     }
 
+    /// Deferring is not a flag, so it is not a line. Claiming one would
+    /// misreport the command line gglib actually built.
     #[test]
     fn flags_line_stays_silent_when_jinja_is_deferred() {
         let (s, c, r) = (
