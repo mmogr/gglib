@@ -11,7 +11,7 @@ use gglib_core::ports::{
 };
 
 use crate::error::GuiError;
-use crate::hf_image_preview::image_preview;
+use crate::hf_image_preview::image_look;
 use crate::hf_quantizations::quantizations_response;
 use crate::types::{
     HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
@@ -223,7 +223,7 @@ impl DownloadOps {
             .models_directory
             .clone()
             .or_else(|| resolve_models_dir(None).ok().map(|resolved| resolved.path));
-        let image = image_preview(
+        let look = image_look(
             self.hf_client.as_ref(),
             self.gguf_parser.as_ref(),
             model_id,
@@ -238,7 +238,8 @@ impl DownloadOps {
         Ok(quantizations_response(
             model_id,
             quants,
-            image,
+            look.family.is_some(),
+            look.preview,
             budget_bytes,
         ))
     }

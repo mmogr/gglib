@@ -13,7 +13,7 @@ mod variants;
 pub use client::{HfClientPort, SNIFF_HEAD_BYTES, hub_file_url};
 pub use download_group::{DownloadGroup, download_group, largest_projector, repository_projector};
 pub use error::{HfPortError, HfPortResult};
-pub use image_companions::{Companion, image_companions};
+pub use image_companions::{Companion, companions_of, image_companions, image_family_of};
 pub use types::{
     HfFileInfo, HfModelKind, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, HfSortField,
 };

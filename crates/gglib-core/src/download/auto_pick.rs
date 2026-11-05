@@ -25,7 +25,7 @@ use crate::domain::kv_estimate::{
     KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
 };
 use crate::domain::phone_fit::{FitVerdict, MissingInput, fit_verdict};
-use crate::domain::recommendation::usable_share;
+use crate::domain::recommendation::{budget_covering, usable_share};
 use crate::domain::variant_fit::VariantFit;
 use crate::ports::huggingface::HELPER_FILES_REFUSAL;
 use crate::settings::DEFAULT_CONTEXT_SIZE;
@@ -181,8 +181,8 @@ impl MemoryFit {
             VariantFit::Fits { ctx: None }
         } else {
             VariantFit::TooBig {
-                need_bytes: bytes,
-                have_bytes: usable_share(self.budget_bytes),
+                need_bytes: budget_covering(bytes),
+                have_bytes: self.budget_bytes,
             }
         };
         (fit, verdict)
@@ -201,9 +201,10 @@ impl MemoryFit {
         } else {
             let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
             VariantFit::TooBig {
-                need_bytes: weights_bytes
-                    .saturating_add(estimate_kv_bytes_for_context(per_token, trained)),
-                have_bytes: usable_share(self.budget_bytes),
+                need_bytes: budget_covering(
+                    weights_bytes.saturating_add(estimate_kv_bytes_for_context(per_token, trained)),
+                ),
+                have_bytes: self.budget_bytes,
             }
         };
         (fit, verdict)

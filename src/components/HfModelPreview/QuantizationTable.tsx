@@ -48,9 +48,10 @@ interface QuantizationTableProps {
 /**
  * The variant table: one row per variant, by its uploader's label, with its
  * size, shard count, the daemon's fit verdict and download button. One row
- * is the selected one. The size and shard count are the weights alone; the
- * daemon's fit counts the projector fetched with them too. A
- * draft or helper is marked as one, and its download is disabled.
+ * is the selected one. The size, the shard count and the daemon's fit are
+ * the weights alone, as the download's own pick judges them; the projector
+ * fetched beside them counts for neither. A draft or helper is marked as
+ * one, and its download is disabled.
  */
 export const QuantizationTable: FC<QuantizationTableProps> = ({
   quantizations,

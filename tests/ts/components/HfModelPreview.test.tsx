@@ -169,7 +169,9 @@ describe('HfModelPreview — the projector that comes with a download', () => {
       quant('draft', 300, null, 'Sidecar'),
     ]);
 
-    expect(within(screen.getByTestId('quant-row-Q8_0')).getByLabelText('too big')).toBeInTheDocument();
+    const verdict = within(screen.getByTestId('quant-row-Q8_0')).getByLabelText('too big');
+    expect(verdict).toBeInTheDocument();
+    expect(verdict).toHaveAttribute('title', 'too big');
     expect(within(screen.getByTestId('quant-row-draft')).queryByLabelText(/fits|too big|tight|unknown/)).toBeNull();
   });
 });

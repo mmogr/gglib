@@ -8,14 +8,16 @@ use gglib_core::ports::huggingface::largest_projector;
 use crate::types::{HfImagePreview, HfProjector, HfQuantization, HfQuantizationsResponse};
 
 /// The listing of `model_id`: each variant with its role, the projector a
-/// download fetches with it, and whether it fits this machine, judged with
-/// the head its role was read from against `budget_bytes`, the budget the
-/// picker uses (`download_budget`). A model with no head read, or a
-/// machine whose memory could not be read, says what is missing rather
-/// than guessing.
+/// download fetches with it, and whether it fits this machine, judged as
+/// the picker judges it: its weights alone (the projector counted by
+/// neither), with the head its role was read from, against `budget_bytes`,
+/// the budget the picker uses (`download_budget`), and by its files alone
+/// when `is_image`. A model with no head read, or a machine whose memory
+/// could not be read, says what is missing rather than guessing.
 pub(crate) fn quantizations_response(
     model_id: &str,
     quants: Vec<(HfQuantInfo, Option<HeadMetadata>)>,
+    is_image: bool,
     image: Option<HfImagePreview>,
     budget_bytes: Option<u64>,
 ) -> HfQuantizationsResponse {
@@ -24,7 +26,6 @@ pub(crate) fn quantizations_response(
         file_path: p.file_paths.first().cloned().unwrap_or_default(),
         size_bytes: p.total_size,
     });
-    let is_image = image.is_some();
     HfQuantizationsResponse {
         image,
         model_id: model_id.to_string(),
@@ -33,10 +34,8 @@ pub(crate) fn quantizations_response(
             .map(|(q, head)| {
                 let is_model = q.role.is_none_or(GgufFileRole::is_weights);
                 let projector = is_model.then(|| projector.clone()).flatten();
-                let fit = is_model.then(|| {
-                    let loaded = q.total_size + projector.as_ref().map_or(0, |p| p.size_bytes);
-                    variant_fit(head.as_ref(), is_image, loaded, budget_bytes)
-                });
+                let fit = is_model
+                    .then(|| variant_fit(head.as_ref(), is_image, q.total_size, budget_bytes));
                 HfQuantization {
                     file_path: q.file_paths.first().cloned().unwrap_or_default(),
                     size_bytes: q.total_size,
@@ -57,12 +56,12 @@ pub(crate) fn quantizations_response(
     }
 }
 
-/// Whether a model whose files take `loaded_bytes` fits in `budget_bytes`,
-/// judged as the picker judges it.
+/// Whether a model whose weights take `weights_bytes` fits in
+/// `budget_bytes`, judged as the picker judges it.
 fn variant_fit(
     head: Option<&HeadMetadata>,
     is_image: bool,
-    loaded_bytes: u64,
+    weights_bytes: u64,
     budget_bytes: Option<u64>,
 ) -> VariantFit {
     let Some(budget_bytes) = budget_bytes else {
@@ -76,7 +75,7 @@ fn variant_fit(
         };
     };
     MemoryFit { budget_bytes }
-        .judge(&head.metadata, is_image, loaded_bytes)
+        .judge(&head.metadata, is_image, weights_bytes)
         .1
 }
 
@@ -116,6 +115,7 @@ mod tests {
                 (projector("X.mmproj-Q8_0.gguf", 600), None),
                 (projector("mmproj-F16.gguf", 900), None),
             ],
+            false,
             None,
             None,
         );
@@ -147,8 +147,13 @@ mod tests {
 
     #[test]
     fn a_repository_without_projectors_names_none() {
-        let response =
-            quantizations_response("o/r", vec![(quant("Q8_0", 1, 8_000), None)], None, None);
+        let response = quantizations_response(
+            "o/r",
+            vec![(quant("Q8_0", 1, 8_000), None)],
+            false,
+            None,
+            None,
+        );
 
         assert_eq!(response.quantizations[0].projector, None);
     }
@@ -174,6 +179,7 @@ mod tests {
         let no_memory = quantizations_response(
             "o/r",
             vec![(quant("Q8_0", 1, 8_000), Some(head(Some(4096))))],
+            false,
             None,
             None,
         );
@@ -190,6 +196,7 @@ mod tests {
                 (quant("Q8_0", 1, 8_000), None),
                 (projector("mmproj-F16.gguf", 900), None),
             ],
+            false,
             None,
             budget,
         );
@@ -209,6 +216,7 @@ mod tests {
         let judged = quantizations_response(
             "o/r",
             vec![(quant("Q8_0", 1, 8_000), Some(head(Some(4096))))],
+            false,
             None,
             budget,
         );
@@ -220,8 +228,107 @@ mod tests {
         );
         assert_eq!(
             judged.quantizations[0].fit_word.as_deref(),
-            Some("unknown: no KV shape in the header")
+            Some("unknown: KV shape not read from the header")
         );
+    }
+
+    /// A head with a trained context and a KV shape, as a chat model's has.
+    fn shaped_head(weights: bool) -> HeadMetadata {
+        let keys = [
+            ("general.architecture", "qwen3"),
+            ("qwen3.block_count", "36"),
+            ("qwen3.attention.head_count", "32"),
+            ("qwen3.attention.head_count_kv", "8"),
+            ("qwen3.attention.key_length", "128"),
+            ("qwen3.attention.value_length", "128"),
+        ];
+        HeadMetadata {
+            metadata: gglib_core::domain::GgufMetadata {
+                architecture: Some("qwen3".to_owned()),
+                context_length: Some(40_960),
+                metadata: keys
+                    .iter()
+                    .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                    .collect(),
+                ..Default::default()
+            },
+            role: Some(if weights {
+                GgufFileRole::Weights
+            } else {
+                GgufFileRole::Projector
+            }),
+            reached_tokenizer: true,
+            complete: true,
+            bytes_used: 1,
+            tensor_count: 1,
+        }
+    }
+
+    /// A model's fit is the picker's judgement of its weights alone, the
+    /// one `gglib model download <repo>` picks by: the projector fetched
+    /// beside them, however large, counts for neither.
+    #[test]
+    fn a_models_fit_is_the_pickers_judgement_of_its_weights_alone() {
+        let weights = 2_497_281_312;
+        let budget = 8_u64 << 30;
+        let listed = quantizations_response(
+            "o/r",
+            vec![
+                (quant("Q4_K_M", 1, weights), Some(shaped_head(true))),
+                (
+                    projector("mmproj-F16.gguf", 6 << 30),
+                    Some(shaped_head(false)),
+                ),
+            ],
+            false,
+            None,
+            Some(budget),
+        );
+
+        let picker = MemoryFit {
+            budget_bytes: budget,
+        }
+        .judge(&shaped_head(true).metadata, false, weights);
+        assert!(matches!(
+            listed.quantizations[0].fit,
+            Some(VariantFit::Fits { ctx: Some(_) })
+        ));
+        assert_eq!(listed.quantizations[0].fit, Some(picker.1));
+        assert_eq!(
+            listed.quantizations[0]
+                .projector
+                .as_ref()
+                .map(|p| p.size_bytes),
+            Some(6 << 30),
+            "the projector is still named"
+        );
+    }
+
+    /// An image model is judged by its files alone, with no context to
+    /// serve at, whether or not its companions could be looked up.
+    #[test]
+    fn an_image_model_is_judged_by_its_files_alone() {
+        let judged = |weights: u64| {
+            quantizations_response(
+                "o/r",
+                vec![(quant("Q8_0", 1, weights), Some(shaped_head(true)))],
+                true,
+                None,
+                Some(16 << 30),
+            )
+            .quantizations
+            .remove(0)
+            .fit
+        };
+
+        assert_eq!(judged(1 << 30), Some(VariantFit::Fits { ctx: None }));
+        assert!(matches!(
+            judged(15 << 30),
+            Some(VariantFit::TooBig {
+                have_bytes,
+                ..
+            }) if have_bytes == 16 << 30
+        ));
     }
 
     /// The browser's listing finds the projector among the variants by the

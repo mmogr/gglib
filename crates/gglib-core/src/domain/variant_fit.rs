@@ -26,8 +26,11 @@ pub enum VariantFit {
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         ctx: u64,
     },
-    /// Not even the lowest rung fits: it needs `need_bytes` and the budget
-    /// allows `have_bytes`, both bytes of memory.
+    /// It does not fit: `need_bytes` is the least memory budget whose
+    /// usable share holds what it loads (its weights, and for a chat model
+    /// the KV cache of the smallest window it is judged at), and
+    /// `have_bytes` this machine's budget, so the two compare as like with
+    /// like whichever way the verdict was reached.
     TooBig {
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         need_bytes: u64,
@@ -75,8 +78,8 @@ impl MissingInput {
     #[must_use]
     pub const fn word(self) -> &'static str {
         match self {
-            Self::TrainedContext => "no trained context in the header",
-            Self::KvShape => "no KV shape in the header",
+            Self::TrainedContext => "trained context not read from the header",
+            Self::KvShape => "KV shape not read from the header",
             Self::Weights => "no size",
             Self::Budget => "this machine's memory could not be read",
         }

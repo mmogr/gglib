@@ -239,10 +239,12 @@ async fn a_chat_head_and_an_unlisted_companion_answer_no_preview() {
 
     let mut unlisted = hub("flux1-schnell-q8_0.gguf");
     unlisted.files_at.pop();
-    assert!(
-        image_preview(&unlisted, &HeadParser, REPO, &[quant("q8_0", 1)], None)
-            .await
-            .is_none()
+    let look = image_look(&unlisted, &HeadParser, REPO, &[quant("q8_0", 1)], None).await;
+    assert!(look.preview.is_none());
+    assert_eq!(
+        look.family,
+        Some(ImageFamily::Flux1),
+        "the family is known without its companions, so the variants are still judged as an image model's"
     );
     assert!(
         image_preview(&unlisted, &HeadParser, REPO, &[], None)

@@ -139,3 +139,22 @@ fn a_helper_is_marked_and_a_repository_of_helpers_alone_offers_no_download() {
         "✗ No GGUF model found in this repository.\n"
     );
 }
+
+/// A repository of projectors alone holds no model to list or download.
+#[test]
+fn a_repository_of_projectors_alone_has_no_gguf_model() {
+    assert_eq!(
+        quant_listing(&listing(vec![projector("mmproj-F16.gguf", MIB)])),
+        "✗ No GGUF model found in this repository.\n"
+    );
+}
+
+/// A size is written to a tenth of a MiB, rounded to the nearest and a
+/// tie upward, in integers.
+#[test]
+fn a_size_is_written_to_the_nearest_tenth_of_a_mib_a_tie_upward() {
+    assert_eq!(mib(262_144), "0.3 MiB");
+    assert_eq!(mib(1_310_720), "1.3 MiB");
+    assert_eq!(mib(MIB + 52_427), "1.0 MiB");
+    assert_eq!(mib(1536 * MIB), "1536.0 MiB");
+}
