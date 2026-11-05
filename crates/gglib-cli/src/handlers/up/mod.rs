@@ -275,10 +275,10 @@ mod tests {
         );
     }
 
-    /// `up` warms, and prints, the id the endpoint lists the model under,
-    /// read from the one listing that names every model: the name, unless
-    /// another model has it; and the name alone for a model the catalogue
-    /// does not hold. `execute` itself is not run here: it needs a daemon.
+    /// `up` names the model by the id the endpoint lists it under, read from
+    /// the one listing that names every model: the name, unless another
+    /// model has it; and the name alone for a model the catalogue does not
+    /// hold. `execute` itself is not run here: it needs a daemon.
     #[tokio::test]
     async fn the_model_is_named_by_the_id_the_endpoint_lists_it_under() {
         let dir = tempfile::tempdir().expect("tempdir");

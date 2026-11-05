@@ -19,8 +19,8 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
-use crate::presentation::short_sha;
 use crate::utils::input;
+use gglib_core::domain::Revision;
 
 use super::board::SoloBoard;
 
@@ -49,10 +49,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, yes: bool) -> Re
     let check = ops.check_upgrade(model.id).await?;
 
     if !check.has_update {
-        println!(
-            "✓ Model is already up to date (SHA: {})",
-            short_sha(&check.latest_sha)
-        );
+        println!("✓ Model is already up to date ({})", check.latest.short);
         return Ok(());
     }
 
@@ -63,7 +60,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, yes: bool) -> Re
         // otherwise. Say that rather than implying a new release exists.
         None => println!("  Current:     none recorded (cannot tell what changed)"),
     }
-    println!("  Latest SHA:  {}", short_sha(&check.latest_sha));
+    println!("  Latest:      {}", check.latest.short);
 
     // Confirmation prompt unless --yes answered already — this re-downloads the full model
     // and overwrites the stored file path.
@@ -89,12 +86,15 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, yes: bool) -> Re
 
     if outcome.updated {
         println!("✓ Model updated successfully");
-        println!("  New SHA: {}", short_sha(&outcome.latest_sha));
+        println!(
+            "  New revision: {}",
+            Revision::parse(&outcome.latest_sha).short
+        );
     } else {
         // The revision moved back under us between check and apply.
         println!(
-            "✓ Model is already up to date (SHA: {})",
-            short_sha(&outcome.latest_sha)
+            "✓ Model is already up to date ({})",
+            Revision::parse(&outcome.latest_sha).short
         );
     }
 

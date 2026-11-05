@@ -10,4 +10,12 @@ import type { Revision } from "./Revision";
  * compare against), so callers should present a missing baseline
  * distinctly rather than as a genuine new revision.
  */
-export type UpgradeCheck = { hasUpdate: boolean, current: Revision | null, latestSha: string, };
+export type UpgradeCheck = { hasUpdate: boolean, current: Revision | null, 
+/**
+ * The Hub's latest commit, as recorded by an upgrade.
+ */
+latestSha: string, 
+/**
+ * The same commit parsed as `current` is, so the two are shown alike.
+ */
+latest: Revision, };

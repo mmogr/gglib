@@ -12,7 +12,6 @@ use gglib_app_services::ModelOps;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::{one_shot_model_ops, resolver};
-use crate::presentation::short_sha;
 
 /// Execute the check-updates command.
 ///
@@ -62,15 +61,16 @@ async fn check_model_update(ops: &ModelOps, model: &gglib_core::domain::Model) {
 
     match ops.check_update(model.id).await {
         Ok(check) => {
-            let latest_sha = short_sha(&check.latest_sha);
+            // Both through `Revision`: a sha short, a ref whole, one width.
+            let latest = &check.latest.short;
             if let Some(current) = &check.current {
                 if check.has_update {
                     println!("  🔄 Update available!");
                     println!("    Current:     {}", current.short);
-                    println!("    Latest SHA:  {latest_sha}");
+                    println!("    Latest:      {latest}");
                     println!("    Use: gglib model upgrade {} to update", model.id);
                 } else {
-                    println!("  ✓ Model is up to date (SHA: {latest_sha})");
+                    println!("  ✓ Model is up to date ({latest})");
                 }
             } else {
                 println!("  ⚠️  No commit SHA stored, cannot check for updates");

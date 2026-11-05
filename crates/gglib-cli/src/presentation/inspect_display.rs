@@ -251,6 +251,14 @@ fn gglib_field_for(key: &str) -> Option<&'static str> {
         .map(|(field, _)| *field)
 }
 
+// ── Revision ──────────────────────────────────────────────────────────────────
+
+/// The stored revision: a sha short, a ref whole, as `Revision` carries it
+/// for every surface; nothing is cut here.
+fn revision_line(revision: &gglib_core::domain::Revision) -> String {
+    format!("  Revision       : {}", revision.short)
+}
+
 // ── Projector ─────────────────────────────────────────────────────────────────
 
 /// The line that says whether the model reads images, and through which file.
@@ -258,12 +266,6 @@ fn gglib_field_for(key: &str) -> Option<&'static str> {
 /// A model reads images exactly when it is linked to a projector. The paired
 /// machine's answer says that much and withholds the path, which is a place on
 /// its disk.
-/// The stored revision: a sha short, a ref whole, as `Revision` carries it
-/// for every surface; nothing is cut here.
-fn revision_line(revision: &gglib_core::domain::Revision) -> String {
-    format!("  Revision       : {}", revision.short)
-}
-
 fn projector_line(dto: &ModelDetailDto) -> String {
     let link = match (&dto.projector_path, dto.image_input) {
         (Some(path), _) => path.as_str(),

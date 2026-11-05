@@ -217,6 +217,12 @@ async fn a_model_with_no_stored_quantization_is_checked_and_not_upgraded() {
     assert_eq!(current.value, RECORDED);
     assert_eq!(current.short, &RECORDED[..12], "a sha is shown short");
     assert_eq!(check.latest_sha, NEWER);
+    assert_eq!(check.latest.value, NEWER);
+    assert_eq!(
+        check.latest.short,
+        &NEWER[..12],
+        "shown as the current one is"
+    );
     let refused = ops.check_upgrade(id).await.unwrap_err();
     assert!(
         matches!(&refused, GuiError::ValidationFailed(why) if why.contains("quantization")),

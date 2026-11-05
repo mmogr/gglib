@@ -346,7 +346,10 @@ pub struct RetagResponse {
 pub struct UpgradeCheck {
     pub has_update: bool,
     pub current: Option<Revision>,
+    /// The Hub's latest commit, as recorded by an upgrade.
     pub latest_sha: String,
+    /// The same commit parsed as `current` is, so the two are shown alike.
+    pub latest: Revision,
 }
 
 /// An upgrade on the download queue, as soon as it is asked for: the

@@ -17,12 +17,6 @@ import type { VerificationReport, UpdateCheckResult, OverallHealth } from '../se
 import type { UpgradeCheck } from '../types';
 import type { VerifiedFileKind } from '../types/generated/VerifiedFileKind';
 
-/**
- * The Hub's latest commit is always a sha; 8 is the conventional readable
- * prefix. The recorded revision is not shortened here: `Revision.short` is.
- */
-const shortSha = (sha: string) => sha.slice(0, 8);
-
 /** A file named by what it is: a shard counted over the weights alone, from 1. */
 const fileLabel = (kind: VerifiedFileKind) => {
   switch (kind.kind) {
@@ -166,10 +160,18 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
         onClose();
         return;
       }
-      setUpgradeMessage(`Already at the latest revision (${shortSha(queued.latestSha)})`);
-      // The daemon's check, settled: the recorded revision it named is
-      // kept as it came rather than rebuilt here from the latest sha.
-      setUpgradeCheck((prev) => prev && { ...prev, hasUpdate: false, latestSha: queued.latestSha });
+      setUpgradeMessage('Already at the latest revision.');
+      // The check, asked again: another client may have upgraded since this
+      // one loaded, and the recorded revision is the daemon's to say, not
+      // rebuilt here from the latest sha.
+      try {
+        setUpgradeCheck(await getTransport().checkModelUpgrade(modelId));
+      } catch (checkErr) {
+        appLogger.warn('component', 'Could not re-check the revision after a no-op upgrade', {
+          error: checkErr,
+          modelId,
+        });
+      }
     } catch (err) {
       appLogger.error('component', 'Model upgrade failed', { error: err, modelId });
       setError(err instanceof Error ? err.message : String(err));
@@ -251,9 +253,9 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
     : !upgradeCheck
       ? 'Checking the repository revision…'
       : upgradeCheck.current == null
-        ? `No revision is recorded for this model, so there is nothing to compare. Re-downloading fetches ${shortSha(upgradeCheck.latestSha)} and records it.`
+        ? `No revision is recorded for this model, so there is nothing to compare. Re-downloading fetches ${upgradeCheck.latest.short} and records it.`
         : upgradeCheck.hasUpdate
-          ? `A newer revision is available: ${upgradeCheck.current.short} → ${shortSha(upgradeCheck.latestSha)}.`
+          ? `A newer revision is available: ${upgradeCheck.current.short} → ${upgradeCheck.latest.short}.`
           : `Already at the latest revision (${upgradeCheck.current.short}).`;
 
   const modalTitle = mode === 'verify' ? `Verify: ${modelName}` : `Check Updates: ${modelName}`;
