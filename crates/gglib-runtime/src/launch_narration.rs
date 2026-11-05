@@ -244,6 +244,7 @@ fn mtp_decision(inputs: &NarrationInputs<'_>, disabled_by_env: bool) -> Option<L
     }
     let source = match mtp.source {
         MtpResolutionSource::Explicit => "explicit",
+        MtpResolutionSource::ModelDefault => "model default",
         MtpResolutionSource::MtpTag => "mtp tag",
         MtpResolutionSource::Default => "default",
     };
@@ -265,6 +266,7 @@ fn mtp_decision(inputs: &NarrationInputs<'_>, disabled_by_env: bool) -> Option<L
 fn jinja_flag(res: JinjaResolution) -> Option<String> {
     let why = match res.source {
         JinjaResolutionSource::AgentTag => "agent tag",
+        JinjaResolutionSource::ModelDefault => "model default",
         JinjaResolutionSource::ExplicitTrue | JinjaResolutionSource::ExplicitFalse => "explicit",
         // Only ever pairs with `Defer`, which yields `None` below — matched
         // rather than wildcarded so a new source cannot render as the wrong

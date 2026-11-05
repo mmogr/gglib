@@ -47,6 +47,7 @@ fn context_resolves_explicit_over_model_over_settings() {
     let mut m = model();
     m.server_defaults = Some(gglib_core::domain::ServerConfig {
         context_length: Some(16_384),
+        ..Default::default()
     });
     let settings = Settings {
         default_context_size: Some(8192),

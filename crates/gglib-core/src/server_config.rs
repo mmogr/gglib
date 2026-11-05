@@ -94,6 +94,14 @@ pub struct ServerConfigOptions {
     /// Per-model server defaults context length (from `Model.server_defaults.context_length`).
     /// Second tier in fallback chain.
     pub model_server_ctx: Option<usize>,
+    /// The model's own Jinja default (`ServerConfig::jinja`), read from the
+    /// catalog at launch. Below `jinja`, which a launch chose, and above
+    /// the tags.
+    pub model_jinja: Option<bool>,
+    /// The model's own speculative-decoding default (`ServerConfig::mtp`),
+    /// read from the catalog at launch. Below `mtp_draft_n_max`, which a
+    /// launch chose, and above the `mtp` tag.
+    pub model_mtp: Option<bool>,
 
     /// Global app setting for default context size (from `Settings.default_context_size`).
     /// Third tier in fallback chain.
@@ -203,6 +211,8 @@ impl ServerConfigOptions {
         let Self {
             context_size,
             model_server_ctx,
+            model_jinja,
+            model_mtp,
             global_default_ctx,
             fitted_ctx,
             port,
@@ -221,6 +231,8 @@ impl ServerConfigOptions {
         Self {
             context_size: context_size.or(self.context_size),
             model_server_ctx: model_server_ctx.or(self.model_server_ctx),
+            model_jinja: model_jinja.or(self.model_jinja),
+            model_mtp: model_mtp.or(self.model_mtp),
             global_default_ctx: global_default_ctx.or(self.global_default_ctx),
             fitted_ctx: fitted_ctx.or(self.fitted_ctx),
             port: port.or(self.port),
@@ -617,6 +629,8 @@ mod tests {
         ServerConfigOptions {
             context_size: Some(u64::from(marker)),
             model_server_ctx: Some(usize::from(marker)),
+            model_jinja: Some(true),
+            model_mtp: Some(marker.is_multiple_of(2)),
             global_default_ctx: Some(u64::from(marker)),
             fitted_ctx: Some(u64::from(marker)),
             port: Some(u16::from(marker)),

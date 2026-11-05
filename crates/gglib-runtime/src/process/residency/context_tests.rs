@@ -1,6 +1,52 @@
 //! The context a launch resolves to, and the fit's fallback.
 
 use super::*;
+use gglib_core::domain::ServerConfig;
+
+/// A model whose own defaults name only a context.
+fn model_ctx(context_length: usize) -> ServerConfig {
+    ServerConfig {
+        context_length: Some(context_length),
+        ..Default::default()
+    }
+}
+
+/// The model's own templates and speculative-decoding defaults ride the
+/// same rung as its context, from this model and never from the template.
+#[test]
+fn resolve_launch_opts_carries_the_models_own_jinja_and_mtp_and_never_the_templates() {
+    let stale_template = ServerConfigOptions {
+        model_jinja: Some(true),
+        model_mtp: Some(true),
+        ..Default::default()
+    };
+    let own = ServerConfig {
+        context_length: None,
+        jinja: Some(false),
+        mtp: None,
+    };
+
+    let (opts, _, _) = resolve_launch_opts(
+        &stale_template,
+        &ServerConfigOptions::default(),
+        None,
+        None,
+        None,
+        Some(&own),
+    );
+    assert_eq!(opts.model_jinja, Some(false));
+    assert_eq!(opts.model_mtp, None, "not inherited from the template");
+
+    let (none, _, _) = resolve_launch_opts(
+        &stale_template,
+        &ServerConfigOptions::default(),
+        None,
+        None,
+        None,
+        None,
+    );
+    assert_eq!((none.model_jinja, none.model_mtp), (None, None));
+}
 
 // ── resolve_launch_opts (#685: the context-bookkeeping desync) ─────────────
 
@@ -15,10 +61,10 @@ fn resolve_launch_opts_applies_the_per_model_context_when_nothing_more_specific_
     let (opts, resolved_ctx, _) = resolve_launch_opts(
         &ServerConfigOptions::default(),
         &ServerConfigOptions::default(),
-        None,          // no per-request override
-        Some(131_072), // global default
-        None,          // nothing fitted
-        Some(196_608), // per-model server_defaults.context_length
+        None,                      // no per-request override
+        Some(131_072),             // global default
+        None,                      // nothing fitted
+        Some(&model_ctx(196_608)), // per-model server_defaults.context_length
     );
 
     assert_eq!(resolved_ctx, 196_608, "per-model tier must win over global");
@@ -39,7 +85,7 @@ fn resolve_launch_opts_explicit_num_ctx_beats_the_per_model_tier() {
         Some(8_192),
         Some(131_072),
         None,
-        Some(196_608),
+        Some(&model_ctx(196_608)),
     );
 
     assert_eq!(resolved_ctx, 8_192);

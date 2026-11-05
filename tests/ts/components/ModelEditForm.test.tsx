@@ -104,3 +104,44 @@ describe('ModelEditForm context-length override', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("ModelEditForm: the model's own launch defaults", () => {
+  it('keeps the other defaults when the context box changes', async () => {
+    const onServerDefaultsChange = renderForm({}, { contextLength: 8192, jinja: false, mtp: true });
+
+    const box = screen.getByPlaceholderText('No override');
+    await userEvent.clear(box);
+    await userEvent.type(box, '4096');
+
+    const last = onServerDefaultsChange.mock.calls.at(-1)?.[0];
+    expect(last).toMatchObject({ jinja: false, mtp: true });
+  });
+
+  it('clears only the context when the box is emptied, not the whole override', async () => {
+    const onServerDefaultsChange = renderForm({}, { contextLength: 8192, jinja: false });
+
+    await userEvent.clear(screen.getByPlaceholderText('No override'));
+
+    expect(onServerDefaultsChange).toHaveBeenLastCalledWith({ contextLength: null, jinja: false });
+  });
+
+  it('offers jinja and speculative decoding as three states and stores auto as null', async () => {
+    const onServerDefaultsChange = renderForm({}, { contextLength: 8192 });
+
+    await userEvent.selectOptions(screen.getByLabelText('Jinja templates default'), 'off');
+    expect(onServerDefaultsChange).toHaveBeenLastCalledWith({ contextLength: 8192, jinja: false });
+
+    await userEvent.selectOptions(screen.getByLabelText('Speculative decoding default'), 'on');
+    expect(onServerDefaultsChange).toHaveBeenLastCalledWith({ contextLength: 8192, mtp: true });
+
+    await userEvent.selectOptions(screen.getByLabelText('Jinja templates default'), 'auto');
+    expect(onServerDefaultsChange).toHaveBeenLastCalledWith({ contextLength: 8192, jinja: null });
+  });
+
+  it('shows a stored default as its state', () => {
+    renderForm({}, { contextLength: null, jinja: true, mtp: false });
+
+    expect(screen.getByLabelText('Jinja templates default')).toHaveValue('on');
+    expect(screen.getByLabelText('Speculative decoding default')).toHaveValue('off');
+  });
+});

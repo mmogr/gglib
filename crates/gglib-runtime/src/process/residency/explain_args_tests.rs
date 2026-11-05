@@ -189,6 +189,7 @@ fn the_context_flags_source_is_the_rung_that_chose_it() {
         ModelLaunchSpec {
             server_defaults: Some(gglib_core::domain::ServerConfig {
                 context_length: Some(16_384),
+                ..Default::default()
             }),
             ..launch_spec(3, "qwen")
         },

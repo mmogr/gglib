@@ -38,6 +38,7 @@ use serde::{Deserialize, Serialize};
 /// // Override only the context length for a long-context model
 /// let config = ServerConfig {
 ///     context_length: Some(32768),
+///     ..Default::default()
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -52,4 +53,18 @@ pub struct ServerConfig {
     /// machine, and finally the built-in floor — which is where a host whose
     /// device gglib cannot read ends up. Common values: 8192, 32768, 131072.
     pub context_length: Option<usize>,
+    /// Whether llama-server renders chat templates with Jinja for this
+    /// model: `Some(true)` sends `--jinja`, `Some(false)` `--no-jinja`, and
+    /// `None` leaves it to the model's tags and llama-server's own default.
+    /// A launch's own choice outranks it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    pub jinja: Option<bool>,
+    /// Whether this model drafts its own tokens ahead (MTP speculative
+    /// decoding): `Some(true)` turns it on with the default draft counts,
+    /// `Some(false)` off, and `None` leaves it to the `mtp` tag. A launch's
+    /// own draft counts outrank it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    pub mtp: Option<bool>,
 }

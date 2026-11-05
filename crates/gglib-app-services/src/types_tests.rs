@@ -43,7 +43,8 @@ mod update_model_request_tests {
         assert_eq!(
             req.server_defaults,
             Some(Some(ServerConfig {
-                context_length: Some(8192)
+                context_length: Some(8192),
+                ..Default::default()
             })),
             "populated object must resolve to Some(Some(config))"
         );

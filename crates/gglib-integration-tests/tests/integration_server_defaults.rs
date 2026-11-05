@@ -33,6 +33,8 @@ fn make_new_model(name: &str) -> NewModel {
 const fn cfg_ctx(len: usize) -> ServerConfig {
     ServerConfig {
         context_length: Some(len),
+        jinja: None,
+        mtp: None,
     }
 }
 
@@ -234,6 +236,7 @@ async fn test_server_defaults_context_length_zero_accepted() {
     let mut with_zero = model.clone();
     with_zero.server_defaults = Some(ServerConfig {
         context_length: Some(0),
+        ..Default::default()
     });
 
     // Currently accepted — no validation layer rejects zero.
