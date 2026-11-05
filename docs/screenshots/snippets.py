@@ -42,6 +42,9 @@ HOME = os.path.expanduser("~")
 RENAMES = [
     f"{HOME}=/Users/mmogr",
     "/Users/mmogr/.local/share/gglib-demo=/Users/mmogr/Library/Application Support/gglib",
+    # A recording machine whose own daemon holds 8080 records the demo copy's
+    # proxy on 8081; the pages show the demo's stored port.
+    "http://127.0.0.1:8081/v1=http://127.0.0.1:8080/v1",
 ]
 
 

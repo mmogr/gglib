@@ -92,7 +92,7 @@ them once; the last column says which commands take each.
 
 Every output block on these pages was recorded by running the command, with
 [`docs/screenshots/snippets.py`](../screenshots/snippets.py), against a gglib
-with its own data folder and models; the pages change when the output does. The machine's user is shown as `mmogr`.
+with its own data folder and models; the pages change when the output does. The machine's user is shown as `mmogr`, and a demo proxy recorded on 8081, when the recording machine's own daemon held 8080, is shown on the demo's stored port, 8080.
 
 ## See also
 

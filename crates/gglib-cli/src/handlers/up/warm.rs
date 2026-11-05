@@ -13,12 +13,12 @@
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use gglib_core::access::endpoint_base_url;
 use gglib_core::domain::KeyState;
 use gglib_core::secret::{SettingSecret, held_line};
 use serde_json::json;
 
 use super::{sgr, use_color};
+use crate::daemon_client::ProxyStatusDto;
 use crate::handlers::inference::proxy::StartedProxy;
 use crate::presentation::style::{BOLD, DIM, RESET, SUCCESS, WARNING, make_spinner};
 
@@ -85,22 +85,30 @@ pub(super) async fn run(
     }
 
     // The daemon said where a client reaches the endpoint and whether a
-    // request needs the key; the block prints its answer rather than working
-    // either out again. An older daemon says neither: then the loopback
-    // address asked for, and the key this probe read, which that proxy
-    // demands.
-    let base_url = started
-        .status
-        .base_url
-        .clone()
-        .unwrap_or_else(|| endpoint_base_url(addr));
-    let key = started
-        .status
-        .key
-        .unwrap_or_else(|| KeyState::of(api_key.is_some()));
-    for line in render_client_config(&base_url, &model, model_id, key, use_color()) {
-        println!("{line}");
+    // request needs the key; the block prints its answer and works neither
+    // out for itself. A daemon that said neither is older than this CLI,
+    // and is told so rather than guessed for.
+    match client_facts(&started.status) {
+        Some((base_url, key)) => {
+            for line in render_client_config(base_url, &model, model_id, key, use_color()) {
+                println!("{line}");
+            }
+        }
+        None => println!("{NO_FACTS}"),
     }
+}
+
+/// What `up` says when the daemon's answer named no address or no key
+/// requirement: it is an older build than this CLI.
+const NO_FACTS: &str = "  The daemon did not say where the endpoint is reached or whether it \
+                        needs a key: it is older than this CLI. Update it, then \
+                        `gglib daemon status`.";
+
+/// The two facts the client block is written from, as the daemon's answer
+/// carries them, and `None` when it carries either without the other or
+/// neither: nothing here stands in for them.
+fn client_facts(status: &ProxyStatusDto) -> Option<(&str, KeyState)> {
+    Some((status.base_url.as_deref()?, status.key?))
 }
 
 /// Poll `/health` until the listener answers.
@@ -356,6 +364,34 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains("None needed"), "{text}");
+    }
+
+    /// The block is written from the daemon's answer and from nothing else:
+    /// an answer missing either fact gives no block, so no address or key
+    /// word can be worked out here.
+    #[test]
+    fn the_client_facts_are_the_daemons_or_none() {
+        use gglib_core::domain::EndpointState;
+        let full = ProxyStatusDto {
+            running: true,
+            state: EndpointState::On,
+            port: Some(8080),
+            base_url: Some("http://192.168.1.20:8080/v1".to_owned()),
+            key: Some(KeyState::Required),
+            pinned_model: None,
+        };
+        assert_eq!(
+            client_facts(&full),
+            Some(("http://192.168.1.20:8080/v1", KeyState::Required))
+        );
+        let no_url = ProxyStatusDto {
+            base_url: None,
+            ..full.clone()
+        };
+        assert_eq!(client_facts(&no_url), None);
+        let no_key = ProxyStatusDto { key: None, ..full };
+        assert_eq!(client_facts(&no_key), None);
+        assert!(NO_FACTS.contains("older than this CLI"));
     }
 
     /// `up` ends here rather than in the dashboard, so the list has to name

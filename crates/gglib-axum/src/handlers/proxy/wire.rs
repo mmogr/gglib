@@ -26,7 +26,8 @@ pub(crate) struct ProxyStatus {
     /// wildcard bind is reached on loopback. `None` while not listening.
     pub base_url: Option<String>,
     /// Whether a request must carry the API key, as the one word every
-    /// surface uses. `None` while not listening.
+    /// surface uses. `None` while not listening, and while listening when
+    /// the daemon could not read its settings to say.
     pub key: Option<KeyState>,
     /// The model this proxy run is pinned to, when started in pinned mode
     /// (`gglib serve`). `None` for the ordinary auto-swapping proxy.
@@ -99,11 +100,12 @@ pub(crate) struct StartPinnedBody {
 }
 
 /// Convert runtime `ProxyStatus` to API `ProxyStatus`. `key` is what the
-/// proxy demands now; it is reported only while the proxy listens.
+/// proxy demands now, or `None` when that could not be read; it is
+/// reported only while the proxy listens.
 pub(super) fn to_api_status(
     s: &RuntimeProxyStatus,
     pinned_model: Option<String>,
-    key: KeyState,
+    key: Option<KeyState>,
 ) -> ProxyStatus {
     match s {
         RuntimeProxyStatus::Running { address } => ProxyStatus {
@@ -111,7 +113,7 @@ pub(super) fn to_api_status(
             state: EndpointState::listening(pinned_model.is_some()),
             port: Some(address.port()),
             base_url: Some(endpoint_base_url(*address)),
-            key: Some(key),
+            key,
             pinned_model,
         },
         // A crashed proxy is not serving, so it reports exactly as a stopped

@@ -151,7 +151,7 @@ fn a_crashed_proxy_reports_as_stopped() {
     let status = to_api_status(
         &RuntimeProxyStatus::Crashed,
         Some("qwen".to_owned()),
-        KeyState::Required,
+        Some(KeyState::Required),
     );
 
     assert!(!status.running);
@@ -172,7 +172,7 @@ fn a_listening_proxy_says_on_or_pinned() {
     let open = to_api_status(
         &RuntimeProxyStatus::Running { address },
         None,
-        KeyState::NoneNeeded,
+        Some(KeyState::NoneNeeded),
     );
     assert!(open.running);
     assert_eq!(open.state, EndpointState::On);
@@ -183,26 +183,38 @@ fn a_listening_proxy_says_on_or_pinned() {
     let pinned = to_api_status(
         &RuntimeProxyStatus::Running { address },
         Some("qwen".to_owned()),
-        KeyState::Required,
+        Some(KeyState::Required),
     );
     assert_eq!(pinned.state, EndpointState::Pinned);
     assert_eq!(pinned.pinned_model.as_deref(), Some("qwen"));
     assert_eq!(pinned.key, Some(KeyState::Required));
+
+    // A key the daemon could not read is said as nothing, not guessed.
+    let unread = to_api_status(&RuntimeProxyStatus::Running { address }, None, None);
+    assert!(unread.running);
+    assert_eq!(unread.key, None);
 }
 
-/// A proxy bound to every interface is reached on loopback: the status says
-/// where a client reaches it, not where it is bound.
+/// A proxy bound to every interface is reached on loopback, and one bound
+/// to an address is reached there: the status says where a client reaches
+/// it, neither the bound address nor loopback by habit.
 #[test]
-fn a_wildcard_bind_is_reported_at_loopback() {
-    let address: std::net::SocketAddr = "0.0.0.0:8080".parse().unwrap();
-
-    let status = to_api_status(
-        &RuntimeProxyStatus::Running { address },
-        None,
-        KeyState::NoneNeeded,
-    );
-
-    assert_eq!(status.base_url.as_deref(), Some("http://127.0.0.1:8080/v1"));
+fn the_base_url_is_where_a_client_reaches_the_bind() {
+    let cases = [
+        ("0.0.0.0:8080", "http://127.0.0.1:8080/v1"),
+        ("[::]:8080", "http://127.0.0.1:8080/v1"),
+        ("[::1]:8080", "http://[::1]:8080/v1"),
+        ("192.168.1.20:8080", "http://192.168.1.20:8080/v1"),
+    ];
+    for (bound, reached) in cases {
+        let address: std::net::SocketAddr = bound.parse().unwrap();
+        let status = to_api_status(
+            &RuntimeProxyStatus::Running { address },
+            None,
+            Some(KeyState::NoneNeeded),
+        );
+        assert_eq!(status.base_url.as_deref(), Some(reached), "{bound}");
+    }
 }
 
 /// The keys the status puts on the wire are the shared list the CLI reads
@@ -213,7 +225,7 @@ fn the_status_sends_exactly_the_contract_fields() {
     let status = to_api_status(
         &RuntimeProxyStatus::Running { address },
         Some("qwen".to_owned()),
-        KeyState::Required,
+        Some(KeyState::Required),
     );
 
     let json = serde_json::to_value(&status).expect("the status serialises");

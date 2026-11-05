@@ -94,3 +94,29 @@ async fn a_started_proxy_serves_the_runs_it_was_handed() {
 
     assert_eq!(status.as_u16(), 200);
 }
+
+/// The status says what the proxy demands now: nothing while no key is
+/// stored and none was started with, and the stored key as soon as one is,
+/// as a proxy started open picks it up through its tracking policy.
+#[tokio::test]
+async fn a_key_stored_after_an_open_start_is_required() {
+    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    assert_eq!(proxy.effective_api_key(), None);
+    assert_eq!(
+        proxy.key_state().await,
+        Some(gglib_core::domain::KeyState::NoneNeeded)
+    );
+
+    core.settings()
+        .update(gglib_core::SettingsUpdate {
+            proxy_api_key: Some(Some("stored-later".to_owned())),
+            ..gglib_core::SettingsUpdate::default()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        proxy.key_state().await,
+        Some(gglib_core::domain::KeyState::Required)
+    );
+}

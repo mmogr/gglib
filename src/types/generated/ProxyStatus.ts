@@ -19,7 +19,8 @@ state: EndpointState, port: number | null,
 base_url: string | null, 
 /**
  * Whether a request must carry the API key, as the one word every
- * surface uses. `None` while not listening.
+ * surface uses. `None` while not listening, and while listening when
+ * the daemon could not read its settings to say.
  */
 key: KeyState | null, 
 /**

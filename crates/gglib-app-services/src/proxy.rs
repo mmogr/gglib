@@ -160,13 +160,17 @@ impl ProxyOps {
     /// ([`crate::remote::key::enforced`]), so the status says what the proxy
     /// does. The key it was started with, else the stored `proxy_api_key`,
     /// which a proxy started open picks up once one is stored.
-    pub async fn key_state(&self) -> KeyState {
-        let stored = self.core.settings().get().await.ok();
-        let demanded = enforced(
-            self.effective_api_key(),
-            stored.as_ref().and_then(|s| s.proxy_api_key.as_deref()),
-        );
-        KeyState::of(demanded.is_some())
+    ///
+    /// `None` when the settings cannot be read: a proxy started open may
+    /// then be enforcing a stored key this cannot see, and a guess of
+    /// "none needed" would be the wrong one. The proxy itself reads the
+    /// stored key through its settings cache, so for the cache's TTL after
+    /// a key is stored or cleared this answer can run ahead of what the
+    /// proxy enforces, as the run door's does.
+    pub async fn key_state(&self) -> Option<KeyState> {
+        let stored = self.core.settings().get().await.ok()?;
+        let demanded = enforced(self.effective_api_key(), stored.proxy_api_key.as_deref());
+        Some(KeyState::of(demanded.is_some()))
     }
 
     /// Resolve a pinned-launch plan for a model — the same cascade

@@ -14,7 +14,7 @@ crates/gglib-app-services/src/models.rs 422
 crates/gglib-app-services/src/models_tests.rs 897
 crates/gglib-app-services/src/models_upgrade.rs 326
 crates/gglib-app-services/src/models_upgrade_tests.rs 373
-crates/gglib-app-services/src/proxy.rs 436
+crates/gglib-app-services/src/proxy.rs 440
 crates/gglib-app-services/src/remote/teardown.rs 331
 crates/gglib-app-services/src/runs/cell.rs 373
 crates/gglib-app-services/src/sampling_explain.rs 438
@@ -43,7 +43,7 @@ crates/gglib-axum/src/handlers/agent/run.rs 391
 crates/gglib-axum/src/handlers/agent/run_fixture.rs 324
 crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 356
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 318
-crates/gglib-axum/src/handlers/proxy/wire_tests.rs 336
+crates/gglib-axum/src/handlers/proxy/wire_tests.rs 348
 crates/gglib-axum/src/routes.rs 467
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-bootstrap/src/builder.rs 323
@@ -78,7 +78,7 @@ crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 536
 crates/gglib-cli/src/handlers/up/choose.rs 351
 crates/gglib-cli/src/handlers/up/mod.rs 380
 crates/gglib-cli/src/handlers/up/probe.rs 310
-crates/gglib-cli/src/handlers/up/warm.rs 377
+crates/gglib-cli/src/handlers/up/warm.rs 413
 crates/gglib-cli/src/model_commands.rs 402
 crates/gglib-cli/src/presentation/explain_display.rs 413
 crates/gglib-cli/src/presentation/explain_display_tests.rs 687
