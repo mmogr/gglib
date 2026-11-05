@@ -45,6 +45,10 @@ pub(super) const fn model_action(command: &ModelCommand) -> (&'static str, Model
         | ModelCommand::Search { .. }
         | ModelCommand::Browse { .. }
         | ModelCommand::Capabilities { .. }
-        | ModelCommand::Explain { .. } => ("model", ModelAction::Manage),
+        | ModelCommand::Explain { .. }
+        // Loading and unloading act on this machine's daemon; a paired
+        // machine's model is loaded when a chat asks for it.
+        | ModelCommand::Load { .. }
+        | ModelCommand::Unload { .. } => ("model", ModelAction::Manage),
     }
 }
