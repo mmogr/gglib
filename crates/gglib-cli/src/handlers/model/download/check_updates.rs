@@ -63,10 +63,10 @@ async fn check_model_update(ops: &ModelOps, model: &gglib_core::domain::Model) {
     match ops.check_update(model.id).await {
         Ok(check) => {
             let latest_sha = short_sha(&check.latest_sha);
-            if let Some(stored_sha) = &check.current_sha {
+            if let Some(current) = &check.current {
                 if check.has_update {
                     println!("  🔄 Update available!");
-                    println!("    Current SHA: {}", short_sha(stored_sha));
+                    println!("    Current:     {}", current.short);
                     println!("    Latest SHA:  {latest_sha}");
                     println!("    Use: gglib model upgrade {} to update", model.id);
                 } else {

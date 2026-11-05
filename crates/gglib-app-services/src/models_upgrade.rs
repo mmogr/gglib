@@ -7,6 +7,7 @@
 use std::future::Future;
 use std::sync::Arc;
 
+use gglib_core::domain::Revision;
 use gglib_core::download::DownloadError;
 use gglib_core::events::AppEvent;
 use gglib_core::ports::ModelRegistrarPort;
@@ -99,7 +100,9 @@ impl ModelOps {
 
         Ok(UpgradeCheck {
             has_update: check.has_update,
-            current_sha: check.current_sha,
+            // Parsed here, at the boundary every reader of the check sits
+            // behind: a `rev:` mark is a ref, and no printer cuts it as a sha.
+            current: check.current_sha.as_deref().map(Revision::parse),
             latest_sha: check.latest_sha,
         })
     }

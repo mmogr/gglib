@@ -17,7 +17,10 @@ import type { VerificationReport, UpdateCheckResult, OverallHealth } from '../se
 import type { UpgradeCheck } from '../types';
 import type { VerifiedFileKind } from '../types/generated/VerifiedFileKind';
 
-/** Commit SHAs are 40 hex chars; 8 is the conventional readable prefix. */
+/**
+ * The Hub's latest commit is always a sha; 8 is the conventional readable
+ * prefix. The recorded revision is not shortened here: `Revision.short` is.
+ */
 const shortSha = (sha: string) => sha.slice(0, 8);
 
 /** A file named by what it is: a shard counted over the weights alone, from 1. */
@@ -164,11 +167,9 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
         return;
       }
       setUpgradeMessage(`Already at the latest revision (${shortSha(queued.latestSha)})`);
-      setUpgradeCheck({
-        hasUpdate: false,
-        currentSha: queued.latestSha,
-        latestSha: queued.latestSha,
-      });
+      // The daemon's check, settled: the recorded revision it named is
+      // kept as it came rather than rebuilt here from the latest sha.
+      setUpgradeCheck((prev) => prev && { ...prev, hasUpdate: false, latestSha: queued.latestSha });
     } catch (err) {
       appLogger.error('component', 'Model upgrade failed', { error: err, modelId });
       setError(err instanceof Error ? err.message : String(err));
@@ -249,11 +250,11 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
     ? 'Could not reach HuggingFace to compare revisions.'
     : !upgradeCheck
       ? 'Checking the repository revision…'
-      : upgradeCheck.currentSha == null
+      : upgradeCheck.current == null
         ? `No revision is recorded for this model, so there is nothing to compare. Re-downloading fetches ${shortSha(upgradeCheck.latestSha)} and records it.`
         : upgradeCheck.hasUpdate
-          ? `A newer revision is available: ${shortSha(upgradeCheck.currentSha)} → ${shortSha(upgradeCheck.latestSha)}.`
-          : `Already at the latest revision (${shortSha(upgradeCheck.currentSha)}).`;
+          ? `A newer revision is available: ${upgradeCheck.current.short} → ${shortSha(upgradeCheck.latestSha)}.`
+          : `Already at the latest revision (${upgradeCheck.current.short}).`;
 
   const modalTitle = mode === 'verify' ? `Verify: ${modelName}` : `Check Updates: ${modelName}`;
 

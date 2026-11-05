@@ -49,18 +49,40 @@ describe('ModelMetadataGrid revision row', () => {
       />,
     );
     expect(screen.getByText('Commit')).toBeInTheDocument();
-    expect(screen.getByTitle(sha)).toHaveTextContent('0123456789ab');
+    // Exact: the whole sha contains its own prefix, so a substring match
+    // would pass with `value` shown.
+    expect(screen.getByTitle(sha)).toHaveTextContent(/^0123456789ab$/);
   });
 
   it('shows a ref whole, never sliced to a sha', () => {
+    const ref = 'release/2026-11-candidate';
     render(
       <ModelMetadataGrid
         model={model({})}
-        detail={farDetail(3, 'qwen', { revision: { kind: 'ref', value: 'main', short: 'main' } })}
+        detail={farDetail(3, 'qwen', { revision: { kind: 'ref', value: ref, short: ref } })}
       />,
     );
     expect(screen.getByText('Revision')).toBeInTheDocument();
-    expect(screen.getByText('main')).toBeInTheDocument();
-    expect(screen.queryByText('rev:mai')).toBeNull();
+    expect(screen.getByText(ref)).toBeInTheDocument();
+    expect(screen.queryByText('release/')).toBeNull();
+  });
+
+  it('shows the short form the daemon chose, whatever the value', () => {
+    // Synthetic: the daemon never shortens a ref, so a ref whose `short`
+    // differs from its `value` does not occur. The grid is shown one to
+    // prove it prints `short` and never works a form out for itself.
+    render(
+      <ModelMetadataGrid
+        model={model({})}
+        detail={farDetail(3, 'qwen', { revision: { kind: 'ref', value: 'refs/heads/main', short: 'main' } })}
+      />,
+    );
+    expect(screen.getByTitle('refs/heads/main')).toHaveTextContent(/^main$/);
+  });
+
+  it('shows no revision row when the daemon recorded none', () => {
+    render(<ModelMetadataGrid model={model({})} detail={farDetail(3, 'qwen')} />);
+    expect(screen.queryByText('Commit')).toBeNull();
+    expect(screen.queryByText('Revision')).toBeNull();
   });
 });

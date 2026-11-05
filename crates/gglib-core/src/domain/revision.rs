@@ -111,6 +111,10 @@ mod tests {
         let branch = Revision::parse("rev:refs%2Fpr%2F12");
         assert_eq!(branch.value, "refs/pr/12");
         assert_eq!(branch.short, "refs/pr/12");
+        // Longer than a short sha, and still whole.
+        let long = Revision::parse("rev:release%2F2026-11-candidate");
+        assert_eq!(long.short, "release/2026-11-candidate");
+        assert_eq!(long.short, long.value);
     }
 
     #[test]

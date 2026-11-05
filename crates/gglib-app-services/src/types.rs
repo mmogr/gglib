@@ -4,6 +4,7 @@
 //! They map between domain types and frontend-friendly representations.
 
 use gglib_core::domain::Model;
+use gglib_core::domain::Revision;
 use gglib_core::domain::mcp::McpLifecycle;
 use gglib_core::ports::ProcessHandle;
 use serde::{Deserialize, Serialize};
@@ -334,16 +335,17 @@ pub struct RetagResponse {
 
 /// Whether a newer `HuggingFace` revision exists for a model.
 ///
-/// `currentSha` is `None` when the model was imported without a recorded
-/// revision. The check treats that as "an update exists" (there is no
-/// baseline to compare against), so callers should present a missing
-/// baseline distinctly rather than as a genuine new revision.
+/// `current` is the recorded revision, parsed once: a sha shown short, a
+/// ref shown whole. It is `None` when the model was imported without one;
+/// the check treats that as "an update exists" (there is no baseline to
+/// compare against), so callers should present a missing baseline
+/// distinctly rather than as a genuine new revision.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct UpgradeCheck {
     pub has_update: bool,
-    pub current_sha: Option<String>,
+    pub current: Option<Revision>,
     pub latest_sha: String,
 }
 

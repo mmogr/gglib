@@ -71,8 +71,7 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
             println!("  Filename       : {filename}");
         }
         if let Some(revision) = &dto.revision {
-            // A sha short, a ref whole: the one shortening every surface prints.
-            println!("  Revision       : {}", revision.short);
+            println!("{}", revision_line(revision));
         }
         if let Some(dl) = &dto.download_date {
             println!("  Downloaded     : {dl} ({})", format_relative_time(dl));
@@ -259,6 +258,12 @@ fn gglib_field_for(key: &str) -> Option<&'static str> {
 /// A model reads images exactly when it is linked to a projector. The paired
 /// machine's answer says that much and withholds the path, which is a place on
 /// its disk.
+/// The stored revision: a sha short, a ref whole, as `Revision` carries it
+/// for every surface; nothing is cut here.
+fn revision_line(revision: &gglib_core::domain::Revision) -> String {
+    format!("  Revision       : {}", revision.short)
+}
+
 fn projector_line(dto: &ModelDetailDto) -> String {
     let link = match (&dto.projector_path, dto.image_input) {
         (Some(path), _) => path.as_str(),

@@ -213,7 +213,9 @@ async fn a_model_with_no_stored_quantization_is_checked_and_not_upgraded() {
         .expect("a check");
 
     assert!(check.has_update);
-    assert_eq!(check.current_sha.as_deref(), Some(RECORDED));
+    let current = check.current.expect("the recorded revision");
+    assert_eq!(current.value, RECORDED);
+    assert_eq!(current.short, &RECORDED[..12], "a sha is shown short");
     assert_eq!(check.latest_sha, NEWER);
     let refused = ops.check_upgrade(id).await.unwrap_err();
     assert!(
@@ -235,7 +237,7 @@ async fn a_model_with_no_recorded_revision_has_an_update_and_no_baseline() {
         .expect("a check");
 
     assert!(check.has_update);
-    assert_eq!(check.current_sha, None);
+    assert_eq!(check.current, None);
 }
 
 /// A model that did not come from the Hub has no repository to ask about,

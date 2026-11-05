@@ -265,3 +265,16 @@ fn a_model_that_stores_no_defaults_gets_no_section() {
     };
     assert!(inference_default_lines(&empty).is_empty());
 }
+
+// ── Revision ──────────────────────────────────────────────────────────────────
+
+#[test]
+fn the_revision_line_shows_a_sha_short_and_a_ref_whole() {
+    let sha = gglib_core::domain::Revision::parse("0123456789abcdef0123456789abcdef01234567");
+    assert_eq!(revision_line(&sha), "  Revision       : 0123456789ab");
+    let branch = gglib_core::domain::Revision::parse("rev:release%2F2026-11-candidate");
+    assert_eq!(
+        revision_line(&branch),
+        "  Revision       : release/2026-11-candidate"
+    );
+}
