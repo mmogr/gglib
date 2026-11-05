@@ -9,6 +9,7 @@ use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
 use gglib_core::domain::{ChoiceSource, ComponentRole, ImageFamily, ModelComponent};
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec};
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
+use std::collections::BTreeMap;
 
 use super::super::explain::plan_launch;
 use super::super::residency_tests::launch_spec;
@@ -28,10 +29,16 @@ fn tagged() -> ModelLaunchSpec {
 
 /// A plan of `spec` with `options` asked for on this launch.
 fn planned(spec: ModelLaunchSpec, options: ServerConfigOptions) -> gglib_core::domain::LaunchPlan {
-    let overrides = LaunchOverrides {
-        options,
-        cache_ram: None,
-    };
+    planned_with(spec, options, None)
+}
+
+/// [`planned`], with the launch's own cache setting too.
+fn planned_with(
+    spec: ModelLaunchSpec,
+    options: ServerConfigOptions,
+    cache_ram: Option<CacheRamSetting>,
+) -> gglib_core::domain::LaunchPlan {
+    let overrides = LaunchOverrides { options, cache_ram };
     plan_launch(
         spec,
         &ServerConfigOptions::default(),
@@ -48,10 +55,27 @@ fn flags(plan: &gglib_core::domain::LaunchPlan) -> Vec<&str> {
     plan.args.iter().map(|a| a.flag.as_str()).collect()
 }
 
+/// Each flag's source, by flag.
+fn sources(plan: &gglib_core::domain::LaunchPlan) -> BTreeMap<&str, ChoiceSource> {
+    plan.args
+        .iter()
+        .map(|a| (a.flag.as_str(), a.source))
+        .collect()
+}
+
+fn unexplained(plan: &gglib_core::domain::LaunchPlan) -> Vec<&str> {
+    plan.args
+        .iter()
+        .filter(|a| a.decision == "unexplained")
+        .map(|a| a.flag.as_str())
+        .collect()
+}
+
 /// Every flag the token list can emit is sent here, and each has a reason
 /// of its own: none falls through to the `unexplained` arm.
 #[test]
 fn every_llama_flag_has_a_reason() {
+    use ChoiceSource::{Gglib, ModelAuthor, You};
     let plan = planned(
         tagged(),
         ServerConfigOptions {
@@ -63,13 +87,34 @@ fn every_llama_flag_has_a_reason() {
         },
     );
 
-    let unexplained: Vec<&str> = plan
-        .args
-        .iter()
-        .filter(|a| a.decision == "unexplained")
-        .map(|a| a.flag.as_str())
-        .collect();
-    assert_eq!(unexplained, Vec::<&str>::new(), "{:?}", flags(&plan));
+    assert_eq!(unexplained(&plan), Vec::<&str>::new(), "{:?}", flags(&plan));
+    // Whose choice each was, on a launch where the tags decide: the files
+    // the author's, the context, the cache dir and mlock yours, the rest
+    // gglib's.
+    let expected: BTreeMap<&str, ChoiceSource> = [
+        ("-m", ModelAuthor),
+        ("--host", Gglib),
+        ("--port", Gglib),
+        ("--metrics", Gglib),
+        ("--parallel", Gglib),
+        ("-c", You),
+        ("--jinja", Gglib),
+        ("--embeddings", Gglib),
+        ("--mmproj", You),
+        ("--reasoning-format", Gglib),
+        ("--slot-save-path", You),
+        ("--cache-ram", Gglib),
+        ("--cache-reuse", Gglib),
+        ("--cache-type-k", Gglib),
+        ("--cache-type-v", Gglib),
+        ("--spec-type", Gglib),
+        ("--spec-draft-n-max", Gglib),
+        ("--spec-draft-p-min", Gglib),
+        ("--load-mode", You),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(sources(&plan), expected);
     for expected in [
         "-m",
         "--host",
@@ -246,4 +291,99 @@ fn an_image_models_plan_is_sd_servers_command_with_no_fit() {
         plan.narration.decisions.iter().any(|d| d.label == "family"),
         "narrated as a launch is"
     );
+}
+
+/// The same flags asked for on the launch are yours, `--no-jinja` included,
+/// and an explicit cache size is yours where the auto size was gglib's.
+#[test]
+fn flags_asked_for_on_the_launch_are_yours() {
+    let plan = planned_with(
+        tagged(),
+        ServerConfigOptions {
+            jinja: Some(false),
+            reasoning_format: Some("deepseek-legacy".to_owned()),
+            mtp_draft_n_max: Some(4),
+            ..Default::default()
+        },
+        Some(CacheRamSetting::ExplicitMb(2048)),
+    );
+
+    assert_eq!(unexplained(&plan), Vec::<&str>::new(), "{:?}", flags(&plan));
+    let got = sources(&plan);
+    assert_eq!(got.get("--no-jinja"), Some(&ChoiceSource::You));
+    assert_eq!(got.get("--jinja"), None);
+    assert_eq!(got.get("--reasoning-format"), Some(&ChoiceSource::You));
+    assert_eq!(got.get("--spec-draft-n-max"), Some(&ChoiceSource::You));
+    assert_eq!(got.get("--cache-ram"), Some(&ChoiceSource::You));
+    assert_eq!(
+        plan.args
+            .iter()
+            .find(|a| a.flag == "--cache-ram")
+            .unwrap()
+            .value
+            .as_deref(),
+        Some("2048")
+    );
+}
+
+/// Your default context is yours; a model with one set is the model's and
+/// still yours.
+#[test]
+fn a_global_default_context_is_yours() {
+    let overrides = LaunchOverrides::default();
+    let plan = plan_launch(
+        launch_spec(3, "qwen"),
+        &ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        None,
+        Some(12_288),
+        &overrides,
+        &[],
+    )
+    .unwrap();
+    let ctx = plan.args.iter().find(|a| a.flag == "-c").unwrap();
+    assert_eq!(
+        (ctx.value.as_deref(), ctx.source),
+        (Some("12288"), ChoiceSource::You)
+    );
+    assert_eq!(plan.fit.unwrap().source, ContextSizeSource::GlobalDefault);
+}
+
+/// Every image family's command, with a file in every role, is explained
+/// flag by flag: the all-in-one `-m`, `--llm`, `--sigmas` and
+/// `--linear-scale` included where a family has them.
+#[test]
+fn every_image_familys_command_is_explained() {
+    for family in ImageFamily::ALL {
+        let spec = ModelLaunchSpec {
+            name: format!("{family:?}"),
+            file_path: PathBuf::from("/models/image-turbo.gguf"),
+            image_family: Some(family),
+            components: ComponentRole::ALL
+                .into_iter()
+                .map(|role| ModelComponent {
+                    role,
+                    path: PathBuf::from(format!("/models/{}.safetensors", role.as_str())),
+                })
+                .collect(),
+            file_size_bytes: 4 << 30,
+            ..launch_spec(11, "image")
+        };
+        let plan = planned(spec, ServerConfigOptions::default());
+        assert_eq!(plan.program, "sd-server", "{family:?}");
+        assert_eq!(
+            unexplained(&plan),
+            Vec::<&str>::new(),
+            "{family:?}: {:?}",
+            flags(&plan)
+        );
+        for component in ["--vae", "--clip_l", "--t5xxl", "--llm"] {
+            let arg = plan.args.iter().find(|a| a.flag == component);
+            assert_eq!(
+                arg.map(|a| a.source),
+                Some(ChoiceSource::You),
+                "{family:?} {component}"
+            );
+        }
+    }
 }

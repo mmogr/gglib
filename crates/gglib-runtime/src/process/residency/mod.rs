@@ -213,12 +213,16 @@ impl ResidentSet {
         default_ctx: Option<u64>,
         overrides: &LaunchOverrides,
     ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
+        // Planned as a launch into the primary slot, so the RAM cache is
+        // sized after the other slots' residents, as `launch` sizes it with
+        // `request.slot`: a model in the primary now would be the one
+        // displaced.
         let others: Vec<Resident> = self
             .queue
             .residents()
             .into_iter()
+            .filter(|(slot, _)| *slot != PRIMARY_SLOT)
             .map(|(_, r)| r)
-            .filter(|r| r.model_id != spec.id)
             .collect();
         explain::plan_launch(
             spec.clone(),
@@ -823,6 +827,9 @@ mod launch_sd_tests;
 #[cfg(test)]
 #[path = "observe_tests.rs"]
 mod observe_tests;
+#[cfg(test)]
+#[path = "plan_tests.rs"]
+mod plan_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 pub(in crate::process) mod residency_tests;

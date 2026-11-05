@@ -172,6 +172,13 @@ pub(crate) fn build_command(
     port: u16,
 ) -> std::process::Command {
     let mut cmd = cmd(validated_path);
+    // Said once per spawn, not per plan: a plan reads the same token list.
+    if config.cache_reuse.is_some() && cache_reuse_disabled_via_env() {
+        info!("cache-reuse suppressed via GGLIB_DISABLE_CACHE_REUSE");
+    }
+    if config.spec_draft_n_max.is_some() && mtp_disabled_via_env() {
+        info!("MTP speculative decoding suppressed via GGLIB_DISABLE_MTP");
+    }
     for token in launch_tokens(config, &port.to_string()) {
         cmd.arg(token.flag);
         if let Some(value) = token.value {
@@ -278,12 +285,10 @@ pub(crate) fn launch_tokens(config: &ServerConfig, port: &str) -> Vec<Token> {
     // the first prefix divergence — helps a follow-up prompt whose earlier
     // messages were edited or summarized, which plain prefix matching can't
     // reuse at all. See `cache_reuse_disabled_via_env` for the kill switch.
-    if let Some(n) = config.cache_reuse {
-        if cache_reuse_disabled_via_env() {
-            info!("cache-reuse suppressed via GGLIB_DISABLE_CACHE_REUSE");
-        } else {
-            with(&mut tokens, "--cache-reuse", n.to_string());
-        }
+    if let Some(n) = config.cache_reuse
+        && !cache_reuse_disabled_via_env()
+    {
+        with(&mut tokens, "--cache-reuse", n.to_string());
     }
 
     // `--cache-type-k` / `--cache-type-v`: KV cache element type. Resolved
@@ -304,15 +309,13 @@ pub(crate) fn launch_tokens(config: &ServerConfig, port: &str) -> Vec<Token> {
     // decoding can be A/B tested as a suspect for long-context degenerate
     // generations without editing any per-model config: `GGLIB_DISABLE_MTP=1
     // gglib proxy`.
-    if let Some(n) = config.spec_draft_n_max {
-        if mtp_disabled_via_env() {
-            info!("MTP speculative decoding suppressed via GGLIB_DISABLE_MTP");
-        } else {
-            with(&mut tokens, "--spec-type", "draft-mtp");
-            with(&mut tokens, "--spec-draft-n-max", n.to_string());
-            if let Some(p) = config.spec_draft_p_min {
-                with(&mut tokens, "--spec-draft-p-min", p.to_string());
-            }
+    if let Some(n) = config.spec_draft_n_max
+        && !mtp_disabled_via_env()
+    {
+        with(&mut tokens, "--spec-type", "draft-mtp");
+        with(&mut tokens, "--spec-draft-n-max", n.to_string());
+        if let Some(p) = config.spec_draft_p_min {
+            with(&mut tokens, "--spec-draft-p-min", p.to_string());
         }
     }
 
