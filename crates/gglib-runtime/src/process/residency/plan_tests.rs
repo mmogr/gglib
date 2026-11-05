@@ -70,6 +70,45 @@ fn a_pins_overrides_reach_a_plan_of_the_pinned_model_only() {
     assert_eq!(value_of(&other, "--cache-reuse"), None);
 }
 
+/// The rule itself, apart from any machine's RAM: the primary's resident
+/// and the planned model never count; another slot's resident does.
+#[test]
+fn a_primary_launch_counts_the_other_slots_residents_but_not_itself() {
+    let resident = |model_id: u32| Resident {
+        model_sampling: ModelSamplingDefaults::default(),
+        model_id,
+        model_name: format!("m{model_id}"),
+        context_size: 0,
+        port: 1,
+        projector: None,
+        runtime: RuntimeKind::Llama,
+        components: Vec::new(),
+        slot_restore_supported: true,
+        cache_ram_health: CacheRamHealth::LlamaDefault,
+        narration: None,
+        inflight: 0,
+        resident_since: Instant::now(),
+        weights_bytes: 1,
+    };
+    let residents = vec![(PRIMARY_SLOT, resident(1)), (1, resident(2))];
+
+    let counted: Vec<u32> = super::others_for_a_primary_launch(residents.clone(), 3)
+        .into_iter()
+        .map(|r| r.model_id)
+        .collect();
+    assert_eq!(counted, [2], "the primary's resident would be displaced");
+
+    let itself: Vec<u32> = super::others_for_a_primary_launch(residents, 2)
+        .into_iter()
+        .map(|r| r.model_id)
+        .collect();
+    assert_eq!(
+        itself,
+        Vec::<u32>::new(),
+        "a model never launches beside itself"
+    );
+}
+
 /// A stand-in server that sleeps until it is killed.
 fn sleeper(dir: &Path) -> std::path::PathBuf {
     let binary = dir.join("server");
@@ -80,7 +119,9 @@ fn sleeper(dir: &Path) -> std::path::PathBuf {
 
 /// A resident in the second slot weighs on the RAM cache a plan sizes, as
 /// it weighs on a launch into the primary; a resident in the primary does
-/// not, because that launch would displace it.
+/// not, because that launch would displace it. On a machine with little
+/// RAM the auto size is 0 either way and this says nothing; the rule itself
+/// is pinned above.
 #[tokio::test]
 async fn the_other_slots_residents_are_netted_out_of_the_plans_ram_cache() {
     gglib_core::paths::isolate_data_root();

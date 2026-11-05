@@ -282,10 +282,10 @@ crates/gglib-runtime/src/process/core.rs 309
 crates/gglib-runtime/src/process/manager.rs 340
 crates/gglib-runtime/src/process/manager_tests.rs 345
 crates/gglib-runtime/src/process/residency/announce_tests.rs 469
-crates/gglib-runtime/src/process/residency/explain_args_tests.rs 390
+crates/gglib-runtime/src/process/residency/explain_args_tests.rs 406
 crates/gglib-runtime/src/process/residency/launch.rs 698
 crates/gglib-runtime/src/process/residency/launch_sd_tests.rs 562
-crates/gglib-runtime/src/process/residency/mod.rs 838
+crates/gglib-runtime/src/process/residency/mod.rs 843
 crates/gglib-runtime/src/process/residency/stop_model_tests.rs 313
 crates/gglib-runtime/src/process/residency/vram.rs 390
 crates/gglib-runtime/src/proxy/supervisor.rs 504

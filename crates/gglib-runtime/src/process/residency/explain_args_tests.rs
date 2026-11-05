@@ -327,8 +327,7 @@ fn flags_asked_for_on_the_launch_are_yours() {
     );
 }
 
-/// Your default context is yours; a model with one set is the model's and
-/// still yours.
+/// Your default context is yours.
 #[test]
 fn a_global_default_context_is_yours() {
     let overrides = LaunchOverrides::default();
@@ -350,41 +349,58 @@ fn a_global_default_context_is_yours() {
     assert_eq!(plan.fit.unwrap().source, ContextSizeSource::GlobalDefault);
 }
 
-/// Every image family's command, with a file in every role, is explained
-/// flag by flag: the all-in-one `-m`, `--llm`, `--sigmas` and
-/// `--linear-scale` included where a family has them.
+/// Every image family's command, under a turbo and a base file name, with
+/// a file in every role, is explained flag by flag: between them the
+/// all-in-one `-m`, `--llm`, `--sigmas` and `--linear-scale` are emitted
+/// and explained.
 #[test]
 fn every_image_familys_command_is_explained() {
+    let mut emitted = std::collections::BTreeSet::new();
     for family in ImageFamily::ALL {
-        let spec = ModelLaunchSpec {
-            name: format!("{family:?}"),
-            file_path: PathBuf::from("/models/image-turbo.gguf"),
-            image_family: Some(family),
-            components: ComponentRole::ALL
-                .into_iter()
-                .map(|role| ModelComponent {
-                    role,
-                    path: PathBuf::from(format!("/models/{}.safetensors", role.as_str())),
-                })
-                .collect(),
-            file_size_bytes: 4 << 30,
-            ..launch_spec(11, "image")
-        };
-        let plan = planned(spec, ServerConfigOptions::default());
-        assert_eq!(plan.program, "sd-server", "{family:?}");
-        assert_eq!(
-            unexplained(&plan),
-            Vec::<&str>::new(),
-            "{family:?}: {:?}",
-            flags(&plan)
-        );
-        for component in ["--vae", "--clip_l", "--t5xxl", "--llm"] {
-            let arg = plan.args.iter().find(|a| a.flag == component);
+        for file in ["image-turbo.gguf", "image.gguf"] {
+            let spec = ModelLaunchSpec {
+                name: format!("{family:?}"),
+                file_path: PathBuf::from(format!("/models/{file}")),
+                image_family: Some(family),
+                components: ComponentRole::ALL
+                    .into_iter()
+                    .map(|role| ModelComponent {
+                        role,
+                        path: PathBuf::from(format!("/models/{}.safetensors", role.as_str())),
+                    })
+                    .collect(),
+                file_size_bytes: 4 << 30,
+                ..launch_spec(11, "image")
+            };
+            let plan = planned(spec, ServerConfigOptions::default());
+            assert_eq!(plan.program, "sd-server", "{family:?} {file}");
             assert_eq!(
-                arg.map(|a| a.source),
-                Some(ChoiceSource::You),
-                "{family:?} {component}"
+                unexplained(&plan),
+                Vec::<&str>::new(),
+                "{family:?} {file}: {:?}",
+                flags(&plan)
             );
+            for component in ["--vae", "--clip_l", "--t5xxl", "--llm"] {
+                let arg = plan.args.iter().find(|a| a.flag == component);
+                assert_eq!(
+                    arg.map(|a| a.source),
+                    Some(ChoiceSource::You),
+                    "{family:?} {file} {component}"
+                );
+            }
+            emitted.extend(plan.args.iter().map(|a| a.flag.clone()));
         }
+    }
+    for flag in [
+        "-m",
+        "--diffusion-model",
+        "--llm",
+        "--sigmas",
+        "--linear-scale",
+    ] {
+        assert!(
+            emitted.contains(flag),
+            "{flag} was emitted by no family: {emitted:?}"
+        );
     }
 }
