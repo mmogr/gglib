@@ -46,6 +46,7 @@ pub struct AppSettings {
     pub proxy_host: Option<String>,
     pub proxy_allowed_hosts: Option<Vec<String>>,
     pub proxy_cache_on_disk: Option<bool>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub proxy_cache_disk_gb: Option<u64>,
     /// Whether a proxy key is stored. Never the key: a read says whether a
     /// secret is held, and `POST /api/secrets/reveal` is where its value
