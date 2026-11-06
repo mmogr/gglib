@@ -34,8 +34,8 @@ const StatusBadge: React.FC<{
   const config = statusConfig[status];
 
   return (
-    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-xl text-2xs font-medium', config.className)}>
-      <span className="text-2xs" aria-hidden>
+    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-xl text-xs font-semibold', config.className)}>
+      <span className="text-xs" aria-hidden>
         <Icon icon={config.icon} size={14} />
       </span>
       <span className="">{config.label}</span>
@@ -70,7 +70,7 @@ export const GenericToolUI = makeAssistantToolUI<
     return (
       <div className="bg-background-secondary border border-border rounded-lg my-2 overflow-hidden text-sm">
         <div className="flex items-center gap-2 px-3 py-2.5 bg-background-tertiary border-b border-border">
-          <span className="text-base" aria-hidden>
+          <span className="text-sm" aria-hidden>
             <Icon icon={Wrench} size={14} />
           </span>
           <span className="font-semibold text-text flex-1">{displayName}</span>

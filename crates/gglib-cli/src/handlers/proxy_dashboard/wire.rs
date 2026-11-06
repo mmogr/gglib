@@ -56,6 +56,9 @@ pub(super) struct DashboardSnapshot {
     /// step for no reader.
     #[serde(default)]
     pub(super) sampling_audit: Option<SamplingAudit>,
+    /// The last requests, oldest first, with what gglib did to each.
+    #[serde(default)]
+    pub(super) recent_requests: Vec<super::wire_recent::RecentRequest>,
 }
 
 /// Mirror of `gglib_core::domain::defects::ModelDefectCounts`.
@@ -170,12 +173,27 @@ pub(super) struct AdmissionSnapshot {
 #[derive(Debug, Deserialize)]
 pub(super) struct ResidentSlotSnapshot {
     pub(super) model_name: String,
+    /// Required, unlike the rest: a missing word would be guessed wrong.
+    pub(super) state: gglib_core::domain::ResidencyState,
     #[serde(default)]
     pub(super) inflight: u32,
     #[serde(default)]
     pub(super) is_primary: bool,
     #[serde(default)]
     pub(super) resident_for_secs: u64,
+    /// How the model was launched, as the one line the daemon composed;
+    /// absent from a daemon older than the field.
+    #[serde(default)]
+    pub(super) launch: Option<LaunchLine>,
+}
+
+/// Mirror of the part of `gglib_core::domain::LaunchFacts` the dashboard
+/// prints. Its own struct with defaults, as every mirror here is, so a field
+/// renamed on a daemon from another build costs the line, not the frame.
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct LaunchLine {
+    #[serde(default)]
+    pub(super) flag_line: String,
 }
 
 /// Mirror of `gglib_core::domain::QueuedModelSnapshot`.

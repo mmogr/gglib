@@ -166,6 +166,7 @@ fn servers(servers: &[(&str, RuntimeKind)]) -> String {
             port: 9000,
             started_at: 0,
             runtime,
+            launch: None,
         })
         .collect();
     serde_json::to_string(&listed).expect("a listing")

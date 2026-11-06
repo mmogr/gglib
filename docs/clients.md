@@ -1,9 +1,13 @@
 # Client Configuration Examples
 
 The endpoint is `http://127.0.0.1:8080/v1`. No API key is required on
-loopback — enter any placeholder if your client insists. Use a model name from
-`gglib model list` (shown below as `qwen3.6`). In `/v1/models`, the model to
-send is an entry's `id`; its `gglib_id` is gglib's own catalog id for it.
+loopback — enter any placeholder if your client insists. Use the Model ID
+`gglib model list` prints for the model (shown below as `qwen3.6`): its name,
+unless two models share one. In `/v1/models` it is an entry's `id`; the
+entry's `gglib_id` is gglib's own catalog id for it. `gglib proxy test <model>`
+prints these recipes with your endpoint's address and that model's id filled
+in, as `gglib up` does when it finishes. opencode does not read `/v1/models`,
+so its recipe lists each model you want to pick from by its id.
 
 ## Cline / Roo Code
 

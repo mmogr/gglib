@@ -15,8 +15,8 @@ const sizeClasses = {
 
 /**
  * Label - Consistent form label with semantic HTML
- * Default: font-medium text-text
- * muted: font-medium text-text-muted (sentence case — the all-caps
+ * Default: font-semibold text-text
+ * muted: font-semibold text-text-muted (sentence case — the all-caps
  * micro-label treatment is retired; hierarchy comes from size and color)
  */
 export const Label: React.FC<LabelProps> = ({
@@ -29,7 +29,7 @@ export const Label: React.FC<LabelProps> = ({
   return (
     <label
       className={cn(
-        'font-medium',
+        'font-semibold',
         muted ? 'text-text-muted' : 'text-text',
         sizeClasses[size],
         className,

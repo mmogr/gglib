@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 mod context;
 pub mod explain;
+mod explain_args;
 mod launch;
 mod pin;
 mod resident_match;
@@ -13,8 +14,8 @@ use std::time::Duration;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::RuntimeKind;
 use gglib_core::ports::{
-    Admission, AdmitObserver, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec,
-    ModelRuntimeError, PinnedSpec, RunningTarget,
+    Admission, AdmitObserver, CatalogError, GenerationTurn, LaunchOverrides, ModelCatalogPort,
+    ModelLaunchSpec, ModelRuntimeError, PinnedSpec, ResidencyObserver, RunningTarget,
 };
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
@@ -26,7 +27,7 @@ use crate::process::admission::{
 };
 use crate::process::core::GuiProcessCore;
 use crate::process::health::check_http_health;
-use context::{fit_or_undivided, resolve_launch_opts};
+use context::resolve_launch_opts;
 use launch::{LaunchRequest, run as run_launch};
 use resident_match::LaunchedAs;
 
@@ -75,6 +76,10 @@ pub struct ResidentSet {
     /// the daemon owns one long-lived manager, and `gglib serve` pins it over
     /// HTTP for the lifetime of one proxy run.
     pinned: std::sync::RwLock<Option<PinnedSpec>>,
+    /// Told of every load and unload once the queue has recorded it, with
+    /// no lock held: the daemon's announcement to its clients. See
+    /// [`ResidencyObserver`].
+    observer: Arc<dyn ResidencyObserver>,
 }
 
 /// Removes a ticket from the queue on every exit path.
@@ -99,6 +104,7 @@ impl ResidentSet {
         catalog: Arc<dyn ModelCatalogPort>,
         launch_overrides: ServerConfigOptions,
         cache_ram: CacheRamSetting,
+        observer: Arc<dyn ResidencyObserver>,
     ) -> Self {
         Self {
             catalog,
@@ -106,7 +112,24 @@ impl ResidentSet {
             launch_overrides,
             cache_ram,
             pinned: std::sync::RwLock::new(None),
+            observer,
         }
+    }
+
+    /// [`Self::new`] with nobody told of loads and unloads: the tests' way
+    /// in, where what is announced is not the question.
+    #[cfg(test)]
+    pub(super) fn unobserved(
+        catalog: Arc<dyn ModelCatalogPort>,
+        launch_overrides: ServerConfigOptions,
+        cache_ram: CacheRamSetting,
+    ) -> Self {
+        Self::new(
+            catalog,
+            launch_overrides,
+            cache_ram,
+            Arc::new(gglib_core::ports::NoopResidencyObserver),
+        )
     }
 
     /// The admission queue, for callers that only need to read or evict.
@@ -149,7 +172,7 @@ impl ResidentSet {
         // the catalog does not hold is `ModelNotFound`, pinned or not.
         let spec = self.resolve(model_name).await?;
         self.check_pinned(&spec)?;
-        let spec_weights_bytes = spec.file_size_bytes;
+        let spec_id = spec.id;
 
         // Everything a launch would lack, before the queue: once `poll`
         // grants a launch it has already forgotten the model it displaces,
@@ -161,151 +184,72 @@ impl ResidentSet {
             .binary(RuntimeKind::StableDiffusion)
             .to_path_buf();
         launch::launch_files::preflight(&spec, &sd_server).await?;
-        let health_deadline_secs = crate::process::health::launch_deadline_secs(spec_weights_bytes);
-
-        // A pin's launch overrides layer onto the standing template, winning
-        // field-wise: they are the *output* of the caller's full cascade
-        // (`UnifiedServerConfig::resolved_options`), so letting the run-wide
-        // template win would undo a cascade that has already run.
-        let template = match self.pinned() {
-            Some(pin) => self.launch_overrides.overlay(&pin.launch_overrides),
-            None => self.launch_overrides.clone(),
-        };
-        let cache_ram = overrides.cache_ram.unwrap_or(self.cache_ram);
-
-        // An image model has no context to fit or resolve, and sd-server
-        // reads none of llama-server's options: it is placed by its files
-        // and its family's margin (`secondary_verdict`), and launched with
-        // the recipe.
-        if spec.runtime() == RuntimeKind::StableDiffusion {
-            return self
-                .wait_for_slot(
-                    core,
-                    LaunchRequest {
-                        spec,
-                        opts: ServerConfigOptions::default(),
-                        context: (0, ContextSizeSource::BuiltInDefault),
-                        slot: PRIMARY_SLOT, // replaced by the queue's decision
-                        evict: None,
-                        cache_ram,
-                        health_deadline_secs,
-                    },
-                    observer,
-                )
-                .await;
-        }
-
-        // What this machine could serve for this model, if nobody has said
-        // otherwise. Ranks below an explicit request, a per-model default and
-        // a global setting the user actually chose — and above the built-in
-        // floor, which is what you serve when you know nothing.
-        //
-        // Derived from the model's own GGUF facts and the device's nominal
-        // capacity less a fixed reservation for the second slot. `None` when
-        // any of that is unknown, which falls through to the floor rather than
-        // guessing.
-        //
-        // KV types come from the *overlaid* options, in the same precedence the
-        // launch will use (`over` wins). Reading the template first would size
-        // the fit against one KV type and launch with another — and a
-        // q8_0/f16 disagreement is a factor of two on the cache being
-        // budgeted.
-        let overlaid = template.overlay(&overrides.options);
-        let kv_types = crate::llama::args::resolve_kv_cache_types(
-            overlaid.cache_type_k,
-            overlaid.cache_type_v,
-        );
-        // One closure, two budgets. Spelling the six-argument call out twice is
-        // how the fit and the launch once came to disagree about which KV cache
-        // type they were sizing for.
-        let fit_against = |budget| {
-            let (fitted, inputs) = gglib_core::domain::fit_context_explained(
-                spec.context_length,
-                Some(spec.file_size_bytes),
-                spec.kv_elems_per_token,
-                kv_types.k,
-                kv_types.v,
-                budget,
-            );
-            // The two constants behind this are judgement calls, and the only
-            // way they stop being guesses is if the numbers they produced are
-            // visible when somebody looks. Nothing reads this.
-            debug!(
-                model = %spec.name,
-                budget_bytes = ?inputs.budget_bytes,
-                weights_bytes = ?inputs.weights_bytes,
-                kv_bytes_per_token = ?inputs.kv_bytes_per_token,
-                trained_ctx = ?inputs.trained_ctx,
-                unsnapped = ?inputs.unsnapped,
-                fitted = ?fitted,
-                "context fit"
-            );
-            fitted
-        };
-
-        // `enabled`, not "is the variable present": every other switch reads
-        // truthiness through this helper, and `active()` — what the daemon
-        // reports as in effect — filters by the same call. Reading presence
-        // would turn the fit off for `=0` while the roster said it was
-        // untouched, which is the confident-wrong-conclusion failure
-        // `debug_switches` exists to prevent.
-        //
-        // Reserving room for a co-resident is worth a rung, not the whole
-        // feature. On a small card a large model can fail to fit at all once
-        // the reservation is taken — and that is exactly the machine where a
-        // full-ceiling secondary could never have loaded anyway, so the
-        // reservation buys nothing and costs everything. Fall back to the
-        // undivided device.
-        //
-        // The two budgets are one closure apart on purpose: they differ only
-        // in the budget, and two spelled-out copies of the same six-argument
-        // call is how the fit and the launch once came to disagree about which
-        // KV cache type they were sizing for.
-        //
-        // Known consequence, deliberate: this makes the served context
-        // non-monotonic in device size. A 6.5 GiB card cannot host a secondary,
-        // so its primary takes the whole device; a 7 GiB card can, so it yields
-        // room for one and its primary gets less. Upgrading that card lowers
-        // the context served for the same model.
-        let fitted_ctx = (!gglib_core::debug_switches::enabled("GGLIB_DISABLE_CONTEXT_FIT"))
-            .then(|| {
-                fit_or_undivided(
-                    fit_against,
-                    vram::fit_budget_for(),
-                    crate::system::total_device_memory_bytes(),
-                )
-            })
-            .flatten();
-
-        // Resolved once, here, before anything else runs. This is the single
-        // source of truth for "what context is this launch/reuse decision
-        // about" — read by the resident-match test below, every log line, the
-        // tracked `Resident`, and the `RunningTarget` returned to the proxy.
-        let (opts, resolved_ctx, ctx_source) = resolve_launch_opts(
-            &template,
-            &overrides.options,
+        let prepared = prepare(
+            spec,
+            &self.template_for(spec_id),
+            self.cache_ram,
             num_ctx,
             default_ctx,
-            fitted_ctx,
-            spec.server_defaults
-                .as_ref()
-                .and_then(|sc| sc.context_length),
+            &overrides,
         );
+        self.wait_for_slot(core, prepared.request, observer).await
+    }
 
-        self.wait_for_slot(
-            core,
-            LaunchRequest {
-                spec,
-                opts,
-                context: (resolved_ctx, ctx_source),
-                slot: PRIMARY_SLOT, // replaced by the queue's decision
-                evict: None,
-                cache_ram,
-                health_deadline_secs,
+    /// The launch gglib would make for `spec` now, without making it: the
+    /// resolutions a launch of it runs, over the other models loaded now.
+    ///
+    /// No pin check and no preflight: this says what a load would be, and
+    /// a file that is missing is the inspector's to name. A pin on this
+    /// model layers its overrides as a launch would; a pin on another model
+    /// is not consulted.
+    ///
+    /// # Errors
+    ///
+    /// As a launch's planning: an image model with no family.
+    pub(super) fn plan(
+        &self,
+        spec: &ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
+        let residents = self.queue.residents();
+        // What the plan's verdict on unloading is read against: the primary's
+        // resident, whatever it is, and whether this model is already loaded
+        // in any slot (then it relaunches in place and displaces nothing).
+        let primary = residents
+            .iter()
+            .find(|(slot, _)| *slot == PRIMARY_SLOT)
+            .map(|(_, r)| r.clone());
+        let already_resident = residents.iter().any(|(_, r)| r.model_id == spec.id);
+        let others = others_for_a_primary_launch(residents, spec.id);
+        explain::plan_launch(
+            spec.clone(),
+            &self.template_for(spec.id),
+            self.cache_ram,
+            num_ctx,
+            default_ctx,
+            overrides,
+            explain::Loaded {
+                primary: primary.as_ref(),
+                others: &others,
+                already_resident,
             },
-            observer,
         )
-        .await
+    }
+
+    /// The options template a launch of model `id` starts from: the
+    /// standing template, with the pin's overrides layered on when the pin
+    /// names this model. The pin's are the *output* of the caller's full
+    /// cascade (`UnifiedServerConfig::resolved_options`), so letting the
+    /// run-wide template win would undo a cascade that has already run.
+    fn template_for(&self, id: u32) -> ServerConfigOptions {
+        match self.pinned() {
+            Some(pin) if pin.id == i64::from(id) => {
+                self.launch_overrides.overlay(&pin.launch_overrides)
+            }
+            _ => self.launch_overrides.clone(),
+        }
     }
 
     /// Resolve a model id or name to its launch specification.
@@ -554,6 +498,7 @@ impl ResidentSet {
         // Along for one purpose: recording the fresh spawn's template-caps
         // observation on the model row once it is health-ready (ADR 0007).
         let catalog = Arc::clone(&self.catalog);
+        let observer = Arc::clone(&self.observer);
         let launch_request = LaunchRequest {
             spec: request.spec.clone(),
             opts: request.opts.clone(),
@@ -581,7 +526,7 @@ impl ResidentSet {
         let handle = tokio::spawn(async move {
             tokio::time::timeout(
                 budget,
-                run_launch(core, Arc::clone(&queue), catalog, launch_request),
+                run_launch(core, Arc::clone(&queue), catalog, observer, launch_request),
             )
             .await
             .unwrap_or_else(|_| {
@@ -615,6 +560,9 @@ impl ResidentSet {
         core: &Arc<RwLock<GuiProcessCore>>,
     ) -> Result<(), ModelRuntimeError> {
         if let Some(previous) = self.queue.evict_unheld(slot)? {
+            // Told before the kill, so a watcher stops looking at the server
+            // before it goes.
+            self.observer.unloaded(previous.model_id);
             let mut core_w = core.write().await;
             if let Err(e) = core_w.kill(previous.model_id).await {
                 warn!(error = %e, "Failed to stop resident model cleanly, continuing");
@@ -651,6 +599,8 @@ impl ResidentSet {
             // A render that was drawing retired the model itself.
             return Ok(asked);
         };
+        // Told before the kill, as a recycle tells it.
+        self.observer.unloaded(previous.model_id);
         let mut core_w = core.write().await;
         core_w
             .kill(previous.model_id)
@@ -708,6 +658,162 @@ impl ResidentSet {
         }
         Ok(())
     }
+
+    /// Retire a render's model once its process was killed, emptying its
+    /// slot only while the slot still holds it
+    /// ([`AdmissionQueue::retire_render`]), and announce the unload when it
+    /// did. After the kill, of necessity: whether the slot was still the
+    /// render's is known only once it is emptied.
+    pub(super) async fn retire_render(
+        &self,
+        turn: GenerationTurn,
+        model_id: u32,
+        kill: impl Future<Output = ()>,
+    ) -> Option<Resident> {
+        let retired = self.queue.retire_render(turn, model_id, kill).await;
+        if let Some(resident) = &retired {
+            self.observer.unloaded(resident.model_id);
+        }
+        retired
+    }
+}
+
+/// What a launch of `spec` resolves before it joins the queue, from the
+/// options `template` and this request's overrides: the options, the
+/// context and the rung that chose it, and the fit the context was sized
+/// by. One function for the launch and for the plan of one, so the two
+/// cannot disagree.
+struct Prepared {
+    /// The launch, slot and eviction still the queue's to decide.
+    request: LaunchRequest,
+    /// What this machine would fit, and what the fit worked from: `None`
+    /// for an image model, which has no context. With
+    /// `GGLIB_DISABLE_CONTEXT_FIT` set nothing was fitted, and the inputs
+    /// say nothing either.
+    fit: Option<(Option<u64>, gglib_core::domain::FitInputs)>,
+}
+
+fn prepare(
+    spec: ModelLaunchSpec,
+    template: &ServerConfigOptions,
+    cache_ram: CacheRamSetting,
+    num_ctx: Option<u64>,
+    default_ctx: Option<u64>,
+    overrides: &LaunchOverrides,
+) -> Prepared {
+    let health_deadline_secs = crate::process::health::launch_deadline_secs(spec.file_size_bytes);
+    let cache_ram = overrides.cache_ram.unwrap_or(cache_ram);
+
+    // An image model has no context to fit or resolve, and sd-server
+    // reads none of llama-server's options: it is placed by its files
+    // and its family's margin (`secondary_verdict`), and launched with
+    // the recipe.
+    if spec.runtime() == RuntimeKind::StableDiffusion {
+        return Prepared {
+            request: LaunchRequest {
+                spec,
+                opts: ServerConfigOptions::default(),
+                context: (0, ContextSizeSource::BuiltInDefault),
+                slot: PRIMARY_SLOT, // replaced by the queue's decision
+                evict: None,
+                cache_ram,
+                health_deadline_secs,
+            },
+            fit: None,
+        };
+    }
+
+    // What this machine could serve for this model, if nobody has said
+    // otherwise. Ranks below an explicit request, a per-model default and
+    // a global setting the user actually chose — and above the built-in
+    // floor, which is what you serve when you know nothing.
+    //
+    // KV types come from the *overlaid* options, in the same precedence the
+    // launch will use (`over` wins). Reading the template first would size
+    // the fit against one KV type and launch with another — and a
+    // q8_0/f16 disagreement is a factor of two on the cache being
+    // budgeted.
+    let overlaid = template.overlay(&overrides.options);
+    let kv_types =
+        crate::llama::args::resolve_kv_cache_types(overlaid.cache_type_k, overlaid.cache_type_v);
+
+    // `enabled`, not "is the variable present": every other switch reads
+    // truthiness through this helper, and `active()` — what the daemon
+    // reports as in effect — filters by the same call.
+    //
+    // `explain_fit` is the one seam: the reserved budget first, then the
+    // undivided device, the same two budgets `gglib model explain` shows.
+    // Reserving room for a co-resident is worth a rung, not the whole
+    // feature: on a small card a large model can fail to fit at all once
+    // the reservation is taken, and that is exactly the machine where a
+    // full-ceiling secondary could never have loaded anyway. Known
+    // consequence, deliberate: the served context is non-monotonic in
+    // device size.
+    let fit = (!gglib_core::debug_switches::enabled("GGLIB_DISABLE_CONTEXT_FIT")).then(|| {
+        let (fitted, inputs) = explain::explain_fit(
+            spec.context_length,
+            Some(spec.file_size_bytes),
+            spec.kv_elems_per_token,
+            kv_types.k,
+            kv_types.v,
+        );
+        // The two constants behind this are judgement calls, and the only
+        // way they stop being guesses is if the numbers they produced are
+        // visible when somebody looks.
+        debug!(
+            model = %spec.name,
+            budget_bytes = ?inputs.budget_bytes,
+            weights_bytes = ?inputs.weights_bytes,
+            kv_bytes_per_token = ?inputs.kv_bytes_per_token,
+            trained_ctx = ?inputs.trained_ctx,
+            unsnapped = ?inputs.unsnapped,
+            fitted = ?fitted,
+            "context fit"
+        );
+        (fitted, inputs)
+    });
+    let fitted_ctx = fit.and_then(|(fitted, _)| fitted);
+
+    // Resolved once, here, before anything else runs. This is the single
+    // source of truth for "what context is this launch/reuse decision
+    // about" — read by the resident-match test, every log line, the
+    // tracked `Resident`, and the `RunningTarget` returned to the proxy.
+    let (opts, resolved_ctx, ctx_source) = resolve_launch_opts(
+        template,
+        &overrides.options,
+        num_ctx,
+        default_ctx,
+        fitted_ctx,
+        spec.server_defaults.as_ref(),
+    );
+
+    Prepared {
+        request: LaunchRequest {
+            spec,
+            opts,
+            context: (resolved_ctx, ctx_source),
+            slot: PRIMARY_SLOT, // replaced by the queue's decision
+            evict: None,
+            cache_ram,
+            health_deadline_secs,
+        },
+        fit: Some(fit.unwrap_or_else(|| (None, gglib_core::domain::FitInputs::default()))),
+    }
+}
+
+/// The residents a plan of model `planned` sizes its RAM cache after.
+///
+/// Planned as a launch into the primary slot, so the other slots' residents
+/// count, as `launch` counts them with `request.slot`: a model in the
+/// primary now would be the one displaced. The planned model itself never
+/// counts: resident, it would be served from its own slot, not launched
+/// beside itself.
+fn others_for_a_primary_launch(residents: Vec<(usize, Resident)>, planned: u32) -> Vec<Resident> {
+    residents
+        .into_iter()
+        .filter(|(slot, r)| *slot != PRIMARY_SLOT && r.model_id != planned)
+        .map(|(_, r)| r)
+        .collect()
 }
 
 /// Project a resident onto the routing type callers outside this crate speak.
@@ -726,6 +832,9 @@ fn target_of(resident: Resident) -> RunningTarget {
 }
 
 #[cfg(test)]
+#[path = "announce_tests.rs"]
+mod announce_tests;
+#[cfg(test)]
 #[path = "hold_tests.rs"]
 mod hold_tests;
 #[cfg(test)]
@@ -734,6 +843,9 @@ mod launch_sd_tests;
 #[cfg(test)]
 #[path = "observe_tests.rs"]
 mod observe_tests;
+#[cfg(test)]
+#[path = "plan_tests.rs"]
+mod plan_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 pub(in crate::process) mod residency_tests;

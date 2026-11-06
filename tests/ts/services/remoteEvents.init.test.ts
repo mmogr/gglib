@@ -50,6 +50,7 @@ const STATUS: RemoteStatus = {
   last_tunnelled_ms: null,
   last_peer: null,
   connected: null,
+  reach: 'disconnected',
   stored_ticket_fingerprint: null,
   paired_name: null,
   has_remote_key: false,

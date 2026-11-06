@@ -177,16 +177,16 @@ fn the_status_line_names_the_paired_machine_and_no_fingerprint() {
     ];
     assert_eq!(
         lines[0],
-        "  Connected: desk  at http://127.0.0.1:8180/v1  (direct)"
+        "  Reach:     Connected to desk  at http://127.0.0.1:8180/v1  (direct)"
     );
     assert!(
-        lines[1].starts_with("  Connected: desk  at "),
+        lines[1].starts_with("  Reach:     Away \u{2014} desk  at "),
         "{}",
         lines[1]
     );
     assert_eq!(
         lines[2],
-        "  Connected: no \u{2014} `gglib remote join` dials desk again"
+        "  Reach:     Disconnected \u{2014} `gglib remote join` dials desk again"
     );
     for line in &lines {
         assert!(!line.contains(FINGERPRINT), "{line}");

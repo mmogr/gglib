@@ -82,7 +82,7 @@ export const LoopGuardTripsPanel: FC = () => {
             <thead>
               <tr className="text-left text-text-muted border-b border-border">
                 {COLUMNS.map((column) => (
-                  <th key={column} className="px-xs py-2xs font-medium">
+                  <th key={column} className="px-xs py-2xs font-semibold">
                     {column}
                   </th>
                 ))}
@@ -109,7 +109,7 @@ export const LoopGuardTripsPanel: FC = () => {
           </table>
         </div>
       )}
-      <p className="m-0 mt-xs text-2xs text-text-muted">
+      <p className="m-0 mt-xs text-xs text-text-muted">
         A trip is the guard&apos;s decision, not a delivery: a noted request can still fail to
         reach the model.
       </p>

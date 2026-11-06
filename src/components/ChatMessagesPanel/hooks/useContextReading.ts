@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useThread, type ThreadState } from '@assistant-ui/react';
-import { contextReading, decidingMade, type ContextReading } from '../components/contextReading';
+import { contextReading, decidingMade, type ContextReading } from '../../../readings/contextReading';
 
 /** The figures the reading comes from: one reply's own, so the same object until they change. */
 const decidingFigures = (thread: ThreadState) => decidingMade(thread.messages);

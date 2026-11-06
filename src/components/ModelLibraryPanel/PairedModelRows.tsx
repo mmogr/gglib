@@ -85,7 +85,7 @@ export const PairedModelRows: FC<PairedModelRowsProps> = ({ paired, searchQuery,
                 onClick={() => onPick({ machine, id: model.gglib_id })}
               >
                 <div className="flex flex-col gap-xs w-full">
-                  <div className="font-medium text-sm flex items-center gap-sm w-full break-words">
+                  <div className="font-semibold text-sm flex items-center gap-sm w-full break-words">
                     {model.id}
                     <Chip size="sm" leftIcon={<Icon icon={Server} size={11} />}>{name}</Chip>
                   </div>

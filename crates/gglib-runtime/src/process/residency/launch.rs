@@ -10,7 +10,7 @@
 //! completes regardless of whether the request that triggered it is still there
 //! to receive it.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gglib_core::cache_config::CacheRamSetting;
@@ -19,7 +19,8 @@ use gglib_core::domain::{
 };
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
-    AdmissionLease, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, RunningTarget,
+    AdmissionLease, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ProcessHandle,
+    ResidencyObserver, RunningTarget,
 };
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
@@ -28,12 +29,13 @@ use tracing::{info, warn};
 use super::spawned_child::{LIVENESS_TICK, SpawnedChild};
 use super::vram;
 use crate::launch_narration::NarrationInputs;
+use crate::llama::args::{CacheRamResolution, KvCacheTypeResolution, SlotRestoreResolution};
 use crate::process::SpawnConfig;
 use crate::process::admission::{AdmissionQueue, PRIMARY_SLOT, Resident};
 use crate::process::core::GuiProcessCore;
 use crate::process::health::wait_for_http_health;
 use crate::sd::SdServerConfig;
-use crate::server_config::build_server_config_narrated;
+use crate::server_config::{ResolvedCapabilities, build_server_config_narrated};
 
 #[path = "launch_files.rs"]
 pub(super) mod launch_files;
@@ -80,9 +82,10 @@ pub(super) async fn run(
     core: Arc<RwLock<GuiProcessCore>>,
     queue: Arc<AdmissionQueue>,
     catalog: Arc<dyn ModelCatalogPort>,
+    observer: Arc<dyn ResidencyObserver>,
     request: LaunchRequest,
 ) -> Result<(RunningTarget, AdmissionLease), ModelRuntimeError> {
-    match launch(&core, &queue, &request).await {
+    match launch(&core, &queue, &observer, &request).await {
         Ok(outcome) => {
             // The one moment ADR 0007's observation can be taken: a fresh
             // spawn is health-ready, so its /props describes exactly this
@@ -144,17 +147,47 @@ async fn observe_template_caps(
 
 /// What the runtime-specific half of a launch hands the shared half: the
 /// spawn, its narration, and what the resident records about it.
-struct Planned {
-    config: SpawnConfig,
-    narration: LaunchNarration,
-    slot_restore_supported: bool,
-    cache_ram_health: CacheRamHealth,
+///
+/// Pure: nothing here touches the disk or logs, so a plan
+/// (`explain::plan_launch`) can ask for the same answer a launch gets.
+pub(super) struct Planned {
+    pub config: SpawnConfig,
+    pub narration: LaunchNarration,
+    pub slot_restore_supported: bool,
+    pub cache_ram_health: CacheRamHealth,
+    /// llama-server's resolutions, which its arguments are explained by;
+    /// `None` for `sd-server`.
+    pub llama: Option<LlamaResolutions>,
+}
+
+/// The decisions behind a llama-server launch's arguments, each with why
+/// it came out as it did.
+pub(super) struct LlamaResolutions {
+    pub kv_types: KvCacheTypeResolution,
+    pub cache_ram: CacheRamResolution,
+    pub slot_restore: SlotRestoreResolution,
+    pub capabilities: ResolvedCapabilities,
+    /// The disk slot directory, when the prompt cache goes to disk.
+    pub slot_save_path: Option<PathBuf>,
+}
+
+impl LlamaResolutions {
+    /// The one-line explanations the resolvers give for anything unusual,
+    /// which a launch logs.
+    fn explanations(&self) -> impl Iterator<Item = String> {
+        self.kv_types
+            .explain()
+            .into_iter()
+            .chain(self.cache_ram.explain())
+            .chain(self.slot_restore.explain())
+    }
 }
 
 #[allow(clippy::too_many_lines)]
 async fn launch(
     core: &Arc<RwLock<GuiProcessCore>>,
     queue: &Arc<AdmissionQueue>,
+    observer: &Arc<dyn ResidencyObserver>,
     request: &LaunchRequest,
 ) -> Result<(RunningTarget, AdmissionLease), ModelRuntimeError> {
     let LaunchRequest {
@@ -179,6 +212,9 @@ async fn launch(
     // refused its relaunch until the daemon restarted.
     if let Some(model_id) = evict {
         info!(model_id = %model_id, slot = %slot, "Stopping resident model for swap");
+        // The queue forgot this resident when it granted the launch; its
+        // unload is announced here, before the kill, as a stop announces one.
+        observer.unloaded(*model_id);
         let mut core_w = core.write().await;
         if let Err(e) = core_w.kill(*model_id).await {
             warn!(error = %e, "Failed to stop displaced model cleanly, continuing");
@@ -207,7 +243,19 @@ async fn launch(
     );
 
     let planned = match runtime {
-        RuntimeKind::Llama => plan_llama(queue, request),
+        RuntimeKind::Llama => {
+            // The RAM figure is what is left after the *other* residents,
+            // not the whole machine: with two models loaded, budgeting each
+            // against the full total would have them both claim the same
+            // memory.
+            let others: Vec<Resident> = queue
+                .residents()
+                .into_iter()
+                .filter(|(s, _)| s != slot)
+                .map(|(_, r)| r)
+                .collect();
+            plan_llama(&others, request)
+        }
         RuntimeKind::StableDiffusion => plan_sd(request)?,
     };
     let Planned {
@@ -215,7 +263,23 @@ async fn launch(
         narration,
         slot_restore_supported,
         cache_ram_health,
+        llama,
     } = planned;
+    if let Some(llama) = &llama {
+        for explanation in llama.explanations() {
+            info!("{explanation}");
+        }
+        // Purge stale slot .bin files before spawning a fresh instance: old
+        // slot files are incompatible with the new server process.
+        // Namespaced by model id, so a co-resident model's caches are
+        // untouched.
+        if let Some(slot_dir) = &llama.slot_save_path {
+            if let Err(e) = std::fs::create_dir_all(slot_dir) {
+                warn!("Failed to create slot directory: {}", e);
+            }
+            purge_stale_slot_bin_files(slot_dir, spec.id);
+        }
+    }
     crate::proxy::banner::print_launch_narration(&narration);
 
     // The guard is armed inside the same critical section that created the
@@ -223,12 +287,12 @@ async fn launch(
     // mean a second lock acquisition with an `await` between it and the spawn
     // — a suspension point at which the child exists and nothing owns it,
     // which is the leak this whole commit is about.
-    let (port, mut child) = {
+    let (port, pid, mut child) = {
         let mut core_w = core.write().await;
         let (port, pid) = core_w
             .spawn(config)
             .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
-        (port, SpawnedChild::arm(core, spec.id, pid))
+        (port, pid, SpawnedChild::arm(core, spec.id, pid))
     };
 
     // From here until `queue.install` the child exists and nothing else owns
@@ -311,6 +375,24 @@ async fn launch(
         "model became healthy"
     );
 
+    // Announced before the queue records it, and with no await between:
+    // a slot still `Loading` cannot be evicted, so the load is always told
+    // before any unload of it. Told after `install`, a waiter woken by it
+    // could recycle the resident, and its unload would be told of a model
+    // never announced loaded. The handle is the one `list_running` would
+    // report: with its pid, so a watcher can tell a dead process from a
+    // slow one.
+    observer.loaded(
+        ProcessHandle::new(
+            i64::from(spec.id),
+            spec.name.clone(),
+            Some(pid),
+            port,
+            started_at_secs(),
+        )
+        .with_runtime(runtime),
+    );
+
     let lease = queue.install(
         *slot,
         Resident {
@@ -330,7 +412,6 @@ async fn launch(
             weights_bytes: spec.file_size_bytes,
         },
     );
-
     // The queue owns the process now: eviction, recycling and shutdown can all
     // reach it, so the guard must not.
     child.disarm();
@@ -364,12 +445,11 @@ async fn launch(
 /// llama-server's half of a launch: the KV cache types, the host-RAM prompt
 /// cache, the disk slot layer, the command line, and the narration of all
 /// of it.
-fn plan_llama(queue: &AdmissionQueue, request: &LaunchRequest) -> Planned {
+pub(super) fn plan_llama(others: &[Resident], request: &LaunchRequest) -> Planned {
     let LaunchRequest {
         spec,
         opts,
         context: (resolved_ctx, ctx_source),
-        slot,
         cache_ram: cache_ram_setting,
         ..
     } = request;
@@ -380,9 +460,6 @@ fn plan_llama(queue: &AdmissionQueue, request: &LaunchRequest) -> Planned {
     // quantized footprint the launch will use. Writing them back as if explicit
     // makes the later resolution a pass-through.
     let kv_types = crate::llama::args::resolve_kv_cache_types(opts.cache_type_k, opts.cache_type_v);
-    if let Some(explanation) = kv_types.explain() {
-        info!("{explanation}");
-    }
     opts.cache_type_k = Some(kv_types.k);
     opts.cache_type_v = Some(kv_types.v);
 
@@ -397,22 +474,13 @@ fn plan_llama(queue: &AdmissionQueue, request: &LaunchRequest) -> Planned {
     let kv_bytes_per_token = spec
         .kv_elems_per_token
         .map(|elems| gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v));
-    let others: Vec<Resident> = queue
-        .residents()
-        .into_iter()
-        .filter(|(s, _)| s != slot)
-        .map(|(_, r)| r)
-        .collect();
     let cache_ram = crate::llama::args::resolve_cache_ram(
         *cache_ram_setting,
-        vram::ram_available_for(crate::system::total_system_ram_bytes(), &others),
+        vram::ram_available_for(crate::system::total_system_ram_bytes(), others),
         spec.file_size_bytes,
         kv_bytes_per_token,
         *resolved_ctx,
     );
-    if let Some(explanation) = cache_ram.explain() {
-        info!("{explanation}");
-    }
     opts.cache_ram_mb = cache_ram.cache_ram_mb;
 
     // Classify the budget while the auto-vs-explicit distinction is still in
@@ -427,9 +495,6 @@ fn plan_llama(queue: &AdmissionQueue, request: &LaunchRequest) -> Planned {
     // per spawn alongside the other launch decisions and carried on the target,
     // so the proxy never re-derives it per request.
     let slot_restore = crate::llama::args::resolve_slot_restore(spec.kv_memory_is_partial);
-    if let Some(explanation) = slot_restore.explain() {
-        info!("{explanation}");
-    }
 
     let slot_save_path = opts.slot_save_path.clone();
 
@@ -458,28 +523,25 @@ fn plan_llama(queue: &AdmissionQueue, request: &LaunchRequest) -> Planned {
         capabilities: &capabilities,
     });
 
-    // Purge stale slot .bin files before spawning a fresh instance: old slot
-    // files are incompatible with the new server process. Namespaced by model
-    // id, so a co-resident model's caches are untouched.
-    if let Some(ref slot_dir) = slot_save_path {
-        if let Err(e) = std::fs::create_dir_all(slot_dir) {
-            warn!("Failed to create slot directory: {}", e);
-        }
-        purge_stale_slot_bin_files(slot_dir, spec.id);
-    }
-
     Planned {
         config: SpawnConfig::Llama(config),
         narration,
         slot_restore_supported: slot_restore.enabled,
         cache_ram_health,
+        llama: Some(LlamaResolutions {
+            kv_types,
+            cache_ram,
+            slot_restore,
+            capabilities,
+            slot_save_path,
+        }),
     }
 }
 
 /// `sd-server`'s half of a launch: the model's files, its family and the
 /// port, and the narration of where it was placed and what it was judged to
 /// need. No context, no prompt cache, no disk slots: sd-server has none.
-fn plan_sd(request: &LaunchRequest) -> Result<Planned, ModelRuntimeError> {
+pub(super) fn plan_sd(request: &LaunchRequest) -> Result<Planned, ModelRuntimeError> {
     let LaunchRequest { spec, slot, .. } = request;
     // A model's runtime is its family, so an sd launch always has one; the
     // footprint is the one the queue placed it by.
@@ -502,7 +564,16 @@ fn plan_sd(request: &LaunchRequest) -> Result<Planned, ModelRuntimeError> {
         narration,
         slot_restore_supported: false,
         cache_ram_health: CacheRamHealth::LlamaDefault,
+        llama: None,
     })
+}
+
+/// Seconds since the Unix epoch, as a resident's handle records when it
+/// started.
+fn started_at_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Remove stale slot files for the given model from `slot_dir`.

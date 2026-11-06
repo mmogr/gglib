@@ -21,7 +21,7 @@ interface PromptProps {
 }
 
 vi.mock('../../../src/pages/ModelControlCenterPage', () => ({ default: () => <main aria-label="Library" /> }));
-vi.mock('../../../src/components/Header', () => ({ default: () => null }));
+vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
 vi.mock('../../../src/components/SettingsModal', () => ({ default: () => null }));
 vi.mock('../../../src/components/SetupWizard', () => ({ default: () => null }));
 vi.mock('../../../src/components/LlamaInstallModal', () => ({
@@ -45,16 +45,20 @@ vi.mock('../../../src/hooks/useServers', () => {
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   listenToMenuEvents: vi.fn(async () => () => {}),
+  setSelectedModel: vi.fn(async () => {}),
+  syncMenuStateSilent: vi.fn(),
   MENU_EVENTS: {},
 }));
 vi.mock('../../../src/services/serverEvents', () => ({ initServerEvents: vi.fn(), cleanupServerEvents: vi.fn() }));
 vi.mock('../../../src/services/proxyEvents', () => ({ initProxyEvents: vi.fn(), cleanupProxyEvents: vi.fn() }));
 vi.mock('../../../src/services/remoteEvents', () => ({ initRemoteEvents: vi.fn(), cleanupRemoteEvents: vi.fn() }));
+vi.mock('../../../src/services/modelEvents', () => ({ initModelEvents: vi.fn(), cleanupModelEvents: vi.fn() }));
 vi.mock('../../../src/services/transport', () => ({ getTransport: () => ({ getSettings: async () => ({}) }) }));
 vi.mock('../../../src/services/transport/api/setup', () => ({ getSetupStatus: vi.fn() }));
 vi.mock('../../../src/services/tools', () => ({ syncBuiltinTools: async () => {} }));
 
 import App from '../../../src/App';
+import { disposeAppRouter } from '../../../src/app/router';
 import { getSetupStatus } from '../../../src/services/transport/api/setup';
 import type { SetupStatus } from '../../../src/types/setup';
 
@@ -78,6 +82,8 @@ async function renderShell() {
 }
 
 describe('the app shell\'s llama.cpp install prompt', () => {
+  afterEach(() => disposeAppRouter());
+
   beforeEach(() => getStatus.mockReset());
   afterEach(() => vi.useRealTimers());
 

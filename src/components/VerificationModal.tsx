@@ -17,9 +17,6 @@ import type { VerificationReport, UpdateCheckResult, OverallHealth } from '../se
 import type { UpgradeCheck } from '../types';
 import type { VerifiedFileKind } from '../types/generated/VerifiedFileKind';
 
-/** Commit SHAs are 40 hex chars; 8 is the conventional readable prefix. */
-const shortSha = (sha: string) => sha.slice(0, 8);
-
 /** A file named by what it is: a shard counted over the weights alone, from 1. */
 const fileLabel = (kind: VerifiedFileKind) => {
   switch (kind.kind) {
@@ -163,12 +160,18 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
         onClose();
         return;
       }
-      setUpgradeMessage(`Already at the latest revision (${shortSha(queued.latestSha)})`);
-      setUpgradeCheck({
-        hasUpdate: false,
-        currentSha: queued.latestSha,
-        latestSha: queued.latestSha,
-      });
+      setUpgradeMessage('Already at the latest revision.');
+      // The check, asked again: another client may have upgraded since this
+      // one loaded, and the recorded revision is the daemon's to say, not
+      // rebuilt here from the latest sha.
+      try {
+        setUpgradeCheck(await getTransport().checkModelUpgrade(modelId));
+      } catch (checkErr) {
+        appLogger.warn('component', 'Could not re-check the revision after a no-op upgrade', {
+          error: checkErr,
+          modelId,
+        });
+      }
     } catch (err) {
       appLogger.error('component', 'Model upgrade failed', { error: err, modelId });
       setError(err instanceof Error ? err.message : String(err));
@@ -249,11 +252,11 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
     ? 'Could not reach HuggingFace to compare revisions.'
     : !upgradeCheck
       ? 'Checking the repository revision…'
-      : upgradeCheck.currentSha == null
-        ? `No revision is recorded for this model, so there is nothing to compare. Re-downloading fetches ${shortSha(upgradeCheck.latestSha)} and records it.`
+      : upgradeCheck.current == null
+        ? `No revision is recorded for this model, so there is nothing to compare. Re-downloading fetches ${upgradeCheck.latest.short} and records it.`
         : upgradeCheck.hasUpdate
-          ? `A newer revision is available: ${shortSha(upgradeCheck.currentSha)} → ${shortSha(upgradeCheck.latestSha)}.`
-          : `Already at the latest revision (${shortSha(upgradeCheck.currentSha)}).`;
+          ? `A newer revision is available: ${upgradeCheck.current.short} → ${upgradeCheck.latest.short}.`
+          : `Already at the latest revision (${upgradeCheck.current.short}).`;
 
   const modalTitle = mode === 'verify' ? `Verify: ${modelName}` : `Check Updates: ${modelName}`;
 
@@ -290,7 +293,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <Loader2 className="animate-spin text-primary" size={16} />
-              <span className="text-sm font-medium text-primary">
+              <span className="text-sm font-semibold text-primary">
                 {progress ? `Verifying ${progress.shardName}...` : 'Starting verification...'}
               </span>
             </div>
@@ -313,7 +316,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <Loader2 className="animate-spin text-primary" size={16} />
-              <span className="text-sm font-medium text-primary">Checking HuggingFace for updates...</span>
+              <span className="text-sm font-semibold text-primary">Checking HuggingFace for updates...</span>
             </div>
           </div>
         )}
@@ -339,7 +342,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
                       {shard.health.type === 'missing' && <AlertCircle size={14} className="text-orange-500 flex-shrink-0" />}
                       {shard.health.type === 'no_oid' && <AlertCircle size={14} className="text-yellow-500 flex-shrink-0" />}
                       <span className="flex-shrink-0 text-secondary">{fileLabel(shard.kind)}</span>
-                      <span className="truncate text-primary font-medium">{shard.file_path.split('/').pop()}</span>
+                      <span className="truncate text-primary font-semibold">{shard.file_path.split('/').pop()}</span>
                     </div>
                     <div className="ml-6 text-xs text-secondary">
                       Status: <span className="font-mono">{shard.health.type}</span>
@@ -406,7 +409,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
                     <div key={idx} className="flex flex-col gap-1 text-xs p-2 bg-surface-elevated rounded border border-subtle">
                       <div className="flex items-center gap-2">
                         <RefreshCw size={12} className="text-blue-400" />
-                        <span className="truncate font-medium text-primary">{change.file_path.split('/').pop()}</span>
+                        <span className="truncate font-semibold text-primary">{change.file_path.split('/').pop()}</span>
                       </div>
                       <div className="ml-5 text-secondary space-y-0.5 font-mono text-xs">
                         <div className="truncate">Old: {change.old_oid.substring(0, 12)}...</div>

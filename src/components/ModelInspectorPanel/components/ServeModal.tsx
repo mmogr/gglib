@@ -99,9 +99,11 @@ export const ServeModal: FC<ServeModalProps> = ({
   const sd = useSdStatus(isImage);
   const imageBlocked =
     isImage && (model.missingComponents.length > 0 || sd.status?.installed !== true);
-  // MTP: auto-enabled when tag present and no explicit override
-  const effectiveMtpEnabled = mtpNMaxOverride !== null ? mtpNMaxOverride > 0 : hasMtpTag;
-  const isAutoMtp = mtpNMaxOverride === null && hasMtpTag;
+  // MTP when nothing is chosen for this launch: the model's own default,
+  // else the tag.
+  const mtpByDefault = model.serverDefaults?.mtp ?? hasMtpTag;
+  const effectiveMtpEnabled = mtpNMaxOverride !== null ? mtpNMaxOverride > 0 : mtpByDefault;
+  const isAutoMtp = mtpNMaxOverride === null && mtpByDefault;
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // What this model's parameters resolve to before this session overrides
@@ -158,7 +160,7 @@ export const ServeModal: FC<ServeModalProps> = ({
 
         {!isImage && (
           <div className="mb-lg">
-            <label htmlFor="context-input" className="block mb-sm font-medium text-text">
+            <label htmlFor="context-input" className="block mb-sm font-semibold text-text">
               Context Length
               <span className="font-normal text-text-secondary text-sm"> (optional)</span>
             </label>
@@ -181,7 +183,7 @@ export const ServeModal: FC<ServeModalProps> = ({
         )}
 
         <div className="mb-lg">
-          <label htmlFor="port-input" className="block mb-sm font-medium text-text">
+          <label htmlFor="port-input" className="block mb-sm font-semibold text-text">
             Port
             <span className="font-normal text-text-secondary text-sm"> (optional)</span>
           </label>
@@ -220,6 +222,7 @@ export const ServeModal: FC<ServeModalProps> = ({
           <>
             <JinjaModeField
               value={jinjaOverride}
+              modelDefault={model.serverDefaults?.jinja ?? null}
               hasAgentTag={hasAgentTag}
               disabled={isServing}
               onChange={onJinjaChange}
@@ -227,7 +230,7 @@ export const ServeModal: FC<ServeModalProps> = ({
             />
 
             {/* MTP Speculative Decoding section (shown for all models; auto-banner when tagged) */}
-            {hasMtpTag && (
+            {hasMtpTag && model.serverDefaults?.mtp !== false && (
               <Banner
                 variant="info"
                 title="MTP speculative decoding detected"
@@ -254,10 +257,10 @@ export const ServeModal: FC<ServeModalProps> = ({
 
             <div className="mb-lg">
               <div className="flex items-center justify-between gap-sm">
-                <label className="block mb-0 font-medium text-text">MTP Speculative Decoding</label>
+                <label className="block mb-0 font-semibold text-text">MTP Speculative Decoding</label>
                 <span className="text-sm text-text-muted">
                   {isAutoMtp
-                    ? 'Auto (mtp tag)'
+                    ? (model.serverDefaults?.mtp ? 'Auto (this model\'s own default)' : 'Auto (mtp tag)')
                     : (mtpNMaxOverride === null
                       ? 'Disabled'
                       : (mtpNMaxOverride === 0 ? 'Disabled manually' : `Enabled (n=${mtpNMaxOverride})`))}
@@ -265,14 +268,16 @@ export const ServeModal: FC<ServeModalProps> = ({
               </div>
               <Checkbox
                 id="mtp-toggle"
+                aria-label="MTP speculative decoding"
                 wrapperClassName="mt-sm"
                 checked={effectiveMtpEnabled}
                 onChange={(e) => {
                   if (!e.target.checked) {
                     onMtpNMaxChange(0);
                   } else {
-                    // Restore to auto (tag) or default explicit n=2
-                    onMtpNMaxChange(hasMtpTag ? null : 2);
+                    // Back to auto when auto is on (the model's own default,
+                    // else the tag); otherwise an explicit two draft tokens.
+                    onMtpNMaxChange(mtpByDefault ? null : 2);
                   }
                 }}
                 disabled={isServing}
@@ -286,7 +291,7 @@ export const ServeModal: FC<ServeModalProps> = ({
               {effectiveMtpEnabled && (
                 <div className="flex gap-md mt-md">
                   <div className="flex-1">
-                    <label htmlFor="mtp-n-max" className="block mb-sm text-sm font-medium text-text">
+                    <label htmlFor="mtp-n-max" className="block mb-sm text-sm font-semibold text-text">
                       Draft tokens (n-max)
                     </label>
                     <Input
@@ -310,7 +315,7 @@ export const ServeModal: FC<ServeModalProps> = ({
                     />
                   </div>
                   <div className="flex-1">
-                    <label htmlFor="mtp-p-min" className="block mb-sm text-sm font-medium text-text">
+                    <label htmlFor="mtp-p-min" className="block mb-sm text-sm font-semibold text-text">
                       Min probability (p-min)
                     </label>
                     <Input

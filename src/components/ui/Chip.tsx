@@ -34,7 +34,7 @@ const variantClasses: Record<ChipVariant, string> = {
 };
 
 const sizeClasses: Record<ChipSize, string> = {
-  sm: "h-5 px-1.5 text-2xs rounded-sm gap-1",
+  sm: "h-5 px-1.5 text-xs rounded-sm gap-1",
   md: "h-6 px-2 text-xs rounded-base gap-1.5",
 };
 
@@ -59,9 +59,9 @@ export function Chip({
   title,
 }: ChipProps) {
   const shared = cn(
-    "inline-flex items-center font-medium whitespace-nowrap max-w-full",
+    "inline-flex items-center font-semibold whitespace-nowrap max-w-full",
     sizeClasses[size],
-    selected ? "bg-primary-subtle text-primary-light" : variantClasses[variant],
+    selected ? "bg-primary text-text-inverse" : variantClasses[variant],
     className,
   );
 

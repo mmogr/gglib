@@ -167,7 +167,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       {/* Model Header */}
       <div className="flex flex-col gap-sm pb-base border-b border-border">
         <div className="flex items-center justify-between gap-md">
-          <h2 className="m-0 text-xl font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap flex-1">{model.name}</h2>
+          <h2 className="m-0 text-base font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap flex-1">{model.name}</h2>
           <IconButton
             label="Open on HuggingFace"
             className="shrink-0"
@@ -188,14 +188,14 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
           {/* Tool support badge - only show when loaded and supported */}
           {!loadingToolSupport && toolSupport?.supports_tool_calls && (
             <span 
-              className="inline-flex items-center gap-1 px-sm py-xs bg-primary-subtle text-primary-light rounded-base text-xs font-medium cursor-help transition-colors duration-150 ease-linear hover:bg-primary/20"
+              className="inline-flex items-center gap-1 px-sm py-xs bg-primary-subtle text-primary-light rounded-base text-xs font-semibold cursor-help transition-colors duration-150 ease-linear hover:bg-primary/20"
               title={getToolSupportTooltip()}
             >
               <span aria-hidden>
                 <Icon icon={Wrench} size={14} />
               </span>
               <span>Tools</span>
-              <span className="text-2xs opacity-70 ml-[0.15rem]" aria-hidden="true">
+              <span className="text-xs opacity-70 ml-[0.15rem]" aria-hidden="true">
                 <Icon icon={Info} size={12} />
               </span>
             </span>

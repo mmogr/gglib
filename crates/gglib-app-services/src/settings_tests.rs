@@ -165,6 +165,10 @@ fn profiles_use_camel_case_on_the_wire() {
         title_generation_prompt: None,
         bind_host: None,
         share_lan: None,
+        proxy_host: None,
+        proxy_allowed_hosts: None,
+        proxy_cache_on_disk: None,
+        proxy_cache_disk_gb: None,
         has_proxy_api_key: false,
         trust_client_sampling: None,
         loop_guard_mode: None,
@@ -247,26 +251,18 @@ async fn get_models_directory_info_returns_valid_info() {
     assert!(result.is_ok(), "expected Ok, got {result:?}");
 }
 
-#[tokio::test]
-async fn get_system_memory_returns_some_when_probe_reports_enough_ram() {
-    let core = test_core().await;
-    let probe = MockSystemProbePort {
-        total_ram_bytes: 8 * 1024 * 1024 * 1024, // 8 GiB
+/// The probe's reading is kept when it is plausible and refused when it is
+/// suspiciously small; `download_budget` and the setup status read it.
+#[test]
+fn system_memory_refuses_a_suspiciously_small_reading() {
+    let enough = MockSystemProbePort {
+        total_ram_bytes: 8 * 1024 * 1024 * 1024,
     };
-    let ops = make_ops(core, probe);
-    let result = ops.get_system_memory().expect("should not error");
-    assert!(result.is_some(), "expected Some for 8 GiB");
-}
-
-#[tokio::test]
-async fn get_system_memory_returns_none_when_probe_reports_tiny_ram() {
-    let core = test_core().await;
-    let probe = MockSystemProbePort {
-        total_ram_bytes: 1024, // 1 KiB – suspiciously small
+    assert!(system_memory(&enough).is_some(), "8 GiB is a reading");
+    let tiny = MockSystemProbePort {
+        total_ram_bytes: 1024,
     };
-    let ops = make_ops(core, probe);
-    let result = ops.get_system_memory().expect("should not error");
-    assert!(result.is_none(), "expected None for suspiciously small RAM");
+    assert!(system_memory(&tiny).is_none(), "1 KiB is not");
 }
 
 /// JSON-boundary tests for `UpdateSettingsRequest`'s double-`Option`

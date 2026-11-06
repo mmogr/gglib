@@ -100,6 +100,11 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/start", post(handlers::proxy::start))
         .route("/proxy/start-pinned", post(handlers::proxy::start_pinned))
         .route("/proxy/stop", post(handlers::proxy::stop))
+        // How a client connects, and one real request to prove it answers:
+        // the daemon's facts, which `gglib up`, `gglib proxy test` and the
+        // Endpoint page print rather than compose.
+        .route("/proxy/clients", get(handlers::proxy::clients))
+        .route("/proxy/prove", post(handlers::proxy::prove))
         .route("/proxy/loop-guard-trips", get(handlers::proxy::trips))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))
@@ -278,7 +283,6 @@ fn config_routes() -> Router<AppState> {
             post(handlers::config::settings::install_profile_templates),
         )
         // System
-        .route("/system/memory", get(handlers::config::settings::memory))
         .route(
             "/system/models-directory",
             get(handlers::config::settings::models_directory)

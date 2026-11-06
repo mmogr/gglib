@@ -155,7 +155,7 @@ export default [
     // Design-system guardrails: feature code must use the primitive layer.
     // The primitive layer itself (ui/, primitives/) is the only place raw
     // buttons and native checkboxes may be rendered.
-    files: ['src/components/**/*.tsx', 'src/pages/**/*.tsx'],
+    files: ['src/{app,sidebar,places,inspector,tray,components,pages}/**/*.tsx'],
     ignores: ['src/components/ui/**', 'src/components/primitives/**'],
     rules: {
       'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...componentRestrictedSyntax],
@@ -167,7 +167,7 @@ export default [
     // src/services/platform. This is the real rule behind the
     // `lint:boundaries` npm script, which previously enabled
     // no-restricted-imports with no options — a permanent no-op.
-    files: ['src/components/**/*.{ts,tsx}', 'src/pages/**/*.{ts,tsx}'],
+    files: ['src/{app,sidebar,places,inspector,tray,components,pages}/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -198,6 +198,34 @@ export default [
               group: ['**/services/**'],
               message:
                 'src/types imports nothing from src/services. A type the transport owns is imported from services/transport/types where it is used.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // `src/readings` is pure: data in, a reading out. No React, no component,
+    // no service and no Tauri, so a reader can be held by a contract test
+    // alone and survive every screen that shows it.
+    // `.ts` only: a `.tsx` could carry JSX without importing React.
+    files: ['src/readings/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['react', 'react-dom', 'react/*'],
+              message: 'src/readings has no React. A reader is a function; the component that shows it lives elsewhere.',
+            },
+            {
+              group: ['**/components/**', '**/pages/**', '**/hooks/**'],
+              message: 'src/readings imports no component, page or hook. It reads data and returns a reading.',
+            },
+            {
+              group: ['**/services/**', '@tauri-apps/*'],
+              message: 'src/readings does no IO. What it reads is passed in.',
             },
           ],
         },

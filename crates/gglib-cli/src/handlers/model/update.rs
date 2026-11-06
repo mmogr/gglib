@@ -55,6 +55,10 @@ pub(crate) struct UpdateArgs {
     /// Parameters to clear back to falling through, by flag name.
     pub unset: Vec<String>,
     pub clear_inference_defaults: bool,
+    /// `--jinja auto|on|off`; absent leaves the model's own default as it is.
+    pub jinja: Option<TriState>,
+    /// `--mtp auto|on|off`, as [`Self::jinja`].
+    pub mtp: Option<TriState>,
     pub dry_run: bool,
     pub yes: bool,
     pub projector: crate::projector_args::ProjectorArgs,
@@ -149,6 +153,56 @@ pub(crate) fn parse_metadata_removals(remove_arg: Option<&str>) -> Vec<String> {
     })
 }
 
+/// A model's own default as a flag states it: `auto` clears it back to
+/// the tags, `on` and `off` set it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TriState {
+    Auto,
+    On,
+    Off,
+}
+
+impl TriState {
+    /// `auto`, `on` or `off`, as the flag's parser admits them.
+    pub(crate) fn parse(word: &str) -> Self {
+        match word {
+            "on" => Self::On,
+            "off" => Self::Off,
+            _ => Self::Auto,
+        }
+    }
+
+    /// The stored value: `None` for `auto`.
+    const fn stored(self) -> Option<bool> {
+        match self {
+            Self::Auto => None,
+            Self::On => Some(true),
+            Self::Off => Some(false),
+        }
+    }
+}
+
+/// The model's server defaults after `--jinja` and `--mtp`: the stored
+/// defaults with the flagged fields replaced, or nothing when neither flag
+/// was passed. The request carries the defaults whole, so the context
+/// length the model holds rides along unchanged.
+fn server_defaults_after(
+    existing: &Model,
+    args: &UpdateArgs,
+) -> Option<gglib_core::domain::ServerConfig> {
+    if args.jinja.is_none() && args.mtp.is_none() {
+        return None;
+    }
+    let mut defaults = existing.server_defaults.clone().unwrap_or_default();
+    if let Some(jinja) = args.jinja {
+        defaults.jinja = jinja.stored();
+    }
+    if let Some(mtp) = args.mtp {
+        defaults.mtp = mtp.stored();
+    }
+    Some(defaults)
+}
+
 /// The request `args` make of `existing`: each flag as the field it sets.
 ///
 /// A request carries a model's metadata and its sampling defaults whole, so
@@ -163,6 +217,7 @@ pub(crate) fn build_request(existing: &Model, args: &UpdateArgs) -> Result<Updat
         context_length: args.context_length,
         metadata: metadata_after(existing, args)?,
         inference_defaults: inference_defaults_after(existing, args)?,
+        server_defaults: server_defaults_after(existing, args).map(Some),
         // The path to link, an explicit nothing to unlink, and no field at
         // all when neither flag was passed.
         projector_path: args.projector.change().map(|change| {
@@ -327,6 +382,21 @@ fn show_changes_preview(existing: &Model, updated: &Model) {
         &format_option_u64(existing.context_length),
         &format_option_u64(updated.context_length),
     );
+
+    let own = |model: &Model, pick: fn(&gglib_core::domain::ServerConfig) -> Option<bool>| {
+        model
+            .server_defaults
+            .as_ref()
+            .and_then(pick)
+            .map_or("auto", |on| if on { "on" } else { "off" })
+            .to_owned()
+    };
+    show_field_change(
+        "Jinja",
+        &own(existing, |d| d.jinja),
+        &own(updated, |d| d.jinja),
+    );
+    show_field_change("MTP", &own(existing, |d| d.mtp), &own(updated, |d| d.mtp));
 
     // Show metadata changes
     show_metadata_changes(&existing.metadata, &updated.metadata);

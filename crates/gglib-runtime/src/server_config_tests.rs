@@ -260,3 +260,52 @@ fn cascade_suppresses_slot_path_when_cache_disabled() {
     );
     assert_eq!(config.slot_save_path, None);
 }
+
+/// The model's own defaults reach the built config and the command line,
+/// below what the launch itself asks for: a stored `off` puts `--no-jinja`
+/// on an agent-tagged model, a stored `on` drafts with the defaults, and
+/// the launch's own choice overrides either.
+#[test]
+fn the_models_own_defaults_reach_the_built_config_below_an_explicit_choice() {
+    use crate::command::build_command;
+    let command_line = |config: &ServerConfig| -> Vec<String> {
+        build_command(std::path::Path::new("/fake/llama-server"), config, 5500)
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    };
+    let tags = vec!["agent".to_owned()];
+    let own = ServerConfigOptions {
+        model_jinja: Some(false),
+        model_mtp: Some(true),
+        ..Default::default()
+    };
+
+    let stored = build_server_config(7, "m".to_owned(), model_path(), 0, &tags, own.clone());
+    assert_eq!(stored.jinja, JinjaMode::Off);
+    assert_eq!(
+        stored.spec_draft_n_max,
+        Some(crate::llama::args::DEFAULT_DRAFT_N_MAX)
+    );
+    let args = command_line(&stored);
+    assert!(args.contains(&"--no-jinja".to_owned()), "{args:?}");
+    assert!(args.contains(&"--spec-draft-n-max".to_owned()), "{args:?}");
+
+    let launch = build_server_config(
+        7,
+        "m".to_owned(),
+        model_path(),
+        0,
+        &tags,
+        ServerConfigOptions {
+            jinja: Some(true),
+            mtp_draft_n_max: Some(0),
+            ..own
+        },
+    );
+    assert_eq!(launch.jinja, JinjaMode::On);
+    assert_eq!(launch.spec_draft_n_max, None);
+    let args = command_line(&launch);
+    assert!(args.contains(&"--jinja".to_owned()), "{args:?}");
+    assert!(!args.contains(&"--spec-type".to_owned()), "{args:?}");
+}

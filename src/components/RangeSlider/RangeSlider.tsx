@@ -66,7 +66,7 @@ const RangeSlider: FC<RangeSliderProps> = ({
     <div className={cn("w-full py-xs", disabled && "opacity-50 pointer-events-none")}>
       {label && (
         <div className="flex justify-between items-center mb-sm">
-          <span className="text-sm font-medium text-text">{label}</span>
+          <span className="text-sm font-semibold text-text">{label}</span>
           <span className="text-xs font-semibold text-primary bg-surface-elevated py-[2px] px-[6px] rounded-sm font-mono tabular-nums">
             {formatValue(minValue)} — {formatValue(maxValue)}
           </span>

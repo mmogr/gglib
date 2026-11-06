@@ -2,7 +2,7 @@
 //! parameter, for `gglib model explain`.
 //!
 //! Format-only, like the rest of [`crate::presentation`]: it draws the
-//! [`SamplingExplanationDto`] that `ModelOps::explain_sampling` answers with,
+//! [`SamplingExplanationDto`] inside what `ModelOps::explain` answers with,
 //! the one `GET /api/models/{id}/explain` sends, and re-derives no value,
 //! source or published comparison. Plain text with no colour, matching
 //! [`super::inspect_display`] — a fact about a model is not a state, so it

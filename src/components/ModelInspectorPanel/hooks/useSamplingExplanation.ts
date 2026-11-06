@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SamplingExplanation } from '../../../types';
-import { explainModelSampling } from '../../../services/transport/api/models/local';
+import { explainModel } from '../../../services/transport/api/models/local';
 import { appLogger } from '../../../services/platform';
 
 export interface SamplingExplanationState {
@@ -12,7 +12,9 @@ export interface SamplingExplanationState {
 }
 
 /**
- * Fetch a model's resolved sampling parameters and their provenance.
+ * Fetch a model's resolved sampling parameters and their provenance: the
+ * sampling half of the model's explanation (`GET /api/models/:id/explain`),
+ * whose launch half the redesigned inspector reads.
  *
  * Refetches when the selected model or profile changes, and when `refreshKey`
  * does — pass the model's stored defaults so saving an edit re-resolves rather
@@ -32,7 +34,7 @@ export function useSamplingExplanation(
     setIsLoading(true);
     setHasError(false);
     try {
-      setExplanation(await explainModelSampling(modelId, profileName ?? undefined));
+      setExplanation((await explainModel(modelId, profileName ?? undefined))?.sampling ?? null);
     } catch (error) {
       // Not error-level: hasError already renders a designed fallback, and a
       // backend without the explain route resolves to null before this catch.

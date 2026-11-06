@@ -24,6 +24,18 @@ context_size: number | null,
  */
 model_server_ctx: number | null, 
 /**
+ * The model's own Jinja default (`ServerConfig::jinja`), read from the
+ * catalog at launch. Below `jinja`, which a launch chose, and above
+ * the tags.
+ */
+model_jinja: boolean | null, 
+/**
+ * The model's own speculative-decoding default (`ServerConfig::mtp`),
+ * read from the catalog at launch. Below `mtp_draft_n_max`, which a
+ * launch chose, and above the `mtp` tag.
+ */
+model_mtp: boolean | null, 
+/**
  * Global app setting for default context size (from `Settings.default_context_size`).
  * Third tier in fallback chain.
  */

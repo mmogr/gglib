@@ -50,7 +50,7 @@ export const SourceSwitch: FC<SourceSwitchProps> = ({ source, onSource, connecti
           title={choice.title}
           onClick={() => onSource(choice.id)}
           className={cn(
-            'h-auto px-xs py-xs text-2xs leading-tight',
+            'h-auto px-xs py-xs text-xs leading-tight',
             source === choice.id && 'bg-surface-elevated text-text',
           )}
         >

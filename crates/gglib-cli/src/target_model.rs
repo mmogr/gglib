@@ -45,6 +45,12 @@ pub(super) const fn model_action(command: &ModelCommand) -> (&'static str, Model
         | ModelCommand::Search { .. }
         | ModelCommand::Browse { .. }
         | ModelCommand::Capabilities { .. }
-        | ModelCommand::Explain { .. } => ("model", ModelAction::Manage),
+        | ModelCommand::Explain { .. }
+        // Loading and unloading act on this machine's daemon. Core's
+        // `ModelAction::Load` may be done on a paired machine, and `serve`
+        // reaches it; `model load --remote` is the declared gap, so these
+        // two are `Manage` here and a miss suggests no flag they lack.
+        | ModelCommand::Load { .. }
+        | ModelCommand::Unload { .. } => ("model", ModelAction::Manage),
     }
 }

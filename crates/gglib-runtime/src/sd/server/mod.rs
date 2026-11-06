@@ -8,11 +8,10 @@ mod job_poll;
 mod source;
 mod spawn;
 
+pub(crate) use args::sd_server_args;
 pub use config::SdServerConfig;
 pub use job::{IMAGE_JOB_DEADLINE, IMAGE_STALL, POLL, SdImageDriver};
 
-#[cfg(test)]
-pub(crate) use args::sd_server_args;
 pub(crate) use spawn::build_and_spawn_sd;
 
 #[cfg(test)]

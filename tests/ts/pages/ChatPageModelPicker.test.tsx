@@ -15,6 +15,7 @@ import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
 import { chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPageHarness';
 import { guiModel } from '../fixtures/model';
+import { applyLibraryRead, resetModelLibrary } from '../../../src/services/modelRegistry';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../src/services/transport', async () => {
@@ -69,18 +70,22 @@ beforeEach(() => {
     runs: [],
     frames: {},
   };
-  transport.current = {
-    ...chatTransport(fixture),
-    listModels: vi.fn(async () => [
+  transport.current = chatTransport(fixture);
+  // The composer's model picker reads the registry, which App fills.
+  applyLibraryRead({
+    models: [
       guiModel({ id: 7, name: 'Qwen3.8-27B' }),
       guiModel({ id: 8, name: 'llama-3.2-3b' }),
       guiModel({ id: 9, name: 'gemma-3-12b' }),
-    ]),
-  };
+    ],
+  });
   serve(8, 'llama-3.2-3b', 'running');
 });
 
-afterEach(() => serve(8, 'llama-3.2-3b', 'stopped'));
+afterEach(() => {
+  serve(8, 'llama-3.2-3b', 'stopped');
+  resetModelLibrary();
+});
 
 describe('ChatPage, model picker', () => {
   it('lists the servers running here, then the models that are not', async () => {
@@ -122,6 +127,10 @@ describe('ChatPage, model picker', () => {
     onSwitchModel.mockRejectedValueOnce(new Error('not enough memory'));
     renderPage();
     const picker = () => screen.getByRole('combobox', { name: 'Model' });
+    // The composer is remounted as the conversation's messages load, so the
+    // pick waits for one to be open, as the test above does.
+    await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
+    await waitFor(() => expect(screen.getByRole('option', { name: /Parsing GGUF/ })).toHaveAttribute('aria-selected', 'true'));
     await waitFor(() => expect(within(picker()).getByRole('option', { name: 'gemma-3-12b' })).toBeInTheDocument());
 
     await user.selectOptions(picker(), 'gemma-3-12b');
@@ -135,10 +144,7 @@ describe('ChatPage, model picker', () => {
 
   it('lists the current model once, though it is running and registered', async () => {
     serve(10, 'Qwen3.8-27B', 'running');
-    (transport.current as { listModels: () => Promise<unknown> }).listModels = async () => [
-      guiModel({ id: 10, name: 'Qwen3.8-27B' }),
-      guiModel({ id: 9, name: 'gemma-3-12b' }),
-    ];
+    applyLibraryRead({ models: [guiModel({ id: 10, name: 'Qwen3.8-27B' }), guiModel({ id: 9, name: 'gemma-3-12b' })] });
     try {
       renderPage(undefined, 10);
       const picker = () => screen.getByRole('combobox', { name: 'Model' });

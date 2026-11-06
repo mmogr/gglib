@@ -16,6 +16,9 @@ infrastructure concerns (database, filesystem, etc.).
   (`ModelDefectLedger`); `defects_agent` holds the one the agent loop writes,
   and `defect_counts` the counts a reader is handed (`ModelDefectCounts`,
   `LoopGuardTrip`)
+- `intervention` - What gglib did to one request on its way through the
+  endpoint (`Intervention`, `InterventionKind`, `Refusal`), each kind with
+  the word every surface shows, written once.
 - `loop_guard_log` - The loop guard's log, which survives a restart: one row
   per decision (`LoopGuardTripEvent`) and one per day, model, version and mode
   counting the requests it scanned (`LoopGuardTripDay`)
@@ -109,12 +112,20 @@ infrastructure concerns (database, filesystem, etc.).
   fits, tight, too big, or unknown with the missing input named), read off the
   launch's own context fit at the default KV cache types, with the inputs it
   was reached from as the reason
+- `variant_fit` - Whether a repository's variant fits this machine, as a
+  listing says it (`VariantFit`, with its words), the picker's verdict on
+  the wire
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
+- `revision` - The revision a model's files came from, a commit sha or a
+  ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine
   (`recommend`, `Recommendation`)
 - `residency` - Whether a second model may stay resident in VRAM beside the
   first (`decide_secondary_slot`, `SecondarySlotDecision`)
+- `state_words` - The word every surface uses for a state (`EndpointState`,
+  `ResidencyState`, `ReachState`, `KeyState`), written once and recorded in
+  `contracts/vocabulary/words.json`.
 - `admission` - What the admission queue and the VRAM resident set look like
   right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in
 - `cache_budget` - Auto-sizing of llama-server's host-RAM prompt cache
@@ -123,5 +134,13 @@ infrastructure concerns (database, filesystem, etc.).
   budget (`select_evictions`); the scanning and deleting live in `gglib-proxy`
 - `launch_narration` - What the runtime decided for one llama-server launch,
   and why (`LaunchNarration`, `LaunchDecision`)
+- `launch_plan` - The launch gglib would make for a model, said flag by flag
+  (`LaunchPlan`, `LaunchArg`, `ChoiceSource`, `ContextFit`): what `gglib
+  model explain` prints and `GET /api/models/{id}/explain` serves, and what
+  it would unload first, and why (`unloads`)
+- `launch_facts` - How a loaded model was launched and what it is doing
+  (`LaunchFacts`): the context, the weights, the quant, the narration and
+  the one flag line, carried on the admission snapshot's rows and the server
+  list so `gglib proxy dashboard` and the GUI print one line
 
 <!-- module-docs:end -->

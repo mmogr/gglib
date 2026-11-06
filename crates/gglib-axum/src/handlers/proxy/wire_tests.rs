@@ -4,7 +4,10 @@
 //! the 300-line budget with a new contract test due.
 
 use super::*;
-use gglib_core::contracts::http::daemon::{PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS};
+use gglib_core::contracts::http::daemon::{
+    PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS, PROXY_STATUS_FIELDS,
+};
+use gglib_core::domain::KeyState;
 use gglib_core::settings::DEFAULT_PROXY_PORT;
 
 /// An omitted port must come from settings, not from the compile-time
@@ -141,14 +144,101 @@ fn default_context_is_the_context_somebody_chose() {
 }
 
 /// A crashed proxy must not look reachable. It reports stopped, with no
-/// port for a client to be handed and no pin left standing.
+/// port or address for a client to be handed, no key demanded and no pin
+/// left standing.
 #[test]
 fn a_crashed_proxy_reports_as_stopped() {
-    let status = to_api_status(&RuntimeProxyStatus::Crashed, Some("qwen".to_owned()));
+    let status = to_api_status(
+        &RuntimeProxyStatus::Crashed,
+        Some("qwen".to_owned()),
+        Some(KeyState::Required),
+    );
 
     assert!(!status.running);
+    assert_eq!(status.state, gglib_core::domain::EndpointState::Off);
     assert_eq!(status.port, None);
+    assert_eq!(status.base_url, None);
+    assert_eq!(status.key, None);
     assert_eq!(status.pinned_model, None);
+}
+
+/// A listening proxy says `on`, or `pinned` when a model is pinned: the one
+/// word every surface shows, agreeing with `running` and `pinned_model`.
+#[test]
+fn a_listening_proxy_says_on_or_pinned() {
+    use gglib_core::domain::EndpointState;
+    let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
+
+    let open = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        None,
+        Some(KeyState::NoneNeeded),
+    );
+    assert!(open.running);
+    assert_eq!(open.state, EndpointState::On);
+    assert_eq!(open.port, Some(8080));
+    assert_eq!(open.base_url.as_deref(), Some("http://127.0.0.1:8080/v1"));
+    assert_eq!(open.key, Some(KeyState::NoneNeeded));
+
+    let pinned = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        Some("qwen".to_owned()),
+        Some(KeyState::Required),
+    );
+    assert_eq!(pinned.state, EndpointState::Pinned);
+    assert_eq!(pinned.pinned_model.as_deref(), Some("qwen"));
+    assert_eq!(pinned.key, Some(KeyState::Required));
+
+    // A key the daemon could not read is said as nothing, not guessed.
+    let unread = to_api_status(&RuntimeProxyStatus::Running { address }, None, None);
+    assert!(unread.running);
+    assert_eq!(unread.key, None);
+}
+
+/// A proxy bound to every interface is reached on loopback, and one bound
+/// to an address is reached there: the status says where a client reaches
+/// it, neither the bound address nor loopback by habit.
+#[test]
+fn the_base_url_is_where_a_client_reaches_the_bind() {
+    let cases = [
+        ("0.0.0.0:8080", "http://127.0.0.1:8080/v1"),
+        ("[::]:8080", "http://127.0.0.1:8080/v1"),
+        ("[::1]:8080", "http://[::1]:8080/v1"),
+        ("192.168.1.20:8080", "http://192.168.1.20:8080/v1"),
+    ];
+    for (bound, reached) in cases {
+        let address: std::net::SocketAddr = bound.parse().unwrap();
+        let status = to_api_status(
+            &RuntimeProxyStatus::Running { address },
+            None,
+            Some(KeyState::NoneNeeded),
+        );
+        assert_eq!(status.base_url.as_deref(), Some(reached), "{bound}");
+    }
+}
+
+/// The keys the status puts on the wire are the shared list the CLI reads
+/// its `ProxyStatusDto` against, so the two ends meet in the contract.
+#[test]
+fn the_status_sends_exactly_the_contract_fields() {
+    let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let status = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        Some("qwen".to_owned()),
+        Some(KeyState::Required),
+    );
+
+    let json = serde_json::to_value(&status).expect("the status serialises");
+    let mut keys: Vec<&str> = json
+        .as_object()
+        .expect("a JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    let mut want = PROXY_STATUS_FIELDS.to_vec();
+    want.sort_unstable();
+    assert_eq!(keys, want);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -255,4 +345,91 @@ fn the_daemon_accepts_every_field_the_cli_sends() {
 fn a_body_with_no_allowed_hosts_still_deserializes() {
     let cfg: StartProxyConfig = serde_json::from_str("{}").expect("an empty body must deserialize");
     assert!(cfg.allowed_hosts.is_empty());
+}
+
+/// The address, the allowed hosts and the prompt cache on disk are read from
+/// settings when a start leaves them out, as the port is, and a start that
+/// names them wins.
+#[test]
+fn an_omitted_address_cache_and_hosts_come_from_settings() {
+    let settings = Settings {
+        proxy_host: Some("0.0.0.0".to_owned()),
+        proxy_allowed_hosts: Some(vec!["gglib.lan".to_owned()]),
+        proxy_cache_on_disk: Some(true),
+        proxy_cache_disk_gb: Some(4),
+        ..Settings::default()
+    };
+
+    let omitted = to_runtime_config(&StartProxyConfig::default(), &settings);
+    assert_eq!(omitted.host, "0.0.0.0");
+    assert_eq!(omitted.allowed_hosts, ["gglib.lan"]);
+    assert!(omitted.cache_enabled);
+    assert_eq!(omitted.slot_dir, Some(gglib_runtime::default_slot_dir()));
+    assert_eq!(
+        omitted.disk_budget,
+        gglib_runtime::proxy::resolve_disk_budget(Some(4))
+    );
+
+    let named = to_runtime_config(
+        &StartProxyConfig {
+            host: Some("127.0.0.1".to_owned()),
+            allowed_hosts: vec!["desk.local".to_owned()],
+            cache: Some(false),
+            cache_disk_gb: Some(9),
+            ..StartProxyConfig::default()
+        },
+        &settings,
+    );
+    assert_eq!(named.host, "127.0.0.1");
+    assert_eq!(named.allowed_hosts, ["desk.local"]);
+    assert!(!named.cache_enabled);
+    assert_eq!(named.slot_dir, None);
+    assert_eq!(
+        named.disk_budget,
+        gglib_runtime::proxy::resolve_disk_budget(Some(9)),
+        "a named budget beats the stored one"
+    );
+
+    let nothing = to_runtime_config(&StartProxyConfig::default(), &Settings::default());
+    assert_eq!(nothing.host, "127.0.0.1");
+    assert!(nothing.allowed_hosts.is_empty());
+    assert!(!nothing.cache_enabled);
+}
+
+/// The pinned-start body's three keys reach the fields the handler plans the
+/// launch from, the options in the start body's `camelCase` and the proxy
+/// config in the proxy body's `snake_case`; the array's length is tied to the
+/// contract's.
+#[test]
+fn the_daemon_reads_the_pinned_start_body_the_cli_sends() {
+    use gglib_core::contracts::http::daemon::PROXY_START_PINNED_CLI_FIELDS;
+    use serde_json::json;
+
+    let sample = |name: &str| match name {
+        "model_id" => json!(7),
+        "options" => json!({ "contextLength": 8192 }),
+        "proxy" => json!({ "port": 8123 }),
+        other => panic!("no sample value for contract field `{other}` — add one"),
+    };
+    let body: serde_json::Map<String, serde_json::Value> = PROXY_START_PINNED_CLI_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), sample(name)))
+        .collect();
+
+    let StartPinnedBody {
+        model_id,
+        options,
+        proxy,
+    } = serde_json::from_value(serde_json::Value::Object(body))
+        .expect("the daemon must read the pinned-start body the CLI sends");
+
+    let read: [(&str, bool); 3] = [
+        ("model_id", model_id == 7),
+        ("options", options.context_length == Some(8192)),
+        ("proxy", proxy.port == Some(8123)),
+    ];
+    assert_eq!(read.len(), PROXY_START_PINNED_CLI_FIELDS.len());
+    for (name, arrived) in read {
+        assert!(arrived, "{name} was dropped");
+    }
 }

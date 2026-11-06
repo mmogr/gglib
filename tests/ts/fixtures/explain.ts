@@ -12,7 +12,7 @@
  * `skip_serializing_if`, so a model whose template reads `reasoning_effort`
  * really does omit the key.
  */
-import type { SamplingExplanation } from '../../../src/types';
+import type { LaunchExplanation, SamplingExplanation } from '../../../src/types';
 import { resolvedConfig } from './inference';
 
 const BASE: SamplingExplanation = {
@@ -29,4 +29,21 @@ export function samplingExplanation(
   overrides: Partial<SamplingExplanation> = {},
 ): SamplingExplanation {
   return { ...BASE, ...overrides };
+}
+
+/**
+ * A whole explanation around `sampling`: the launch half is the smallest
+ * plan the daemon can send, a program with no arguments and no fit, for a
+ * test that reads only the sampling.
+ */
+export function launchExplanation(sampling: SamplingExplanation): LaunchExplanation {
+  return {
+    plan: {
+      program: 'llama-server',
+      args: [],
+      narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [] },
+      fit: null,
+    },
+    sampling,
+  };
 }

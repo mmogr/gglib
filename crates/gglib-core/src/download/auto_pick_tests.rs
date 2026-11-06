@@ -15,6 +15,7 @@ use crate::domain::gguf::{GgufMetadata, HeadMetadata};
 use crate::domain::kv_estimate::{estimate_kv_elems_per_token, kv_bytes_per_token};
 use crate::domain::phone_fit::{FitVerdict, fit_verdict};
 use crate::domain::recommendation::{budget_covering, usable_share};
+use crate::domain::variant_fit::VariantFit;
 use crate::download::GgufFileRole;
 
 const Q4_K_M: FileType = FileType(15);
@@ -637,5 +638,93 @@ fn an_image_model_fits_by_its_weights_alone() {
     assert_eq!(
         fit.fit(&none, true, usable_share(budget) + 1),
         Fit::DoesNotFit
+    );
+}
+
+/// The verdict beside the picker's answer, as a listing shows it: each arm
+/// of [`MemoryFit::judge`] against the fit it rests on and the numbers a
+/// `TooBig` carries, the least budget covering the load against the budget
+/// there is.
+#[test]
+fn each_verdict_says_what_the_picker_found() {
+    let model = qwen3_4b();
+    let kv = estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref());
+    let per_token = kv_bytes_per_token(kv.unwrap(), DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+
+    // Roomy: the ladder's own verdict, with the context it reached.
+    let roomy = MemoryFit {
+        budget_bytes: 64 * GIB,
+    };
+    let (ladder, _) = fit_verdict(
+        model.context_length,
+        Some(QWEN3_4B_Q4_K_M),
+        kv,
+        Some(64 * GIB),
+    );
+    assert!(matches!(ladder, FitVerdict::Fits { .. }), "{ladder:?}");
+    assert_eq!(
+        roomy.judge(&model, false, QWEN3_4B_Q4_K_M),
+        (Fit::Fits, VariantFit::from(ladder))
+    );
+
+    // A whole window that fits: the model is served at all it was trained
+    // for, whether the ladder's lowest rung was tight (4096) or too big.
+    for trained in [2048, 4096, 6144] {
+        let mut model = qwen3_4b();
+        model.context_length = Some(trained);
+        let window = QWEN3_4B_Q4_K_M + per_token * trained;
+        let at_edge = MemoryFit {
+            budget_bytes: budget_covering(window),
+        };
+        assert_eq!(
+            at_edge.judge(&model, false, QWEN3_4B_Q4_K_M),
+            (Fit::Fits, VariantFit::Fits { ctx: Some(trained) }),
+            "{trained}"
+        );
+        let short = MemoryFit {
+            budget_bytes: budget_covering(window) - 1,
+        };
+        assert_eq!(
+            short.judge(&model, false, QWEN3_4B_Q4_K_M),
+            (
+                Fit::DoesNotFit,
+                VariantFit::TooBig {
+                    need_bytes: budget_covering(window),
+                    have_bytes: budget_covering(window) - 1,
+                }
+            ),
+            "{trained}"
+        );
+    }
+
+    // Too big for the lowest rung of a long window: the ladder's numbers.
+    let cramped = MemoryFit {
+        budget_bytes: 2 * GIB,
+    };
+    let (fit, verdict) = cramped.judge(&model, false, QWEN3_4B_Q4_K_M);
+    assert_eq!(fit, Fit::DoesNotFit);
+    assert!(
+        matches!(verdict, VariantFit::TooBig { have_bytes, need_bytes } if have_bytes == 2 * GIB && need_bytes > 2 * GIB),
+        "{verdict:?}"
+    );
+
+    // An image model: its files alone, with no context to serve at.
+    let image = MemoryFit {
+        budget_bytes: 16 * GIB,
+    };
+    let none = GgufMetadata::default();
+    assert_eq!(
+        image.judge(&none, true, usable_share(16 * GIB)),
+        (Fit::Fits, VariantFit::Fits { ctx: None })
+    );
+    assert_eq!(
+        image.judge(&none, true, usable_share(16 * GIB) + 1),
+        (
+            Fit::DoesNotFit,
+            VariantFit::TooBig {
+                need_bytes: budget_covering(usable_share(16 * GIB) + 1),
+                have_bytes: 16 * GIB,
+            }
+        )
     );
 }

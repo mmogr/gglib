@@ -15,6 +15,7 @@ mod hub_chats;
 
 pub mod benchmark;
 mod downloads;
+pub mod launch_explain;
 pub mod launch_options;
 mod mcp;
 mod models;
@@ -22,9 +23,13 @@ mod models_components;
 mod models_projector;
 mod models_upgrade;
 mod proxy;
+pub mod proxy_clients;
 mod proxy_guard;
 mod proxy_port;
+pub mod proxy_prove;
+pub mod proxy_settings;
 mod remote;
+mod residency_events;
 mod runs;
 mod sampling_explain;
 mod servers;
@@ -41,9 +46,13 @@ pub use error::GuiError;
 pub use benchmark::BenchmarkOps;
 pub use downloads::{DownloadDeps, DownloadOps, download_budget, search_hf_models};
 pub use hub_chats::HubChats;
+pub use launch_explain::LaunchExplanationDto;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;
+pub use proxy_clients::{ClientFacts, ClientRecipe, ClientRecipes, RecipeLine, recipes};
+pub use proxy_prove::{ProofOutcome, ProofRefusal};
+pub use proxy_settings::proxy_config_from_settings;
 pub use remote::{
     EnableRequest, Enabled, FarCredentials, FarError, FarProxy, JoinRequest, Joined,
     OfferedPairing, PairedModels, RemoteConnection, RemoteDevice, RemoteEnableBody,

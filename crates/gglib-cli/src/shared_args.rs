@@ -218,11 +218,11 @@ pub struct CacheArgs {
     /// Byte budget, in GiB, for the on-disk KV cache slot file eviction
     /// sweep. Only meaningful with `--cache`.
     ///
-    /// Omit to auto-size from free disk space at `--slot-dir` (a quarter
-    /// of free space + the cache's own current footprint, recomputed on
-    /// every sweep so it tracks disk pressure from other applications).
-    /// Can also be set via `GGLIB_CACHE_DISK_GB` (e.g. in a `.env` file)
-    /// without editing this flag; the flag wins if both are set.
+    /// Omitted, the stored `proxy-cache-disk-gb` setting applies, else
+    /// `GGLIB_CACHE_DISK_GB` in the daemon's environment, else the budget is
+    /// sized from free disk space at `--slot-dir` (a quarter of free space +
+    /// the cache's own current footprint, recomputed on every sweep so it
+    /// tracks disk pressure from other applications). Typed, the flag wins.
     #[arg(long)]
     pub cache_disk_gb: Option<u64>,
 }
@@ -257,6 +257,7 @@ pub struct AccessArgs {
     /// malicious page from reaching it by DNS rebinding. A wildcard bind
     /// (`--host 0.0.0.0`) names no reachable address, so reaching it as
     /// `gglib.lan` or `192.168.1.5` needs that name given here.
+    /// Given, the list replaces the stored `proxy_allowed_hosts` for this run.
     #[arg(long = "allowed-host", value_name = "HOST")]
     pub allowed_hosts: Vec<String>,
 }
@@ -269,12 +270,13 @@ pub struct ServeOptions {
     pub jinja: bool,
     /// Host the OpenAI-compatible endpoint binds to.
     ///
-    /// Defaults to loopback. `0.0.0.0` accepts LAN clients, and binding off
-    /// loopback generates an API key if none is configured. A wildcard bind
-    /// names no reachable address, so clients reaching it by hostname or LAN
-    /// IP need that value passed to `--allowed-host`.
-    #[arg(long, default_value = "127.0.0.1")]
-    pub host: String,
+    /// Omit to use the stored `proxy_host` setting, loopback until one is
+    /// stored. `0.0.0.0` accepts LAN clients, and binding off loopback
+    /// generates an API key if none is configured. A wildcard bind names no
+    /// reachable address, so clients reaching it by hostname or LAN IP need
+    /// that value passed to `--allowed-host`.
+    #[arg(long)]
+    pub host: Option<String>,
     /// Port the OpenAI-compatible endpoint listens on. Omit to use the stored
     /// `proxy_port` setting.
     ///

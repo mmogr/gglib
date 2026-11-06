@@ -27,6 +27,12 @@ interface JinjaModeFieldProps {
    * Mirrors `ServeConfig.jinja`, which is `undefined` for the deferred case.
    */
   value: boolean | null;
+  /**
+   * The model's own default (`serverDefaults.jinja`), the rung between this
+   * launch's choice and the tags: `true` sends `--jinja`, `false`
+   * `--no-jinja`, absent leaves it to the tags.
+   */
+  modelDefault?: boolean | null;
   /** An agent-tagged model has `--jinja` added for it when the choice is deferred. */
   hasAgentTag: boolean;
   disabled: boolean;
@@ -42,9 +48,15 @@ interface JinjaModeFieldProps {
  * and the reason second. The deferred-and-untagged branch is the one that used
  * to lie: nothing is sent, and llama-server's own default is on.
  */
-function describeLaunch(value: boolean | null, hasAgentTag: boolean): string {
+function describeLaunch(
+  value: boolean | null,
+  modelDefault: boolean | null | undefined,
+  hasAgentTag: boolean,
+): string {
   if (value === true) return 'On — --jinja, chosen for this launch';
   if (value === false) return 'Off — --no-jinja, chosen for this launch';
+  if (modelDefault === true) return "On — --jinja, this model's own default";
+  if (modelDefault === false) return "Off — --no-jinja, this model's own default";
   return hasAgentTag
     ? 'On — --jinja, added automatically for the agent tag'
     : "On — no flag sent, and llama-server's own default is on";
@@ -52,6 +64,7 @@ function describeLaunch(value: boolean | null, hasAgentTag: boolean): string {
 
 export const JinjaModeField: FC<JinjaModeFieldProps> = ({
   value,
+  modelDefault = null,
   hasAgentTag,
   disabled,
   onChange,
@@ -59,10 +72,10 @@ export const JinjaModeField: FC<JinjaModeFieldProps> = ({
 }) => (
   <div className="mb-lg">
     <div className="flex items-center justify-between gap-sm">
-      <label htmlFor="jinja-mode" className="block mb-0 font-medium text-text">
+      <label htmlFor="jinja-mode" className="block mb-0 font-semibold text-text">
         Jinja Templates
       </label>
-      <span className="text-sm text-text-muted">{describeLaunch(value, hasAgentTag)}</span>
+      <span className="text-sm text-text-muted">{describeLaunch(value, modelDefault, hasAgentTag)}</span>
     </div>
     <Select
       id="jinja-mode"
@@ -74,7 +87,7 @@ export const JinjaModeField: FC<JinjaModeFieldProps> = ({
         else onChange(e.target.value === 'on');
       }}
     >
-      <option value="auto">Auto — let llama-server decide</option>
+      <option value="auto">Auto — the model's own default, else the tags and llama-server</option>
       <option value="on">On — always send --jinja</option>
       <option value="off">Off — always send --no-jinja</option>
     </Select>

@@ -99,6 +99,7 @@ pub fn plan_pinned_launch(
     let mtp = resolve_mtp_args(
         request.mtp_draft_n_max,
         request.mtp_draft_p_min,
+        model.server_defaults.as_ref().and_then(|s| s.mtp),
         &model.tags,
     );
 

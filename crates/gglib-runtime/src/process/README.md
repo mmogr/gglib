@@ -13,7 +13,7 @@ This module provides shared infrastructure for managing llama-server and
   for either runtime: a `SpawnConfig` names llama-server or `sd-server`, and
   `RuntimeBinaries` holds the binary each is started from
 - `ProcessManager` - High-level orchestration; dispatch only
-- `ResidentSet` (`residency/`) - The VRAM slots and the launch driver that fills them
+- `ResidentSet` (`residency/`) - The VRAM slots and the launch driver that fills them; tells a `ResidencyObserver` of every load and unload
 - `AdmissionQueue` (`admission/`) - Decides who gets the GPU next, and for how long
 - `ServerEvent` / `ServerEventBroadcaster` - Lifecycle event broadcasting
 - `ServerLogManager` - Log streaming infrastructure

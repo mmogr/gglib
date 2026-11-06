@@ -5,7 +5,7 @@ use axum::extract::{Path, Query, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_app_services::SamplingExplanationDto;
+use gglib_app_services::LaunchExplanationDto;
 use gglib_app_services::types::{
     AddModelRequest, ComponentChoices, GuiModel, ProjectorChoice, RemoveModelRequest,
     SetCapabilitiesRequest, UpdateModelRequest,
@@ -205,7 +205,7 @@ pub(crate) async fn retag(
 /// downloads, distinct from the shard-level diff on `/{id}/updates`. It is
 /// the comparison `gglib model check-updates` makes, for a model an upgrade
 /// can be applied to: with no recorded revision it reports an update and no
-/// `currentSha`, which that command prints as nothing to compare with.
+/// `current`, which that command prints as nothing to compare with.
 pub(crate) async fn check_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -279,20 +279,18 @@ pub(crate) struct ExplainQueryParams {
     pub profile: Option<String>,
 }
 
-/// Resolved sampling parameters for a model, and which layer supplied each.
+/// The launch gglib would make for a model, flag by flag, and the sampling
+/// it resolves to with the layer that supplied each value.
 ///
 /// The HTTP equivalent of `gglib model explain`. Both surfaces call
-/// `ModelOps::explain_sampling`, so neither can describe a hierarchy that
-/// differs from the one the proxy actually resolves.
+/// `ModelOps::explain`, so neither can describe a launch or a hierarchy
+/// that differs from the one that runs.
 pub(crate) async fn explain(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Query(params): Query<ExplainQueryParams>,
-) -> Result<Json<SamplingExplanationDto>, HttpError> {
+) -> Result<Json<LaunchExplanationDto>, HttpError> {
     Ok(Json(
-        state
-            .models
-            .explain_sampling(id, params.profile.as_deref())
-            .await?,
+        state.models.explain(id, params.profile.as_deref()).await?,
     ))
 }

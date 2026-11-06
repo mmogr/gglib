@@ -29,6 +29,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use gglib_core::domain::defects::LoopGuardTrip;
+use gglib_core::domain::{Intervention, InterventionKind};
 
 use crate::generation::TurnGeneration;
 
@@ -150,6 +151,13 @@ pub struct ContextSnapshot {
     /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub recorded_at_secs: u64,
+    /// What gglib did to this request, each with its word, in the order it
+    /// was done: filled where the request is recorded, and a repaired tool
+    /// call added by [`ContextMetricsStore::flag_tool_repair`] when the
+    /// repair lands, which comes after everything else. A repair whose
+    /// snapshot was already evicted is lost to this list, the bounded
+    /// undercount that flag already accepts.
+    pub interventions: Vec<Intervention>,
     /// Per-store sequence number assigned by [`ContextMetricsStore::record`].
     /// Identifies this snapshot for post-stream back-patching; callers pass
     /// `0` and the store overwrites it. Not part of the wire contract.
@@ -313,6 +321,11 @@ impl ContextMetricsStore {
             .unwrap_or_else(PoisonError::into_inner);
         if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
             snapshot.tool_repaired = succeeded;
+            if succeeded {
+                snapshot
+                    .interventions
+                    .push(Intervention::new(InterventionKind::RepairedToolCall));
+            }
             // The ring row still knows its model; a repair whose snapshot
             // was already evicted keeps the fleet counter above but is lost
             // to the per-model ledger — a bounded, bias-free undercount on

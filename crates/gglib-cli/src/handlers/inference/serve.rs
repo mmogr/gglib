@@ -158,7 +158,7 @@ async fn serve_here(
             mlock: context.mlock,
         },
         ProxyGlobals {
-            host: Some(options.host.clone()),
+            host: options.host.clone(),
             default_ctx: None,
             proxy_port: options.port,
             // The daemon owns llama-server port allocation; a per-run value
@@ -214,6 +214,7 @@ async fn serve_here(
     let body = start_body(
         plan.unified.to_proxy_config(),
         plan.pinned,
+        options.host.clone(),
         options.port,
         &cache,
         // The profile is carried by name: the proxy re-reads its list per
@@ -222,29 +223,29 @@ async fn serve_here(
     );
 
     let handle = daemon_client::ensure_daemon(ctx).await?;
-    let proxy_port = super::proxy::start_on(&handle, &body, &settings).await?;
-    super::proxy::attach_dashboard(ctx, proxy_port, access.api_key).await
+    let started = super::proxy::start_on(&handle, &body, &settings).await?;
+    let reach = super::proxy::reached(options.host.as_deref(), &settings);
+    super::proxy::attach_dashboard(ctx, reach, started.port, access.api_key).await
 }
 
 /// What `gglib serve` asks the daemon to start: the proxy as `planned`,
-/// pinned to `pinned`.
-///
-/// `port` is the `--port` flag as typed, and never `planned.port`. The plan
-/// resolves an absent flag to the built-in default, which the daemon would
-/// read as a port somebody chose; no port leaves it to the daemon's own
-/// fallback, the stored `proxy_port`, as the GUI's pinned start does.
+/// pinned to `pinned`. `host`, `port` and `cache` are the flags as typed,
+/// never `planned`'s: the plan resolves an absent flag to the built-in
+/// default, which the daemon would read as a choice, while no value leaves
+/// it to the stored `proxy_host`, `proxy_port` and `proxy_cache_on_disk`.
 fn start_body(
     planned: ProxyConfig,
     pinned: PinnedSpec,
+    host: Option<String>,
     port: Option<u16>,
     cache: &CacheArgs,
     default_profile: Option<String>,
 ) -> StartProxyBody {
     StartProxyBody {
-        host: Some(planned.host),
+        host,
         port,
         default_context: planned.default_context,
-        cache: Some(cache.cache),
+        cache: cache.cache.then_some(true),
         // `slot_dir` comes from the cascade rather than the raw flag: it has
         // already had the `cache_enabled` master switch applied and the
         // default directory filled in.

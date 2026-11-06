@@ -126,13 +126,24 @@ fn parsed(argv: &[&str]) -> Result<crate::ModelCommand> {
 }
 
 /// `argv` parsed as the CLI parses it and run as `gglib model …` runs it.
+///
+/// The dispatch is boxed: its future holds every subcommand's state, and
+/// on Windows it outgrew what clippy lets a test await in place.
 pub(super) async fn run(ctx: &CliContext, argv: &[&str]) -> Result<()> {
-    super::dispatch(ctx, parsed(argv)?, crate::target::Target::Local).await
+    let command = parsed(argv)?;
+    Box::pin(super::dispatch(ctx, command, crate::target::Target::Local)).await
 }
 
 /// [`run`], through `ops` in place of the ones a command builds for itself.
 pub(super) async fn run_with(ctx: &CliContext, ops: &ModelOps, argv: &[&str]) -> Result<()> {
-    super::dispatch_with(ctx, ops, parsed(argv)?, crate::target::Target::Local).await
+    let command = parsed(argv)?;
+    Box::pin(super::dispatch_with(
+        ctx,
+        ops,
+        command,
+        crate::target::Target::Local,
+    ))
+    .await
 }
 
 /// An emitter that keeps what it was told, in the order it was told.
@@ -202,6 +213,24 @@ impl ModelRuntimePort for Runtime {
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         unimplemented!("an update and a removal start nothing")
+    }
+
+    fn plan(
+        &self,
+        spec: &gglib_core::ports::ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
+        gglib_runtime::process::residency::explain::plan_launch(
+            spec.clone(),
+            &gglib_core::server_config::ServerConfigOptions::default(),
+            gglib_core::cache_config::CacheRamSetting::Auto,
+            num_ctx,
+            default_ctx,
+            overrides,
+            gglib_runtime::process::residency::explain::Loaded::NOTHING,
+        )
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {

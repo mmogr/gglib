@@ -53,8 +53,12 @@ export default defineConfig(({ mode }) => {
       reportCompressedSize: false,
     },
 
-    // Use relative paths for assets so they work in both dev and production
-    base: './',
+    // Absolute asset paths: every screen has a URL now (`/models/7`,
+    // `/chat/7`), and a relative `./assets/…` would resolve under it. The
+    // daemon serves the shell for any deep path (`crates/gglib-axum/src/ui.rs`)
+    // and so does Tauri's asset protocol (an unknown path falls back to
+    // `index.html`); `tray.html` is its own entry at the root either way.
+    base: '/',
 
     // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
     //

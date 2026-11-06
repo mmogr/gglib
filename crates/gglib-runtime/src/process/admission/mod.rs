@@ -30,3 +30,8 @@ mod state_tests;
 #[cfg(test)]
 #[path = "state_placement_tests.rs"]
 mod state_placement_tests;
+
+/// What the dashboard's projection says about a launch and the second slot.
+#[cfg(test)]
+#[path = "snapshot_tests.rs"]
+mod snapshot_tests;

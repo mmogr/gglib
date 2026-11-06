@@ -72,11 +72,13 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 |---------|-------------|
 | `up [-y] [--model <id\|name>] [-p PORT]` | Go from nothing to a working OpenAI-compatible endpoint: install llama.cpp and the image runtime when missing, recommend and download a model that fits, start the proxy, send one request through it, and print the client configuration; safe to re-run |
 | `model add <path>` | Add a GGUF model to the library; `--component <role>=<path>` links an image model's component as it is added |
-| `model list` | List all models with metadata, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
+| `model list` | List all models with metadata, the Model ID a client sends for each, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
 | `model inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
-| `model explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
+| `model explain <id\|name> [--profile <name>]` | Show the launch gglib would make for the model, each argument with whose choice it was and why, the context fit, and every resolved inference parameter with the layer that supplied it |
+| `model load <id\|name> [--context <N\|max>] [--pin]` | Load a model into memory on the daemon, as the app's Load does; `--pin` pins the endpoint to it first |
+| `model unload <id\|name>` | Unload a model from memory on the daemon, as the app's Unload does |
 | `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |
-| `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
+| `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its own launch defaults (`--jinja auto|on|off`, `--mtp auto|on|off`), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
 | `model retag [<id\|name>] [--all] [--full]` | Re-derive auto-tags from the stored GGUF metadata; additive unless `--full` |
 | `model capabilities <id\|name> [--set FLAG] [--unset FLAG]` | Show a model's capability flags, or override them |
 | `model download <repo>` | Download a model from `HuggingFace`; an image model's companions come too, named with their sizes before it is queued |
@@ -129,6 +131,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
+| `proxy test [<id\|name>]` | Send one real request through the running endpoint and say who answered and in how long, then how a client connects to it: the address, the key rule, the Model ID and a recipe per client, all the daemon's; with no model named, the pinned model, else the one loaded model |
 | `proxy stop` | Stop the proxy on the running daemon; it keeps running there after `gglib proxy` or `gglib serve` detach |
 | `config settings show` | Show current configuration; a stored secret is shown as `(set, not shown)` with the command that prints it |
 | `config settings set [flags]` | Update application settings, one flag each |

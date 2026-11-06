@@ -15,8 +15,8 @@ Custom React hooks for gglib GUI functionality.
 │   │                              Custom Hooks                                   │   │
 │   │                                                                             │   │
 │   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │   │
-│   │  │  useModels  │  │ useServers  │  │ useSettings │  │  useTags    │         │   │
-│   │  │   CRUD ops  │  │Registry view│  │   Config    │  │  Tagging    │         │   │
+│   │  │ useServers  │  │ useSettings │  │  useTags    │  │ useProxyKey │         │   │
+│   │  │Registry view│  │   Config    │  │  Tagging    │  │  Reveal     │         │   │
 │   │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │   │
 │   │         │                │                │                │                │   │
 │   │         └────────────────┴────────────────┴────────────────┘                │   │
@@ -36,10 +36,7 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useModels.ts`](useModels.ts) | Model CRUD operations and listing |
-| [`useModelLibraryEvents.ts`](useModelLibraryEvents.ts) | Reload the library when another client changes it |
 | [`usePairedModels.ts`](usePairedModels.ts) | The paired machine's models for the library and a chat on one of them: read while it is reached and the caller needs them, kept and marked stale while it is away or a read fails, cleared on disconnect or once another machine answers |
-| [`useLibrarySelection.ts`](useLibrarySelection.ts) | The library's one selection, a model here or a far one, never both; a far pick tells the native menu nothing here is selected |
 | [`useServers.ts`](useServers.ts) | Running servers from the event-driven registry, and stopping one |
 | [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, quantisation, whether it reads images, its context, and whether it thinks |
 | [`useImageInput.ts`](useImageInput.ts) | Whether the chat's composers offer images, by `canSee` (this machine's model, or the paired machine's row for it, read only for a chat on its model; always for a far chat), why not, and the context their cost is read against |
@@ -62,12 +59,10 @@ Custom React hooks for gglib GUI functionality.
 | Hook | Description |
 |------|-------------|
 | [`useLlamaStatus.ts`](useLlamaStatus.ts) | Whether llama.cpp is installed and can be downloaded, from the daemon's setup-status route |
-| [`useSystemMemory.ts`](useSystemMemory.ts) | System memory probes |
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |
 | [`useToolSupportCache.ts`](useToolSupportCache.ts) | Whether a HuggingFace model supports tool calling, cached in memory and shared across components |
 | [`useDaemonReachable.ts`](useDaemonReachable.ts) | Whether the daemon answers at all — the state the tray popover used to confuse with a stopped proxy |
-| [`useProxyDashboard.ts`](useProxyDashboard.ts) | Subscribes to a running proxy's live dashboard stream, on the proxy's own host, port and credential |
 | [`useProxyKey.ts`](useProxyKey.ts) | The proxy's API key, revealed each time a surface that presents it opens (ADR 0027): the dashboard stream, the tray panel's stream and Clear Cache |
 
 ### Utility Hooks
@@ -92,16 +87,17 @@ Custom React hooks for gglib GUI functionality.
 ## Usage
 
 ```tsx
-import { useModels } from './hooks/useModels';
 import { useServers } from './hooks/useServers';
+import { useModelLibrary } from './services/modelRegistry';
+import { refreshModels } from './services/modelEvents';
 
 function ModelList() {
-  const { models, loading, error, loadModels } = useModels();
+  const { models, loading, error } = useModelLibrary();
   const { servers, stopServer } = useServers();
 
   const handleStop = async (modelId: number) => {
     await stopServer(modelId);
-    await loadModels();
+    await refreshModels();
   };
 }
 ```

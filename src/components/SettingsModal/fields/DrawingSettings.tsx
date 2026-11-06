@@ -1,7 +1,7 @@
 import { FC } from 'react';
 import { Select } from '../../ui/Select';
 import type { GgufModel } from '../../../types';
-import type { DrawingSettingsValues } from '../useDrawingSettings';
+import type { DrawingSettingsValues } from '../../../readings/drawingValues';
 import { SettingField } from './SettingField';
 import { ToggleField } from './ToggleField';
 

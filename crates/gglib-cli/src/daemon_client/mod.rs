@@ -288,7 +288,10 @@ pub(crate) mod runs;
 pub(crate) mod wire;
 
 pub(crate) use library_changes::LibraryChanges;
-pub(crate) use wire::{QueueDownloadBody, StartProxyBody, StartServerBody};
+pub(crate) use wire::{
+    ClientRecipesDto, ProofOutcomeDto, ProxyStatusDto, QueueDownloadBody, StartProxyBody,
+    StartServerBody,
+};
 
 #[cfg(test)]
 #[path = "handle_tests.rs"]

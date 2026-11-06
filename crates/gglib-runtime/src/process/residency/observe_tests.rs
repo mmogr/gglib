@@ -50,7 +50,7 @@ async fn a_waiting_admission_is_told_its_place_once_per_change() {
         image_family: Some(ImageFamily::Sdxl),
         ..launch_spec(999_401, "sdxl")
     };
-    let set = Arc::new(ResidentSet::new(
+    let set = Arc::new(ResidentSet::unobserved(
         Arc::new(OneModel(spec)),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

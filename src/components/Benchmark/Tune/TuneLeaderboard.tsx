@@ -63,16 +63,16 @@ export const TuneLeaderboard: FC<TuneLeaderboardProps> = ({
     <table className="w-full text-xs border-collapse">
       <thead className="sticky top-0 bg-background z-10">
         <tr className="text-left text-text-muted border-b border-border">
-          <th className="px-base py-xs font-medium">#</th>
-          <th className="px-base py-xs font-medium">Source</th>
-          <th className="px-base py-xs font-medium">Temp</th>
-          <th className="px-base py-xs font-medium">DRY</th>
-          <th className="px-base py-xs font-medium">top_p</th>
-          <th className="px-base py-xs font-medium">Score</th>
-          <th className="px-base py-xs font-medium">Tool Acc.</th>
-          <th className="px-base py-xs font-medium">Loop-free</th>
-          <th className="px-base py-xs font-medium">Status</th>
-          <th className="px-base py-xs font-medium" />
+          <th className="px-base py-xs font-semibold">#</th>
+          <th className="px-base py-xs font-semibold">Source</th>
+          <th className="px-base py-xs font-semibold">Temp</th>
+          <th className="px-base py-xs font-semibold">DRY</th>
+          <th className="px-base py-xs font-semibold">top_p</th>
+          <th className="px-base py-xs font-semibold">Score</th>
+          <th className="px-base py-xs font-semibold">Tool Acc.</th>
+          <th className="px-base py-xs font-semibold">Loop-free</th>
+          <th className="px-base py-xs font-semibold">Status</th>
+          <th className="px-base py-xs font-semibold" />
         </tr>
       </thead>
       <tbody>

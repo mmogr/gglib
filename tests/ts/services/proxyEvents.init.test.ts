@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const subscribeSseEvent = vi.fn();
 const getProxyStatus = vi.fn();
 const ingestProxyEvent = vi.fn();
+const applyProxyStatus = vi.fn();
 const resetProxyState = vi.fn();
 
 vi.mock('../../../src/services/transport', () => ({
@@ -22,6 +23,7 @@ vi.mock('../../../src/services/transport', () => ({
 
 vi.mock('../../../src/services/proxyRegistry', () => ({
   ingestProxyEvent,
+  applyProxyStatus,
   resetProxyState,
 }));
 
@@ -32,17 +34,25 @@ async function loadFresh() {
 
 const PORT = 51733;
 
+/** The daemon's status with nothing listening. */
+const OFF = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+
+/** The daemon's status with the proxy up on `PORT`, as `GET /api/proxy/status` answers. */
+const UP = {
+  running: true,
+  state: 'on',
+  port: PORT,
+  base_url: `http://127.0.0.1:${PORT}/v1`,
+  key: 'none_needed',
+  pinned_model: null,
+};
+
 describe('initProxyEvents', () => {
   beforeEach(() => {
     subscribeSseEvent.mockReset().mockReturnValue(() => {});
-    getProxyStatus.mockReset().mockResolvedValue({
-      running: false,
-      port: null,
-      current_model: null,
-      model_port: null,
-      pinned_model: null,
-    });
+    getProxyStatus.mockReset().mockResolvedValue(OFF);
     ingestProxyEvent.mockReset();
+    applyProxyStatus.mockReset();
     resetProxyState.mockReset();
   });
 
@@ -60,30 +70,52 @@ describe('initProxyEvents', () => {
     cleanupProxyEvents();
   });
 
-  it('hydrates from a running proxy so a page load sees the port', async () => {
-    getProxyStatus.mockResolvedValue({
-      running: true,
-      port: PORT,
-      current_model: null,
-      model_port: null,
-      pinned_model: null,
-    });
+  it('hydrates from the daemon\'s whole status, so a page load sees the port, the address and the key rule', async () => {
+    getProxyStatus.mockResolvedValue(UP);
 
     const { initProxyEvents, cleanupProxyEvents } = await loadFresh();
     initProxyEvents();
-    await vi.waitFor(() => expect(ingestProxyEvent).toHaveBeenCalled());
+    await vi.waitFor(() => expect(applyProxyStatus).toHaveBeenCalled());
 
-    expect(ingestProxyEvent).toHaveBeenCalledWith({ type: 'proxy_started', port: PORT });
+    expect(applyProxyStatus).toHaveBeenCalledWith(UP);
+    expect(ingestProxyEvent).not.toHaveBeenCalled();
 
     cleanupProxyEvents();
   });
 
-  it('says nothing when the proxy is not running', async () => {
+  it('applies an off status too, so a registry that guessed up is corrected', async () => {
     const { initProxyEvents, cleanupProxyEvents } = await loadFresh();
     initProxyEvents();
-    await vi.waitFor(() => expect(getProxyStatus).toHaveBeenCalled());
+    await vi.waitFor(() => expect(applyProxyStatus).toHaveBeenCalled());
 
-    expect(ingestProxyEvent).not.toHaveBeenCalled();
+    expect(applyProxyStatus).toHaveBeenCalledWith(OFF);
+
+    cleanupProxyEvents();
+  });
+
+  /**
+   * An event carries the port and nothing else. The registry moves on it at
+   * once, and the daemon is asked for the rest: the state word, where a
+   * client reaches it, whether a request needs the key.
+   */
+  it('moves on an event at once, then reads the status again', async () => {
+    let deliver: ((evt: unknown) => void) | undefined;
+    subscribeSseEvent.mockImplementation((_c: string, cb: (e: unknown) => void) => {
+      deliver = cb;
+      return () => {};
+    });
+
+    const { initProxyEvents, cleanupProxyEvents } = await loadFresh();
+    initProxyEvents();
+    await vi.waitFor(() => expect(applyProxyStatus).toHaveBeenCalledTimes(1));
+
+    getProxyStatus.mockResolvedValue(UP);
+    deliver?.({ type: 'proxy_started', port: PORT });
+
+    expect(ingestProxyEvent).toHaveBeenCalledWith({ type: 'proxy_started', port: PORT });
+    await vi.waitFor(() => expect(applyProxyStatus).toHaveBeenCalledTimes(2));
+    expect(applyProxyStatus).toHaveBeenLastCalledWith(UP);
+    expect(getProxyStatus).toHaveBeenCalledTimes(2);
 
     cleanupProxyEvents();
   });
@@ -100,27 +132,29 @@ describe('initProxyEvents', () => {
     });
 
     let resolveStatus: (v: unknown) => void = () => {};
-    getProxyStatus.mockReturnValue(
-      new Promise((resolve) => {
-        resolveStatus = resolve;
-      }),
-    );
+    // The hydration GET hangs until the event has landed; the event's own
+    // re-read answers off, as a daemon that just stopped does.
+    getProxyStatus
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveStatus = resolve;
+        }),
+      )
+      .mockResolvedValue(OFF);
 
     const { initProxyEvents, cleanupProxyEvents } = await loadFresh();
     initProxyEvents();
 
     deliver?.({ type: 'proxy_stopped' });
-    resolveStatus({
-      running: true,
-      port: PORT,
-      current_model: null,
-      model_port: null,
-      pinned_model: null,
-    });
+    resolveStatus(UP);
     await vi.waitFor(() => expect(ingestProxyEvent).toHaveBeenCalled());
+    // The event's own re-read is a second GET; the first one's answer is dropped.
+    await vi.waitFor(() => expect(getProxyStatus).toHaveBeenCalledTimes(2));
 
     expect(ingestProxyEvent).toHaveBeenCalledTimes(1);
     expect(ingestProxyEvent).toHaveBeenCalledWith({ type: 'proxy_stopped' });
+    expect(applyProxyStatus).not.toHaveBeenCalledWith(UP);
+    expect(applyProxyStatus).toHaveBeenLastCalledWith(OFF);
 
     cleanupProxyEvents();
   });
@@ -188,15 +222,10 @@ describe('initProxyEvents', () => {
     expect(getProxyStatus).toHaveBeenCalledTimes(1);
     cleanupProxyEvents();
 
-    resolveStatus({
-      running: true,
-      port: PORT,
-      current_model: null,
-      model_port: null,
-      pinned_model: null,
-    });
+    resolveStatus(UP);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(applyProxyStatus).not.toHaveBeenCalled();
     expect(ingestProxyEvent).not.toHaveBeenCalled();
   });
 
@@ -208,8 +237,8 @@ describe('initProxyEvents', () => {
   ])('says nothing for a status that is %s', async (_label, half) => {
     getProxyStatus.mockResolvedValue({
       ...half,
-      current_model: null,
-      model_port: null,
+      base_url: null,
+      key: null,
       pinned_model: null,
     });
 

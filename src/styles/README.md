@@ -27,7 +27,7 @@ Tokens are layered: a foundation value, then aliases named for their purpose.
 
 ```css
 /* Foundation tokens (primitives) */
---color-primary: #f08c26;
+--color-primary: #edece8;
 --spacing-base: 1rem;
 
 /* Semantic aliases (purpose-based) */
@@ -175,7 +175,7 @@ src/
 │   ├── ui/                    # Controls: Button, Icon, Modal, Input, Tabs, …
 │   ├── primitives/            # Layout and readouts: Stack, Row, Readout, …
 │   ├── AddModel.tsx           # Feature components
-│   └── Header.tsx
+│   └── CopyValue.tsx
 ├── pages/                     # Route/page components
 ├── contexts/                  # React contexts
 ├── hooks/                     # Custom hooks
@@ -282,21 +282,36 @@ has an accessible name.
 - Exactly **one solid `primary` Button per visible surface**.
 - Solid red (`Button variant="danger"`) only inside confirm dialogs;
   destructive actions elsewhere are `dangerGhost` (muted at rest, red on hover).
-- Green means running/online only, expressed as a **dot + neutral text** —
-  never a filled pill.
-- Amber (`primary`) is selection, focus, links, and the single primary CTA.
-- Warning is always an icon or label **plus text**, never color alone —
-  accent amber and warning gold are hue neighbors by design, so the words
-  carry the distinction.
+- Status is always a **shape plus a word**, never colour alone. The three
+  status hues sit at least 60° apart (`success` ≈150°, `warning` ≈40°,
+  `danger` ≈350°) so none can be mistaken for another.
+- Green (`success`) means On, Loaded or Connected, expressed as a **dot +
+  neutral text** — never a filled pill, and never "usage is fine".
+- Amber (`warning`) means attention: an update to take, a part missing, a
+  device away. It is always a mark or label **plus text**.
+- `primary` is ink, the highest-contrast neutral: one inverted Button per
+  screen is the action, and selection and focus share it. Amber marks no
+  action; it is the attention colour only.
+
+### Motion
+
+Nothing moves at rest. A dot, a chip or an icon never pulses to say
+"running" — the word says it. Motion is allowed only while something is
+changing: a bar advances while a download or a prompt read is in progress,
+an arc rotates while a load is starting, a caret blinks while a reply is
+streaming. Skeleton placeholders are static grey blocks, not shimmers.
 
 ### Type hierarchy
 
-No all-caps micro-labels. Panel/modal titles `text-lg font-semibold`;
-section headings `text-sm font-semibold text-text`; body and controls
-`text-sm`; meta `text-xs text-text-muted`; ports/paths/quant strings and
-**all numeric telemetry** (counts, rates, percentages, sizes)
-`font-mono tabular-nums`. `text-2xs` is reserved for badge numerals and
-readout unit suffixes.
+Four sizes, at least 2px apart, and no screen uses more than four:
+`text-xs` (12px) for captions, subtitles, figure lines and footnotes;
+`text-sm` (14px) for every control, row, field and setting; `text-base`
+(16px) for running text and for titles; `text-lg` (22px) for the one large
+figure a screen may carry (an address, a pairing code, a headline). Two
+weights, `font-normal` and `font-semibold`; there is no medium or bold.
+No all-caps micro-labels. Ports, paths, quant strings and **all numeric
+telemetry** (counts, rates, percentages, sizes) are `font-mono
+tabular-nums`.
 
 ### Readouts & live charts
 

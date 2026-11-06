@@ -47,6 +47,7 @@ fn context_resolves_explicit_over_model_over_settings() {
     let mut m = model();
     m.server_defaults = Some(gglib_core::domain::ServerConfig {
         context_length: Some(16_384),
+        ..Default::default()
     });
     let settings = Settings {
         default_context_size: Some(8192),
@@ -240,4 +241,29 @@ fn no_stated_sampling_leaves_the_override_empty() {
         ProxyGlobals::default(),
     );
     assert!(plan.unified.to_proxy_config().inference_override.is_none());
+}
+
+/// The banner's MTP line reads the model's own default as the launch will,
+/// and the pin carries no draft count for it: the launch reads the default
+/// from the catalog, so a request's silence stays silence.
+#[test]
+fn the_models_own_mtp_default_reaches_the_banner_and_not_the_pin() {
+    let mut m = model();
+    m.server_defaults = Some(gglib_core::domain::ServerConfig {
+        mtp: Some(true),
+        ..Default::default()
+    });
+    let pin = plan_pinned_launch(
+        &m,
+        &Settings::default(),
+        &request(),
+        ProxyGlobals::default(),
+    );
+
+    assert!(pin.mtp.enabled);
+    assert_eq!(
+        pin.mtp.source,
+        gglib_runtime::llama::args::MtpResolutionSource::ModelDefault
+    );
+    assert_eq!(pin.pinned.launch_overrides.mtp_draft_n_max, None);
 }

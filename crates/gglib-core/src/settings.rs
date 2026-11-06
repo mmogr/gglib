@@ -34,6 +34,12 @@ pub use settings_remote::{Device, KEPT_ON_RESET, RemotePairing, RemoteServe};
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;
 
+/// The address the endpoint binds when `proxy_host` is unset.
+pub const DEFAULT_PROXY_HOST: &str = "127.0.0.1";
+
+/// The least on-disk prompt cache budget a setting may name, in GiB.
+pub const MIN_CACHE_DISK_GB: u64 = 1;
+
 /// The loopback port of the gglib daemon's management API, unless
 /// `GGLIB_DAEMON_PORT` names another: see [`daemon_port`].
 pub const DEFAULT_DAEMON_PORT: u16 = 9887;
@@ -139,6 +145,30 @@ pub struct Settings {
     /// `None`/`Some(false)` → localhost-only. The `--share-lan` flag can turn
     /// this on for a single run, but cannot turn it off — clear it here.
     pub share_lan: Option<bool>,
+
+    // ── The endpoint ────────────────────────────────────────────────
+    /// The address the endpoint (the OpenAI-compatible proxy) binds.
+    ///
+    /// `None` → loopback ([`DEFAULT_PROXY_HOST`]). A literal IP, as
+    /// `bind_host` is: `0.0.0.0` accepts LAN clients, and binding off
+    /// loopback makes the proxy demand a key. `gglib proxy --host` and
+    /// `gglib serve --host` override it for one run.
+    pub proxy_host: Option<String>,
+
+    /// Host header values the endpoint accepts beyond loopback and its
+    /// bound address, as `--allowed-host` names them for one run: a
+    /// wildcard bind names no reachable address, so clients reaching it by
+    /// a name or a LAN IP need that value here. `None` or empty → none.
+    pub proxy_allowed_hosts: Option<Vec<String>>,
+
+    /// Whether the endpoint keeps its prompt cache on disk across model
+    /// swaps and restarts (`gglib proxy --cache`). `None` → off.
+    pub proxy_cache_on_disk: Option<bool>,
+
+    /// The on-disk prompt cache's budget in GiB (`--cache-disk-gb`), at
+    /// least [`MIN_CACHE_DISK_GB`]. `None` → `GGLIB_CACHE_DISK_GB` in the
+    /// daemon's environment, else sized from free disk space.
+    pub proxy_cache_disk_gb: Option<u64>,
 
     /// Bearer token required on the proxy's `/v1/*` and `/mcp` routes.
     ///
@@ -355,6 +385,10 @@ impl Settings {
             title_generation_prompt: None,
             bind_host: None,
             share_lan: None,
+            proxy_host: None,
+            proxy_allowed_hosts: None,
+            proxy_cache_on_disk: None,
+            proxy_cache_disk_gb: None,
             proxy_api_key: None,
             trust_client_sampling: None,
             loop_guard_mode: None,
@@ -377,6 +411,28 @@ impl Settings {
             Some(port) => port,
             None => DEFAULT_PROXY_PORT,
         }
+    }
+
+    /// The address the endpoint binds: the setting, else loopback.
+    #[must_use]
+    pub fn effective_proxy_host(&self) -> String {
+        self.proxy_host
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PROXY_HOST.to_owned())
+    }
+
+    /// The host header values the endpoint accepts beyond its own: the
+    /// setting, else none.
+    #[must_use]
+    pub fn effective_proxy_allowed_hosts(&self) -> Vec<String> {
+        self.proxy_allowed_hosts.clone().unwrap_or_default()
+    }
+
+    /// Whether the endpoint keeps its prompt cache on disk: the setting,
+    /// else off.
+    #[must_use]
+    pub const fn effective_proxy_cache_on_disk(&self) -> bool {
+        matches!(self.proxy_cache_on_disk, Some(true))
     }
 
     /// What the loop guard does: the stored [`Self::loop_guard_mode`], or the
@@ -459,6 +515,18 @@ impl Settings {
         if let Some(ref v) = other.share_lan {
             self.share_lan = *v;
         }
+        if let Some(ref v) = other.proxy_host {
+            self.proxy_host.clone_from(v);
+        }
+        if let Some(ref v) = other.proxy_allowed_hosts {
+            self.proxy_allowed_hosts.clone_from(v);
+        }
+        if let Some(ref v) = other.proxy_cache_on_disk {
+            self.proxy_cache_on_disk = *v;
+        }
+        if let Some(ref v) = other.proxy_cache_disk_gb {
+            self.proxy_cache_disk_gb = *v;
+        }
         if let Some(ref v) = other.proxy_api_key {
             self.proxy_api_key.clone_from(v);
         }
@@ -536,6 +604,34 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         && host.parse::<std::net::IpAddr>().is_err()
     {
         return Err(SettingsError::InvalidBindHost(host.clone()));
+    }
+
+    // The endpoint's bind is held to the same rule, for the same reason.
+    if let Some(ref host) = settings.proxy_host
+        && host.parse::<std::net::IpAddr>().is_err()
+    {
+        return Err(SettingsError::InvalidProxyHost(host.clone()));
+    }
+    // An allowed host is one host: bare, or with a port, as a `Host` header
+    // arrives, with no comma or space in it. A value that cannot be one
+    // would never match a request, and a comma-joined pair typed as one
+    // value is the commonest way to store such a thing.
+    if let Some(hosts) = &settings.proxy_allowed_hosts
+        && let Some(bad) = hosts.iter().find(|host| {
+            crate::access::normalize_host(host).is_none()
+                || host.contains(',')
+                || host.chars().any(char::is_whitespace)
+        })
+    {
+        return Err(SettingsError::InvalidAllowedHost(bad.clone()));
+    }
+    if let Some(gb) = settings.proxy_cache_disk_gb
+        && gb < MIN_CACHE_DISK_GB
+    {
+        return Err(SettingsError::CacheDiskBudgetTooSmall {
+            got: gb,
+            min: MIN_CACHE_DISK_GB,
+        });
     }
 
     // A stored blank would read as "authentication is on" while accepting

@@ -22,11 +22,11 @@
  * chooses and what it hands it, and the stub shows both.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import { ReactNode, useState } from 'react';
+import { useState } from 'react';
 
 // The library the page loads. Empty for the paired cases; one model for the
 // case about a model already running here.
@@ -48,6 +48,8 @@ const downloads = vi.hoisted(() => ({ queue: null as unknown }));
 const updateModel = vi.hoisted(() =>
   vi.fn(async (_params: { id: number; projectorPath?: string | null; components?: Record<string, string | null> }) => ({})),
 );
+const removeModel = vi.hoisted(() => vi.fn(async (_id: number) => {}));
+const stopServer = vi.hoisted(() => vi.fn(async (_id: number) => {}));
 const queueDownload = vi.hoisted(() => vi.fn(async (_params: { modelId: string; quantization?: string }) => ({ id: 'q-1' })));
 // The desktop shell's event channel: it records who listens and sends nothing.
 const shell = vi.hoisted(() => ({ listen: vi.fn(async (_event: string) => () => {}) }));
@@ -70,6 +72,8 @@ vi.mock('../../../src/services/transport', async () => {
       listModels,
       getModelDetail: vi.fn(async () => here.detail),
       updateModel,
+      removeModel,
+      stopServer,
       listPairedModels: vi.fn(() =>
         far.hang ? new Promise(() => {}) : Promise.resolve(pairedModels([farEntry('qwen3-8b', 7)])),
       ),
@@ -170,27 +174,18 @@ vi.mock('../../../src/pages/ChatPage', () => ({
   },
 }));
 
-import ModelControlCenterPage from '../../../src/pages/ModelControlCenterPage';
-import { ToastProvider } from '../../../src/contexts/ToastContext';
+import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
+import { ingestServerEvent } from '../../../src/services/serverRegistry';
+import { renderApp } from '../places/harness';
 import { guiModel } from '../fixtures/model';
 import { farDetail, farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
 import { queueSnapshot, runningRow, waitingRow } from '../fixtures/downloads';
-import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
-import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import {
   IDLE_STATUS,
   applyRemoteStatus,
   resetRemoteState,
 } from '../../../src/services/remoteRegistry';
 import { get } from '../../../src/services/transport/api/client';
-
-const wrapper = ({ children }: { children: ReactNode }) => (
-  <ToastProvider>
-    <ConfirmProvider>
-      <SettingsProvider showToast={() => {}}>{children}</SettingsProvider>
-    </ConfirmProvider>
-  </ToastProvider>
-);
 
 const CONNECTED = {
   ...IDLE_STATUS,
@@ -206,14 +201,18 @@ const CONNECTED = {
   has_remote_key: true,
 };
 
-const stopServer = vi.fn(async () => {});
+/** A model served here, as the registry hears of one. */
+function serve(modelId: number, modelName: string, port: number, type: 'running' | 'stopped' = 'running') {
+  act(() => ingestServerEvent({ type, modelId: String(modelId), port, updatedAt: Date.now(), modelName }));
+}
 
-/** Render the page with nothing served here — the laptop this PR is about. */
+/**
+ * Render the library, the registry filled first as `App` fills it once;
+ * nothing served here unless a test says so.
+ */
 function renderPage() {
-  return render(
-    <ModelControlCenterPage servers={[]} stopServer={stopServer} />,
-    { wrapper },
-  );
+  initModelEvents();
+  return renderApp('/library');
 }
 
 /** Pick the paired machine's row for `name`, under that machine's group. */
@@ -225,6 +224,10 @@ async function pickFar(name: RegExp) {
 }
 
 describe('ModelControlCenterPage', () => {
+  afterEach(() => {
+    cleanupModelEvents();
+    for (const id of [7, 8, 9, 11]) serve(id, '', 0, 'stopped');
+  });
   beforeEach(() => {
     library.models = [];
     listModels.mockClear();
@@ -235,6 +238,7 @@ describe('ModelControlCenterPage', () => {
     here.projectors = null;
     here.components = null;
     updateModel.mockClear();
+    removeModel.mockClear();
     queueDownload.mockClear();
     shell.listen.mockClear();
     serveModel.mockClear();
@@ -321,11 +325,8 @@ describe('ModelControlCenterPage', () => {
     // Served before the page loaded — by the CLI, the tray, another window —
     // so no serve here ever fired the handler that opens chat by itself.
     library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true })];
-    const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }];
-    render(
-      <ModelControlCenterPage servers={running} stopServer={stopServer} />,
-      { wrapper },
-    );
+    serve(7, 'qwen3-8b', 9123);
+    renderPage();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('option', { name: /qwen3-8b/i }));
@@ -355,11 +356,9 @@ describe('ModelControlCenterPage', () => {
   /** One model running here, one not, and the chat open on the running one. */
   async function openChatOnQwen(extra: { modelId: number; modelName: string; port: number; status: 'running' }[] = []) {
     library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true }), guiModel({ id: 9, name: 'gemma-3-12b' })];
-    const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }, ...extra];
-    render(
-      <ModelControlCenterPage servers={running} stopServer={stopServer} />,
-      { wrapper },
-    );
+    serve(7, 'qwen3-8b', 9123);
+    for (const s of extra) serve(s.modelId, s.modelName, s.port);
+    renderPage();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('option', { name: /qwen3-8b/i }));
     await user.click(await screen.findByRole('button', { name: /open chat/i }));
@@ -412,6 +411,39 @@ describe('ModelControlCenterPage', () => {
 
     expect(await screen.findByRole('button', { name: /start endpoint/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open chat/i })).not.toBeInTheDocument();
+  });
+
+  it('a cold load of ?serve=1 opens the Serve dialog once the inspector can, then strips it', async () => {
+    library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
+    here.detail = farDetail(9, 'gemma-3-12b', { filePath: '/models/g/gemma.gguf' });
+    initModelEvents();
+    const { at } = renderApp('/models/9?serve=1');
+
+    expect(await screen.findByRole('dialog', { name: /start model server/i })).toBeInTheDocument();
+    await waitFor(() => expect(at()).toBe('/models/9'));
+  });
+
+  it('removing the selected model clears the selection: the address goes back to the library', async () => {
+    library.models = [guiModel({ id: 7, name: 'qwen3-8b' }), guiModel({ id: 9, name: 'gemma-3-12b' })];
+    here.detail = farDetail(9, 'gemma-3-12b', { filePath: '/models/g/gemma.gguf' });
+    const { at } = renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
+    expect(at()).toBe('/models/9');
+    // The daemon's list once the removal has been answered.
+    library.models = [guiModel({ id: 7, name: 'qwen3-8b' })];
+
+    // The inspector's Delete opens the confirmation; the page behind it is
+    // hidden from the accessibility tree while it is up, so its Delete is
+    // the only one left.
+    await user.click(await screen.findByRole('button', { name: /^delete$/i }));
+    const confirmation = await screen.findByRole('dialog', { name: /delete model/i });
+    await user.click(within(confirmation).getByRole('button', { name: /^delete$/i }));
+
+    await waitFor(() => expect(removeModel).toHaveBeenCalledWith(9));
+    await waitFor(() => expect(at()).toBe('/library'));
+    await waitFor(() => expect(screen.queryByRole('option', { name: /gemma-3-12b/i })).not.toBeInTheDocument());
+    expect(screen.getByRole('option', { name: /qwen3-8b/i })).toHaveAttribute('aria-selected', 'false');
   });
 
   it("links this machine's model to the projector picked in its inspector, by the library's update", async () => {

@@ -5,6 +5,7 @@ pub(crate) mod download;
 pub(crate) mod explain;
 pub(crate) mod inspect;
 pub(crate) mod list;
+pub(crate) mod load;
 mod recorded_servers;
 pub(crate) mod remove;
 pub(crate) mod resolver;
@@ -132,6 +133,8 @@ async fn dispatch_with(
             reasoning_budget_tokens,
             unset,
             clear_inference_defaults,
+            jinja,
+            mtp,
             dry_run,
             yes,
             projector,
@@ -166,6 +169,8 @@ async fn dispatch_with(
                 reasoning_budget_tokens,
                 unset,
                 clear_inference_defaults,
+                jinja: jinja.as_deref().map(update::TriState::parse),
+                mtp: mtp.as_deref().map(update::TriState::parse),
                 dry_run,
                 yes,
                 projector,
@@ -265,6 +270,16 @@ async fn dispatch_with(
             profile,
         } => {
             explain::execute(ctx, ops, &identifier, profile.as_deref()).await?;
+        }
+        ModelCommand::Load {
+            identifier,
+            context,
+            pin,
+        } => {
+            load::load(ctx, &identifier, context.as_deref(), pin).await?;
+        }
+        ModelCommand::Unload { identifier } => {
+            load::unload(ctx, &identifier).await?;
         }
     }
     Ok(())

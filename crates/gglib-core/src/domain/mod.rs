@@ -25,9 +25,12 @@ pub mod image_family;
 pub(crate) mod image_family_goldens;
 pub(crate) mod inference;
 pub mod inference_profile;
+pub mod intervention;
 pub(crate) mod kv_estimate;
 pub(crate) mod kv_memory;
+pub mod launch_facts;
 pub(crate) mod launch_narration;
+pub mod launch_plan;
 pub mod loop_guard_log;
 mod machine;
 pub mod mcp;
@@ -43,6 +46,7 @@ pub(crate) mod query;
 pub(crate) mod reasoning_effort;
 pub mod recommendation;
 pub(crate) mod residency;
+pub mod revision;
 pub mod runs;
 pub(crate) mod runtime_capabilities;
 mod runtime_kind;
@@ -50,15 +54,18 @@ pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
+pub mod state_words;
 pub(crate) mod template_caps;
 pub mod tensor_table;
 pub mod thinking;
+pub mod variant_fit;
 
 // Re-export model types at the domain level for convenience
 pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
 pub use model::{Model, ModelComponent, ModelFilterOptions, NO_HUB_LABEL, NewModel};
 pub use model_detail::{ComponentLinkDto, ModelDetailDto, ModelLookup};
 pub use model_file::{ModelFile, ModelFolder, NewModelFile};
+pub use revision::{Revision, RevisionKind};
 
 // Re-export query types at the domain level for convenience
 pub use query::{ModelListQuery, ModelSortBy, SortOrder, apply_query};
@@ -85,6 +92,7 @@ pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};
+pub use state_words::{EndpointState, KeyState, ReachState, ResidencyState};
 
 // Re-export the template-capability self-report (ADR 0007) at the domain level
 pub use template_caps::{
@@ -104,6 +112,7 @@ pub use model_sampling::{
 
 // Re-export launch narration types at the domain level for convenience
 pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};
+pub use launch_plan::{ChoiceSource, ContextFit, LaunchArg, LaunchPlan, Unload, UnloadReason};
 
 // Re-export the first-run model recommendation at the domain level.
 pub use recommendation::BUDGET_UTILISATION;
@@ -113,17 +122,19 @@ pub use recommendation::{
 
 // Re-export a model's fit on a phone at the domain level for convenience
 pub use phone_fit::{FitVerdict, MissingInput, fit_verdict};
+pub use variant_fit::VariantFit;
 
 // Re-export admission-control telemetry at the domain level for convenience
 pub use admission::{
     AdmissionSnapshot, GenerationSnapshot, QueuedModelSnapshot, RenderSnapshot,
     ResidentSlotSnapshot, SecondarySlotStatus,
 };
+pub use launch_facts::{LaunchFacts, flag_line, format_context};
 
 // Re-export the second-VRAM-slot decision at the domain level for convenience
 pub use residency::{
     RESIDENCY_UTILISATION, SecondarySlotDecision, SlotFootprint, decide_secondary_slot,
-    decide_secondary_slot_for,
+    decide_secondary_slot_for, secondary_headroom,
 };
 pub use server_config::ServerConfig;
 
@@ -165,6 +176,7 @@ pub use image_family::{
     ComponentRole, ComponentSpec, FlashAttention, ImageFamily, Placement, Recipe, Sampling,
     SizeRule, UnknownName,
 };
+pub use intervention::{Intervention, InterventionKind, Refusal};
 pub use runtime_kind::RuntimeKind;
 
 // Re-export dialect types at the domain level for convenience

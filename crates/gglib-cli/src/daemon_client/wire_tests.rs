@@ -3,7 +3,12 @@
 //! what the daemon sends.
 
 use super::*;
-use gglib_core::contracts::http::daemon::{PROXY_START_CLI_FIELDS, SERVERS_START_CLI_FIELDS};
+use gglib_core::contracts::http::daemon::{
+    PROXY_CLIENTS_FIELDS, PROXY_PROVE_FIELDS, PROXY_START_CLI_FIELDS,
+    PROXY_START_PINNED_CLI_FIELDS, PROXY_STATUS_FIELDS, SERVERS_START_CLI_FIELDS,
+    SERVERS_STOP_CLI_FIELDS,
+};
+use gglib_core::domain::{EndpointState, KeyState};
 
 /// The keys `body` puts on the wire, sorted.
 fn keys_of(body: &impl Serialize) -> Vec<String> {
@@ -146,4 +151,146 @@ fn a_start_server_response_deserializes_into_the_narrowing() {
         serde_json::from_value(json).expect("the narrowing reads what the daemon sends");
 
     assert_eq!(got.port, sent.port);
+    assert_eq!(got.message, sent.message, "the daemon's sentence is kept");
+}
+
+/// The stop body's key is the contract's: the one the daemon reads the
+/// model to stop from.
+#[test]
+fn a_stop_server_body_sends_exactly_the_contract_fields() {
+    let body = StopServerBody { model_id: 7 };
+    assert_eq!(keys_of(&body), sorted(SERVERS_STOP_CLI_FIELDS));
+    assert_eq!(
+        serde_json::to_value(&body).expect("serialises")["model_id"],
+        7
+    );
+}
+
+/// The pinned-start body's keys are the contract's, its options in the
+/// start body's `camelCase` and its proxy config in the proxy body's
+/// `snake_case`, as the daemon reads each.
+#[test]
+fn a_start_pinned_body_sends_exactly_the_contract_fields() {
+    let body = StartPinnedBody {
+        model_id: 7,
+        options: StartServerRequest {
+            context_length: Some(8192),
+            ..Default::default()
+        },
+        proxy: StartProxyBody {
+            port: Some(8123),
+            ..Default::default()
+        },
+    };
+
+    assert_eq!(keys_of(&body), sorted(PROXY_START_PINNED_CLI_FIELDS));
+    let json = serde_json::to_value(&body).expect("serialises");
+    assert_eq!(json["model_id"], 7);
+    assert_eq!(json["options"]["contextLength"], 8192);
+    assert_eq!(json["proxy"]["port"], 8123);
+}
+
+/// The daemon's status is read whole: every key in the shared list lands in
+/// a field with its value. The daemon's own test holds its struct to the same
+/// list, so the two ends of the answer meet in the contract.
+#[test]
+fn a_status_with_every_contract_field_is_read_whole() {
+    let sample = |name: &str| match name {
+        "running" => serde_json::json!(true),
+        "state" => serde_json::json!("on"),
+        "port" => serde_json::json!(8080),
+        "base_url" => serde_json::json!("http://127.0.0.1:8080/v1"),
+        "key" => serde_json::json!("required"),
+        "pinned_model" => serde_json::json!("qwen"),
+        other => panic!("no sample value for contract field `{other}` — add one"),
+    };
+    let answer: serde_json::Map<String, serde_json::Value> = PROXY_STATUS_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), sample(name)))
+        .collect();
+
+    let status: ProxyStatusDto = serde_json::from_value(serde_json::Value::Object(answer))
+        .expect("the CLI must read every field the daemon sends");
+
+    let ProxyStatusDto {
+        running,
+        state,
+        port,
+        base_url,
+        key,
+        pinned_model,
+    } = status;
+    let fields: [(&str, bool); 6] = [
+        ("running", running),
+        ("state", state == EndpointState::On),
+        ("port", port == Some(8080)),
+        (
+            "base_url",
+            base_url.as_deref() == Some("http://127.0.0.1:8080/v1"),
+        ),
+        ("key", key == Some(KeyState::Required)),
+        ("pinned_model", pinned_model.as_deref() == Some("qwen")),
+    ];
+    assert_eq!(fields.len(), PROXY_STATUS_FIELDS.len());
+    for (name, read) in fields {
+        assert!(read, "{name} was not read as sent");
+    }
+}
+
+/// The client-recipes and proof mirrors read every field the daemon sends,
+/// held to the shared lists as the status mirror is.
+#[test]
+fn the_clients_and_prove_mirrors_read_every_field_the_contract_names() {
+    let clients_sample = |name: &str| match name {
+        "base_url" => serde_json::json!("http://127.0.0.1:8080/v1"),
+        "key" => serde_json::json!("required"),
+        "model_id" => serde_json::json!("qwen@Q4_K_M"),
+        "gglib_id" => serde_json::json!(7),
+        "recipes" => {
+            serde_json::json!([{ "client": "c", "hint": "h", "lines": [{ "label": "l", "value": "v" }] }])
+        }
+        other => panic!("no sample value for contract field `{other}` — add one"),
+    };
+    let answer: serde_json::Map<String, serde_json::Value> = PROXY_CLIENTS_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), clients_sample(name)))
+        .collect();
+    let recipes: super::ClientRecipesDto =
+        serde_json::from_value(serde_json::Value::Object(answer)).expect("every field reads");
+    let read: [(&str, bool); 5] = [
+        ("base_url", recipes.base_url == "http://127.0.0.1:8080/v1"),
+        ("key", recipes.key == Some(KeyState::Required)),
+        ("model_id", recipes.model_id == "qwen@Q4_K_M"),
+        ("gglib_id", recipes.gglib_id == 7),
+        (
+            "recipes",
+            recipes.recipes.len() == 1 && recipes.recipes[0].lines[0].value == "v",
+        ),
+    ];
+    assert_eq!(read.len(), PROXY_CLIENTS_FIELDS.len());
+    for (name, ok) in read {
+        assert!(ok, "{name} was not read as sent");
+    }
+
+    let prove_sample = |name: &str| match name {
+        "answered_by" => serde_json::json!("qwen"),
+        "asked_for" => serde_json::json!("Qwen 8B"),
+        "elapsed_ms" => serde_json::json!(1400),
+        other => panic!("no sample value for contract field `{other}` — add one"),
+    };
+    let answer: serde_json::Map<String, serde_json::Value> = PROXY_PROVE_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), prove_sample(name)))
+        .collect();
+    let proof: super::ProofOutcomeDto =
+        serde_json::from_value(serde_json::Value::Object(answer)).expect("every field reads");
+    let read: [(&str, bool); 3] = [
+        ("answered_by", proof.answered_by == "qwen"),
+        ("asked_for", proof.asked_for == "Qwen 8B"),
+        ("elapsed_ms", proof.elapsed_ms == 1400),
+    ];
+    assert_eq!(read.len(), PROXY_PROVE_FIELDS.len());
+    for (name, ok) in read {
+        assert!(ok, "{name} was not read as sent");
+    }
 }

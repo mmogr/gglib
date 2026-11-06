@@ -98,7 +98,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label htmlFor={inputId} className="text-sm font-medium text-text">{label}</label>
+        <label htmlFor={inputId} className="text-sm font-semibold text-text">{label}</label>
         <div className="flex items-center gap-[0.5rem]">
           <Input
             id={inputId}
@@ -153,7 +153,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label htmlFor={inputId} className="text-sm font-medium text-text">{label}</label>
+        <label htmlFor={inputId} className="text-sm font-semibold text-text">{label}</label>
         <div className="flex items-center gap-[0.75rem]">
           <input
             id={inputId}
@@ -198,7 +198,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
 
   return (
     <div className="my-[1.5rem] p-[1rem] border border-border rounded-base bg-background-secondary">
-      <h4 className="m-0 mb-[0.5rem] text-base font-semibold text-text">Inference Parameters</h4>
+      <h4 className="m-0 mb-[0.5rem] text-sm font-semibold text-text">Inference Parameters</h4>
       <p className="m-0 mb-[1rem] text-sm text-text-muted leading-[1.4]">
         Configure default sampling parameters. Leave blank to inherit from global defaults.
       </p>

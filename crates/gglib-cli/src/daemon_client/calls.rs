@@ -13,7 +13,8 @@ use gglib_app_services::types::{McpServerInfo, QueueDownloadResponse, ServerInfo
 use gglib_core::download::{DownloadId, QueueSnapshot};
 
 use super::wire::{
-    ProxyStatusDto, QueueDownloadBody, StartProxyBody, StartServerBody, StartServerDto,
+    ClientRecipesDto, ProofOutcomeDto, ProxyStatusDto, QueueDownloadBody, StartPinnedBody,
+    StartProxyBody, StartServerBody, StartServerDto, StopServerBody,
 };
 use super::{DaemonHandle, auth, base_url, paths};
 
@@ -107,6 +108,36 @@ impl DaemonHandle {
         Ok(Self::expect_ok(response).await?.json().await?)
     }
 
+    /// How a client connects to the running endpoint for model `gglib_id`:
+    /// the daemon's address, key rule, the id a client sends, and a recipe
+    /// per client, printed as sent.
+    pub(crate) async fn proxy_clients(&self, gglib_id: Option<i64>) -> Result<ClientRecipesDto> {
+        let query = gglib_id.map_or_else(String::new, |id| format!("?model={id}"));
+        let response = self
+            .get(&format!("{}{query}", paths::PROXY_CLIENTS_PATH))
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// One real request through the running endpoint for model `gglib_id`,
+    /// the pin when `None`.
+    ///
+    /// Long timeout: the daemon holds the request open while the model
+    /// loads, up to its own bind and load limits (half a minute and ten
+    /// minutes); this waits past both so the daemon's own refusal, not a
+    /// client timeout, is what is printed.
+    pub(crate) async fn proxy_prove(&self, gglib_id: Option<i64>) -> Result<ProofOutcomeDto> {
+        let response = self
+            .post(paths::PROXY_PROVE_PATH)
+            .json(&serde_json::json!({ "model_id": gglib_id }))
+            .timeout(Duration::from_mins(11))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
     /// The model servers the daemon is running, each with its runtime.
     pub(crate) async fn list_servers(&self) -> Result<Vec<ServerInfo>> {
         let response = self
@@ -155,6 +186,34 @@ impl DaemonHandle {
             .post(paths::SERVERS_START_PATH)
             .json(body)
             .timeout(Duration::from_mins(3))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Stop a model's server. The answer is the daemon's sentence; a model
+    /// that is not loaded is its 404, in its words.
+    pub(crate) async fn stop_model_server(&self, body: &StopServerBody) -> Result<String> {
+        let response = self
+            .post(paths::SERVERS_STOP_PATH)
+            .json(body)
+            .timeout(Duration::from_mins(1))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Start the proxy pinned to one model, the daemon running the launch
+    /// cascade itself. A proxy already running unpinned, or pinned to another
+    /// model, is the daemon's refusal, in its words.
+    pub(crate) async fn start_pinned_proxy(
+        &self,
+        body: &StartPinnedBody,
+    ) -> Result<ProxyStatusDto> {
+        let response = self
+            .post(paths::PROXY_START_PINNED_PATH)
+            .json(body)
+            .timeout(Duration::from_secs(30))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)

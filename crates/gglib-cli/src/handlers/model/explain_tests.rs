@@ -1,17 +1,20 @@
-//! `gglib model explain` as a person reads it: the sampling table for a
-//! model with a profile and without one, the answer to a profile nobody
-//! configured, and what the context fit is sized by.
+//! `gglib model explain` as a person reads it: the launch line and the
+//! context section from the runtime's plan, the sampling table for a model
+//! with a profile and without one, and the answer to a profile nobody
+//! configured.
 //!
 //! The tables are the text the command printed before it read its
-//! explanation from `ModelOps::explain_sampling`, character for character.
+//! explanation from `ModelOps::explain`, character for character.
 
 use std::path::Path;
 
+use gglib_core::domain::Model;
 use gglib_core::services::ImportMode;
 
 use super::*;
 use crate::handlers::model::one_shot_model_ops;
 use crate::handlers::model::test_library::{library, run, stored, write_gguf};
+use crate::presentation::launch_display;
 
 /// The two lines under every table, with client sampling left untrusted.
 const CAVEATS: &str = "  Operator flags (gglib proxy --temperature, ...) outrank every layer above.
@@ -27,11 +30,11 @@ fn table(model: &Model, heading: &str, rows: &str) -> String {
     )
 }
 
-/// What `gglib model explain <model> [--profile <profile>]` prints above the
-/// context chain.
+/// The sampling table `gglib model explain <model> [--profile <profile>]`
+/// prints after the launch.
 async fn printed(ctx: &CliContext, model: &Model, profile: Option<&str>) -> String {
     let explanation = explain(&one_shot_model_ops(ctx), model.id, profile).await;
-    explain_display::explanation_text(&model.name, model.id, &explanation.unwrap())
+    explain_display::explanation_text(&model.name, model.id, &explanation.unwrap().sampling)
 }
 
 /// A library of two models: the first stores nothing, and the second stores
@@ -180,8 +183,8 @@ async fn a_profile_is_applied_over_the_models_own_defaults() {
 }
 
 /// A name that is no configured profile is answered with the ones there are,
-/// in the words `ModelOps::explain_sampling` refuses it with, so the inspector
-/// is told what the terminal is.
+/// in the words `ModelOps::explain` refuses it with, so the inspector is
+/// told what the terminal is.
 #[tokio::test]
 async fn an_unknown_profile_is_answered_with_the_configured_ones_on_both_surfaces() {
     let dir = tempfile::tempdir().unwrap();
@@ -206,62 +209,40 @@ async fn an_unknown_profile_is_answered_with_the_configured_ones_on_both_surface
     let typo = run(&ctx, &argv).await.expect_err("the name is a typo");
     assert_eq!(typo.to_string(), said);
     let ops = one_shot_model_ops(&ctx);
-    let refused = ops.explain_sampling(model.id, Some("codign")).await;
+    let refused = ops.explain(model.id, Some("codign")).await;
     assert!(
         matches!(&refused, Err(GuiError::ValidationFailed(message)) if message == said),
         "{refused:?}"
     );
 }
 
-fn model(weights: &std::path::Path, projector: Option<&std::path::Path>) -> Model {
-    let mut new = gglib_core::NewModel::new(
-        "qwen".to_owned(),
-        weights.to_path_buf(),
-        7.0,
-        chrono::Utc::now(),
-    );
-    new.projector_path = projector.map(std::path::Path::to_path_buf);
-    Model::stored(1, &new)
-}
-
-/// The resident figure is labelled for what `resident_bytes` summed.
-#[test]
-fn the_resident_figure_names_the_projector_when_it_counts_one() {
-    let weights = std::path::Path::new("/models/qwen.gguf");
-    let projector = std::path::Path::new("/models/mmproj-F16.gguf");
-
-    assert_eq!(resident_label(&model(weights, None)), "  weights");
-    assert_eq!(
-        resident_label(&model(weights, Some(projector))),
-        "  weights + projector"
-    );
-}
-
-/// The figure under that label: both files, and the same number a launch
-/// of the model is sized by.
-#[test]
-fn the_fit_is_sized_by_the_weights_and_the_projector_as_a_launch_is() {
+/// The launch half comes from the runtime's plan of a bare start, through
+/// the one-shot runtime: the command names the model's own file and takes
+/// its port when it loads, every argument has a reason, and the context
+/// section follows.
+#[tokio::test]
+async fn the_launch_is_the_runtimes_plan_through_the_one_shot_runtime() {
     let dir = tempfile::tempdir().unwrap();
-    let weights = dir.path().join("qwen.Q8_0.gguf");
-    let projector = dir.path().join("mmproj-F16.gguf");
-    std::fs::write(&weights, vec![0u8; 4096]).unwrap();
-    std::fs::write(&projector, vec![0u8; 512]).unwrap();
-    let linked = model(&weights, Some(&projector));
+    let (ctx, model) = library(dir.path()).await;
 
-    let (_, inputs) = context_fit(&linked);
+    let explanation = explain(&one_shot_model_ops(&ctx), model.id, None)
+        .await
+        .expect("explained");
+    let text = launch_display::launch_text(&model.name, model.id, &explanation.plan);
 
-    assert_eq!(inputs.weights_bytes, Some(4608));
-    let launch = gglib_core::services::model_to_launch_spec(linked);
-    assert_eq!(inputs.weights_bytes, Some(launch.file_size_bytes));
-}
-
-#[test]
-fn the_fit_of_an_unlinked_model_is_sized_by_its_weights() {
-    let dir = tempfile::tempdir().unwrap();
-    let weights = dir.path().join("qwen.Q8_0.gguf");
-    std::fs::write(&weights, vec![0u8; 4096]).unwrap();
-
-    let (_, inputs) = context_fit(&model(&weights, None));
-
-    assert_eq!(inputs.weights_bytes, Some(4096));
+    let line = format!(
+        "llama-server -m {} --host 127.0.0.1 --port auto --metrics --parallel 1",
+        model.file_path.display()
+    );
+    assert!(text.contains(&line), "{text}");
+    assert!(
+        explanation
+            .plan
+            .args
+            .iter()
+            .all(|a| a.decision != "unexplained"),
+        "{:?}",
+        explanation.plan.args
+    );
+    assert!(text.contains("\nContext\n  serves at"), "{text}");
 }

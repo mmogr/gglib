@@ -27,11 +27,48 @@ pub const VERSION_PATH: &str = "/api/version";
 /// Start the proxy.
 pub const PROXY_START_PATH: &str = "/api/proxy/start";
 
+/// Start the proxy pinned to one model, the daemon running the launch
+/// cascade itself: the app's pinned start, and `gglib model load --pin`.
+pub const PROXY_START_PINNED_PATH: &str = "/api/proxy/start-pinned";
+
 /// Stop the proxy.
 pub const PROXY_STOP_PATH: &str = "/api/proxy/stop";
 
 /// Current proxy status.
 pub const PROXY_STATUS_PATH: &str = "/api/proxy/status";
+
+/// The keys of the answer to [`PROXY_STATUS_PATH`], and to a proxy start
+/// and stop.
+///
+/// The daemon's test holds its `ProxyStatus` to this list and the CLI's holds
+/// its `ProxyStatusDto` to it, as the start body's lists do.
+pub const PROXY_STATUS_FIELDS: &[&str] = &[
+    "running",
+    "state",
+    "port",
+    "base_url",
+    "key",
+    "pinned_model",
+];
+
+/// How a client connects to the endpoint for one model (`?model=<gglib id>`).
+///
+/// The address, the key rule, the id a client sends, and the recipes per
+/// client, written once by the daemon. `gglib up`, `gglib proxy test` and the
+/// Endpoint page print them.
+pub const PROXY_CLIENTS_PATH: &str = "/api/proxy/clients";
+
+/// The keys of the answer to [`PROXY_CLIENTS_PATH`]; the CLI's mirror is held
+/// to this list as `ProxyStatusDto` is to [`PROXY_STATUS_FIELDS`].
+pub const PROXY_CLIENTS_FIELDS: &[&str] = &["base_url", "key", "model_id", "gglib_id", "recipes"];
+
+/// Send one real completion through the endpoint for a model (`{"model_id"}`)
+/// and say who answered, in how long, or why it failed. The daemon holds the
+/// request open while the model loads.
+pub const PROXY_PROVE_PATH: &str = "/api/proxy/prove";
+
+/// The keys of the answer to [`PROXY_PROVE_PATH`].
+pub const PROXY_PROVE_FIELDS: &[&str] = &["answered_by", "asked_for", "elapsed_ms"];
 
 /// The loop guard's log, a day per row (#1052).
 ///
@@ -45,6 +82,9 @@ pub const SERVERS_LIST_PATH: &str = "/api/servers";
 
 /// Start (or reuse) a llama-server for a model.
 pub const SERVERS_START_PATH: &str = "/api/servers/start";
+
+/// Stop a model's server: the app's Unload, and `gglib model unload`.
+pub const SERVERS_STOP_PATH: &str = "/api/servers/stop";
 
 /// Ask the daemon to shut down.
 pub const DAEMON_SHUTDOWN_PATH: &str = "/api/daemon/shutdown";
@@ -301,9 +341,13 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], HEALTH_PATH),
     (&["POST"], PROXY_START_PATH),
     (&["POST"], PROXY_STOP_PATH),
+    (&["GET"], PROXY_CLIENTS_PATH),
+    (&["POST"], PROXY_PROVE_PATH),
     (&["GET"], PROXY_STATUS_PATH),
+    (&["POST"], PROXY_START_PINNED_PATH),
     (&["GET"], SERVERS_LIST_PATH),
     (&["POST"], SERVERS_START_PATH),
+    (&["POST"], SERVERS_STOP_PATH),
     (&["POST"], DAEMON_SHUTDOWN_PATH),
     (&["GET"], MCP_SERVERS_PATH),
     (&["POST"], EVENTS_PATH),
@@ -399,3 +443,14 @@ pub const SERVERS_START_CLI_FIELDS: &[&str] = &[
     "inferenceParams",
     "mlock",
 ];
+
+/// The keys of a stop-server body ([`SERVERS_STOP_PATH`]), pinned at both
+/// ends as the start body's are.
+pub const SERVERS_STOP_CLI_FIELDS: &[&str] = &["model_id"];
+
+/// The keys of a pinned-start body ([`PROXY_START_PINNED_PATH`]).
+///
+/// The model, its launch options in the start body's `camelCase`, and the
+/// proxy's own start config in the proxy body's `snake_case`. Pinned at both
+/// ends.
+pub const PROXY_START_PINNED_CLI_FIELDS: &[&str] = &["model_id", "options", "proxy"];

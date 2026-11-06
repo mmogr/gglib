@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
 import { ServeModal } from '../../../src/components/ModelInspectorPanel/components/ServeModal';
@@ -19,7 +20,11 @@ import type { AppSettings, GgufModel } from '../../../src/types';
 import { guiModel } from '../fixtures/model';
 import { appSettings } from '../fixtures/settings';
 
-function renderModal(model: GgufModel, settings: AppSettings | null) {
+function renderModal(
+  model: GgufModel,
+  settings: AppSettings | null,
+  overrides: { hasMtpTag?: boolean; onMtpNMaxChange?: (value: number | null) => void } = {},
+) {
   render(
     <ServeModal
       model={model}
@@ -29,7 +34,7 @@ function renderModal(model: GgufModel, settings: AppSettings | null) {
       jinjaOverride={null}
       isServing={false}
       hasAgentTag={false}
-      hasMtpTag={false}
+      hasMtpTag={overrides.hasMtpTag ?? false}
       mtpNMaxOverride={null}
       mtpPMinOverride={null}
       inferenceParams={undefined}
@@ -38,7 +43,7 @@ function renderModal(model: GgufModel, settings: AppSettings | null) {
       onPortChange={vi.fn()}
       onJinjaChange={vi.fn()}
       onJinjaReset={vi.fn()}
-      onMtpNMaxChange={vi.fn()}
+      onMtpNMaxChange={overrides.onMtpNMaxChange ?? vi.fn()}
       onMtpPMinChange={vi.fn()}
       onInferenceParamsChange={vi.fn()}
       onPinProxyChange={vi.fn()}
@@ -94,5 +99,40 @@ describe('ServeModal — the Context Length placeholder', () => {
     // The regression itself: this box used to read `Model max: 262,144`.
     const model = guiModel({ contextLength: 262144 });
     expect(renderModal(model, null).getAttribute('placeholder')).not.toContain('262,144');
+  });
+});
+
+describe("ServeModal: the model's own launch defaults", () => {
+  it("describes Auto as the model's own default when one is stored", () => {
+    renderModal(
+      guiModel({ serverDefaults: { contextLength: null, jinja: false, mtp: false } }),
+      appSettings(),
+    );
+    expect(screen.getByText("Off — --no-jinja, this model's own default")).toBeInTheDocument();
+  });
+
+  it('lets a tagged model whose own default is off be drafted for one launch', async () => {
+    const onMtpNMaxChange = vi.fn();
+    renderModal(
+      guiModel({ serverDefaults: { contextLength: null, jinja: null, mtp: false }, tags: ['mtp'] }),
+      appSettings(),
+      { hasMtpTag: true, onMtpNMaxChange },
+    );
+
+    expect(screen.queryByText('MTP speculative decoding detected')).not.toBeInTheDocument();
+    const box = screen.getByRole('checkbox', { name: 'MTP speculative decoding' });
+    expect(box).not.toBeChecked();
+    await userEvent.click(box);
+    // Auto would mean the model's default, which is off: an explicit count.
+    expect(onMtpNMaxChange).toHaveBeenCalledWith(2);
+  });
+
+  it("says Auto is the model's own default when it drafts by default without a tag", () => {
+    renderModal(
+      guiModel({ serverDefaults: { contextLength: null, jinja: null, mtp: true } }),
+      appSettings(),
+    );
+
+    expect(screen.getByText("Auto (this model's own default)")).toBeInTheDocument();
   });
 });

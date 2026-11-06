@@ -86,7 +86,10 @@ pub(crate) async fn resolve_port(
 /// Only that tier is resolved here, which is what makes `--ctx-size max` work:
 /// it needs the model's own context length. The daemon applies the per-model
 /// and global tiers itself, as it does for every other start request.
-fn start_body(model: &Model, ctx_size: Option<&str>) -> Result<StartServerBody> {
+pub(in crate::handlers) fn start_body(
+    model: &Model,
+    ctx_size: Option<&str>,
+) -> Result<StartServerBody> {
     let ctx_arg = parse_ctx_size_flag(ctx_size)?;
     Ok(StartServerBody {
         id: model.id,

@@ -10,11 +10,11 @@ names a model by the id or name shown here.
 $ gglib model list
 Found 3 model(s):
 
-ID  Name                      Params   Arch         Quant    Context    Images  Draws Added                File Path
----------------------------------------------------------------------------------------------------------------------------------
-3   Qwen3.8-27B               27.0     qwen35       Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
-2   Qwen3-4B-Instruct-2507    4.0      qwen3        Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
-1   Qwen3-30B-A3B             30.0     qwen3moe     Q4_K_M   40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf
+ID  Name                      Model ID               Params   ⚡ t/s      Arch         Quant    Context    Images  Draws Added                File Path
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+3   Qwen3.8-27B               Qwen3.8-27B            27.0     --         qwen35       Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
+2   Qwen3-4B-Instruct-2507    Qwen3-4B-Instruct-2507 4.0      --         qwen3        Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
+1   Qwen3-30B-A3B             Qwen3-30B-A3B          30.0     --         qwen3moe     Q4_K_M   40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf
 ```
 <!-- /snippet -->
 
@@ -33,7 +33,11 @@ speed.
   is being served under the same data root, and says how to stop it;
   `-y` / `--yes` skips the confirmation and stops nothing.
 - `update` changes a model's metadata, including the companion files of an
-  image model (below).
+  image model (below), and the model's own launch defaults: `--jinja
+  auto|on|off` for chat templates and `--mtp auto|on|off` for speculative
+  decoding, each below what a launch itself asks for and above the model's
+  tags. [`explain`](#explain) shows the flag each one puts on the command
+  line, and that it was yours.
 
 ## `inspect`
 
@@ -79,14 +83,44 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 
 ## `explain`
 
-Every resolved sampling parameter, beside the layer that supplied it, from
-the same resolver the live path uses, so it cannot describe a hierarchy
-different from the one that runs. Then the context size the model will be
-served at, and how it was fitted.
+The launch gglib would make for the model, without making it: the command
+it would run, each argument beside whose choice it was (the model author's,
+gglib's, or yours) and why, then the context size the model would be served
+at and how it was fitted. When a loaded model would have to go first, one
+more line says which and why: it would not fit beside it, the second slot is
+taken, or one image model is loaded at a time.
+Then every resolved sampling parameter, beside the layer that supplied it.
+All of it comes from the same code a launch runs, so it cannot describe a
+launch or a hierarchy different from the one that happens, and
+`GET /api/models/{id}/explain` answers with the same thing.
 
 <!-- snippet: model-explain -->
 ```console
 $ gglib model explain Qwen3-4B-Instruct-2507
+
+  Launch for Qwen3-4B-Instruct-2507 (id 2)
+  llama-server -m /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 131072 --jinja --reasoning-format deepseek --cache-ram 100813 --cache-type-k q8_0 --cache-type-v q8_0
+
+  -m                  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf ← model author: the weights, as published
+  --host              127.0.0.1    ← gglib: loopback only; the endpoint is the address you share
+  --port              auto         ← gglib: the next free port above the base when it loads; the endpoint's port does not move
+  --metrics                        ← gglib: the dashboard reads them
+  --parallel          1            ← gglib: one request at a time per model, so each gets the whole context; the queue holds the rest
+  -c                  131072       ← gglib: the largest rung that fits beside the weights on this machine
+  --jinja                          ← gglib: tagged agent: tool calls need the model's own template
+  --reasoning-format  deepseek     ← gglib: tagged reasoning: thinking is split from the answer
+  --cache-ram         100813       ← gglib: sized when loaded: free RAM after the weights, the KV cache and the other loaded models
+  --cache-type-k      q8_0         ← gglib: q8_0 halves the KV cache at no measured cost
+  --cache-type-v      q8_0         ← gglib: q8_0 halves the KV cache at no measured cost
+
+Context
+  serves at              131072 (fitted to hardware)
+  fitted to hardware     131072
+    device budget        96.00 GiB
+    weights              3.99 GiB
+    kv bytes/token       78336
+    trained window       262144
+    before snapping      262144
 
   Sampling for Qwen3-4B-Instruct-2507 (id 2)
 -------------------------------------------------------------------------------------
@@ -111,26 +145,41 @@ $ gglib model explain Qwen3-4B-Instruct-2507
   Operator flags (gglib proxy --temperature, ...) outrank every layer above.
   Client sampling is ignored, except max_tokens, reasoning_budget_tokens.
 
-
-Context
-  serves at              131072 (fitted to hardware)
-  fitted to hardware     131072
-    device budget        96.00 GiB
-    weights              3.99 GiB
-    kv bytes/token       78336
-    trained window       262144
-    before snapping      262144
 ```
 <!-- /snippet -->
 
 The layers, from strongest to weakest, are in
 [Sampling resolution](../sampling.md).
 
+## `load`, `unload`
+
+The app's Load and Unload, from the terminal. `load` asks the daemon to
+start the model's server, llama-server or sd-server for an image model,
+and the daemon keeps it resident after the command returns; `list` then
+shows it serving. A model already loaded is reused. `--context N` or
+`--context max` sets the context it is served at; omitted, the daemon
+fits one. `--pin` pins the endpoint to the model first, as `gglib serve`
+does, so every request for another model is refused while the pin holds;
+an endpoint already running unpinned is the daemon's refusal, and
+`gglib proxy stop` clears it. `unload` asks the daemon to stop the model's
+server; one that is not loaded is said so, in the daemon's words.
+
+Illustrative, not a recording: the two lines are the daemon's sentences.
+
+```console
+$ gglib model load 3
+  Server started on port 9301
+$ gglib model unload 3
+  Server for model 3 stopped
+```
+
 ## `download`, `search`, `browse`
 
 Hugging Face. `search <query>` and `browse` (popular repositories) find a
 model; `download <repo>` fetches it, `-q <QUANT>` picks a quantization, and
-`--list-quants` lists the ones a repository offers.
+`--list-quants` lists the ones a repository offers, each with whether it
+fits this machine, judged as a download without `-q` picks one (the same
+listing the GUI's table shows).
 
 <!-- snippet: model-search -->
 ```console

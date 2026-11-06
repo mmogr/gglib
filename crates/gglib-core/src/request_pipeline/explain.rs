@@ -12,7 +12,7 @@
 //! gate applied to the resolution rather than to a request. Two copies of a
 //! rule can only ever drift into two accounts of one resolution, and the whole
 //! value of an explain surface is that it describes the resolution that
-//! actually runs. So the rule lives here once, and `ModelOps::explain_sampling`
+//! actually runs. So the rule lives here once, and `ModelOps::explain`
 //! in `gglib-app-services` builds from it the one explanation both draw.
 //!
 //! It sits beside [`effort_gate`](super::effort_gate) because

@@ -13,8 +13,8 @@ use tokio::fs;
 use super::*;
 use crate::error::GuiError;
 use crate::sampling_explain::ProvenanceKindDto;
-use crate::test_support::{RecordingEmitter, RunningRuntime, test_core};
-use gglib_core::ports::{NoopGgufParser, NoopModelRuntime};
+use crate::test_support::{PlansOnly, RecordingEmitter, RunningRuntime, test_core};
+use gglib_core::ports::NoopGgufParser;
 
 fn make_ops(core: Arc<AppCore>) -> ModelOps {
     make_ops_with_emitter(core, Arc::new(gglib_core::ports::NoopEmitter::new()))
@@ -23,7 +23,7 @@ fn make_ops(core: Arc<AppCore>) -> ModelOps {
 fn make_ops_with_emitter(core: Arc<AppCore>, emitter: Arc<dyn AppEventEmitter>) -> ModelOps {
     ModelOps::new(ModelDeps {
         core,
-        runtime: Arc::new(NoopModelRuntime),
+        runtime: Arc::new(PlansOnly),
         gguf_parser: Arc::new(NoopGgufParser),
         emitter,
     })
@@ -758,10 +758,11 @@ async fn update_server_defaults_json_round_trip() {
     );
 }
 
-// ── explain_sampling ──────────────────────────────────────────────────
+// ── explain ───────────────────────────────────────────────────────────
 //
-// The resolution itself is covered in `sampling_explain`; these cover the
-// wiring — model lookup, settings load, and profile selection.
+// The sampling resolution itself is covered in `sampling_explain` and the
+// launch plan in `gglib-runtime`; these cover the wiring — model lookup,
+// settings load, profile selection, and the plan being the runtime's.
 
 /// Import a placeholder model and return its id.
 async fn seed_model(ops: &ModelOps, dir: &tempfile::TempDir) -> i64 {
@@ -789,13 +790,13 @@ fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile
 }
 
 #[tokio::test]
-async fn explain_sampling_resolves_nothing_when_nothing_is_stored() {
+async fn explain_resolves_nothing_when_nothing_is_stored() {
     let core = test_core().await;
     let ops = make_ops(Arc::clone(&core));
     let dir = tempdir().unwrap();
     let id = seed_model(&ops, &dir).await;
 
-    let dto = ops.explain_sampling(id, None).await.expect("explain");
+    let dto = ops.explain(id, None).await.expect("explain").sampling;
 
     assert_eq!(dto.resolved.temperature, None);
     assert!(dto.profile.is_none());
@@ -809,10 +810,10 @@ async fn explain_sampling_resolves_nothing_when_nothing_is_stored() {
 }
 
 #[tokio::test]
-async fn explain_sampling_unknown_id_returns_not_found() {
+async fn explain_unknown_id_returns_not_found() {
     let core = test_core().await;
     let ops = make_ops(core);
-    let result = ops.explain_sampling(999, None).await;
+    let result = ops.explain(999, None).await;
     assert!(
         matches!(
             result,
@@ -828,7 +829,7 @@ async fn explain_sampling_unknown_id_returns_not_found() {
 /// A named profile that does not exist is a caller error, not a reason to
 /// answer a different question.
 #[tokio::test]
-async fn explain_sampling_unknown_profile_names_the_configured_ones() {
+async fn explain_unknown_profile_names_the_configured_ones() {
     let core = test_core().await;
     let ops = make_ops(Arc::clone(&core));
     let dir = tempdir().unwrap();
@@ -842,7 +843,7 @@ async fn explain_sampling_unknown_profile_names_the_configured_ones() {
         .await
         .unwrap();
 
-    let result = ops.explain_sampling(id, Some("codign")).await;
+    let result = ops.explain(id, Some("codign")).await;
     let Err(GuiError::ValidationFailed(message)) = result else {
         panic!("expected ValidationFailed, got {result:?}");
     };
@@ -851,7 +852,7 @@ async fn explain_sampling_unknown_profile_names_the_configured_ones() {
 }
 
 #[tokio::test]
-async fn explain_sampling_applies_a_named_profile_over_global_settings() {
+async fn explain_applies_a_named_profile_over_global_settings() {
     let core = test_core().await;
     let ops = make_ops(Arc::clone(&core));
     let dir = tempdir().unwrap();
@@ -869,19 +870,20 @@ async fn explain_sampling_applies_a_named_profile_over_global_settings() {
         .await
         .unwrap();
 
-    let unprofiled = ops.explain_sampling(id, None).await.expect("explain");
+    let unprofiled = ops.explain(id, None).await.expect("explain").sampling;
     assert_eq!(unprofiled.resolved.temperature, Some(0.4));
 
     let profiled = ops
-        .explain_sampling(id, Some("coding"))
+        .explain(id, Some("coding"))
         .await
-        .expect("explain");
+        .expect("explain")
+        .sampling;
     assert_eq!(profiled.profile.as_deref(), Some("coding"));
     assert_eq!(profiled.resolved.temperature, Some(0.2));
 }
 
 #[tokio::test]
-async fn explain_sampling_reads_the_reasoning_tag_from_the_stored_model() {
+async fn explain_reads_the_reasoning_tag_from_the_stored_model() {
     let core = test_core().await;
     let ops = make_ops(Arc::clone(&core));
     let dir = tempdir().unwrap();
@@ -889,9 +891,82 @@ async fn explain_sampling_reads_the_reasoning_tag_from_the_stored_model() {
 
     ops.add_tag(id, "reasoning".to_owned()).await.unwrap();
 
-    let dto = ops.explain_sampling(id, None).await.expect("explain");
+    let dto = ops.explain(id, None).await.expect("explain").sampling;
     assert_eq!(
         dto.resolved,
         gglib_core::domain::InferenceConfig::reasoning_profile()
     );
+}
+
+/// The launch half is the runtime's plan of a bare start: the program is
+/// llama-server, the weights are the model's file, and the port is `auto`.
+#[tokio::test]
+async fn explain_carries_the_runtimes_plan_of_a_bare_start() {
+    let core = test_core().await;
+    let ops = make_ops(Arc::clone(&core));
+    let dir = tempdir().unwrap();
+    let id = seed_model(&ops, &dir).await;
+
+    let plan = ops.explain(id, None).await.expect("explain").plan;
+
+    assert_eq!(plan.program, "llama-server");
+    let weights = plan.args.iter().find(|a| a.flag == "-m").expect("-m");
+    // The library stores the file's canonical path (`/private/var/…` on a
+    // Mac), and the plan names the file as the library has it.
+    let stored = dir.path().canonicalize().unwrap().join("model.gguf");
+    assert_eq!(weights.value.as_deref(), stored.to_str());
+    let port = plan
+        .args
+        .iter()
+        .find(|a| a.flag == "--port")
+        .expect("--port");
+    assert_eq!(port.value.as_deref(), Some("auto"));
+    assert!(plan.fit.is_some(), "a chat model has a context");
+}
+
+/// The id a client sends is named over the whole catalogue: a listing a
+/// filter narrows still names a twin's id as `/v1/models` does, with the
+/// hidden twin counted; `get` names it the same way; a name no other model
+/// has is its own id.
+#[tokio::test]
+async fn the_client_id_is_named_over_the_whole_catalogue_whatever_the_filter_shows() {
+    let core = test_core().await;
+    let ops = make_ops(core.clone());
+    let add = async |name: &str, file: &str, quantization: &str| {
+        let mut new = gglib_core::NewModel::new(
+            name.to_owned(),
+            std::path::PathBuf::from(format!("/models/{file}")),
+            7.0,
+            chrono::Utc::now(),
+        );
+        new.variant_label = Some(quantization.to_owned());
+        core.models().add(new).await.unwrap()
+    };
+    let q4 = add("qwen3", "q4.gguf", "Q4_K_M").await;
+    let q6 = add("qwen3", "q6.gguf", "Q6_K").await;
+    let mistral = add("mistral", "mistral.gguf", "Q4_K_M").await;
+    ops.add_tag(q4.id, "fast".to_owned()).await.unwrap();
+
+    let shown = ops
+        .list_with_query(ModelListQuery {
+            tags: Some(vec!["fast".to_owned()]),
+            ..ModelListQuery::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        shown.len(),
+        1,
+        "the filter shows one of the twins: {shown:?}"
+    );
+    assert_eq!(
+        shown[0].openai_id.as_deref(),
+        Some("qwen3@Q4_K_M"),
+        "named as /v1/models names it, the hidden twin counted"
+    );
+
+    let id_of = async |id: i64| ops.get(id).await.unwrap().openai_id;
+    assert_eq!(id_of(q4.id).await.as_deref(), Some("qwen3@Q4_K_M"));
+    assert_eq!(id_of(q6.id).await.as_deref(), Some("qwen3@Q6_K"));
+    assert_eq!(id_of(mistral.id).await.as_deref(), Some("mistral"));
 }

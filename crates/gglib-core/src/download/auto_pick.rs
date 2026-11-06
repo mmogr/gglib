@@ -25,7 +25,8 @@ use crate::domain::kv_estimate::{
     KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
 };
 use crate::domain::phone_fit::{FitVerdict, MissingInput, fit_verdict};
-use crate::domain::recommendation::usable_share;
+use crate::domain::recommendation::{budget_covering, usable_share};
+use crate::domain::variant_fit::VariantFit;
 use crate::ports::huggingface::HELPER_FILES_REFUSAL;
 use crate::settings::DEFAULT_CONTEXT_SIZE;
 
@@ -126,36 +127,97 @@ impl MemoryFit {
     }
 }
 
-impl FitJudge for MemoryFit {
-    fn fit(&self, metadata: &GgufMetadata, image: bool, weights_bytes: u64) -> Fit {
+impl MemoryFit {
+    /// The picker's answer for a variant, and the verdict it rests on, as a
+    /// listing shows it: one computation, so the Fit column and the
+    /// download it leads to agree.
+    ///
+    /// An image model is judged by its files alone and fits with no
+    /// context. A chat model's whole trained window counts as fitting
+    /// where the ladder starts above it.
+    #[must_use]
+    pub fn judge(
+        &self,
+        metadata: &GgufMetadata,
+        image: bool,
+        weights_bytes: u64,
+    ) -> (Fit, VariantFit) {
         if image {
-            return self.holds(weights_bytes);
+            return self.files_only(weights_bytes);
         }
         let trained = metadata.context_length;
         let kv = estimate_kv_elems_per_token(&metadata.metadata, metadata.architecture.as_deref());
         let (verdict, _) = fit_verdict(trained, Some(weights_bytes), kv, Some(self.budget_bytes));
         match (verdict, trained, kv) {
-            (FitVerdict::Fits { .. }, ..) => Fit::Fits,
+            (FitVerdict::Fits { .. }, ..) => (Fit::Fits, verdict.into()),
             // The lowest rung is all the model was trained for.
-            (FitVerdict::Tight { ctx }, Some(trained), _) if ctx >= trained => Fit::Fits,
+            (FitVerdict::Tight { ctx }, Some(trained), _) if ctx >= trained => {
+                (Fit::Fits, VariantFit::Fits { ctx: Some(trained) })
+            }
             // The ladder starts above the trained context, or its next rung
             // does: the whole of it.
             (FitVerdict::TooBig { .. }, Some(trained), Some(kv))
                 if trained < DEFAULT_CONTEXT_SIZE =>
             {
-                self.whole_window(weights_bytes, trained, kv)
+                self.whole_window_judged(weights_bytes, trained, kv)
             }
             (FitVerdict::Tight { .. }, Some(trained), Some(kv)) if trained < SECOND_RUNG => {
-                self.whole_window(weights_bytes, trained, kv)
+                self.whole_window_judged(weights_bytes, trained, kv)
             }
             (
                 FitVerdict::Unknown {
                     missing: MissingInput::TrainedContext | MissingInput::KvShape,
                 },
                 ..,
-            ) => Fit::CannotTell,
-            _ => Fit::DoesNotFit,
+            ) => (Fit::CannotTell, verdict.into()),
+            _ => (Fit::DoesNotFit, verdict.into()),
         }
+    }
+
+    /// The files alone against the budget's usable share: an image model.
+    /// An image model's answer: its files alone, with no context to size.
+    /// Public because a listing judges an image model whose header holds no
+    /// chat metadata by this and nothing else, as [`Self::judge`] does.
+    #[must_use]
+    pub fn files_only(self, bytes: u64) -> (Fit, VariantFit) {
+        let fit = self.holds(bytes);
+        let verdict = if fit == Fit::Fits {
+            VariantFit::Fits { ctx: None }
+        } else {
+            VariantFit::TooBig {
+                need_bytes: budget_covering(bytes),
+                have_bytes: self.budget_bytes,
+            }
+        };
+        (fit, verdict)
+    }
+
+    /// [`Self::whole_window`], with the verdict it amounts to.
+    fn whole_window_judged(
+        self,
+        weights_bytes: u64,
+        trained: u64,
+        kv: KvElemsPerToken,
+    ) -> (Fit, VariantFit) {
+        let fit = self.whole_window(weights_bytes, trained, kv);
+        let verdict = if fit == Fit::Fits {
+            VariantFit::Fits { ctx: Some(trained) }
+        } else {
+            let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+            VariantFit::TooBig {
+                need_bytes: budget_covering(
+                    weights_bytes.saturating_add(estimate_kv_bytes_for_context(per_token, trained)),
+                ),
+                have_bytes: self.budget_bytes,
+            }
+        };
+        (fit, verdict)
+    }
+}
+
+impl FitJudge for MemoryFit {
+    fn fit(&self, metadata: &GgufMetadata, image: bool, weights_bytes: u64) -> Fit {
+        self.judge(metadata, image, weights_bytes).0
     }
 
     fn weights_fit(&self, weights_bytes: u64) -> bool {

@@ -13,10 +13,11 @@ use super::core::GuiProcessCore;
 use super::spawn_config::RuntimeBinaries;
 use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::AdmissionSnapshot;
+use gglib_core::domain::{AdmissionSnapshot, LaunchPlan};
 use gglib_core::ports::{
     Admission, AdmissionLease, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides,
-    ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
+    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ProcessHandle, ResidencyObserver,
+    RunningTarget,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
@@ -63,6 +64,9 @@ impl ProcessManager {
     ///   perturb prefill timings. (Omitting the flag entirely, so llama-server's
     ///   own default applies, is what [`CacheRamSetting::Auto`] does when
     ///   autosizing is suppressed by env.)
+    /// * `observer` — told of every load and unload, whoever caused it, once
+    ///   the queue has recorded it and with no lock held. The daemon hands
+    ///   in the one that announces them to its clients.
     ///
     /// Use [`Self::set_pin`] afterwards when the manager must refuse every
     /// model but one (`gglib serve`).
@@ -72,11 +76,12 @@ impl ProcessManager {
         catalog: Arc<dyn ModelCatalogPort>,
         launch_overrides: ServerConfigOptions,
         cache_ram: CacheRamSetting,
+        observer: Arc<dyn ResidencyObserver>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, binaries);
         Self {
             core: Arc::new(RwLock::new(core)),
-            residency: ResidentSet::new(catalog, launch_overrides, cache_ram),
+            residency: ResidentSet::new(catalog, launch_overrides, cache_ram, observer),
         }
     }
 
@@ -157,6 +162,23 @@ impl ProcessManager {
             .await
     }
 
+    /// The launch [`Self::admit`] would make for `spec` now, without making
+    /// it, over the models loaded now. See
+    /// [`ModelRuntimePort::plan`](gglib_core::ports::ModelRuntimePort::plan).
+    ///
+    /// # Errors
+    ///
+    /// An image model with no family.
+    pub fn plan(
+        &self,
+        spec: &ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<LaunchPlan, ModelRuntimeError> {
+        self.residency.plan(spec, num_ctx, default_ctx, overrides)
+    }
+
     /// What the admission queue and resident set look like right now.
     #[must_use]
     pub fn admission_snapshot(&self) -> AdmissionSnapshot {
@@ -207,9 +229,12 @@ impl ProcessManager {
     ///
     /// The core's own records, projected onto the port type so callers that
     /// already speak `ProcessHandle` can consume a manager-backed runtime
-    /// without a second shape to handle.
+    /// without a second shape to handle. Each carries the launch facts of
+    /// the resident serving it, read from the admission queue, so the server
+    /// list says how a model was launched with the words the dashboard uses.
     pub async fn list_running(&self) -> Vec<ProcessHandle> {
         let core = self.core.read().await;
+        let queue = self.residency.queue();
         core.list_all()
             .into_iter()
             .map(|info| {
@@ -221,6 +246,7 @@ impl ProcessManager {
                     info.started_at,
                 )
                 .with_runtime(info.runtime)
+                .with_launch(queue.launch_facts(info.model_id))
             })
             .collect()
     }
@@ -274,10 +300,7 @@ impl ProcessManager {
                 tracing::warn!(model_id, error = %e, "could not stop the image model cleanly");
             }
         };
-        self.residency
-            .queue()
-            .retire_render(turn, model_id, kill)
-            .await
+        self.residency.retire_render(turn, model_id, kill).await
     }
 
     /// Whether a person's Stop was asked of model `model_id` while a render

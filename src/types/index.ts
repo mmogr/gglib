@@ -36,16 +36,6 @@ export type { InferenceConfig };
  */
 export type SparseInferenceConfig = Partial<InferenceConfig>;
 
-/** Capability bitflags, mirroring `gglib_core::domain::ModelCapabilities` (a bare u32 on the wire). */
-export const CAPABILITY_FLAGS = {
-  supportsSystemRole: 0b0001,
-  requiresStrictTurns: 0b0010,
-  supportsToolCalls: 0b0100,
-  supportsReasoning: 0b1000,
-} as const;
-
-export type CapabilityFlagName = keyof typeof CAPABILITY_FLAGS;
-
 /**
  * `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged.
  *
@@ -193,6 +183,26 @@ export type SamplingExplanation = Omit<SamplingExplanationDto, 'sources' | 'publ
 };
 
 /**
+ * The launch gglib would make for a model now, and its sampling —
+ * `GET /api/models/:id/explain`, the whole of `gglib model explain`.
+ *
+ * Mirrors the backend `LaunchExplanationDto`, with `sampling` narrowed as
+ * {@link SamplingExplanation} is. `plan.args` is the command the daemon
+ * would run, each argument with whose choice it was (`source`) and why
+ * (`reason`), in the daemon's own words; the inspector arranges them and
+ * writes none of its own.
+ */
+import type { LaunchExplanationDto } from './generated/LaunchExplanationDto';
+export type LaunchExplanation = Omit<LaunchExplanationDto, 'sampling'> & {
+  sampling: SamplingExplanation;
+};
+export type { LaunchPlan } from './generated/LaunchPlan';
+export type { LaunchArg } from './generated/LaunchArg';
+export type { ChoiceSource } from './generated/ChoiceSource';
+export type { ContextFit } from './generated/ContextFit';
+export type { ContextSizeSource } from './generated/ContextSizeSource';
+
+/**
  * Where a model's stored `inferenceDefaults` came from.
  *
  * - `user` — set by a person. Outranks global settings.
@@ -241,6 +251,21 @@ export type PublishedDefault = PublishedDefaultDto & {
  */
 import type { ServerConfig } from './generated/ServerConfig';
 export type { ServerConfig };
+
+/**
+ * Whether a Hugging Face variant fits this machine, as the daemon judges it
+ * for the listing (`HfQuantization.fit`); its words travel beside it as
+ * `fit_word`.
+ */
+export type { VariantFit } from './generated/VariantFit';
+export type { MissingInput } from './generated/MissingInput';
+
+/**
+ * A model's revision told apart by the daemon: a commit sha shown short, a
+ * ref whole (`ModelDetailDto.revision`).
+ */
+export type { Revision } from './generated/Revision';
+export type { RevisionKind } from './generated/RevisionKind';
 
 // ============================================================================
 // Model Types
@@ -393,26 +418,6 @@ export type UpdateSettingsRequest = Omit<
   inferenceProfiles?: SparseInferenceProfile[] | null;
 };
 
-// ============================================================================
-// System Memory Types (for "Will it fit?" indicators)
-// ============================================================================
-
-/**
- * What the host has to run a model on — `GET /api/config/system/memory`, and
- * the `systemMemory` of the setup status, which is the same Rust type.
- *
- * `gpuMemoryBytes` is optional and *not* nullable, which is the correction:
- * it is the one field carrying `skip_serializing_if`, so a machine with no
- * readable GPU memory omits the key rather than sending `null`. The mirror
- * admitted both, so a reader had two absent-shapes to handle and only one
- * could ever arrive.
- */
-export type { SystemMemoryInfo } from './generated/SystemMemoryInfo';
-
-/**
- * Fit status for a model quantization based on available memory.
- */
-export type FitStatus = 'fits' | 'tight' | 'wont_fit' | 'unknown';
 
 // ============================================================================
 // Server Health Types (for monitoring server lifecycle)

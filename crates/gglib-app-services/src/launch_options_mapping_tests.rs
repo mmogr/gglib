@@ -59,6 +59,7 @@ fn a_model(mtp_tag: bool, own_context: Option<usize>) -> Model {
         },
         server_defaults: own_context.map(|context_length| gglib_core::domain::ServerConfig {
             context_length: Some(context_length),
+            ..Default::default()
         }),
         ..model()
     }
@@ -116,6 +117,8 @@ fn a_request_reaches_its_options_as_sent_on_a_pin_and_on_a_bare_start() {
         let ServerConfigOptions {
             context_size,
             model_server_ctx,
+            model_jinja,
+            model_mtp,
             global_default_ctx,
             fitted_ctx,
             port,
@@ -144,6 +147,9 @@ fn a_request_reaches_its_options_as_sent_on_a_pin_and_on_a_bare_start() {
             .as_ref()
             .and_then(|s| s.context_length);
         assert_eq!(model_server_ctx, own_context);
+        // The model's own jinja and MTP defaults are the launch's to read
+        // from the catalog, not the pin's to carry.
+        assert_eq!((model_jinja, model_mtp), (None, None));
         assert_eq!(global_default_ctx, settings.default_context_size);
         assert_eq!(fitted_ctx, None);
         assert_eq!(slot_save_path, None);
@@ -154,7 +160,12 @@ fn a_request_reaches_its_options_as_sent_on_a_pin_and_on_a_bare_start() {
         // what the plan tells the banner: the request where it speaks, the
         // tag only where it does not.
         assert_eq!(
-            resolve_mtp_args(mtp_draft_n_max, mtp_draft_p_min, &model.tags),
+            resolve_mtp_args(
+                mtp_draft_n_max,
+                mtp_draft_p_min,
+                model.server_defaults.as_ref().and_then(|s| s.mtp),
+                &model.tags
+            ),
             pin.mtp,
             "{request:?}"
         );

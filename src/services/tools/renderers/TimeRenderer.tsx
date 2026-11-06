@@ -40,10 +40,10 @@ export const timeRenderer: ToolResultRenderer = {
 
     return (
       <div className="text-center py-3">
-        <div className="text-lg font-semibold text-text mb-2 font-mono">
+        <div className="text-base font-semibold text-text mb-2 font-mono">
           {typeof resolved.time === 'number' ? resolved.time.toString() : resolved.time}
         </div>
-        <div className="flex justify-center gap-4 text-2xs text-text-muted">
+        <div className="flex justify-center gap-4 text-xs text-text-muted">
           <span>Timezone: {resolved.timezone}</span>
           <span>Format: {resolved.format}</span>
         </div>

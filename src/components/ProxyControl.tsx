@@ -1,122 +1,57 @@
-import { FC, useEffect, useState, useRef } from "react";
-import { ChevronDown, ChevronUp, LayoutDashboard, Repeat2, Trash2 } from "lucide-react";
+import { FC, useState } from "react";
+import { LayoutDashboard, Trash2 } from "lucide-react";
 import { getTransport } from "../services/transport";
 import { clearProxyCache } from "../services/clients/proxyDashboard";
-import { useClickOutside } from "../hooks/useClickOutside";
 import { formatError } from "../utils/errors";
-import { useProxyState } from "../services/proxyRegistry";
+import { useEndpointFacts, useProxyState } from "../services/proxyRegistry";
 import { useSettings } from "../hooks/useSettings";
 import { useProxyKey } from "../hooks/useProxyKey";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
-import { Input } from "./ui/Input";
-import { SecretInput } from "./ui/SecretInput";
-import { Checkbox } from "./ui/Checkbox";
 import { cn } from '../utils/cn';
 import { Stack, Label } from './primitives';
 import { useToastContext } from '../contexts/ToastContext';
 import { ProxyDashboardModal } from './ProxyDashboardModal';
-import { EndpointCopyBar, ProxyStatusPill, ProxyToggleButton } from './proxy';
+import { EndpointCopyBar, ProxyStatusPill, ProxyToggleButton, reachableHost } from './proxy';
 
-interface ProxyConfig {
-  host: string;
-  /**
-   * Explicit per-run port. `undefined` means "the daemon's": the backend
-   * resolves it from settings, or its built-in default. Seeded from settings
-   * here, it could be read before they loaded and stick at 8080 whatever
-   * `proxy_port` said. Only ever set when the user edits the field.
-   */
-  port?: number;
-  /**
-   * Explicit per-run context override. `undefined` means "no override" —
-   * the backend is the single source of truth and resolves the default
-   * from user settings (explicit override > settings default > built-in).
-   * Only ever set when the user manually edits the field.
-   */
-  default_context?: number;
-}
-interface ProxyControlProps {
-  buttonClassName?: string;
-  buttonActiveClassName?: string;
-  statusDotClassName?: string;
-  statusDotActiveClassName?: string;
-  /** Icon-only trigger for narrow headers; the label moves to title/aria-label. */
-  compact?: boolean;
+interface ProxyPopoverProps {
+  /** Whether the panel is drawn; the dashboard it opens outlives the panel. */
+  open: boolean;
+  onClose: () => void;
+  /** Where the panel sits relative to the line that owns it. */
+  className?: string;
 }
 
-const ProxyControl: FC<ProxyControlProps> = ({
-  buttonClassName,
-  buttonActiveClassName,
-  statusDotClassName,
-  statusDotActiveClassName,
-  compact = false,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
+/**
+ * Today's proxy panel: the endpoint's URL to copy, the dashboard, Clear
+ * Cache and Turn on / off. Anchored by the sidebar's endpoint line, which
+ * owns the open state and the click-outside, until the Endpoint place
+ * replaces both (N1). The address it dials is the GUI's reading of the
+ * stored bind address, as before; the line above it reads the daemon's.
+ */
+export const ProxyPopover: FC<ProxyPopoverProps> = ({ open, onClose, className }) => {
   const proxyState = useProxyState();
+  const { pinnedModel } = useEndpointFacts();
   const { settings } = useSettings();
-  const [config, setConfig] = useState<ProxyConfig>({
-    host: "127.0.0.1",
-    // Intentionally no default_context: the backend resolves the default
-    // from settings. Seeding it here would send an accidental explicit
-    // override (and could freeze a stale value captured before settings
-    // finished loading).
-  });
+  // Where this app reaches the endpoint: the stored address is where it
+  // BINDS, and a wildcard is nowhere a client can send, so that is reached on
+  // loopback; one interface's address is reached on itself. The daemon's own
+  // rule, until this panel goes with the Endpoint place (N1).
+  const endpointHost = reachableHost(settings?.proxyHost ?? null);
   const [loading, setLoading] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [cache, setCache] = useState(false);
-  const [cacheDiskGb, setCacheDiskGb] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [allowedHosts, setAllowedHosts] = useState('');
-  const [pinnedModel, setPinnedModel] = useState<string | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToastContext();
   // Clear Cache presents the proxy's key; revealed while the popover is open.
-  const proxyKey = useProxyKey(isOpen && proxyState.running, settings);
-
-  // Close dropdown when clicking outside
-  useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
-
-  // The registry tracks running/port; the pin only travels on the status
-  // response, so fetch it when the popover opens.
-  useEffect(() => {
-    if (!isOpen || !proxyState.running) {
-      setPinnedModel(null);
-      return;
-    }
-    let cancelled = false;
-    void getTransport()
-      .getProxyStatus()
-      .then((s) => {
-        if (!cancelled) setPinnedModel(s.pinned_model ?? null);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, proxyState.running]);
+  const proxyKey = useProxyKey(open && proxyState.running, settings);
 
   const handleStart = async () => {
     try {
       setLoading(true);
-      // Only include fields the user explicitly set — omitting them lets
-      // the backend resolve defaults from settings.
-      const { default_context, port, ...rest } = config;
-      const hosts = allowedHosts
-        .split(',')
-        .map((h) => h.trim())
-        .filter(Boolean);
-      const diskGb = parseInt(cacheDiskGb, 10);
-      await getTransport().startProxy({
-        ...rest,
-        ...(default_context !== undefined ? { default_context } : {}),
-        ...(port !== undefined ? { port } : {}),
-        ...(cache ? { cache: true } : {}),
-        ...(cache && Number.isFinite(diskGb) && diskGb > 0 ? { cache_disk_gb: diskGb } : {}),
-        ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
-        ...(hosts.length > 0 ? { allowed_hosts: hosts } : {}),
-      });
+      // Nothing is named: the daemon starts the endpoint as the settings
+      // say (address, port, allowed hosts, prompt cache), the same start the
+      // tray and `gglib proxy` with no flags get.
+      await getTransport().startProxy({});
     } catch (err) {
       showToast(`Failed to start proxy: ${formatError(err)}`, 'error');
     } finally {
@@ -137,42 +72,21 @@ const ProxyControl: FC<ProxyControlProps> = ({
 
   // The port a start without one gets: the stored one, else the default.
   const daemonPort = settings?.proxyPort ?? 8080;
-  const activePort = proxyState.port ?? config.port ?? daemonPort;
+  const activePort = proxyState.port ?? settings?.proxyPort ?? daemonPort;
 
   const handleCopied = () => showToast('Proxy URL copied to clipboard!', 'success');
 
-  // Neutral trigger: running state reads from the green dot, not a filled pill.
-  const buttonClasses = cn(
-    buttonClassName ?? 'gap-sm px-md relative',
-    proxyState.running && (buttonActiveClassName ?? 'text-text'),
-  );
-
-  const dotClasses = cn(
-    statusDotClassName ?? 'w-2 h-2 rounded-full bg-success animate-pulse',
-    proxyState.running && statusDotActiveClassName,
-  );
-
   return (
-    <div className="relative inline-flex" ref={dropdownRef}>
-      <Button
-        variant="ghost"
-        className={buttonClasses}
-        onClick={() => setIsOpen(!isOpen)}
-        type="button"
-        title={compact ? 'Proxy' : undefined}
-        aria-label={compact ? 'Proxy' : undefined}
-      >
-        <span aria-hidden>
-          <Icon icon={Repeat2} size={16} />
-        </span>
-        {!compact && <span>Proxy</span>}
-        {proxyState.running && <span className={dotClasses}></span>}
-      </Button>
-
-      {isOpen && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-surface-elevated rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[350px] phone:max-h-[80vh] phone:overflow-y-auto">
+    <>
+      {open && (
+        <div
+          className={cn(
+            'min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-surface-elevated rounded-lg shadow-xl p-base z-dropdown text-text',
+            className,
+          )}
+        >
           <div className="flex justify-between items-center mb-base pb-md border-b border-border-light">
-            <h3 className="m-0 text-lg font-semibold text-text">OpenAI Proxy</h3>
+            <h3 className="m-0 text-base font-semibold text-text">OpenAI Proxy</h3>
             <ProxyStatusPill running={proxyState.running} />
           </div>
 
@@ -187,14 +101,14 @@ const ProxyControl: FC<ProxyControlProps> = ({
               <div className="mb-base">
                 <Stack gap="xs" className="mb-sm">
                   <Label size="xs" muted>Endpoint URL</Label>
-                  <EndpointCopyBar host={config.host} port={activePort} onCopied={handleCopied} />
+                  <EndpointCopyBar host={endpointHost} port={activePort} onCopied={handleCopied} />
                 </Stack>
               </div>
 
               <Button
                 variant="secondary"
-                className="w-full p-sm mb-md rounded-base text-sm font-medium"
-                onClick={() => { setIsOpen(false); setShowDashboard(true); }}
+                className="w-full p-sm mb-md rounded-base text-sm font-semibold"
+                onClick={() => { onClose(); setShowDashboard(true); }}
                 leftIcon={<Icon icon={LayoutDashboard} size={14} />}
               >
                 View Dashboard
@@ -202,11 +116,11 @@ const ProxyControl: FC<ProxyControlProps> = ({
 
               <Button
                 variant="secondary"
-                className="w-full p-sm mb-md rounded-base text-sm font-medium"
+                className="w-full p-sm mb-md rounded-base text-sm font-semibold"
                 onClick={async () => {
                   setClearing(true);
                   try {
-                    const result = await clearProxyCache(config.host, activePort, proxyKey);
+                    const result = await clearProxyCache(endpointHost, activePort, proxyKey);
                     showToast(result.message || 'Cache cleared', 'success');
                   } catch (err) {
                     showToast(`Failed to clear cache: ${formatError(err)}`, 'error');
@@ -231,102 +145,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
             </>
           ) : (
             <>
-              {showSettings && (
-                <div className="mb-md">
-                  <div className="mb-md">
-                    <Label size="xs" muted className="mb-xs" htmlFor="proxy-host">Host</Label>
-                    <Input
-                      id="proxy-host"
-                      type="text"
-                      value={config.host}
-                      onChange={(e) => setConfig({ ...config, host: e.target.value })}
-                    />
-                  </div>
-                  <div className="mb-md">
-                    <Label size="xs" muted className="mb-xs" htmlFor="proxy-port">Proxy port</Label>
-                    <Input
-                      id="proxy-port"
-                      type="number"
-                      className="font-mono tabular-nums"
-                      value={config.port ?? ''}
-                      placeholder={settings?.proxyPort != null ? `${settings.proxyPort} (from settings)` : `${daemonPort} (default)`}
-                      onChange={(e) => {
-                        const parsed = parseInt(e.target.value);
-                        setConfig({ ...config, port: Number.isNaN(parsed) ? undefined : parsed });
-                      }}
-                    />
-                  </div>
-                  <div className="mb-md">
-                    <Label size="xs" muted className="mb-xs" htmlFor="proxy-default-context">Default context</Label>
-                    <Input
-                      id="proxy-default-context"
-                      type="number"
-                      className="font-mono tabular-nums"
-                      value={config.default_context ?? ''}
-                      placeholder={settings?.defaultContextSize ? `${settings.defaultContextSize.toLocaleString()} (from settings)` : 'Sized per launch'}
-                      onChange={(e) => {
-                        const parsed = parseInt(e.target.value);
-                        setConfig({
-                          ...config,
-                          default_context: Number.isNaN(parsed) ? undefined : parsed,
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="mb-md">
-                    <Checkbox
-                      checked={cache}
-                      onChange={(e) => setCache(e.target.checked)}
-                      label="Persist KV cache slots to disk"
-                      description="Keeps prompt caches across model swaps and restarts."
-                    />
-                    {cache && (
-                      <div className="mt-sm">
-                        <Label size="xs" muted className="mb-xs" htmlFor="proxy-cache-disk">Disk budget (GiB)</Label>
-                        <Input
-                          id="proxy-cache-disk"
-                          type="number"
-                          min={1}
-                          className="font-mono tabular-nums"
-                          value={cacheDiskGb}
-                          placeholder="Default budget"
-                          onChange={(e) => setCacheDiskGb(e.target.value)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  <div className="mb-md">
-                    <Label size="xs" muted className="mb-xs" htmlFor="proxy-api-key">API key</Label>
-                    <SecretInput
-                      id="proxy-api-key"
-                      label="API key for this run"
-                      value={apiKey}
-                      placeholder="None — endpoint is open on this host"
-                      onChange={setApiKey}
-                    />
-                  </div>
-                  <div>
-                    <Label size="xs" muted className="mb-xs" htmlFor="proxy-allowed-hosts">Allowed hosts</Label>
-                    <Input
-                      id="proxy-allowed-hosts"
-                      type="text"
-                      value={allowedHosts}
-                      placeholder="Comma-separated, beyond loopback"
-                      onChange={(e) => setAllowedHosts(e.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <Button
-                variant="outline"
-                className="w-full mb-md"
-                onClick={() => setShowSettings(!showSettings)}
-                leftIcon={<Icon icon={showSettings ? ChevronUp : ChevronDown} size={14} />}
-              >
-                Connection options
-              </Button>
-
               <ProxyToggleButton
                 running={false}
                 pending={loading}
@@ -348,11 +166,9 @@ const ProxyControl: FC<ProxyControlProps> = ({
       <ProxyDashboardModal
         isOpen={showDashboard}
         onClose={() => setShowDashboard(false)}
-        host={config.host}
+        host={endpointHost}
         port={activePort}
       />
-    </div>
+    </>
   );
 };
-
-export default ProxyControl;

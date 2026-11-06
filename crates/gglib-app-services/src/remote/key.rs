@@ -63,6 +63,24 @@ pub(super) fn decide(
 /// to, and whether it is pinned; `None` when nothing is enforced. Never
 /// mints, so a caller that only needs to present the key (a run posting to
 /// the proxy) uses this rather than `decide`.
+/// The key the endpoint demands of a request right now, as its bearer
+/// policy reads it (`gglib_core::access::BearerPolicy::current`): a key
+/// given on the command line is pinned for the run; otherwise the stored
+/// `proxy_api_key`, which a tracking policy picks up as soon as it is set or
+/// rotated; otherwise the key the run started with. `None` while the
+/// endpoint is open.
+pub(crate) fn demanded(
+    effective: Option<(String, ApiKeySource)>,
+    stored: Option<&str>,
+) -> Option<String> {
+    if let Some((key, ApiKeySource::Flag)) = &effective {
+        return Some(key.clone());
+    }
+    held(stored)
+        .map(|stored| stored.trim().to_owned())
+        .or_else(|| effective.map(|(key, _)| key))
+}
+
 pub(crate) fn enforced(
     effective: Option<(String, ApiKeySource)>,
     stored: Option<&str>,

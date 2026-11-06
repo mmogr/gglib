@@ -6,7 +6,7 @@ use std::net::TcpListener;
 
 use clap::Parser as _;
 
-use super::{resolve_default_context, start_body, start_on};
+use super::{reach_host, reached, resolve_default_context, start_body, start_on};
 use crate::commands::Commands;
 use crate::daemon_client::{DaemonHandle, STAND_IN_PORT, StartProxyBody, paths};
 use crate::parser::Cli;
@@ -163,7 +163,16 @@ pub(in crate::handlers) async fn started(
     let port = listener.local_addr().expect("its address").port();
     let daemon = std::thread::spawn(move || {
         let (request, mut stream) = blocking::accept(&listener).expect("the request");
-        let reply = serde_json::json!({ "running": answer.is_some(), "port": answer }).to_string();
+        let state = if answer.is_some() { "on" } else { "off" };
+        let reply = serde_json::json!({
+            "running": answer.is_some(),
+            "state": state,
+            "port": answer,
+            "base_url": answer.map(|p| format!("http://127.0.0.1:{p}/v1")),
+            "key": answer.map(|_| "none_needed"),
+            "pinned_model": null,
+        })
+        .to_string();
         let _ = write!(
             stream,
             "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
@@ -186,7 +195,7 @@ pub(in crate::handlers) async fn started(
     assert_eq!(line, format!("POST {} HTTP/1.1", paths::PROXY_START_PATH));
     Started {
         sent: serde_json::from_str(&sent).expect("a JSON body"),
-        port: answered,
+        port: answered.port,
     }
 }
 
@@ -259,4 +268,52 @@ async fn a_start_that_reports_no_port_answers_the_flag_then_the_stored_port() {
         started(&bare, None, &Settings::default()).await.port,
         DEFAULT_PROXY_PORT
     );
+}
+
+/// Without `--host` and `--cache` the daemon is sent neither, so the stored
+/// `proxy_host` and `proxy_cache_on_disk` decide; given, they go as typed.
+#[tokio::test]
+async fn without_a_host_or_cache_flag_the_daemon_is_sent_neither() {
+    let bare = started(
+        &body_for(&["gglib", "proxy"]),
+        Some(9000),
+        &Settings::default(),
+    )
+    .await;
+    assert!(bare.sent["host"].is_null(), "{}", bare.sent);
+    assert!(bare.sent["cache"].is_null(), "{}", bare.sent);
+
+    let named = started(
+        &body_for(&["gglib", "proxy", "--host", "0.0.0.0", "--cache"]),
+        Some(9000),
+        &Settings::default(),
+    )
+    .await;
+    assert_eq!(named.sent["host"], "0.0.0.0");
+    assert_eq!(named.sent["cache"], true);
+}
+
+/// The dashboard dials where the endpoint can be reached: a wildcard bind on
+/// loopback, loopback on itself, and one interface's address on that address,
+/// since nothing listens on loopback then; an IPv6 address in brackets.
+#[test]
+fn a_wildcard_bind_is_reached_on_loopback_and_an_interfaces_address_on_itself() {
+    assert_eq!(reach_host("0.0.0.0"), "127.0.0.1");
+    assert_eq!(reach_host("::"), "127.0.0.1");
+    assert_eq!(reach_host("127.0.0.1"), "127.0.0.1");
+    assert_eq!(reach_host("192.168.1.20"), "192.168.1.20");
+    assert_eq!(reach_host("fe80::1"), "[fe80::1]");
+}
+
+/// With no `--host`, the stored address decides where the dashboard dials;
+/// typed, the flag does.
+#[test]
+fn the_dashboard_dials_the_typed_host_else_the_stored_one() {
+    let stored = Settings {
+        proxy_host: Some("192.168.1.20".to_owned()),
+        ..Settings::default()
+    };
+    assert_eq!(reached(None, &stored), "192.168.1.20");
+    assert_eq!(reached(Some("0.0.0.0"), &stored), "127.0.0.1");
+    assert_eq!(reached(None, &Settings::default()), "127.0.0.1");
 }

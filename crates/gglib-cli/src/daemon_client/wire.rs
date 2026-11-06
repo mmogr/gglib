@@ -13,7 +13,9 @@
 //! in `wire_tests.rs` pin `StartProxyBody`, `StartServerBody` and
 //! `StartServerDto`, the test of the queue request in `calls.rs` reads
 //! `QueueDownloadBody` as it was sent, and `repair_tests.rs` reads
-//! `RepairBody` so. `ProxyStatusDto` is not pinned. The answers to a queue
+//! `RepairBody` so. `ProxyStatusDto` is read against the status's own key
+//! list, `PROXY_STATUS_FIELDS`, which the daemon's test holds its struct to.
+//! The answers to a queue
 //! request and to a repair have no twin here: the CLI reads the daemon's own
 //! `gglib_app_services::types::QueueDownloadResponse` and
 //! `gglib_core::services::RepairStarted`.
@@ -30,6 +32,7 @@
 use serde::{Deserialize, Serialize};
 
 use gglib_app_services::types::StartServerRequest;
+use gglib_core::domain::KeyState;
 use gglib_core::ports::PinnedSpec;
 
 /// Body for `POST /api/proxy/start` — the client-side twin of
@@ -55,9 +58,59 @@ pub(crate) struct StartProxyBody {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ProxyStatusDto {
     pub running: bool,
+    /// Required: a daemon that does not say it is older than this CLI, and the
+    /// build-mismatch warning says so; a guessed word would be a wrong one.
+    pub state: gglib_core::domain::EndpointState,
     pub port: Option<u16>,
+    /// Where a client reaches it, `http://<address>/v1`; `None` while not
+    /// listening.
+    pub base_url: Option<String>,
+    /// Whether a request must carry the API key; `None` while not listening,
+    /// and while listening when the daemon could not read its settings to
+    /// say.
+    pub key: Option<KeyState>,
     #[serde(default)]
     pub pinned_model: Option<String>,
+}
+
+/// One copyable line of a client recipe, as the daemon sends it.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RecipeLineDto {
+    pub label: String,
+    pub value: String,
+}
+
+/// One client's recipe, as the daemon sends it.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ClientRecipeDto {
+    pub client: String,
+    #[serde(default)]
+    pub hint: String,
+    #[serde(default)]
+    pub lines: Vec<RecipeLineDto>,
+}
+
+/// `GET /api/proxy/clients?model=` response: how a client connects to the
+/// endpoint for one model, the daemon's facts and its recipes. Mirror of
+/// `gglib_app_services::ClientRecipes`, held to `PROXY_CLIENTS_FIELDS`.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ClientRecipesDto {
+    pub base_url: String,
+    /// `None` when the daemon could not read its settings to say.
+    pub key: Option<KeyState>,
+    pub model_id: String,
+    pub gglib_id: i64,
+    #[serde(default)]
+    pub recipes: Vec<ClientRecipeDto>,
+}
+
+/// `POST /api/proxy/prove` response: the endpoint answered. Mirror of
+/// `gglib_app_services::ProofOutcome`, held to `PROXY_PROVE_FIELDS`.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ProofOutcomeDto {
+    pub answered_by: String,
+    pub asked_for: String,
+    pub elapsed_ms: u64,
 }
 
 /// Body for `POST /api/servers/start` — the client-side twin of
@@ -74,16 +127,34 @@ pub(crate) struct StartServerBody {
     pub config: StartServerRequest,
 }
 
-/// `POST /api/servers/start` response.
+/// `POST /api/servers/start` response: the port, and the daemon's own
+/// sentence about the start, which `gglib model load` prints as it came.
 ///
-/// A narrowing of `gglib_app_services::types::StartServerResponse`, which also
-/// carries a `message` the CLI has no use for. Reading only what is used keeps
-/// a daemon of a different build from failing this deserialize over a field
-/// nothing renders; `a_start_server_response_deserializes_into_the_narrowing`
-/// pins the half that is used.
+/// The CLI's reading of `gglib_app_services::types::StartServerResponse`;
+/// `a_start_server_response_deserializes_into_the_narrowing` pins it.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct StartServerDto {
     pub port: u16,
+    pub message: String,
+}
+
+/// Body for `POST /api/servers/stop` — the client-side twin of
+/// `gglib_axum::handlers::servers::StopServerBody`.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct StopServerBody {
+    pub model_id: i64,
+}
+
+/// Body for `POST /api/proxy/start-pinned` — the client-side twin of
+/// `gglib_axum::handlers::proxy::StartPinnedBody`: the app's pinned start,
+/// which the daemon runs `gglib serve`'s launch cascade for.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct StartPinnedBody {
+    pub model_id: i64,
+    /// The model's launch options, in the start body's `camelCase`.
+    pub options: StartServerRequest,
+    /// The proxy's own start config, in the proxy body's `snake_case`.
+    pub proxy: StartProxyBody,
 }
 
 /// `POST /api/models/downloads/queue` request body.

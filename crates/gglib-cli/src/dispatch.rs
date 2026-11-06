@@ -254,6 +254,9 @@ pub async fn dispatch(
                     crate::commands::ProxyCommand::Stop => {
                         handlers::inference::proxy::stop(ctx).await?;
                     }
+                    crate::commands::ProxyCommand::Test { model } => {
+                        handlers::proxy_test::execute(ctx, model.as_deref()).await?;
+                    }
                     crate::commands::ProxyCommand::Trips { since } => {
                         handlers::proxy_trips::execute(ctx, since).await?;
                     }

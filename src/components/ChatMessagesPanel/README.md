@@ -18,7 +18,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │                             ├── ChatStatusBanners   ← chat error / server-down warning
     │                             ├── RunPreviewsProvider ← the run's preview frames, for the replies
     │                             │     └── MessageBubbles      ← each turn a TurnRow: margin + body
-    │                             │           ├── TurnMargin (who; figures or arrival, from turnFigures)
+    │                             │           ├── TurnMargin (who; figures or arrival, from `readings/turnFigures`)
     │                             │           ├── BranchSwitcher (the options where the chat's branches part)
     │                             │           ├── MarkdownMessageContent
     │                             │           └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress

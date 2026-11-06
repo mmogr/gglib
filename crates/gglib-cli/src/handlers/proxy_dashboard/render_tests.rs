@@ -68,6 +68,7 @@ fn render_frame_shows_placeholder_when_no_connections() {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     let frame = render_frame(
         "http://127.0.0.1:8123/v1/proxy/status/stream",
@@ -104,6 +105,7 @@ fn render_frame_shows_connection_and_slot_bars() {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     let frame = render_frame(
         "http://127.0.0.1:8123/v1/proxy/status/stream",
@@ -138,6 +140,7 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     let width = 80u16;
     let frame = render_frame(
@@ -197,6 +200,7 @@ fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     let term_width = 40u16;
     let frame = render_frame(
@@ -238,6 +242,7 @@ fn frame_with_cache(cache: Option<CacheStatus>) -> String {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -254,6 +259,7 @@ fn frame_with_agent_usage(agent_usage: CacheUsage) -> String {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -270,6 +276,7 @@ fn frame_with_admission(admission: AdmissionSnapshot) -> String {
         admission,
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -290,15 +297,19 @@ fn admission_section_names_each_resident_and_its_role() {
         slots: vec![
             ResidentSlotSnapshot {
                 model_name: "qwen-coder".to_string(),
+                state: gglib_core::domain::ResidencyState::Working,
                 inflight: 2,
                 is_primary: true,
                 resident_for_secs: 95,
+                launch: None,
             },
             ResidentSlotSnapshot {
                 model_name: "nomic-embed".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: false,
                 resident_for_secs: 30,
+                launch: None,
             },
         ],
         ..Default::default()
@@ -306,11 +317,112 @@ fn admission_section_names_each_resident_and_its_role() {
 
     assert!(frame.contains("qwen-coder"), "{frame}");
     assert!(frame.contains("primary"), "{frame}");
-    assert!(frame.contains("2 in flight"), "{frame}");
+    assert!(frame.contains("Working (2)"), "{frame}");
     assert!(frame.contains("1m 35s"), "{frame}");
     assert!(frame.contains("nomic-embed"), "{frame}");
     assert!(frame.contains("secondary"), "{frame}");
-    assert!(frame.contains("idle"), "{frame}");
+    assert!(frame.contains("Loaded"), "{frame}");
+}
+
+/// The flag line under a resident is the daemon's (`LaunchFacts::flag_line`),
+/// printed as sent and indented under its row; a resident whose launch
+/// recorded nothing gets no line, not a blank one.
+#[test]
+fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
+    let flag_line = "Q4_K_M \u{b7} 32K \u{b7} 17.0 GiB".to_string();
+    let frame = frame_with_admission(AdmissionSnapshot {
+        slots: vec![
+            ResidentSlotSnapshot {
+                model_name: "qwen-coder".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
+                inflight: 0,
+                is_primary: true,
+                resident_for_secs: 95,
+                launch: Some(LaunchLine {
+                    flag_line: flag_line.clone(),
+                }),
+            },
+            ResidentSlotSnapshot {
+                model_name: "older-daemon".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
+                inflight: 0,
+                is_primary: false,
+                resident_for_secs: 30,
+                launch: None,
+            },
+        ],
+        ..Default::default()
+    });
+
+    let lines: Vec<&str> = frame.lines().collect();
+    let row = lines
+        .iter()
+        .position(|l| l.contains("qwen-coder"))
+        .expect("the row");
+    assert_eq!(
+        lines[row + 1].trim_end(),
+        format!("    {flag_line}"),
+        "{frame}"
+    );
+    let older = lines
+        .iter()
+        .position(|l| l.contains("older-daemon"))
+        .expect("the row");
+    assert!(
+        !lines[older + 1].starts_with("    "),
+        "no line under a resident without one: {frame}"
+    );
+}
+
+/// A flag line is one physical row whatever the terminal width, as every
+/// other server-phrased line is, so the redraw's cursor arithmetic holds.
+#[test]
+fn a_long_launch_line_is_clipped_to_the_terminal() {
+    let snapshot = DashboardSnapshot {
+        active_connections: vec![],
+        slots_available: false,
+        slots: vec![],
+        slots_status: None,
+        total_requests: 0,
+        cache: None,
+        agent_usage: CacheUsage::default(),
+        admission: AdmissionSnapshot {
+            slots: vec![ResidentSlotSnapshot {
+                model_name: "qwen-coder".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
+                inflight: 0,
+                is_primary: true,
+                resident_for_secs: 1,
+                launch: Some(LaunchLine {
+                    flag_line: "x".repeat(400),
+                }),
+            }],
+            ..Default::default()
+        },
+        per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
+        recent_requests: vec![],
+    };
+    let frame = render_frame("http://127.0.0.1:8123", &snapshot, 80);
+    for line in frame.lines() {
+        assert!(line.chars().count() <= 80, "{line:?}");
+    }
+}
+
+/// The default second-slot status carries "Room for one more" when the
+/// daemon knows the free VRAM; this prints it as it prints any detail.
+#[test]
+fn admission_section_prints_the_room_for_one_more() {
+    let frame = frame_with_admission(AdmissionSnapshot {
+        secondary_slot: SecondarySlotStatus {
+            detail: gglib_core::domain::SecondarySlotStatus::available_with(Some(9 << 30)).detail,
+        },
+        ..Default::default()
+    });
+    assert!(
+        frame.contains("Room for one more, about 9.0 GiB."),
+        "{frame}"
+    );
 }
 
 /// The whole reason the server sends prose: an idle second slot has to
@@ -364,6 +476,7 @@ fn a_long_second_slot_explanation_is_clipped_to_the_terminal() {
         },
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
 
     let frame = render_frame("http://127.0.0.1:8123", &snapshot, 80);
@@ -531,4 +644,42 @@ fn thousands_inserts_separators_at_the_right_boundaries() {
     assert_eq!(thousands(70_008), "70,008");
     assert_eq!(thousands(1_234_567), "1,234,567");
     assert_eq!(thousands(u64::MAX), "18,446,744,073,709,551,615");
+}
+
+/// The frame carries the recent section just before its total, with the
+/// proxy's words for what was done.
+#[test]
+fn the_recent_requests_sit_before_the_total() {
+    use crate::handlers::proxy_dashboard::wire_recent::{Intervention, RecentRequest};
+    let snapshot = DashboardSnapshot {
+        active_connections: vec![],
+        slots_available: false,
+        slots: vec![],
+        slots_status: None,
+        total_requests: 1,
+        cache: None,
+        agent_usage: CacheUsage::default(),
+        admission: AdmissionSnapshot::default(),
+        per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
+        recent_requests: vec![RecentRequest {
+            model_name: "qwen3".to_owned(),
+            recorded_at_secs: u64::MAX,
+            interventions: vec![Intervention {
+                word: "Repaired a tool call".to_owned(),
+            }],
+        }],
+    };
+    let frame = render_frame(
+        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        &snapshot,
+        DEFAULT_TERM_WIDTH,
+    );
+    let recent = frame.find("Recent requests").expect("the section");
+    let total = frame.find("Total requests served").expect("the total");
+    assert!(recent < total, "{frame}");
+    assert!(
+        frame.contains("qwen3") && frame.contains("Repaired a tool call"),
+        "{frame}"
+    );
 }

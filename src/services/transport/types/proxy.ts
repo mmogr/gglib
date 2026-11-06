@@ -62,9 +62,11 @@ export type StartPinnedRequest = Pick<StartPinnedBody, 'model_id'> &
  *   identically, neither having a port to hand out — so a truthy `running`
  *   means `port` is a number. TypeScript cannot express that pairing across
  *   two fields, so the narrowing has to be written at each call site.
- * - `current_model` and `model_port` are always `null` today. The daemon
- *   hard-codes both rather than reporting the swapping proxy's current
- *   upstream; the keys are on the wire, the answers are not.
+ * - `base_url` and `key` pair with `running` the same way: the daemon sets
+ *   both exactly when the proxy listens. `base_url` is where a client on
+ *   this machine reaches it (`http://<address>/v1`, a wildcard bind on
+ *   loopback) and `key` says whether a request must carry the API key,
+ *   in the word every surface uses (`KEY_WORDS`).
  */
 import type { ProxyStatus } from '../../../types/generated/ProxyStatus';
 export type { ProxyStatus };

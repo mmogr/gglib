@@ -80,7 +80,7 @@ async fn stopping_the_image_model_beside_a_chat_model_leaves_the_chat_model_runn
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let binary = sleeper(dir.path());
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(OneModel(launch_spec(CHAT_ID, "qwen"))),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
@@ -145,7 +145,7 @@ async fn stopping_an_image_model_mid_render_leaves_the_slots_next_model_its_requ
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let binary = sleeper(dir.path());
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(OneModel(launch_spec(CHAT_ID, "qwen"))),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
@@ -215,7 +215,7 @@ async fn a_stop_that_outwaits_a_render_answers_an_error_and_empties_nothing() {
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let binary = dir.path().join("never-run");
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(OneModel(launch_spec(CHAT_ID, "qwen"))),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
@@ -276,7 +276,7 @@ async fn stopping_the_current_model_asks_a_render_in_the_primary_slot_too() {
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let binary = dir.path().join("never-run");
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(OneModel(launch_spec(CHAT_ID, "qwen"))),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

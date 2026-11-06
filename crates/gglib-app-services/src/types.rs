@@ -4,6 +4,7 @@
 //! They map between domain types and frontend-friendly representations.
 
 use gglib_core::domain::Model;
+use gglib_core::domain::Revision;
 use gglib_core::domain::mcp::McpLifecycle;
 use gglib_core::ports::ProcessHandle;
 use serde::{Deserialize, Serialize};
@@ -59,6 +60,12 @@ pub struct GuiModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_shared_count: Option<u32>,
     pub added_at: String,
+    /// The id `/v1/models` lists this model under, which a client sends:
+    /// its name, unless another model shares it (`openai_model_ids`). A
+    /// fact about the whole catalogue, so it is set by the listing and by
+    /// `ModelOps::get`, and `None` on a row built from one model alone (the
+    /// answer to an add or an update).
+    pub openai_id: Option<String>,
     pub hf_repo_id: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
@@ -130,6 +137,7 @@ impl GuiModel {
             expert_used_count: model.expert_used_count,
             expert_shared_count: model.expert_shared_count,
             added_at: model.added_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            openai_id: None,
             hf_repo_id: model.hf_repo_id,
             tags: model.tags,
             is_serving,
@@ -222,6 +230,12 @@ pub struct ServerInfo {
     /// out.
     #[serde(default)]
     pub runtime: gglib_core::domain::RuntimeKind,
+    /// How the model was launched and what it is doing, the record the
+    /// admission snapshot's rows carry too; `None` when the runtime keeps
+    /// no resident for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub launch: Option<gglib_core::domain::LaunchFacts>,
 }
 
 impl ServerInfo {
@@ -234,6 +248,7 @@ impl ServerInfo {
             port: handle.port,
             started_at: handle.started_at,
             runtime: handle.runtime,
+            launch: handle.launch.clone(),
         }
     }
 }
@@ -327,17 +342,21 @@ pub struct RetagResponse {
 
 /// Whether a newer `HuggingFace` revision exists for a model.
 ///
-/// `currentSha` is `None` when the model was imported without a recorded
-/// revision. The check treats that as "an update exists" (there is no
-/// baseline to compare against), so callers should present a missing
-/// baseline distinctly rather than as a genuine new revision.
+/// `current` is the recorded revision, parsed once: a sha shown short, a
+/// ref shown whole. It is `None` when the model was imported without one;
+/// the check treats that as "an update exists" (there is no baseline to
+/// compare against), so callers should present a missing baseline
+/// distinctly rather than as a genuine new revision.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct UpgradeCheck {
     pub has_update: bool,
-    pub current_sha: Option<String>,
+    pub current: Option<Revision>,
+    /// The Hub's latest commit, as recorded by an upgrade.
     pub latest_sha: String,
+    /// The same commit parsed as `current` is, so the two are shown alike.
+    pub latest: Revision,
 }
 
 /// An upgrade on the download queue, as soon as it is asked for: the

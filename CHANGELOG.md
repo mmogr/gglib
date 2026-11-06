@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.31.0-rc.1](https://github.com/mmogr/gglib/compare/v0.30.1-rc.1...v0.31.0-rc.1) (2026-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **app-services:** client recipes and the proof request belong to the daemon ([#1779](https://github.com/mmogr/gglib/issues/1779))
+* **gui:** a sidebar names the library, the endpoint and devices; the header is gone ([#1777](https://github.com/mmogr/gglib/issues/1777))
+* **models:** templates and speculative decoding are a model's own defaults ([#1764](https://github.com/mmogr/gglib/issues/1764))
+* **app-services:** model explain says the launch it would make: argv, each flag's source, and the fit ([#1762](https://github.com/mmogr/gglib/issues/1762))
+* **gui:** the main window's screens are addresses; `gglib web`'s link and a reload land on the place the address names, and the desktop app's asset paths are absolute.
+* **settings:** `gglib proxy --host` and `gglib serve --host` default to the stored `proxy_host` (loopback until set) rather than always to loopback; the desktop app's per-run connection options are removed in favour of the settings.
+* **gui:** the accent is ink; amber means attention ([#1751](https://github.com/mmogr/gglib/issues/1751))
+* **gui:** four type sizes, status hues apart, nothing pulses ([#1750](https://github.com/mmogr/gglib/issues/1750))
+* **runtime:** every load and unload is announced, whoever caused it ([#1761](https://github.com/mmogr/gglib/issues/1761))
+* **hf:** every variant says whether it fits this machine ([#1765](https://github.com/mmogr/gglib/issues/1765))
+* **proxy:** `GET /api/proxy/status` (and a start's or stop's answer) no longer carries `current_model` or `model_port`.
+* **core:** the state words are written once ([#1759](https://github.com/mmogr/gglib/issues/1759))
+
+### What gglib now does
+
+* **app-services:** client recipes and the proof request belong to the daemon ([#1779](https://github.com/mmogr/gglib/issues/1779)) ([694fc0b](https://github.com/mmogr/gglib/commit/694fc0b5ae1f9101745b969bc3717e618e0deeb5))
+* **app-services:** model explain says the launch it would make: argv, each flag's source, and the fit ([#1762](https://github.com/mmogr/gglib/issues/1762)) ([80b4115](https://github.com/mmogr/gglib/commit/80b4115baf222bc8f30b33be7af80ced45db1481))
+* **cli:** gglib model load and unload ([#1769](https://github.com/mmogr/gglib/issues/1769)) ([8f0f4ad](https://github.com/mmogr/gglib/commit/8f0f4ad7fe3d9007d3ce26519d99698fde94ae76))
+* **core:** the state words are written once ([#1759](https://github.com/mmogr/gglib/issues/1759)) ([7e394f5](https://github.com/mmogr/gglib/commit/7e394f5052b515c514a4e89ab4a333fae5e19d9b))
+* **gui:** a sidebar names the library, the endpoint and devices; the header is gone ([#1777](https://github.com/mmogr/gglib/issues/1777)) ([48f57c5](https://github.com/mmogr/gglib/commit/48f57c58df3453c257e999b46473085f2a6f366f))
+* **gui:** every screen has a URL ([#1774](https://github.com/mmogr/gglib/issues/1774)) ([3ff4c28](https://github.com/mmogr/gglib/commit/3ff4c2831ca94d8d8b1f8be49ee056394b293cb1))
+* **gui:** four type sizes, status hues apart, nothing pulses ([#1750](https://github.com/mmogr/gglib/issues/1750)) ([3859ad7](https://github.com/mmogr/gglib/commit/3859ad72505b85b9a9b865f6a2ad5d92f2f74522))
+* **gui:** the accent is ink; amber means attention ([#1751](https://github.com/mmogr/gglib/issues/1751)) ([78835b1](https://github.com/mmogr/gglib/commit/78835b148e843d3650dbe27fb0f90514861b1133))
+* **hf:** every variant says whether it fits this machine ([#1765](https://github.com/mmogr/gglib/issues/1765)) ([f763819](https://github.com/mmogr/gglib/commit/f76381904e7f8d02e3fbdef580898b08198fa5b6))
+* **models:** templates and speculative decoding are a model's own defaults ([#1764](https://github.com/mmogr/gglib/issues/1764)) ([75c69e1](https://github.com/mmogr/gglib/commit/75c69e17a9d5e8589b4db568c011d55b51a4f889))
+* **models:** the id a client sends is stated once, and a ref is shown whole ([#1766](https://github.com/mmogr/gglib/issues/1766)) ([2ad6804](https://github.com/mmogr/gglib/commit/2ad68045b2a814bd247275ae9fc277f1c99ea3d9))
+* **proxy:** each loaded model says how it was launched and what it is doing; the second slot says how much room is left ([#1778](https://github.com/mmogr/gglib/issues/1778)) ([9aab47f](https://github.com/mmogr/gglib/commit/9aab47f5fe21c2c377821195e6f454cd8f93cb22))
+* **proxy:** proxy status says its address and whether it needs a key ([#1768](https://github.com/mmogr/gglib/issues/1768)) ([e56dc55](https://github.com/mmogr/gglib/commit/e56dc55a935d7b439b40fa82fc67b13d75011002))
+* **proxy:** the request ledger says what gglib did to each request ([#1770](https://github.com/mmogr/gglib/issues/1770)) ([46899db](https://github.com/mmogr/gglib/commit/46899dbeeb2630a09e80929ec009056a1006b651))
+* **settings:** the endpoint's bind address, allowed hosts and on-disk prompt cache are settings ([#1771](https://github.com/mmogr/gglib/issues/1771)) ([661cf47](https://github.com/mmogr/gglib/commit/661cf47408371436c30195bcf5199933477aa0ea))
+
+
+### What it stopped getting wrong
+
+* **runtime:** every load and unload is announced, whoever caused it ([#1761](https://github.com/mmogr/gglib/issues/1761)) ([28ec436](https://github.com/mmogr/gglib/commit/28ec436a05cedab170af148d37a4b8a700eb2291))
+
+
+### Internal
+
+* **deps:** bump @vitejs/plugin-react ([#1756](https://github.com/mmogr/gglib/issues/1756)) ([5d5cf45](https://github.com/mmogr/gglib/commit/5d5cf45be26f84e750a74d69beae2ed6996cfbc8))
+* **deps:** bump globals from 17.13.0 to 17.14.0 in the eslint group ([#1755](https://github.com/mmogr/gglib/issues/1755)) ([1cd9f3a](https://github.com/mmogr/gglib/commit/1cd9f3a3b0a747d9b07980544f3255f20a5f85eb))
+* **deps:** bump knip from 6.44.0 to 6.44.1 in the npm-compatible group ([#1745](https://github.com/mmogr/gglib/issues/1745)) ([c4455d1](https://github.com/mmogr/gglib/commit/c4455d1098393ca7f49308a5229c8424f5e942f5))
+* **deps:** bump taiki-e/install-action ([#1757](https://github.com/mmogr/gglib/issues/1757)) ([e190fb4](https://github.com/mmogr/gglib/commit/e190fb4adc5cfc2f2e2b357157357984e86d85ee))
+* **deps:** bump the cargo-compatible group with 6 updates ([#1758](https://github.com/mmogr/gglib/issues/1758)) ([f4bb333](https://github.com/mmogr/gglib/commit/f4bb33353827e7aec1e827e3f65ac72690be1954))
+* **deps:** update hf-xet requirement in /crates/gglib-download/scripts ([#1752](https://github.com/mmogr/gglib/issues/1752)) ([536da86](https://github.com/mmogr/gglib/commit/536da86afb874af5bb7d574e5ccbb705473cae2e))
+* **gui:** one model registry and one dashboard stream ([#1773](https://github.com/mmogr/gglib/issues/1773)) ([cbd3abe](https://github.com/mmogr/gglib/commit/cbd3abeefdf32acbe8948b39b8963af5b1f2f796))
+* **gui:** the readers the contracts pin live in src/readings ([#1772](https://github.com/mmogr/gglib/issues/1772)) ([52f5925](https://github.com/mmogr/gglib/commit/52f5925d9772d29656f3d8bb25f3905875a709cf))
+* **release:** the release PR proposes the right candidate without a Release-As line ([#1748](https://github.com/mmogr/gglib/issues/1748)) ([023b0a3](https://github.com/mmogr/gglib/commit/023b0a30ae34d83306d414fd2a64ad960d3d080f)), closes [#1747](https://github.com/mmogr/gglib/issues/1747)
+
 ## [0.30.1-rc.1](https://github.com/mmogr/gglib/compare/v0.30.0-rc.3...v0.30.1-rc.1) (2026-11-03)
 
 

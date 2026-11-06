@@ -15,7 +15,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const baseStyles =
-  "inline-flex items-center justify-center gap-2 rounded-base border border-transparent text-sm font-medium transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-60 disabled:cursor-not-allowed";
+  "inline-flex items-center justify-center gap-2 rounded-base border border-transparent text-sm font-semibold transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-60 disabled:cursor-not-allowed";
 
 const variantStyles: Record<ButtonVariant, string> = {
   // Level 1 — Primary CTA. One per surface maximum.
@@ -31,7 +31,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   // Demoted destructive action — reveals intent on hover without spending red at rest.
   dangerGhost: "bg-transparent text-text-muted hover:text-danger hover:bg-danger-subtle",
   // Inline text link — no background, no border.
-  link: "bg-transparent text-primary h-auto p-0 hover:underline hover:text-primary-hover",
+  link: "bg-transparent text-primary h-auto p-0 underline underline-offset-2 hover:text-text-secondary",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

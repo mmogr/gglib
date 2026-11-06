@@ -267,6 +267,11 @@ pub struct ProcessHandle {
     /// existed reads as llama.cpp's, which every server then was.
     #[serde(default)]
     pub runtime: RuntimeKind,
+    /// How the model was launched and what it is doing, when the runtime
+    /// that made the handle keeps a resident for it; `None` from a handle
+    /// made before the field existed or by a runtime with no residents.
+    #[serde(default)]
+    pub launch: Option<crate::domain::LaunchFacts>,
 }
 
 impl ProcessHandle {
@@ -287,6 +292,7 @@ impl ProcessHandle {
             port,
             started_at,
             runtime: RuntimeKind::Llama,
+            launch: None,
         }
     }
 
@@ -294,6 +300,13 @@ impl ProcessHandle {
     #[must_use]
     pub const fn with_runtime(mut self, runtime: RuntimeKind) -> Self {
         self.runtime = runtime;
+        self
+    }
+
+    /// Carry the launch facts of the resident serving the model.
+    #[must_use]
+    pub fn with_launch(mut self, launch: Option<crate::domain::LaunchFacts>) -> Self {
+        self.launch = launch;
         self
     }
 }

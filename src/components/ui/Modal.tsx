@@ -100,7 +100,7 @@ export const Modal: FC<ModalProps> = ({
           }}
         >
           <div className="flex items-center justify-between p-lg border-b border-border-light shrink-0">
-            <DialogPrimitive.Title className="text-lg font-semibold text-text m-0">{title}</DialogPrimitive.Title>
+            <DialogPrimitive.Title className="text-base font-semibold text-text m-0">{title}</DialogPrimitive.Title>
             <DialogPrimitive.Close asChild>
               <IconButton label="Close dialog" onClick={onClose} disabled={preventClose}>
                 <Icon icon={X} size={14} />

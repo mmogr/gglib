@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use gglib_core::domain::{ListedModel, openai_model_ids};
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort, ProcessHandle};
 use gglib_core::services::{AppCore, ImportMode};
@@ -12,10 +13,12 @@ use gglib_core::{
 };
 
 use crate::error::GuiError;
-use crate::sampling_explain::{self, SamplingExplanationDto};
+use crate::launch_explain::LaunchExplanationDto;
+use crate::launch_options::plan_bare_launch;
+use crate::sampling_explain;
 use crate::types::{
     AddModelRequest, GuiModel, RemoveModelRequest, RetagResponse, SetCapabilitiesRequest,
-    UpdateModelRequest,
+    StartServerRequest, UpdateModelRequest,
 };
 
 /// Dependencies for model operations.
@@ -120,6 +123,9 @@ impl ModelOps {
     /// files, looks once for the listing and not once a row.
     pub async fn list_with_query(&self, query: ModelListQuery) -> Result<Vec<GuiModel>, GuiError> {
         let models = self.deps.core.models().list().await?;
+        // Named over the whole catalogue, before the filter: a twin the
+        // filter drops still makes its sibling's id a longer one.
+        let mut ids = openai_ids(&models);
 
         let filtered = apply_query(models, &query);
 
@@ -128,16 +134,32 @@ impl ModelOps {
             .into_iter()
             .map(|model| {
                 let (is_serving, port) = Self::serving_status(&running, model.id);
-                GuiModel::from_model(model, is_serving, port)
+                let openai_id = ids.remove(&model.id);
+                GuiModel {
+                    openai_id,
+                    ..GuiModel::from_model(model, is_serving, port)
+                }
             })
             .collect())
+    }
+
+    /// The id `/v1/models` lists model `id` under, which a client sends:
+    /// named over the whole catalogue, as the listing names every row.
+    /// `None` for an id the catalogue does not hold.
+    pub async fn openai_id(&self, id: i64) -> Result<Option<String>, GuiError> {
+        let models = self.deps.core.models().list().await?;
+        Ok(openai_ids(&models).remove(&id))
     }
 
     /// Get a specific model by ID.
     pub async fn get(&self, id: i64) -> Result<GuiModel, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         let (is_serving, port) = self.get_server_status(id).await;
-        Ok(GuiModel::from_model(model, is_serving, port))
+        let openai_id = self.openai_id(id).await?;
+        Ok(GuiModel {
+            openai_id,
+            ..GuiModel::from_model(model, is_serving, port)
+        })
     }
 
     /// Get full details for a model by ID, for the inspect view.
@@ -152,21 +174,24 @@ impl ModelOps {
         Ok(ModelDetailDto::from_model(model, is_serving, port))
     }
 
-    /// Resolve a model's sampling parameters and report which layer supplied
-    /// each one.
+    /// The launch gglib would make for model `id` now, and the sampling it
+    /// resolves to, with where each value came from.
     ///
     /// The shared data source for the CLI `model explain` command and the
-    /// `GET /api/models/:id/explain` route. `profile` names a configured
+    /// `GET /api/models/:id/explain` route. The launch is the runtime's own
+    /// plan of a bare start (`plan_bare_launch`, as `ServerOps::start` runs
+    /// it with nothing asked for), so a terminal and the inspector read the
+    /// command a Load would run. `profile` names a configured
     /// [`InferenceProfile`] to apply on top of the model's own defaults;
     /// an unknown name is a [`GuiError::ValidationFailed`] rather than a
     /// silent fall back to the unprofiled resolution.
     ///
     /// [`InferenceProfile`]: gglib_core::domain::InferenceProfile
-    pub async fn explain_sampling(
+    pub async fn explain(
         &self,
         id: i64,
         profile: Option<&str>,
-    ) -> Result<SamplingExplanationDto, GuiError> {
+    ) -> Result<LaunchExplanationDto, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         let settings = self.deps.core.settings().get().await?;
 
@@ -175,8 +200,18 @@ impl ModelOps {
                 sampling_explain::find_profile(name, settings.inference_profiles.as_deref())
             })
             .transpose()?;
+        let sampling = sampling_explain::explain(&model, &settings, selected);
 
-        Ok(sampling_explain::explain(&model, &settings, selected))
+        let (default_ctx, overrides) =
+            plan_bare_launch(&model, &settings, &StartServerRequest::default());
+        let spec = gglib_core::services::model_to_launch_spec(model);
+        let plan = self
+            .deps
+            .runtime
+            .plan(&spec, None, default_ctx, &overrides)
+            .map_err(|e| GuiError::Internal(format!("could not plan the launch: {e}")))?;
+
+        Ok(LaunchExplanationDto { plan, sampling })
     }
 
     /// Import the GGUF file `request` names: the one add, for `POST
@@ -415,6 +450,17 @@ impl ModelOps {
             },
         })
     }
+}
+
+/// Each model's `/v1/models` id, by its catalogue id: the one function the
+/// proxy's listing, `gglib up` and the client recipes name a model by.
+pub(crate) fn openai_ids(models: &[Model]) -> std::collections::HashMap<i64, String> {
+    let listed: Vec<ListedModel<'_>> = models.iter().map(ListedModel::from).collect();
+    models
+        .iter()
+        .zip(openai_model_ids(&listed))
+        .map(|(model, id)| (model.id, id))
+        .collect()
 }
 
 #[cfg(test)]

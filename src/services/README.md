@@ -75,8 +75,11 @@ not because it belongs here.
 | `remoteRegistryState.ts` | What that store holds and what an empty tunnel looks like: the `RemoteState` shape and `IDLE_STATUS`, split out so the registry file stays under budget; and `pairedName`, the name the paired machine is shown by, never its fingerprint |
 | `remoteOffer.ts` | The pairing code on offer, held by `remoteRegistry` so closing the popover cannot lose it, and the pure rules for when a status read ends it (paired, tunnel down, or withdrawn) or marks it gone |
 | `remoteEvents.ts` | Subscribes to `remote_*` events, ingests them into `remoteRegistry`, and re-reads the status after each |
-| `createEventStore.ts` | Shared store factory behind the three registries: one value, replaced whole on each write, with a `useSyncExternalStore` hook over it |
-| `bridgeEvents.ts` | Shared bridge behind the three `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event or a cleanup overtook |
+| `modelRegistry.ts` | External store for this machine's model library, read once by every surface that shows it: the list as last read, whether a read has answered, and why the last one failed |
+| `modelEvents.ts` | Fills `modelRegistry`: a read on init, one after each burst of `model_*` events (batched, so a retag of many is one read), and one after each edit made through its `addModel`/`removeModel`/`updateModel` |
+| `dashboardRegistry.ts` | One `/v1/proxy/status/stream` per endpoint and credential, ref-counted: opened by the first surface that wants it, closed by the last, reopened when the key changes |
+| `createEventStore.ts` | Shared store factory behind the registries: one value, replaced whole on each write, with a `useSyncExternalStore` hook over it |
+| `bridgeEvents.ts` | Shared bridge behind the `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event or a cleanup overtook |
 | `agentOverrides.ts` | Per-session chat overrides, in two halves: `agentOverridesToWire()` builds the `config` object, `reasoningOverridesToWire()` builds the top-level reasoning fields the request declares separately |
 
 ## Clients

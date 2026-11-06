@@ -119,6 +119,19 @@ and a budget that moves evicts and relaunches the model it just sized.
 The asymmetry is the point: one question tolerates a figure that changes,
 the other cannot.
 
+# Every change is announced
+
+The set tells its [`ResidencyObserver`](gglib_core::ports::ResidencyObserver)
+of every load and unload, whoever caused it: a launch once its server is
+healthy, with the handle `list_running` would report; a stop, a recycle and
+a swap's displacement before the process is killed, so a watcher stops
+looking before the server goes; a render's retirement once its slot is
+emptied, which is after the kill by construction. Always after the queue has
+recorded the change and with no lock held: the observer is caller code. The
+daemon's observer sends `server_started` and `server_stopped` to its clients
+from these, so a model the proxy swapped in for a request is announced the
+same way as one the GUI started.
+
 # What this module is not responsible for
 
 It does not schedule. It never decides whose turn it is, when a swap is fair,

@@ -116,6 +116,8 @@ pub(super) fn bare_args() -> UpdateArgs {
         reasoning_budget_tokens: None,
         unset: Vec::new(),
         clear_inference_defaults: false,
+        jinja: None,
+        mtp: None,
         projector: crate::projector_args::ProjectorArgs::default(),
         components: crate::component_args::ComponentArgs::default(),
     }
