@@ -46,7 +46,7 @@ export const AgenticLiveProgress: FC<AgenticLiveProgressProps> = ({
           <span
             className={cn(
               'text-sm',
-              a.arm === currentArm ? 'text-text font-medium' : 'text-text-muted',
+              a.arm === currentArm ? 'text-text font-semibold' : 'text-text-muted',
             )}
           >
             {ARM_LABELS[a.arm]}

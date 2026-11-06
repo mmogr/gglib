@@ -55,7 +55,7 @@ export const ModelCard: FC<ModelCardProps> = ({
       <div className="px-4 py-[0.9rem]">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold text-text m-0 mb-[0.35rem] overflow-hidden text-ellipsis whitespace-nowrap flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-text m-0 mb-[0.35rem] overflow-hidden text-ellipsis whitespace-nowrap flex items-center gap-2">
               {model.name}
               <IconButton
                 label="Open on HuggingFace"
@@ -84,13 +84,13 @@ export const ModelCard: FC<ModelCardProps> = ({
               </span>
             )}
             <span className="flex items-center gap-[0.35rem] text-sm text-text-secondary">
-              <span className="text-base" aria-hidden>
+              <span className="text-sm" aria-hidden>
                 <Icon icon={Download} size={14} />
               </span>
               <span className="font-mono tabular-nums">{formatNumber(model.downloads)}</span>
             </span>
             <span className="flex items-center gap-[0.35rem] text-sm text-text-secondary">
-              <span className="text-base" aria-hidden>
+              <span className="text-sm" aria-hidden>
                 <Icon icon={Heart} size={14} />
               </span>
               <span className="font-mono tabular-nums">{formatNumber(model.likes)}</span>

@@ -241,7 +241,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
     <div className="flex flex-col gap-md">
       <div className="flex justify-between items-center gap-md">
         <div className="flex items-center gap-sm">
-          <h3 className="m-0 text-base font-semibold text-text">MCP Servers</h3>
+          <h3 className="m-0 text-sm font-semibold text-text">MCP Servers</h3>
           <span className="text-sm text-text-secondary">
             {servers.length} server{servers.length !== 1 ? "s" : ""}
           </span>
@@ -313,7 +313,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       {info.server.server_type === "stdio" ? "Stdio" : "SSE"}
                     </span>
                     {!info.server.is_valid && (
-                      <span className="inline-flex items-center gap-1 px-sm py-0.5 bg-warning-subtle text-warning text-xs font-medium rounded-sm cursor-help" title={info.server.last_error || "Invalid configuration"}>
+                      <span className="inline-flex items-center gap-1 px-sm py-0.5 bg-warning-subtle text-warning text-xs font-semibold rounded-sm cursor-help" title={info.server.last_error || "Invalid configuration"}>
                         <Icon icon={AlertTriangle} size={14} />
                         <span className="ml-1.5">Needs relink</span>
                       </span>

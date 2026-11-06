@@ -48,7 +48,7 @@ const ServerList: FC<ServerListProps> = ({
   if (servers.length === 0) {
     return (
       <div className={cn("flex flex-col items-center justify-center text-center text-text-muted", compact ? "p-base" : "p-xl")}>
-        <div className="text-2xl mb-sm opacity-50" aria-hidden>
+        <div className="text-lg mb-sm opacity-50" aria-hidden>
           <Icon icon={ServerOff} size={22} />
         </div>
         <p className="my-xs text-sm">No active servers</p>
@@ -70,7 +70,7 @@ const ServerList: FC<ServerListProps> = ({
               onClick={() => handleServerClick(server.modelId)}
             >
               <div className="flex-1 min-w-0">
-                <Row gap="sm" align="center" className="font-medium text-sm overflow-hidden text-ellipsis whitespace-nowrap">
+                <Row gap="sm" align="center" className="font-semibold text-sm overflow-hidden text-ellipsis whitespace-nowrap">
                   {server.modelName}
                   <ServerHealthIndicator modelId={server.modelId} />
                 </Row>

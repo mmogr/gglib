@@ -14,16 +14,12 @@ export interface SkeletonProps {
   count?: number;
 }
 
-const SHIMMER_BG = {
-  background:
-    'linear-gradient(90deg, var(--color-surface-elevated) 25%, var(--color-surface-hover) 50%, var(--color-surface-elevated) 75%)',
-  backgroundSize: '200% 100%',
-} as const;
-
+// A skeleton is a static grey block: a placeholder, not a signal, so it does
+// not move (see styles/README.md, "Motion").
 const variantClasses: Record<NonNullable<SkeletonProps['variant']>, string> = {
-  text: 'rounded-sm',
-  rect: 'rounded-base',
-  circle: 'rounded-full shrink-0',
+  text: 'rounded-sm bg-surface-elevated',
+  rect: 'rounded-base bg-surface-elevated',
+  circle: 'rounded-full shrink-0 bg-surface-elevated',
 };
 
 const variantDefaults: Record<
@@ -45,8 +41,8 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   const defaults = variantDefaults[variant];
   const w = width ?? defaults.width;
   const h = height ?? defaults.height;
-  const itemClass = cn('animate-shimmer', variantClasses[variant], className);
-  const itemStyle = { ...SHIMMER_BG, width: w, height: h };
+  const itemClass = cn(variantClasses[variant], className);
+  const itemStyle = { width: w, height: h };
 
   if (count > 1) {
     return (

@@ -6,7 +6,7 @@ const baseStyles = "w-full rounded-md border bg-background-input text-text text-
 const sizeStyles: Record<InputSize, string> = {
   sm: "h-7 px-2 text-xs",
   base: "h-8 px-3 text-sm",
-  lg: "h-9 px-3.5 text-base",
+  lg: "h-9 px-3.5 text-sm",
 };
 
 const variantStyles: Record<InputVariant, string> = {

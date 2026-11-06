@@ -58,7 +58,7 @@ export function Tabs<T extends string = string>({
               aria-selected={active}
               onClick={() => onChange(tab.id)}
               className={cn(
-                "relative flex items-center justify-center gap-xs bg-transparent cursor-pointer font-medium whitespace-nowrap transition-colors",
+                "relative flex items-center justify-center gap-xs bg-transparent cursor-pointer font-semibold whitespace-nowrap transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset rounded-t-base",
                 size === "sm" ? "px-sm py-xs text-xs" : "px-md py-sm text-sm",
                 fill && "flex-1",

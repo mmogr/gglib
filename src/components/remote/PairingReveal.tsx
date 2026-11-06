@@ -97,7 +97,7 @@ export const PairingReveal: FC<PairingRevealProps> = ({ reveal, onCopied }) => {
         <span className="text-xs text-text-muted">Code</span>
         <Button
           variant="ghost"
-          className="font-mono tabular-nums text-2xl tracking-[0.3em] text-text"
+          className="font-mono tabular-nums text-lg tracking-[0.3em] text-text"
           onClick={() => copy('code', reveal.code)}
           title="Copy code"
         >

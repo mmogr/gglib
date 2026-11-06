@@ -127,7 +127,7 @@ export const EnginesStep: FC<{
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-xl font-semibold text-text mb-2">Engines</h2>
+        <h2 className="text-base font-semibold text-text mb-2">Engines</h2>
         <p className="text-text-secondary leading-relaxed">
           gglib runs models with two engines, each installed from the release it is pinned to.
         </p>
@@ -146,7 +146,7 @@ export const EnginesStep: FC<{
           return (
             <div key={kind} className="py-2 px-3 bg-background-secondary rounded-lg border border-border">
               <p className="m-0 text-sm text-text">
-                <span className="font-medium">{ENGINE_PRODUCT[kind]}</span>
+                <span className="font-semibold">{ENGINE_PRODUCT[kind]}</span>
                 <span className="text-text-muted">, which {does}</span>
               </p>
               {status && <p className="m-0 text-xs text-text-muted">{standing(status)}</p>}

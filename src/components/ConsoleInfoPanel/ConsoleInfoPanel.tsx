@@ -59,8 +59,8 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
       <div className="p-md border-b border-border-light shrink-0">
         <div className="flex items-start justify-between gap-md">
           <Stack gap="xs">
-            <span className="text-xs font-medium text-text-muted">Server running</span>
-            <h2 className="m-0 text-lg font-semibold text-text break-words">{modelName}</h2>
+            <span className="text-xs font-semibold text-text-muted">Server running</span>
+            <h2 className="m-0 text-base font-semibold text-text break-words">{modelName}</h2>
           </Stack>
         </div>
       </div>

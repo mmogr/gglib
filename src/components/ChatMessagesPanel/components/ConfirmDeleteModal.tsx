@@ -59,8 +59,8 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
             <Icon icon={Trash2} size={18} />
           </span>
           <div>
-            <h2 className="m-0 text-base font-semibold text-text">Delete this message?</h2>
-            <p className="mt-[0.15rem] mb-0 text-text-secondary text-base">This action is permanent.</p>
+            <h2 className="m-0 text-sm font-semibold text-text">Delete this message?</h2>
+            <p className="mt-[0.15rem] mb-0 text-text-secondary text-sm">This action is permanent.</p>
           </div>
         </div>
 

@@ -10,7 +10,7 @@ const Td: FC<{ children: React.ReactNode; className?: string }> = ({ children, c
   <td className={cn('px-md py-xs text-sm text-text font-mono tabular-nums', className)}>{children}</td>
 );
 const Th: FC<{ children?: React.ReactNode }> = ({ children }) => (
-  <th className="px-md py-xs text-left text-xs font-medium text-text-muted">{children}</th>
+  <th className="px-md py-xs text-left text-xs font-semibold text-text-muted">{children}</th>
 );
 
 /** Collapsible per-task drill-down — detail the CLI does not print. */

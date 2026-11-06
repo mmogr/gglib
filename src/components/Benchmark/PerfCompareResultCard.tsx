@@ -87,8 +87,8 @@ export const PerfCompareResultCard: FC<PerfCompareResultCardProps> = ({ model: m
   return (
     <div className="bg-surface rounded-md p-base flex flex-col gap-sm">
       <div className="flex items-center gap-sm">
-        <span className="font-medium text-text truncate flex-1">{m.modelName}</span>
-        <span className={cn('text-xs font-medium', statusColor)}>{statusLabel}</span>
+        <span className="font-semibold text-text truncate flex-1">{m.modelName}</span>
+        <span className={cn('text-xs font-semibold', statusColor)}>{statusLabel}</span>
       </div>
 
       {m.thoughtFor !== undefined && m.status !== 'failed' && (
@@ -100,7 +100,7 @@ export const PerfCompareResultCard: FC<PerfCompareResultCardProps> = ({ model: m
       {m.status === 'running' && m.liveText && showLiveText && (
         <div className="bg-surface-elevated rounded-md p-base text-sm text-text whitespace-pre-wrap font-mono leading-relaxed max-h-[300px] overflow-y-auto">
           {m.liveText}
-          <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />
+          <span className="inline-block w-2 h-4 bg-primary ml-0.5 align-text-bottom" />
         </div>
       )}
 
