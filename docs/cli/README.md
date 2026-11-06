@@ -90,9 +90,9 @@ them once; the last column says which commands take each.
 
 ## How these pages were made
 
-Every output block on these pages was recorded by running the command, with
+Every output block on these pages but one was recorded by running the command, with
 [`docs/screenshots/snippets.py`](../screenshots/snippets.py), against a gglib
-with its own data folder and models; the pages change when the output does. The machine's user is shown as `mmogr`.
+with its own data folder and models; the pages change when the output does. The machine's user is shown as `mmogr`. The one exception, the `load`/`unload` block in [model.md](model.md), is marked as illustrative where it stands.
 
 ## See also
 

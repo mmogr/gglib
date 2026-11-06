@@ -18,18 +18,26 @@ struct Taken {
 
 /// A stand-in daemon that answers `replies` in order, each `(status, body)`,
 /// closing every connection, and `f` run against it. Answers what `f`
-/// answered beside the requests the stand-in took.
+/// answered beside the requests the stand-in took, which may be fewer than
+/// the replies scripted: once `f` is over, each reply still waiting is
+/// woken with an empty connection and the stand-in stops, so a request
+/// that never came is a short count and not a hang.
 async fn against<T, F, Fut>(replies: Vec<(u16, String)>, f: F) -> (T, Vec<Taken>)
 where
     F: FnOnce(DaemonHandle) -> Fut,
     Fut: Future<Output = T>,
 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
-    let port = listener.local_addr().expect("its address").port();
+    let addr = listener.local_addr().expect("its address");
+    let port = addr.port();
+    let scripted = replies.len();
     let daemon = std::thread::spawn(move || {
         let mut taken = Vec::new();
         for (status, reply) in replies {
-            let (request, mut stream) = blocking::accept(&listener).expect("the request");
+            // An empty connection is the wake-up, not a request.
+            let Ok((request, mut stream)) = blocking::accept(&listener) else {
+                break;
+            };
             let reason = if status == 200 { "OK" } else { "Refused" };
             let _ = write!(
                 stream,
@@ -49,6 +57,10 @@ where
         api_key: None,
     };
     let answered = STAND_IN_PORT.scope(port, f(handle)).await;
+    for _ in 0..scripted {
+        // Wakes a reply still waiting; refused once the stand-in has stopped.
+        drop(std::net::TcpStream::connect(addr));
+    }
     (answered, daemon.join().expect("the stand-in ran"))
 }
 
@@ -63,16 +75,17 @@ fn body(id: i64, context: Option<u64>) -> StartServerBody {
 }
 
 /// A load is one start request, the model's id and context flat in its
-/// body, and the line printed is the daemon's own sentence.
+/// body, and the line printed is the daemon's own sentence: one the CLI
+/// could not have built from the port.
 #[tokio::test]
 async fn a_load_asks_the_daemon_to_start_the_model_and_prints_its_sentence() {
-    let reply = serde_json::json!({ "port": 9301, "message": "Server started on port 9301" });
+    let reply = serde_json::json!({ "port": 9301, "message": "loaded at 9301 (stand-in)" });
     let (lines, taken) = against(vec![(200, reply.to_string())], |handle| async move {
         load_on(&handle, &body(3, Some(4096)), false).await
     })
     .await;
 
-    assert_eq!(lines.unwrap(), ["  Server started on port 9301"]);
+    assert_eq!(lines.unwrap(), ["  loaded at 9301 (stand-in)"]);
     assert_eq!(taken.len(), 1);
     assert_eq!(
         taken[0].line,
@@ -88,7 +101,7 @@ async fn a_load_asks_the_daemon_to_start_the_model_and_prints_its_sentence() {
 #[tokio::test]
 async fn a_pinned_load_pins_the_endpoint_before_it_loads_the_model() {
     let pinned = serde_json::json!({ "running": true, "port": 8080, "pinned_model": "qwen3" });
-    let started = serde_json::json!({ "port": 9301, "message": "Server started on port 9301" });
+    let started = serde_json::json!({ "port": 9301, "message": "loaded at 9301 (stand-in)" });
     let (lines, taken) = against(
         vec![(200, pinned.to_string()), (200, started.to_string())],
         |handle| async move { load_on(&handle, &body(3, Some(4096)), true).await },
@@ -99,7 +112,7 @@ async fn a_pinned_load_pins_the_endpoint_before_it_loads_the_model() {
         lines.unwrap(),
         [
             "  Endpoint on port 8080, pinned to qwen3",
-            "  Server started on port 9301",
+            "  loaded at 9301 (stand-in)",
         ]
     );
     let lines_taken: Vec<&str> = taken.iter().map(|t| t.line.as_str()).collect();
@@ -116,15 +129,17 @@ async fn a_pinned_load_pins_the_endpoint_before_it_loads_the_model() {
 }
 
 /// A refusal is the daemon's sentence, and the model is not asked for after
-/// the pin was refused.
+/// the pin was refused: a second reply stands ready and is never taken.
 #[tokio::test]
 async fn a_refused_pin_is_the_daemons_sentence_and_loads_nothing() {
     let refusal = serde_json::json!({
         "error": "the proxy is already running unpinned \u{2014} stop it first (`gglib proxy stop`)"
     });
-    let (lines, taken) = against(vec![(409, refusal.to_string())], |handle| async move {
-        load_on(&handle, &body(3, None), true).await
-    })
+    let would_start = serde_json::json!({ "port": 9301, "message": "loaded at 9301 (stand-in)" });
+    let (lines, taken) = against(
+        vec![(409, refusal.to_string()), (200, would_start.to_string())],
+        |handle| async move { load_on(&handle, &body(3, None), true).await },
+    )
     .await;
 
     let err = format!("{:#}", lines.expect_err("the daemon refused"));

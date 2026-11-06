@@ -7,15 +7,15 @@
 //! model (`POST /api/proxy/start-pinned`: the app's pinned start, which runs
 //! `gglib serve`'s cascade on the daemon) and then for the model, in that
 //! order, since a plain start brings up an unpinned endpoint when none is
-//! running, which a pinned start then refuses. Every sentence printed is the
-//! daemon's.
+//! running, which a pinned start then refuses. Every answer printed is the
+//! daemon's; the pinned line lays out its status, as `daemon status` does.
 
 use anyhow::{Context as _, Result};
 
 use super::resolver;
 use crate::bootstrap::CliContext;
 use crate::daemon_client::wire::{StartPinnedBody, StopServerBody};
-use crate::daemon_client::{self, DaemonHandle, StartProxyBody, StartServerBody};
+use crate::daemon_client::{self, Absent, DaemonHandle, StartProxyBody, StartServerBody};
 use crate::handlers::agent_chat::upstream::start_body;
 
 /// Execute `gglib model load <id> [--context N|max] [--pin]`.
@@ -26,10 +26,11 @@ pub(crate) async fn load(
     pin: bool,
 ) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
+    // A bad `--context` is refused before anything is installed or asked.
+    let body = start_body(&model, context)?;
     // The engine the model runs under has to be here before the daemon is
     // asked for it, as `serve` and `chat` make sure of.
     crate::handlers::config::engine::ensure_installed(ctx, model.runtime(), false).await?;
-    let body = start_body(&model, context)?;
     let handle = daemon_client::ensure_daemon(ctx).await?;
     for line in load_on(&handle, &body, pin).await? {
         eprintln!("{line}");
@@ -39,7 +40,8 @@ pub(crate) async fn load(
 
 /// Ask the daemon, in order, for the endpoint pinned to the model when `pin`
 /// and then for the model loaded. The lines are the daemon's answers, one per
-/// request, and a refusal is the daemon's sentence.
+/// request: the pinned status laid out, then the start's own sentence. A
+/// refusal is the daemon's sentence.
 pub(super) async fn load_on(
     handle: &DaemonHandle,
     body: &StartServerBody,
@@ -55,11 +57,15 @@ pub(super) async fn load_on(
             })
             .await
             .context("the daemon did not pin the endpoint")?;
-        lines.push(match (pinned.port, pinned.pinned_model) {
-            (Some(port), Some(model)) => format!("  Endpoint on port {port}, pinned to {model}"),
-            (Some(port), None) => format!("  Endpoint on port {port}"),
-            (None, _) => "  Endpoint not running".to_owned(),
-        });
+        // A pinned start that answers no port left nothing listening; the
+        // model is not loaded behind it.
+        let Some(port) = pinned.port else {
+            anyhow::bail!("the daemon answered the pinned start with no listening endpoint");
+        };
+        lines.push(pinned.pinned_model.map_or_else(
+            || format!("  Endpoint on port {port}"),
+            |model| format!("  Endpoint on port {port}, pinned to {model}"),
+        ));
     }
     let started = handle
         .start_model_server(body)
@@ -72,9 +78,16 @@ pub(super) async fn load_on(
 /// Execute `gglib model unload <id>`.
 pub(crate) async fn unload(ctx: &CliContext, identifier: &str) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
-    let Ok(handle) = daemon_client::running(ctx).await else {
-        eprintln!("  Daemon is not running \u{2014} nothing is loaded.");
-        return Ok(());
+    let handle = match daemon_client::running(ctx).await {
+        Ok(handle) => handle,
+        Err(Absent::NotRunning) => {
+            eprintln!("  Daemon is not running \u{2014} nothing is loaded.");
+            return Ok(());
+        }
+        Err(Absent::ForeignServer) => anyhow::bail!(
+            "port {} is held by another program (not a gglib daemon) \u{2014} nothing to unload",
+            gglib_core::daemon_port()
+        ),
     };
     eprintln!("{}", unload_on(&handle, model.id).await?);
     Ok(())

@@ -139,6 +139,8 @@ an endpoint already running unpinned is the daemon's refusal, and
 `gglib proxy stop` clears it. `unload` asks the daemon to stop the model's
 server; one that is not loaded is said so, in the daemon's words.
 
+Illustrative, not a recording: the two lines are the daemon's sentences.
+
 ```console
 $ gglib model load 3
   Server started on port 9301
