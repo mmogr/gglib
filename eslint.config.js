@@ -208,7 +208,8 @@ export default [
     // `src/readings` is pure: data in, a reading out. No React, no component,
     // no service and no Tauri, so a reader can be held by a contract test
     // alone and survive every screen that shows it.
-    files: ['src/readings/**/*.{ts,tsx}'],
+    // `.ts` only: a `.tsx` could carry JSX without importing React.
+    files: ['src/readings/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
