@@ -329,13 +329,7 @@ fn admission_section_names_each_resident_and_its_role() {
 /// recorded nothing gets no line, not a blank one.
 #[test]
 fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
-    let launch = gglib_core::domain::LaunchFacts::new(
-        gglib_core::domain::ResidencyState::Loaded,
-        32_768,
-        17 * (1 << 30),
-        Some("Q4_K_M".to_string()),
-        None,
-    );
+    let flag_line = "Q4_K_M \u{b7} 32K \u{b7} 17.0 GiB".to_string();
     let frame = frame_with_admission(AdmissionSnapshot {
         slots: vec![
             ResidentSlotSnapshot {
@@ -344,10 +338,12 @@ fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
                 inflight: 0,
                 is_primary: true,
                 resident_for_secs: 95,
-                launch: Some(launch.clone()),
+                launch: Some(LaunchLine {
+                    flag_line: flag_line.clone(),
+                }),
             },
             ResidentSlotSnapshot {
-                model_name: "restored".to_string(),
+                model_name: "older-daemon".to_string(),
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: false,
@@ -365,18 +361,52 @@ fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
         .expect("the row");
     assert_eq!(
         lines[row + 1].trim_end(),
-        format!("    {}", launch.flag_line),
+        format!("    {flag_line}"),
         "{frame}"
     );
-    assert_eq!(launch.flag_line, "Q4_K_M \u{b7} 32K \u{b7} 17.0 GiB");
-    let restored = lines
+    let older = lines
         .iter()
-        .position(|l| l.contains("restored"))
+        .position(|l| l.contains("older-daemon"))
         .expect("the row");
     assert!(
-        !lines[restored + 1].starts_with("    "),
+        !lines[older + 1].starts_with("    "),
         "no line under a resident without one: {frame}"
     );
+}
+
+/// A flag line is one physical row whatever the terminal width, as every
+/// other server-phrased line is, so the redraw's cursor arithmetic holds.
+#[test]
+fn a_long_launch_line_is_clipped_to_the_terminal() {
+    let snapshot = DashboardSnapshot {
+        active_connections: vec![],
+        slots_available: false,
+        slots: vec![],
+        slots_status: None,
+        total_requests: 0,
+        cache: None,
+        agent_usage: CacheUsage::default(),
+        admission: AdmissionSnapshot {
+            slots: vec![ResidentSlotSnapshot {
+                model_name: "qwen-coder".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
+                inflight: 0,
+                is_primary: true,
+                resident_for_secs: 1,
+                launch: Some(LaunchLine {
+                    flag_line: "x".repeat(400),
+                }),
+            }],
+            ..Default::default()
+        },
+        per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
+        recent_requests: vec![],
+    };
+    let frame = render_frame("http://127.0.0.1:8123", &snapshot, 80);
+    for line in frame.lines() {
+        assert!(line.chars().count() <= 80, "{line:?}");
+    }
 }
 
 /// The default second-slot status carries "Room for one more" when the

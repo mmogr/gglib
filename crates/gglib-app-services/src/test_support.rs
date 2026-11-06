@@ -298,6 +298,7 @@ impl ModelRuntimePort for PlansOnly {
             overrides,
             None,
             &[],
+            false,
         )
     }
 

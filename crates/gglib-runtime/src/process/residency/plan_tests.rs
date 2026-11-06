@@ -228,3 +228,57 @@ fn a_runtime_with_its_own_cache_setting_plans_with_it() {
         "{auto:?}"
     );
 }
+
+/// The plan's verdict on unloading reads what the set holds: a chat model
+/// refused the second slot (this stub has no footprint to judge by, so it
+/// always is) would swap the primary's resident out, and names it; the
+/// primary's own model, or one already in the second slot, relaunches in
+/// place and unloads nothing.
+#[test]
+fn a_plan_says_which_loaded_model_it_would_unload() {
+    let set = ResidentSet::unobserved(
+        Arc::new(StubCatalog),
+        ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+    );
+    let resident = |model_id: u32, name: &str| Resident {
+        model_sampling: ModelSamplingDefaults::default(),
+        model_id,
+        model_name: name.to_owned(),
+        context_size: 4096,
+        port: 1,
+        projector: None,
+        runtime: RuntimeKind::Llama,
+        components: Vec::new(),
+        slot_restore_supported: true,
+        cache_ram_health: CacheRamHealth::LlamaDefault,
+        narration: None,
+        inflight: 0,
+        resident_since: Instant::now(),
+        weights_bytes: 1,
+    };
+
+    let empty = plan(&set, &launch_spec(7, "llama-3-8b"));
+    assert!(
+        !empty.would_unload && empty.displaces.is_none(),
+        "{empty:?}"
+    );
+
+    drop(set.queue().install(PRIMARY_SLOT, resident(3, "qwen2.5")));
+    let against_primary = plan(&set, &launch_spec(7, "llama-3-8b"));
+    assert!(against_primary.would_unload);
+    assert_eq!(against_primary.displaces.as_deref(), Some("qwen2.5"));
+
+    let itself = plan(&set, &launch_spec(3, "qwen2.5"));
+    assert!(
+        !itself.would_unload && itself.displaces.is_none(),
+        "{itself:?}"
+    );
+
+    drop(set.queue().install(1, resident(7, "llama-3-8b")));
+    let in_second = plan(&set, &launch_spec(7, "llama-3-8b"));
+    assert!(
+        !in_second.would_unload && in_second.displaces.is_none(),
+        "{in_second:?}"
+    );
+}

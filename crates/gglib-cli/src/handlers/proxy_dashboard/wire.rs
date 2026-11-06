@@ -181,10 +181,19 @@ pub(super) struct ResidentSlotSnapshot {
     pub(super) is_primary: bool,
     #[serde(default)]
     pub(super) resident_for_secs: u64,
-    /// How the model was launched, with the line that says it; absent from
-    /// a daemon older than the field, and from a restored resident.
+    /// How the model was launched, as the one line the daemon composed;
+    /// absent from a daemon older than the field.
     #[serde(default)]
-    pub(super) launch: Option<gglib_core::domain::LaunchFacts>,
+    pub(super) launch: Option<LaunchLine>,
+}
+
+/// Mirror of the part of `gglib_core::domain::LaunchFacts` the dashboard
+/// prints. Its own struct with defaults, as every mirror here is, so a field
+/// renamed on a daemon from another build costs the line, not the frame.
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct LaunchLine {
+    #[serde(default)]
+    pub(super) flag_line: String,
 }
 
 /// Mirror of `gglib_core::domain::QueuedModelSnapshot`.

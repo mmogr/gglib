@@ -86,8 +86,8 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 The launch gglib would make for the model, without making it: the command
 it would run, each argument beside whose choice it was (the model author's,
 gglib's, or yours) and why, then the context size the model would be served
-at and how it was fitted. When a model is loaded and this one would not fit
-beside it, one more line says which model the launch would unload first.
+at and how it was fitted. When a loaded model would have to go first, one
+more line says which (or, with both slots full, that one of the two goes).
 Then every resolved sampling parameter, beside the layer that supplied it.
 All of it comes from the same code a launch runs, so it cannot describe a
 launch or a hierarchy different from the one that happens, and

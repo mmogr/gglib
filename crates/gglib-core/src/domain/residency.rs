@@ -282,9 +282,10 @@ pub fn decide_secondary_slot_for(
     }
 }
 
-/// The interaction between a fitted context and this slot's hard ceiling.
 /// How much a second chat model may take right now, from the machine's free
-/// VRAM: the share the residency rule lets a resident use of it, capped at the
+/// VRAM.
+///
+/// The share the residency rule lets a resident use of it, capped at the
 /// second slot's ceiling, since [`decide_secondary_slot`] refuses anything
 /// past either. `None` when free VRAM cannot be read, as the decision would
 /// refuse for the same reason. This is the figure "Room for one more" names.
@@ -301,6 +302,7 @@ fn usable_share(free_bytes: u64) -> u64 {
     (free_bytes as f64 * RESIDENCY_UTILISATION) as u64
 }
 
+/// The interaction between a fitted context and this slot's hard ceiling.
 #[cfg(test)]
 #[path = "residency_fit_tests.rs"]
 mod fit_tests;

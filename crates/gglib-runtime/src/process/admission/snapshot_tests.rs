@@ -154,3 +154,57 @@ async fn the_second_slot_says_the_room_for_one_more_when_the_free_vram_is_known(
     assert_eq!(held.secondary_slot.state, "resident");
     assert_eq!(held.secondary_slot.headroom_bytes, None);
 }
+
+/// The room line shows after the first model loads: a verdict taken for a
+/// model going into an empty daemon is not a refusal of the second slot, so
+/// nothing is recorded, and a refusal recorded against one primary is dropped
+/// when another lands.
+#[tokio::test]
+async fn the_room_line_shows_once_the_first_model_has_loaded() {
+    let q = Arc::new(AdmissionQueue::new());
+    let ticket = q.enqueue(1, "qwen-coder");
+    let decision = q.poll(&ticket, NEVER_FITS);
+    assert!(
+        matches!(
+            decision,
+            AdmissionDecision::Launch {
+                slot: PRIMARY_SLOT,
+                ..
+            }
+        ),
+        "{decision:?}"
+    );
+    let _primary = q.install(PRIMARY_SLOT, resident(1, "qwen-coder", None));
+    q.lock().forget(&ticket);
+
+    let loaded = q.lock().snapshot(Instant::now(), Some(8 * GIB));
+    assert_eq!(
+        loaded.secondary_slot.detail, "Room for one more, about 2.0 GiB.",
+        "{loaded:?}"
+    );
+    assert!(q.lock().second_slot_room_wanted());
+
+    // A second model refused beside it: the refusal shows, and the room
+    // reading is not wanted.
+    let second = q.enqueue(2, "big");
+    let _ = q.poll(&second, NEVER_FITS);
+    assert_eq!(
+        q.lock()
+            .snapshot(Instant::now(), Some(8 * GIB))
+            .secondary_slot
+            .state,
+        "too_large"
+    );
+    assert!(!q.lock().second_slot_room_wanted());
+    q.lock().forget(&second);
+
+    // A new primary: the old pairing's refusal goes with it.
+    let _next = q.install(PRIMARY_SLOT, resident(3, "gemma", None));
+    assert_eq!(
+        q.lock()
+            .snapshot(Instant::now(), Some(8 * GIB))
+            .secondary_slot
+            .detail,
+        "Room for one more, about 2.0 GiB."
+    );
+}

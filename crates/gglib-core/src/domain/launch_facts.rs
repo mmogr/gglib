@@ -5,8 +5,7 @@
 //! launch decided (the narration), and whether it is working right now. The
 //! runtime knows them; this is the shape they travel in, on the admission
 //! snapshot's resident rows and on the server list, so `gglib proxy
-//! dashboard`, `gglib model list` and the GUI's Loaded rows read one record
-//! and print one line.
+//! dashboard` and the GUI's Loaded rows read one record and print one line.
 //!
 //! The flag line is composed here, from the narration's own words, so that
 //! no surface composes it again: the GUI arranges it, the CLI prints it.
@@ -66,14 +65,15 @@ impl LaunchFacts {
     }
 }
 
-/// The launch as one line: `Q4_K_M · 32K · k=q8_0 v=q8_0 KV · mtp on · 17.4 GiB`.
+/// The launch as one line: `Q4_K_M · 32K · q8_0 KV · mtp on · 17.4 GiB`.
 ///
 /// Each segment comes from a fact the launch recorded and is dropped when the
 /// fact is missing, never written as "unknown": a quant the catalog lacks, a
 /// KV decision an image model's launch never made, speculative decoding that
 /// is off or unmentioned. The KV decision's value is the narration's own
-/// (`k=q8_0 v=q8_0`), without the cache size it may append after `->`, since
-/// that size is the context section's to say.
+/// (`q8_0` when both cache types match, `k=q8_0 v=f16` when they differ),
+/// without the cache size it may append after `->`, since that size is the
+/// context section's to say.
 #[must_use]
 pub fn flag_line(
     quantization: Option<&str>,
@@ -111,7 +111,7 @@ pub fn flag_line(
 /// `4096` when it is not a whole number of K.
 #[must_use]
 pub fn format_context(tokens: u64) -> String {
-    if tokens >= 1024 && tokens % 1024 == 0 {
+    if tokens >= 1024 && tokens.is_multiple_of(1024) {
         format!("{}K", tokens / 1024)
     } else {
         tokens.to_string()
@@ -158,11 +158,18 @@ mod tests {
         assert_eq!(flag_line(Some(""), 0, 0, None), "");
         // MTP off is not said; a KV decision without a size is taken whole.
         let mut n = LaunchNarration::new("m", None, 0);
-        n.push(LaunchDecision::new("kv", "k=f16 v=f16", "default"));
+        n.push(LaunchDecision::new("kv", "k=f16 v=q8_0", "default"));
         n.push(LaunchDecision::new("mtp", "off", "GGLIB_DISABLE_MTP"));
         assert_eq!(
             flag_line(None, 8192, 0, Some(&n)),
-            "8K \u{b7} k=f16 v=f16 KV"
+            "8K \u{b7} k=f16 v=q8_0 KV"
+        );
+        // The producer's matched-types form loses only its size.
+        let mut matched = LaunchNarration::new("m", None, 0);
+        matched.push(LaunchDecision::new("kv", "q8_0 -> 1.5 GiB", "default"));
+        assert_eq!(
+            flag_line(None, 8192, 0, Some(&matched)),
+            "8K \u{b7} q8_0 KV"
         );
     }
 

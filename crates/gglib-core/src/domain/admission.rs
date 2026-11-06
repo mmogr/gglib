@@ -52,8 +52,9 @@ pub struct ResidentSlotSnapshot {
     /// The program serving it.
     pub runtime: RuntimeKind,
     /// How it was launched: the context it serves, its weights, its quant,
-    /// the decisions its launch made and the one line that says them. `None`
-    /// for a resident whose launch recorded nothing (a restored one).
+    /// the decisions its launch made and the one line that says them. Every
+    /// resident has them (a launch that recorded no narration still has its
+    /// context and weights); absent only from a daemon older than the field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub launch: Option<super::launch_facts::LaunchFacts>,
@@ -138,14 +139,11 @@ impl SecondarySlotStatus {
     /// `None` headroom is the default status, since nothing can be promised.
     #[must_use]
     pub fn available_with(headroom_bytes: Option<u64>) -> Self {
-        match headroom_bytes {
-            Some(bytes) => Self {
-                state: "available",
-                detail: format!("Room for one more, about {}.", format_bytes(bytes)),
-                headroom_bytes: Some(bytes),
-            },
-            None => Self::default(),
-        }
+        headroom_bytes.map_or_else(Self::default, |bytes| Self {
+            state: "available",
+            detail: format!("Room for one more, about {}.", format_bytes(bytes)),
+            headroom_bytes: Some(bytes),
+        })
     }
 
     /// Render the most recent refusal as a status.

@@ -214,12 +214,14 @@ impl ResidentSet {
         overrides: &LaunchOverrides,
     ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
         let residents = self.queue.residents();
-        // The primary's resident is what a launch refused the second slot
-        // swaps out; the model itself relaunching displaces nothing.
+        // What the plan's verdict on unloading is read against: the primary's
+        // resident, whatever it is, and whether this model is already loaded
+        // in any slot (then it relaunches in place and displaces nothing).
         let primary = residents
             .iter()
-            .find(|(slot, r)| *slot == PRIMARY_SLOT && r.model_id != spec.id)
+            .find(|(slot, _)| *slot == PRIMARY_SLOT)
             .map(|(_, r)| r.clone());
+        let already_resident = residents.iter().any(|(_, r)| r.model_id == spec.id);
         let others = others_for_a_primary_launch(residents, spec.id);
         explain::plan_launch(
             spec.clone(),
@@ -230,6 +232,7 @@ impl ResidentSet {
             overrides,
             primary.as_ref(),
             &others,
+            already_resident,
         )
     }
 

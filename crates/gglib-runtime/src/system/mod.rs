@@ -102,6 +102,16 @@ const UNIFIED_MEMORY_GPU_SHARE: f64 = 0.75;
 /// Cached for [`FREE_VRAM_TTL`], so a burst of admissions costs one probe.
 #[must_use]
 pub fn free_gpu_memory_bytes() -> Option<u64> {
+    free_gpu_memory_bytes_within(FREE_VRAM_TTL)
+}
+
+/// [`free_gpu_memory_bytes`] for a reader content with a reading up to
+/// `max_age` old: the dashboard's "room for one more", which is drawn every
+/// second for the life of the proxy and must not fork `nvidia-smi` each time.
+/// A reading younger than `max_age` is answered from the cache; an older one
+/// is probed anew, and the probe refreshes the cache for every reader.
+#[must_use]
+pub fn free_gpu_memory_bytes_within(max_age: std::time::Duration) -> Option<u64> {
     let now = std::time::Instant::now();
 
     {
@@ -109,7 +119,7 @@ pub fn free_gpu_memory_bytes() -> Option<u64> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some((probed_at, value)) = *guard
-            && now.duration_since(probed_at) < FREE_VRAM_TTL
+            && now.duration_since(probed_at) < max_age
         {
             return value;
         }

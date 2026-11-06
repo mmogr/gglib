@@ -62,15 +62,23 @@ impl QueueState {
     }
 
     /// Why the second slot is or is not in use: the model it holds; the
-    /// refusal the last launch met, or the grant under way; else how much a
-    /// second model may take now, when the free VRAM is known.
+    /// refusal the last launch met while a model held the primary; else how
+    /// much a second model may take now, when the free VRAM is known.
     fn secondary_slot_status(&self, free_vram_bytes: Option<u64>) -> SecondarySlotStatus {
         if let Some(r) = self.slot(PRIMARY_SLOT + 1) {
             return SecondarySlotStatus::resident(&r.model_name);
         }
-        if self.secondary_slot == SecondarySlotStatus::default() {
+        if self.second_slot_room_wanted() {
             return SecondarySlotStatus::available_with(secondary_headroom(free_vram_bytes));
         }
         self.secondary_slot.clone()
+    }
+
+    /// Whether the snapshot would say how much room the second slot has: it
+    /// holds nothing and no launch has been refused it. The caller reads the
+    /// free VRAM only then.
+    pub(in crate::process::admission) fn second_slot_room_wanted(&self) -> bool {
+        self.slot(PRIMARY_SLOT + 1).is_none()
+            && self.secondary_slot == SecondarySlotStatus::default()
     }
 }

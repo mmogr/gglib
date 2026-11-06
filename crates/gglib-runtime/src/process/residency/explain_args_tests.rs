@@ -48,6 +48,7 @@ fn planned_with(
         &overrides,
         None,
         &[],
+        false,
     )
     .expect("a chat model plans")
 }
@@ -341,6 +342,7 @@ fn a_global_default_context_is_yours() {
         &overrides,
         None,
         &[],
+        false,
     )
     .unwrap();
     let ctx = plan.args.iter().find(|a| a.flag == "-c").unwrap();

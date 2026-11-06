@@ -70,21 +70,24 @@ fn the_explanation_agrees_with_the_budget_it_reports() {
     );
 }
 
-/// What a launch would do to what is loaded, apart from any machine's VRAM:
-/// nothing in the primary unloads nothing; a refusal of the second slot swaps
-/// the primary's resident out and names it; a grant loads beside an empty
-/// second slot, and beside a full one unloads one of them, unnamed.
+/// What a launch would do to what is loaded, apart from any machine's VRAM,
+/// by the rules placement follows. A chat model: nothing in the primary
+/// unloads nothing; refused the second slot, it swaps the primary's resident
+/// out and names it; granted, it sits beside the primary, and a model in the
+/// second slot gives way first. An image model takes the loaded image model's
+/// slot, else a free second slot, else the second slot's resident. A model
+/// already loaded relaunches in place.
 #[test]
 fn a_plan_says_what_it_would_unload() {
     use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults, SecondarySlotDecision};
-    let resident = |model_id: u32, name: &str| Resident {
+    let resident = |model_id: u32, name: &str, runtime: RuntimeKind| Resident {
         model_sampling: ModelSamplingDefaults::default(),
         model_id,
         model_name: name.to_owned(),
         context_size: 4096,
         port: 1,
         projector: None,
-        runtime: RuntimeKind::Llama,
+        runtime,
         components: Vec::new(),
         slot_restore_supported: true,
         cache_ram_health: CacheRamHealth::LlamaDefault,
@@ -98,15 +101,63 @@ fn a_plan_says_what_it_would_unload() {
         headroom_bytes: 1,
     };
     let refusal = SecondarySlotDecision::RefuseUnknownFootprint;
-    let gemma = resident(7, "gemma");
-    let nomic = resident(9, "nomic");
+    let qwen = resident(7, "qwen", RuntimeKind::Llama);
+    let nomic = resident(9, "nomic", RuntimeKind::Llama);
+    let flux = resident(11, "flux-a", RuntimeKind::StableDiffusion);
+    let chat = RuntimeKind::Llama;
+    let image = RuntimeKind::StableDiffusion;
 
-    assert_eq!(displacement(&refusal, None, &[]), (false, None));
-    assert_eq!(displacement(&grant, None, &[nomic.clone()]), (false, None));
+    // A chat model.
     assert_eq!(
-        displacement(&refusal, Some(&gemma), &[]),
-        (true, Some("gemma".to_owned()))
+        displacement(chat, &refusal, None, &[], false),
+        (false, None)
     );
-    assert_eq!(displacement(&grant, Some(&gemma), &[]), (false, None));
-    assert_eq!(displacement(&grant, Some(&gemma), &[nomic]), (true, None));
+    assert_eq!(
+        displacement(chat, &grant, None, &[nomic.clone()], false),
+        (false, None)
+    );
+    assert_eq!(
+        displacement(chat, &refusal, Some(&qwen), &[], false),
+        (true, Some("qwen".to_owned()))
+    );
+    assert_eq!(
+        displacement(chat, &grant, Some(&qwen), &[], false),
+        (false, None)
+    );
+    assert_eq!(
+        displacement(chat, &grant, Some(&qwen), &[nomic.clone()], false),
+        (true, Some("nomic".to_owned()))
+    );
+    // Already loaded, in either slot: a relaunch in place.
+    assert_eq!(
+        displacement(chat, &refusal, Some(&qwen), &[], true),
+        (false, None)
+    );
+    assert_eq!(
+        displacement(chat, &refusal, Some(&qwen), &[nomic.clone()], true),
+        (false, None)
+    );
+
+    // An image model: the loaded image model's slot, whichever slot that is.
+    assert_eq!(
+        displacement(image, &refusal, Some(&qwen), &[flux.clone()], false),
+        (true, Some("flux-a".to_owned()))
+    );
+    assert_eq!(
+        displacement(image, &refusal, Some(&flux), &[nomic.clone()], false),
+        (true, Some("flux-a".to_owned()))
+    );
+    // No image model loaded: a free second slot takes it, a held one gives way.
+    assert_eq!(
+        displacement(image, &refusal, Some(&qwen), &[], false),
+        (false, None)
+    );
+    assert_eq!(
+        displacement(image, &refusal, Some(&qwen), &[nomic.clone()], false),
+        (true, Some("nomic".to_owned()))
+    );
+    assert_eq!(
+        displacement(image, &refusal, None, &[nomic], false),
+        (true, Some("nomic".to_owned()))
+    );
 }

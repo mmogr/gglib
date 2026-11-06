@@ -89,6 +89,7 @@ pub fn plan_launch(
     overrides: &LaunchOverrides,
     primary: Option<&Resident>,
     others: &[Resident],
+    already_resident: bool,
 ) -> Result<LaunchPlan, ModelRuntimeError> {
     let Prepared { request, fit } =
         prepare(spec, template, cache_ram, num_ctx, default_ctx, overrides);
@@ -113,7 +114,13 @@ pub fn plan_launch(
     };
     let (serves_at, source) = request.context;
     let decision = second_slot_decision(&request, planned.llama.as_ref());
-    let (would_unload, displaces) = displacement(&decision, primary, others);
+    let (would_unload, displaces) = displacement(
+        request.spec.runtime(),
+        &decision,
+        primary,
+        others,
+        already_resident,
+    );
     Ok(LaunchPlan {
         program: program.to_owned(),
         args,
@@ -149,25 +156,55 @@ fn second_slot_decision(
     }
 }
 
-/// Whether the launch would unload a loaded model, and which one when that
-/// is known, from the second-slot `decision` read against what is resident
-/// now. `primary` is the model in the primary slot, which a launch refused
-/// the second slot swaps out; `others` are the other slots' residents, one of
-/// which a granted co-load evicts when they are full, the queue choosing
-/// which at launch time.
+/// Whether the launch would unload a loaded model, and which one, from the
+/// second-slot `decision` read against what is resident now, by the rules
+/// placement follows (`choose_slot`, `choose_image_slot`).
+///
+/// `primary` is the model in the primary slot and `others` the other slots'
+/// residents (one slot: `SLOT_COUNT` is two). A model already resident, in
+/// either, relaunches in place and unloads nothing. A chat model refused the
+/// second slot swaps the primary's resident out; granted it, it sits beside
+/// the primary, and a model already in that slot gives way first. An image
+/// model takes the slot of the image model loaded, if any, since placement
+/// keeps one image model; else a free second slot; else the second slot's
+/// resident; else the primary's.
 fn displacement(
+    runtime: RuntimeKind,
     decision: &SecondarySlotDecision,
     primary: Option<&Resident>,
     others: &[Resident],
+    already_resident: bool,
 ) -> (bool, Option<String>) {
-    match (primary, decision.is_grant()) {
-        // Nothing in the primary: the launch takes it, unloading nothing.
-        (None, _) => (false, None),
-        // Refused the second slot: the primary's resident is swapped out.
-        (Some(resident), false) => (true, Some(resident.model_name.clone())),
-        // Granted the second slot: beside the primary; an occupied second slot
-        // gives way, the queue picking which resident when there are several.
-        (Some(_), true) => (!others.is_empty(), None),
+    if already_resident {
+        return (false, None);
+    }
+    let name = |r: &Resident| Some(r.model_name.clone());
+    match runtime {
+        RuntimeKind::StableDiffusion => {
+            if let Some(image) = primary
+                .into_iter()
+                .chain(others.iter())
+                .find(|r| r.runtime == RuntimeKind::StableDiffusion)
+            {
+                return (true, name(image));
+            }
+            match (others.first(), primary) {
+                (None, _) => (false, None),
+                (Some(second), _) => (true, name(second)),
+            }
+        }
+        RuntimeKind::Llama => match (primary, decision.is_grant()) {
+            // Nothing in the primary: the launch takes it, unloading nothing.
+            (None, _) => (false, None),
+            // Refused the second slot: the primary's resident is swapped out.
+            (Some(resident), false) => (true, name(resident)),
+            // Granted the second slot: beside the primary; a model already in
+            // that slot gives way first.
+            (Some(_), true) => match others.first() {
+                None => (false, None),
+                Some(second) => (true, name(second)),
+            },
+        },
     }
 }
 

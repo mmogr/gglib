@@ -22,11 +22,17 @@
 //! [#721]: https://github.com/mmogr/gglib/issues/721
 
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 use tokio::time::Instant;
 
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{AdmissionLease, AdmissionRelease};
 use tokio::sync::Notify;
+
+/// How old a free-VRAM reading may be when it sizes the second slot's room
+/// for the dashboard: the figure is "about N GiB" and the probe can fork a
+/// process, so one reading serves many frames.
+const ROOM_READING_MAX_AGE: Duration = Duration::from_secs(30);
 
 use super::state::{AdmissionDecision, Candidate, QueueState, Resident, Ticket};
 
@@ -226,11 +232,20 @@ impl AdmissionQueue {
         self.lock().is_loading()
     }
 
-    /// Project the queue for the dashboard. The free VRAM that sizes the
-    /// second slot's room is read before the lock is taken (the reading is
-    /// cached for a few seconds, so a dashboard frame costs no probe).
+    /// Project the queue for the dashboard.
+    ///
+    /// The free VRAM that sizes the second slot's room is read before the
+    /// lock is taken, and read only when that room can be shown (the second
+    /// slot empty, no refusal recorded): the dashboard publishes a frame every
+    /// second for the life of the proxy, and on an NVIDIA host the probe forks
+    /// `nvidia-smi`, so a reading up to [`ROOM_READING_MAX_AGE`] old is taken
+    /// rather than a fresh one per frame. "About 2 GiB" is not a figure that
+    /// moves by the second.
     pub fn snapshot(&self) -> AdmissionSnapshot {
-        let free_vram_bytes = crate::system::free_gpu_memory_bytes();
+        let wants_room = self.lock().second_slot_room_wanted();
+        let free_vram_bytes = wants_room
+            .then(|| crate::system::free_gpu_memory_bytes_within(ROOM_READING_MAX_AGE))
+            .flatten();
         self.lock().snapshot(Instant::now(), free_vram_bytes)
     }
 
