@@ -67,7 +67,6 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useDebounce.ts`](useDebounce.ts) | Debounced value updates |
 | [`useClickOutside.ts`](useClickOutside.ts) | Click outside detection for dropdowns |
 | [`useFileDropGuard.ts`](useFileDropGuard.ts) | Refuses a file dragged or dropped where nothing takes it, so the desktop window never opens it in place of the app |
 | [`useMetricHistory.ts`](useMetricHistory.ts) | Ring buffer of samples, either as-is or as the per-second rate of a cumulative counter |

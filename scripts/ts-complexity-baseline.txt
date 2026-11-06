@@ -2,7 +2,6 @@ src/components/Benchmark/Tune/TuneTab.tsx 306
 src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 334
 src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
 src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
-src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 354
 src/components/McpServersPanel.tsx 482
 src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 346
 src/components/ModelInspectorPanel/components/ServeModal.tsx 380

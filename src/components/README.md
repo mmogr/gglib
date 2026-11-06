@@ -54,12 +54,9 @@ A chat is its own address, with tab switching:
 - **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and tells its caller, which says "copied" where it lives
 
 ### Model Management
-- **`ModelLibraryPanel/`**: What the library's Add pane (`/library?view=add`) shows until the one search replaces it: the Hugging Face browser and the local-file form, and the suggestion for this machine
 - **`ModelInspectorPanel/`**: Detailed model view with serve/stop controls
-- **`AddModel.tsx`**: Add model from local file
 - **`VisionChip.tsx`**: The neutral "Vision" chip on a model that reads images, in both inspectors' headers
 - **`DrawsChip.tsx`**: The neutral "Draws · <family>" chip on this machine's model that draws images, in its inspector's header; its title names the roles still missing a file
-- **`HuggingFaceBrowser/`**: Browse and search GGUF models on HuggingFace Hub
 
 ### Chat Interface
 - **`ChatMessagesPanel/`**: Message display with markdown rendering and composer

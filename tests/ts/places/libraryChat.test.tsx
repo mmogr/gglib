@@ -609,9 +609,7 @@ describe('the library, into a chat', () => {
       renderPage();
       const user = userEvent.setup();
 
-      await user.click(await screen.findByRole('button', { name: 'Add' }));
-      await user.click(screen.getByRole('menuitem', { name: 'Find on Hugging Face' }));
-      await user.type(await screen.findByPlaceholderText(/user\/repo:quant/), 'owner/zeta-GGUF:Q8_0');
+      await user.type(await screen.findByRole('searchbox'), 'owner/zeta-GGUF:Q8_0{Enter}');
       await user.click(screen.getByRole('button', { name: 'Download' }));
 
       await waitFor(() =>

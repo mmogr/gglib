@@ -2,7 +2,7 @@
  * What the llama.cpp banner is doing, kept for as long as the window is
  * open: whether "Not now" put it away, and the install it started, with its
  * progress and how it ended. Held here and not in the banner, which unmounts
- * whenever the library does (the Add pane, a chat), so neither a dismissal
+ * whenever the library does (a chat, the settings), so neither a dismissal
  * nor a running install is lost by going elsewhere and coming back.
  *
  * @module places/library/engineInstall

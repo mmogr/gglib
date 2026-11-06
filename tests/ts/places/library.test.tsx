@@ -3,7 +3,8 @@
  * routes and registries: groups of rows in their order, a model in one of
  * them, the words beside a row from the daemon's own fields, the search and
  * the sort, the paired machine's group, the empty, failed and loading
- * states, downloads as rows, and the llama.cpp banner.
+ * states, downloads as rows, and the llama.cpp banner. The search's way to
+ * Hugging Face is `librarySearch.test.tsx`.
  *
  * The transport is the fake; the event stream is played through the
  * handlers the registries subscribe with.
@@ -55,6 +56,7 @@ vi.mock('../../../src/services/transport/api/client', () => ({ get: vi.fn(async 
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getSetupStatus: vi.fn(async () => setup.status),
   streamEngineInstall: install.stream,
+  getRecommendedModel: vi.fn(async () => null),
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn() }));
 vi.mock('../../../src/services/clients/proxyDashboard', () => ({
@@ -230,11 +232,11 @@ describe('the library place', () => {
     await screen.findByRole('option', { name: /gemma/ });
     const user = userEvent.setup();
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search your models' }), 'vision');
+    await user.type(screen.getByRole('searchbox', { name: 'Search your models, or Hugging Face' }), 'vision');
     expect(rowsOf('On this Mac')).toEqual(['gemma']);
 
     await user.type(screen.getByRole('searchbox'), ' q4');
-    expect(screen.getByText('Nothing in your library matches.')).toBeInTheDocument();
+    expect(screen.getByText('Nothing in your library matches. Press ↵ to search Hugging Face.')).toBeInTheDocument();
     expect(screen.queryByRole('listbox', { name: 'On this Mac' })).not.toBeInTheDocument();
   });
 
@@ -382,40 +384,14 @@ describe('the library place', () => {
     expect(screen.queryByRole('group', { name: 'owner/b:Q4_K_M' })).not.toBeInTheDocument();
   });
 
-  it('keeps the downloads, with their ×, over the Add pane', async () => {
-    downloads.queue = queueSnapshot({ revision: 3, active: runningRow() });
-    renderLibrary('/library?view=add&sub=add');
-
-    const group = await screen.findByRole('region', { name: 'Downloading' });
-    expect(within(group).getByRole('button', { name: 'Cancel owner/zeta-GGUF:Q8_0' })).toBeInTheDocument();
-  });
-
-  it('shows the Add pane at its address in place of the rows, with the way back', async () => {
-    library.models = [guiModel({ id: 1, name: 'Qwen3-4B' })];
-    const { at } = renderLibrary();
-    const user = userEvent.setup();
-    await screen.findByRole('option', { name: /Qwen3-4B/ });
-
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Add a GGUF file…' }));
-
-    expect(at()).toBe('/library?view=add&sub=add');
-    expect(screen.queryByRole('option')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Your models' }));
-    expect(at()).toBe('/library');
-    expect(screen.getByRole('option', { name: /Qwen3-4B/ })).toBeInTheDocument();
-  });
-
   describe('the llama.cpp banner', () => {
     const older = { llamaInstalled: true, llamaCanDownload: true, llamaPin: { standing: 'older', installedRelease: 'b6900', targetRelease: 'b7012', built: false, rebuilds: false, updateDownloads: true } };
 
-    /** Into the Add pane and back to the rows, which unmounts the banner and mounts it again. */
-    async function awayAndBack() {
-      const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: 'Add' }));
-      await user.click(screen.getByRole('menuitem', { name: 'Add a GGUF file…' }));
+    /** Away from the library and back, which unmounts the banner and mounts it again. */
+    function awayAndBack(view: { unmount: () => void }) {
+      view.unmount();
       expect(screen.queryByRole('status', { name: 'llama.cpp' })).not.toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: 'Your models' }));
+      renderApp('/library');
     }
 
     it('offers the update with a model running on llama.cpp, runs the install stream, and shows the refusal it answers with', async () => {
@@ -434,7 +410,7 @@ describe('the library place', () => {
 
     it('offers an install when there is none, and goes on Not now', async () => {
       setup.status = { llamaInstalled: false, llamaCanDownload: true };
-      renderLibrary();
+      const view = renderLibrary();
       const banner = await screen.findByRole('status', { name: 'llama.cpp' });
       expect(banner).toHaveTextContent('llama.cpp is not installed.');
       expect(within(banner).getByRole('button', { name: 'Install' })).toBeInTheDocument();
@@ -443,7 +419,7 @@ describe('the library place', () => {
       expect(screen.queryByRole('status', { name: 'llama.cpp' })).not.toBeInTheDocument();
 
       // Leaving the library and coming back does not bring it back.
-      await awayAndBack();
+      awayAndBack(view);
       await screen.findByRole('searchbox');
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
       expect(screen.queryByRole('status', { name: 'llama.cpp' })).not.toBeInTheDocument();
@@ -451,12 +427,12 @@ describe('the library place', () => {
 
     it('keeps a running install, and its progress, across leaving the library', async () => {
       setup.status = older;
-      renderLibrary();
+      const view = renderLibrary();
       await userEvent.setup().click(await screen.findByRole('button', { name: 'Update' }));
       const send = install.stream.mock.calls[0][1];
       act(() => send({ type: 'phase_started', phase: 'download' }));
 
-      await awayAndBack();
+      awayAndBack(view);
 
       const banner = await screen.findByRole('status', { name: 'llama.cpp' });
       expect(within(banner).getByText(INSTALL_PHASE_LABELS.download)).toBeInTheDocument();
