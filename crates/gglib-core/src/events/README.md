@@ -11,7 +11,7 @@ same `/api/events` stream a browser tab does.
 # Structure
 
 - `app` - Application-level events (model added/removed/updated)
-- `server` - Model server lifecycle events
+- `server` - Model server lifecycle events, sent for every load and unload whoever caused it (the runtime tells a `ResidencyObserver`; the daemon's sends them)
 - `remote` - Remote tunnel events (enabled, paired, joined, away, back)
 
 Download events are not a submodule here: `AppEvent::Download` wraps

@@ -115,7 +115,7 @@ fn set_and_core(
     llama: &Path,
     sd: &Path,
 ) -> (ResidentSet, Arc<RwLock<GuiProcessCore>>) {
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(OneModel(spec)),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

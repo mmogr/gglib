@@ -25,6 +25,7 @@ mod proxy;
 mod proxy_guard;
 mod proxy_port;
 mod remote;
+mod residency_events;
 mod runs;
 mod sampling_explain;
 mod servers;

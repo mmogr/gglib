@@ -36,6 +36,7 @@ async fn retiring_a_render_stops_its_server_and_empties_its_slot() {
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
+        Arc::new(gglib_core::ports::NoopResidencyObserver),
     );
 
     let (port, _pid) = manager
