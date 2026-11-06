@@ -83,6 +83,37 @@ describe('the dashboard registry', () => {
     expect(openDashboardStreams()).toBe(1);
   });
 
+  it('two holders of different endpoints open two streams, and each reads its own', () => {
+    const keyed = { ...LOOPBACK, apiKey: 'k3y-5f3a' };
+    const plain = renderHook(() => useDashboard(LOOPBACK));
+    const withKey = renderHook(() => useDashboard(keyed));
+    expect(streams.opened.map((s) => s.apiKey)).toEqual([null, 'k3y-5f3a']);
+    expect(openDashboardStreams()).toBe(2);
+
+    const snapshot = dashboardSnapshot({ total_requests: 9 });
+    act(() => streams.opened[1].onSnapshot(snapshot));
+
+    expect(withKey.result.current.snapshot).toBe(snapshot);
+    expect(plain.result.current.snapshot).toBeNull();
+    plain.unmount();
+    withKey.unmount();
+    expect(openDashboardStreams()).toBe(0);
+  });
+
+  it('a frame that arrives after the last release writes nothing', () => {
+    const release = acquireDashboard(LOOPBACK);
+    const stream = streams.opened[0];
+    release();
+
+    act(() => stream.onSnapshot(dashboardSnapshot({ total_requests: 4 })));
+
+    const { result } = renderHook(() => useDashboard(null));
+    expect(result.current).toEqual({ snapshot: null, connected: false });
+    const late = renderHook(() => useDashboard(LOOPBACK));
+    expect(late.result.current.snapshot).toBeNull();
+    late.unmount();
+  });
+
   it('null keeps the hook idle, with no stream and no snapshot', () => {
     const { result } = renderHook(() => useDashboard(null));
 

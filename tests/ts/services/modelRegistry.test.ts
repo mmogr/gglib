@@ -91,6 +91,39 @@ describe('the model registry', () => {
     expect(result.current.models).toHaveLength(1);
   });
 
+  it('a read that fails after a list was read keeps the list and says why', async () => {
+    const { result } = renderHook(() => useModelLibrary());
+    act(() => initModelEvents());
+    await settle();
+    expect(result.current.models).toHaveLength(1);
+    transport.listModels.mockRejectedValueOnce(new Error('daemon away'));
+
+    await act(() => refreshModels());
+
+    expect(result.current.models.map((m) => m.name)).toEqual(['llama-7b']);
+    expect(result.current.error).toBe('Failed to load models: daemon away');
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('a read asked while the bridge is down, or answered after it went down, writes nothing', async () => {
+    const { result } = renderHook(() => useModelLibrary());
+    act(() => initModelEvents());
+    await settle();
+    let answer: (models: unknown[]) => void = () => {};
+    transport.listModels.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    const removing = removeModel(1);
+    await settle();
+
+    act(() => cleanupModelEvents());
+    act(() => answer([guiModel({ id: 2, name: 'late' })]));
+    await act(() => removing);
+    await act(() => refreshModels());
+    await act(() => addModel('/models/after.gguf'));
+
+    expect(result.current).toEqual({ models: [], loading: true, error: null });
+    expect(transport.listModels).toHaveBeenCalledTimes(2);
+  });
+
   it('reads once for a burst of events, after the window, and tells its listeners once', async () => {
     const changed = vi.fn();
     act(() => initModelEvents());

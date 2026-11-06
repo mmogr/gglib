@@ -35,6 +35,9 @@ type Listener = () => void;
 
 const listeners = new Set<Listener>();
 
+/** Whether the bridge is up: a read asked while it is down writes nothing. */
+let live = false;
+
 let batcher = createBatchWithinWindow<ModelEvent>(DEFAULT_BATCH_WINDOW_MS, onBurst);
 
 const bridge = bridgeEvents({
@@ -56,6 +59,7 @@ function onBurst(): void {
  * Safe to call multiple times — only initializes once.
  */
 export function initModelEvents(): void {
+  live = true;
   bridge.init();
 }
 
@@ -64,21 +68,22 @@ export function initModelEvents(): void {
  * the registry. Should be called on app unmount or hot-reload.
  */
 export function cleanupModelEvents(): void {
+  live = false;
   batcher.dispose();
   batcher = createBatchWithinWindow<ModelEvent>(DEFAULT_BATCH_WINDOW_MS, onBurst);
   bridge.cleanup();
 }
 
 /**
- * Read the library again now.
- *
- * Resolves once a read at least as new as the call has been applied. A read
- * an event overtook is retried once rather than reported: the read itself
- * worked, and one started now is at least as new as both.
+ * Read the library again now, while the bridge is up; down, nothing is read
+ * and nothing written. A read an event overtook is retried once rather than
+ * reported: the read itself worked, and one started now is at least as new
+ * as both; a retry overtaken too is left to the burst that overtook it.
  */
 export async function refreshModels(): Promise<void> {
+  if (!live) return;
   const first = await bridge.refresh();
-  if (first === 'superseded') await bridge.refresh();
+  if (first === 'superseded' && live) await bridge.refresh();
 }
 
 /**

@@ -89,7 +89,6 @@ export function chatTransport(fixture: ChatFixture) {
     getModel: vi.fn(async () => ({ quantization: 'Q8_0' })),
     // Asked by the tools popout the first time it opens, for the effort row.
     getModelDetail: vi.fn(async () => ({ reasoningEffortSupport: 'unknown' })),
-    listModels: vi.fn(async () => []),
     // A copy, as a fetch gives: the page must not see the fixture change under it.
     listConversations: vi.fn(async () => [...fixture.conversations]),
     createConversation: vi.fn(async (params: { title: string }) => {

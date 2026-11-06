@@ -112,12 +112,12 @@ describe('the model list the library page asks for', () => {
 
     await act(() => result.current.handleModelAdded());
 
-    // The registry is read again (the bare list), then this list is, with
-    // the same filters.
-    const filtered = '/api/models?sort=added_at&order=desc&min_context=8192&max_context=32768';
-    expect(paths()[0]).toBe(filtered);
-    expect(paths()).toContain('/api/models');
-    expect(paths().at(-1)).toBe(filtered);
+    // This list is asked again with the same filters. The registry's own
+    // re-read is its bridge's, which this hook does not start, and is held
+    // by `services/modelRegistry.test.ts`.
+    expect(paths()).toHaveLength(2);
+    expect(paths()[1]).toBe('/api/models?sort=added_at&order=desc&min_context=8192&max_context=32768');
+    expect(paths()[1]).toBe(paths()[0]);
   });
 
   it('asks again, and shows the answer, when the library is read again', async () => {

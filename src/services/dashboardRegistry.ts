@@ -59,17 +59,24 @@ function write(key: string, live: DashboardLive): void {
 
 function open(key: string, target: DashboardTarget): Handle {
   write(key, IDLE);
-  const close = subscribeProxyDashboard(
+  const handle: Handle = { count: 0, close: () => {} };
+  // A frame already read when the stream is closed must not bring the key
+  // back: only the stream this handle holds may write under it.
+  const held = () => handles.get(key) === handle;
+  handle.close = subscribeProxyDashboard(
     target.host,
     target.port,
     target.apiKey,
-    (snapshot) => write(key, { snapshot, connected: true }),
+    (snapshot) => {
+      if (held()) write(key, { snapshot, connected: true });
+    },
     () => {
+      if (!held()) return;
       const current = store.getState().get(key) ?? IDLE;
       write(key, { ...current, connected: false });
     },
   );
-  return { count: 0, close };
+  return handle;
 }
 
 /**

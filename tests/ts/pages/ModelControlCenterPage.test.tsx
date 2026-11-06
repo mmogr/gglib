@@ -48,6 +48,9 @@ const downloads = vi.hoisted(() => ({ queue: null as unknown }));
 const updateModel = vi.hoisted(() =>
   vi.fn(async (_params: { id: number; projectorPath?: string | null; components?: Record<string, string | null> }) => ({})),
 );
+const removeModel = vi.hoisted(() => vi.fn(async (_id: number) => {}));
+// What the native menu is told is selected; a no-op on the web, watched here.
+const setSelectedModel = vi.hoisted(() => vi.fn(async (_id: number | null) => {}));
 const queueDownload = vi.hoisted(() => vi.fn(async (_params: { modelId: string; quantization?: string }) => ({ id: 'q-1' })));
 // The desktop shell's event channel: it records who listens and sends nothing.
 const shell = vi.hoisted(() => ({ listen: vi.fn(async (_event: string) => () => {}) }));
@@ -70,6 +73,7 @@ vi.mock('../../../src/services/transport', async () => {
       listModels,
       getModelDetail: vi.fn(async () => here.detail),
       updateModel,
+      removeModel,
       listPairedModels: vi.fn(() =>
         far.hang ? new Promise(() => {}) : Promise.resolve(pairedModels([farEntry('qwen3-8b', 7)])),
       ),
@@ -101,6 +105,10 @@ vi.mock('../../../src/services/transport/api/client', () => ({
   ),
 }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: shell.listen }));
+vi.mock('../../../src/services/platform', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('../../../src/services/platform');
+  return { ...actual, setSelectedModel };
+});
 vi.mock('../../../src/services/remoteEvents', () => ({
   refreshRemoteStatus: vi.fn(),
 }));
@@ -209,8 +217,10 @@ const CONNECTED = {
 
 const stopServer = vi.fn(async () => {});
 
-/** Render the page with nothing served here — the laptop this PR is about. */
-/** What `App` does once: fill the model registry, which the page reads. */
+/**
+ * Render the page with nothing served here, the registry filled first as
+ * `App` fills it once.
+ */
 function renderPage() {
   initModelEvents();
   return render(
@@ -239,6 +249,8 @@ describe('ModelControlCenterPage', () => {
     here.projectors = null;
     here.components = null;
     updateModel.mockClear();
+    removeModel.mockClear();
+    setSelectedModel.mockClear();
     queueDownload.mockClear();
     shell.listen.mockClear();
     serveModel.mockClear();
@@ -418,6 +430,29 @@ describe('ModelControlCenterPage', () => {
 
     expect(await screen.findByRole('button', { name: /start endpoint/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open chat/i })).not.toBeInTheDocument();
+  });
+
+  it('removing the selected model clears the selection, and tells the native menu nothing is selected', async () => {
+    library.models = [guiModel({ id: 7, name: 'qwen3-8b' }), guiModel({ id: 9, name: 'gemma-3-12b' })];
+    here.detail = farDetail(9, 'gemma-3-12b', { filePath: '/models/g/gemma.gguf' });
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
+    expect(setSelectedModel).toHaveBeenLastCalledWith(9);
+    // The daemon's list once the removal has been answered.
+    library.models = [guiModel({ id: 7, name: 'qwen3-8b' })];
+
+    // The inspector's Delete opens the confirmation; the page behind it is
+    // hidden from the accessibility tree while it is up, so its Delete is
+    // the only one left.
+    await user.click(await screen.findByRole('button', { name: /^delete$/i }));
+    const confirmation = await screen.findByRole('dialog', { name: /delete model/i });
+    await user.click(within(confirmation).getByRole('button', { name: /^delete$/i }));
+
+    await waitFor(() => expect(removeModel).toHaveBeenCalledWith(9));
+    await waitFor(() => expect(setSelectedModel).toHaveBeenLastCalledWith(null));
+    await waitFor(() => expect(screen.queryByRole('option', { name: /gemma-3-12b/i })).not.toBeInTheDocument());
+    expect(screen.getByRole('option', { name: /qwen3-8b/i })).toHaveAttribute('aria-selected', 'false');
   });
 
   it("links this machine's model to the projector picked in its inspector, by the library's update", async () => {
