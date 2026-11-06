@@ -12,8 +12,8 @@ crates/gglib-app-services/src/hf_image_preview_tests.rs 319
 crates/gglib-app-services/src/hf_quantizations.rs 376
 crates/gglib-app-services/src/mcp.rs 330
 crates/gglib-app-services/src/mcp_tests.rs 329
-crates/gglib-app-services/src/models.rs 453
-crates/gglib-app-services/src/models_tests.rs 944
+crates/gglib-app-services/src/models.rs 468
+crates/gglib-app-services/src/models_tests.rs 972
 crates/gglib-app-services/src/models_upgrade.rs 330
 crates/gglib-app-services/src/models_upgrade_tests.rs 381
 crates/gglib-app-services/src/proxy.rs 440
