@@ -51,6 +51,12 @@ describe('the proxy registry', () => {
     expect(getProxyState()).toEqual({ running: true, port: 8081, status: null });
   });
 
+  it('a start with no stop before it drops the status too, since it is a new run', () => {
+    applyProxyStatus(UP);
+    ingestProxyEvent({ type: 'proxy_started', port: 8080 });
+    expect(getProxyState()).toEqual({ running: true, port: 8080, status: null });
+  });
+
   /**
    * A stop and a start that both land before the stop's re-read: the old
    * run's status must not be shown against the new run's port, since its

@@ -17,6 +17,7 @@ const transport = vi.hoisted(() => ({
   getSettings: vi.fn(async () => ({})),
   getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null })),
   getRemoteStatus: vi.fn(async () => null),
+  revealSecret: vi.fn(async () => null),
 }));
 const chats = vi.hoisted(() => ({
   listConversations: vi.fn(async (): Promise<unknown[]> => []),
@@ -29,6 +30,7 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
 vi.mock('../../../src/services/transport/api/chat', () => ({
   listConversations: () => chats.listConversations(),
 }));
+vi.mock('../../../src/components/ProxyDashboardModal', () => ({ ProxyDashboardModal: () => null }));
 vi.mock('../../../src/pages/ModelControlCenterPage', () => ({ default: () => <main aria-label="Library" /> }));
 vi.mock('../../../src/app/ChatRoute', () => ({ ChatRoute: () => <main aria-label="Chat" />, CHAT_LOADING: null }));
 vi.mock('../../../src/app/BenchmarkRoute', () => ({ BenchmarkRoute: () => <main aria-label="Benchmarks" /> }));
@@ -160,6 +162,20 @@ describe('the sidebar', () => {
       await user.keyboard('{Escape}');
       expect(screen.getByTestId('sidebar-drawer')).toBeInTheDocument();
       document.removeEventListener('keydown', consume, true);
+
+      await user.keyboard('{Escape}');
+      await gone();
+    });
+
+    it('Escape with a panel open in it closes the panel and keeps the drawer', async () => {
+      const { user } = await opened();
+      // The drawer's own endpoint line is the second one on the page.
+      await user.click(screen.getAllByRole('button', { name: /^endpoint,/i })[1]);
+      expect(screen.getByRole('heading', { name: 'OpenAI Proxy' })).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-drawer')).toBeInTheDocument();
 
       await user.keyboard('{Escape}');
       await gone();

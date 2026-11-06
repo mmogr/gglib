@@ -36,13 +36,15 @@ export function Shell() {
   useEffect(() => {
     if (!drawerOpen) return;
     const onKey = (event: KeyboardEvent) => {
-      // A dialog consumes Escape on a capture listener and marks it handled;
-      // the same keypress must not also take the drawer it was opened from.
+      // A dialog, or a panel open inside the drawer, consumes Escape and
+      // marks it handled; the same keypress must not also take the drawer.
+      // Listening on the window, after every document listener has run,
+      // is what lets that mark be seen whichever was registered first.
       if (event.defaultPrevented) return;
       if (event.key === 'Escape') setDrawerOpen(false);
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [drawerOpen]);
 
   return (

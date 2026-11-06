@@ -23,6 +23,7 @@ import { cn } from '../utils/cn';
 import { DevicesLine } from './DevicesLine';
 import { EndpointLine } from './EndpointLine';
 import { openLatestChat } from './openLatestChat';
+import { SPREAD } from './placement';
 
 /** Which sidebar row the address at `pathname` belongs to. */
 export type SidebarPlace = 'library' | 'chats' | 'diagnostics' | null;
@@ -55,7 +56,8 @@ function Row({ current, onClick, tertiary = false, children }: RowProps) {
       variant="ghost"
       fullWidth
       className={cn(
-        'h-auto justify-between gap-sm px-sm py-sm text-sm',
+        'h-auto gap-sm px-sm py-sm text-sm',
+        SPREAD,
         tertiary ? 'text-text-muted' : 'text-text',
         current && 'bg-surface-hover',
       )}

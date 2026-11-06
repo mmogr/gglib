@@ -23,7 +23,8 @@ import { useClickOutside } from '../hooks/useClickOutside';
 import { pairedName, useRemoteState } from '../services/remoteRegistry';
 import type { RemoteStatus } from '../services/transport/types/remote';
 import type { ReachState } from '../types/generated/ReachState';
-import { POPOVER_BESIDE } from './placement';
+import { cn } from '../utils/cn';
+import { POPOVER_BESIDE, SPREAD } from './placement';
 
 const REACH_MARK: Record<ReachState, MarkKind> = {
   connected: 'on',
@@ -62,7 +63,7 @@ export function DevicesLine() {
       <Button
         variant="ghost"
         fullWidth
-        className="h-auto justify-between gap-sm px-sm py-sm"
+        className={cn('h-auto gap-sm px-sm py-sm', SPREAD)}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={`Devices${said}`}

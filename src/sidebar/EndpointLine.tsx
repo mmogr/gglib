@@ -30,7 +30,8 @@ import { useClickOutside } from '../hooks/useClickOutside';
 import { useEndpointFacts, type EndpointFacts } from '../services/proxyRegistry';
 import { useAllServerStates } from '../services/serverRegistry';
 import type { EndpointState } from '../types/generated/EndpointState';
-import { POPOVER_BESIDE } from './placement';
+import { cn } from '../utils/cn';
+import { POPOVER_BESIDE, SPREAD } from './placement';
 
 const MARK: Record<EndpointState, MarkKind> = {
   on: 'on',
@@ -72,7 +73,7 @@ export function EndpointLine() {
         <Button
           variant="ghost"
           fullWidth
-          className="h-auto justify-between gap-sm px-0 py-0"
+          className={cn('h-auto gap-sm px-0 py-0', SPREAD)}
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-label={`Endpoint, ${word}`}

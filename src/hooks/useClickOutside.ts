@@ -54,6 +54,9 @@ export function useClickOutside<T extends HTMLElement>(
       if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
         handler();
+        // Mark the key as used, as a dialog does, so whatever holds this
+        // panel (the sidebar's drawer) does not close on the same press.
+        event.preventDefault();
       }
     };
 

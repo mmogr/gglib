@@ -7,5 +7,11 @@
  *
  * @module sidebar/placement
  */
+/**
+ * `Button` lays its children in one inline span, so a row that wants its
+ * name at the left and its state at the right spreads that span.
+ */
+export const SPREAD = '[&>span]:w-full [&>span]:justify-between';
+
 export const POPOVER_BESIDE =
   'fixed inset-x-sm top-16 max-h-[calc(100vh-5rem)] wide:absolute wide:inset-x-auto wide:left-full wide:top-0 wide:ml-sm wide:max-h-[calc(100vh-14rem)]';
