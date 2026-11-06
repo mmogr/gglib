@@ -242,6 +242,13 @@ export type PublishedDefault = PublishedDefaultDto & {
 import type { ServerConfig } from './generated/ServerConfig';
 export type { ServerConfig };
 
+/**
+ * A model's revision told apart by the daemon: a commit sha shown short, a
+ * ref whole (`ModelDetailDto.revision`).
+ */
+export type { Revision } from './generated/Revision';
+export type { RevisionKind } from './generated/RevisionKind';
+
 // ============================================================================
 // Model Types
 // ============================================================================

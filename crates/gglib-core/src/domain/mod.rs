@@ -43,6 +43,7 @@ pub(crate) mod query;
 pub(crate) mod reasoning_effort;
 pub mod recommendation;
 pub(crate) mod residency;
+pub mod revision;
 pub mod runs;
 pub(crate) mod runtime_capabilities;
 mod runtime_kind;
@@ -60,6 +61,7 @@ pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
 pub use model::{Model, ModelComponent, ModelFilterOptions, NO_HUB_LABEL, NewModel};
 pub use model_detail::{ComponentLinkDto, ModelDetailDto, ModelLookup};
 pub use model_file::{ModelFile, ModelFolder, NewModelFile};
+pub use revision::{Revision, RevisionKind};
 
 // Re-export query types at the domain level for convenience
 pub use query::{ModelListQuery, ModelSortBy, SortOrder, apply_query};
