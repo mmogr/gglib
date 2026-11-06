@@ -10,6 +10,6 @@ generated bindings, so a new state fails to compile until it has a word.
 
 | File | Purpose |
 |------|---------|
-| `words.ts` | `ENDPOINT_WORDS`, `RESIDENCY_WORDS`, `REACH_WORDS`: the word for each `EndpointState`, `ResidencyState` and `ReachState` |
+| `words.ts` | `ENDPOINT_WORDS`, `RESIDENCY_WORDS`, `REACH_WORDS`, `KEY_WORDS`: the word for each `EndpointState`, `ResidencyState`, `ReachState` and `KeyState` |
 
 <!-- module-docs:end -->

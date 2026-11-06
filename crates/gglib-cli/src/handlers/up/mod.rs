@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 
 mod choose;
+mod client_block;
 mod probe;
 mod warm;
 
@@ -95,14 +96,14 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
 
     let handle = daemon_client::ensure_daemon(ctx).await?;
     let body = start_body(args.port, default_context);
-    let proxy_port = proxy::start_on(&handle, &body, &settings).await?;
+    let started = proxy::start_on(&handle, &body, &settings).await?;
 
     // Step 5: prove it. The warm request loads the model through the very
     // endpoint the user is about to point their client at, by the id that
     // endpoint lists it under.
     let listed = listed_id(ctx, &model).await;
-    warm::run(proxy_port, listed, model.id, api_key).await;
-    for line in warm::render_next_steps(proxy_port, model.id, use_color()) {
+    warm::run(&started, listed, model.id, api_key).await;
+    for line in warm::render_next_steps(started.port, model.id, use_color()) {
         println!("{line}");
     }
     Ok(())

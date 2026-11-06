@@ -21,7 +21,9 @@ pub use device_keys::{
     store as store_device_keys,
 };
 pub use device_ports::DevicePorts;
-pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
+pub use host::{
+    endpoint_base_url, is_loopback_host, is_wildcard_host, normalize_host, reachable_at,
+};
 pub use origin::may_change;
 
 use std::sync::Arc;

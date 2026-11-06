@@ -10,7 +10,7 @@
 mod tests {
     use std::path::PathBuf;
 
-    use gglib_core::domain::{EndpointState, ReachState, ResidencyState};
+    use gglib_core::domain::{EndpointState, KeyState, ReachState, ResidencyState};
     use serde::Serialize;
 
     /// One state: its name on the wire and the word a person reads.
@@ -20,12 +20,13 @@ mod tests {
         word: &'static str,
     }
 
-    /// The three tables as the file holds them, each in display order.
+    /// The four tables as the file holds them, each in display order.
     #[derive(Serialize)]
     struct Words {
         endpoint: Vec<Recorded>,
         residency: Vec<Recorded>,
         reach: Vec<Recorded>,
+        key: Vec<Recorded>,
     }
 
     fn row<S: Serialize>(state: S, word: &'static str) -> Recorded {
@@ -48,6 +49,7 @@ mod tests {
                 .map(|s| row(s, s.word()))
                 .collect(),
             reach: ReachState::ALL.iter().map(|s| row(s, s.word())).collect(),
+            key: KeyState::ALL.iter().map(|s| row(s, s.word())).collect(),
         }
     }
 

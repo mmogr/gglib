@@ -1,11 +1,10 @@
-//! The door's two rules: the key the tunnel would enforce, never a minted
-//! one, and a wildcard bind dialled on loopback.
-
-use std::net::SocketAddr;
+//! The door's rule: the key the tunnel would enforce, never a minted one.
+//! Where a wildcard bind is reached is `gglib_core::access::reachable_at`,
+//! pinned beside it.
 
 use gglib_core::{ApiKeySource, SettingsUpdate};
 
-use super::door::{bearer, dial};
+use super::door::bearer;
 use crate::remote::key::enforced;
 
 #[test]
@@ -46,18 +45,4 @@ async fn a_proxy_started_with_no_key_then_a_stored_key_is_sent_the_stored_key() 
         bearer(&proxy, &core).await.unwrap().as_deref(),
         Some("stored-later")
     );
-}
-
-#[test]
-fn only_a_wildcard_bind_is_rewritten_to_loopback() {
-    let cases = [
-        ("0.0.0.0:8080", "127.0.0.1:8080"),
-        ("[::]:8080", "127.0.0.1:8080"),
-        ("127.0.0.1:8080", "127.0.0.1:8080"),
-        ("192.168.1.20:8080", "192.168.1.20:8080"),
-    ];
-    for (bound, dialled) in cases {
-        let bound: SocketAddr = bound.parse().unwrap();
-        assert_eq!(dial(bound), dialled.parse().unwrap(), "{bound}");
-    }
 }

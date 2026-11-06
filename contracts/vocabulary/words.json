@@ -56,5 +56,15 @@
       "state": "disconnected",
       "word": "Disconnected"
     }
+  ],
+  "key": [
+    {
+      "state": "required",
+      "word": "Required"
+    },
+    {
+      "state": "none_needed",
+      "word": "None needed"
+    }
   ]
 }

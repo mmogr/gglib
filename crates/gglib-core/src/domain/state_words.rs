@@ -1,7 +1,8 @@
 //! The words every surface uses for a state, written once.
 //!
 //! A proxy that is listening, a model that is in memory, a paired machine
-//! that is reachable: each is one state with one word, and the CLI's
+//! that is reachable, a request that needs the key: each is one state with
+//! one word, and the CLI's
 //! printers, the daemon's wire types and the GUI's bindings all take it from
 //! here. The GUI takes its words from here as each of its screens is rebuilt
 //! on the redesign, and the CLI prints no word the GUI does not know.
@@ -172,6 +173,49 @@ impl fmt::Display for ReachState {
     }
 }
 
+/// Whether a request to the endpoint must carry the API key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum KeyState {
+    /// The proxy refuses a request without its key.
+    Required,
+    /// The proxy answers without one; a client that insists on a key may
+    /// send any text.
+    #[default]
+    NoneNeeded,
+}
+
+impl KeyState {
+    /// Every state, in display order.
+    pub const ALL: [Self; 2] = [Self::Required, Self::NoneNeeded];
+
+    /// The state of an endpoint that demands a key, or does not.
+    #[must_use]
+    pub const fn of(required: bool) -> Self {
+        if required {
+            Self::Required
+        } else {
+            Self::NoneNeeded
+        }
+    }
+
+    /// The word a person reads.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Required => "Required",
+            Self::NoneNeeded => "None needed",
+        }
+    }
+}
+
+impl fmt::Display for KeyState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.word())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,6 +229,8 @@ mod tests {
         assert_eq!(ReachState::of(false, true), ReachState::Disconnected);
         assert_eq!(ReachState::of(true, true), ReachState::Away);
         assert_eq!(ReachState::of(true, false), ReachState::Connected);
+        assert_eq!(KeyState::of(true), KeyState::Required);
+        assert_eq!(KeyState::of(false), KeyState::NoneNeeded);
     }
 
     #[test]
@@ -200,5 +246,10 @@ mod tests {
         );
         assert_eq!(ResidencyState::NotLoaded.to_string(), "Not loaded");
         assert_eq!(ReachState::default(), ReachState::Disconnected);
+        assert_eq!(
+            serde_json::to_string(&KeyState::NoneNeeded).unwrap(),
+            "\"none_needed\""
+        );
+        assert_eq!(KeyState::NoneNeeded.to_string(), "None needed");
     }
 }

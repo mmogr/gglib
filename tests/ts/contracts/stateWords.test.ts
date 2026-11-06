@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { ENDPOINT_WORDS, REACH_WORDS, RESIDENCY_WORDS } from '../../../src/components/status/words';
+import { ENDPOINT_WORDS, KEY_WORDS, REACH_WORDS, RESIDENCY_WORDS } from '../../../src/components/status/words';
 
 import { rust } from './rustSource';
 
@@ -22,6 +22,7 @@ const WORDS = JSON.parse(rust('contracts/vocabulary/words.json')) as {
   endpoint: Recorded[];
   residency: Recorded[];
   reach: Recorded[];
+  key: Recorded[];
 };
 
 function asRows(map: Readonly<Record<string, string>>): Recorded[] {
@@ -33,6 +34,7 @@ describe('the state words are the ones the CLI records', () => {
     ['endpoint', ENDPOINT_WORDS, WORDS.endpoint],
     ['residency', RESIDENCY_WORDS, WORDS.residency],
     ['reach', REACH_WORDS, WORDS.reach],
+    ['key', KEY_WORDS, WORDS.key],
   ] as const)('%s: the same states, in the same order, with the same words', (_name, map, recorded) => {
     expect(asRows(map)).toEqual(recorded);
   });
