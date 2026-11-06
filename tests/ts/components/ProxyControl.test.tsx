@@ -1,7 +1,8 @@
 /**
- * The proxy panel: Turn on names nothing, so the daemon starts the endpoint
- * as the settings say; View Dashboard closes the popover it opens over;
- * Clear Cache presents the revealed key.
+ * The proxy panel, opened from the sidebar's endpoint line: Turn on names
+ * nothing, so the daemon starts the endpoint as the settings say; View
+ * Dashboard closes the popover it opens over; Clear Cache presents the
+ * revealed key.
  *
  * The per-run connection options this file once pinned are gone: where the
  * endpoint binds, its hosts and its prompt cache are settings now.
@@ -13,13 +14,26 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { ReactNode } from 'react';
 
-import ProxyControl from '../../../src/components/ProxyControl';
+import { EndpointLine } from '../../../src/sidebar/EndpointLine';
+import { applyProxyStatus, resetProxyState } from '../../../src/services/proxyRegistry';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
 import { appSettings } from '../fixtures/settings';
 import type { AppSettings } from '../../../src/types';
 
 const settingsRef: { current: AppSettings | null } = { current: null };
-const proxyStateRef = { current: { running: false, port: null as number | null } };
+
+/** The registry as the daemon's status leaves it: up on `port`, or down. */
+function proxyIs(running: boolean, port: number | null) {
+  resetProxyState();
+  applyProxyStatus({
+    running,
+    state: running ? 'on' : 'off',
+    port,
+    base_url: running && port !== null ? `http://127.0.0.1:${port}/v1` : null,
+    key: running ? 'none_needed' : null,
+    pinned_model: null,
+  });
+}
 const { revealSecret, clearProxyCache, startProxy } = vi.hoisted(() => ({
   revealSecret: vi.fn(),
   clearProxyCache: vi.fn(),
@@ -29,12 +43,8 @@ const { revealSecret, clearProxyCache, startProxy } = vi.hoisted(() => ({
 vi.mock('../../../src/hooks/useSettings', () => ({
   useSettings: () => ({ settings: settingsRef.current }),
 }));
-vi.mock('../../../src/services/proxyRegistry', () => ({
-  useProxyState: () => proxyStateRef.current,
-}));
 vi.mock('../../../src/services/transport', () => ({
   getTransport: () => ({
-    getProxyStatus: () => Promise.resolve({ pinned_model: null }),
     revealSecret,
     startProxy,
   }),
@@ -43,16 +53,17 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
   clearProxyCache,
 }));
 vi.mock('../../../src/components/ProxyDashboardModal', () => ({
-  ProxyDashboardModal: () => null,
+  ProxyDashboardModal: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div role="dialog" aria-label="Live numbers" /> : null,
 }));
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <ToastProvider>{children}</ToastProvider>
 );
 
-describe('ProxyControl — Turn on', () => {
+describe('The proxy panel — Turn on', () => {
   beforeEach(() => {
-    proxyStateRef.current = { running: false, port: null };
+    proxyIs(false, null);
     revealSecret.mockResolvedValue(null);
     startProxy.mockReset();
     startProxy.mockResolvedValue({ running: true, port: 8080 });
@@ -62,18 +73,18 @@ describe('ProxyControl — Turn on', () => {
   // from the settings, the same start the tray and `gglib proxy` get.
   it('names nothing, so the daemon starts the endpoint as the settings say', async () => {
     settingsRef.current = appSettings({ proxyHost: '0.0.0.0', proxyCacheOnDisk: true });
-    render(<ProxyControl />, { wrapper });
+    render(<EndpointLine />, { wrapper });
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /^endpoint,/i }));
     await user.click(screen.getByRole('button', { name: /start proxy/i }));
     await waitFor(() => expect(startProxy).toHaveBeenCalledTimes(1));
     expect(startProxy).toHaveBeenCalledWith({});
   });
 });
 
-describe('ProxyControl — View Dashboard', () => {
+describe('The proxy panel — View Dashboard', () => {
   beforeEach(() => {
-    proxyStateRef.current = { running: false, port: null };
+    proxyIs(false, null);
     revealSecret.mockResolvedValue(null);
   });
 
@@ -81,28 +92,31 @@ describe('ProxyControl — View Dashboard', () => {
     // A click in a dialog no longer counts as outside the popover, so the
     // dashboard opening over it no longer closes it by accident. The button
     // closes it on purpose now, and this is what holds that.
-    proxyStateRef.current = { running: true, port: 8080 };
+    proxyIs(true, 8080);
     settingsRef.current = appSettings();
-    render(<ProxyControl />, { wrapper });
+    render(<EndpointLine />, { wrapper });
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /^endpoint,/i }));
     expect(screen.getByRole('heading', { name: 'OpenAI Proxy' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /view dashboard/i }));
     expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
+    // The dashboard it opened outlives the panel: the line owns the panel's
+    // open state now, and the dashboard must not go with it.
+    expect(screen.getByRole('dialog', { name: 'Live numbers' })).toBeInTheDocument();
   });
 });
 
 /** Settings carry no key, so Clear Cache presents the one revealed for it. */
-describe('ProxyControl — Clear Cache', () => {
+describe('The proxy panel — Clear Cache', () => {
   it('sends the revealed proxy key', async () => {
     revealSecret.mockResolvedValue('k3y-5f3a');
     clearProxyCache.mockResolvedValue({ message: 'cleared' });
-    proxyStateRef.current = { running: true, port: 8080 };
+    proxyIs(true, 8080);
     settingsRef.current = appSettings({ hasProxyApiKey: true });
-    render(<ProxyControl />, { wrapper });
+    render(<EndpointLine />, { wrapper });
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /^endpoint,/i }));
     expect(revealSecret).toHaveBeenCalledWith({ kind: 'setting', secret: 'proxy_api_key' });
     const clear = screen.getByRole('button', { name: /clear cache/i });
     await waitFor(() => expect(clear).toBeEnabled());
@@ -116,11 +130,11 @@ describe('ProxyControl — Clear Cache', () => {
   it('reaches an endpoint bound to one address on that address, and a wildcard on loopback', async () => {
     revealSecret.mockResolvedValue(null);
     clearProxyCache.mockResolvedValue({ message: 'cleared' });
-    proxyStateRef.current = { running: true, port: 8080 };
+    proxyIs(true, 8080);
     settingsRef.current = appSettings({ proxyHost: '192.168.1.20' });
-    const { unmount } = render(<ProxyControl />, { wrapper });
+    const { unmount } = render(<EndpointLine />, { wrapper });
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /^endpoint,/i }));
     expect(screen.getByText('http://192.168.1.20:8080/v1')).toBeInTheDocument();
     const clear = screen.getByRole('button', { name: /clear cache/i });
     await waitFor(() => expect(clear).toBeEnabled());
@@ -129,19 +143,19 @@ describe('ProxyControl — Clear Cache', () => {
     unmount();
 
     settingsRef.current = appSettings({ proxyHost: '0.0.0.0' });
-    render(<ProxyControl />, { wrapper });
-    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    render(<EndpointLine />, { wrapper });
+    await user.click(screen.getByRole('button', { name: /^endpoint,/i }));
     expect(screen.getByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
   });
 
   /** Sent before the reveal answers, it would carry no key and be refused. */
   it('waits for the reveal before it can be pressed', async () => {
     revealSecret.mockReturnValue(new Promise(() => {}));
-    proxyStateRef.current = { running: true, port: 8080 };
+    proxyIs(true, 8080);
     settingsRef.current = appSettings({ hasProxyApiKey: true });
-    render(<ProxyControl />, { wrapper });
+    render(<EndpointLine />, { wrapper });
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /^endpoint,/i }));
 
     expect(screen.getByRole('button', { name: /clear cache/i })).toBeDisabled();
   });
@@ -153,11 +167,11 @@ describe('ProxyControl — Clear Cache', () => {
   ])('can be pressed when %s, and sends no key', async (_, answer) => {
     answer();
     clearProxyCache.mockResolvedValue({ message: 'cleared' });
-    proxyStateRef.current = { running: true, port: 8080 };
+    proxyIs(true, 8080);
     settingsRef.current = appSettings();
-    render(<ProxyControl />, { wrapper });
+    render(<EndpointLine />, { wrapper });
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /^endpoint,/i }));
     const clear = screen.getByRole('button', { name: /clear cache/i });
     await waitFor(() => expect(clear).toBeEnabled());
 

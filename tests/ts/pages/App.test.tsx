@@ -12,14 +12,10 @@ import '@testing-library/jest-dom';
 
 vi.mock('../../../src/pages/ModelControlCenterPage', () => ({ default: () => <main aria-label="Library" /> }));
 vi.mock('../../../src/app/BenchmarkRoute', () => ({ BenchmarkRoute: () => <main aria-label="Benchmarks" /> }));
-vi.mock('../../../src/components/Header', () => ({ default: () => null }));
+vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
 vi.mock('../../../src/components/SettingsModal', () => ({ default: () => null }));
 vi.mock('../../../src/components/LlamaInstallModal', () => ({ default: () => null }));
 vi.mock('../../../src/components/SetupWizard', () => ({ default: () => null }));
-vi.mock('../../../src/hooks/useServers', () => {
-  const servers = { servers: [], stopServer: vi.fn() };
-  return { useServers: () => servers };
-});
 vi.mock('../../../src/hooks/useLlamaStatus', () => {
   const llama = {
     status: { installed: true, canDownload: false },
@@ -62,6 +58,8 @@ describe('App', () => {
     // a second router would take the menu's navigation off screen.
     render(<StrictMode><App /></StrictMode>);
     await screen.findByRole('main', { name: 'Library' });
+    // The place sits in the shell: the sidebar is beside it.
+    expect(screen.getByRole('navigation', { name: 'gglib' })).toBeInTheDocument();
 
     await act(() => appRouter().navigate('/diagnostics/benchmarks'));
 

@@ -1,5 +1,6 @@
 /**
- * The Remote popover: both sides of the tunnel, and the devices on it.
+ * The remote panel, opened from the sidebar's devices line: both sides of
+ * the tunnel, and the devices on it.
  *
  * What is pinned here is the shape of the one-time reveal — a pairing exists
  * on a screen only in the answer to `enable --invite` or `invite`, so the
@@ -20,7 +21,7 @@ import { FC, ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QRCodeSVG } from 'qrcode.react';
 
-import RemoteControl from '../../../src/components/RemoteControl';
+import { DevicesLine } from '../../../src/sidebar/DevicesLine';
 import { qrPayload } from '../../../src/components/remote/PairingReveal';
 import type {
   RemoteConnection,
@@ -146,14 +147,15 @@ function paired(): RemoteDevice {
   };
 }
 
+/** The panel as the app opens it: from the sidebar's devices line. */
 async function open() {
-  render(<RemoteControl />, { wrapper });
+  render(<DevicesLine />, { wrapper });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: /remote/i }));
+  await user.click(screen.getByRole('button', { name: /^devices/i }));
   return user;
 }
 
-describe('RemoteControl', () => {
+describe('The remote panel', () => {
   beforeEach(() => {
     resetRemoteState();
     applyRemoteStatus(IDLE_STATUS);
@@ -751,9 +753,9 @@ describe('RemoteControl', () => {
         expires_in_s: 120,
         device: 'dev-99887766',
       });
-      render(<RemoteControl />, { wrapper });
+      render(<DevicesLine />, { wrapper });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const trigger = screen.getByRole('button', { name: /remote/i });
+      const trigger = screen.getByRole('button', { name: /^devices/i });
       await user.click(trigger);
       await user.click(screen.getByRole('button', { name: /invite a device/i }));
       await screen.findByText('119284');
@@ -762,7 +764,7 @@ describe('RemoteControl', () => {
       // says a code is waiting.
       await user.click(trigger);
       expect(screen.queryByText('119284')).not.toBeInTheDocument();
-      expect(trigger).toHaveAttribute('title', 'Remote: a pairing code is waiting');
+      expect(trigger).toHaveAttribute('title', 'A pairing code is waiting');
 
       await act(() => vi.advanceTimersByTimeAsync(30_000));
       await user.click(trigger);
@@ -848,9 +850,9 @@ describe('RemoteControl', () => {
         expires_in_s: 120,
         device: row.id,
       });
-      render(<RemoteControl />, { wrapper });
+      render(<DevicesLine />, { wrapper });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      await user.click(screen.getByRole('button', { name: /remote/i }));
+      await user.click(screen.getByRole('button', { name: /^devices/i }));
       await user.click(screen.getByRole('button', { name: /invite a device/i }));
       await screen.findByText('119284');
 
@@ -879,9 +881,9 @@ describe('RemoteControl', () => {
       expires_in_s: 120,
       device: 'dev-99887766',
     });
-    render(<RemoteControl />, { wrapper });
+    render(<DevicesLine />, { wrapper });
     const user = userEvent.setup();
-    const trigger = screen.getByRole('button', { name: /remote/i });
+    const trigger = screen.getByRole('button', { name: /^devices/i });
     await user.click(trigger);
     await user.click(screen.getByRole('button', { name: /invite a device/i }));
     await screen.findByText('119284');
@@ -945,9 +947,9 @@ describe('RemoteControl', () => {
         device: 'dev-99887766',
       });
       disableRemote.mockResolvedValue({ ...IDLE_STATUS });
-      render(<RemoteControl />, { wrapper });
+      render(<DevicesLine />, { wrapper });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      await user.click(screen.getByRole('button', { name: /remote/i }));
+      await user.click(screen.getByRole('button', { name: /^devices/i }));
       await user.click(screen.getByRole('button', { name: /invite a device/i }));
       await screen.findByText('119284');
 
@@ -1073,9 +1075,9 @@ describe('RemoteControl', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       applyRemoteStatus({ ...IDLE_STATUS, enabled: true, pairing_active: true });
-      render(<RemoteControl />, { wrapper });
+      render(<DevicesLine />, { wrapper });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      await user.click(screen.getByRole('button', { name: /remote/i }));
+      await user.click(screen.getByRole('button', { name: /^devices/i }));
       expect(screen.getByRole('button', { name: /invite a device/i })).toBeDisabled();
 
       refreshRemoteStatus.mockImplementation(() => {

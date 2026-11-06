@@ -175,7 +175,7 @@ src/
 │   ├── ui/                    # Controls: Button, Icon, Modal, Input, Tabs, …
 │   ├── primitives/            # Layout and readouts: Stack, Row, Readout, …
 │   ├── AddModel.tsx           # Feature components
-│   └── Header.tsx
+│   └── CopyValue.tsx
 ├── pages/                     # Route/page components
 ├── contexts/                  # React contexts
 ├── hooks/                     # Custom hooks

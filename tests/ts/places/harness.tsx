@@ -5,10 +5,11 @@
  * drives is the screen, by address or by click.
  *
  * `renderApp` mounts the routes under the providers the layout gives them,
- * without the header and the dialogs the layout draws over every place; a
- * test of those renders `App` itself. The router it makes is the app's, so
- * `app/menuBridge` and anything else that navigates from outside React
- * reaches it.
+ * without the sidebar and the dialogs the layout draws over every place;
+ * `renderShell` mounts them inside the shell, sidebar and all, for a test of
+ * the sidebar itself; a test of the dialogs renders `App`. The router each
+ * makes is the app's, so `app/menuBridge` and anything else that navigates
+ * from outside React reaches it.
  */
 
 import type { ReactNode } from 'react';
@@ -16,6 +17,7 @@ import { Outlet, RouterProvider } from 'react-router';
 import { render } from '@testing-library/react';
 
 import { createAppRouter, type AppRouter } from '../../../src/app/router';
+import { Shell } from '../../../src/app/Shell';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import { ToastProvider, useToastContext } from '../../../src/contexts/ToastContext';
@@ -54,9 +56,26 @@ export interface RenderedApp extends ReturnType<typeof render> {
   at: () => string;
 }
 
-/** Render the place at `path`, with the real routes and providers. */
-export function renderApp(path: string): RenderedApp {
-  const router = createAppRouter(<Layout />, [path]);
+function rendered(router: AppRouter): RenderedApp {
   const view = render(<RouterProvider router={router} />);
   return { ...view, router, at: () => `${router.state.location.pathname}${router.state.location.search}` };
+}
+
+/** Render the place at `path`, with the real routes and providers. */
+export function renderApp(path: string): RenderedApp {
+  return rendered(createAppRouter(<Layout />, [path]));
+}
+
+/** The shell, sidebar and all, around the place at `path`. */
+function ShellLayout() {
+  return (
+    <PlaceProviders>
+      <Shell />
+    </PlaceProviders>
+  );
+}
+
+/** Render the shell at `path`: the sidebar beside the place the address names. */
+export function renderShell(path: string): RenderedApp {
+  return rendered(createAppRouter(<ShellLayout />, [path]));
 }

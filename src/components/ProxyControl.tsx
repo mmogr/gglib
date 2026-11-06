@@ -1,10 +1,9 @@
-import { FC, useEffect, useState, useRef } from "react";
-import { LayoutDashboard, Repeat2, Trash2 } from "lucide-react";
+import { FC, useState } from "react";
+import { LayoutDashboard, Trash2 } from "lucide-react";
 import { getTransport } from "../services/transport";
 import { clearProxyCache } from "../services/clients/proxyDashboard";
-import { useClickOutside } from "../hooks/useClickOutside";
 import { formatError } from "../utils/errors";
-import { useProxyState } from "../services/proxyRegistry";
+import { useEndpointFacts, useProxyState } from "../services/proxyRegistry";
 import { useSettings } from "../hooks/useSettings";
 import { useProxyKey } from "../hooks/useProxyKey";
 import { Icon } from "./ui/Icon";
@@ -15,60 +14,36 @@ import { useToastContext } from '../contexts/ToastContext';
 import { ProxyDashboardModal } from './ProxyDashboardModal';
 import { EndpointCopyBar, ProxyStatusPill, ProxyToggleButton, reachableHost } from './proxy';
 
-interface ProxyControlProps {
-  buttonClassName?: string;
-  buttonActiveClassName?: string;
-  statusDotClassName?: string;
-  statusDotActiveClassName?: string;
-  /** Icon-only trigger for narrow headers; the label moves to title/aria-label. */
-  compact?: boolean;
+interface ProxyPopoverProps {
+  /** Whether the panel is drawn; the dashboard it opens outlives the panel. */
+  open: boolean;
+  onClose: () => void;
+  /** Where the panel sits relative to the line that owns it. */
+  className?: string;
 }
 
-const ProxyControl: FC<ProxyControlProps> = ({
-  buttonClassName,
-  buttonActiveClassName,
-  statusDotClassName,
-  statusDotActiveClassName,
-  compact = false,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
+/**
+ * Today's proxy panel: the endpoint's URL to copy, the dashboard, Clear
+ * Cache and Turn on / off. Anchored by the sidebar's endpoint line, which
+ * owns the open state and the click-outside, until the Endpoint place
+ * replaces both (N1). The address it dials is the GUI's reading of the
+ * stored bind address, as before; the line above it reads the daemon's.
+ */
+export const ProxyPopover: FC<ProxyPopoverProps> = ({ open, onClose, className }) => {
   const proxyState = useProxyState();
+  const { pinnedModel } = useEndpointFacts();
   const { settings } = useSettings();
   // Where this app reaches the endpoint: the stored address is where it
   // BINDS, and a wildcard is nowhere a client can send, so that is reached on
   // loopback; one interface's address is reached on itself. The daemon's own
-  // rule, until its status says the reached address (`base_url`, #1768).
+  // rule, until this panel goes with the Endpoint place (N1).
   const endpointHost = reachableHost(settings?.proxyHost ?? null);
   const [loading, setLoading] = useState(false);
-  const [pinnedModel, setPinnedModel] = useState<string | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToastContext();
   // Clear Cache presents the proxy's key; revealed while the popover is open.
-  const proxyKey = useProxyKey(isOpen && proxyState.running, settings);
-
-  // Close dropdown when clicking outside
-  useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
-
-  // The registry tracks running/port; the pin only travels on the status
-  // response, so fetch it when the popover opens.
-  useEffect(() => {
-    if (!isOpen || !proxyState.running) {
-      setPinnedModel(null);
-      return;
-    }
-    let cancelled = false;
-    void getTransport()
-      .getProxyStatus()
-      .then((s) => {
-        if (!cancelled) setPinnedModel(s.pinned_model ?? null);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, proxyState.running]);
+  const proxyKey = useProxyKey(open && proxyState.running, settings);
 
   const handleStart = async () => {
     try {
@@ -101,36 +76,15 @@ const ProxyControl: FC<ProxyControlProps> = ({
 
   const handleCopied = () => showToast('Proxy URL copied to clipboard!', 'success');
 
-  // Neutral trigger: running state reads from the green dot, not a filled pill.
-  const buttonClasses = cn(
-    buttonClassName ?? 'gap-sm px-md relative',
-    proxyState.running && (buttonActiveClassName ?? 'text-text'),
-  );
-
-  const dotClasses = cn(
-    statusDotClassName ?? 'w-2 h-2 rounded-full bg-success',
-    proxyState.running && statusDotActiveClassName,
-  );
-
   return (
-    <div className="relative inline-flex" ref={dropdownRef}>
-      <Button
-        variant="ghost"
-        className={buttonClasses}
-        onClick={() => setIsOpen(!isOpen)}
-        type="button"
-        title={compact ? 'Proxy' : undefined}
-        aria-label={compact ? 'Proxy' : undefined}
-      >
-        <span aria-hidden>
-          <Icon icon={Repeat2} size={16} />
-        </span>
-        {!compact && <span>Proxy</span>}
-        {proxyState.running && <span className={dotClasses}></span>}
-      </Button>
-
-      {isOpen && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-surface-elevated rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[350px] phone:max-h-[80vh] phone:overflow-y-auto">
+    <>
+      {open && (
+        <div
+          className={cn(
+            'min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-surface-elevated rounded-lg shadow-xl p-base z-dropdown text-text',
+            className,
+          )}
+        >
           <div className="flex justify-between items-center mb-base pb-md border-b border-border-light">
             <h3 className="m-0 text-base font-semibold text-text">OpenAI Proxy</h3>
             <ProxyStatusPill running={proxyState.running} />
@@ -154,7 +108,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
               <Button
                 variant="secondary"
                 className="w-full p-sm mb-md rounded-base text-sm font-semibold"
-                onClick={() => { setIsOpen(false); setShowDashboard(true); }}
+                onClick={() => { onClose(); setShowDashboard(true); }}
                 leftIcon={<Icon icon={LayoutDashboard} size={14} />}
               >
                 View Dashboard
@@ -215,8 +169,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
         host={endpointHost}
         port={activePort}
       />
-    </div>
+    </>
   );
 };
-
-export default ProxyControl;
