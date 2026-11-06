@@ -117,7 +117,7 @@ pub(super) async fn serve_image(
         &settings,
         &StartServerRequest::default(),
         ProxyGlobals {
-            host: Some(options.host.clone()),
+            host: options.host.clone(),
             proxy_port: options.port,
             cache_enabled: cache.cache,
             slot_dir: cache.slot_dir.clone(),
@@ -133,6 +133,7 @@ pub(super) async fn serve_image(
     let body = start_body(
         plan.unified.to_proxy_config(),
         pinned,
+        options.host.clone(),
         options.port,
         cache,
         None,
@@ -164,7 +165,9 @@ pub(super) async fn serve_image(
         }
     }
 
-    crate::handlers::inference::proxy::attach_dashboard(ctx, proxy_port, access.api_key).await
+    let reach = crate::handlers::inference::proxy::reached(options.host.as_deref(), &settings);
+    crate::handlers::inference::proxy::attach_dashboard(ctx, reach, proxy_port, access.api_key)
+        .await
 }
 
 /// What the banner says of an image model: the model, its runtime, its

@@ -1,5 +1,5 @@
 export { ProxyStatusPill } from './ProxyStatusPill';
-export { EndpointCopyBar, proxyEndpointUrl } from './EndpointCopyBar';
+export { EndpointCopyBar, proxyEndpointUrl, reachableHost } from './EndpointCopyBar';
 export { ConnectionRow } from './ConnectionRow';
 export { SlotCard } from './SlotCard';
 export {

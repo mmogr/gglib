@@ -472,3 +472,69 @@ fn a_reset_leaves_the_fitted_rung_reachable() {
     assert_eq!(source, ContextSizeSource::FittedToHardware);
     assert_eq!(ctx, 32_768);
 }
+
+// ── The endpoint's own settings ───────────────────────────────────────────────
+
+#[test]
+fn the_endpoints_address_is_an_ip() {
+    for good in ["127.0.0.1", "0.0.0.0", "::", "192.168.1.20"] {
+        let settings = Settings {
+            proxy_host: Some(good.to_owned()),
+            ..Default::default()
+        };
+        assert!(validate_settings(&settings).is_ok(), "{good}");
+    }
+    let settings = Settings {
+        proxy_host: Some("gglib.lan".to_owned()),
+        ..Default::default()
+    };
+    assert!(matches!(
+        validate_settings(&settings),
+        Err(SettingsError::InvalidProxyHost(host)) if host == "gglib.lan"
+    ));
+}
+
+#[test]
+fn an_allowed_host_is_one_host() {
+    let settings = Settings {
+        proxy_allowed_hosts: Some(vec![
+            "gglib.lan".to_owned(),
+            "[::1]:8080".to_owned(),
+            "192.168.1.20".to_owned(),
+        ]),
+        ..Default::default()
+    };
+    assert!(validate_settings(&settings).is_ok());
+    for bad in ["", "a,b", "not a host", "user@host", "host/path"] {
+        let settings = Settings {
+            proxy_allowed_hosts: Some(vec![bad.to_owned()]),
+            ..Default::default()
+        };
+        assert!(
+            matches!(
+                validate_settings(&settings),
+                Err(SettingsError::InvalidAllowedHost(host)) if host == bad
+            ),
+            "{bad:?}"
+        );
+    }
+}
+
+#[test]
+fn the_cache_budget_is_at_least_a_gib_and_the_refusal_names_the_floor() {
+    let settings = Settings {
+        proxy_cache_disk_gb: Some(MIN_CACHE_DISK_GB),
+        ..Default::default()
+    };
+    assert!(validate_settings(&settings).is_ok());
+    let settings = Settings {
+        proxy_cache_disk_gb: Some(0),
+        ..Default::default()
+    };
+    let refused = validate_settings(&settings).unwrap_err();
+    assert!(matches!(
+        refused,
+        SettingsError::CacheDiskBudgetTooSmall { got: 0, min } if min == MIN_CACHE_DISK_GB
+    ));
+    assert!(refused.to_string().contains("at least 1 GiB"), "{refused}");
+}

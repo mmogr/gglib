@@ -347,6 +347,55 @@ fn a_body_with_no_allowed_hosts_still_deserializes() {
     assert!(cfg.allowed_hosts.is_empty());
 }
 
+/// The address, the allowed hosts and the prompt cache on disk are read from
+/// settings when a start leaves them out, as the port is, and a start that
+/// names them wins.
+#[test]
+fn an_omitted_address_cache_and_hosts_come_from_settings() {
+    let settings = Settings {
+        proxy_host: Some("0.0.0.0".to_owned()),
+        proxy_allowed_hosts: Some(vec!["gglib.lan".to_owned()]),
+        proxy_cache_on_disk: Some(true),
+        proxy_cache_disk_gb: Some(4),
+        ..Settings::default()
+    };
+
+    let omitted = to_runtime_config(&StartProxyConfig::default(), &settings);
+    assert_eq!(omitted.host, "0.0.0.0");
+    assert_eq!(omitted.allowed_hosts, ["gglib.lan"]);
+    assert!(omitted.cache_enabled);
+    assert_eq!(omitted.slot_dir, Some(gglib_runtime::default_slot_dir()));
+    assert_eq!(
+        omitted.disk_budget,
+        gglib_runtime::proxy::resolve_disk_budget(Some(4))
+    );
+
+    let named = to_runtime_config(
+        &StartProxyConfig {
+            host: Some("127.0.0.1".to_owned()),
+            allowed_hosts: vec!["desk.local".to_owned()],
+            cache: Some(false),
+            cache_disk_gb: Some(9),
+            ..StartProxyConfig::default()
+        },
+        &settings,
+    );
+    assert_eq!(named.host, "127.0.0.1");
+    assert_eq!(named.allowed_hosts, ["desk.local"]);
+    assert!(!named.cache_enabled);
+    assert_eq!(named.slot_dir, None);
+    assert_eq!(
+        named.disk_budget,
+        gglib_runtime::proxy::resolve_disk_budget(Some(9)),
+        "a named budget beats the stored one"
+    );
+
+    let nothing = to_runtime_config(&StartProxyConfig::default(), &Settings::default());
+    assert_eq!(nothing.host, "127.0.0.1");
+    assert!(nothing.allowed_hosts.is_empty());
+    assert!(!nothing.cache_enabled);
+}
+
 /// The pinned-start body's three keys reach the fields the handler plans the
 /// launch from, the options in the start body's `camelCase` and the proxy
 /// config in the proxy body's `snake_case`; the array's length is tied to the

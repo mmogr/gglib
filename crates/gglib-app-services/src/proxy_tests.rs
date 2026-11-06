@@ -95,6 +95,27 @@ async fn a_started_proxy_serves_the_runs_it_was_handed() {
     assert_eq!(status.as_u16(), 200);
 }
 
+/// A start that names nothing binds where the settings say, not loopback by
+/// habit: the stored address on the stored port.
+#[tokio::test]
+async fn ensure_running_binds_the_stored_address() {
+    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    core.settings()
+        .update(gglib_core::SettingsUpdate {
+            proxy_host: Some(Some("0.0.0.0".to_owned())),
+            proxy_port: Some(Some(18081)),
+            ..Default::default()
+        })
+        .await
+        .expect("settings update should succeed");
+
+    let addr = proxy.ensure_running().await.expect("an unused port");
+    assert!(addr.ip().is_unspecified(), "{addr}");
+    assert_eq!(addr.port(), 18081);
+
+    proxy.stop().await.expect("stop should succeed");
+}
+
 /// The status says what the proxy demands now: nothing while no key is
 /// stored and none was started with, and the stored key as soon as one is,
 /// as a proxy started open picks it up through its tracking policy.

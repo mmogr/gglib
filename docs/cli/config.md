@@ -17,7 +17,7 @@ Current application settings:
   default-context-size        None (sized per launch)
   default-download-path       None
   default-image-model-id      None
-  default-model-id            1 (Qwen3-30B-A3B)
+  default-model-id            2 (Qwen3-4B-Instruct-2507)
   inference-profiles          None
   llama-base-port             9300
   loop-guard-mode             None
@@ -25,8 +25,12 @@ Current application settings:
   max-stagnation-steps        None
   max-tool-iterations         None
   mcp-drawing                 None (off)
+  proxy-allowed-hosts         None
   proxy-api-key               None
   proxy-autostart             None
+  proxy-cache-disk-gb         None
+  proxy-cache-on-disk         None
+  proxy-host                  None
   proxy-port                  8080
   remote-devices              None
   remote-enabled              None
@@ -66,6 +70,15 @@ gglib config settings reveal proxy-api-key  # a stored secret, alone on stdout
   `proxy dashboard` and `proxy cache-clear` look for it.
 - `llama-base-port` is the first upstream port the daemon allocates
   llama-server from, behind the endpoint.
+- `proxy-host`, `proxy-allowed-hosts`, `proxy-cache-on-disk` and
+  `proxy-cache-disk-gb` are how the endpoint starts when nothing says
+  otherwise: the address it binds (loopback until set; `0.0.0.0` accepts
+  LAN clients and makes it demand the API key), the host names it answers
+  to beyond its own, and whether its prompt cache lives on disk and within
+  how many GiB. `proxy --host`, `--allowed-host`, `--cache` and
+  `--cache-disk-gb` override them for one run; the desktop app and the
+  tray follow them, and `up` binds loopback by name. A stored budget
+  outranks `GGLIB_CACHE_DISK_GB`, as the flag does.
 
 ## `default`
 

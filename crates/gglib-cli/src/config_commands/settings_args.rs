@@ -86,6 +86,27 @@ pub struct SettingsSetArgs {
     /// WARNING: makes `GGLib` visible to every device on your network.
     #[arg(long)]
     pub share_lan: Option<bool>,
+    /// Address the endpoint binds (an IP, e.g. 127.0.0.1 or 0.0.0.0), for
+    /// `proxy`, `serve` and the desktop app alike; `--host` on `proxy` and
+    /// `serve` overrides it for one run, and `up` binds loopback by name.
+    /// Off loopback, the endpoint demands an API key.
+    #[arg(long)]
+    pub proxy_host: Option<String>,
+    /// Host header values the endpoint accepts beyond loopback and its bound
+    /// address (a name or IP, with or without a port). Repeatable; the list
+    /// given replaces the stored one. `--allowed-host` on `proxy` and
+    /// `serve` overrides it for one run.
+    #[arg(long, value_name = "HOST", value_delimiter = ',')]
+    pub proxy_allowed_hosts: Option<Vec<String>>,
+    /// Keep the endpoint's prompt cache on disk across model swaps and
+    /// restarts; `--cache` on `proxy` and `serve` turns it on for one run.
+    #[arg(long)]
+    pub proxy_cache_on_disk: Option<bool>,
+    /// Budget in GiB for the endpoint's on-disk prompt cache (>= 1). Unset,
+    /// `GGLIB_CACHE_DISK_GB` applies, else it is sized from free disk space;
+    /// set, it outranks the variable as `--cache-disk-gb` does.
+    #[arg(long)]
+    pub proxy_cache_disk_gb: Option<u64>,
     /// Bearer token the proxy requires on /v1/* and /mcp. Clients send it
     /// as `Authorization: Bearer <key>`; /health stays open. Clear it to
     /// go back to an unauthenticated endpoint. The proxy sets this itself
@@ -193,6 +214,32 @@ mod tests {
         );
     }
 
+    /// `--proxy-allowed-hosts a,b` is two hosts, as the GUI's comma field is,
+    /// and the flag repeated is too.
+    #[test]
+    fn the_allowed_hosts_flag_splits_on_commas() {
+        for argv in [
+            vec!["t", "--proxy-allowed-hosts", "gglib.lan,192.168.1.20:8080"],
+            vec![
+                "t",
+                "--proxy-allowed-hosts",
+                "gglib.lan",
+                "--proxy-allowed-hosts",
+                "192.168.1.20:8080",
+            ],
+        ] {
+            let m = SettingsSetArgs::augment_args(Command::new("t"))
+                .try_get_matches_from(argv.clone())
+                .unwrap_or_else(|e| panic!("{argv:?} must parse: {e}"));
+            let args = SettingsSetArgs::from_arg_matches(&m).expect("args");
+            assert_eq!(
+                args.proxy_allowed_hosts.as_deref(),
+                Some(&["gglib.lan".to_owned(), "192.168.1.20:8080".to_owned()][..]),
+                "for {argv:?}"
+            );
+        }
+    }
+
     /// The flag parses the three spellings a person types, and nothing else.
     #[test]
     fn the_flag_accepts_exactly_off_note_and_refuse() {
@@ -237,6 +284,10 @@ mod tests {
             ("proxy-port", format!("(>= {MIN_PORT})")),
             ("llama-base-port", format!("(>= {MIN_PORT})")),
             ("max-download-queue-size", closed(&DOWNLOAD_QUEUE_RANGE)),
+            (
+                "proxy-cache-disk-gb",
+                format!("(>= {})", gglib_core::settings::MIN_CACHE_DISK_GB),
+            ),
             (
                 "max-tool-iterations",
                 format!("(clamped to 1-{MAX_ITERATIONS_CEILING} "),

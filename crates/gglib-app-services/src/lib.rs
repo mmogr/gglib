@@ -24,6 +24,7 @@ mod models_upgrade;
 mod proxy;
 mod proxy_guard;
 mod proxy_port;
+pub mod proxy_settings;
 mod remote;
 mod residency_events;
 mod runs;
@@ -45,6 +46,7 @@ pub use hub_chats::HubChats;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;
+pub use proxy_settings::proxy_config_from_settings;
 pub use remote::{
     EnableRequest, Enabled, FarCredentials, FarError, FarProxy, JoinRequest, Joined,
     OfferedPairing, PairedModels, RemoteConnection, RemoteDevice, RemoteEnableBody,

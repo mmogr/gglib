@@ -16,6 +16,7 @@ import {
   ProxyStatusPill,
   ProxyToggleButton,
   proxyEndpointUrl,
+  reachableHost,
 } from '../../../src/components/proxy';
 import type {
   ActiveConnectionSnapshot,
@@ -49,7 +50,21 @@ describe('ProxyStatusPill', () => {
   });
 });
 
+describe('reachableHost', () => {
+  it('reaches a wildcard bind on loopback and any other address on itself', () => {
+    expect(reachableHost(null)).toBe('127.0.0.1');
+    expect(reachableHost('0.0.0.0')).toBe('127.0.0.1');
+    expect(reachableHost('::')).toBe('127.0.0.1');
+    expect(reachableHost('127.0.0.1')).toBe('127.0.0.1');
+    expect(reachableHost('192.168.1.20')).toBe('192.168.1.20');
+  });
+});
+
 describe('proxyEndpointUrl', () => {
+  it('brackets an IPv6 address', () => {
+    expect(proxyEndpointUrl('fe80::1', 8080)).toBe('http://[fe80::1]:8080/v1');
+  });
+
   it('builds the /v1 base URL clients are pointed at', () => {
     expect(proxyEndpointUrl('127.0.0.1', 8080)).toBe('http://127.0.0.1:8080/v1');
   });
