@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use gglib_app_services::{RemoteJoinBody, RemoteJoinResponse, RemoteStatus};
-use gglib_core::domain::UNNAMED_PAIRED;
+use gglib_core::domain::{ReachState, UNNAMED_PAIRED};
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
@@ -135,21 +135,32 @@ fn connection_line(status: &RemoteStatus) -> String {
     let machine = status.paired_shown();
     let Some(c) = &status.connected else {
         return match (&status.stored_ticket_fingerprint, status.has_remote_key) {
-            (Some(_), true) => {
-                format!("  Connected: no \u{2014} `gglib remote join` dials {machine} again")
-            }
-            (Some(_), false) => format!(
-                "  Connected: no \u{2014} last dialled {machine}, but no key is stored; pair again"
+            (Some(_), true) => format!(
+                "  Reach:     {} \u{2014} `gglib remote join` dials {machine} again",
+                ReachState::Disconnected
             ),
-            (None, _) => "  Connected: no \u{2014} never paired with another machine".to_owned(),
+            (Some(_), false) => format!(
+                "  Reach:     {} \u{2014} last dialled {machine}, but no key is stored; pair again",
+                ReachState::Disconnected
+            ),
+            (None, _) => format!(
+                "  Reach:     {} \u{2014} never paired with another machine",
+                ReachState::Disconnected
+            ),
         };
     };
+    let reach = ReachState::of(true, c.away_for_s.is_some());
     c.away_for_s.map_or_else(
-        || format!("  Connected: {machine}  at {}  ({})", c.base_url, c.path),
+        || {
+            format!(
+                "  Reach:     {reach} to {machine}  at {}  ({})",
+                c.base_url, c.path
+            )
+        },
         |secs| {
             format!(
-                "  Connected: {machine}  at {}  \u{2014} away {}; the address stays, and it \
-                 reconnects when that machine is back",
+                "  Reach:     {reach} \u{2014} {machine}  at {}  has been away {}; the address \
+                 stays, and it reconnects when that machine is back",
                 c.base_url,
                 for_how_long(secs)
             )

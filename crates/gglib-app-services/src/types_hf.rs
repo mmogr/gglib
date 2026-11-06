@@ -4,6 +4,7 @@
 //! A `#[path]` child of `types.rs`, and everything here is re-exported from
 //! `types`.
 
+use gglib_core::domain::VariantFit;
 use gglib_core::domain::{ComponentRole, ImageFamily};
 use gglib_core::download::GgufFileRole;
 use gglib_core::ports::HfRepoInfo;
@@ -123,6 +124,15 @@ pub struct HfQuantization {
     /// The projector a download of this quantization fetches with it, when
     /// the repository has one. `size_bytes` above is the weights alone.
     pub projector: Option<HfProjector>,
+    /// Whether it fits this machine, judged as `gglib model download`
+    /// picks a variant: by the memory budget, its files (the projector
+    /// counted, since both are loaded) and its header's trained context
+    /// and KV shape. `None` for a projector or a draft or helper, which
+    /// are not loaded on their own.
+    pub fit: Option<VariantFit>,
+    /// `fit` in the words the CLI prints: "fits with 32K", "too big",
+    /// "unknown: …". `None` with `fit`.
+    pub fit_word: Option<String>,
 }
 
 /// A projector file of a `HuggingFace` repository.

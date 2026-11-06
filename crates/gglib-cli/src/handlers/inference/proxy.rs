@@ -9,7 +9,7 @@
 use anyhow::{Context, Result};
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonHandle, StartProxyBody};
+use crate::daemon_client::{self, DaemonHandle, ProxyStatusDto, StartProxyBody};
 use crate::shared_args::{AccessArgs, CacheArgs, SamplingArgs};
 use gglib_core::settings::CONTEXT_SIZE_RANGE;
 
@@ -90,8 +90,18 @@ fn start_body(
     }
 }
 
-/// Start the proxy `body` describes on the daemon, and answer the port it is
-/// on.
+/// What a start answered: the daemon's status as it came, and the port the
+/// proxy is on.
+pub(in crate::handlers) struct StartedProxy {
+    /// The daemon's answer: where a client reaches the proxy and whether a
+    /// request needs the key, for the surfaces that print them.
+    pub status: ProxyStatusDto,
+    /// The port: the daemon's, else where the body asked for it, else the
+    /// stored `proxy_port`.
+    pub port: u16,
+}
+
+/// Start the proxy `body` describes on the daemon, and answer what it said.
 ///
 /// The daemon's answer is the port: with no `--port` the daemon chose it, and
 /// a proxy that was already running answers with the port it holds, whatever
@@ -99,18 +109,19 @@ fn start_body(
 /// then is where the body asked for it, or the stored `proxy_port` the daemon
 /// falls back to.
 ///
-/// Shared by `proxy`, `serve` and `up`, so none of them has a port of its own
-/// to report.
+/// Shared by `proxy`, `serve` and `up`, so none of them has a port, an
+/// address or a key rule of its own to report.
 pub(in crate::handlers) async fn start_on(
     handle: &DaemonHandle,
     body: &StartProxyBody,
     settings: &gglib_core::Settings,
-) -> Result<u16> {
+) -> Result<StartedProxy> {
     let status = handle.start_proxy(body).await?;
-    Ok(status
+    let port = status
         .port
         .or(body.port)
-        .unwrap_or_else(|| settings.effective_proxy_port()))
+        .unwrap_or_else(|| settings.effective_proxy_port());
+    Ok(StartedProxy { status, port })
 }
 
 /// Execute the proxy command.
@@ -132,8 +143,8 @@ pub(crate) async fn execute(
     let body = start_body(host, port, default_context, sampling, &cache, &access);
 
     let handle = daemon_client::ensure_daemon(ctx).await?;
-    let proxy_port = start_on(&handle, &body, &settings).await?;
-    attach_dashboard(ctx, proxy_port, access.api_key).await
+    let started = start_on(&handle, &body, &settings).await?;
+    attach_dashboard(ctx, started.port, access.api_key).await
 }
 
 /// Attach the live dashboard to the running proxy, and print the detach

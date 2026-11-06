@@ -2,6 +2,7 @@
 """The rules that keep main and a maintenance line from releasing into each other.
 
     scripts/release_lines.py line      --branch B
+    scripts/release_lines.py choose    --branch B --dry-run FILE --config FILE --tags FILE [--branches FILE]
     scripts/release_lines.py guard-pr  --branch B --version V --tags FILE [--branches FILE]
     scripts/release_lines.py guard-tag --branch B --version V --branches FILE
     scripts/release_lines.py candidate --input I --tags FILE
@@ -19,13 +20,32 @@ is one `::error::` line on stderr and exit 1, and says what to do.
 
 * `line`: which line a branch releases. `line=` for main, `line=X.Y` for
   release/X.Y.x; any other branch is refused, since nothing else releases.
+* `choose`: the version release-please.yml makes the release PR propose.
+  It reads release-please's dry run and keeps the version it proposes when
+  `guard-pr` passes it, which is every run inside a cycle and every run
+  after a `Release-As:` line. release-please gets three cases wrong, and
+  each has one right answer, which this prints as `release_as` for the real
+  run to force. After a promotion it proposes the shipped version's
+  `rc.N+1`, since the stable version's commit is not on the branch: on main
+  that becomes the next minor's rc.1 after a feat or a breaking change and
+  the next patch's otherwise (the next minor's when the patch is a branched
+  line's), and on a line its next patch's. And a feat merged while main's
+  candidate is a patch makes it propose the stable `X.Y.0`, which becomes
+  `X.Y.0-rc.1`. Whatever else `guard-pr` refuses, `choose` refuses.
+  Whether a feat or a breaking change came in is read from the dry run's
+  changelog, under the feat section's heading in the config or the
+  breaking-changes heading. That is release-please's own reading of the
+  commits: it splits a squash commit's body into commits of their own, so a
+  pattern over `git log` subjects would disagree with it exactly when a PR
+  body lists a `feat:` line. Keep the dry run as the source.
 * `guard-pr`: the release PR's version (release-please.yml). It must be a
   release candidate of a version that has not shipped. On a line it must
   also be that line's next patch: a feat or a breaking change cherry-picked
   there proposes the next minor, and is refused with a word to revert it.
   On main it must not fall inside a line that has a branch, where that
   line's patches are cut. Each refusal names the `Release-As:` line that
-  puts the release PR right.
+  puts the release PR right. `choose` puts the common ones right itself, so
+  the lock job runs this as the backstop.
 * `guard-tag`: the same line rule at the tag (release-tag.yml), for a
   version set by hand or by an admin's push that the release PR never saw.
 * `candidate`: which candidate Promote promotes. Named, it must be the
@@ -46,6 +66,8 @@ is one `::error::` line on stderr and exit 1, and says what to do.
 FILE holds one ref per line: bare tags, or `git ls-remote` output, whose
 sha and `refs/tags/` are dropped and whose `^{}` entries are skipped. `-`
 is stdin. Nothing here runs git; the workflows pass what they already read.
+`choose` also reads release-please's dry-run output (`release-please
+release-pr --dry-run`, stdout) and release-please-config.json.
 
 Exit codes:
     0  passed, or the self-test passed
@@ -55,6 +77,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -242,6 +265,81 @@ def guard_pr(branch: str, text: str, tags: Sequence[str], branches: Sequence[str
     return {"version": text, "line": ""}
 
 
+# --- choose -----------------------------------------------------------------
+
+BREAKING = "⚠ BREAKING CHANGES"
+
+
+def feat_heading(config: dict) -> str:
+    """The changelog heading release-please writes feats under, from its config."""
+    for section in config.get("changelog-sections", []):
+        if section.get("type") == "feat":
+            return section["section"]
+    raise Refusal("release-please-config.json has no changelog section for feat, so a feature cannot be told apart")
+
+
+def read_dry_run(text: str, feature: str) -> Optional[Tuple[str, bool]]:
+    """The version release-please's dry run proposes, and whether it carries a feat or a breaking change.
+
+    None when it would open no pull request. Anything it cannot read is refused, so a change to
+    release-please's output stops the run instead of passing a version unchecked.
+    """
+    opens = re.search(r"^Would open (\d+) pull requests?$", text, re.M)
+    if not opens:
+        raise Refusal("release-please's dry run printed no 'Would open N pull requests' line, so its proposal cannot be read")
+    count = int(opens.group(1))
+    if count == 0:
+        return None
+    if count > 1:
+        raise Refusal(f"release-please's dry run would open {count} pull requests; this repository releases one package")
+    title = re.search(r"^title: .* release (\S+)$", text, re.M)
+    body = re.search(r"^body: (.*?)^updates: ", text, re.M | re.S)
+    if not title or not body:
+        raise Refusal("release-please's dry run printed no title or no body, so its proposal cannot be read")
+    headings = {f"### {feature}", f"### {BREAKING}"}
+    carries = any(line.strip() in headings for line in body.group(1).splitlines())
+    return title.group(1), carries
+
+
+def fixes(branch: str, version: Version, feature: bool, tags: Sequence[str]) -> List[Version]:
+    """The versions that put a refused proposal right, in order of preference."""
+    line = line_of(branch)
+    major, minor, patch, rc = version
+    if rc is None:
+        return [(major, minor, patch, 1)]
+    if not shipped(version, tags):
+        return []
+    if line is not None:
+        return [next_patch(line, tags)[:3] + (1,)]
+    next_minor = (major, minor + 1, 0, 1)
+    if feature:
+        return [next_minor]
+    return [(major, minor, patch + 1, 1), next_minor]
+
+
+def choose(branch: str, text: str, feature_heading: str, tags: Sequence[str], branches: Sequence[str]) -> Dict[str, str]:
+    proposal = read_dry_run(text, feature_heading)
+    if proposal is None:
+        return {"proposed": "", "release_as": ""}
+    proposed, feature = proposal
+    try:
+        guard_pr(branch, proposed, tags, branches)
+        return {"proposed": proposed, "release_as": ""}
+    except Refusal as refusal:
+        refused = refusal
+    version = parse(proposed)
+    if version is None:
+        raise refused
+    for fixed in fixes(branch, version, feature, tags):
+        try:
+            guard_pr(branch, spell(fixed), tags, branches)
+        except Refusal as again:
+            refused = again
+            continue
+        return {"proposed": proposed, "release_as": spell(fixed)}
+    raise refused
+
+
 # --- guard-tag ---------------------------------------------------------------
 
 
@@ -381,12 +479,42 @@ LINE_BRANCHES = ["release/0.30.x"]
 PATCHED = LINE + ["v0.30.1-rc.1", "v0.30.1"]
 # Interleaved: a patch on the line while main's next minor was out.
 INTERLEAVED = ["v0.29.0", "v0.30.0-rc.1", "v0.29.1-rc.1", "v0.29.1", "v0.30.0"]
+# main after a patch made there shipped: 0.30.1 from rc.1, nothing branched.
+SHIPPED_PATCH = LINE[:-1] + ["v0.30.1-rc.1", "v0.30.1"]
+FEATURE_HEADING = "What gglib now does"
+
+
+def dry_run(version: Optional[str], *headings: str, count: int = 1) -> str:
+    """release-please's dry-run stdout, as 17.6.0 prints it, cut to the lines that matter."""
+    lines = [
+        "❯ Fetching release-please-config.json from branch main",
+        "✔ Considering: 3 commits",
+        f"Would open {count} pull requests",
+    ]
+    if version is not None:
+        lines += [
+            "fork: false",
+            f"title: chore(main): release {version}",
+            "branch: release-please--branches--main",
+            "draft: false",
+            "body: Merging this cuts the candidate.",
+            "---",
+            "",
+            f"## [{version}](https://github.com/mmogr/gglib/compare/a...b) (2026-11-05)",
+        ]
+        for heading in headings or ("Internal",):
+            lines += ["", f"### {heading}", "", "* **deps:** bump knip ([#1745](https://x))"]
+        lines += ["", "---", "CI tags it once it passes on main.", "updates: 5", "  Cargo.toml:  [class GenericToml]"]
+    return "\n".join(lines) + "\n"
+
+
 LS_REMOTE_TAGS = [
     "0123456789abcdef0123456789abcdef01234567\trefs/tags/v0.29.0",
     "89abcdef0123456789abcdef0123456789abcdef\trefs/tags/v0.29.0^{}",
     "",
     "fedcba9876543210fedcba9876543210fedcba98\trefs/tags/v0.30.0-rc.1",
 ]
+CONFIG = '{"changelog-sections": [{"type": "feat", "section": "What gglib now does"}, {"type": "fix", "section": "x"}]}'
 LS_REMOTE_HEADS = ["fedcba9876543210fedcba9876543210fedcba98\trefs/heads/release/0.29.x"]
 
 
@@ -464,6 +592,93 @@ def self_test() -> bool:
     )
     refuses("pr line: a .0 candidate", lambda: guard_pr("release/0.30.x", "0.30.0-rc.4", LINE, LINE_BRANCHES), "0.30.0 has shipped")
 
+    # choose
+    def chose(branch: str, text: str, tags: Sequence[str], branches: Sequence[str] = ()) -> Dict[str, str]:
+        return choose(branch, text, FEATURE_HEADING, tags, list(branches))
+
+    passes("choose: inside a cycle", chose("main", dry_run("0.30.0-rc.3"), TODAY), {"proposed": "0.30.0-rc.3", "release_as": ""})
+    passes("choose: nothing to release", chose("main", dry_run(None, count=0), TODAY), {"proposed": "", "release_as": ""})
+    passes(
+        "choose: after a patch shipped from main, chores only",
+        chose("main", dry_run("0.30.1-rc.2"), SHIPPED_PATCH),
+        {"proposed": "0.30.1-rc.2", "release_as": "0.30.2-rc.1"},
+    )
+    passes(
+        "choose: after a patch shipped from main, a fix",
+        chose("main", dry_run("0.30.1-rc.2", "What it stopped getting wrong"), SHIPPED_PATCH),
+        {"proposed": "0.30.1-rc.2", "release_as": "0.30.2-rc.1"},
+    )
+    passes(
+        "choose: after a minor shipped from main, a fix",
+        chose("main", dry_run("0.30.0-rc.4", "What it stopped getting wrong"), LINE[:-1]),
+        {"proposed": "0.30.0-rc.4", "release_as": "0.30.1-rc.1"},
+    )
+    passes(
+        "choose: after a minor shipped from main, a feat",
+        chose("main", dry_run("0.30.0-rc.4", FEATURE_HEADING, "Internal"), LINE[:-1]),
+        {"proposed": "0.30.0-rc.4", "release_as": "0.31.0-rc.1"},
+    )
+    passes(
+        "choose: after a minor shipped from main, a breaking change",
+        chose("main", dry_run("0.30.0-rc.4", BREAKING, "Internal"), LINE[:-1]),
+        {"proposed": "0.30.0-rc.4", "release_as": "0.31.0-rc.1"},
+    )
+    passes(
+        "choose: after a minor shipped, fixes only, its line branched",
+        chose("main", dry_run("0.30.0-rc.4", "What it stopped getting wrong"), LINE[:-1], LINE_BRANCHES),
+        {"proposed": "0.30.0-rc.4", "release_as": "0.31.0-rc.1"},
+    )
+    passes(
+        "choose: a feat over main's patch candidate",
+        chose("main", dry_run("0.31.0", FEATURE_HEADING), SHIPPED_PATCH[:-1]),
+        {"proposed": "0.31.0", "release_as": "0.31.0-rc.1"},
+    )
+    passes(
+        "choose: a Release-As line already wrote the version",
+        chose("main", dry_run("0.30.2-rc.1"), SHIPPED_PATCH),
+        {"proposed": "0.30.2-rc.1", "release_as": ""},
+    )
+    passes(
+        "choose: a heading only mentioned in a changelog line is not a heading",
+        chose("main", dry_run("0.30.1-rc.2", "Internal").replace("bump knip", "### What gglib now does"), SHIPPED_PATCH),
+        {"proposed": "0.30.1-rc.2", "release_as": "0.30.2-rc.1"},
+    )
+    passes(
+        "choose: a line after its patch shipped",
+        chose("release/0.30.x", dry_run("0.30.1-rc.2"), PATCHED, LINE_BRANCHES),
+        {"proposed": "0.30.1-rc.2", "release_as": "0.30.2-rc.1"},
+    )
+    passes(
+        "choose: a line's first patch",
+        chose("release/0.30.x", dry_run("0.30.1-rc.1"), LINE, LINE_BRANCHES),
+        {"proposed": "0.30.1-rc.1", "release_as": ""},
+    )
+    refuses(
+        "choose: a feat cherry-picked onto a line's patch candidate",
+        lambda: chose("release/0.30.x", dry_run("0.31.0", FEATURE_HEADING), LINE + ["v0.30.1-rc.1"], LINE_BRANCHES),
+        "outside the 0.30.x line", "does not belong on a maintenance line",
+    )
+    refuses(
+        "choose: a feat cherry-picked onto a freshly cut line",
+        lambda: chose("release/0.30.x", dry_run("0.31.0-rc.1", FEATURE_HEADING), LINE, LINE_BRANCHES),
+        "outside the 0.30.x line",
+    )
+    refuses(
+        "choose: a line's patch skipped",
+        lambda: chose("release/0.30.x", dry_run("0.30.3-rc.1"), PATCHED, LINE_BRANCHES),
+        "v0.30.2 has not shipped",
+    )
+    refuses("choose: not a version", lambda: chose("main", dry_run("banana"), TODAY), "not a version")
+    refuses("choose: two pull requests", lambda: chose("main", dry_run("0.30.0-rc.3", count=2), TODAY), "would open 2 pull requests")
+    refuses("choose: no count line", lambda: chose("main", "✔ Considering: 3 commits\n", TODAY), "no 'Would open N pull requests' line")
+    refuses(
+        "choose: no body",
+        lambda: chose("main", dry_run("0.30.0-rc.3").replace("updates: 5", "files: 5"), TODAY),
+        "no title or no body",
+    )
+    passes("choose: the feat heading from the config", {"heading": feat_heading(json.loads(CONFIG))}, {"heading": FEATURE_HEADING})
+    refuses("choose: a config without a feat section", lambda: feat_heading({"changelog-sections": []}), "no changelog section for feat")
+
     # guard-tag
     passes("tag main: today", guard_tag("main", "0.30.0-rc.3", []), {"version": "0.30.0-rc.3", "line": ""})
     passes("tag main: stable by hand", guard_tag("main", "0.30.0", []), {"version": "0.30.0", "line": ""})
@@ -508,7 +723,7 @@ def self_test() -> bool:
     refuses("cut: below the newest stable", lambda: cut("v0.29.1", INTERLEAVED, []), "v0.30.0 is the newest stable", "not maintained")
 
     if not failures:
-        print("✓ release_lines.py self-test: the line rules hold on main, on a line and between them", file=sys.stderr)
+        print("✓ release_lines.py self-test: the line rules hold on main, on a line and between them, and the release PR's version is chosen by them", file=sys.stderr)
         return True
     print("✗ release_lines.py self-test failed:", file=sys.stderr)
     for failure in failures:
@@ -539,6 +754,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     commands = parser.add_subparsers(dest="command")
     sub = commands.add_parser("line", help="which line a branch releases")
     sub.add_argument("--branch", required=True)
+    sub = commands.add_parser("choose", help="the version the release PR is made to propose")
+    sub.add_argument("--branch", required=True, help="the release PR's base branch")
+    sub.add_argument("--dry-run", required=True, help="release-please's dry-run output, or - for stdin")
+    sub.add_argument("--config", required=True, help="release-please-config.json")
+    sub.add_argument("--tags", required=True, help="a file of tags")
+    sub.add_argument("--branches", help="a file of branches")
     sub = commands.add_parser("guard-pr", help="the release PR's version")
     sub.add_argument("--branch", required=True, help="the release PR's base branch")
     sub.add_argument("--version", required=True)
@@ -568,6 +789,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         if args.command == "line":
             out = line({"branch": args.branch})
+        elif args.command == "choose":
+            with open(args.config, encoding="utf-8") as handle:
+                heading = feat_heading(json.load(handle))
+            if args.dry_run == "-":
+                text = sys.stdin.read()
+            else:
+                with open(args.dry_run, encoding="utf-8") as handle:
+                    text = handle.read()
+            out = choose(args.branch, text, heading, read_refs(args.tags, "refs/tags/"), read_refs(args.branches, "refs/heads/"))
         elif args.command == "guard-pr":
             out = guard_pr(args.branch, args.version, read_refs(args.tags, "refs/tags/"), read_refs(args.branches, "refs/heads/"))
         elif args.command == "guard-tag":

@@ -53,6 +53,7 @@ impl ModelRuntimePort for Resident {
                     model_id,
                     port: 9000,
                     inflight: 0,
+                    state: gglib_core::domain::ResidencyState::Loaded,
                     is_primary: slot == 0,
                     resident_for_secs: 1,
                     runtime: gglib_core::domain::RuntimeKind::Llama,

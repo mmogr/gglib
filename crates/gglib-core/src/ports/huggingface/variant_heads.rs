@@ -63,6 +63,31 @@ pub async fn variant_role(
         .unwrap_or_default()
 }
 
+/// `variants` of `model_id`, each with its head read and kept beside it.
+///
+/// The head of each first file is read by [`variant_head`], four at once,
+/// and the role set from it. The head stays beside the variant: a listing
+/// judges whether a model fits from its trained context and KV shape, the
+/// same read its role came from.
+pub async fn read_heads(
+    client: &dyn HfClientPort,
+    parser: &dyn GgufParserPort,
+    model_id: &str,
+    variants: Vec<HfQuantInfo>,
+) -> Vec<(HfQuantInfo, Option<HeadMetadata>)> {
+    stream::iter(variants)
+        .map(|mut variant| async move {
+            let head = variant_head(client, parser, model_id, &variant).await;
+            if variant.role.is_none() {
+                variant.role = Some(head.as_ref().and_then(|h| h.role).unwrap_or_default());
+            }
+            (variant, head)
+        })
+        .buffered(HEADS_AT_ONCE)
+        .collect()
+        .await
+}
+
 /// `variants` of `model_id`, each with its role read by [`variant_role`],
 /// four heads at once.
 pub async fn read_roles(
@@ -71,14 +96,11 @@ pub async fn read_roles(
     model_id: &str,
     variants: Vec<HfQuantInfo>,
 ) -> Vec<HfQuantInfo> {
-    stream::iter(variants)
-        .map(|mut variant| async move {
-            variant.role = Some(variant_role(client, parser, model_id, &variant).await);
-            variant
-        })
-        .buffered(HEADS_AT_ONCE)
-        .collect()
+    read_heads(client, parser, model_id, variants)
         .await
+        .into_iter()
+        .map(|(variant, _)| variant)
+        .collect()
 }
 
 /// The label a Hub lookup asks `repo_id` for to find `model`'s files again.
