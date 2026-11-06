@@ -23,6 +23,7 @@ import { appLogger, listenToMenuEvents, MENU_EVENTS, setSelectedModel, syncMenuS
 import { safeStopServer } from '../services/server/safeActions';
 import { isServerRunning, runningModelIds } from '../services/serverRegistry';
 import { getTransport } from '../services/transport';
+import { formatError } from '../utils/errors';
 import { confirm } from './confirm';
 import { menuModelId, paths, settingsAt } from './paths';
 import { appRouter } from './router';
@@ -58,7 +59,7 @@ async function stopSelected(): Promise<void> {
   syncMenuStateSilent();
 }
 
-async function removeSelected(): Promise<void> {
+async function removeSelected(notify: Notify): Promise<void> {
   const selected = selectedModelId();
   if (selected === null) return;
   const name = getModelLibrary().models.find((m) => m.id === selected)?.name ?? 'this model';
@@ -69,7 +70,13 @@ async function removeSelected(): Promise<void> {
     variant: 'danger',
   });
   if (!confirmed) return;
-  await removeModel(selected);
+  try {
+    await removeModel(selected);
+  } catch (error) {
+    // A served model is refused: said here, since nothing else sees it.
+    notify(`Could not remove ${name}: ${formatError(error)}`, 'error');
+    return;
+  }
   if (selectedModelId() === selected) navigate(paths.library());
   syncMenuStateSilent();
 }
@@ -87,7 +94,7 @@ export function menuHandlers(notify: Notify) {
       if (selected !== null) navigate(paths.serve(selected));
     },
     [MENU_EVENTS.STOP_SERVER]: () => void stopSelected(),
-    [MENU_EVENTS.REMOVE_MODEL]: () => void removeSelected(),
+    [MENU_EVENTS.REMOVE_MODEL]: () => void removeSelected(notify),
     [MENU_EVENTS.COPY_TO_CLIPBOARD]: (payload: string) => {
       if (payload) {
         navigator.clipboard.writeText(payload).catch((error) =>

@@ -98,9 +98,11 @@ describe('the menu bridge', () => {
   });
 
   it('Settings opens the dialog over the place; Add Model and Downloads open the Add pane', async () => {
-    const { at, fire, stop } = await bridged('/models/7');
+    const { at, router, fire, stop } = await bridged('/models/7');
     await fire(MENU_EVENTS.OPEN_SETTINGS);
     expect(at()).toBe('/models/7?settings=general');
+    // Over the place, not after it: Back from here leaves the dialog behind.
+    expect(router.state.historyAction).toBe('REPLACE');
     await fire(MENU_EVENTS.ADD_MODEL_FILE);
     expect(at()).toBe('/library?view=add&sub=add');
     await fire(MENU_EVENTS.SHOW_DOWNLOADS);
@@ -181,6 +183,20 @@ describe('the menu bridge', () => {
     await removed;
     expect(transport.removeModel).toHaveBeenCalledWith(7);
     await waitFor(() => expect(at()).toBe('/library'));
+    stop();
+  });
+
+  it('a refused Remove is said, and the address stays', async () => {
+    transport.removeModel.mockRejectedValueOnce(new Error('the model is being served'));
+    const { at, stop } = await bridged('/chat/7');
+    const user = userEvent.setup();
+    const asked = menu.handlers?.[MENU_EVENTS.REMOVE_MODEL]?.();
+    await user.click(await screen.findByRole('button', { name: 'Remove' }));
+    await asked;
+
+    expect(notify).toHaveBeenCalledWith(expect.stringMatching(/could not remove qwen3-8b/i), 'error');
+    expect(at()).toBe('/chat/7');
+    expect(menu.syncMenuStateSilent).not.toHaveBeenCalled();
     stop();
   });
 

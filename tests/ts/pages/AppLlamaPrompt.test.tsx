@@ -58,6 +58,7 @@ vi.mock('../../../src/services/transport/api/setup', () => ({ getSetupStatus: vi
 vi.mock('../../../src/services/tools', () => ({ syncBuiltinTools: async () => {} }));
 
 import App from '../../../src/App';
+import { disposeAppRouter } from '../../../src/app/router';
 import { getSetupStatus } from '../../../src/services/transport/api/setup';
 import type { SetupStatus } from '../../../src/types/setup';
 
@@ -81,6 +82,8 @@ async function renderShell() {
 }
 
 describe('the app shell\'s llama.cpp install prompt', () => {
+  afterEach(() => disposeAppRouter());
+
   beforeEach(() => getStatus.mockReset());
   afterEach(() => vi.useRealTimers());
 

@@ -20,7 +20,7 @@ import type { ModelChoice } from '../components/ChatMessagesPanel';
 import type { ServerViewModel } from '../hooks/useServers';
 import { getTransport } from '../services/transport';
 import type { ChatDraft } from '../types/messages';
-import { setChatHandoff } from './chatHandoff';
+import { HANDED, setChatHandoff } from './chatHandoff';
 import { paths } from './paths';
 
 /** What a switch carries to the new page, read when the switch lands. */
@@ -63,7 +63,7 @@ export function useChatSwitch(servers: ServerViewModel[]): ChatSwitch {
       if (ticket !== latest.current || !open.current) return;
       const { conversationId, draft } = context();
       setChatHandoff({ modelId: choice.modelId, port, modelName: choice.modelName, conversationId, draft });
-      navigate(paths.chat(choice.modelId));
+      navigate(paths.chat(choice.modelId), { state: HANDED });
     },
     [servers, navigate],
   );

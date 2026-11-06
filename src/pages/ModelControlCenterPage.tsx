@@ -12,7 +12,7 @@ import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel
 import { FarModelInspector, ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
 import TwoPanelLayout from '../components/TwoPanelLayout';
-import { setChatHandoff } from '../app/chatHandoff';
+import { HANDED, setChatHandoff } from '../app/chatHandoff';
 import { inspectorSubject, libraryIntent, paths, settingsAt } from '../app/paths';
 import { useMccFilters } from './modelControlCenter/useMccFilters';
 import { useMccLayout } from './modelControlCenter/useMccLayout';
@@ -113,14 +113,14 @@ export default function ModelControlCenterPage() {
   const intent = libraryIntent(location.search);
   useEffect(() => {
     if (intent.add === null && !intent.serve) return;
-    if (intent.serve && openServeModal === null) return;
+    if (intent.serve && openServeModal === null && selectedModelId !== null) return;
     if (intent.add !== null) {
       setSidebarTab('add');
       setActiveSubTab(intent.add);
     }
     if (intent.serve) openServeModal?.();
     void navigate(location.pathname, { replace: true });
-  }, [intent.add, intent.serve, openServeModal, location.pathname, navigate, setActiveSubTab]);
+  }, [intent.add, intent.serve, openServeModal, selectedModelId, location.pathname, navigate, setActiveSubTab]);
 
   // Handler for selecting a local model (clears HF selection)
   const handleSelectLocalModel = (id: number | null) => {
@@ -164,7 +164,7 @@ export default function ModelControlCenterPage() {
   // on, since the registry may not have heard of it yet.
   const handleServerStarted = async (serverInfo: ServerViewModel) => {
     setChatHandoff({ modelId: serverInfo.modelId, port: serverInfo.port, modelName: serverInfo.modelName });
-    navigate(paths.chat(serverInfo.modelId));
+    navigate(paths.chat(serverInfo.modelId), { state: HANDED });
   };
 
   return (

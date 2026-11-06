@@ -4,10 +4,13 @@
  * on an Open chat, the port the model was just served on, which the server
  * registry may not have heard yet.
  *
- * A module store rather than history state: the draft carries `File`s, and
- * what crosses a navigation is read once by the page that lands. Peeked, not
- * taken, because a page's first render can run twice in development; the
- * landing page clears it when it leaves.
+ * A module store rather than history state: the draft carries `File`s. The
+ * navigation that sets one marks its history entry (`HANDED`), and only a
+ * page landing on that entry reads it, so a later visit to the same address
+ * by a link, a reload or Back finds nothing. Peeked, not taken, because a
+ * page's first render can run twice in development; the page takes it once
+ * it has committed, never from an effect's cleanup, which development also
+ * runs on a page that stays.
  *
  * @module app/chatHandoff
  */
@@ -26,6 +29,14 @@ export interface ChatHandoff {
   draft?: ChatDraft;
 }
 
+/** The history state a navigation that set a handoff carries. */
+export const HANDED = { handoff: true } as const;
+
+/** Whether `state`, a location's, is a navigation that set a handoff. */
+export function wasHanded(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && (state as { handoff?: unknown }).handoff === true;
+}
+
 let pending: ChatHandoff | null = null;
 
 export function setChatHandoff(handoff: ChatHandoff): void {
@@ -37,7 +48,7 @@ export function peekChatHandoff(modelId: number): ChatHandoff | null {
   return pending?.modelId === modelId ? pending : null;
 }
 
-/** Drop the handoff for `modelId`, once its page has left. */
+/** Drop the handoff for `modelId`, once its page has it. */
 export function clearChatHandoff(modelId: number): void {
   if (pending?.modelId === modelId) pending = null;
 }

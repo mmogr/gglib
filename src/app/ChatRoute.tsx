@@ -2,9 +2,9 @@
  * `/chat/:modelId`: a chat on one of this machine's models, served here.
  *
  * The port is the server registry's, or the one the start that opened this
- * chat handed on, since the registry may not have heard of it yet; with
- * neither, the model is not running, and the address goes to its inspector,
- * where Load is. Keyed by the model, so a switch remounts the page on the
+ * chat handed on (`chatHandoff`, read only by the navigation that set it),
+ * since the registry may not have heard of it yet; with neither, the model
+ * is not running, and the address goes to its inspector, where Load is. Keyed by the model, so a switch remounts the page on the
  * new one. Close leaves the chat for the model's inspector: the proxy serves
  * its model to every client, Copilot included, so unloading it is a separate
  * action.
@@ -13,11 +13,11 @@
  */
 
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { useServers } from '../hooks/useServers';
 import { useModel } from '../services/modelRegistry';
-import { clearChatHandoff, peekChatHandoff } from './chatHandoff';
+import { clearChatHandoff, peekChatHandoff, wasHanded } from './chatHandoff';
 import { paths } from './paths';
 import { useChatSwitch } from './useChatSwitch';
 
@@ -32,9 +32,17 @@ export const CHAT_LOADING = (
 
 function LocalChat({ modelId, view }: { modelId: number; view: 'chat' | 'console' }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { servers, stopServer } = useServers();
   const server = servers.find((s) => s.modelId === modelId);
-  const [handoff] = useState(() => peekChatHandoff(modelId));
+  // Peeked during render, so a render that runs twice reads the same; taken
+  // once a page has committed, handed or not, so one that never did (left
+  // while its chunk loaded) leaves it for nobody: a later visit is not
+  // handed, and drops it.
+  const [handoff] = useState(() => (wasHanded(location.state) ? peekChatHandoff(modelId) : null));
+  useEffect(() => {
+    clearChatHandoff(modelId);
+  }, [modelId]);
   const { startingModel, switchTo } = useChatSwitch(servers);
   const inLibrary = useModel(modelId);
 
@@ -61,10 +69,6 @@ export function ChatRoute() {
   const { modelId: raw } = useParams();
   const [search] = useSearchParams();
   const modelId = /^\d+$/.test(raw ?? '') ? Number(raw) : null;
-  // The handoff is dropped on leaving the model's chat, here rather than in
-  // the page, which may never commit if its chunk is still loading when the
-  // person leaves.
-  useEffect(() => (modelId === null ? undefined : () => clearChatHandoff(modelId)), [modelId]);
   if (modelId === null) return <Navigate to={paths.library()} replace />;
   const view = search.get('view') === 'console' ? 'console' : 'chat';
   return (
