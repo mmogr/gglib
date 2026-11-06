@@ -11,7 +11,8 @@ use crate::bootstrap::test_context;
 use crate::handlers::model::one_shot_model_ops;
 use crate::handlers::model::test_library::{Heard, Runtime, ops};
 
-/// A catalogue row with id `id`, called `name`.
+/// A catalogue row with id `id`, called `name`, whose files could not be
+/// read (no size).
 fn model(id: i64, name: &str) -> GuiModel {
     serde_json::from_value(serde_json::json!({
         "id": id,
@@ -59,7 +60,7 @@ fn the_id_column_is_as_wide_as_the_widest_id() {
     // wide for rows named by nothing.
     assert_eq!(
         lines[1].len(),
-        126 + 4 + 9,
+        137 + 4 + 9,
         "the rule spans the wider column"
     );
     assert!(lines[2].starts_with("3    "), "{table}");
@@ -72,7 +73,7 @@ fn short_ids_get_a_column_three_wide() {
     let table = render_table(&[model(3, "small")]);
 
     assert!(table.starts_with("ID  Name"), "{table}");
-    assert_eq!(table.lines().nth(1).map(str::len), Some(129 + 9));
+    assert_eq!(table.lines().nth(1).map(str::len), Some(140 + 9));
 }
 
 /// The paired machine's line follows the table.
@@ -114,6 +115,20 @@ fn the_images_column_marks_the_models_that_read_images() {
     assert!(lines[3][column..].starts_with("-- "), "{table}");
 }
 
+/// The `Size` column says what a model's files take on disk, in binary
+/// units, and `--` for one whose files could not be read.
+#[test]
+fn the_size_column_says_what_the_files_take() {
+    let mut big = model(1, "big");
+    big.size_bytes = 5 * 1024 * 1024 * 1024 / 2;
+    let table = render_table(&[big, model(2, "unread")]);
+
+    let lines: Vec<&str> = table.lines().collect();
+    let column = lines[0].find("Size").expect("a Size header");
+    assert!(lines[2][column..].starts_with("2.50 GiB "), "{table}");
+    assert!(lines[3][column..].starts_with("-- "), "{table}");
+}
+
 /// An image model of `family` needing `missing`, as the listing reads it.
 fn drawing(id: i64, name: &str, family: &str, missing: &[&str]) -> GuiModel {
     let mut row = model(id, name);
@@ -151,7 +166,7 @@ fn the_draws_column_names_the_family_and_what_it_needs() {
     }
     assert_eq!(
         lines[1].len(),
-        122 + 3 + "Model ID".len() + "Flux.1, needs VAE, T5-XXL".len()
+        133 + 3 + "Model ID".len() + "Flux.1, needs VAE, T5-XXL".len()
     );
 }
 
@@ -202,17 +217,17 @@ async fn the_library_is_listed_newest_first() {
     let dir = tempfile::tempdir().unwrap();
     let ctx = three_models(dir.path()).await;
 
-    let rule = "-".repeat(138);
+    let rule = "-".repeat(149);
     assert_eq!(
         printed(&one_shot_model_ops(&ctx), &[]).await,
         format!(
             "Found 3 model(s):
 
-ID  Name                      Model ID Params   Arch         Quant    Context    Images  Draws Added                File Path
+ID  Name                      Model ID Params   Arch         Quant    Size       Context    Images  Draws Added                File Path
 {rule}
-3   charlie                   charlie  27.0     --           --       131072     --      --    2026-10-03 12:00:00  /models/charlie.gguf
-2   bravo                     bravo    3.0      --           --       8192       --      --    2026-10-02 12:00:00  /models/bravo.gguf
-1   alpha                     alpha    7.5      --           --       32768      --      --    2026-10-01 12:00:00  /models/alpha.gguf
+3   charlie                   charlie  27.0     --           --       --         131072     --      --    2026-10-03 12:00:00  /models/charlie.gguf
+2   bravo                     bravo    3.0      --           --       --         8192       --      --    2026-10-02 12:00:00  /models/bravo.gguf
+1   alpha                     alpha    7.5      --           --       --         32768      --      --    2026-10-01 12:00:00  /models/alpha.gguf
 "
         )
     );

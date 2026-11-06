@@ -30,8 +30,8 @@ crates/gglib-app-services/src/settings_tests.rs 327
 crates/gglib-app-services/src/setup.rs 363
 crates/gglib-app-services/src/setup_engines_tests.rs 529
 crates/gglib-app-services/src/test_support.rs 449
-crates/gglib-app-services/src/types.rs 602
-crates/gglib-app-services/src/types_model_dto_tests.rs 313
+crates/gglib-app-services/src/types.rs 609
+crates/gglib-app-services/src/types_model_dto_tests.rs 317
 crates/gglib-app-services/src/types_settings.rs 310
 crates/gglib-axum/src/error.rs 331
 crates/gglib-axum/src/handlers/agent/compose.rs 375
@@ -77,7 +77,7 @@ crates/gglib-cli/src/handlers/inference/proxy_tests.rs 319
 crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 361
 crates/gglib-cli/src/handlers/mcp_cli.rs 405
 crates/gglib-cli/src/handlers/model/download/interactive.rs 400
-crates/gglib-cli/src/handlers/model/list_tests.rs 345
+crates/gglib-cli/src/handlers/model/list_tests.rs 360
 crates/gglib-cli/src/handlers/model/update.rs 683
 crates/gglib-cli/src/handlers/model/update_surface_tests.rs 368
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 377

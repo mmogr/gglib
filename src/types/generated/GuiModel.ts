@@ -20,6 +20,12 @@ quantization: string | null,
  */
 bitsPerWeight?: number, contextLength: number | null, 
 /**
+ * What the model takes on disk: its weights (every shard), its
+ * projector and its linked components (`resident_bytes`). `0` when no
+ * file could be read.
+ */
+sizeBytes: number, 
+/**
  * Total number of experts (`MoE` models only).
  */
 expertCount?: number, 
