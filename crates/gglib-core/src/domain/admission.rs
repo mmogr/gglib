@@ -134,12 +134,9 @@ impl SecondarySlotStatus {
         }
     }
 
-    /// The status for an empty second slot on a machine whose free VRAM is
-    /// known: how much a second model may take, said once for every surface.
-    /// `None` headroom is the default status, since nothing can be promised.
-    /// The slot while a model is loading into it: granted, not landed yet.
-    /// Said as `available`, since nothing is resident, with no room figure,
-    /// since the load has the room.
+    /// The slot while a model is loading into it beside a loaded primary:
+    /// granted, not landed yet. Said as `available`, since nothing is
+    /// resident, with no room figure, since the load has the room.
     #[must_use]
     pub fn loading() -> Self {
         Self {
@@ -149,6 +146,9 @@ impl SecondarySlotStatus {
         }
     }
 
+    /// The status for an empty second slot on a machine whose free VRAM is
+    /// known: how much a second model may take, said once for every surface.
+    /// `None` headroom is the default status, since nothing can be promised.
     #[must_use]
     pub fn available_with(headroom_bytes: Option<u64>) -> Self {
         headroom_bytes.map_or_else(Self::default, |bytes| Self {

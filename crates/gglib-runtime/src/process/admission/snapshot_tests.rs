@@ -329,3 +329,27 @@ async fn the_free_vram_is_read_only_when_the_room_line_can_show() {
         "Room for one more, about 2.0 GiB."
     );
 }
+
+/// An image model's first load on an empty daemon goes into the second slot
+/// (never an empty primary); that is no second model, so the slot says
+/// nothing of a load, and no room.
+#[tokio::test]
+async fn a_first_load_into_the_second_slot_is_no_second_model() {
+    let q = Arc::new(AdmissionQueue::new());
+    let ticket = q.enqueue(5, "flux");
+    let decision = q.poll(
+        &ticket,
+        Candidate::image(SecondarySlotDecision::RefuseUnknownBudget),
+    );
+    assert!(
+        matches!(decision, AdmissionDecision::Launch { slot, .. } if slot == PRIMARY_SLOT + 1),
+        "{decision:?}"
+    );
+    let loading = q.lock().snapshot(Instant::now(), Some(8 * GIB));
+    assert_eq!(
+        loading.secondary_slot,
+        SecondarySlotStatus::default(),
+        "{loading:?}"
+    );
+    assert!(!q.lock().second_slot_room_wanted());
+}

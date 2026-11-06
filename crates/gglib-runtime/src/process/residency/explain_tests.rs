@@ -79,7 +79,7 @@ fn unload_fixtures() -> (
     gglib_core::domain::SecondarySlotDecision,
 ) {
     use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults, SecondarySlotDecision};
-    let resident = |model_id: u32, name: &str, runtime: RuntimeKind| Resident {
+    let resident = |model_id: u32, name: &str, runtime: RuntimeKind, weights_bytes: u64| Resident {
         model_sampling: ModelSamplingDefaults::default(),
         model_id,
         model_name: name.to_owned(),
@@ -93,7 +93,7 @@ fn unload_fixtures() -> (
         narration: None,
         inflight: 0,
         resident_since: tokio::time::Instant::now(),
-        weights_bytes: GIB,
+        weights_bytes,
     };
     let grant = SecondarySlotDecision::Grant {
         footprint_bytes: 1,
@@ -101,9 +101,11 @@ fn unload_fixtures() -> (
     };
     let refusal = SecondarySlotDecision::RefuseUnknownFootprint;
     (
-        resident(7, "qwen", RuntimeKind::Llama),
-        resident(9, "nomic", RuntimeKind::Llama),
-        resident(11, "flux-a", RuntimeKind::StableDiffusion),
+        resident(7, "qwen", RuntimeKind::Llama, GIB),
+        resident(9, "nomic", RuntimeKind::Llama, GIB),
+        // Three GiB: an image model's place gives back more than a chat
+        // model's, which the place-fit cases tell apart.
+        resident(11, "flux-a", RuntimeKind::StableDiffusion, 3 * GIB),
         grant,
         refusal,
     )
@@ -216,9 +218,30 @@ fn an_image_plan_says_what_it_would_unload() {
         displacement(image, &too_large, Some(&qwen), &[], false),
         None
     );
+    // Beside flux the place is flux's slot, and flux's three GiB given back
+    // (five GiB free, 4.5 usable) take the four GiB model: flux goes. The
+    // same model judged against qwen's one GiB would wait.
     assert_eq!(
         displacement(image, &too_large, Some(&qwen), flux_only, false),
+        Some(unloads("flux-a", UnloadReason::OneImageModel))
+    );
+    let too_large_for_flux = SecondarySlotDecision::RefuseNoHeadroom {
+        footprint_bytes: 8 * GIB,
+        free_bytes: 2 * GIB,
+    };
+    assert_eq!(
+        displacement(image, &too_large_for_flux, Some(&qwen), flux_only, false),
         None
+    );
+    // An image model loaded alone is replaced whatever the budget, as on a
+    // cold daemon: the place is judged only while another model is loaded.
+    assert_eq!(
+        displacement(image, &too_large_for_flux, Some(&flux), &[], false),
+        Some(unloads("flux-a", UnloadReason::OneImageModel))
+    );
+    assert_eq!(
+        displacement(image, &too_large_for_flux, None, flux_only, false),
+        Some(unloads("flux-a", UnloadReason::OneImageModel))
     );
     let fits_in_place = SecondarySlotDecision::RefuseNoHeadroom {
         footprint_bytes: GIB,

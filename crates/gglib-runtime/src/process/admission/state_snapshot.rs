@@ -69,7 +69,11 @@ impl QueueState {
         if let Some(r) = self.slot(PRIMARY_SLOT + 1) {
             return SecondarySlotStatus::resident(&r.model_name);
         }
-        if matches!(self.slots[PRIMARY_SLOT + 1], SlotState::Loading { .. }) {
+        // A load into the slot beside a loaded primary says so; one into an
+        // empty daemon (an image model's first load) is no second model yet.
+        if matches!(self.slots[PRIMARY_SLOT + 1], SlotState::Loading { .. })
+            && self.slot(PRIMARY_SLOT).is_some()
+        {
             return SecondarySlotStatus::loading();
         }
         if self.second_slot_room_wanted() {

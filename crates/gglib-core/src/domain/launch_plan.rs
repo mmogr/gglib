@@ -122,8 +122,9 @@ pub enum UnloadReason {
     /// for it, no headroom, or nothing known to judge by), so the primary's
     /// resident is swapped out.
     WouldNotFitBeside,
-    /// This model fits beside the primary, but the second slot already holds
-    /// a model, and there are two slots.
+    /// The second slot is this model's place (granted it beside the primary,
+    /// or the primary is empty), but the slot already holds a model, and
+    /// there are two slots.
     SecondSlotFull,
     /// One image model is loaded at a time: this one takes the loaded image
     /// model's slot.
