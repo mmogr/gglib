@@ -114,7 +114,6 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `PUT` | `/api/config/settings` | Update application settings |
 | `PATCH` | `/api/config/settings` | The same as `PUT` |
 | `POST` | `/api/config/profiles/install-templates` | Add the starter profiles; a stored profile of the same name is kept and named in `kept` |
-| `GET` | `/api/config/system/memory` | System memory, or `null` when it cannot be read |
 | `GET` | `/api/config/system/models-directory` | The models directory |
 | `PUT` | `/api/config/system/models-directory` | Change the models directory |
 | `GET` | `/api/config/system/setup-status` | The first-run wizard's setup status |

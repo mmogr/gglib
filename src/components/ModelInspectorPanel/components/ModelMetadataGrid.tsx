@@ -146,9 +146,10 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
           </InfoRow>
         )}
 
-        {detail?.hfCommitSha && (
-          <InfoRow label="Commit" mono>
-            <span title={detail.hfCommitSha}>{detail.hfCommitSha.slice(0, 7)}</span>
+        {detail?.revision && (
+          <InfoRow label={detail.revision.kind === 'sha' ? 'Commit' : 'Revision'} mono>
+            {/* A sha short, a ref whole: the daemon shortens, the grid shows. */}
+            <span title={detail.revision.value}>{detail.revision.short}</span>
           </InfoRow>
         )}
 

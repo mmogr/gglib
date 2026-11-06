@@ -30,7 +30,15 @@ expertUsedCount?: number,
 /**
  * Shared experts that are always active (`MoE` models only).
  */
-expertSharedCount?: number, addedAt: string, hfRepoId: string | null, tags: Array<string>, isServing: boolean, port?: number, inferenceDefaults?: InferenceConfig, 
+expertSharedCount?: number, addedAt: string, 
+/**
+ * The id `/v1/models` lists this model under, which a client sends:
+ * its name, unless another model shares it (`openai_model_ids`). A
+ * fact about the whole catalogue, so it is set by the listing and by
+ * `ModelOps::get`, and `None` on a row built from one model alone (the
+ * answer to an add or an update).
+ */
+openaiId: string | null, hfRepoId: string | null, tags: Array<string>, isServing: boolean, port?: number, inferenceDefaults?: InferenceConfig, 
 /**
  * Who wrote [`Self::inference_defaults`]: a person, the import, or a
  * tune sweep. See `gglib_core::domain::DefaultsOrigin`.

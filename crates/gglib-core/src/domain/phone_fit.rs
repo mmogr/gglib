@@ -70,7 +70,9 @@ pub enum FitVerdict {
 }
 
 /// The input a [`FitVerdict::Unknown`] could not do without.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "snake_case")]
 pub enum MissingInput {
     /// The model's trained context, `{arch}.context_length` in its GGUF.
     TrainedContext,

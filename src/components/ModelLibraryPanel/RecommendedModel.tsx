@@ -13,7 +13,7 @@ import { Button } from '../ui/Button';
 import { getRecommendedModel } from '../../services/transport/api/setup';
 import type { ModelRecommendation } from '../../types/setup';
 import { appLogger } from '../../services/platform';
-import { formatMemorySize } from '../../hooks/useSystemMemory';
+import { formatMemorySize } from '../../utils/format';
 
 const BUDGET_COPY: Record<ModelRecommendation['budgetSource'], string> = {
   vram: 'GPU memory',

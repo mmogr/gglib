@@ -185,3 +185,16 @@ export const getHuggingFaceModelUrl = (modelId: string): string => {
  * does not, and so a future change of mind about separators lands once.
  */
 export const formatCount = (value: number): string => value.toLocaleString();
+
+/**
+ * A memory size in binary units with one decimal: `21.0 GiB`, `880 MiB`.
+ * What the setup recommendation prints its budget in.
+ */
+export function formatMemorySize(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+  } else if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(0)} MiB`;
+  }
+  return `${(bytes / 1024).toFixed(0)} KiB`;
+}

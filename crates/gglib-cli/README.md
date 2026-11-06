@@ -72,7 +72,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 |---------|-------------|
 | `up [-y] [--model <id\|name>] [-p PORT]` | Go from nothing to a working OpenAI-compatible endpoint: install llama.cpp and the image runtime when missing, recommend and download a model that fits, start the proxy, send one request through it, and print the client configuration; safe to re-run |
 | `model add <path>` | Add a GGUF model to the library; `--component <role>=<path>` links an image model's component as it is added |
-| `model list` | List all models with metadata, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
+| `model list` | List all models with metadata, the Model ID a client sends for each, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
 | `model inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
 | `model explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
 | `model load <id\|name> [--context <N\|max>] [--pin]` | Load a model into memory on the daemon, as the app's Load does; `--pin` pins the endpoint to it first |

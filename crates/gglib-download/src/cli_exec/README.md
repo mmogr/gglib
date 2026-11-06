@@ -10,9 +10,6 @@ separated from the queue-based
 
 # What lives here
 
-- [`list_quantizations`] — `HuggingFace` quant listing for `--list-quants`: the
-  quantizations, then the repository's projectors, each marked with the
-  quantizations whose download fetches it
 - [`check_update`] / [`update_model`] — update path for `model upgrade`.
   `update_model` hands the download's row to a [`RowCallback`] while its
   files are fetched
