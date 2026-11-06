@@ -49,7 +49,9 @@ config builder, so a model behaves identically however it was started.
 ### `dashboard`, `cache-clear`, `trips`, `stop`
 
 A live terminal view of an already-running proxy, with its connections,
-slots, cache and requests:
+slots, cache and requests, and the last five requests with what gglib did
+to each, in words: a tool call repaired, old messages trimmed, tool calls
+constrained, a loop noted or stopped, a request refused:
 
 <p align="center">
   <img src="../assets/cli-proxy-dashboard.gif" alt="gglib proxy dashboard while a request is answered" width="800">

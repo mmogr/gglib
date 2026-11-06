@@ -735,6 +735,7 @@ pub(crate) async fn forward_chat_completion(
             // the wire contract clients already handle.
             debug!(error = %e, "rejecting request that exceeds the context budget");
             metrics.record(ContextSnapshot {
+                interventions: crate::metrics::clamped_interventions(),
                 model_name: model_name.to_owned(),
                 payload_chars_before: 0,
                 payload_chars_after: 0,
@@ -804,6 +805,11 @@ pub(crate) async fn forward_chat_completion(
         );
     }
     let snapshot_seq = metrics.record(ContextSnapshot {
+        interventions: crate::metrics::forwarded_interventions(
+            report.messages_truncated,
+            grammar_enforced,
+            loop_guard_trip,
+        ),
         model_name: model_name.to_owned(),
         payload_chars_before: report.payload_chars_before,
         payload_chars_after: report.payload_chars_after,

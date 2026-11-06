@@ -20,7 +20,9 @@ mod render;
 mod render_defects;
 /// The one section that is not a readback — see the module docs there.
 mod render_reasoning;
+mod render_recent;
 mod wire;
+mod wire_recent;
 mod wire_sampling;
 
 use render::{render_frame, visual_row_count};

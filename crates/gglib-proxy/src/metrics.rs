@@ -29,6 +29,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use gglib_core::domain::defects::LoopGuardTrip;
+use gglib_core::domain::{Intervention, InterventionKind, Refusal};
 
 use crate::generation::TurnGeneration;
 
@@ -150,6 +151,12 @@ pub struct ContextSnapshot {
     /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub recorded_at_secs: u64,
+    /// What gglib did to this request, each with its word, in the order it
+    /// was done: filled where the request is recorded, and a repaired tool
+    /// call added by [`ContextMetricsStore::flag_tool_repair`] when the
+    /// repair lands. A repair whose snapshot was already evicted is lost to
+    /// this list, the bounded undercount that flag already accepts.
+    pub interventions: Vec<Intervention>,
     /// Per-store sequence number assigned by [`ContextMetricsStore::record`].
     /// Identifies this snapshot for post-stream back-patching; callers pass
     /// `0` and the store overwrites it. Not part of the wire contract.
@@ -313,6 +320,11 @@ impl ContextMetricsStore {
             .unwrap_or_else(PoisonError::into_inner);
         if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
             snapshot.tool_repaired = succeeded;
+            if succeeded {
+                snapshot
+                    .interventions
+                    .push(Intervention::new(InterventionKind::RepairedToolCall));
+            }
             // The ring row still knows its model; a repair whose snapshot
             // was already evicted keeps the fleet counter above but is lost
             // to the per-model ledger — a bounded, bias-free undercount on
@@ -501,6 +513,51 @@ impl Default for ContextMetricsStore {
 // =============================================================================
 // Tests
 // =============================================================================
+
+/// What a forwarded request had done to it before it was sent on: its old
+/// messages trimmed, its output constrained to a tool call, and a loop noted.
+#[must_use]
+pub(crate) fn forwarded_interventions(
+    messages_truncated: usize,
+    grammar_enforced: bool,
+    trip: Option<LoopGuardTrip>,
+) -> Vec<Intervention> {
+    let mut done = Vec::new();
+    if messages_truncated > 0 {
+        done.push(Intervention::new(InterventionKind::Trimmed {
+            messages: messages_truncated,
+        }));
+    }
+    if grammar_enforced {
+        done.push(Intervention::new(InterventionKind::Constrained));
+    }
+    if let Some(detector) = trip {
+        done.push(Intervention::new(InterventionKind::NotedLoop { detector }));
+    }
+    done
+}
+
+/// What the loop guard did to a request it answered itself: ended the run,
+/// or refused the request.
+#[must_use]
+pub(crate) fn unforwarded_interventions(trip: LoopGuardTrip, ended: bool) -> Vec<Intervention> {
+    let what = if ended {
+        InterventionKind::StoppedLoop { detector: trip }
+    } else {
+        InterventionKind::Refused {
+            reason: Refusal::Loop { detector: trip },
+        }
+    };
+    vec![Intervention::new(what)]
+}
+
+/// What was done to a request the context budget refused.
+#[must_use]
+pub(crate) fn clamped_interventions() -> Vec<Intervention> {
+    vec![Intervention::new(InterventionKind::Refused {
+        reason: Refusal::LongerThanContext,
+    })]
+}
 
 #[cfg(test)]
 #[path = "metrics_tests.rs"]

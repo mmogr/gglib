@@ -72,8 +72,8 @@ crates/gglib-cli/src/handlers/model/download/interactive.rs 400
 crates/gglib-cli/src/handlers/model/list_tests.rs 315
 crates/gglib-cli/src/handlers/model/update.rs 618
 crates/gglib-cli/src/handlers/model/update_surface_tests.rs 304
-crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 362
-crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 534
+crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 367
+crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 580
 crates/gglib-cli/src/handlers/up/choose.rs 351
 crates/gglib-cli/src/handlers/up/mod.rs 380
 crates/gglib-cli/src/handlers/up/probe.rs 310
@@ -211,8 +211,8 @@ crates/gglib-proxy/src/cache_lifecycle.rs 484
 crates/gglib-proxy/src/canonicalization.rs 601
 crates/gglib-proxy/src/connections.rs 881
 crates/gglib-proxy/src/dashboard.rs 570
-crates/gglib-proxy/src/dashboard_tests.rs 567
-crates/gglib-proxy/src/forward.rs 1619
+crates/gglib-proxy/src/dashboard_tests.rs 568
+crates/gglib-proxy/src/forward.rs 1625
 crates/gglib-proxy/src/forward_generation_tests.rs 546
 crates/gglib-proxy/src/forward_tests.rs 566
 crates/gglib-proxy/src/forward_unary_repair_tests.rs 316
@@ -222,7 +222,8 @@ crates/gglib-proxy/src/loop_guard.rs 609
 crates/gglib-proxy/src/loop_guard_tests.rs 1187
 crates/gglib-proxy/src/mcp/drawing.rs 337
 crates/gglib-proxy/src/mcp/handlers.rs 533
-crates/gglib-proxy/src/metrics.rs 507
+crates/gglib-proxy/src/metrics.rs 564
+crates/gglib-proxy/src/metrics_tests.rs 330
 crates/gglib-proxy/src/models.rs 561
 crates/gglib-proxy/src/models_tests.rs 561
 crates/gglib-proxy/src/props.rs 563
