@@ -115,3 +115,59 @@ async fn ensure_running_binds_the_stored_address() {
 
     proxy.stop().await.expect("stop should succeed");
 }
+
+/// The status says what the proxy demands now: nothing while no key is
+/// stored and none was started with, and the stored key as soon as one is,
+/// as a proxy started open picks it up through its tracking policy.
+#[tokio::test]
+async fn a_key_stored_after_an_open_start_is_required() {
+    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    assert_eq!(proxy.effective_api_key(), None);
+    assert_eq!(
+        proxy.key_state().await,
+        Some(gglib_core::domain::KeyState::NoneNeeded)
+    );
+
+    core.settings()
+        .update(gglib_core::SettingsUpdate {
+            proxy_api_key: Some(Some("stored-later".to_owned())),
+            ..gglib_core::SettingsUpdate::default()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        proxy.key_state().await,
+        Some(gglib_core::domain::KeyState::Required)
+    );
+}
+
+/// A settings store that cannot be read says nothing of the key: a proxy
+/// started open may be enforcing a stored key this cannot see, and "none
+/// needed" would be the wrong guess.
+#[tokio::test]
+async fn a_key_the_settings_cannot_say_is_unknown() {
+    use gglib_core::ports::{RepositoryError, SettingsRepository};
+
+    struct Unreadable;
+    #[async_trait::async_trait]
+    impl SettingsRepository for Unreadable {
+        async fn load(&self) -> Result<gglib_core::Settings, RepositoryError> {
+            Err(RepositoryError::Storage(
+                "the settings store is unreadable".to_owned(),
+            ))
+        }
+        async fn save(&self, _: &gglib_core::Settings) -> Result<(), RepositoryError> {
+            Err(RepositoryError::Storage(
+                "the settings store is unreadable".to_owned(),
+            ))
+        }
+    }
+
+    let pool = gglib_db::setup_test_database().await.expect("in-memory DB");
+    let mut repos = gglib_db::CoreFactory::build_repos(pool);
+    repos.settings = Arc::new(Unreadable);
+    let (_core, proxy) = crate::test_support::test_core_and_proxy_over(&repos);
+
+    assert_eq!(proxy.key_state().await, None);
+}

@@ -66,6 +66,10 @@ impl RemoteOps {
         // "not admitted" from a session that had already gone.
         let admitting = live.full().map(|l| l.handle.token_names());
         let now_ms = connect_watch::unix_ms();
+        let reach = gglib_core::domain::ReachState::of(
+            connected.is_some(),
+            connected.as_ref().is_some_and(|c| c.away_for_s.is_some()),
+        );
         let mut status = RemoteStatus {
             devices: device_view::viewed(roster, &held, admitting.as_deref(), now_ms),
             enabled: live.full().is_some(),
@@ -80,6 +84,7 @@ impl RemoteOps {
             last_tunnelled_ms: self.gateway.last_tunnelled_ms(),
             last_peer: self.gateway.last_peer(),
             connected,
+            reach,
             stored_ticket_fingerprint,
             paired_name,
             has_remote_key,

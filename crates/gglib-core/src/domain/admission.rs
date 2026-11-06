@@ -46,6 +46,9 @@ pub struct ResidentSlotSnapshot {
     /// Seconds this model has been resident.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub resident_for_secs: u64,
+    /// What it is doing there, as the one word every surface uses: `working`
+    /// while any request holds the slot, else `loaded`.
+    pub state: super::state_words::ResidencyState,
     /// The program serving it.
     pub runtime: RuntimeKind,
 }
@@ -265,6 +268,7 @@ mod tests {
             model_id: 1,
             port: 8080,
             inflight,
+            state: crate::domain::ResidencyState::of_inflight(inflight),
             is_primary,
             resident_for_secs: 10,
             runtime: RuntimeKind::Llama,

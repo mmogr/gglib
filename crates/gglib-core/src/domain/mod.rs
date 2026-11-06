@@ -43,6 +43,7 @@ pub(crate) mod query;
 pub(crate) mod reasoning_effort;
 pub mod recommendation;
 pub(crate) mod residency;
+pub mod revision;
 pub mod runs;
 pub(crate) mod runtime_capabilities;
 mod runtime_kind;
@@ -50,15 +51,18 @@ pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
+pub mod state_words;
 pub(crate) mod template_caps;
 pub mod tensor_table;
 pub mod thinking;
+pub mod variant_fit;
 
 // Re-export model types at the domain level for convenience
 pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
 pub use model::{Model, ModelComponent, ModelFilterOptions, NO_HUB_LABEL, NewModel};
 pub use model_detail::{ComponentLinkDto, ModelDetailDto, ModelLookup};
 pub use model_file::{ModelFile, ModelFolder, NewModelFile};
+pub use revision::{Revision, RevisionKind};
 
 // Re-export query types at the domain level for convenience
 pub use query::{ModelListQuery, ModelSortBy, SortOrder, apply_query};
@@ -85,6 +89,7 @@ pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};
+pub use state_words::{EndpointState, KeyState, ReachState, ResidencyState};
 
 // Re-export the template-capability self-report (ADR 0007) at the domain level
 pub use template_caps::{
@@ -113,6 +118,7 @@ pub use recommendation::{
 
 // Re-export a model's fit on a phone at the domain level for convenience
 pub use phone_fit::{FitVerdict, MissingInput, fit_verdict};
+pub use variant_fit::VariantFit;
 
 // Re-export admission-control telemetry at the domain level for convenience
 pub use admission::{

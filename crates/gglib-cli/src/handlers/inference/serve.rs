@@ -223,9 +223,9 @@ async fn serve_here(
     );
 
     let handle = daemon_client::ensure_daemon(ctx).await?;
-    let proxy_port = super::proxy::start_on(&handle, &body, &settings).await?;
+    let started = super::proxy::start_on(&handle, &body, &settings).await?;
     let reach = super::proxy::reached(options.host.as_deref(), &settings);
-    super::proxy::attach_dashboard(ctx, reach, proxy_port, access.api_key).await
+    super::proxy::attach_dashboard(ctx, reach, started.port, access.api_key).await
 }
 
 /// What `gglib serve` asks the daemon to start: the proxy as `planned`,

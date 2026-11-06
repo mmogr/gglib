@@ -290,12 +290,14 @@ fn admission_section_names_each_resident_and_its_role() {
         slots: vec![
             ResidentSlotSnapshot {
                 model_name: "qwen-coder".to_string(),
+                state: gglib_core::domain::ResidencyState::Working,
                 inflight: 2,
                 is_primary: true,
                 resident_for_secs: 95,
             },
             ResidentSlotSnapshot {
                 model_name: "nomic-embed".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: false,
                 resident_for_secs: 30,
@@ -306,11 +308,11 @@ fn admission_section_names_each_resident_and_its_role() {
 
     assert!(frame.contains("qwen-coder"), "{frame}");
     assert!(frame.contains("primary"), "{frame}");
-    assert!(frame.contains("2 in flight"), "{frame}");
+    assert!(frame.contains("Working (2)"), "{frame}");
     assert!(frame.contains("1m 35s"), "{frame}");
     assert!(frame.contains("nomic-embed"), "{frame}");
     assert!(frame.contains("secondary"), "{frame}");
-    assert!(frame.contains("idle"), "{frame}");
+    assert!(frame.contains("Loaded"), "{frame}");
 }
 
 /// The whole reason the server sends prose: an idle second slot has to

@@ -6,6 +6,8 @@
 //! without the routing around them.
 
 use gglib_core::Settings;
+use gglib_core::access::endpoint_base_url;
+use gglib_core::domain::{EndpointState, KeyState};
 use gglib_core::server_config::{ServerConfigOptions, chosen_context_size};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
@@ -16,9 +18,17 @@ use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ProxyStatus {
     pub running: bool,
+    /// The same fact as `running` and `pinned_model`, said as the one word
+    /// every surface uses: `on`, `off` or `pinned`.
+    pub state: EndpointState,
     pub port: Option<u16>,
-    pub current_model: Option<String>,
-    pub model_port: Option<u16>,
+    /// Where a client on this machine reaches it, `http://<address>/v1`; a
+    /// wildcard bind is reached on loopback. `None` while not listening.
+    pub base_url: Option<String>,
+    /// Whether a request must carry the API key, as the one word every
+    /// surface uses. `None` while not listening, and while listening when
+    /// the daemon could not read its settings to say.
+    pub key: Option<KeyState>,
     /// The model this proxy run is pinned to, when started in pinned mode
     /// (`gglib serve`). `None` for the ordinary auto-swapping proxy.
     pub pinned_model: Option<String>,
@@ -94,23 +104,31 @@ pub(crate) struct StartPinnedBody {
     pub proxy: StartProxyConfig,
 }
 
-/// Convert runtime `ProxyStatus` to API `ProxyStatus`.
-pub(super) fn to_api_status(s: &RuntimeProxyStatus, pinned_model: Option<String>) -> ProxyStatus {
+/// Convert runtime `ProxyStatus` to API `ProxyStatus`. `key` is what the
+/// proxy demands now, or `None` when that could not be read; it is
+/// reported only while the proxy listens.
+pub(super) fn to_api_status(
+    s: &RuntimeProxyStatus,
+    pinned_model: Option<String>,
+    key: Option<KeyState>,
+) -> ProxyStatus {
     match s {
         RuntimeProxyStatus::Running { address } => ProxyStatus {
             running: true,
+            state: EndpointState::listening(pinned_model.is_some()),
             port: Some(address.port()),
-            current_model: None,
-            model_port: None,
+            base_url: Some(endpoint_base_url(*address)),
+            key,
             pinned_model,
         },
         // A crashed proxy is not serving, so it reports exactly as a stopped
         // one does: no port to hand out, and no pin still in force.
         RuntimeProxyStatus::Stopped | RuntimeProxyStatus::Crashed => ProxyStatus {
             running: false,
+            state: EndpointState::Off,
             port: None,
-            current_model: None,
-            model_port: None,
+            base_url: None,
+            key: None,
             pinned_model: None,
         },
     }

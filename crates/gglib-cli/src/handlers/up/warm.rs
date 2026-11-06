@@ -1,5 +1,5 @@
-//! Step 5: prove the endpoint works, then say how to connect to it and what
-//! to run next.
+//! Step 5: prove the endpoint works, then say how to connect to it (the
+//! client block, `client_block`) and what to run next.
 //!
 //! The proxy runs on the daemon, so this talks to the endpoint over HTTP like
 //! any other client rather than reaching into a runtime: the point is to
@@ -13,10 +13,11 @@
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use gglib_core::secret::{SettingSecret, held_line};
 use serde_json::json;
 
+use super::client_block::{NO_ADDRESS, client_facts, render_client_config};
 use super::{sgr, use_color};
+use crate::handlers::inference::proxy::StartedProxy;
 use crate::presentation::style::{BOLD, DIM, RESET, SUCCESS, WARNING, make_spinner};
 
 /// How long to keep polling for the listener before giving up on it.
@@ -38,8 +39,13 @@ const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
 ///
 /// `model` is what a client sends, the id the endpoint lists it under;
 /// `model_id` is what a printed command takes: a name is often several words.
-pub(super) async fn run(port: u16, model: String, model_id: i64, api_key: Option<String>) {
-    let addr: SocketAddr = ([127, 0, 0, 1], port).into();
+pub(super) async fn run(
+    started: &StartedProxy,
+    model: String,
+    model_id: i64,
+    api_key: Option<String>,
+) {
+    let addr: SocketAddr = ([127, 0, 0, 1], started.port).into();
     let client = gglib_proxy::loopback::client();
 
     if !wait_for_bind(&client, addr).await {
@@ -50,7 +56,7 @@ pub(super) async fn run(port: u16, model: String, model_id: i64, api_key: Option
 
     let spinner = make_spinner();
     spinner.set_message(format!("Loading {model}..."));
-    let started = Instant::now();
+    let begun = Instant::now();
     let outcome = warm_request(&client, addr, &model, api_key.as_deref()).await;
     spinner.finish_and_clear();
 
@@ -60,7 +66,7 @@ pub(super) async fn run(port: u16, model: String, model_id: i64, api_key: Option
             "  {}\u{2713}{} endpoint answered in {:.1}s",
             sgr(SUCCESS),
             sgr(RESET),
-            started.elapsed().as_secs_f64()
+            begun.elapsed().as_secs_f64()
         ),
         Err(e) => {
             println!(
@@ -76,8 +82,18 @@ pub(super) async fn run(port: u16, model: String, model_id: i64, api_key: Option
         }
     }
 
-    for line in render_client_config(addr, &model, model_id, api_key.is_some(), use_color()) {
-        println!("{line}");
+    // The daemon said where a client reaches the endpoint and whether a
+    // request needs the key; the block prints its answer and works neither
+    // out for itself. A daemon that named no address is older than this
+    // CLI and is told so; one that named the address and could not read
+    // its settings to say of the key is printed as it answered.
+    match client_facts(&started.status) {
+        Some((base_url, key)) => {
+            for line in render_client_config(base_url, &model, model_id, key, use_color()) {
+                println!("{line}");
+            }
+        }
+        None => println!("{NO_ADDRESS}"),
     }
 }
 
@@ -140,78 +156,6 @@ async fn warm_request(
     }
 }
 
-/// Render the connection details, as data.
-///
-/// Split from printing for the same reason the launch narration is: the
-/// content is the deliverable — a user copies these values into a settings
-/// dialog — so it deserves assertions rather than an eyeball over terminal
-/// output.
-///
-/// Copilot gets its own line because its BYOK provider cannot switch models
-/// through `/v1/models`, which is precisely what `gglib serve` exists for.
-/// Sending someone there with the unpinned base URL would fail in a way that
-/// looks like gglib being broken.
-///
-/// Told whether the endpoint has a key, never the key, so it cannot print
-/// one (ADR 0027): this block is the one most likely to be pasted into a chat
-/// or an issue. The `curl` line reads the key through the reveal command.
-fn render_client_config(
-    addr: SocketAddr,
-    model: &str,
-    model_id: i64,
-    has_key: bool,
-    color: bool,
-) -> Vec<String> {
-    let (bold, dim, reset) = if color {
-        (BOLD, DIM, RESET)
-    } else {
-        ("", "", "")
-    };
-    let base = format!("http://{addr}/v1");
-
-    // "not-needed" is the honest answer only for an unauthenticated
-    // endpoint. A key is named, with the command that prints it.
-    let secret = SettingSecret::ProxyApiKey;
-    let (key_line, curl_line) = if has_key {
-        (
-            format!("      API Key    {}", held_line(secret)),
-            format!(
-                "      curl -H \"Authorization: Bearer $({})\" {base}/models",
-                secret.reveal_command()
-            ),
-        )
-    } else {
-        (
-            format!(
-                "      API Key    not-needed  {dim}(unused, but most clients demand one){reset}"
-            ),
-            format!("      curl {base}/models"),
-        )
-    };
-
-    vec![
-        String::new(),
-        format!("  {bold}Connect your client{reset}"),
-        String::new(),
-        format!("    Cline / Roo / Continue   {dim}provider: OpenAI Compatible{reset}"),
-        format!("      Base URL   {base}"),
-        key_line,
-        format!("      Model ID   {model}"),
-        String::new(),
-        format!("    Open WebUI               {dim}Settings -> Connections -> OpenAI API{reset}"),
-        format!("      URL        {base}"),
-        String::new(),
-        format!("    VS Code Copilot (BYOK) needs one fixed model, so use:"),
-        format!("      gglib serve {model_id}"),
-        String::new(),
-        format!("    Check it from another shell:"),
-        curl_line,
-        String::new(),
-        format!("  Dashboard  http://{addr}/v1/proxy/status"),
-        String::new(),
-    ]
-}
-
 /// What to run once `up` is done, as data: the endpoint keeps serving on the
 /// daemon, so the list ends with how to watch it and how to stop it. The model
 /// is named by its id, which a shell passes as one argument.
@@ -244,93 +188,7 @@ pub(super) fn render_next_steps(port: u16, model_id: i64, color: bool) -> Vec<St
 
 #[cfg(test)]
 mod tests {
-    use gglib_core::settings::DEFAULT_PROXY_PORT;
-
     use super::*;
-
-    fn addr() -> SocketAddr {
-        ([127, 0, 0, 1], DEFAULT_PROXY_PORT).into()
-    }
-
-    /// The three values a user actually retypes. If any goes missing the
-    /// command has failed at its whole purpose.
-    #[test]
-    fn the_pasteable_values_are_all_present() {
-        let lines = render_client_config(addr(), "qwen3-30b-a3b", 7, false, false);
-        let text = lines.join("\n");
-        assert!(text.contains(&format!("http://127.0.0.1:{DEFAULT_PROXY_PORT}/v1")));
-        assert!(text.contains("qwen3-30b-a3b"));
-        assert!(text.contains("not-needed"));
-    }
-
-    /// Copilot cannot use the unpinned endpoint; the pinned alternative has to
-    /// be spelled out with the model already filled in, by id: a name such as
-    /// "Qwen3 8B" would reach `serve` as two arguments.
-    #[test]
-    fn copilot_is_pointed_at_the_pinned_command() {
-        let lines = render_client_config(addr(), "Qwen3 8B", 7, false, false);
-        assert!(lines.iter().any(|l| l.ends_with("gglib serve 7")));
-        assert!(!lines.iter().any(|l| l.contains("gglib serve Qwen3")));
-    }
-
-    #[test]
-    fn a_verification_command_is_offered() {
-        let lines = render_client_config(addr(), "m", 1, false, false);
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("curl") && l.contains("/models"))
-        );
-    }
-
-    #[test]
-    fn the_dashboard_url_is_included() {
-        let lines = render_client_config(addr(), "m", 1, false, false);
-        assert!(lines.iter().any(|l| l.contains("/v1/proxy/status")));
-    }
-
-    /// Piped or captured output must be clean — this block is the one most
-    /// likely to be copied out of a terminal into a chat or an issue.
-    #[test]
-    fn no_ansi_escapes_when_color_is_off() {
-        let lines = render_client_config(addr(), "m", 1, false, false);
-        assert!(lines.iter().all(|l| !l.contains('\u{1b}')));
-    }
-
-    #[test]
-    fn ansi_escapes_appear_only_when_color_is_on() {
-        let lines = render_client_config(addr(), "m", 1, false, true);
-        assert!(lines.iter().any(|l| l.contains(DIM)));
-        assert!(lines.iter().any(|l| l.contains(BOLD)));
-    }
-
-    /// The address is not hardcoded — `--port` has to reach the printed URLs.
-    #[test]
-    fn a_non_default_port_reaches_every_url() {
-        let lines = render_client_config(([127, 0, 0, 1], 9999).into(), "m", 1, false, false);
-        let text = lines.join("\n");
-        assert!(text.contains("http://127.0.0.1:9999/v1"));
-        assert!(!text.contains(&DEFAULT_PROXY_PORT.to_string()));
-    }
-
-    /// A keyed endpoint is said to have a key, and the `curl` line reads it
-    /// through the reveal, which then runs in the reader's own shell.
-    #[test]
-    fn a_key_is_named_and_read_through_the_reveal() {
-        let text = render_client_config(addr(), "m", 1, true, false).join("\n");
-
-        assert!(
-            text.contains("API Key    (set, not shown)"),
-            "the key is said to be held: {text}"
-        );
-        assert!(
-            text.contains(
-                "curl -H \"Authorization: Bearer $(gglib config settings reveal proxy-api-key)\""
-            ),
-            "{text}"
-        );
-        assert!(!text.contains("not-needed"), "{text}");
-    }
 
     /// `up` ends here rather than in the dashboard, so the list has to name
     /// the chat, the web page, and how to watch and stop what is still
