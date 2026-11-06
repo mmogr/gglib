@@ -15,21 +15,21 @@ export interface LlamaShellStatus {
   canDownload: boolean;
   /**
    * The update to offer, as a missing install is: what is installed is
-   * older than the pinned release, the update is a download, and no chat
-   * model runs on llama-server. An update the command line would build is
-   * the terminal's.
+   * older than the pinned release, and the update is a download. Offered
+   * while a chat model runs on llama-server too: the daemon refuses the
+   * install then, and says which model to stop. An update the command line
+   * would build is the terminal's.
    */
   update: LlamaUpdate | null;
 }
 
 /**
- * The update `setup` calls for, if any: one the daemon can run, a download,
- * under no running chat model. One the command line would build is left to
- * it, as the Settings card says.
+ * The update `setup` calls for, if any: one the daemon can run, a download.
+ * One the command line would build is left to it, as the Settings card says.
  */
 function updateOf(setup: SetupStatus): LlamaUpdate | null {
   const pin = setup.llamaPin;
-  if (pin?.standing !== 'older' || !pin.updateDownloads || setup.llamaServing || !pin.targetRelease) {
+  if (pin?.standing !== 'older' || !pin.updateDownloads || !pin.targetRelease) {
     return null;
   }
   return { installed: pin.installedRelease ?? 'unknown', target: pin.targetRelease };

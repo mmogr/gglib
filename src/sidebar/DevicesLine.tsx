@@ -16,21 +16,14 @@
 
 import { useRef, useState } from 'react';
 import { RemotePopover } from '../components/RemoteControl';
-import { StatusMark, type MarkKind } from '../components/status/StatusMark';
+import { REACH_MARK, StatusMark, type MarkKind } from '../components/status/StatusMark';
 import { REACH_WORDS } from '../components/status/words';
 import { Button } from '../components/ui/Button';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { pairedName, useRemoteState } from '../services/remoteRegistry';
 import type { RemoteStatus } from '../services/transport/types/remote';
-import type { ReachState } from '../types/generated/ReachState';
 import { cn } from '../utils/cn';
 import { POPOVER_BESIDE, SPREAD } from './placement';
-
-const REACH_MARK: Record<ReachState, MarkKind> = {
-  connected: 'on',
-  away: 'away',
-  disconnected: 'off',
-};
 
 /** What the line says at its right, from the last status and any offer. */
 export type DevicesSaying = { mark: MarkKind; word: string; name?: string } | null;

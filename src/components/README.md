@@ -15,11 +15,11 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
                      └──────────────────────┴───────┬───────┘
                                                     │
 ┌───────────────────────────────────────────────────┴─┐
-│ ModelControlCenterPage                              │
+│ places/library/LibraryPlace                         │
 │ (/library, /models/:id, /far/:id)                   │
 │  ┌─────────────┬─────────────┐                      │
 │  │   Library   │  Inspector  │                      │
-│  │    Panel    │    Panel    │                      │
+│  │    rows     │    Panel    │                      │
 │  └─────────────┴─────────────┘                      │
 └─────────────────┬───────────────────────────────────┘
                   │  other addresses, lazy-loaded
@@ -37,7 +37,8 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
 ## Layout Structure
 
 The window is a sidebar (`src/sidebar/`) beside the place the address names
-(`app/Shell.tsx`); there is no header. The Library place is a 2-panel layout:
+(`app/Shell.tsx`); there is no header. The Library place (`src/places/library/`)
+is the library's rows, with the inspector beside them while it has a subject:
 
 1. **Model Library Panel** (left): Browse models, search/filter, add new models
 2. **Model Inspector Panel** (right): View details, serve models, manage servers
@@ -53,13 +54,11 @@ A chat is its own address, with tab switching:
 - **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and tells its caller, which says "copied" where it lives
 
 ### Model Management
-- **`ModelLibraryPanel/`**: Main model browser with tabbed interface:
-  - "Your Models" tab: List of imported models with search/filter
-  - "Add Models" tab: Add local files or download from HuggingFace
+- **`ModelLibraryPanel/`**: What the library's Add pane (`/library?view=add`) shows until the one search replaces it: the Hugging Face browser and the local-file form, and the suggestion for this machine
 - **`ModelInspectorPanel/`**: Detailed model view with serve/stop controls
 - **`AddModel.tsx`**: Add model from local file
-- **`VisionChip.tsx`**: The neutral "Vision" chip on a model that reads images, shared by the library rows, this machine's and the paired machine's, and both inspectors
-- **`DrawsChip.tsx`**: The neutral "Draws · <family>" chip on this machine's model that draws images, in its library row and its inspector's header; its title names the roles still missing a file
+- **`VisionChip.tsx`**: The neutral "Vision" chip on a model that reads images, in both inspectors' headers
+- **`DrawsChip.tsx`**: The neutral "Draws · <family>" chip on this machine's model that draws images, in its inspector's header; its title names the roles still missing a file
 - **`HuggingFaceBrowser/`**: Browse and search GGUF models on HuggingFace Hub
 
 ### Chat Interface
@@ -78,10 +77,9 @@ When a model is served, users can switch between Chat and Console views:
 ### Server Management
 - **`ProxyControl.tsx`**: `ProxyPopover`, today's proxy panel (Turn on / off, the URL, the dashboard, Clear Cache), anchored by the sidebar's endpoint line until the Endpoint place replaces it
 - **`RemoteControl.tsx`**: `RemotePopover`, the remote tunnel panel (ADR 0012) — this machine's proxy on another machine, or another's here; its two halves live in `remote/`; anchored by the sidebar's devices line until the Devices place replaces it
-- **`LlamaInstallModal.tsx`**: Offers to install llama.cpp and runs the daemon's install stream, the one the setup wizard uses
+- **`LlamaInstallModal.tsx`**: Offers to install llama.cpp and runs the daemon's install stream, the one the setup wizard uses; opened by a refused server start in the inspector
 
 ### Support Components
-- **`GlobalDownloadStatus/`**: The running download's card, drawn from the daemon's queue snapshot, and the popover of waiting downloads
 - **`Toast/`**: Reusable toast notification system for success/error/info messages
 
 <!-- module-docs:end -->

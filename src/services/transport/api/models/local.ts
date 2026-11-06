@@ -11,7 +11,6 @@ import type {
   ComponentChoices,
   GgufModel,
   ModelDetail,
-  ModelFilterOptions,
   ModelsDirectoryInfo,
   RetagResponse,
   LaunchExplanation,
@@ -184,13 +183,6 @@ export async function upgradeModel(modelId: number): Promise<UpgradeQueued> {
   return post<UpgradeQueued>(`/api/models/${modelId}/upgrade`, null);
 }
 
-
-/**
- * Get available filter options (tags, quantizations, parameter ranges).
- */
-export async function getModelFilterOptions(): Promise<ModelFilterOptions> {
-  return get<ModelFilterOptions>('/api/models/filter-options');
-}
 
 /**
  * Get models directory information.

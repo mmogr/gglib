@@ -19,7 +19,7 @@
 import type { ReactNode } from 'react';
 import { createBrowserRouter, createMemoryRouter, Navigate, type RouteObject } from 'react-router';
 
-import ModelControlCenterPage from '../pages/ModelControlCenterPage';
+import LibraryPlace from '../places/library/LibraryPlace';
 import { takeDaemonToken } from '../services/transport/api/daemonToken';
 import { BenchmarkRoute } from './BenchmarkRoute';
 import { ChatRoute } from './ChatRoute';
@@ -29,7 +29,7 @@ import { paths } from './paths';
 export const routes: RouteObject[] = [
   { index: true, element: <Navigate to={paths.library()} replace /> },
   {
-    element: <ModelControlCenterPage />,
+    element: <LibraryPlace />,
     children: [{ path: 'library' }, { path: 'models/:id' }, { path: 'far/:id' }],
   },
   { path: 'chat/far/:id', element: <FarChatRoute /> },

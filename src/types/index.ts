@@ -552,18 +552,8 @@ export type { HfCompanion } from './generated/HfCompanion';
 export type { ToolSupportResponse } from './generated/ToolSupportResponse';
 
 // ============================================================================
-// Model Filter Options Types
+// Model List Query Types
 // ============================================================================
-
-/**
- * Filter options for the model library UI.
- *
- * All three ranges are required nullables. The mirror made `speed_range`
- * optional, which read as "a backend that has not benchmarked anything omits
- * the key" — it does not; it sends `null`, exactly as the other two do when
- * the library is empty.
- */
-export type { ModelFilterOptions } from './generated/ModelFilterOptions';
 
 /**
  * Sort field for `GET /api/models`.

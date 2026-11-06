@@ -62,7 +62,7 @@ pub mod variant_fit;
 
 // Re-export model types at the domain level for convenience
 pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
-pub use model::{Model, ModelComponent, ModelFilterOptions, NO_HUB_LABEL, NewModel};
+pub use model::{Model, ModelComponent, NO_HUB_LABEL, NewModel};
 pub use model_detail::{ComponentLinkDto, ModelDetailDto, ModelLookup};
 pub use model_file::{ModelFile, ModelFolder, NewModelFile};
 pub use revision::{Revision, RevisionKind};
@@ -206,7 +206,6 @@ pub(crate) use context_fit::SECOND_RUNG;
 pub use context_fit::{FitInputs, fit_context, fit_context_explained};
 pub use generation_config::generation_config_candidates;
 pub use generation_config::parse_generation_config;
-pub use model::RangeValues;
 pub use model::is_system_tag;
 pub(crate) use model::missing_roles;
 pub use model_naming::declared_name;

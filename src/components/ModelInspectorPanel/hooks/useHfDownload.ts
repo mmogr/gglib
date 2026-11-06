@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { appLogger } from '../../../services/platform';
 import type { QueueSnapshot } from '../../../services/transport/types/downloads';
 import { useToastContext } from '../../../contexts/ToastContext';
-import { getTransport } from '../../../services/transport';
+import { queueDownload } from '../../../services/downloadsEvents';
 
 export interface HfDownloadState {
   handleHfDownload: (modelId: string, quantization: string) => Promise<void>;
@@ -19,7 +19,7 @@ export function useHfDownload(downloadQueue: QueueSnapshot | null | undefined): 
 
   const handleHfDownload = useCallback(async (modelId: string, quantization: string) => {
     try {
-      await getTransport().queueDownload({ modelId, quantization });
+      await queueDownload(modelId, quantization);
       showToast(`Download queued: ${modelId}`, 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start download';

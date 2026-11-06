@@ -111,7 +111,7 @@ describe.each([
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('offers the pinned release over an older llama.cpp, unless a chat model runs or it was built from source', async () => {
+  it('offers the pinned release over an older llama.cpp, a chat model running or not, unless it was built from source', async () => {
     fetchMock
       .mockResolvedValueOnce(setupStatus(true, true, pin('older')))
       .mockResolvedValueOnce(setupStatus(true, true, { ...pin('older'), llamaServing: 'qwen' }))
@@ -122,7 +122,10 @@ describe.each([
     await waitFor(() =>
       expect(result.current.status?.update).toEqual({ installed: 'b10327', target: 'b11429' }),
     );
-    for (let read = 0; read < 3; read += 1) {
+    // The daemon refuses the install under a running model, and says so.
+    await act(() => result.current.checkStatus());
+    expect(result.current.status?.update).toEqual({ installed: 'b10327', target: 'b11429' });
+    for (let read = 0; read < 2; read += 1) {
       await act(() => result.current.checkStatus());
       expect(result.current.status?.update).toBeNull();
     }

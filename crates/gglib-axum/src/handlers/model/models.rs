@@ -10,7 +10,6 @@ use gglib_app_services::types::{
     AddModelRequest, ComponentChoices, GuiModel, ProjectorChoice, RemoveModelRequest,
     SetCapabilitiesRequest, UpdateModelRequest,
 };
-use gglib_core::ModelFilterOptions;
 use gglib_core::domain::{ModelDetailDto, ModelListQuery, ModelSortBy, SortOrder};
 use gglib_core::services::ImportMode;
 
@@ -174,13 +173,6 @@ pub(crate) async fn remove_tag(
 ) -> Result<(), HttpError> {
     state.models.remove_tag(id, tag).await?;
     Ok(())
-}
-
-/// Get filter options for the model list UI.
-pub(crate) async fn filter_options(
-    State(state): State<AppState>,
-) -> Result<Json<ModelFilterOptions>, HttpError> {
-    Ok(Json(state.models.get_filter_options().await?))
 }
 
 /// Request body for `POST /api/models/{id}/retag`.

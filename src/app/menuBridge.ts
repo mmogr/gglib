@@ -17,7 +17,7 @@
  */
 
 import type { ToastType } from '../components/Toast';
-import { refreshLibrary, removeModel } from '../services/modelEvents';
+import { refreshModels, removeModel } from '../services/modelEvents';
 import { getModelLibrary } from '../services/modelRegistry';
 import { appLogger, listenToMenuEvents, MENU_EVENTS, setSelectedModel, syncMenuStateSilent } from '../services/platform';
 import { safeStopServer } from '../services/server/safeActions';
@@ -88,7 +88,7 @@ export function menuHandlers(notify: Notify) {
     [MENU_EVENTS.ADD_MODEL_FILE]: () => navigate(paths.libraryAdd('add')),
     [MENU_EVENTS.SHOW_DOWNLOADS]: () => navigate(paths.libraryAdd('browse')),
     [MENU_EVENTS.SHOW_CHAT]: () => showChat(notify),
-    [MENU_EVENTS.REFRESH_MODELS]: () => void refreshLibrary(),
+    [MENU_EVENTS.REFRESH_MODELS]: () => void refreshModels(),
     [MENU_EVENTS.START_SERVER]: () => {
       const selected = selectedModelId();
       if (selected !== null) navigate(paths.serve(selected));

@@ -17,10 +17,6 @@
  * library through `ModelOps`: it posts the daemon the event its change
  * emitted. Downloads are covered separately, by the download event stream.
  *
- * A screen that keeps more than the list from the library, such as the filter
- * options and the tag list, listens with `onModelLibraryChange` and is told
- * once per burst, as the registry is.
- *
  * @module services/modelEvents
  */
 
@@ -30,10 +26,6 @@ import type { ModelUpdates } from './modelRegistry';
 import { getTransport } from './transport';
 import type { ModelEvent } from './transport/types/events';
 import { createBatchWithinWindow, DEFAULT_BATCH_WINDOW_MS } from '../utils/batchWithinWindow';
-
-type Listener = () => void;
-
-const listeners = new Set<Listener>();
 
 /** Whether the bridge is up: a read asked while it is down writes nothing. */
 let live = false;
@@ -48,10 +40,9 @@ const bridge = bridgeEvents({
   reset: resetModelLibrary,
 });
 
-/** One burst of events: read again, and tell whoever keeps more than the list. */
+/** One burst of events: read again. */
 function onBurst(): void {
   void bridge.refresh();
-  listeners.forEach((listener) => listener());
 }
 
 /**
@@ -84,29 +75,6 @@ export async function refreshModels(): Promise<void> {
   if (!live) return;
   const first = await bridge.refresh();
   if (first === 'superseded' && live) await bridge.refresh();
-}
-
-/**
- * Refresh everything the library feeds: the registry, and whoever listens
- * with `onModelLibraryChange`. The page's Refresh button and the native
- * menu's Refresh Models are this one verb.
- */
-export async function refreshLibrary(): Promise<void> {
-  listeners.forEach((listener) => listener());
-  await refreshModels();
-}
-
-/**
- * Be told once per burst of library events, after the registry's own re-read
- * has been asked for, and on `refreshLibrary`. For state kept beside the
- * list, such as the filter options and the tags, which a change to the
- * library may have moved too.
- */
-export function onModelLibraryChange(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
 }
 
 /** Register a model file, then read the library again. */

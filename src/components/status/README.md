@@ -13,6 +13,6 @@ word, never a colour alone.
 | File | Purpose |
 |------|---------|
 | `words.ts` | `ENDPOINT_WORDS`, `RESIDENCY_WORDS`, `REACH_WORDS`, `KEY_WORDS`: the word for each `EndpointState`, `ResidencyState`, `ReachState` and `KeyState` |
-| `StatusMark.tsx` | The shape for a state (`on` ● filled, `off` ○ hollow, `changing` ◌ an arc that turns, `away` ◌ amber, `attention` ▲, `failed` ✕) with the word beside it, or a label for readers when the shape stands alone |
+| `StatusMark.tsx` | The shape for a state (`on` ● filled, `off` ○ hollow, `changing` ◌ an arc that turns, `away` ◌ amber, `attention` ▲, `failed` ✕) with the word beside it, or a label for readers when the shape stands alone; `REACH_MARK` and `RESIDENCY_MARK`, the shape for each `ReachState` and `ResidencyState` |
 
 <!-- module-docs:end -->

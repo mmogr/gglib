@@ -10,21 +10,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-vi.mock('../../../src/pages/ModelControlCenterPage', () => ({ default: () => <main aria-label="Library" /> }));
+vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 vi.mock('../../../src/app/BenchmarkRoute', () => ({ BenchmarkRoute: () => <main aria-label="Benchmarks" /> }));
 vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
 vi.mock('../../../src/components/SettingsModal', () => ({ default: () => null }));
-vi.mock('../../../src/components/LlamaInstallModal', () => ({ default: () => null }));
 vi.mock('../../../src/components/SetupWizard', () => ({ default: () => null }));
-vi.mock('../../../src/hooks/useLlamaStatus', () => {
-  const llama = {
-    status: { installed: true, canDownload: false },
-    loading: false,
-    error: null,
-    checkStatus: vi.fn(),
-  };
-  return { useLlamaStatus: () => llama };
-});
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   syncMenuStateSilent: vi.fn(),
@@ -36,6 +26,11 @@ vi.mock('../../../src/services/serverEvents', () => ({ initServerEvents: vi.fn()
 vi.mock('../../../src/services/proxyEvents', () => ({ initProxyEvents: vi.fn(), cleanupProxyEvents: vi.fn() }));
 vi.mock('../../../src/services/remoteEvents', () => ({ initRemoteEvents: vi.fn(), cleanupRemoteEvents: vi.fn() }));
 vi.mock('../../../src/services/modelEvents', () => ({ initModelEvents: vi.fn(), cleanupModelEvents: vi.fn() }));
+vi.mock('../../../src/services/downloadsEvents', () => ({
+  initDownloadEvents: vi.fn(),
+  cleanupDownloadEvents: vi.fn(),
+  onDownloadEndings: vi.fn(() => () => {}),
+}));
 vi.mock('../../../src/services/transport', () => ({ getTransport: () => ({ getSettings: async () => ({}) }) }));
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getSetupStatus: async () => ({ setupCompleted: true }),

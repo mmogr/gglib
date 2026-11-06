@@ -77,9 +77,11 @@ not because it belongs here.
 | `remoteEvents.ts` | Subscribes to `remote_*` events, ingests them into `remoteRegistry`, and re-reads the status after each |
 | `modelRegistry.ts` | External store for this machine's model library, read once by every surface that shows it: the list as last read, whether a read has answered, and why the last one failed |
 | `modelEvents.ts` | Fills `modelRegistry`: a read on init, one after each burst of `model_*` events (batched, so a retag of many is one read), and one after each edit made through its `addModel`/`removeModel`/`updateModel` |
+| `downloadsRegistry.ts` | External store for the download queue, read by the library's Downloading group and the inspector's Download buttons: the daemon's snapshot, a newer `revision` replacing an older one whichever way it came, and the cancel that is out |
+| `downloadsEvents.ts` | Fills `downloadsRegistry`: the queue read on init and on every opening of the event stream (the revision forgotten, for a restarted daemon), and every `queue_snapshot` between (only a snapshot overtakes a read that is out; an ending carries none); settles a cancel on the download's ending or another's start; batches completions into one library read and one word to `onDownloadEndings`, failures told at once; queue, cancel and remove |
 | `dashboardRegistry.ts` | One `/v1/proxy/status/stream` per endpoint and credential, ref-counted: opened by the first surface that wants it, closed by the last, reopened when the key changes |
 | `createEventStore.ts` | Shared store factory behind the registries: one value, replaced whole on each write, with a `useSyncExternalStore` hook over it |
-| `bridgeEvents.ts` | Shared bridge behind the `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event or a cleanup overtook |
+| `bridgeEvents.ts` | Shared bridge behind the `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event (or only the events `overtakes` names) or a cleanup overtook |
 | `agentOverrides.ts` | Per-session chat overrides, in two halves: `agentOverridesToWire()` builds the `config` object, `reasoningOverridesToWire()` builds the top-level reasoning fields the request declares separately |
 
 ## Clients

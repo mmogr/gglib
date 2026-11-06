@@ -15,8 +15,8 @@ Custom React hooks for gglib GUI functionality.
 │   │                              Custom Hooks                                   │   │
 │   │                                                                             │   │
 │   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │   │
-│   │  │ useServers  │  │ useSettings │  │  useTags    │  │ useProxyKey │         │   │
-│   │  │Registry view│  │   Config    │  │  Tagging    │  │  Reveal     │         │   │
+│   │  │ useServers  │  │ useSettings │  │useMcpServers│  │ useProxyKey │         │   │
+│   │  │Registry view│  │   Config    │  │ MCP servers │  │  Reveal     │         │   │
 │   │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │   │
 │   │         │                │                │                │                │   │
 │   │         └────────────────┴────────────────┴────────────────┘                │   │
@@ -43,7 +43,6 @@ Custom React hooks for gglib GUI functionality.
 | [`useThinkingSwitch.ts`](useThinkingSwitch.ts) | The chat's Thinking switch: shown where its model thinks, by `thinks` (this machine's model, the paired machine's row for it, or a far chat's row for the model it last ran on); showing what gglib remembers of the chat until it is clicked; and saying the choice on a send, `off` or `default`, until the turn that says it is accepted, after which the choice shows only until the chat is next read and that reading is shown whatever it says; a choice no accepted turn has said ends when a reading of the chat agrees with it |
 | [`useChatFolder.ts`](useChatFolder.ts) | The chat's folder, where gglib's own file tools read in its runs on this machine ([ADR 0023](../../docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md)): the choice made here (picked with the native dialog, or typed on web, or cleared), else what gglib remembers (`settings.folder`); said on the run that changes it, the path or `""` for Clear, until that turn is accepted or a reading agrees; an error state after a run refused for its folder (`folder_unusable`, `folder_missing`) until another is chosen, it is cleared or a turn is accepted; none on a far chat, and none offered to a model that calls no tools unless its chat has one; held in memory per chat, moved to the chat a first send makes |
 | [`useDrawSwitch.ts`](useDrawSwitch.ts) | The composer's Draw button: greyed, with the reason, until the machine that would draw answers that a message can (`drawingAvailability`: this machine's answer, told that the model is the paired machine's or calls no tools, or the far machine's for a far chat) and whenever it answers that it cannot; pressed, armed for the open chat's next start, which says `draw`: a send, or an answer run (an edit, a regenerate or a Retry) started while it is armed; no longer armed once that turn is accepted, and still armed after a refused one. It also holds the open chat's choice of image model, where that machine lists two or more: a pick is asked about (`image_model` on the question, so one that cannot draw greys the button with the machine's reason), presses the button, and is said as `imageModel` on every start that says `draw` while it stands; held in memory per chat and per machine, moved to the chat a first turn makes, and never sent to a machine whose answer listed no models |
-| [`useTags.ts`](useTags.ts) | Model tagging operations |
 | [`useMcpServers.ts`](useMcpServers.ts) | MCP server configuration |
 | [`useSettings.ts`](useSettings.ts) | Application settings management |
 
@@ -51,14 +50,13 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useDownloadManager.ts`](useDownloadManager.ts) | Holds the daemon's queue snapshot, from the queue route and the event stream, newest `revision` winning; queue, cancel and clear |
-| [`useDownloadCompletionEffects.ts`](useDownloadCompletionEffects.ts) | Batches download completions into one library refresh and one toast; raises an error toast for each failure. A toast for one download is the daemon's own text for how it ended |
+| [`useDownloadToasts.ts`](useDownloadToasts.ts) | How downloads ended, as toasts on any screen, mounted once by the app's layout: completions batched by `services/downloadsEvents` (one download in the daemon's words, several counted), each failure its own error toast. The queue itself is `services/downloadsRegistry` |
 
 ### System Hooks
 
 | Hook | Description |
 |------|-------------|
-| [`useLlamaStatus.ts`](useLlamaStatus.ts) | Whether llama.cpp is installed and can be downloaded, from the daemon's setup-status route |
+| [`useLlamaStatus.ts`](useLlamaStatus.ts) | Whether llama.cpp is installed and can be downloaded, and the update to offer (a model running on it or not; the daemon refuses an install under one), from the daemon's setup-status route |
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |
 | [`useToolSupportCache.ts`](useToolSupportCache.ts) | Whether a HuggingFace model supports tool calling, cached in memory and shared across components |
@@ -72,7 +70,6 @@ Custom React hooks for gglib GUI functionality.
 | [`useDebounce.ts`](useDebounce.ts) | Debounced value updates |
 | [`useClickOutside.ts`](useClickOutside.ts) | Click outside detection for dropdowns |
 | [`useFileDropGuard.ts`](useFileDropGuard.ts) | Refuses a file dragged or dropped where nothing takes it, so the desktop window never opens it in place of the app |
-| [`useModelFilterOptions.ts`](useModelFilterOptions.ts) | Model filtering and sorting |
 | [`useMetricHistory.ts`](useMetricHistory.ts) | Ring buffer of samples, either as-is or as the per-second rate of a cumulative counter |
 | [`usePanelResize.ts`](usePanelResize.ts) | Draggable split with min/max bounds, optionally persisted to `localStorage` |
 | [`useToastTimer.ts`](useToastTimer.ts) | Toast auto-dismiss countdown with pause and resume |

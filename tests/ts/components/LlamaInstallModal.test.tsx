@@ -1,5 +1,6 @@
 /**
- * The llama.cpp install prompt runs the daemon's install.
+ * The llama.cpp install prompt, opened by a server start that found no
+ * llama-server, runs the daemon's install.
  *
  * There were two installs. The setup wizard read the daemon's stream; this
  * prompt called a command only the desktop app had, so in a browser its
@@ -76,10 +77,11 @@ describe.each([
     vi.unstubAllGlobals();
   });
 
-  /** Open the prompt as the app shell does and press its install button. */
-  async function pressInstall(onInstalled = vi.fn()) {
-    const view = render(<LlamaInstallModal canDownload onSkip={vi.fn()} onInstalled={onInstalled} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Install llama.cpp' }));
+  /** Open the prompt as the inspector does and press its install button. */
+  async function pressInstall(onClose = vi.fn()) {
+    const view = render(<LlamaInstallModal metadata={METADATA} onClose={onClose} />);
+    expect(screen.getByText(METADATA.expectedPath)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Install now' }));
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     return view;
   }
@@ -108,38 +110,30 @@ describe.each([
     expect(screen.getByText(formatRate(2_500_000))).toBeInTheDocument();
     expect(screen.getByText(`${formatDuration(6)} remaining`)).toBeInTheDocument();
     // Nothing closes the prompt or starts a second install while one runs.
-    expect(screen.queryByRole('button', { name: 'Install llama.cpp' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Install now' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Close dialog' })).toBeDisabled();
   });
 
-  it('ends as complete, names the version installed, reports it once, and stays up to be read', async () => {
-    const onInstalled = vi.fn();
+  it('closes once the install completes, and not before', async () => {
     const onClose = vi.fn();
-    render(<LlamaInstallModal canDownload onClose={onClose} onInstalled={onInstalled} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Install llama.cpp' }));
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await pressInstall(onClose);
 
-    stream.send({ type: 'phase_started', phase: 'verify' });
+    stream.send({ type: 'phase_started', phase: 'extract' });
+    expect(await screen.findByText(INSTALL_PHASE_LABELS.extract)).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
     stream.send({ type: 'completed', version: 'b6123' });
     stream.close();
 
-    expect(await screen.findByText('Installation complete')).toBeInTheDocument();
-    expect(screen.getByText(/llama\.cpp b6123 is ready/)).toBeInTheDocument();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     // The stream closing after its result is not a second result.
     await settled();
-    expect(screen.getByText('Installation complete')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Install llama.cpp' })).not.toBeInTheDocument();
-    expect(onInstalled).toHaveBeenCalledTimes(1);
-    // It is over: nothing is still drawn as running, and the prompt can be closed again.
-    expect(screen.queryByText('Preparing download…')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Close dialog' })).toBeEnabled();
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('shows the daemon\'s own words when the install fails, and installs again when asked', async () => {
-    const onInstalled = vi.fn();
-    await pressInstall(onInstalled);
+    const onClose = vi.fn();
+    await pressInstall(onClose);
 
     stream.send({ type: 'failed', message: 'Failed to install llama.cpp: no asset for this platform' });
     stream.close();
@@ -147,17 +141,15 @@ describe.each([
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to install llama.cpp: no asset for this platform');
     await settled();
     expect(screen.getByRole('alert')).toHaveTextContent('Failed to install llama.cpp: no asset for this platform');
-    expect(onInstalled).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
 
     stream = installStream();
-    await userEvent.click(screen.getByRole('button', { name: 'Install llama.cpp' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Install now' }));
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     stream.send({ type: 'completed', version: 'b6123' });
-    expect(await screen.findByText('Installation complete')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(onInstalled).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
   it('shows the daemon\'s refusal when the request itself is refused', async () => {
@@ -170,7 +162,7 @@ describe.each([
     await pressInstall();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('the daemon is shutting down');
-    expect(screen.getByRole('button', { name: 'Install llama.cpp' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Install now' })).toBeEnabled();
   });
 
   it('stops installing, and says why, when the stream closes having reported no result', async () => {
@@ -180,7 +172,7 @@ describe.each([
     stream.close();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/ended before it reported a result/);
-    expect(screen.getByRole('button', { name: 'Install llama.cpp' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Install now' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Close dialog' })).toBeEnabled();
   });
 
@@ -192,73 +184,5 @@ describe.each([
     unmount();
 
     expect(init.signal?.aborted).toBe(true);
-  });
-
-  it('shows why the install state could not be read, until an install is tried', async () => {
-    render(<LlamaInstallModal canDownload error="Failed to check llama status: offline" onSkip={vi.fn()} />);
-    expect(screen.getByRole('alert')).toHaveTextContent('Failed to check llama status: offline');
-
-    await userEvent.click(screen.getByRole('button', { name: 'Install llama.cpp' }));
-    stream.send({ type: 'failed', message: 'no disk space' });
-
-    await vi.waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('no disk space'));
-  });
-
-  it('offers an older llama.cpp the pinned release, over the same install stream', async () => {
-    render(
-      <LlamaInstallModal canDownload update={{ installed: 'b10327', target: 'b11429' }} onSkip={vi.fn()} />,
-    );
-
-    expect(screen.getByText(/llama\.cpp b10327 is installed; gglib now uses b11429/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Update to b11429' }));
-
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(`${daemon}/api/config/system/engines/llama/install`);
-  });
-
-  it('offers no install where no prebuilt binary exists, only the way to build one', () => {
-    const onSkip = vi.fn();
-    render(<LlamaInstallModal canDownload={false} onSkip={onSkip} />);
-
-    expect(screen.getByText(/gglib config llama install/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Install llama.cpp' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'I understand' })).toBeInTheDocument();
-  });
-
-  describe('opened by a server start that found no llama-server', () => {
-    it('installs over the same stream, shows its progress, and closes once it completes', async () => {
-      const onClose = vi.fn();
-      const onInstalled = vi.fn();
-      render(<LlamaInstallModal metadata={METADATA} onClose={onClose} onInstalled={onInstalled} />);
-      expect(screen.getByText(METADATA.expectedPath)).toBeInTheDocument();
-
-      await userEvent.click(screen.getByRole('button', { name: 'Install now' }));
-      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-      expect((fetchMock.mock.calls[0] as [string])[0]).toBe(`${daemon}/api/config/system/engines/llama/install`);
-
-      stream.send({ type: 'phase_started', phase: 'extract' });
-      expect(await screen.findByText(INSTALL_PHASE_LABELS.extract)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Install now' })).toBeDisabled();
-      expect(onClose).not.toHaveBeenCalled();
-
-      stream.send({ type: 'completed', version: 'b6123' });
-
-      await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-      expect(onInstalled).toHaveBeenCalledTimes(1);
-    });
-
-    it('stays open with the failure when the install fails', async () => {
-      const onClose = vi.fn();
-      render(<LlamaInstallModal metadata={METADATA} onClose={onClose} />);
-
-      await userEvent.click(screen.getByRole('button', { name: 'Install now' }));
-      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-      stream.send({ type: 'failed', message: 'Pre-built binaries not available: unsupported platform' });
-
-      expect(await screen.findByRole('alert')).toHaveTextContent('Pre-built binaries not available: unsupported platform');
-      expect(screen.getByRole('button', { name: 'Install now' })).toBeEnabled();
-      expect(onClose).not.toHaveBeenCalled();
-    });
   });
 });

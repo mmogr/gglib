@@ -205,10 +205,6 @@ fn model_routes() -> Router<AppState> {
             post(handlers::model::models::add_tag).delete(handlers::model::models::remove_tag),
         )
         .route("/tags", get(handlers::model::models::list_tags))
-        .route(
-            "/filter-options",
-            get(handlers::model::models::filter_options),
-        )
         // Verification
         .route("/{id}/verify", post(handlers::model::verification::verify))
         .route(

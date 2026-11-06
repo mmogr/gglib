@@ -1,5 +1,5 @@
 /**
- * The Model Control Center as the thing that decides which screen is up.
+ * The library as the way into a chat, and into the inspector's controls.
  *
  * A laptop with no local models must reach a chat with the paired machine's
  * model: every other route into `ChatPage` starts from a server running
@@ -31,13 +31,8 @@ import { useState } from 'react';
 // The library the page loads. Empty for the paired cases; one model for the
 // case about a model already running here.
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
-// Every read of that library, by the page's list or the sidebar's filtered one.
+// Every read of that library.
 const listModels = vi.hoisted(() => vi.fn(async () => library.models));
-// The reads behind the filter popover's choices.
-const filterReads = vi.hoisted(() => ({
-  options: vi.fn(async () => ({ architectures: [], quantizations: [], tags: [], parameterSizes: [] })),
-  tags: vi.fn(async () => []),
-}));
 // The paired machine's models, and whether reading them hangs.
 const far = vi.hoisted(() => ({ hang: false }));
 // This machine's model as its detail route answers, the projector and
@@ -80,8 +75,6 @@ vi.mock('../../../src/services/transport', async () => {
       getPairedModel: vi.fn(async (id: number) => ({ detail: farDetail(id, 'qwen3-8b') })),
       loadPairedModel: vi.fn(async () => ({ model: 'qwen3-8b', started: true, context: 30000 })),
       serveModel,
-      listTags: filterReads.tags,
-      getModelFilterOptions: filterReads.options,
       getDownloadQueue: vi.fn(async () => downloads.queue),
       queueDownload,
       browseHfModels: vi.fn(async () => ({ models: [], next_cursor: null })),
@@ -175,11 +168,12 @@ vi.mock('../../../src/pages/ChatPage', () => ({
 }));
 
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
+import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { renderApp } from '../places/harness';
 import { guiModel } from '../fixtures/model';
 import { farDetail, farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
-import { queueSnapshot, runningRow, waitingRow } from '../fixtures/downloads';
+import { queueSnapshot } from '../fixtures/downloads';
 import {
   IDLE_STATUS,
   applyRemoteStatus,
@@ -212,27 +206,27 @@ function serve(modelId: number, modelName: string, port: number, type: 'running'
  */
 function renderPage() {
   initModelEvents();
+  initDownloadEvents();
   return renderApp('/library');
 }
 
 /** Pick the paired machine's row for `name`, under that machine's group. */
 async function pickFar(name: RegExp) {
   const user = userEvent.setup();
-  const group = await screen.findByRole('listbox', { name: "desk's models" });
+  const group = await screen.findByRole('listbox', { name: 'On desk' });
   await user.click(within(group).getByRole('option', { name }));
   return user;
 }
 
-describe('ModelControlCenterPage', () => {
+describe('the library, into a chat', () => {
   afterEach(() => {
     cleanupModelEvents();
+    cleanupDownloadEvents();
     for (const id of [7, 8, 9, 11]) serve(id, '', 0, 'stopped');
   });
   beforeEach(() => {
     library.models = [];
     listModels.mockClear();
-    filterReads.options.mockClear();
-    filterReads.tags.mockClear();
     downloads.queue = queueSnapshot();
     here.detail = null;
     here.projectors = null;
@@ -286,14 +280,13 @@ describe('ModelControlCenterPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    const here = await screen.findByRole('listbox', { name: 'Model library' });
+    const here = await screen.findByRole('listbox', { name: 'On this Mac' });
     await user.click(within(here).getByRole('option', { name: /qwen3-8b/ }));
     expect(within(here).getByRole('option', { name: /qwen3-8b/ })).toHaveAttribute('aria-selected', 'true');
 
-    // The far row is its own row, badged with its machine.
-    const there = await screen.findByRole('listbox', { name: "desk's models" });
+    // The far row is its own row, under its machine's group.
+    const there = await screen.findByRole('listbox', { name: 'On desk' });
     const farRow = within(there).getByRole('option', { name: /qwen3-8b/ });
-    expect(farRow).toHaveTextContent('desk');
     await user.click(farRow);
     expect(farRow).toHaveAttribute('aria-selected', 'true');
     expect(within(here).getByRole('option', { name: /qwen3-8b/ })).toHaveAttribute('aria-selected', 'false');
@@ -318,7 +311,7 @@ describe('ModelControlCenterPage', () => {
     await user.click(await screen.findByRole('option', { name: /qwen3-8b/ }));
 
     expect(screen.getByRole('option', { name: /qwen3-8b/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('listbox', { name: "desk's models" })).not.toBeInTheDocument();
+    expect(screen.queryByRole('listbox', { name: 'On desk' })).not.toBeInTheDocument();
   });
 
   it("an already-running model's Open chat opens the chat page", async () => {
@@ -335,22 +328,6 @@ describe('ModelControlCenterPage', () => {
     const chat = await screen.findByTestId('chat-page');
     expect(chat).toHaveTextContent('Chatting with qwen3-8b');
     expect(chat).toHaveAttribute('data-paired', '');
-  });
-
-  it('draws the download the queue read at load names, with no event yet', async () => {
-    // A page opened mid-download: the stream has sent nothing, and the row
-    // the read returned is on screen in its own words.
-    downloads.queue = queueSnapshot({
-      revision: 12,
-      active: runningRow(),
-      waiting: [waitingRow('owner/b:Q4_K_M', 2), waitingRow('owner/c:Q4_K_M', 3)],
-    });
-    renderPage();
-
-    expect(await screen.findByText('owner/zeta-GGUF:Q8_0')).toBeInTheDocument();
-    expect(screen.getByText('7.00 GiB / 28.00 GiB')).toBeInTheDocument();
-    expect(screen.getByText('118.4 MB/s')).toBeInTheDocument();
-    expect(screen.getByText('+2 queued')).toBeInTheDocument();
   });
 
   /** One model running here, one not, and the chat open on the running one. */
@@ -372,36 +349,6 @@ describe('ModelControlCenterPage', () => {
     serveModel.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
     return (port: number) => act(async () => answer({ port }));
   }
-
-  it('draws a model the library gained once Refresh is pressed, with no filter touched', async () => {
-    // A download finished, or another client added one: the library has it
-    // and the page has not asked since. The page's own read and the
-    // sidebar's filtered one have both answered before the model exists.
-    renderPage();
-    await waitFor(() => expect(listModels).toHaveBeenCalledTimes(2));
-    await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
-    expect(listModels).toHaveBeenCalledTimes(2);
-    library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
-
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh models' }));
-
-    expect(await screen.findByRole('option', { name: /gemma-3-12b/i })).toBeInTheDocument();
-  });
-
-  it('reads the filter choices and tags again when Refresh is pressed', async () => {
-    // The model Refresh brings in can carry a quantization or tag no row had,
-    // and the filter popover offers only what these reads return.
-    renderPage();
-    await waitFor(() => expect(filterReads.options).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(filterReads.tags).toHaveBeenCalledTimes(1));
-    const refresh = screen.getByRole('button', { name: 'Refresh models' });
-    await waitFor(() => expect(refresh).toBeEnabled());
-
-    await userEvent.setup().click(refresh);
-
-    await waitFor(() => expect(filterReads.options).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(filterReads.tags).toHaveBeenCalledTimes(2));
-  });
 
   it('offers Open chat only for a model that is running', async () => {
     library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
@@ -466,7 +413,7 @@ describe('ModelControlCenterPage', () => {
     library.models = [guiModel({ id: 9, name: 'gemma-3-12b', imageInput: true })];
     renderPage();
     const row = await screen.findByRole('option', { name: /gemma-3-12b/i });
-    expect(within(row).getByText('Vision')).toBeInTheDocument();
+    expect(row).toHaveTextContent('sees images');
 
     await userEvent.setup().click(row);
 
@@ -485,7 +432,7 @@ describe('ModelControlCenterPage', () => {
     renderPage();
     const user = userEvent.setup();
     const row = await screen.findByRole('option', { name: /flux1-schnell/i });
-    expect(within(row).getByText('Draws · Flux.1')).toBeInTheDocument();
+    expect(row).toHaveTextContent('draws (Flux.1)');
     await user.click(row);
 
     const picker = await screen.findByRole('combobox', { name: 'VAE' });
@@ -662,7 +609,8 @@ describe('ModelControlCenterPage', () => {
       renderPage();
       const user = userEvent.setup();
 
-      await user.click(await screen.findByRole('tab', { name: 'Add Models' }));
+      await user.click(await screen.findByRole('button', { name: 'Add' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Find on Hugging Face' }));
       await user.type(await screen.findByPlaceholderText(/user\/repo:quant/), 'owner/zeta-GGUF:Q8_0');
       await user.click(screen.getByRole('button', { name: 'Download' }));
 

@@ -31,7 +31,6 @@ import {
   addModel,
   cleanupModelEvents,
   initModelEvents,
-  onModelLibraryChange,
   refreshModels,
   removeModel,
   updateModel,
@@ -84,7 +83,7 @@ describe('the model registry', () => {
 
     act(() => initModelEvents());
     await settle();
-    expect(result.current).toEqual({ models: [], loading: false, error: 'Failed to load models: daemon away' });
+    expect(result.current).toEqual({ models: [], loading: false, error: 'daemon away' });
 
     await act(() => refreshModels());
     expect(result.current.error).toBeNull();
@@ -101,7 +100,7 @@ describe('the model registry', () => {
     await act(() => refreshModels());
 
     expect(result.current.models.map((m) => m.name)).toEqual(['llama-7b']);
-    expect(result.current.error).toBe('Failed to load models: daemon away');
+    expect(result.current.error).toBe('daemon away');
     expect(result.current.loading).toBe(false);
   });
 
@@ -124,12 +123,10 @@ describe('the model registry', () => {
     expect(transport.listModels).toHaveBeenCalledTimes(2);
   });
 
-  it('reads once for a burst of events, after the window, and tells its listeners once', async () => {
-    const changed = vi.fn();
+  it('reads once for a burst of events, after the window', async () => {
     act(() => initModelEvents());
     await settle();
     expect(transport.listModels).toHaveBeenCalledTimes(1);
-    const off = onModelLibraryChange(changed);
 
     act(() => {
       deliver(REMOVED);
@@ -140,8 +137,6 @@ describe('the model registry', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(400));
     expect(transport.listModels).toHaveBeenCalledTimes(2);
-    expect(changed).toHaveBeenCalledTimes(1);
-    off();
   });
 
   it('a read an event overtook is dropped, and the burst brings the newer one', async () => {

@@ -3,7 +3,7 @@
  * moves the chat to another model without leaving the conversation.
  *
  * The page does not move itself: it hands the choice and the open
- * conversation up, and `ModelControlCenterPage` remounts it on the new
+ * conversation up, and the chat route remounts it on the new
  * session with that conversation. So the two halves are pinned here — what
  * the page hands up, and that a page given a conversation opens on it.
  */

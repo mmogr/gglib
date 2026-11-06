@@ -19,7 +19,7 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/transport')>()),
   getTransport: () => transport,
 }));
-vi.mock('../../../src/pages/ModelControlCenterPage', () => ({ default: () => <main aria-label="Library" /> }));
+vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 // The chat page is a placard naming what it was given.
 vi.mock('../../../src/pages/ChatPage', () => ({
   default: ({ modelName, serverPort, paired }: { modelName: string; serverPort?: number; paired?: { far: { id: number }; machineName: string } }) => (
