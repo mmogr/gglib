@@ -5,6 +5,7 @@ pub(crate) mod explain_display;
 pub(crate) mod inspect_display;
 pub(crate) mod model_display;
 pub(crate) mod sampling_values;
+pub(crate) mod state_words;
 pub(crate) mod style;
 pub(crate) mod tables;
 

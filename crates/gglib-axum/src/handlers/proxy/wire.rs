@@ -6,6 +6,7 @@
 //! without the routing around them.
 
 use gglib_core::Settings;
+use gglib_core::domain::EndpointState;
 use gglib_core::server_config::{ServerConfigOptions, chosen_context_size};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
@@ -16,6 +17,9 @@ use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ProxyStatus {
     pub running: bool,
+    /// The same fact as `running` and `pinned_model`, said as the one word
+    /// every surface uses: `on`, `off` or `pinned`.
+    pub state: EndpointState,
     pub port: Option<u16>,
     pub current_model: Option<String>,
     pub model_port: Option<u16>,
@@ -94,6 +98,7 @@ pub(super) fn to_api_status(s: &RuntimeProxyStatus, pinned_model: Option<String>
     match s {
         RuntimeProxyStatus::Running { address } => ProxyStatus {
             running: true,
+            state: EndpointState::listening(pinned_model.is_some()),
             port: Some(address.port()),
             current_model: None,
             model_port: None,
@@ -103,6 +108,7 @@ pub(super) fn to_api_status(s: &RuntimeProxyStatus, pinned_model: Option<String>
         // one does: no port to hand out, and no pin still in force.
         RuntimeProxyStatus::Stopped | RuntimeProxyStatus::Crashed => ProxyStatus {
             running: false,
+            state: EndpointState::Off,
             port: None,
             current_model: None,
             model_port: None,

@@ -242,7 +242,7 @@ async fn a_paired_machine_with_the_daemon_down_is_not_connected() {
 
     let line = summary_from(&ctx, &daemon).await;
 
-    assert_eq!(line.as_deref(), Some("desk: not connected"));
+    assert_eq!(line.as_deref(), Some("desk: Disconnected"));
     assert_eq!(daemon.asked(), ["probe"]);
 }
 
@@ -258,11 +258,11 @@ async fn a_connected_or_away_machine_is_said_from_the_daemons_status() {
 
     assert_eq!(
         summary_from(&ctx, &connected).await.as_deref(),
-        Some("Paired with desk (direct). Its models: gglib model list --remote")
+        Some("desk: Connected (direct). Its models: gglib model list --remote")
     );
     assert_eq!(
         summary_from(&ctx, &away).await.as_deref(),
-        Some("desk: away 2m")
+        Some("desk: Away 2m")
     );
     assert_eq!(connected.asked(), ["probe", "status"]);
     assert_eq!(away.asked(), ["probe", "status"]);
@@ -276,7 +276,7 @@ fn a_connected_machine_is_named_with_the_command_that_lists_it() {
 
     assert_eq!(
         line,
-        "Paired with desk (direct). Its models: gglib model list --remote"
+        "desk: Connected (direct). Its models: gglib model list --remote"
     );
     assert!(!line.contains(';'), "never two commands joined: {line}");
 }
@@ -284,11 +284,11 @@ fn a_connected_machine_is_named_with_the_command_that_lists_it() {
 /// A daemon up and not connected reports no connection: the pairing is
 /// still named, so the list says whose models are missing.
 #[test]
-fn a_machine_with_no_connection_is_named_as_not_connected() {
-    assert_eq!(summary_line(Some("desk"), None), "desk: not connected");
+fn a_machine_with_no_connection_is_named_as_disconnected() {
+    assert_eq!(summary_line(Some("desk"), None), "desk: Disconnected");
     assert_eq!(
         summary_line(None, None),
-        "the paired machine: not connected",
+        "the paired machine: Disconnected",
         "a machine that gave no name is called what every surface calls it"
     );
 }
