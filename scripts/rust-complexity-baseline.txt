@@ -82,7 +82,7 @@ crates/gglib-cli/src/handlers/up/choose.rs 351
 crates/gglib-cli/src/handlers/up/mod.rs 388
 crates/gglib-cli/src/handlers/up/probe.rs 310
 crates/gglib-cli/src/handlers/up/warm.rs 351
-crates/gglib-cli/src/model_commands.rs 438
+crates/gglib-cli/src/model_commands.rs 448
 crates/gglib-cli/src/presentation/explain_display.rs 413
 crates/gglib-cli/src/presentation/explain_display_tests.rs 687
 crates/gglib-cli/src/presentation/inspect_display.rs 319
