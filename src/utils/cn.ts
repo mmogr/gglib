@@ -7,7 +7,7 @@ import { twMerge } from "tailwind-merge";
  *
  * @example
  * cn("px-4 py-2", isActive && "bg-primary", className)
- * cn("text-sm font-medium", { "opacity-50": disabled })
+ * cn("text-sm font-semibold", { "opacity-50": disabled })
  */
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));

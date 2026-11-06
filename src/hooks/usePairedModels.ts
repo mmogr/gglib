@@ -14,7 +14,7 @@
  * writes) keeps them too, marked stale: the daemon acts on whichever machine
  * answered, where their ids may be other models.
  *
- * This machine's library is `useModels`, which this never touches: a far read
+ * This machine's library is `modelRegistry`, which this never touches: a far read
  * that hangs or fails cannot blank or delay a local row. Profile variants are
  * left out — a variant is its base model asked for another way, and the page
  * picks no far profiles.

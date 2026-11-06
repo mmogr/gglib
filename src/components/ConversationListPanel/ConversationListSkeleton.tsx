@@ -21,7 +21,7 @@ const SkeletonItem: React.FC = () => (
  */
 export const ConversationListSkeleton: React.FC = () => (
   <>
-    {/* The shimmer is decorative and hidden from assistive tech, but it
+    {/* The placeholder is decorative and hidden from assistive tech, but it
         replaced a literal "Loading conversations…" string that screen readers
         announced — so the announcement is kept explicitly. */}
     <span className="sr-only" role="status">

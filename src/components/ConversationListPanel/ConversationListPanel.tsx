@@ -122,7 +122,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
               >
                 <Stack gap="xs" className="min-w-0 flex-1">
                   <span
-                    className="font-medium text-sm text-text overflow-hidden text-ellipsis whitespace-nowrap"
+                    className="font-semibold text-sm text-text overflow-hidden text-ellipsis whitespace-nowrap"
                     title={conversation.title}
                   >
                     {conversation.title}

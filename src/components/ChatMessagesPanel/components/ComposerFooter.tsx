@@ -154,7 +154,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
                 <ComposerPrimitive.Input
                   aria-label="Message"
                   addAttachmentOnPaste={imageInput.offered}
-                  className="flex-1 py-xs bg-transparent text-text text-base placeholder:text-text-disabled resize-none min-h-[40px] max-h-[150px] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-xs bg-transparent text-text text-sm placeholder:text-text-disabled resize-none min-h-[40px] max-h-[150px] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder={
                     isServerConnected
                       ? 'Type your message. Shift + Enter for newline'

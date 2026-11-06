@@ -80,6 +80,8 @@ fn what_a_model_command_reaches_is_cores_table() {
         (&["gglib", "model", "remove", "3"], ModelAction::Manage),
         (&["gglib", "model", "retag", "3"], ModelAction::Manage),
         (&["gglib", "model", "explain", "3"], ModelAction::Manage),
+        (&["gglib", "model", "load", "3"], ModelAction::Manage),
+        (&["gglib", "model", "unload", "3"], ModelAction::Manage),
         (&["gglib", "model", "add", "x.gguf"], ModelAction::Manage),
     ] {
         let (name, reach) = reach(&parsed(argv));

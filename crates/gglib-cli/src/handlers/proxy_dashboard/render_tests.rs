@@ -68,6 +68,7 @@ fn render_frame_shows_placeholder_when_no_connections() {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     let frame = render_frame(
         "http://127.0.0.1:8123/v1/proxy/status/stream",
@@ -104,6 +105,7 @@ fn render_frame_shows_connection_and_slot_bars() {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     let frame = render_frame(
         "http://127.0.0.1:8123/v1/proxy/status/stream",
@@ -138,6 +140,7 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     let width = 80u16;
     let frame = render_frame(
@@ -197,6 +200,7 @@ fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     let term_width = 40u16;
     let frame = render_frame(
@@ -238,6 +242,7 @@ fn frame_with_cache(cache: Option<CacheStatus>) -> String {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -254,6 +259,7 @@ fn frame_with_agent_usage(agent_usage: CacheUsage) -> String {
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -270,6 +276,7 @@ fn frame_with_admission(admission: AdmissionSnapshot) -> String {
         admission,
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
     render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -366,6 +373,7 @@ fn a_long_second_slot_explanation_is_clipped_to_the_terminal() {
         },
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
+        recent_requests: vec![],
     };
 
     let frame = render_frame("http://127.0.0.1:8123", &snapshot, 80);
@@ -533,4 +541,42 @@ fn thousands_inserts_separators_at_the_right_boundaries() {
     assert_eq!(thousands(70_008), "70,008");
     assert_eq!(thousands(1_234_567), "1,234,567");
     assert_eq!(thousands(u64::MAX), "18,446,744,073,709,551,615");
+}
+
+/// The frame carries the recent section just before its total, with the
+/// proxy's words for what was done.
+#[test]
+fn the_recent_requests_sit_before_the_total() {
+    use crate::handlers::proxy_dashboard::wire_recent::{Intervention, RecentRequest};
+    let snapshot = DashboardSnapshot {
+        active_connections: vec![],
+        slots_available: false,
+        slots: vec![],
+        slots_status: None,
+        total_requests: 1,
+        cache: None,
+        agent_usage: CacheUsage::default(),
+        admission: AdmissionSnapshot::default(),
+        per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
+        recent_requests: vec![RecentRequest {
+            model_name: "qwen3".to_owned(),
+            recorded_at_secs: u64::MAX,
+            interventions: vec![Intervention {
+                word: "Repaired a tool call".to_owned(),
+            }],
+        }],
+    };
+    let frame = render_frame(
+        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        &snapshot,
+        DEFAULT_TERM_WIDTH,
+    );
+    let recent = frame.find("Recent requests").expect("the section");
+    let total = frame.find("Total requests served").expect("the total");
+    assert!(recent < total, "{frame}");
+    assert!(
+        frame.contains("qwen3") && frame.contains("Repaired a tool call"),
+        "{frame}"
+    );
 }

@@ -4,7 +4,8 @@
  * Self-contained live view of a running proxy's dashboard: active
  * connections (with per-request prompt-processing progress bars), VRAM
  * residency and the admission queue, and inference slots (with per-slot
- * context-usage donuts), backed by `useProxyDashboard()`'s SSE subscription.
+ * context-usage donuts), backed by the one stream `dashboardRegistry` keeps
+ * open for this endpoint.
  *
  * Triggered from `ProxyControl.tsx`'s "View Dashboard" button, following the
  * same self-contained `{isOpen, onClose}` Modal pattern as `SettingsModal`
@@ -27,7 +28,7 @@ import { TuneActivityCard } from './TuneActivityCard';
 import { ProxyLaunchPanel } from './ProxyLaunchPanel';
 import { ProxySamplingPanel } from './ProxySamplingPanel';
 import { ActiveConnectionsSection, InferenceSlotsSection, ModelSignalsSection } from './proxy';
-import { useProxyDashboard } from '../hooks/useProxyDashboard';
+import { useDashboard } from '../services/dashboardRegistry';
 import { useProxyKey } from '../hooks/useProxyKey';
 import { useSettings } from '../hooks/useSettings';
 
@@ -49,11 +50,9 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
   // waits for the answer rather than open once without the key.
   const { settings } = useSettings();
   const apiKey = useProxyKey(isOpen, settings);
-  const { snapshot, connected } = useProxyDashboard({
-    host,
-    port: isOpen && apiKey !== undefined ? port : null,
-    apiKey,
-  });
+  const { snapshot, connected } = useDashboard(
+    isOpen && apiKey !== undefined ? { host, port, apiKey } : null,
+  );
 
   return (
     <Modal

@@ -104,6 +104,19 @@ async fn a_noted_request_that_is_then_clamped_still_counts_its_trip() {
     // no readings, which is not readings of zero.
     let entry = &dashboard["recent_requests"][0];
     assert_eq!(entry["was_clamped"], true, "{dashboard}");
+    // The row says what was done, in order: the note the guard gave it,
+    // then the refusal the budget answered with.
+    let words: Vec<&str> = entry["interventions"]
+        .as_array()
+        .expect("the interventions list")
+        .iter()
+        .map(|i| i["word"].as_str().expect("a word"))
+        .collect();
+    assert_eq!(
+        words,
+        ["Noted a loop", "Refused: longer than the context"],
+        "{dashboard}"
+    );
     assert_eq!(
         json!([
             entry["completion_tokens"],

@@ -40,7 +40,7 @@ export function Banner({ variant, title, children, action, onDismiss, className 
     <div role={variant === "danger" ? "alert" : "status"} className={cn("flex items-start gap-sm rounded-md p-md", config.container, className)}>
       <Icon icon={config.icon} size={16} className={cn("shrink-0 mt-0.5", config.iconColor)} />
       <div className="flex-1 min-w-0 text-sm">
-        {title && <div className="font-medium text-text">{title}</div>}
+        {title && <div className="font-semibold text-text">{title}</div>}
         {children && <div className={cn("text-text-secondary", title && "mt-0.5")}>{children}</div>}
       </div>
       {action && <div className="shrink-0">{action}</div>}

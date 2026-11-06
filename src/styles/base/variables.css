@@ -7,23 +7,28 @@
      Color Palette
      ================== */
 
-  /* Primary Colors */
-  --color-primary: #f08c26;
-  --color-primary-hover: #de7d1b;
-  --color-primary-light: #f7a950;
-  --color-primary-subtle: rgba(240, 140, 38, 0.12);
-  --color-primary-border: rgba(240, 140, 38, 0.35);
+  /* Primary is ink: the highest-contrast neutral, paper on graphite. One
+     inverted button per screen is the action; selection and focus share it.
+     Amber is no longer an action colour, only attention (--color-warning). */
+  --color-primary: #edece8;
+  --color-primary-hover: #d2d1cc;
+  --color-primary-light: #ffffff;
+  --color-primary-subtle: rgba(237, 236, 232, 0.1);
+  --color-primary-border: rgba(237, 236, 232, 0.3);
 
-  /* Semantic Colors */
-  --color-success: #45bd85;
-  --color-success-subtle: rgba(69, 189, 133, 0.12);
-  --color-success-border: rgba(69, 189, 133, 0.3);
-  --color-warning: #e8d666;
-  --color-warning-subtle: rgba(232, 214, 102, 0.12);
-  --color-danger: #e05252;
-  --color-danger-hover: #c94343;
-  --color-danger-subtle: rgba(224, 82, 82, 0.12);
-  --color-danger-border: rgba(224, 82, 82, 0.3);
+  /* Status Colors — hues at least 60° apart so no two can be confused:
+     success ≈150° (On, Loaded, Connected), warning ≈40° (attention, Away),
+     danger ≈350° (failed, refused). Status is always a shape plus a word;
+     colour never carries it alone. */
+  --color-success: #4fb37a;
+  --color-success-subtle: rgba(79, 179, 122, 0.12);
+  --color-success-border: rgba(79, 179, 122, 0.3);
+  --color-warning: #e0a640;
+  --color-warning-subtle: rgba(224, 166, 64, 0.12);
+  --color-danger: #e17a89;
+  --color-danger-hover: #d6687a;
+  --color-danger-subtle: rgba(225, 122, 137, 0.12);
+  --color-danger-border: rgba(225, 122, 137, 0.3);
 
   /* Neutral Colors - Dark Theme (graphite ramp, near-achromatic) */
   --color-background: #0e0e10;
@@ -89,22 +94,18 @@
   --font-family-mono: 'IBM Plex Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code',
     'Fira Mono', 'Roboto Mono', monospace;
 
-  /* Font Sizes (desktop-density scale: 14px base UI type) */
-  --font-size-2xs: 0.6875rem; /* 11px */
+  /* Font Sizes — four, each at least 2px from the next, so a size step is
+     always visible: xs captions and subtitles, sm every control and row,
+     base running text and titles, lg the one large figure a screen may have
+     (an address, a pairing code, a headline). No screen uses more than four. */
   --font-size-xs: 0.75rem;    /* 12px */
-  --font-size-sm: 0.8125rem;  /* 13px */
-  --font-size-base: 0.875rem; /* 14px */
-  --font-size-lg: 1rem;       /* 16px */
-  --font-size-xl: 1.125rem;   /* 18px */
-  --font-size-2xl: 1.375rem;  /* 22px */
-  --font-size-3xl: 1.75rem;   /* 28px */
-  --font-size-4xl: 2rem;      /* 32px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-base: 1rem;     /* 16px */
+  --font-size-lg: 1.375rem;   /* 22px */
 
-  /* Font Weights */
+  /* Font Weights — two. Emphasis is semibold; there is no medium or bold. */
   --font-weight-normal: 400;
-  --font-weight-medium: 500;
   --font-weight-semibold: 600;
-  --font-weight-bold: 700;
 
   /* Line Heights */
   --line-height-tight: 1.25;

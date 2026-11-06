@@ -135,7 +135,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             
             {/* Item info */}
             <div className="flex-1 min-w-0 flex flex-col gap-[2px]">
-              <div className="text-sm font-medium text-text-primary overflow-hidden text-ellipsis whitespace-nowrap" title={item.text.title}>
+              <div className="text-sm font-semibold text-text-primary overflow-hidden text-ellipsis whitespace-nowrap" title={item.text.title}>
                 {item.text.title}
               </div>
               <div className="flex items-center gap-xs flex-wrap">

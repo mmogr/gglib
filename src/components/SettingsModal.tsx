@@ -3,7 +3,7 @@ import { appLogger } from '../services/platform';
 import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
-import { useModels } from "../hooks/useModels";
+import { useModelLibrary } from '../services/modelRegistry';
 import { UpdateSettingsRequest, SparseInferenceConfig, type AppSettings } from "../types";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
@@ -49,7 +49,7 @@ const sourceLabels: Record<string, string> = {
 export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initialTab }) => {
   const { info, loading: loadingDir, saving: savingDir, error: dirError, refresh: refreshDir, save: saveDir } = useModelsDirectory();
   const { settings, loading: loadingSettings, saving: savingSettings, error: settingsError, refresh: refreshSettings, save: saveSettings } = useSettings();
-  const { models, loading: loadingModels } = useModels();
+  const { models, loading: loadingModels } = useModelLibrary();
   
   const [pathInput, setPathInput] = useState("");
   const [contextSizeInput, setContextSizeInput] = useState("");

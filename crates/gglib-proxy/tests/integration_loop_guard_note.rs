@@ -121,6 +121,10 @@ async fn a_repeated_batch_is_forwarded_with_a_note_naming_it() {
         dashboard["recent_requests"][0]["loop_guard_trip"], "loop",
         "the forward's own snapshot names the detector: {dashboard}"
     );
+    assert_eq!(
+        dashboard["recent_requests"][0]["interventions"][0]["word"], "Noted a loop",
+        "the forwarded row says what the guard did: {dashboard}"
+    );
 }
 
 /// The stagnation half, and the proof that the two detectors stay separable
@@ -154,6 +158,10 @@ async fn a_repeated_reply_is_forwarded_with_a_note_and_counted_as_stagnation() {
     assert_eq!(
         dashboard["recent_requests"][0]["loop_guard_trip"],
         "stagnation"
+    );
+    assert_eq!(
+        dashboard["recent_requests"][0]["interventions"][0]["word"],
+        "Noted stagnation"
     );
 }
 

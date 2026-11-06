@@ -29,11 +29,11 @@ export const RunHistoryTable: FC<RunHistoryTableProps> = ({ history, loading, on
         <table className="w-full text-xs border-collapse">
           <thead className="sticky top-0 bg-background z-10">
             <tr className="text-left text-text-muted border-b border-border">
-              <th className="px-base py-xs font-medium">ID</th>
-              <th className="px-base py-xs font-medium">Type</th>
-              <th className="px-base py-xs font-medium">Status</th>
-              <th className="px-base py-xs font-medium">Models</th>
-              <th className="px-base py-xs font-medium">Started</th>
+              <th className="px-base py-xs font-semibold">ID</th>
+              <th className="px-base py-xs font-semibold">Type</th>
+              <th className="px-base py-xs font-semibold">Status</th>
+              <th className="px-base py-xs font-semibold">Models</th>
+              <th className="px-base py-xs font-semibold">Started</th>
             </tr>
           </thead>
           <tbody>
@@ -47,7 +47,7 @@ export const RunHistoryTable: FC<RunHistoryTableProps> = ({ history, loading, on
                 <td className="px-base py-xs">
                   <span className="inline-flex items-center gap-xs">
                     {run.status === 'running' && (
-                      <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                      <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-success" />
                     )}
                     <span
                       className={cn(

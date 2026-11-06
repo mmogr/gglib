@@ -42,3 +42,13 @@ fn the_event_a_command_posts_is_swept_with_the_routes_the_cli_calls() {
 
     assert!(CLI_ROUTE_CONTRACT.contains(&(&["POST"][..], EVENTS_PATH)));
 }
+
+/// The routes `gglib model load` and `unload` call are swept with the rest:
+/// the sweep checks only what the list holds, so the list is held to them.
+#[test]
+fn the_load_and_unload_routes_are_swept_with_the_routes_the_cli_calls() {
+    use super::daemon::{CLI_ROUTE_CONTRACT, PROXY_START_PINNED_PATH, SERVERS_STOP_PATH};
+
+    assert!(CLI_ROUTE_CONTRACT.contains(&(&["POST"][..], PROXY_START_PINNED_PATH)));
+    assert!(CLI_ROUTE_CONTRACT.contains(&(&["POST"][..], SERVERS_STOP_PATH)));
+}

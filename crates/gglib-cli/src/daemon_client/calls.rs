@@ -13,7 +13,8 @@ use gglib_app_services::types::{McpServerInfo, QueueDownloadResponse, ServerInfo
 use gglib_core::download::{DownloadId, QueueSnapshot};
 
 use super::wire::{
-    ProxyStatusDto, QueueDownloadBody, StartProxyBody, StartServerBody, StartServerDto,
+    ProxyStatusDto, QueueDownloadBody, StartPinnedBody, StartProxyBody, StartServerBody,
+    StartServerDto, StopServerBody,
 };
 use super::{DaemonHandle, auth, base_url, paths};
 
@@ -155,6 +156,34 @@ impl DaemonHandle {
             .post(paths::SERVERS_START_PATH)
             .json(body)
             .timeout(Duration::from_mins(3))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Stop a model's server. The answer is the daemon's sentence; a model
+    /// that is not loaded is its 404, in its words.
+    pub(crate) async fn stop_model_server(&self, body: &StopServerBody) -> Result<String> {
+        let response = self
+            .post(paths::SERVERS_STOP_PATH)
+            .json(body)
+            .timeout(Duration::from_mins(1))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Start the proxy pinned to one model, the daemon running the launch
+    /// cascade itself. A proxy already running unpinned, or pinned to another
+    /// model, is the daemon's refusal, in its words.
+    pub(crate) async fn start_pinned_proxy(
+        &self,
+        body: &StartPinnedBody,
+    ) -> Result<ProxyStatusDto> {
+        let response = self
+            .post(paths::PROXY_START_PINNED_PATH)
+            .json(body)
+            .timeout(Duration::from_secs(30))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)

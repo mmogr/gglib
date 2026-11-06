@@ -8,7 +8,7 @@ const score = (v: Cell) => (v == null ? '—' : v.toFixed(3));
 const signed = (v: Cell) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(3)}`);
 const deltaClass = (v: Cell) =>
   v == null ? '' : v > 0 ? 'text-success' : v < 0 ? 'text-danger' : '';
-const TH = 'px-md py-xs text-left text-xs font-medium text-text-muted';
+const TH = 'px-md py-xs text-left text-xs font-semibold text-text-muted';
 const TD = 'px-md py-xs text-sm text-text font-mono tabular-nums';
 
 /**

@@ -136,22 +136,21 @@
   --font-base: var(--font-family-base);
   --font-mono: var(--font-family-mono);
 
-  /* ---------- Font Size ---------- */
-  --text-2xs: var(--font-size-2xs);
+  /* ---------- Font Size (four; see variables.css) ---------- */
+  --text-*: initial;
   --text-xs: var(--font-size-xs);
+  --text-xs--line-height: 1rem;
   --text-sm: var(--font-size-sm);
+  --text-sm--line-height: 1.25rem;
   --text-base: var(--font-size-base);
+  --text-base--line-height: 1.5rem;
   --text-lg: var(--font-size-lg);
-  --text-xl: var(--font-size-xl);
-  --text-2xl: var(--font-size-2xl);
-  --text-3xl: var(--font-size-3xl);
-  --text-4xl: var(--font-size-4xl);
+  --text-lg--line-height: 1.75rem;
 
-  /* ---------- Font Weight ---------- */
+  /* ---------- Font Weight (two) ---------- */
+  --font-weight-*: initial;
   --font-weight-normal: var(--font-weight-normal);
-  --font-weight-medium: var(--font-weight-medium);
   --font-weight-semibold: var(--font-weight-semibold);
-  --font-weight-bold: var(--font-weight-bold);
 
   /* ---------- Line Height ---------- */
   --leading-tight: var(--line-height-tight);
@@ -182,6 +181,9 @@
   --breakpoint-phone: 37.5rem;     /* 600px — phablet → tablet */
 
   /* ---------- Custom Animations ---------- */
+  /* Nothing pulses at rest (styles/README.md, "Motion"): the default
+     animate-pulse utility is retired so it cannot come back by accident. */
+  --animate-pulse: initial;
   --animate-modal-slide-in: modal-slide-in 0.2s ease-out;
   --animate-toast-enter: toast-enter 0.3s ease-out;
   --animate-toast-exit: toast-exit 0.3s ease-in forwards;
@@ -190,7 +192,6 @@
   --animate-blink: blink 1s ease-in-out infinite;
   --animate-spin-360: spin-360 0.8s linear infinite;
   --animate-research-pulse: research-pulse 1.5s ease-in-out infinite;
-  --animate-shimmer: shimmer 1.5s linear infinite;
 }
 
 /* ---------- Z-Index Utilities ---------- */
@@ -297,15 +298,6 @@
   }
 }
 
-@keyframes shimmer {
-  from {
-    background-position: -200% 0;
-  }
-  to {
-    background-position: 200% 0;
-  }
-}
-
 /* =============================================================================
    BASE: Styles not covered by Tailwind Preflight that we need to preserve.
    These were duplicated by a base/reset.css that Phase 4 deleted, so they are
@@ -325,7 +317,7 @@
 
   body {
     font-family: var(--font-family-base);
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-sm);
     line-height: var(--line-height-normal);
     color: var(--color-text);
     background-color: var(--color-background);
@@ -388,12 +380,10 @@
     line-height: var(--line-height-tight);
     margin: 0;
   }
-  h1 { font-size: var(--font-size-3xl); }
-  h2 { font-size: var(--font-size-2xl); }
-  h3 { font-size: var(--font-size-xl); }
-  h4 { font-size: var(--font-size-lg); }
-  h5 { font-size: var(--font-size-base); }
-  h6 { font-size: var(--font-size-sm); }
+  /* Four sizes, so heading levels pair up; the order still reads top down. */
+  h1, h2 { font-size: var(--font-size-lg); }
+  h3, h4 { font-size: var(--font-size-base); }
+  h5, h6 { font-size: var(--font-size-sm); }
 
   /* Monospace elements */
   code, pre {

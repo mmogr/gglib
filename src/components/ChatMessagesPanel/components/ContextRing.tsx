@@ -6,7 +6,7 @@ import { ContextUsageDonut } from '../../ContextUsageDonut';
 import { useClickOutside } from '../../../hooks/useClickOutside';
 import { cn } from '../../../utils/cn';
 import { useContextReading } from '../hooks/useContextReading';
-import { contextLines, percentText, spokenReading, type ContextReading } from './contextReading';
+import { contextLines, percentText, spokenReading, type ContextReading } from '../../../readings/contextReading';
 
 /**
  * A reading's ring and its detail. Hovering says the sentence; a click

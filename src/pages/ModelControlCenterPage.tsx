@@ -1,11 +1,11 @@
-import { useState, useRef, useCallback, lazy, Suspense } from 'react';
-import { useModels } from '../hooks/useModels';
+import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useModel, useModelLibrary } from '../services/modelRegistry';
+import { onModelLibraryChange, refreshModels, removeModel as removeLibraryModel, updateModel } from '../services/modelEvents';
 import { usePairedModels } from '../hooks/usePairedModels';
 import { useLibrarySelection } from '../hooks/useLibrarySelection';
 import { useTags } from '../hooks/useTags';
 import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
-import { useModelLibraryEvents } from '../hooks/useModelLibraryEvents';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import { useToastContext } from '../contexts/ToastContext';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
@@ -49,24 +49,28 @@ export default function ModelControlCenterPage({
   onOpenSystemSettings,
   onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
-  const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
+  const { models, loading, error } = useModelLibrary();
   // The paired machine's rows, and one selection across both machines.
   const paired = usePairedModels();
-  const { farPick, pickFar, pickLocal } = useLibrarySelection(selectModel, paired.group);
+  const { localPick: selectedModelId, farPick, pickFar, pickLocal, dropLocal } = useLibrarySelection(paired.group);
+  const selectedModel = useModel(selectedModelId);
+  const removeModel = useCallback(async (id: number) => {
+    await removeLibraryModel(id);
+    dropLocal(id);
+  }, [dropLocal]);
   const { tags, loadTags, addTagToModel, removeTagFromModel } = useTags();
   const { showToast } = useToastContext();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
   
   // Unified refresh function for models, filter options, and tags
   const handleRefreshAll = useCallback(async () => {
-    await Promise.all([loadModels(), refreshFilterOptions(), loadTags()]);
-  }, [loadModels, refreshFilterOptions, loadTags]);
-  
-  // Another client's edits. Mounted here rather than inside `useModels`
-  // because a library change moves more than the list: a new architecture or
-  // tag has to reach the filter options too, or the user can see the model
-  // that appeared but cannot filter to it.
-  useModelLibraryEvents(handleRefreshAll);
+    await Promise.all([refreshModels(), refreshFilterOptions(), loadTags()]);
+  }, [refreshFilterOptions, loadTags]);
+
+  // Another client's edits move more than the list, which the registry re-reads
+  // itself: a new architecture or tag has to reach the filter options too.
+  const refreshFilterChoices = useCallback(() => void Promise.all([refreshFilterOptions(), loadTags()]), [refreshFilterOptions, loadTags]);
+  useEffect(() => onModelLibraryChange(refreshFilterChoices), [refreshFilterChoices]);
 
   // Download ending effects - batches completions, triggers refresh, shows toasts
   const { onCompleted, onFailed } = useDownloadCompletionEffects({
@@ -142,13 +146,7 @@ export default function ModelControlCenterPage({
     activeSubTab,
     setActiveSubTab,
     handleModelAdded,
-  } = useMccFilters({
-    models,
-    addModel,
-    loadModels,
-    refreshFilterOptions,
-    loadTags,
-  });
+  } = useMccFilters({ refreshFilterOptions, loadTags });
 
   // Handler for selecting a local model (clears HF selection)
   const handleSelectLocalModel = (id: number | null) => {

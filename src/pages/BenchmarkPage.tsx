@@ -62,7 +62,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
           <Icon icon={ArrowLeft} size={16} />
         </Button>
         <Icon icon={BarChart2} size={18} className="text-primary" />
-        <h1 className="text-base font-semibold text-text m-0 flex-1">Benchmark Dashboard</h1>
+        <h1 className="text-sm font-semibold text-text m-0 flex-1">Benchmark Dashboard</h1>
         <Tabs<RunMode>
           aria-label="Benchmark mode"
           size="sm"
