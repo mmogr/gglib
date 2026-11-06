@@ -166,7 +166,8 @@ pub struct Settings {
     pub proxy_cache_on_disk: Option<bool>,
 
     /// The on-disk prompt cache's budget in GiB (`--cache-disk-gb`), at
-    /// least [`MIN_CACHE_DISK_GB`]. `None` → sized from free disk space.
+    /// least [`MIN_CACHE_DISK_GB`]. `None` → `GGLIB_CACHE_DISK_GB` in the
+    /// daemon's environment, else sized from free disk space.
     pub proxy_cache_disk_gb: Option<u64>,
 
     /// Bearer token required on the proxy's `/v1/*` and `/mcp` routes.

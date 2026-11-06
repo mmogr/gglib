@@ -51,7 +51,8 @@ pub(crate) struct StartProxyConfig {
     pub pinned: Option<gglib_core::ports::PinnedSpec>,
     /// Byte budget in GiB for the on-disk slot eviction sweep
     /// (`--cache-disk-gb`). Omitted falls through to the stored
-    /// `proxy_cache_disk_gb`, then auto-sizes from free disk space.
+    /// `proxy_cache_disk_gb`, then `GGLIB_CACHE_DISK_GB` in the daemon's
+    /// environment, then auto-sizes from free disk space.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default)]
     pub cache_disk_gb: Option<u64>,

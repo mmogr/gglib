@@ -218,11 +218,11 @@ pub struct CacheArgs {
     /// Byte budget, in GiB, for the on-disk KV cache slot file eviction
     /// sweep. Only meaningful with `--cache`.
     ///
-    /// Omit to auto-size from free disk space at `--slot-dir` (a quarter
-    /// of free space + the cache's own current footprint, recomputed on
-    /// every sweep so it tracks disk pressure from other applications).
-    /// Can also be set via `GGLIB_CACHE_DISK_GB` (e.g. in a `.env` file)
-    /// without editing this flag; the flag wins if both are set.
+    /// Omitted, the stored `proxy-cache-disk-gb` setting applies, else
+    /// `GGLIB_CACHE_DISK_GB` in the daemon's environment, else the budget is
+    /// sized from free disk space at `--slot-dir` (a quarter of free space +
+    /// the cache's own current footprint, recomputed on every sweep so it
+    /// tracks disk pressure from other applications). Typed, the flag wins.
     #[arg(long)]
     pub cache_disk_gb: Option<u64>,
 }

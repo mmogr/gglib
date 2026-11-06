@@ -13,7 +13,7 @@ import { cn } from '../utils/cn';
 import { Stack, Label } from './primitives';
 import { useToastContext } from '../contexts/ToastContext';
 import { ProxyDashboardModal } from './ProxyDashboardModal';
-import { EndpointCopyBar, ProxyStatusPill, ProxyToggleButton } from './proxy';
+import { EndpointCopyBar, ProxyStatusPill, ProxyToggleButton, reachableHost } from './proxy';
 
 interface ProxyControlProps {
   buttonClassName?: string;
@@ -34,11 +34,11 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const proxyState = useProxyState();
   const { settings } = useSettings();
-  // Where this app reaches the endpoint: loopback, which reaches a loopback
-  // and a wildcard bind alike. The stored address is where it BINDS, and
-  // `0.0.0.0` is nowhere a client can send; the reached address is the
-  // daemon's to say (`base_url` on its status, #1768), not worked out here.
-  const endpointHost = '127.0.0.1';
+  // Where this app reaches the endpoint: the stored address is where it
+  // BINDS, and a wildcard is nowhere a client can send, so that is reached on
+  // loopback; one interface's address is reached on itself. The daemon's own
+  // rule, until its status says the reached address (`base_url`, #1768).
+  const endpointHost = reachableHost(settings?.proxyHost ?? null);
   const [loading, setLoading] = useState(false);
   const [pinnedModel, setPinnedModel] = useState<string | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);

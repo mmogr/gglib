@@ -29,7 +29,8 @@ pub enum DiskBudget {
     /// space is [`HostFacts::free_disk`]'s reading; a host with no reader has
     /// no Auto budget (see [`evict_over_budget`]).
     Auto,
-    /// Fixed byte budget, from `--cache-disk-gb` or `GGLIB_CACHE_DISK_GB`.
+    /// Fixed byte budget: `--cache-disk-gb`, the stored `proxy_cache_disk_gb`
+    /// the daemon passes as explicit, or `GGLIB_CACHE_DISK_GB`.
     ExplicitBytes(u64),
 }
 
@@ -38,8 +39,10 @@ pub enum DiskBudget {
 /// elsewhere for cache knobs).
 const DISK_BUDGET_ENV_VAR: &str = "GGLIB_CACHE_DISK_GB";
 
-/// Resolve the disk budget: an explicit `--cache-disk-gb` flag wins, then
-/// `GGLIB_CACHE_DISK_GB`, then [`DiskBudget::Auto`].
+/// Resolve the disk budget: an explicit budget wins (the `--cache-disk-gb`
+/// flag, else the stored `proxy_cache_disk_gb`, which the daemon resolves
+/// before calling here), then `GGLIB_CACHE_DISK_GB`, then
+/// [`DiskBudget::Auto`].
 #[must_use]
 pub fn resolve_disk_budget(explicit_gb: Option<u64>) -> DiskBudget {
     resolve_disk_budget_inner(explicit_gb, std::env::var(DISK_BUDGET_ENV_VAR).ok())

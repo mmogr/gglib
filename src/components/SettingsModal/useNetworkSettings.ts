@@ -76,9 +76,10 @@ const hostsFrom = (typed: string): string[] | null => {
 };
 
 /**
- * The GiB as typed, or `null` for an empty field. A zero or a negative
- * number goes to the daemon as typed, so its validator refuses it and says
- * the floor, rather than being swallowed into "auto" here.
+ * The GiB as typed, or `null` for an empty field. What is typed goes to the
+ * daemon as typed rather than being swallowed into "auto" here: a zero is
+ * refused by its validator, which says the floor; a negative or a fraction
+ * is refused earlier, as not a whole number of GiB.
  */
 const gibFrom = (typed: string): number | null => {
   const trimmed = typed.trim();

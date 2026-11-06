@@ -112,6 +112,28 @@ describe('ProxyControl — Clear Cache', () => {
     expect(clearProxyCache).toHaveBeenCalledWith('127.0.0.1', 8080, 'k3y-5f3a');
   });
 
+  /** Bound to one interface's address, the endpoint listens nowhere else. */
+  it('reaches an endpoint bound to one address on that address, and a wildcard on loopback', async () => {
+    revealSecret.mockResolvedValue(null);
+    clearProxyCache.mockResolvedValue({ message: 'cleared' });
+    proxyStateRef.current = { running: true, port: 8080 };
+    settingsRef.current = appSettings({ proxyHost: '192.168.1.20' });
+    const { unmount } = render(<ProxyControl />, { wrapper });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    expect(screen.getByText('http://192.168.1.20:8080/v1')).toBeInTheDocument();
+    const clear = screen.getByRole('button', { name: /clear cache/i });
+    await waitFor(() => expect(clear).toBeEnabled());
+    await user.click(clear);
+    expect(clearProxyCache).toHaveBeenCalledWith('192.168.1.20', 8080, null);
+    unmount();
+
+    settingsRef.current = appSettings({ proxyHost: '0.0.0.0' });
+    render(<ProxyControl />, { wrapper });
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    expect(screen.getByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
+  });
+
   /** Sent before the reveal answers, it would carry no key and be refused. */
   it('waits for the reveal before it can be pressed', async () => {
     revealSecret.mockReturnValue(new Promise(() => {}));

@@ -163,7 +163,9 @@ pub(super) async fn serve_image(
         }
     }
 
-    crate::handlers::inference::proxy::attach_dashboard(ctx, proxy_port, access.api_key).await
+    let reach = crate::handlers::inference::proxy::reached(options.host.as_deref(), &settings);
+    crate::handlers::inference::proxy::attach_dashboard(ctx, reach, proxy_port, access.api_key)
+        .await
 }
 
 /// What the banner says of an image model: the model, its runtime, its

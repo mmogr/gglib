@@ -131,20 +131,44 @@ pub(crate) async fn execute(
 ) -> Result<()> {
     let settings = ctx.app.settings().get().await?;
     let default_context = resolve_default_context(default_context.as_deref(), &settings)?;
+    let reach = reached(host.as_deref(), &settings);
     let body = start_body(host, port, default_context, sampling, &cache, &access);
 
     let handle = daemon_client::ensure_daemon(ctx).await?;
     let proxy_port = start_on(&handle, &body, &settings).await?;
-    attach_dashboard(ctx, proxy_port, access.api_key).await
+    attach_dashboard(ctx, reach, proxy_port, access.api_key).await
 }
 
-/// Attach the live dashboard to the running proxy, and print the detach
-/// hint when the user leaves it.
+/// Where this machine reaches an endpoint bound at `bound`: a wildcard
+/// address (`0.0.0.0`, `::`) on loopback, and any other address, loopback
+/// or one interface's, on itself, an IPv6 one in the brackets a URL needs.
+/// The daemon's own dial rule (`runs/door.rs`); the status says the reached
+/// address once #1768 lands.
+pub(in crate::handlers) fn reach_host(bound: &str) -> String {
+    match bound.parse::<std::net::IpAddr>() {
+        Ok(ip) if ip.is_unspecified() => "127.0.0.1".to_owned(),
+        Ok(std::net::IpAddr::V6(ip)) => format!("[{ip}]"),
+        _ => bound.to_owned(),
+    }
+}
+
+/// Where a start that typed `host_flag`, else the stored `proxy_host`, is
+/// reached from here.
+pub(in crate::handlers) fn reached(
+    host_flag: Option<&str>,
+    settings: &gglib_core::Settings,
+) -> String {
+    reach_host(host_flag.unwrap_or(&settings.effective_proxy_host()))
+}
+
+/// Attach the live dashboard to the running proxy at `host`, and print the
+/// detach hint when the user leaves it.
 ///
 /// Shared by `proxy` and `serve`: the daemon owns the process, so the
 /// foreground command's job after starting it is to show it working.
 pub(in crate::handlers) async fn attach_dashboard(
     ctx: &CliContext,
+    host: String,
     proxy_port: u16,
     api_key_flag: Option<String>,
 ) -> Result<()> {
@@ -157,9 +181,7 @@ pub(in crate::handlers) async fn attach_dashboard(
     // dashboard presents whatever the proxy demands.
     let key = daemon_client::auth::proxy_key(ctx, api_key_flag).await;
 
-    let result =
-        crate::handlers::proxy_dashboard::execute("127.0.0.1".into(), proxy_port, key.as_deref())
-            .await;
+    let result = crate::handlers::proxy_dashboard::execute(host, proxy_port, key.as_deref()).await;
 
     eprintln!();
     eprintln!("  Detached. The proxy is still serving on port {proxy_port}.");

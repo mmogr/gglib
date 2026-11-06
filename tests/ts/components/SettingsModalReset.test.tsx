@@ -34,10 +34,10 @@ const settings = {
   hasProxyApiKey: true,
   bindHost: '0.0.0.0',
   shareLan: true,
-  proxyHost: null,
-  proxyAllowedHosts: null,
-  proxyCacheOnDisk: null,
-  proxyCacheDiskGb: null,
+  proxyHost: '0.0.0.0',
+  proxyAllowedHosts: ['gglib.lan'],
+  proxyCacheOnDisk: true,
+  proxyCacheDiskGb: 4,
   proxyAutostart: true,
   closeToTray: true,
   startAtLogin: true,
@@ -101,6 +101,10 @@ describe('SettingsModal — reset to default', () => {
     const modelsDir = document.querySelector<HTMLInputElement>('#models-dir-input');
     const bindHost = document.querySelector<HTMLInputElement>('#bind-host-input');
     const shareLan = document.querySelector<HTMLInputElement>('#share-lan-input');
+    const proxyHost = document.querySelector<HTMLInputElement>('#proxy-host-input');
+    const allowedHosts = document.querySelector<HTMLInputElement>('#proxy-allowed-hosts-input');
+    const cacheOnDisk = document.querySelector<HTMLInputElement>('#proxy-cache-on-disk-input');
+    const cacheDiskGb = document.querySelector<HTMLInputElement>('#proxy-cache-disk-gb-input');
 
     expect(modelsDir?.value).toBe('/custom/models');
     expect(bindHost?.value).toBe('0.0.0.0');
@@ -120,5 +124,11 @@ describe('SettingsModal — reset to default', () => {
     // behind the collapsed Advanced disclosure.
     expect(bindHost?.value).toBe('0.0.0.0');
     expect(shareLan?.checked).toBe(true);
+    // The endpoint's four, likewise: held away from their defaults so a
+    // reset that touched them would show.
+    expect(proxyHost?.value).toBe('0.0.0.0');
+    expect(allowedHosts?.value).toBe('gglib.lan');
+    expect(cacheOnDisk?.checked).toBe(true);
+    expect(cacheDiskGb?.value).toBe('4');
   });
 });

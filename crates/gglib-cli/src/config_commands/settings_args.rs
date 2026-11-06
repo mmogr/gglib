@@ -214,6 +214,32 @@ mod tests {
         );
     }
 
+    /// `--proxy-allowed-hosts a,b` is two hosts, as the GUI's comma field is,
+    /// and the flag repeated is too.
+    #[test]
+    fn the_allowed_hosts_flag_splits_on_commas() {
+        for argv in [
+            vec!["t", "--proxy-allowed-hosts", "gglib.lan,192.168.1.20:8080"],
+            vec![
+                "t",
+                "--proxy-allowed-hosts",
+                "gglib.lan",
+                "--proxy-allowed-hosts",
+                "192.168.1.20:8080",
+            ],
+        ] {
+            let m = SettingsSetArgs::augment_args(Command::new("t"))
+                .try_get_matches_from(argv.clone())
+                .unwrap_or_else(|e| panic!("{argv:?} must parse: {e}"));
+            let args = SettingsSetArgs::from_arg_matches(&m).expect("args");
+            assert_eq!(
+                args.proxy_allowed_hosts.as_deref(),
+                Some(&["gglib.lan".to_owned(), "192.168.1.20:8080".to_owned()][..]),
+                "for {argv:?}"
+            );
+        }
+    }
+
     /// The flag parses the three spellings a person types, and nothing else.
     #[test]
     fn the_flag_accepts_exactly_off_note_and_refuse() {

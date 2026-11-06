@@ -16,7 +16,21 @@ interface EndpointCopyBarProps {
 
 /** Build the OpenAI-compatible base URL clients should be pointed at. */
 export function proxyEndpointUrl(host: string, port: number): string {
-  return `http://${host}:${port}/v1`;
+  // An IPv6 address needs brackets in a URL; one already bracketed, or a name, does not.
+  const authority = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  return `http://${authority}:${port}/v1`;
+}
+
+/**
+ * Where this app reaches an endpoint bound at `bound` (the stored
+ * `proxyHost`; `null` is loopback): a wildcard address, `0.0.0.0` or `::`, on
+ * loopback, since that is nowhere a client can send; any other address, a
+ * loopback or one interface's, on itself, since nothing listens on loopback
+ * then. The daemon's own dial rule; its status says the reached address once
+ * #1768 lands, and this reader goes with it.
+ */
+export function reachableHost(bound: string | null): string {
+  return bound === null || bound === '' || bound === '0.0.0.0' || bound === '::' ? '127.0.0.1' : bound;
 }
 
 /**

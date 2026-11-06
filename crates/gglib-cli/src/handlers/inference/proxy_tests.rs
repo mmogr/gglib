@@ -6,7 +6,7 @@ use std::net::TcpListener;
 
 use clap::Parser as _;
 
-use super::{resolve_default_context, start_body, start_on};
+use super::{reach_host, reached, resolve_default_context, start_body, start_on};
 use crate::commands::Commands;
 use crate::daemon_client::{DaemonHandle, STAND_IN_PORT, StartProxyBody, paths};
 use crate::parser::Cli;
@@ -282,4 +282,29 @@ async fn without_a_host_or_cache_flag_the_daemon_is_sent_neither() {
     .await;
     assert_eq!(named.sent["host"], "0.0.0.0");
     assert_eq!(named.sent["cache"], true);
+}
+
+/// The dashboard dials where the endpoint can be reached: a wildcard bind on
+/// loopback, loopback on itself, and one interface's address on that address,
+/// since nothing listens on loopback then; an IPv6 address in brackets.
+#[test]
+fn a_wildcard_bind_is_reached_on_loopback_and_an_interfaces_address_on_itself() {
+    assert_eq!(reach_host("0.0.0.0"), "127.0.0.1");
+    assert_eq!(reach_host("::"), "127.0.0.1");
+    assert_eq!(reach_host("127.0.0.1"), "127.0.0.1");
+    assert_eq!(reach_host("192.168.1.20"), "192.168.1.20");
+    assert_eq!(reach_host("fe80::1"), "[fe80::1]");
+}
+
+/// With no `--host`, the stored address decides where the dashboard dials;
+/// typed, the flag does.
+#[test]
+fn the_dashboard_dials_the_typed_host_else_the_stored_one() {
+    let stored = Settings {
+        proxy_host: Some("192.168.1.20".to_owned()),
+        ..Settings::default()
+    };
+    assert_eq!(reached(None, &stored), "192.168.1.20");
+    assert_eq!(reached(Some("0.0.0.0"), &stored), "127.0.0.1");
+    assert_eq!(reached(None, &Settings::default()), "127.0.0.1");
 }
