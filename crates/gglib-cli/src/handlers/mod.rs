@@ -14,6 +14,7 @@ pub(crate) mod mcp_cli;
 pub(crate) mod model;
 pub(crate) mod proxy_cache_clear;
 pub(crate) mod proxy_dashboard;
+pub(crate) mod proxy_test;
 pub(crate) mod proxy_trips;
 pub(crate) mod remote;
 pub(crate) mod run;

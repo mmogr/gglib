@@ -95,6 +95,20 @@ pub enum ProxyCommand {
         #[command(flatten)]
         remote: RemoteFlag,
     },
+    /// Send one real request through the running endpoint and say who
+    /// answered, then how a client connects to it
+    ///
+    /// The daemon sends the request to its own endpoint, with the key the
+    /// endpoint demands, by the id a client would send; the answer names the
+    /// model that answered (a pinned endpoint answers with its pin) and how
+    /// long it took, the load included. Then the client block `gglib up`
+    /// ends with: the address, the key rule, the Model ID and a recipe per
+    /// client, all the daemon's. With no model named, the pinned model is
+    /// used, else the one loaded model, else the command refuses.
+    Test {
+        /// Model to prove the endpoint with (id or name)
+        model: Option<String>,
+    },
     /// Stop the proxy on the running gglib daemon
     ///
     /// The proxy keeps running in the daemon after `gglib proxy`/`gglib serve`

@@ -4,8 +4,9 @@
 
 use super::*;
 use gglib_core::contracts::http::daemon::{
-    PROXY_START_CLI_FIELDS, PROXY_START_PINNED_CLI_FIELDS, PROXY_STATUS_FIELDS,
-    SERVERS_START_CLI_FIELDS, SERVERS_STOP_CLI_FIELDS,
+    PROXY_CLIENTS_FIELDS, PROXY_PROVE_FIELDS, PROXY_START_CLI_FIELDS,
+    PROXY_START_PINNED_CLI_FIELDS, PROXY_STATUS_FIELDS, SERVERS_START_CLI_FIELDS,
+    SERVERS_STOP_CLI_FIELDS,
 };
 use gglib_core::domain::{EndpointState, KeyState};
 
@@ -233,5 +234,63 @@ fn a_status_with_every_contract_field_is_read_whole() {
     assert_eq!(fields.len(), PROXY_STATUS_FIELDS.len());
     for (name, read) in fields {
         assert!(read, "{name} was not read as sent");
+    }
+}
+
+/// The client-recipes and proof mirrors read every field the daemon sends,
+/// held to the shared lists as the status mirror is.
+#[test]
+fn the_clients_and_prove_mirrors_read_every_field_the_contract_names() {
+    let clients_sample = |name: &str| match name {
+        "base_url" => serde_json::json!("http://127.0.0.1:8080/v1"),
+        "key" => serde_json::json!("required"),
+        "model_id" => serde_json::json!("qwen@Q4_K_M"),
+        "gglib_id" => serde_json::json!(7),
+        "recipes" => {
+            serde_json::json!([{ "client": "c", "hint": "h", "lines": [{ "label": "l", "value": "v" }] }])
+        }
+        other => panic!("no sample value for contract field `{other}` — add one"),
+    };
+    let answer: serde_json::Map<String, serde_json::Value> = PROXY_CLIENTS_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), clients_sample(name)))
+        .collect();
+    let recipes: super::ClientRecipesDto =
+        serde_json::from_value(serde_json::Value::Object(answer)).expect("every field reads");
+    let read: [(&str, bool); 5] = [
+        ("base_url", recipes.base_url == "http://127.0.0.1:8080/v1"),
+        ("key", recipes.key == Some(KeyState::Required)),
+        ("model_id", recipes.model_id == "qwen@Q4_K_M"),
+        ("gglib_id", recipes.gglib_id == 7),
+        (
+            "recipes",
+            recipes.recipes.len() == 1 && recipes.recipes[0].lines[0].value == "v",
+        ),
+    ];
+    assert_eq!(read.len(), PROXY_CLIENTS_FIELDS.len());
+    for (name, ok) in read {
+        assert!(ok, "{name} was not read as sent");
+    }
+
+    let prove_sample = |name: &str| match name {
+        "answered_by" => serde_json::json!("qwen"),
+        "asked_for" => serde_json::json!("Qwen 8B"),
+        "elapsed_ms" => serde_json::json!(1400),
+        other => panic!("no sample value for contract field `{other}` — add one"),
+    };
+    let answer: serde_json::Map<String, serde_json::Value> = PROXY_PROVE_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), prove_sample(name)))
+        .collect();
+    let proof: super::ProofOutcomeDto =
+        serde_json::from_value(serde_json::Value::Object(answer)).expect("every field reads");
+    let read: [(&str, bool); 3] = [
+        ("answered_by", proof.answered_by == "qwen"),
+        ("asked_for", proof.asked_for == "Qwen 8B"),
+        ("elapsed_ms", proof.elapsed_ms == 1400),
+    ];
+    assert_eq!(read.len(), PROXY_PROVE_FIELDS.len());
+    for (name, ok) in read {
+        assert!(ok, "{name} was not read as sent");
     }
 }

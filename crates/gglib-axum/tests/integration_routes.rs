@@ -1005,3 +1005,62 @@ async fn an_engine_status_route_returns_json() {
     assert!(json["installed"].is_boolean());
     assert!(json["binaryPath"].is_string());
 }
+
+// ============================================================================
+// Proxy API Tests - how a client connects, and the proof request
+// ============================================================================
+
+/// Both routes are the daemon's facts about a running endpoint, so with the
+/// endpoint off each refuses with the one sentence every surface prints,
+/// rather than answering with an address nobody can reach.
+#[tokio::test]
+async fn proxy_clients_and_prove_refuse_while_the_endpoint_is_off() {
+    let app = test_app(CorsConfig::AllowAll).await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            authed()
+                .header("Host", "127.0.0.1:9887")
+                .uri("/api/proxy/clients?model=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let body_str = std::str::from_utf8(&body).unwrap();
+    assert!(body_str.contains("the endpoint is off"), "{body_str}");
+
+    let response = app
+        .clone()
+        .oneshot(
+            authed()
+                .method("POST")
+                .header("Host", "127.0.0.1:9887")
+                .header("content-type", "application/json")
+                .uri("/api/proxy/prove")
+                .body(Body::from(r#"{"model_id":1}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let body_str = std::str::from_utf8(&body).unwrap();
+    assert!(body_str.contains("the endpoint is off"), "{body_str}");
+
+    // The model is required: a recipe is for one model.
+    let response = app
+        .oneshot(
+            authed()
+                .header("Host", "127.0.0.1:9887")
+                .uri("/api/proxy/clients")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

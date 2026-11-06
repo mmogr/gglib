@@ -23,8 +23,10 @@ mod models_components;
 mod models_projector;
 mod models_upgrade;
 mod proxy;
+pub mod proxy_clients;
 mod proxy_guard;
 mod proxy_port;
+pub mod proxy_prove;
 pub mod proxy_settings;
 mod remote;
 mod residency_events;
@@ -48,6 +50,8 @@ pub use launch_explain::LaunchExplanationDto;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;
+pub use proxy_clients::{ClientFacts, ClientRecipe, ClientRecipes, RecipeLine, recipes};
+pub use proxy_prove::{ProofOutcome, ProofRefusal};
 pub use proxy_settings::proxy_config_from_settings;
 pub use remote::{
     EnableRequest, Enabled, FarCredentials, FarError, FarProxy, JoinRequest, Joined,

@@ -453,8 +453,8 @@ impl ModelOps {
 }
 
 /// Each model's `/v1/models` id, by its catalogue id: the one function the
-/// proxy's listing and `gglib up` name a model by.
-fn openai_ids(models: &[Model]) -> std::collections::HashMap<i64, String> {
+/// proxy's listing, `gglib up` and the client recipes name a model by.
+pub(crate) fn openai_ids(models: &[Model]) -> std::collections::HashMap<i64, String> {
     let listed: Vec<ListedModel<'_>> = models.iter().map(ListedModel::from).collect();
     models
         .iter()

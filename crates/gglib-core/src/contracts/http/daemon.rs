@@ -51,6 +51,25 @@ pub const PROXY_STATUS_FIELDS: &[&str] = &[
     "pinned_model",
 ];
 
+/// How a client connects to the endpoint for one model (`?model=<gglib id>`).
+///
+/// The address, the key rule, the id a client sends, and the recipes per
+/// client, written once by the daemon. `gglib up`, `gglib proxy test` and the
+/// Endpoint page print them.
+pub const PROXY_CLIENTS_PATH: &str = "/api/proxy/clients";
+
+/// The keys of the answer to [`PROXY_CLIENTS_PATH`]; the CLI's mirror is held
+/// to this list as `ProxyStatusDto` is to [`PROXY_STATUS_FIELDS`].
+pub const PROXY_CLIENTS_FIELDS: &[&str] = &["base_url", "key", "model_id", "gglib_id", "recipes"];
+
+/// Send one real completion through the endpoint for a model (`{"model_id"}`)
+/// and say who answered, in how long, or why it failed. The daemon holds the
+/// request open while the model loads.
+pub const PROXY_PROVE_PATH: &str = "/api/proxy/prove";
+
+/// The keys of the answer to [`PROXY_PROVE_PATH`].
+pub const PROXY_PROVE_FIELDS: &[&str] = &["answered_by", "asked_for", "elapsed_ms"];
+
 /// The loop guard's log, a day per row (#1052).
 ///
 /// Not in [`CLI_ROUTE_CONTRACT`]: `gglib proxy trips` reads the log from this
@@ -322,6 +341,8 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], HEALTH_PATH),
     (&["POST"], PROXY_START_PATH),
     (&["POST"], PROXY_STOP_PATH),
+    (&["GET"], PROXY_CLIENTS_PATH),
+    (&["POST"], PROXY_PROVE_PATH),
     (&["GET"], PROXY_STATUS_PATH),
     (&["POST"], PROXY_START_PINNED_PATH),
     (&["GET"], SERVERS_LIST_PATH),
