@@ -27,7 +27,7 @@ crates/gglib-app-services/src/setup.rs 363
 crates/gglib-app-services/src/setup_engines_tests.rs 529
 crates/gglib-app-services/src/test_support.rs 396
 crates/gglib-app-services/src/types.rs 583
-crates/gglib-app-services/src/types_settings.rs 309
+crates/gglib-app-services/src/types_settings.rs 310
 crates/gglib-app-services/src/types_model_dto_tests.rs 313
 crates/gglib-axum/src/error.rs 331
 crates/gglib-axum/src/handlers/agent/compose.rs 375
