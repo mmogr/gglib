@@ -35,6 +35,9 @@ const bridge = bridgeEvents({
     const normalized = normalizeServerEventFromAppEvent(payload);
     if (normalized) {
       ingestServerEvent(normalized);
+      // A load's event names the model and port; how it was launched and
+      // what it is doing are on the list alone, so it is read again.
+      if (normalized.type === 'running') void bridge.refresh();
     }
   },
   // Hydration: seed the registry with servers already running at load. No

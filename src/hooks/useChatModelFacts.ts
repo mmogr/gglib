@@ -23,7 +23,7 @@ export interface ChatModelFacts {
  * its context (its served default, else the file's), and whether it thinks.
  *
  * Fetched once per model id. A page that moves to another model is remounted
- * with the new id (ModelControlCenterPage keys it by the session), so the
+ * with the new id (the chat route keys it by the session), so the
  * answers never describe a model the page is no longer talking to.
  */
 export function useChatModelFacts(modelId: number | undefined): ChatModelFacts {

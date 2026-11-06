@@ -62,7 +62,7 @@ export async function readLibrary(): Promise<LibraryRead> {
   try {
     return { models: await getTransport().listModels() };
   } catch (err) {
-    return { failed: `Failed to load models: ${formatError(err)}` };
+    return { failed: formatError(err) };
   }
 }
 

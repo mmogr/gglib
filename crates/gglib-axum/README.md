@@ -96,7 +96,6 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/models/{id}/tags/{tag}` | Add a tag, named in the path |
 | `DELETE` | `/api/models/{id}/tags/{tag}` | Remove a tag |
 | `GET` | `/api/models/tags` | Every tag in use |
-| `GET` | `/api/models/filter-options` | The filter options for the model list |
 | `POST` | `/api/models/{id}/verify` | Verify model integrity (streams progress via SSE) |
 | `GET` | `/api/models/{id}/updates` | Check for `HuggingFace` updates |
 | `POST` | `/api/models/{id}/repair` | Delete a model's unhealthy files and queue the download that fetches them again; answers that download's id and the files |

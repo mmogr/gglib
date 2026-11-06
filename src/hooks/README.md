@@ -51,8 +51,7 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useDownloadManager.ts`](useDownloadManager.ts) | Holds the daemon's queue snapshot, from the queue route and the event stream, newest `revision` winning; queue, cancel and clear |
-| [`useDownloadCompletionEffects.ts`](useDownloadCompletionEffects.ts) | Batches download completions into one library refresh and one toast; raises an error toast for each failure. A toast for one download is the daemon's own text for how it ended |
+| [`useDownloadToasts.ts`](useDownloadToasts.ts) | How downloads ended, as toasts on any screen, mounted once by the app's layout: completions batched by `services/downloadsEvents` (one download in the daemon's words, several counted), each failure its own error toast. The queue itself is `services/downloadsRegistry` |
 
 ### System Hooks
 
@@ -72,7 +71,6 @@ Custom React hooks for gglib GUI functionality.
 | [`useDebounce.ts`](useDebounce.ts) | Debounced value updates |
 | [`useClickOutside.ts`](useClickOutside.ts) | Click outside detection for dropdowns |
 | [`useFileDropGuard.ts`](useFileDropGuard.ts) | Refuses a file dragged or dropped where nothing takes it, so the desktop window never opens it in place of the app |
-| [`useModelFilterOptions.ts`](useModelFilterOptions.ts) | Model filtering and sorting |
 | [`useMetricHistory.ts`](useMetricHistory.ts) | Ring buffer of samples, either as-is or as the per-second rate of a cumulative counter |
 | [`usePanelResize.ts`](usePanelResize.ts) | Draggable split with min/max bounds, optionally persisted to `localStorage` |
 | [`useToastTimer.ts`](useToastTimer.ts) | Toast auto-dismiss countdown with pause and resume |

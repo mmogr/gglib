@@ -26,8 +26,8 @@ stream a browser tab does.
 The stream has no backlog: what was sent while the connection was down is
 gone, and the daemon behind a new connection may be a new process. A listener
 that holds state built from events reads that state again on
-`onEventStreamOpen`. `useDownloadManager` does, and forgets the last queue
-`revision` it took, since a restarted daemon numbers its snapshots from 1.
+`onEventStreamOpen`. `services/downloadsEvents` does, and forgets the last
+queue `revision` it took, since a restarted daemon numbers its snapshots from 1.
 
 ## Key Files
 

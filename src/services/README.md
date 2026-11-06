@@ -67,7 +67,7 @@ not because it belongs here.
 | File | Description |
 |------|-------------|
 | `serverRegistry.ts` | External store for server lifecycle state. Uses `useSyncExternalStore` for reactive React integration. |
-| `serverEvents.ts` | Subscribes to the daemon's SSE stream and ingests server lifecycle events into the registry |
+| `serverEvents.ts` | Subscribes to the daemon's SSE stream and ingests server lifecycle events into the registry; reads the server list again after a load, since only the list says how a model was launched and what it is doing (`launch`) |
 | `serverEvents.normalize.ts` | Two named readers, one per producer: `normalizeServerEventFromAppEvent` for the camelCase `AppEvent` frames on `/api/events`, `normalizeServerSnapshotFromList` for the snake_case `GET /api/servers` list. Neither accepts the other's spelling |
 | `proxyRegistry.ts` | External store for proxy state, the `serverRegistry.ts` analogue |
 | `proxyEvents.ts` | Subscribes to proxy lifecycle events and ingests them into `proxyRegistry` |
@@ -77,6 +77,8 @@ not because it belongs here.
 | `remoteEvents.ts` | Subscribes to `remote_*` events, ingests them into `remoteRegistry`, and re-reads the status after each |
 | `modelRegistry.ts` | External store for this machine's model library, read once by every surface that shows it: the list as last read, whether a read has answered, and why the last one failed |
 | `modelEvents.ts` | Fills `modelRegistry`: a read on init, one after each burst of `model_*` events (batched, so a retag of many is one read), and one after each edit made through its `addModel`/`removeModel`/`updateModel` |
+| `downloadsRegistry.ts` | External store for the download queue, read by the library's Downloading group and the inspector's Download buttons: the daemon's snapshot, a newer `revision` replacing an older one whichever way it came, and the cancel that is out |
+| `downloadsEvents.ts` | Fills `downloadsRegistry`: the queue read on init and on every opening of the event stream (the revision forgotten, for a restarted daemon), and every `queue_snapshot` between; settles a cancel on the download's ending or another's start; batches completions into one library read and one word to `onDownloadEndings`, failures told at once; queue, cancel and remove |
 | `dashboardRegistry.ts` | One `/v1/proxy/status/stream` per endpoint and credential, ref-counted: opened by the first surface that wants it, closed by the last, reopened when the key changes |
 | `createEventStore.ts` | Shared store factory behind the registries: one value, replaced whole on each write, with a `useSyncExternalStore` hook over it |
 | `bridgeEvents.ts` | Shared bridge behind the `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event or a cleanup overtook |

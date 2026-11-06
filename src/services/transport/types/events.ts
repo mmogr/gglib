@@ -57,10 +57,10 @@ export type { CompletionDetail };
  * Emitted when the queue transitions from busy → idle.
  *
  * The last hand-written type in this file, and the only drift class it could
- * still hide was field *addition*: `useDownloadManager` assigns the generated
- * `DownloadEvent.summary` into state typed by this, so a removal or a type
- * change already failed to compile, while a new Rust field simply stayed
- * unreadable. Nothing gated it either — `check_ts_bindings.sh` and
+ * still hide was field *addition*: the download hook that held the queue
+ * assigned the generated `DownloadEvent.summary` into state typed by this, so
+ * a removal or a type change already failed to compile, while a new Rust
+ * field simply stayed unreadable. Nothing gated it either — `check_ts_bindings.sh` and
  * `make bindings-check` only ever look at Rust and `src/types/generated`.
  */
 import type { QueueRunSummary } from '../../../types/generated/QueueRunSummary';

@@ -42,7 +42,7 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
   getTransport: () => transport,
 }));
 // The places are not under test; each names itself.
-vi.mock('../../../src/pages/ModelControlCenterPage', () => ({ default: () => <main aria-label="Library" /> }));
+vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 vi.mock('../../../src/app/ChatRoute', () => ({ ChatRoute: () => <main aria-label="Chat" />, CHAT_LOADING: null }));
 
 import { startMenuBridge } from '../../../src/app/menuBridge';

@@ -35,36 +35,6 @@ pub fn is_system_tag(tag: &str) -> bool {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Filter/Aggregate Types
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Filter options for the model library UI.
-///
-/// Contains aggregate data about available models for building
-/// dynamic filter controls.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct ModelFilterOptions {
-    /// All distinct quantization types present in the library.
-    pub quantizations: Vec<String>,
-    /// Minimum and maximum parameter counts (in billions).
-    pub param_range: Option<RangeValues>,
-    /// Minimum and maximum context lengths.
-    pub context_range: Option<RangeValues>,
-    /// Minimum and maximum `latest_tg_tps` from benchmark summaries.
-    /// `None` when no models have been benchmarked.
-    pub speed_range: Option<RangeValues>,
-}
-
-/// A range of numeric values with min and max.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct RangeValues {
-    pub min: f64,
-    pub max: f64,
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Model Types
 // ─────────────────────────────────────────────────────────────────────────────
 

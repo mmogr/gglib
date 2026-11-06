@@ -1,26 +1,19 @@
 import React from 'react';
-import { Skeleton, Stack, Row } from '../primitives';
+import { Skeleton, Stack } from '../../components/primitives';
 
-/**
- * Skeleton placeholder for a single model list row.
- * Mirrors the ModelsListContent row: name line + param/arch/quant badges.
- */
+/** One grey two-line row: a name, and the line of facts under it. */
 const SkeletonRow: React.FC = () => (
-  <div className="py-sm px-md border-l-[3px] border-l-transparent w-full">
+  <div className="min-h-[52px] px-md py-sm">
     <Stack gap="sm">
-      <Skeleton variant="text" width="55%" />
-      <Row gap="md" align="center">
-        <Skeleton width="40px" height="0.75em" />
-        <Skeleton width="60px" height="0.75em" />
-        <Skeleton width="36px" height="0.75em" />
-      </Row>
+      <Skeleton variant="text" width="45%" />
+      <Skeleton variant="text" width="30%" height="0.75em" />
     </Stack>
   </div>
 );
 
 /**
- * Full-panel skeleton for the model library list.
- * Replaces the "Loading models..." text while the model list is being fetched.
+ * The library before its first read: six grey two-line rows, still (a
+ * skeleton is a placeholder, not a signal, so it does not move).
  *
  * The placeholder is decorative, so it is hidden from assistive tech — but it
  * replaced a literal "Loading models..." string that screen readers used to

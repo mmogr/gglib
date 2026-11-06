@@ -8,7 +8,7 @@ use gglib_core::events::AppEvent;
 use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort, ProcessHandle};
 use gglib_core::services::{AppCore, ImportMode};
 use gglib_core::{
-    Model, ModelCapabilities, ModelFilterOptions,
+    Model, ModelCapabilities,
     domain::{ModelDetailDto, ModelListQuery, apply_query},
 };
 
@@ -353,11 +353,6 @@ impl ModelOps {
     /// Get all tags for a specific model.
     pub async fn get_tags(&self, model_id: i64) -> Result<Vec<String>, GuiError> {
         Ok(self.deps.core.models().get_tags(model_id).await?)
-    }
-
-    /// Get filter options for the model library UI.
-    pub async fn get_filter_options(&self) -> Result<ModelFilterOptions, GuiError> {
-        Ok(self.deps.core.models().get_filter_options().await?)
     }
 
     /// Override one or more capability flags on a model.

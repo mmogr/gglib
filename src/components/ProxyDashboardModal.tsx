@@ -9,9 +9,9 @@
  *
  * Triggered from `ProxyControl.tsx`'s "View Dashboard" button, following the
  * same self-contained `{isOpen, onClose}` Modal pattern as `SettingsModal`
- * rather than threading state through
- * `ModelControlCenterPage` — the dashboard is proxy-wide, not tied to a
- * specific selected model.
+ * rather than threading state through the
+ * library place — the dashboard is proxy-wide, not tied to a specific
+ * selected model.
  *
  * Connection and slot rendering lives in `components/proxy/` because the tray
  * popover shows the same figures; this file owns only the modal chrome and the

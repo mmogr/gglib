@@ -84,7 +84,7 @@ describe('the model registry', () => {
 
     act(() => initModelEvents());
     await settle();
-    expect(result.current).toEqual({ models: [], loading: false, error: 'Failed to load models: daemon away' });
+    expect(result.current).toEqual({ models: [], loading: false, error: 'daemon away' });
 
     await act(() => refreshModels());
     expect(result.current.error).toBeNull();
@@ -101,7 +101,7 @@ describe('the model registry', () => {
     await act(() => refreshModels());
 
     expect(result.current.models.map((m) => m.name)).toEqual(['llama-7b']);
-    expect(result.current.error).toBe('Failed to load models: daemon away');
+    expect(result.current.error).toBe('daemon away');
     expect(result.current.loading).toBe(false);
   });
 

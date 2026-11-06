@@ -1,16 +1,26 @@
 /**
- * The download queue the GUI holds is the daemon's snapshot, taken whole.
+ * The download queue the GUI holds is the daemon's snapshot, taken whole,
+ * and a download's ending is said once, on any screen.
  *
- * It arrives two ways, from `GET /api/models/downloads/queue` and in
- * `queue_snapshot` events, numbered in one sequence. What is pinned here is
- * which snapshot wins: the one with the higher `revision`, until the event
- * stream opens again, when the numbering may have started over.
+ * The snapshot arrives two ways, from `GET /api/models/downloads/queue` and
+ * in `queue_snapshot` events, numbered in one sequence. What is pinned here
+ * is which snapshot wins: the one with the higher `revision`, until the
+ * event stream opens again, when the numbering may have started over. Then
+ * the cancel that is out and when it settles, and the endings: completions
+ * batched into one library read and one toast, failures told at once.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useDownloadManager } from '../../../src/hooks/useDownloadManager';
-import { useDownloadCompletionEffects } from '../../../src/hooks/useDownloadCompletionEffects';
+import { useDownloads } from '../../../src/services/downloadsRegistry';
+import {
+  cancelDownload,
+  cleanupDownloadEvents,
+  initDownloadEvents,
+  queueDownload,
+  removeFromQueue,
+} from '../../../src/services/downloadsEvents';
+import { useDownloadToasts } from '../../../src/hooks/useDownloadToasts';
 import { ToastProvider, useToastContext } from '../../../src/contexts/ToastContext';
 import type { DownloadEvent } from '../../../src/services/transport/types/events';
 import type { QueueSnapshot } from '../../../src/services/transport/types/downloads';
@@ -26,14 +36,17 @@ const transport = vi.hoisted(() => ({
   queueDownload: vi.fn(),
   getDownloadQueue: vi.fn(),
   cancelDownload: vi.fn(),
+  removeFromQueue: vi.fn(),
   subscribe: vi.fn(),
   onEventStreamOpen: vi.fn(),
 }));
+const refreshModels = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/transport')>()),
   getTransport: () => transport,
 }));
+vi.mock('../../../src/services/modelEvents', () => ({ refreshModels }));
 
 /** Deliver a download event as the stream does. */
 function emit(event: DownloadEvent) {
@@ -50,12 +63,29 @@ function heldAnswer() {
   return (snapshot: QueueSnapshot) => act(async () => settle(snapshot));
 }
 
-describe('useDownloadManager', () => {
+/** The registry, read as a screen reads it, with the bridge up. */
+function watch() {
+  initDownloadEvents();
+  return renderHook(() => useDownloads());
+}
+
+/** The toasts the hook raises, under the app's provider. */
+function watchToasts() {
+  return renderHook(() => {
+    useDownloadToasts();
+    return useToastContext().toasts.map((t) => [t.message, t.type]);
+  }, { wrapper: ToastProvider });
+}
+
+const completed = (id: string, text: string): DownloadEvent => ({ type: 'download_completed', id, text });
+
+describe('downloadsRegistry', () => {
   beforeEach(() => {
     sendEvent = null;
     streamOpened = null;
     unsubscribed = [];
     for (const mock of Object.values(transport)) mock.mockReset();
+    refreshModels.mockClear();
     transport.getDownloadQueue.mockResolvedValue(queueSnapshot());
     transport.subscribe.mockImplementation((_type: string, handler: typeof sendEvent) => {
       sendEvent = handler;
@@ -66,12 +96,19 @@ describe('useDownloadManager', () => {
       return () => unsubscribed.push('open');
     });
   });
+  afterEach(() => {
+    cleanupDownloadEvents();
+    vi.useRealTimers();
+  });
 
-  it('seeds from REST on mount', async () => {
+  it('subscribes before it reads, and seeds from the read', async () => {
     const seeded = queueSnapshot({ revision: 7, active: runningRow(), waiting: [waitingRow('owner/b:Q4_K_M', 2)] });
-    transport.getDownloadQueue.mockResolvedValue(seeded);
+    transport.getDownloadQueue.mockImplementation(async () => {
+      expect(transport.subscribe).toHaveBeenCalled();
+      return seeded;
+    });
 
-    const { result } = renderHook(() => useDownloadManager());
+    const { result } = watch();
 
     // No event has arrived: the running download is known from the read alone.
     await waitFor(() => expect(result.current.snapshot).toEqual(seeded));
@@ -79,7 +116,7 @@ describe('useDownloadManager', () => {
   });
 
   it('replaces the snapshot with each one the stream sends', async () => {
-    const { result } = renderHook(() => useDownloadManager());
+    const { result } = watch();
     await waitFor(() => expect(result.current.snapshot?.revision).toBe(1));
 
     emit(snapshotEvent(queueSnapshot({ revision: 2, active: runningRow() })));
@@ -92,8 +129,7 @@ describe('useDownloadManager', () => {
 
   it('drops an older revision', async () => {
     const answerLate = heldAnswer();
-    const { result } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const { result } = watch();
 
     emit(snapshotEvent(queueSnapshot({ revision: 5, active: runningRow() })));
     emit(snapshotEvent(queueSnapshot({ revision: 4 })));
@@ -104,14 +140,14 @@ describe('useDownloadManager', () => {
     emit(snapshotEvent(queueSnapshot({ revision: 5 })));
     expect(result.current.snapshot?.active).toBeDefined();
 
-    // Nor is the read sent at mount, answered after the stream moved on.
+    // Nor is the read sent at init, answered after the stream moved on.
     await answerLate(queueSnapshot({ revision: 3 }));
     expect(result.current.snapshot?.revision).toBe(5);
   });
 
   it("takes a restarted daemon's first snapshot, and reads the queue again", async () => {
-    const { result } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const { result } = watch();
+    await waitFor(() => expect(result.current.snapshot?.revision).toBe(1));
     emit(snapshotEvent(queueSnapshot({ revision: 40, active: runningRow() })));
     expect(transport.getDownloadQueue).toHaveBeenCalledTimes(1);
 
@@ -127,71 +163,23 @@ describe('useDownloadManager', () => {
     expect(result.current.snapshot?.revision).toBe(2);
   });
 
-  it("reports a completion in the event's own words", async () => {
-    const onCompleted = vi.fn();
-    renderHook(() => useDownloadManager({ onCompleted }));
-    await waitFor(() => expect(sendEvent).toBeTruthy());
-    const row = runningRow();
-    emit(snapshotEvent(queueSnapshot({ revision: 2, active: row })));
-
-    emit({ type: 'download_completed', id: row.id, text: 'Zeta, eight bit: in the library' });
-
-    expect(onCompleted).toHaveBeenCalledWith({ id: row.id, text: 'Zeta, eight bit: in the library' });
-  });
-
-  it('shows a file added without its details in the toast, as the daemon worded it', async () => {
-    const text = 'owner/zeta-GGUF:Q8_0: Downloaded model to models/zeta.Q8_0.gguf. '
-      + 'zeta.Q8_0.gguf was added without its details: Invalid GGUF format: Invalid magic number';
-    const refreshModels = vi.fn();
-    // The two hooks as the page wires them, under the page's toasts.
-    const { result } = renderHook(() => {
-      useDownloadManager(useDownloadCompletionEffects({ refreshModels, windowMs: 1 }));
-      return useToastContext().toasts;
-    }, { wrapper: ToastProvider });
-    await waitFor(() => expect(sendEvent).toBeTruthy());
-
-    emit({ type: 'download_completed', id: 'owner/zeta-GGUF:Q8_0', text });
-
-    await waitFor(() => expect(result.current.map((toast) => [toast.message, toast.type])).toEqual([[text, 'success']]));
-    expect(refreshModels).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports a failure in the event's own words, whatever the snapshot holds", async () => {
-    const onFailed = vi.fn();
-    renderHook(() => useDownloadManager({ onFailed }));
-    await waitFor(() => expect(sendEvent).toBeTruthy());
-
-    emit({ type: 'download_failed', id: 'owner/b:Q4_K_M', text: 'B, four bit: it broke' });
-
-    expect(onFailed).toHaveBeenCalledWith({ id: 'owner/b:Q4_K_M', text: 'B, four bit: it broke' });
-  });
-
-  it("keeps a run's summary until a download runs again", async () => {
-    const { result } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(sendEvent).toBeTruthy());
-    const summary = { run_id: 'r1', items: [] } as unknown as Extract<DownloadEvent, { type: 'queue_run_complete' }>['summary'];
-
-    emit({ type: 'queue_run_complete', summary });
-    emit(snapshotEvent(queueSnapshot({ revision: 2 })));
-    expect(result.current.lastQueueSummary).toBe(summary);
-
-    emit(snapshotEvent(queueSnapshot({ revision: 3, active: runningRow() })));
-    expect(result.current.lastQueueSummary).toBeNull();
-  });
-
   it('shows a cancel as out until the download ends', async () => {
     transport.cancelDownload.mockResolvedValue(undefined);
-    const { result } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const { result } = watch();
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
     const row = runningRow();
     emit(snapshotEvent(queueSnapshot({ revision: 2, active: row })));
     // The daemon has the cancel but the download has not ended yet.
     transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 3, active: row }));
 
-    await act(async () => { await result.current.cancel(row.id); });
+    await act(() => cancelDownload(row.id));
 
     expect(transport.cancelDownload).toHaveBeenCalledWith(row.id);
     expect(result.current.cancellingId).toBe(row.id);
+
+    // A second cancel while the first is out sends nothing.
+    await act(() => cancelDownload(row.id));
+    expect(transport.cancelDownload).toHaveBeenCalledTimes(1);
 
     emit({ type: 'download_cancelled', id: row.id, text: 'cancelled' });
     expect(result.current.cancellingId).toBeNull();
@@ -199,20 +187,20 @@ describe('useDownloadManager', () => {
 
   it('settles a cancel when the download fails, or when another is the one running', async () => {
     transport.cancelDownload.mockResolvedValue(undefined);
-    const { result } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const { result } = watch();
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
     const row = runningRow();
     emit(snapshotEvent(queueSnapshot({ revision: 2, active: row })));
     transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 3, active: row }));
 
     // The download failed before the cancel reached it: no `download_cancelled` comes.
-    await act(async () => { await result.current.cancel(row.id); });
+    await act(() => cancelDownload(row.id));
     expect(result.current.cancellingId).toBe(row.id);
     emit({ type: 'download_failed', id: row.id, text: 'failed' });
     expect(result.current.cancellingId).toBeNull();
 
     // The ending event was missed: a snapshot with another download running says as much.
-    await act(async () => { await result.current.cancel(row.id); });
+    await act(() => cancelDownload(row.id));
     expect(result.current.cancellingId).toBe(row.id);
     const next = runningRow({ id: 'owner/b:Q4_K_M', model_id: 'owner/b', quantization: 'Q4_K_M' });
     emit(snapshotEvent(queueSnapshot({ revision: 4, active: next })));
@@ -221,33 +209,112 @@ describe('useDownloadManager', () => {
 
   it('lets a cancel be tried again when the request for it fails', async () => {
     transport.cancelDownload.mockRejectedValue(new Error('500 internal error'));
-    const { result } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const { result } = watch();
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
     const row = runningRow();
     transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 2, active: row }));
 
-    await act(async () => { await result.current.cancel(row.id); });
+    await act(() => cancelDownload(row.id));
 
     expect(result.current.cancellingId).toBeNull();
     expect(result.current.snapshot?.active?.id).toBe(row.id);
   });
 
-  it('queues a model and reads the queue again', async () => {
+  it('queues a model, or takes a waiting one off, and reads the queue again', async () => {
     transport.queueDownload.mockResolvedValue({ id: 'm2:q4' });
-    const { result } = renderHook(() => useDownloadManager());
+    const { result } = watch();
     await waitFor(() => expect(result.current.snapshot?.revision).toBe(1));
     transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 2, waiting: [waitingRow('m2:q4', 1)] }));
 
-    await act(async () => { await result.current.queueModel('m2', 'q4'); });
+    await act(() => queueDownload('m2', 'q4'));
 
     expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: 'm2', quantization: 'q4' });
     expect(result.current.snapshot?.waiting.map((row) => row.id)).toEqual(['m2:q4']);
+
+    transport.removeFromQueue.mockResolvedValue(undefined);
+    transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 3 }));
+    await act(() => removeFromQueue('m2:q4'));
+
+    expect(transport.removeFromQueue).toHaveBeenCalledWith('m2:q4');
+    expect(result.current.snapshot?.waiting).toEqual([]);
   });
 
-  it('stops listening on unmount', async () => {
-    const { unmount } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(sendEvent).toBeTruthy());
-    unmount();
+  it('stops listening, and empties, on cleanup', async () => {
+    const { result } = watch();
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+    act(() => cleanupDownloadEvents());
     expect(unsubscribed.sort()).toEqual(['events', 'open']);
+    expect(result.current.snapshot).toBeNull();
+  });
+
+  describe('endings', () => {
+    it("says one download in the daemon's own words, and reads the library once", async () => {
+      const text = 'owner/zeta-GGUF:Q8_0: Downloaded model to models/zeta.Q8_0.gguf. '
+        + 'zeta.Q8_0.gguf was added without its details: Invalid GGUF format: Invalid magic number';
+      const { result } = watchToasts();
+      watch();
+      vi.useFakeTimers();
+
+      emit(completed('owner/zeta-GGUF:Q8_0', text));
+      expect(refreshModels).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(350));
+
+      expect(result.current).toEqual([[text, 'success']]);
+      expect(refreshModels).toHaveBeenCalledTimes(1);
+    });
+
+    it('counts the downloads that end within one window: one toast, one read', () => {
+      const { result } = watchToasts();
+      watch();
+      vi.useFakeTimers();
+
+      emit(completed('a', 'A: downloaded'));
+      emit(completed('b', 'B: downloaded'));
+      act(() => vi.advanceTimersByTime(349));
+      expect(result.current).toEqual([]);
+      emit(completed('c', 'C: downloaded'));
+      act(() => vi.advanceTimersByTime(1));
+
+      expect(result.current).toEqual([['3 models downloaded', 'success']]);
+      expect(refreshModels).toHaveBeenCalledTimes(1);
+    });
+
+    it('says downloads in different windows separately', () => {
+      const { result } = watchToasts();
+      watch();
+      vi.useFakeTimers();
+
+      emit(completed('a', 'A: downloaded'));
+      emit(completed('b', 'B: downloaded'));
+      act(() => vi.advanceTimersByTime(350));
+      emit(completed('c', 'C: downloaded'));
+      act(() => vi.advanceTimersByTime(350));
+
+      expect(result.current).toEqual([['2 models downloaded', 'success'], ['C: downloaded', 'success']]);
+      expect(refreshModels).toHaveBeenCalledTimes(2);
+    });
+
+    it("raises an error toast at once for a failure, in the daemon's words, and reads nothing", () => {
+      const { result } = watchToasts();
+      watch();
+
+      emit({ type: 'download_failed', id: 'owner/b:Q4_K_M', text: 'B, four bit: it broke' });
+
+      expect(result.current).toEqual([['B, four bit: it broke', 'error']]);
+      expect(refreshModels).not.toHaveBeenCalled();
+    });
+
+    it('drops a pending batch on cleanup', () => {
+      const { result } = watchToasts();
+      watch();
+      vi.useFakeTimers();
+
+      emit(completed('a', 'A: downloaded'));
+      act(() => cleanupDownloadEvents());
+      act(() => vi.advanceTimersByTime(350));
+
+      expect(result.current).toEqual([]);
+      expect(refreshModels).not.toHaveBeenCalled();
+    });
   });
 });

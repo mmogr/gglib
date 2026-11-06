@@ -4,7 +4,7 @@
  * The proxy serves the chat's model to every client, Copilot included, so
  * Close only leaves the chat, and Unload, beside the model picker and in the
  * Console, is the one control that stops the model. The page hands each up
- * to `ModelControlCenterPage`, whose test pins what it does with them; this
+ * to the chat route, which `tests/ts/places/libraryChat.test.tsx` pins; this
  * one pins which control hands up which.
  */
 

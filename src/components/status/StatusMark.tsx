@@ -16,9 +16,28 @@ import type { FC } from 'react';
 import { Triangle, X } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
+import type { ReachState } from '../../types/generated/ReachState';
+import type { ResidencyState } from '../../types/generated/ResidencyState';
 
 /** The kinds of mark, one per row of the visual system's status table. */
 export type MarkKind = 'on' | 'off' | 'changing' | 'away' | 'attention' | 'failed';
+
+/** The shape for each reach, beside `REACH_WORDS`. */
+export const REACH_MARK: Readonly<Record<ReachState, MarkKind>> = {
+  connected: 'on',
+  away: 'away',
+  disconnected: 'off',
+};
+
+/** The shape for each residency, beside `RESIDENCY_WORDS`: only a load in progress turns. */
+export const RESIDENCY_MARK: Readonly<Record<ResidencyState, MarkKind>> = {
+  loaded: 'on',
+  loading: 'changing',
+  working: 'on',
+  reading: 'on',
+  waiting: 'on',
+  not_loaded: 'off',
+};
 
 interface StatusMarkProps {
   kind: MarkKind;
