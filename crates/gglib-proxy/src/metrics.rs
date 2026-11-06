@@ -152,11 +152,11 @@ pub struct ContextSnapshot {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub recorded_at_secs: u64,
     /// What gglib did to this request, each with its word, in the order it
-    /// was done (`crate::interventions`): filled where the request is
-    /// recorded, and a repaired tool call added by
-    /// [`ContextMetricsStore::flag_tool_repair`] when the repair lands, last
-    /// since it is. A repair whose snapshot was already evicted is lost to
-    /// this list, the bounded undercount that flag already accepts.
+    /// was done: filled where the request is recorded, and a repaired tool
+    /// call added by [`ContextMetricsStore::flag_tool_repair`] when the
+    /// repair lands, which comes after everything else. A repair whose
+    /// snapshot was already evicted is lost to this list, the bounded
+    /// undercount that flag already accepts.
     pub interventions: Vec<Intervention>,
     /// Per-store sequence number assigned by [`ContextMetricsStore::record`].
     /// Identifies this snapshot for post-stream back-patching; callers pass
