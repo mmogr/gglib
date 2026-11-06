@@ -7,7 +7,8 @@
  * the row's `percent`; with no total known there is no bar to fill.
  *
  * Hovering shows ×: on the running download it cancels, on a waiting one it
- * takes it off the queue.
+ * takes it off the queue. `Downloads` is the group of them, the running one
+ * first, drawn over the rows and over the Add pane alike.
  *
  * @module places/library/DownloadRow
  */
@@ -17,6 +18,10 @@ import { X } from 'lucide-react';
 import { IconButton } from '../../components/ui/IconButton';
 import { Icon } from '../../components/ui/Icon';
 import type { DownloadRow as Row } from '../../services/transport/types/downloads';
+import { useDownloads } from '../../services/downloadsRegistry';
+import { cancelDownload, removeFromQueue } from '../../services/downloadsEvents';
+import { Group } from './Group';
+import { matchesDownload } from './groups';
 
 interface DownloadRowProps {
   row: Row;
@@ -69,5 +74,26 @@ export const DownloadRow: FC<DownloadRowProps> = ({ row, cancelling, onCancel, o
         <Icon icon={X} size={14} />
       </IconButton>
     </div>
+  );
+};
+
+/** The Downloading group: the queue's rows that match `query`, or nothing. */
+export const Downloads: FC<{ query: string }> = ({ query }) => {
+  const { snapshot, cancellingId } = useDownloads();
+  const rows = snapshot ? [...(snapshot.active ? [snapshot.active] : []), ...snapshot.waiting] : [];
+  const shown = rows.filter((row) => matchesDownload(row, query));
+  if (shown.length === 0) return null;
+  return (
+    <Group label="Downloading">
+      {shown.map((row) => (
+        <DownloadRow
+          key={row.id}
+          row={row}
+          cancelling={cancellingId === row.id}
+          onCancel={(id) => void cancelDownload(id)}
+          onRemove={(id) => void removeFromQueue(id)}
+        />
+      ))}
+    </Group>
   );
 };

@@ -35,7 +35,7 @@ export interface SetupStatus {
   llamaInstalled: boolean;
   /** Where the installed llama.cpp stands against its pinned release, and the two releases. */
   llamaPin: PinState;
-  /** The chat model running on llama-server, when one is: no update is offered under it. */
+  /** The chat model running on llama-server, when one is: the daemon refuses an install under it. */
   llamaServing?: string | null;
   llamaCanDownload: boolean;
   llamaPlatformDescription?: string | null;

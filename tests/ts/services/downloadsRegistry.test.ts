@@ -145,6 +145,16 @@ describe('downloadsRegistry', () => {
     expect(result.current.snapshot?.revision).toBe(5);
   });
 
+  it('keeps its first read over an ending that carries no snapshot', async () => {
+    const answer = heldAnswer();
+    const { result } = watch();
+
+    emit({ type: 'download_completed', id: 'owner/a:Q4_K_M', text: 'A: downloaded' });
+    await answer(queueSnapshot({ revision: 4, waiting: [waitingRow('owner/b:Q4_K_M', 1)] }));
+
+    expect(result.current.snapshot?.revision).toBe(4);
+  });
+
   it("takes a restarted daemon's first snapshot, and reads the queue again", async () => {
     const { result } = watch();
     await waitFor(() => expect(result.current.snapshot?.revision).toBe(1));

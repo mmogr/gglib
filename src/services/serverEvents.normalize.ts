@@ -85,7 +85,6 @@ export function normalizeServerSnapshotFromList(
           port: s.port,
           updatedAt: coerceUnixTimeToMs(s.started_at) ?? Date.now(),
           modelName: s.model_name,
-          launch: s.launch,
         };
       })
       .filter(present),

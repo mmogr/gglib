@@ -2,7 +2,8 @@
  * What fills `downloadsRegistry`, and what a download's ending sets off.
  *
  * `bridgeEvents` over the `download` category: subscribe first, then read
- * the queue, and drop a read an event or a cleanup overtook. The registry's
+ * the queue, and drop a read a snapshot event or a cleanup overtook; an
+ * ending event carries no snapshot and overtakes nothing. The registry's
  * revision guard drops whatever is older still. Each time the event stream
  * opens the last revision is forgotten and the queue read again, since a
  * restarted daemon counts from 1 and keeps no backlog.
@@ -70,6 +71,9 @@ const bridge = bridgeEvents({
   read: () => getTransport().getDownloadQueue(),
   apply: takeQueueSnapshot,
   reset: resetDownloads,
+  // A snapshot's revision orders it against the read; an ending carries no
+  // snapshot, and must not cost the read that may be the only one.
+  overtakes: (wrapped) => wrapped.event.type === 'queue_snapshot',
 });
 
 let stopWatchingOpen: (() => void) | null = null;

@@ -25,16 +25,16 @@ import { Icon } from '../../components/ui/Icon';
 import { useToastContext } from '../../contexts/ToastContext';
 import { usePairedModels } from '../../hooks/usePairedModels';
 import { useServers, type ServerViewModel } from '../../hooks/useServers';
-import { useTags } from '../../hooks/useTags';
 import { HANDED, setChatHandoff } from '../../app/chatHandoff';
 import { inspectorSubject, libraryIntent, paths, settingsAt } from '../../app/paths';
 import { useDownloads } from '../../services/downloadsRegistry';
-import { refreshLibrary, refreshModels, removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
+import { refreshModels, removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
 import { useModel } from '../../services/modelRegistry';
 import { getTransport } from '../../services/transport';
 import type { HfModelSummary } from '../../types';
 import type { ModelRef } from '../../types/generated/ModelRef';
 import { formatError } from '../../utils/errors';
+import { Downloads } from './DownloadRow';
 import { EngineBanner } from './EngineBanner';
 import { DEFAULT_SORT, type LibrarySort } from './groups';
 import { LibraryHeader } from './LibraryHeader';
@@ -47,7 +47,6 @@ export default function LibraryPlace() {
   const { servers, stopServer } = useServers();
   const { snapshot: downloadQueue } = useDownloads();
   const paired = usePairedModels();
-  const { addTagToModel, removeTagFromModel } = useTags();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<LibrarySort>(DEFAULT_SORT);
   const [selectedHfModel, setSelectedHfModel] = useState<HfModelSummary | null>(null);
@@ -107,6 +106,7 @@ export default function LibraryPlace() {
         <LibraryHeader sort={sort} onSort={setSort} query={intent.add === null ? query : null} onQuery={setQuery} />
         {intent.add !== null ? (
           <div className="flex min-h-0 flex-1 flex-col">
+            <Downloads query="" />
             <div className="px-md pb-sm">
               <Button variant="ghost" size="sm" leftIcon={<Icon icon={ArrowLeft} size={14} />} onClick={() => navigate(paths.library())}>
                 Your models
@@ -156,10 +156,10 @@ export default function LibraryPlace() {
               servers={servers}
               onRemoveModel={removeModel}
               onUpdateModel={updateModel}
-              onAddTag={addTagToModel}
-              onRemoveTag={removeTagFromModel}
+              onAddTag={(id, tag) => getTransport().addModelTag(id, tag)}
+              onRemoveTag={(id, tag) => getTransport().removeModelTag(id, tag)}
               getModelDetail={(id) => getTransport().getModelDetail(id)}
-              onRefresh={refreshLibrary}
+              onRefresh={refreshModels}
               downloadQueue={downloadQueue}
               onRegisterServeModalOpener={(opener) => setOpenServeModal(() => opener)}
               onBenchmark={(modelId) => navigate(paths.benchmarks([modelId]))}

@@ -28,6 +28,8 @@ const transport = vi.hoisted(() => ({
   removeFromQueue: vi.fn(async (_id: string) => {}),
   listPairedModels: vi.fn(),
 }));
+// The proxy's live dashboard: the test sends its frames.
+const dashboard = vi.hoisted(() => ({ send: null as ((snapshot: unknown) => void) | null }));
 const install = vi.hoisted(() => ({
   stream: vi.fn((_kind: string, _onEvent: (e: unknown) => void, _onError: (m: string) => void) => () => {}),
 }));
@@ -46,6 +48,7 @@ vi.mock('../../../src/services/transport', async () => {
         return () => handlers.delete(category);
       }),
       onEventStreamOpen: vi.fn(() => () => {}),
+      revealSecret: vi.fn(async () => null),
     }),
   };
 });
@@ -55,11 +58,23 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
   streamEngineInstall: install.stream,
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn() }));
+vi.mock('../../../src/services/clients/proxyDashboard', () => ({
+  subscribeProxyDashboard: (_h: string, _p: number, _k: unknown, onSnapshot: (s: unknown) => void) => {
+    dashboard.send = onSnapshot;
+    return () => {
+      dashboard.send = null;
+    };
+  },
+}));
 
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
 import { cleanupServerEvents, initServerEvents } from '../../../src/services/serverEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
+import { ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
+import { resetEngineInstall } from '../../../src/places/library/engineInstall';
+import { INSTALL_PHASE_LABELS } from '../../../src/types/setup';
+import { getSetupStatus } from '../../../src/services/transport/api/setup';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
 import type { RemoteStatus } from '../../../src/services/transport/types/remote';
 import { renderApp } from './harness';
@@ -79,7 +94,15 @@ const listed = (id: number, name: string, extra: Record<string, unknown> = {}) =
   model_id: id, model_name: name, pid: 1, port: 9000 + id, started_at: Math.floor(later() / 1000), runtime: 'llama', ...extra,
 });
 
-const launch = (state: string) => ({ state, context_size: 8192, weights_bytes: 1, quantization: null, narration: null, flag_line: '' });
+/** A dashboard frame whose admission slots hold `residents`, each a model id and its state. */
+const frame = (...residents: [number, string][]) => ({
+  admission: {
+    slots: residents.map(([model_id, state]) => ({
+      model_id,
+      launch: { state, context_size: 8192, weights_bytes: 1, quantization: null, narration: null, flag_line: '' },
+    })),
+  },
+});
 
 const DESK: RemoteStatus = {
   ...IDLE_STATUS,
@@ -120,8 +143,10 @@ describe('the library place', () => {
     transport.getDownloadQueue.mockImplementation(async () => downloads.queue);
     transport.listPairedModels.mockResolvedValue(pairedModels([farEntry('Llama-3.3-70B', 7, { quantization: 'Q4_K_M', capabilities: ['vision'] })]));
     resetRemoteState();
+    resetEngineInstall();
   });
   afterEach(() => {
+    act(() => resetProxyState());
     cleanupModelEvents();
     cleanupDownloadEvents();
     cleanupServerEvents();
@@ -146,20 +171,24 @@ describe('the library place', () => {
     expect(rowsOf('On this Mac')).toEqual(['Qwen3-4B', 'Qwen3-30B-A3B']);
   });
 
-  it("says a loaded model's state in the word for the launch state the server list gives", async () => {
+  it("says a loaded model's state as the endpoint's live stream gives it, and Loaded while it says nothing", async () => {
     library.models = [guiModel({ id: 1, name: 'Qwen3-4B' })];
+    servers.list = [listed(1, 'Qwen3-4B')];
+    act(() => ingestProxyEvent({ type: 'proxy_started', port: 8080 }));
     renderLibrary();
-    await screen.findByRole('option', { name: /Qwen3-4B/ });
-
-    // A load is announced by event; what it is doing is on the list it
-    // re-reads, dated by the server's start, before the event arrived.
-    servers.list = [listed(1, 'Qwen3-4B', { started_at: 1, launch: launch('working') })];
-    vi.spyOn(Date, 'now').mockReturnValueOnce(later());
-    act(() => handlers.get('server')?.({ type: 'server_started', modelId: 1, modelName: 'Qwen3-4B', port: 9001 }));
-
     const row = await screen.findByRole('option', { name: /Qwen3-4B/ });
-    await waitFor(() => expect(within(row).getByText('Working')).toBeInTheDocument());
+    await waitFor(() => expect(within(row).getByText('Loaded')).toBeInTheDocument());
     expect(within(screen.getByRole('listbox', { name: 'Loaded' })).getByRole('option')).toBe(row);
+    await waitFor(() => expect(dashboard.send).not.toBeNull());
+
+    // A request starts, then ends: the word follows the resident's slot.
+    act(() => dashboard.send?.(frame([1, 'working'])));
+    expect(within(row).getByText('Working')).toBeInTheDocument();
+    act(() => dashboard.send?.(frame([1, 'loaded'])));
+    expect(within(row).getByText('Loaded')).toBeInTheDocument();
+    // Another model's slot says nothing of this one.
+    act(() => dashboard.send?.(frame([2, 'working'])));
+    expect(within(row).getByText('Loaded')).toBeInTheDocument();
   });
 
   it("says the facts under a model's name, and a missing part as the one accessory", async () => {
@@ -297,16 +326,50 @@ describe('the library place', () => {
 
   it("unloads a loaded row through the daemon, and copies a row's Model ID", async () => {
     library.models = [guiModel({ id: 1, name: 'Qwen3-4B', openaiId: 'Qwen3-4B' })];
-    servers.list = [listed(1, 'Qwen3-4B', { launch: launch('loaded') })];
-    renderLibrary();
+    servers.list = [listed(1, 'Qwen3-4B')];
+    const { at } = renderLibrary();
     const user = userEvent.setup();
     const row = await screen.findByRole('option', { name: /Qwen3-4B/ });
     await waitFor(() => expect(within(row).getByText('Loaded')).toBeInTheDocument());
 
     await user.click(within(row).getByRole('button', { name: 'Unload' }));
     expect(transport.stopServer).toHaveBeenCalledWith(1);
+    // Unload acts on the row; it does not pick it.
+    expect(at()).toBe('/library');
     await user.click(within(row).getByRole('button', { name: 'Copy the Model ID Qwen3-4B' }));
     expect(await navigator.clipboard.readText()).toBe('Qwen3-4B');
+  });
+
+  it('picks a row with Enter or Space as with a click', async () => {
+    library.models = [guiModel({ id: 1, name: 'a' }), guiModel({ id: 2, name: 'b' })];
+    const { at } = renderLibrary();
+    const user = userEvent.setup();
+    (await screen.findByRole('option', { name: /^a/ })).focus();
+
+    await user.keyboard('{Enter}');
+    expect(at()).toBe('/models/1');
+    screen.getByRole('option', { name: /^b/ }).focus();
+    await user.keyboard(' ');
+    expect(at()).toBe('/models/2');
+  });
+
+  it('filters the downloads by the search too', async () => {
+    downloads.queue = queueSnapshot({ revision: 3, active: runningRow(), waiting: [waitingRow('owner/b:Q4_K_M', 2)] });
+    renderLibrary();
+    await screen.findByRole('group', { name: 'owner/b:Q4_K_M' });
+
+    await userEvent.setup().type(screen.getByRole('searchbox'), 'zeta');
+
+    expect(screen.getByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'owner/b:Q4_K_M' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the downloads, with their ×, over the Add pane', async () => {
+    downloads.queue = queueSnapshot({ revision: 3, active: runningRow() });
+    renderLibrary('/library?view=add&sub=add');
+
+    const group = await screen.findByRole('region', { name: 'Downloading' });
+    expect(within(group).getByRole('button', { name: 'Cancel owner/zeta-GGUF:Q8_0' })).toBeInTheDocument();
   });
 
   it('shows the Add pane at its address in place of the rows, with the way back', async () => {
@@ -328,8 +391,17 @@ describe('the library place', () => {
   describe('the llama.cpp banner', () => {
     const older = { llamaInstalled: true, llamaCanDownload: true, llamaPin: { standing: 'older', installedRelease: 'b6900', targetRelease: 'b7012', built: false, rebuilds: false, updateDownloads: true } };
 
-    it('offers the update, runs the install stream, and shows the refusal it answers with', async () => {
-      setup.status = older;
+    /** Into the Add pane and back to the rows, which unmounts the banner and mounts it again. */
+    async function awayAndBack() {
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Add a GGUF file…' }));
+      expect(screen.queryByRole('status', { name: 'llama.cpp' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Your models' }));
+    }
+
+    it('offers the update with a model running on llama.cpp, runs the install stream, and shows the refusal it answers with', async () => {
+      setup.status = { ...older, llamaServing: 'qwen' };
       renderLibrary();
       const banner = await screen.findByRole('status', { name: 'llama.cpp' });
       expect(banner).toHaveTextContent('llama.cpp b6900 is older than the b7012 this gglib expects.');
@@ -351,6 +423,40 @@ describe('the library place', () => {
 
       await userEvent.setup().click(within(banner).getByRole('button', { name: 'Not now' }));
       expect(screen.queryByRole('status', { name: 'llama.cpp' })).not.toBeInTheDocument();
+
+      // Leaving the library and coming back does not bring it back.
+      await awayAndBack();
+      await screen.findByRole('searchbox');
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(screen.queryByRole('status', { name: 'llama.cpp' })).not.toBeInTheDocument();
+    });
+
+    it('keeps a running install, and its progress, across leaving the library', async () => {
+      setup.status = older;
+      renderLibrary();
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Update' }));
+      const send = install.stream.mock.calls[0][1];
+      act(() => send({ type: 'phase_started', phase: 'download' }));
+
+      await awayAndBack();
+
+      const banner = await screen.findByRole('status', { name: 'llama.cpp' });
+      expect(within(banner).getByText(INSTALL_PHASE_LABELS.download)).toBeInTheDocument();
+      expect(within(banner).queryByRole('button', { name: 'Update' })).not.toBeInTheDocument();
+      expect(install.stream).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads the status again when the install completes, and goes once llama.cpp is at its release', async () => {
+      setup.status = older;
+      renderLibrary();
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Update' }));
+      const reads = vi.mocked(getSetupStatus).mock.calls.length;
+      setup.status = { llamaInstalled: true, llamaCanDownload: true };
+
+      act(() => install.stream.mock.calls[0][1]({ type: 'completed', version: 'b7012' }));
+
+      await waitFor(() => expect(screen.queryByRole('status', { name: 'llama.cpp' })).not.toBeInTheDocument());
+      expect(vi.mocked(getSetupStatus).mock.calls.length).toBe(reads + 1);
     });
 
     it('is not drawn when llama.cpp is at its release', async () => {

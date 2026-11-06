@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useAllServerStates, type ServerStatus } from '../services/serverRegistry';
 import { safeStopServer } from '../services/server/safeActions';
-import type { LaunchFacts } from '../types/generated/LaunchFacts';
 
 /**
  * A running server as the UI draws it.
@@ -17,8 +16,6 @@ export interface ServerViewModel {
   modelName: string;
   port: number;
   status: ServerStatus;
-  /** How it was launched and what it is doing, from the daemon's server list. */
-  launch?: LaunchFacts;
 }
 
 /**
@@ -44,7 +41,6 @@ export function useServers() {
       modelName: s.modelName ?? fallbackName,
       port: s.port ?? 0,
       status: s.status,
-      launch: s.launch,
     };
   });
 

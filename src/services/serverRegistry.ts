@@ -15,7 +15,6 @@
 
 import { useSyncExternalStore } from 'react';
 import type { RuntimeErrorInfo, ServerHealthStatus } from '../types';
-import type { LaunchFacts } from '../types/generated/LaunchFacts';
 import { createEventStore } from './createEventStore';
 
 // Re-export for convenience
@@ -35,8 +34,6 @@ export interface ServerState {
   health?: ServerHealthStatus;
   /** Model name for display purposes */
   modelName?: string;
-  /** How it was launched and what it is doing, as the server list last said. */
-  launch?: LaunchFacts;
 }
 
 export interface ServerStateInfo {
@@ -47,8 +44,6 @@ export interface ServerStateInfo {
   health?: ServerHealthStatus;
   /** Model name for display purposes */
   modelName?: string;
-  /** How it was launched and what it is doing; only the server list says. */
-  launch?: LaunchFacts;
 }
 
 export type ServerEvent =
@@ -139,12 +134,7 @@ export function ingestServerEvent(evt: ServerEvent): void {
             updatedAt: server.updatedAt,
             health: server.health,
             modelName: server.modelName ?? existing?.modelName,
-            launch: server.launch ?? existing?.launch,
           });
-        } else if (server.launch && existing.status === 'running') {
-          // The list is dated by the server's start, older than the event
-          // that announced it; its launch facts are still the only ones.
-          next.set(server.modelId, { ...existing, launch: server.launch });
         }
       }
       store.setState(next);
@@ -164,8 +154,6 @@ export function ingestServerEvent(evt: ServerEvent): void {
           // Clear health on lifecycle transitions (will be updated by health monitor)
           health: evt.type === 'running' ? { status: 'healthy' } : undefined,
           modelName: evt.modelName ?? existing?.modelName,
-          // A new start's facts are read from the server list again.
-          launch: evt.type === 'running' && existing?.status === 'running' ? existing.launch : undefined,
         });
       }
       break;
@@ -279,7 +267,6 @@ function getAllRunningServerInfos(): ServerStateInfo[] {
         updatedAt: s.updatedAt,
         health: s.health,
         modelName: s.modelName,
-        launch: s.launch,
       });
     }
   }

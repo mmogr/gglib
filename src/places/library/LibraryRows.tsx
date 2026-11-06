@@ -4,16 +4,17 @@
  * (`groups.ts`). Each group of models is a listbox; its rows are options.
  *
  * Every word on a row is the daemon's or arranged from its facts: the state
- * beside a Loaded row is `RESIDENCY_WORDS` for the launch state the server
- * list gives (`Loaded` for a server announced before the list is read again,
- * since it is announced once it answers), the paired machine's reach is
+ * beside a Loaded row is `RESIDENCY_WORDS` for the state the proxy's live
+ * dashboard gives its resident (`useResidency`), `Loaded` while the stream
+ * says nothing of it (a server is announced once it answers), the paired
+ * machine's reach is
  * `REACH_WORDS` for the remote status's `reach`, and a download is said in
  * its row's own text.
  *
  * @module places/library/LibraryRows
  */
 
-import type { FC, MouseEvent, ReactNode } from 'react';
+import type { FC, MouseEvent } from 'react';
 import { CopyValue } from '../../components/CopyValue';
 import { RESIDENCY_MARK, REACH_MARK, StatusMark } from '../../components/status/StatusMark';
 import { REACH_WORDS, RESIDENCY_WORDS } from '../../components/status/words';
@@ -21,9 +22,7 @@ import { Button } from '../../components/ui/Button';
 import { useToastContext } from '../../contexts/ToastContext';
 import type { PairedModelsState } from '../../hooks/usePairedModels';
 import type { ServerViewModel } from '../../hooks/useServers';
-import { useDownloads } from '../../services/downloadsRegistry';
-import { cancelDownload, removeFromQueue } from '../../services/downloadsEvents';
-import { refreshLibrary } from '../../services/modelEvents';
+import { refreshModels } from '../../services/modelEvents';
 import { useModelLibrary } from '../../services/modelRegistry';
 import { useRemoteState } from '../../services/remoteRegistry';
 import type { GgufModel } from '../../types';
@@ -31,10 +30,12 @@ import type { InspectorSubject } from '../../app/paths';
 import { canSee } from '../../utils/canSee';
 import { formatParamCount, formatSize } from '../../utils/format';
 import { imageFamilyLabel } from '../../utils/imageFamily';
-import { DownloadRow } from './DownloadRow';
-import { libraryGroups, matchesDownload, matchesFar, type LibrarySort } from './groups';
+import { Downloads } from './DownloadRow';
+import { Group, Note } from './Group';
+import { libraryGroups, matchesFar, type LibrarySort } from './groups';
 import { ModelListSkeleton } from './ModelListSkeleton';
 import { ModelRow } from './ModelRow';
+import { useResidency } from './useResidency';
 
 interface LibraryRowsProps {
   query: string;
@@ -47,22 +48,6 @@ interface LibraryRowsProps {
   onPickFar: (id: number) => void;
   onUnload: (id: number) => void;
 }
-
-function Group({ label, aside, children }: { label: string; aside?: ReactNode; children: ReactNode }) {
-  return (
-    <section aria-label={label} className="flex flex-col pb-md">
-      <h3 className="m-0 flex items-center justify-between px-md py-xs text-xs font-semibold text-text-secondary">
-        <span>{label}</span>
-        {aside}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-const Note: FC<{ children: ReactNode }> = ({ children }) => (
-  <p className="m-0 px-md py-xs text-xs text-text-secondary">{children}</p>
-);
 
 /** The facts under a model's name: params, quant, size, and what it can do. */
 function factsOf(model: GgufModel): (string | null | false)[] {
@@ -77,7 +62,7 @@ function factsOf(model: GgufModel): (string | null | false)[] {
 
 export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, servers, paired, onPickLocal, onPickFar, onUnload }) => {
   const { models, loading, error } = useModelLibrary();
-  const { snapshot, cancellingId } = useDownloads();
+  const residency = useResidency();
   const { status: remote } = useRemoteState();
   const { showToast } = useToastContext();
 
@@ -85,8 +70,6 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
 
   const serverOf = new Map(servers.map((s) => [s.modelId, s]));
   const { loaded, here } = libraryGroups(models, new Set(serverOf.keys()), query, sort);
-  const downloads = snapshot ? [...(snapshot.active ? [snapshot.active] : []), ...snapshot.waiting] : [];
-  const shownDownloads = downloads.filter((row) => matchesDownload(row, query));
   const far = paired.group?.machine.kind === 'paired' ? paired.group : null;
   const farShown = far ? far.models.filter((m) => matchesFar(m, query)) : [];
 
@@ -101,7 +84,7 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
 
   const row = (model: GgufModel) => {
     const server = serverOf.get(model.id);
-    const state = server?.launch?.state ?? 'loaded';
+    const state = residency.get(model.id) ?? 'loaded';
     const missing = model.missingComponents.length;
     const accessory = server ? (
       <StatusMark kind={RESIDENCY_MARK[state]} word={RESIDENCY_WORDS[state]} />
@@ -136,24 +119,12 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
 
   return (
     <div className="flex flex-col">
-      {shownDownloads.length > 0 && (
-        <Group label="Downloading">
-          {shownDownloads.map((d) => (
-            <DownloadRow
-              key={d.id}
-              row={d}
-              cancelling={cancellingId === d.id}
-              onCancel={(id) => void cancelDownload(id)}
-              onRemove={(id) => void removeFromQueue(id)}
-            />
-          ))}
-        </Group>
-      )}
+      <Downloads query={query} />
 
       {error !== null && models.length === 0 ? (
         <div className="flex items-center gap-sm px-md py-sm text-sm text-text-secondary">
           <span>{`Can't read the library: ${error.replace(/\.$/, '')}.`}</span>
-          <Button size="sm" variant="ghost" onClick={() => void refreshLibrary()}>
+          <Button size="sm" variant="ghost" onClick={() => void refreshModels()}>
             Retry
           </Button>
         </div>

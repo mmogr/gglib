@@ -36,6 +36,12 @@ interface EventBridgeOptions<K extends AppEventType, T> {
   apply: (value: T) => void;
   /** Empties the registry on cleanup, for one that should not outlive its bridge. */
   reset?: () => void;
+  /**
+   * Whether an event makes a read that is out stale. Every event does,
+   * unless this says otherwise: a registry whose reads carry their own order
+   * (a revision) need not drop one for an event that says nothing of it.
+   */
+  overtakes?: (evt: AppEventMap[K]) => boolean;
 }
 
 interface EventBridge {
@@ -53,6 +59,7 @@ export function bridgeEvents<K extends AppEventType, T>({
   read,
   apply,
   reset,
+  overtakes,
 }: EventBridgeOptions<K, T>): EventBridge {
   let unsubscribe: Unsubscribe | null = null;
   let version = 0;
@@ -75,7 +82,7 @@ export function bridgeEvents<K extends AppEventType, T>({
 
     // Subscribe FIRST so no event is missed during the hydration read below.
     unsubscribe = getTransport().subscribe(category, (evt) => {
-      version++;
+      if (overtakes?.(evt) ?? true) version++;
       onEvent(evt);
     });
     void refresh();
