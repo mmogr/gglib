@@ -31,6 +31,7 @@ vi.mock('../../../src/hooks/useLlamaStatus', () => {
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   syncMenuStateSilent: vi.fn(),
+  setSelectedModel: vi.fn(async () => {}),
   listenToMenuEvents: vi.fn(async () => () => {}),
   MENU_EVENTS: {},
 }));

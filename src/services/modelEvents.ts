@@ -87,9 +87,20 @@ export async function refreshModels(): Promise<void> {
 }
 
 /**
+ * Refresh everything the library feeds: the registry, and whoever listens
+ * with `onModelLibraryChange`. The page's Refresh button and the native
+ * menu's Refresh Models are this one verb.
+ */
+export async function refreshLibrary(): Promise<void> {
+  listeners.forEach((listener) => listener());
+  await refreshModels();
+}
+
+/**
  * Be told once per burst of library events, after the registry's own re-read
- * has been asked for. For state kept beside the list, such as the filter
- * options and the tags, which a change to the library may have moved too.
+ * has been asked for, and on `refreshLibrary`. For state kept beside the
+ * list, such as the filter options and the tags, which a change to the
+ * library may have moved too.
  */
 export function onModelLibraryChange(listener: Listener): () => void {
   listeners.add(listener);

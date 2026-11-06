@@ -1,80 +1,70 @@
-import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { useModel, useModelLibrary } from '../services/modelRegistry';
-import { onModelLibraryChange, refreshModels, removeModel as removeLibraryModel, updateModel } from '../services/modelEvents';
+import { onModelLibraryChange, refreshLibrary, removeModel as removeLibraryModel, updateModel } from '../services/modelEvents';
 import { usePairedModels } from '../hooks/usePairedModels';
-import { useLibrarySelection } from '../hooks/useLibrarySelection';
+import { useServers } from '../hooks/useServers';
 import { useTags } from '../hooks/useTags';
 import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
-import { useToastContext } from '../contexts/ToastContext';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { FarModelInspector, ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
 import TwoPanelLayout from '../components/TwoPanelLayout';
+import { setChatHandoff } from '../app/chatHandoff';
+import { inspectorSubject, libraryIntent, paths, settingsAt } from '../app/paths';
 import { useMccFilters } from './modelControlCenter/useMccFilters';
 import { useMccLayout } from './modelControlCenter/useMccLayout';
-import { useMccMenuActions } from './modelControlCenter/useMccMenuActions';
-import { useChatSession } from './modelControlCenter/useChatSession';
-// Lazy load ChatPage to avoid loading assistant-ui until needed
-const ChatPage = lazy(() => import('./ChatPage'));
-// Lazy load BenchmarkPage to keep initial bundle small
-const BenchmarkPage = lazy(() => import('./BenchmarkPage'));
 import { HfModelSummary } from '../types';
+import type { ModelRef } from '../types/generated/ModelRef';
 import type { ServerViewModel } from '../hooks/useServers';
 import { SidebarTabId } from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
 import { getTransport } from '../services/transport';
 
-interface ModelControlCenterPageProps {
-  servers: ServerViewModel[];
-  stopServer: (modelId: number) => Promise<void>;
-  /** Open Settings on its System tab, where the image runtime is installed. */
-  onOpenSystemSettings?: () => void;
-  onRegisterMenuActions?: (actions: {
-    refreshModels: () => void;
-    addModelFromFile: () => void;
-    showDownloads: () => void;
-    showChat: () => void;
-    startServer: () => void;
-    stopServer: () => void;
-    removeModel: () => void;
-    selectModel: (modelId: number, view?: 'chat' | 'console') => void;
-  }) => void;
-}
-
-export default function ModelControlCenterPage({
-  servers,
-  stopServer,
-  onOpenSystemSettings,
-  onRegisterMenuActions,
-}: ModelControlCenterPageProps) {
-  const { models, loading, error } = useModelLibrary();
-  // The paired machine's rows, and one selection across both machines.
+/**
+ * The library and the inspector beside it. The selection is the address:
+ * `/library` nothing, `/models/:id` one of this machine's models, `/far/:id`
+ * one of the paired machine's; a chat, the benchmarks and the settings are
+ * addresses too, so this page shows one screen and moves to the others.
+ */
+export default function ModelControlCenterPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { loading, error } = useModelLibrary();
+  const { servers, stopServer } = useServers();
+  // The paired machine's rows, and the one selection the address names.
   const paired = usePairedModels();
-  const { localPick: selectedModelId, farPick, pickFar, pickLocal, dropLocal } = useLibrarySelection(paired.group);
+  const subject = inspectorSubject(location);
+  const selectedModelId = subject?.kind === 'model' ? subject.id : null;
   const selectedModel = useModel(selectedModelId);
+  // A far pick holds only while the paired rows are that machine's.
+  const farPick: ModelRef | null = useMemo(
+    () => (subject?.kind === 'far' && paired.group ? { machine: paired.group.machine, id: subject.id } : null),
+    [subject?.kind, subject?.id, paired.group],
+  );
+  const pickLocal = useCallback(
+    (id: number | null) => navigate(id === null ? paths.library() : paths.model(id)),
+    [navigate],
+  );
+  const pickFar = useCallback((model: ModelRef) => navigate(paths.far(model.id)), [navigate]);
   const removeModel = useCallback(async (id: number) => {
     await removeLibraryModel(id);
-    dropLocal(id);
-  }, [dropLocal]);
+    if (selectedModelId === id) navigate(paths.library());
+  }, [selectedModelId, navigate]);
   const { tags, loadTags, addTagToModel, removeTagFromModel } = useTags();
-  const { showToast } = useToastContext();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
-  
-  // Unified refresh function for models, filter options, and tags
-  const handleRefreshAll = useCallback(async () => {
-    await Promise.all([refreshModels(), refreshFilterOptions(), loadTags()]);
-  }, [refreshFilterOptions, loadTags]);
 
-  // Another client's edits move more than the list, which the registry re-reads
-  // itself: a new architecture or tag has to reach the filter options too.
+  // Another client's edits, and Refresh, move more than the list, which the
+  // registry re-reads itself: a new architecture or tag has to reach the
+  // filter options too.
   const refreshFilterChoices = useCallback(() => void Promise.all([refreshFilterOptions(), loadTags()]), [refreshFilterOptions, loadTags]);
   useEffect(() => onModelLibraryChange(refreshFilterChoices), [refreshFilterChoices]);
 
   // Download ending effects - batches completions, triggers refresh, shows toasts
   const { onCompleted, onFailed } = useDownloadCompletionEffects({
-    refreshModels: handleRefreshAll,
+    refreshModels: refreshLibrary,
   });
   
   // The download queue - lifted to page level so it's always visible
@@ -98,43 +88,12 @@ export default function ModelControlCenterPage({
   
   // HuggingFace model selection state (for preview in inspector)
   const [selectedHfModel, setSelectedHfModel] = useState<HfModelSummary | null>(null);
-  
-  // Chat session state - when set, shows ChatPage instead of model panels.
-  // Local sessions come from a served model here, paired ones from a far row.
-  const { chatSession, setChatSession, openChatSession, openPairedChat, switchChatModel, startingModel, closeChatSession } =
-    useChatSession(servers);
 
-  // Benchmark state - when set, shows BenchmarkPage instead of model panels
-  const [benchmarkModelId, setBenchmarkModelId] = useState<number | null>(null);
-  
-  // Ref for file input (for menu-triggered file add)
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
   // Ref for opening serve modal from menu
   const openServeModalRef = useRef<(() => void) | null>(null);
   
   // Panel width state (percentages) - now just two columns
   const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = useMccLayout();
-
-  useMccMenuActions({
-    onRegisterMenuActions,
-    selectedModelId,
-    servers,
-    models,
-    stopServer,
-    removeModel,
-    selectModel: pickLocal,
-    setSidebarTab,
-    setActiveSubTab: (tab: AddDownloadSubTab) => setActiveSubTab(tab),
-    triggerFilePicker: () => fileInputRef.current?.click(),
-    refreshAll: handleRefreshAll,
-    // Only a local session can be the one whose server just stopped.
-    chatSessionModelId: chatSession?.kind === 'local' ? chatSession.modelId : null,
-    closeChatSession,
-    openChatSession,
-    onOpenServeModal: () => openServeModalRef.current?.(),
-    showToast,
-  });
 
   const {
     searchQuery,
@@ -147,6 +106,19 @@ export default function ModelControlCenterPage({
     setActiveSubTab,
     handleModelAdded,
   } = useMccFilters({ refreshFilterOptions, loadTags });
+
+  // What the native menu asked for, carried in the address and acted on once:
+  // the Add pane on a tab, or the picked model's Serve dialog.
+  const intent = libraryIntent(location.search);
+  useEffect(() => {
+    if (intent.add === null && !intent.serve) return;
+    if (intent.add !== null) {
+      setSidebarTab('add');
+      setActiveSubTab(intent.add);
+    }
+    if (intent.serve) openServeModalRef.current?.();
+    void navigate(location.pathname, { replace: true });
+  }, [intent.add, intent.serve, location.pathname, navigate, setActiveSubTab]);
 
   // Handler for selecting a local model (clears HF selection)
   const handleSelectLocalModel = (id: number | null) => {
@@ -186,57 +158,12 @@ export default function ModelControlCenterPage({
     }
   };
 
-  // Handler for when server starts - opens chat view
+  // A server started from the inspector opens its chat; the port is handed
+  // on, since the registry may not have heard of it yet.
   const handleServerStarted = async (serverInfo: ServerViewModel) => {
-    setChatSession({
-      kind: 'local',
-      serverPort: serverInfo.port,
-      modelId: serverInfo.modelId,
-      modelName: serverInfo.modelName,
-      initialView: 'chat',
-    });
+    setChatHandoff({ modelId: serverInfo.modelId, port: serverInfo.port, modelName: serverInfo.modelName });
+    navigate(paths.chat(serverInfo.modelId));
   };
-
-  // If chat session is active, show ChatPage. Keyed by the server, so a
-  // model switch remounts it on the new one. Close only leaves the chat: the
-  // proxy serves its model to every client, Copilot included, so unloading
-  // it is a separate action, and only a model served here can be unloaded.
-  if (chatSession) {
-    return (
-      <Suspense fallback={<div className="flex flex-col h-full w-full overflow-hidden"><div className="loading-chat">Loading chat...</div></div>}>
-        {chatSession.kind === 'local' ? (
-          <ChatPage
-            key={`${chatSession.modelId}:${chatSession.serverPort}`}
-            serverPort={chatSession.serverPort}
-            modelId={chatSession.modelId}
-            modelName={chatSession.modelName}
-            initialView={chatSession.initialView}
-            conversationId={chatSession.conversationId}
-            draft={chatSession.draft}
-            startingModel={startingModel}
-            onSwitchModel={(choice, context) => switchChatModel(chatSession, choice, context)}
-            onUnloadModel={() => stopServer(chatSession.modelId)}
-            onClose={closeChatSession}
-          />
-        ) : (
-          <ChatPage paired={chatSession} modelName={chatSession.modelName} onClose={closeChatSession} />
-        )}
-      </Suspense>
-    );
-  }
-
-  // If benchmark is active, show BenchmarkPage
-  if (benchmarkModelId !== null) {
-    return (
-      <Suspense fallback={<div className="flex flex-col h-full w-full overflow-hidden items-center justify-center text-text-muted">Loading benchmark...</div>}>
-        <BenchmarkPage
-          models={models}
-          initialModelIds={[benchmarkModelId]}
-          onClose={() => setBenchmarkModelId(null)}
-        />
-      </Suspense>
-    );
-  }
 
   return (
     <div className="flex flex-col w-full min-h-full overflow-auto md:h-full md:min-h-0 md:overflow-hidden">
@@ -253,7 +180,7 @@ export default function ModelControlCenterPage({
             onSelectModel={handleSelectLocalModel}
             loading={loading}
             error={error}
-            onRefresh={handleRefreshAll}
+            onRefresh={refreshLibrary}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             tags={tags}
@@ -288,13 +215,13 @@ export default function ModelControlCenterPage({
               />
             )}
             {farPick ? (
-              <FarModelInspector model={farPick} paired={paired} onChat={(far, name) => openPairedChat(far, name, paired.name)} />
+              <FarModelInspector model={farPick} paired={paired} onChat={(far) => navigate(paths.farChat(far.id))} />
             ) : (
               <ModelInspectorPanel
                 model={selectedModel}
                 selectedHfModel={selectedHfModel}
                 onServerStarted={handleServerStarted}
-                onOpenChat={(modelId) => openChatSession(modelId, 'chat')}
+                onOpenChat={(modelId) => navigate(paths.chat(modelId))}
                 onStopServer={stopServer}
                 servers={servers}
                 onRemoveModel={removeModel}
@@ -302,11 +229,11 @@ export default function ModelControlCenterPage({
                 onAddTag={addTagToModel}
                 onRemoveTag={removeTagFromModel}
                 getModelDetail={(id) => getTransport().getModelDetail(id)}
-                onRefresh={handleRefreshAll}
+                onRefresh={refreshLibrary}
                 downloadQueue={downloadQueue}
                 onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
-                onBenchmark={(modelId) => setBenchmarkModelId(modelId)}
-                onOpenSystemSettings={onOpenSystemSettings}
+                onBenchmark={(modelId) => navigate(paths.benchmarks([modelId]))}
+                onOpenSystemSettings={() => navigate(settingsAt(location, 'system'))}
               />
             )}
           </>
