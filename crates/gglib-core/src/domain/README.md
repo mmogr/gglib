@@ -114,10 +114,15 @@ infrastructure concerns (database, filesystem, etc.).
   the wire
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
+- `revision` - The revision a model's files came from, a commit sha or a
+  ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine
   (`recommend`, `Recommendation`)
 - `residency` - Whether a second model may stay resident in VRAM beside the
   first (`decide_secondary_slot`, `SecondarySlotDecision`)
+- `state_words` - The word every surface uses for a state (`EndpointState`,
+  `ResidencyState`, `ReachState`), written once and recorded in
+  `contracts/vocabulary/words.json`.
 - `admission` - What the admission queue and the VRAM resident set look like
   right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in
 - `cache_budget` - Auto-sizing of llama-server's host-RAM prompt cache

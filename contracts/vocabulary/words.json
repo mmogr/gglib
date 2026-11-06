@@ -1,0 +1,60 @@
+{
+  "endpoint": [
+    {
+      "state": "on",
+      "word": "On"
+    },
+    {
+      "state": "off",
+      "word": "Off"
+    },
+    {
+      "state": "pinned",
+      "word": "Pinned"
+    },
+    {
+      "state": "starting",
+      "word": "Starting"
+    }
+  ],
+  "residency": [
+    {
+      "state": "loaded",
+      "word": "Loaded"
+    },
+    {
+      "state": "loading",
+      "word": "Loading"
+    },
+    {
+      "state": "working",
+      "word": "Working"
+    },
+    {
+      "state": "reading",
+      "word": "Reading"
+    },
+    {
+      "state": "waiting",
+      "word": "Waiting"
+    },
+    {
+      "state": "not_loaded",
+      "word": "Not loaded"
+    }
+  ],
+  "reach": [
+    {
+      "state": "connected",
+      "word": "Connected"
+    },
+    {
+      "state": "away",
+      "word": "Away"
+    },
+    {
+      "state": "disconnected",
+      "word": "Disconnected"
+    }
+  ]
+}

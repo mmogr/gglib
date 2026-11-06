@@ -4,6 +4,7 @@ import type { ComponentRole } from "./ComponentRole";
 import type { DefaultsOrigin } from "./DefaultsOrigin";
 import type { ImageFamily } from "./ImageFamily";
 import type { InferenceConfig } from "./InferenceConfig";
+import type { Revision } from "./Revision";
 import type { Support } from "./Support";
 
 /**
@@ -106,9 +107,14 @@ hfRepoId?: string,
  */
 hfFilename?: string, 
 /**
- * Git commit SHA from `HuggingFace` Hub.
+ * What the download recorded: a commit sha, or a ref under a `rev:`
+ * mark. Read it through [`Self::revision`].
  */
 hfCommitSha?: string, 
+/**
+ * [`Self::hf_commit_sha`] told apart: a sha shown short, a ref whole.
+ */
+revision?: Revision, 
 /**
  * When the model was downloaded from `HuggingFace` (`"%Y-%m-%d %H:%M:%S"`).
  */
