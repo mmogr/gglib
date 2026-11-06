@@ -45,7 +45,8 @@ pub(crate) struct StartProxyConfig {
     pub default_context: Option<u64>,
     /// Enable KV cache session persistence (disk slot save/restore),
     /// mirroring `gglib serve`/`gglib proxy --cache`. Omitted or `None`
-    /// means disabled, matching the CLI's own default.
+    /// falls through to the stored `proxy_cache_on_disk`; `false` is an
+    /// explicit off.
     #[serde(default)]
     pub cache: Option<bool>,
     /// Directory for KV cache slot files. Only consulted when `cache` is
@@ -59,7 +60,9 @@ pub(crate) struct StartProxyConfig {
     #[serde(default)]
     pub pinned: Option<gglib_core::ports::PinnedSpec>,
     /// Byte budget in GiB for the on-disk slot eviction sweep
-    /// (`--cache-disk-gb`). Omitted auto-sizes from free disk space.
+    /// (`--cache-disk-gb`). Omitted falls through to the stored
+    /// `proxy_cache_disk_gb`, then `GGLIB_CACHE_DISK_GB` in the daemon's
+    /// environment, then auto-sizes from free disk space.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default)]
     pub cache_disk_gb: Option<u64>,
@@ -77,6 +80,8 @@ pub(crate) struct StartProxyConfig {
     #[serde(default)]
     pub api_key: Option<String>,
     /// Host header values to accept beyond loopback (`--allowed-host`).
+    /// Empty falls through to the stored `proxy_allowed_hosts`; given, the
+    /// list replaces it for this run.
     #[serde(default)]
     pub allowed_hosts: Vec<String>,
 }
@@ -145,7 +150,10 @@ pub(super) fn to_runtime_config(cfg: &StartProxyConfig, settings: &Settings) -> 
         ..Default::default()
     });
 
-    let cache_enabled = cfg.cache.unwrap_or(false);
+    // What the settings say, for every field the caller left out: the one
+    // config `ProxyOps::ensure_running` and `gglib proxy` with no flags get.
+    let stored = gglib_app_services::proxy_config_from_settings(settings);
+    let cache_enabled = cfg.cache.unwrap_or(stored.cache_enabled);
     // Resolved here rather than left `None`: the Axum proxy path errors
     // requests with "slot_dir not configured" when cache_enabled is true and
     // slot_dir is absent (see gglib-proxy's server.rs), unlike the CLI's
@@ -158,16 +166,22 @@ pub(super) fn to_runtime_config(cfg: &StartProxyConfig, settings: &Settings) -> 
     });
 
     RuntimeProxyConfig {
-        host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
-        port: cfg.port.unwrap_or_else(|| settings.effective_proxy_port()),
+        host: cfg.host.clone().unwrap_or(stored.host),
+        port: cfg.port.unwrap_or(stored.port),
         default_context,
         cache_enabled,
         slot_dir,
-        disk_budget: gglib_runtime::proxy::resolve_disk_budget(cfg.cache_disk_gb),
+        disk_budget: gglib_runtime::proxy::resolve_disk_budget(
+            cfg.cache_disk_gb.or(settings.proxy_cache_disk_gb),
+        ),
         inference_override: cfg.inference_override.clone(),
         default_profile: cfg.default_profile.clone(),
         api_key: cfg.api_key.clone(),
-        allowed_hosts: cfg.allowed_hosts.clone(),
+        allowed_hosts: if cfg.allowed_hosts.is_empty() {
+            stored.allowed_hosts
+        } else {
+            cfg.allowed_hosts.clone()
+        },
         // Attached by `ProxyOps` on the way through, which is the one place
         // that knows whether a daemon is running this — and whether a tunnel
         // may be in front of it.

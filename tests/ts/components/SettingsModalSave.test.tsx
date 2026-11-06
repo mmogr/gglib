@@ -47,6 +47,10 @@ const settings: Record<string, unknown> = {
   hasProxyApiKey: true,
   bindHost: '0.0.0.0',
   shareLan: true,
+  proxyHost: null,
+  proxyAllowedHosts: ['desk.local'],
+  proxyCacheOnDisk: null,
+  proxyCacheDiskGb: null,
   proxyAutostart: true,
   closeToTray: true,
   startAtLogin: true,
@@ -129,6 +133,10 @@ const retype = (id: string, text: string): Change => async (user) => {
   await user.clear(field(id));
   await user.type(field(id), text);
 };
+/** Empty a field, which sends the row cleared. */
+const clear = (id: string): Change => async (user) => {
+  await user.clear(field(id));
+};
 const toggle = (id: string): Change => async (user) => {
   await user.click(field(id));
 };
@@ -163,6 +171,15 @@ const changes: [string, Change, UpdateSettingsRequest][] = [
   ['download path', retype('download-path-input', '/elsewhere'), { defaultDownloadPath: '/elsewhere' }],
   ['bind host', retype('bind-host-input', '127.0.0.1'), { bindHost: '127.0.0.1' }],
   ['LAN sharing', toggle('share-lan-input'), { shareLan: false }],
+  ['endpoint address', retype('proxy-host-input', '0.0.0.0'), { proxyHost: '0.0.0.0' }],
+  [
+    'allowed hosts',
+    retype('proxy-allowed-hosts-input', 'gglib.lan, 192.168.1.20'),
+    { proxyAllowedHosts: ['gglib.lan', '192.168.1.20'] },
+  ],
+  ['prompt cache on disk', toggle('proxy-cache-on-disk-input'), { proxyCacheOnDisk: true }],
+  ['prompt cache budget', retype('proxy-cache-disk-gb-input', '4'), { proxyCacheDiskGb: 4 }],
+  ['allowed hosts cleared', clear('proxy-allowed-hosts-input'), { proxyAllowedHosts: null }],
   ['fit indicators', toggle('show-fit-indicators-input'), { showMemoryFitIndicators: true }],
   ['proxy autostart', toggle('proxy-autostart-input'), { proxyAutostart: false }],
   ['close to tray', toggle('close-to-tray-input'), { closeToTray: false }],

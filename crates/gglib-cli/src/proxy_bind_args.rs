@@ -10,9 +10,10 @@ use clap::Args;
 /// Host, port and default context for `gglib proxy`.
 #[derive(Args, Debug, Clone)]
 pub struct ProxyBindArgs {
-    /// Host to bind to
-    #[arg(long, default_value = "127.0.0.1")]
-    pub host: String,
+    /// Host to bind to. Omit to use the stored `proxy_host` setting
+    /// (loopback until one is stored)
+    #[arg(long)]
+    pub host: Option<String>,
     /// Port to bind the proxy to. Omit to use the stored `proxy_port` setting
     #[arg(short, long)]
     pub port: Option<u16>,

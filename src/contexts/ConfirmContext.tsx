@@ -1,5 +1,6 @@
-import { createContext, FC, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, FC, ReactNode, useContext, useEffect } from "react";
 import { ConfirmDialog, type ConfirmOptions } from "../components/ui/ConfirmDialog";
+import { confirm, dismissConfirm, usePendingConfirm } from "../app/confirm";
 
 interface ConfirmContextValue {
   confirm: (opts: ConfirmOptions) => Promise<boolean>;
@@ -7,74 +8,37 @@ interface ConfirmContextValue {
 
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 
-interface ConfirmState {
-  open: boolean;
-  opts: ConfirmOptions;
-}
+const VALUE: ConfirmContextValue = { confirm };
 
 const DEFAULT_OPTS: ConfirmOptions = { title: "" };
 
+/**
+ * Draws the question `app/confirm`'s store holds, and hands components
+ * `confirm` through the context they already read it from. The question
+ * itself lives in the store so the native menu, outside React, can ask it.
+ */
 export const ConfirmProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<ConfirmState>({ open: false, opts: DEFAULT_OPTS });
-  // Holds the resolve function of the currently pending Promise.
-  const resolveRef = useRef<((value: boolean) => void) | null>(null);
+  const pending = usePendingConfirm();
 
-  // If the provider ever tears down (e.g. app unmount), resolve any pending promise as false
-  // so callers don't leak unresolved promises.
+  // If the provider ever tears down (e.g. app unmount), answer any open
+  // question `false` so callers don't leak unresolved promises.
+  useEffect(() => dismissConfirm, []);
+
+  // A move through history while the question is open answers it `false`:
+  // the screen it was asked on is going, and so is its answer's meaning.
   useEffect(() => {
-    return () => {
-      resolveRef.current?.(false);
-    };
-  }, []);
-
-  // Guard against browser back/forward navigation while dialog is open.
-  // The app has no URL router (navigation is state-based), so the back button
-  // would navigate away entirely — but popstate also fires for programmatic
-  // history.back() calls and any future URL routing added to the app.
-  useEffect(() => {
-    const handlePopState = () => {
-      if (resolveRef.current !== null) {
-        resolveRef.current(false);
-        resolveRef.current = null;
-        setState((s) => ({ ...s, open: false }));
-      }
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
-    // Guard: if a dialog is already open, reject the new call rather than
-    // silently orphaning the pending promise.
-    if (resolveRef.current !== null) {
-      return Promise.resolve(false);
-    }
-    return new Promise<boolean>((resolve) => {
-      resolveRef.current = resolve;
-      setState({ open: true, opts });
-    });
-  }, []);
-
-  const handleConfirm = useCallback(() => {
-    setState((s) => ({ ...s, open: false }));
-    resolveRef.current?.(true);
-    resolveRef.current = null;
-  }, []);
-
-  const handleCancel = useCallback(() => {
-    setState((s) => ({ ...s, open: false }));
-    resolveRef.current?.(false);
-    resolveRef.current = null;
+    window.addEventListener("popstate", dismissConfirm);
+    return () => window.removeEventListener("popstate", dismissConfirm);
   }, []);
 
   return (
-    <ConfirmContext.Provider value={{ confirm }}>
+    <ConfirmContext.Provider value={VALUE}>
       {children}
       <ConfirmDialog
-        {...state.opts}
-        open={state.open}
-        onConfirm={handleConfirm}
-        onCancel={handleCancel}
+        {...(pending?.opts ?? DEFAULT_OPTS)}
+        open={pending !== null}
+        onConfirm={() => pending?.answer(true)}
+        onCancel={() => pending?.answer(false)}
       />
     </ConfirmContext.Provider>
   );

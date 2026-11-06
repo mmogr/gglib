@@ -192,7 +192,14 @@ fn body_for(argv: &[&str]) -> StartProxyBody {
         globals.proxy_port = port;
     }
     let planned = unified(ServerConfigOptions::default(), globals).to_proxy_config();
-    start_body(planned, PinnedSpec::default(), options.port, &cache, None)
+    start_body(
+        planned,
+        PinnedSpec::default(),
+        options.host,
+        options.port,
+        &cache,
+        None,
+    )
 }
 
 /// Without `--port` the plan still carries a port, the built-in default, and
@@ -217,4 +224,49 @@ async fn a_port_flag_is_sent_as_typed() {
 
     assert_eq!(started.sent["port"], 8123);
     assert_eq!(started.port, 8123);
+}
+
+/// `serve` sends the daemon the `--host` and `--cache` flags as typed, never
+/// the plan's resolved loopback and no-cache: absent, the stored settings
+/// decide, as they do for the port.
+#[test]
+fn serve_sends_the_host_and_cache_flags_as_typed() {
+    use crate::shared_args::CacheArgs;
+    let planned =
+        unified(ServerConfigOptions::default(), GlobalDefaults::default()).to_proxy_config();
+    let no_cache = CacheArgs {
+        cache: false,
+        slot_dir: None,
+        cache_disk_gb: None,
+    };
+    let bare = super::start_body(
+        planned.clone(),
+        gglib_core::ports::PinnedSpec::default(),
+        None,
+        None,
+        &no_cache,
+        None,
+    );
+    assert_eq!(
+        bare.host, None,
+        "the plan's loopback is not sent as a choice"
+    );
+    assert_eq!(bare.cache, None, "no `--cache` is not an explicit off");
+
+    let cache = CacheArgs {
+        cache: true,
+        slot_dir: None,
+        cache_disk_gb: Some(4),
+    };
+    let named = super::start_body(
+        planned,
+        gglib_core::ports::PinnedSpec::default(),
+        Some("0.0.0.0".to_owned()),
+        Some(8123),
+        &cache,
+        None,
+    );
+    assert_eq!(named.host.as_deref(), Some("0.0.0.0"));
+    assert_eq!(named.cache, Some(true));
+    assert_eq!(named.cache_disk_gb, Some(4));
 }

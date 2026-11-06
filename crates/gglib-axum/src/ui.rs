@@ -147,8 +147,9 @@ fn respond<E: RustEmbed>(path: &str, headers: &HeaderMap) -> Response {
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    // Client-side route: serve the shell. There is no router in the frontend
-    // today, so in practice this is `/` and typos.
+    // Client-side route: serve the shell. The frontend routes `/library`,
+    // `/models/:id`, `/chat/:id` and the rest from the address, so a reload
+    // or a `gglib web` link on any of them lands here.
     serve::<E>("index.html", headers).unwrap_or_else(|| StatusCode::NOT_FOUND.into_response())
 }
 
