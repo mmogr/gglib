@@ -64,6 +64,12 @@ pub struct RemoteStatus {
     /// The connect side, when this machine is reaching another.
     #[serde(default)]
     pub connected: Option<RemoteConnection>,
+    /// Whether the far machine can be reached: the connect side, said as one
+    /// word. `Disconnected` when there is no connect side. Defaulted like every
+    /// other field; the CLI derives the word from `connected` itself, and the
+    /// GUI ships with its daemon.
+    #[serde(default)]
+    pub reach: gglib_core::domain::ReachState,
     /// Fingerprint of the ticket a bare `join` would dial, from the stored
     /// pairing. Never the ticket, and never shown: it is the identity.
     #[serde(default)]

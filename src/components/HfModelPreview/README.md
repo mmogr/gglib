@@ -13,7 +13,7 @@ Detail preview card for a HuggingFace model showing metadata (params, architectu
 | `ProjectorNote.tsx` | Under the table: the projector the selected quantization's download fetches, its size, and what it costs |
 | `CompanionNote.tsx` | Under the table, for a repository the daemon reads as an image model: the family, each companion's role, file name, repository and size, "already here" for one in the models directory, and the bytes the companions add |
 
-Each quantization is classified as `fits` / `tight` / `wont_fit` / `unknown` by `useSystemMemory`, comparing available RAM against the quantization's estimated memory requirement. The size and shard columns are the weights alone; the fit counts the projector too.
+Each variant's fit comes from the daemon's listing (`fit`, with its words in `fit_word`), judged as `gglib model download` picks a variant: by the machine's memory budget, the files with the projector counted, and the header's trained context and KV shape. The table draws it and computes nothing. The size and shard columns are the weights alone.
 
 The projector shown is chosen by the daemon (`HfQuantization.projector`), by the same rule the download uses, so the note names the file that is fetched. A repository with no projector shows no note.
 

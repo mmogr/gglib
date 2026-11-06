@@ -140,13 +140,6 @@ impl SettingsOps {
             settings: settings.into(),
         })
     }
-
-    /// Get system memory information.
-    ///
-    /// Returns None if memory information is unavailable (probe failed, too small, etc.).
-    pub fn get_system_memory(&self) -> Result<Option<SystemMemoryInfo>, GuiError> {
-        Ok(system_memory(self.deps.system_probe.as_ref()))
-    }
 }
 
 #[cfg(test)]

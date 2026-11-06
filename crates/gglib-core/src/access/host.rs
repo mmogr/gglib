@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 /// Whether `host` refers to the loopback interface.
 ///
@@ -67,4 +67,28 @@ pub fn normalize_host(host: &str) -> Option<String> {
         return None;
     }
     Some(bare.to_ascii_lowercase())
+}
+
+/// Where a client on this machine reaches an endpoint bound to `addr`.
+///
+/// A wildcard bind (`0.0.0.0` or `::`) names every interface and no reachable
+/// address, so it is reached on loopback; any other bind is reached where it
+/// is. The run door dials this and the proxy's status reports it, so the
+/// address gglib prints is the one it uses.
+#[must_use]
+pub fn reachable_at(addr: SocketAddr) -> SocketAddr {
+    if addr.ip().is_unspecified() {
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), addr.port())
+    } else {
+        addr
+    }
+}
+
+/// The base URL a client is given for an endpoint bound to `addr`.
+///
+/// `http://<reachable address>/v1`: the daemon's proxy status carries it as
+/// `base_url`, `gglib up` prints it, and the GUI shows it as it is.
+#[must_use]
+pub fn endpoint_base_url(addr: SocketAddr) -> String {
+    format!("http://{}/v1", reachable_at(addr))
 }

@@ -185,9 +185,9 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
             "secondary"
         };
         let activity = if slot.inflight > 0 {
-            format!("{} in flight", slot.inflight)
+            format!("{} ({})", slot.state, slot.inflight)
         } else {
-            "idle".to_string()
+            slot.state.to_string()
         };
         let _ = writeln!(
             out,

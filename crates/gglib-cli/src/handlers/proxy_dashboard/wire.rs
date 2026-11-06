@@ -173,6 +173,8 @@ pub(super) struct AdmissionSnapshot {
 #[derive(Debug, Deserialize)]
 pub(super) struct ResidentSlotSnapshot {
     pub(super) model_name: String,
+    /// Required, unlike the rest: a missing word would be guessed wrong.
+    pub(super) state: gglib_core::domain::ResidencyState,
     #[serde(default)]
     pub(super) inflight: u32,
     #[serde(default)]

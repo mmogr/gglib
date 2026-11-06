@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::revision::Revision;
+
 use super::Model;
 use super::image_family::{ComponentRole, ImageFamily};
 // Named as the adapters name it: the doc comments below are copied verbatim
@@ -104,10 +106,15 @@ pub struct ModelDetailDto {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_filename: Option<String>,
-    /// Git commit SHA from `HuggingFace` Hub.
+    /// What the download recorded: a commit sha, or a ref under a `rev:`
+    /// mark. Read it through [`Self::revision`].
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_commit_sha: Option<String>,
+    /// [`Self::hf_commit_sha`] told apart: a sha shown short, a ref whole.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<Revision>,
     /// When the model was downloaded from `HuggingFace` (`"%Y-%m-%d %H:%M:%S"`).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -221,6 +228,7 @@ impl ModelDetailDto {
             expert_shared_count: model.expert_shared_count,
             hf_repo_id: model.hf_repo_id,
             hf_filename: model.hf_filename,
+            revision: model.hf_commit_sha.as_deref().map(Revision::parse),
             hf_commit_sha: model.hf_commit_sha,
             download_date: model
                 .download_date

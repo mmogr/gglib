@@ -36,6 +36,7 @@ impl QueueState {
                     model_id: r.model_id,
                     port: r.port,
                     inflight: r.inflight,
+                    state: gglib_core::domain::ResidencyState::of_inflight(r.inflight),
                     is_primary: slot == PRIMARY_SLOT,
                     resident_for_secs: now.duration_since(r.resident_since).as_secs(),
                     runtime: r.runtime,
