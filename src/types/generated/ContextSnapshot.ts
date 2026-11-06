@@ -135,9 +135,10 @@ loop_guard_ended: boolean,
 recorded_at_secs: number, 
 /**
  * What gglib did to this request, each with its word, in the order it
- * was done: filled where the request is recorded, and a repaired tool
- * call added by [`ContextMetricsStore::flag_tool_repair`] when the
- * repair lands. A repair whose snapshot was already evicted is lost to
+ * was done (`crate::interventions`): filled where the request is
+ * recorded, and a repaired tool call added by
+ * [`ContextMetricsStore::flag_tool_repair`] when the repair lands, last
+ * since it is. A repair whose snapshot was already evicted is lost to
  * this list, the bounded undercount that flag already accepts.
  */
 interventions: Array<Intervention>, };

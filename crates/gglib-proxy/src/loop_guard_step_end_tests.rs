@@ -44,6 +44,17 @@ fn a_runs_first_trip_is_noted_and_its_second_is_ended() {
         assert_eq!(recent.len(), 1);
         assert!(recent[0].loop_guard_ended, "{:?}", recent[0]);
         assert_eq!(recent[0].loop_guard_trip, Some(detector));
+        // The row says what the step did, in the proxy's words.
+        let words: Vec<&str> = recent[0]
+            .interventions
+            .iter()
+            .map(|i| i.word.as_str())
+            .collect();
+        assert_eq!(
+            words,
+            [format!("Stopped {}", tripped(detector)).as_str()],
+            "{detector:?}"
+        );
         assert_eq!(counts(&ledger).loop_guard_trips, 1, "counted once");
     }
 }
@@ -59,7 +70,18 @@ fn refuse_still_refuses_a_run_that_would_have_ended() {
         &observing(&metrics),
     );
     assert!(matches!(step, GuardStep::Refuse(_)));
-    assert!(!metrics.recent(1)[0].loop_guard_ended);
+    let row = &metrics.recent(1)[0];
+    assert!(!row.loop_guard_ended);
+    let words: Vec<&str> = row.interventions.iter().map(|i| i.word.as_str()).collect();
+    assert_eq!(words, ["Refused: a loop"], "the row says the step refused");
+}
+
+/// What a detector's trip is called in the words, as core spells it.
+fn tripped(detector: LoopGuardTrip) -> &'static str {
+    match detector {
+        LoopGuardTrip::Loop => "a loop",
+        LoopGuardTrip::Stagnation => "stagnation",
+    }
 }
 
 #[tokio::test]

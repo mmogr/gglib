@@ -286,10 +286,14 @@ fn repair_totals_survive_eviction() {
 
 // ── What was done to a request ───────────────────────────────────────────
 
-/// Each record site says what it did, in the order it was done, and the
+/// Each record site says what it did, in the order it was done (the note
+/// goes on the body before the pipeline trims and constrains it), and the
 /// repair that lands later is added to the row it belongs to.
 #[test]
 fn what_was_done_to_a_request_is_said_in_words() {
+    use crate::interventions::{
+        clamped_interventions, forwarded_interventions, unforwarded_interventions,
+    };
     let words = |done: Vec<gglib_core::domain::Intervention>| -> Vec<String> {
         done.into_iter().map(|i| i.word).collect()
     };
@@ -297,9 +301,9 @@ fn what_was_done_to_a_request_is_said_in_words() {
     assert_eq!(
         words(forwarded_interventions(4, true, Some(LoopGuardTrip::Loop))),
         [
+            "Noted a loop",
             "Trimmed 4 old messages",
-            "Constrained tool calls",
-            "Noted a loop"
+            "Constrained tool calls"
         ]
     );
     assert_eq!(
@@ -311,8 +315,13 @@ fn what_was_done_to_a_request_is_said_in_words() {
         ["Refused: a loop"]
     );
     assert_eq!(
-        words(clamped_interventions()),
+        words(clamped_interventions(None)),
         ["Refused: longer than the context"]
+    );
+    assert_eq!(
+        words(clamped_interventions(Some(LoopGuardTrip::Loop))),
+        ["Noted a loop", "Refused: longer than the context"],
+        "a noted request that is then clamped keeps its note"
     );
 
     let store = ContextMetricsStore::new();

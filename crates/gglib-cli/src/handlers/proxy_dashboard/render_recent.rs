@@ -29,13 +29,14 @@ pub(super) fn render_recent_section(recent: &[RecentRequest]) -> String {
             .iter()
             .map(|i| i.word.as_str())
             .collect();
-        let _ = writeln!(
-            out,
+        let row = format!(
             "  {:>7} ago  {:<24} {}",
             format_elapsed_secs(request.recorded_at_secs),
             truncate_string(&request.model_name, 24),
             done.join(" \u{b7} ")
         );
+        // A row nothing was done to ends after its model, not after padding.
+        let _ = writeln!(out, "{}", row.trim_end());
     }
     out
 }
@@ -74,8 +75,8 @@ mod tests {
             "{out}"
         );
         assert!(
-            rows[2].contains("qwen3") && rows[2].trim_end().ends_with("qwen3"),
-            "{out}"
+            rows[2].ends_with("qwen3"),
+            "no padding after the model: {out:?}"
         );
     }
 

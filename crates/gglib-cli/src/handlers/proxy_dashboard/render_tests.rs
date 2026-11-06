@@ -541,10 +541,10 @@ fn thousands_inserts_separators_at_the_right_boundaries() {
     assert_eq!(thousands(u64::MAX), "18,446,744,073,709,551,615");
 }
 
-/// The frame carries the recent section before its total, with the proxy's
-/// words for what was done.
+/// The frame carries the recent section just before its total, with the
+/// proxy's words for what was done.
 #[test]
-fn the_frame_ends_with_the_recent_requests() {
+fn the_recent_requests_sit_before_the_total() {
     use crate::handlers::proxy_dashboard::wire_recent::{Intervention, RecentRequest};
     let snapshot = DashboardSnapshot {
         active_connections: vec![],

@@ -1288,6 +1288,7 @@ neither prompt field is present does it fall back to `n_past` →
 | `loop_guard_ended` | `bool` | The loop guard ended this request's run: under `note`, the same run tripped again after its note, so the proxy answered with a finished assistant message instead of forwarding ([ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md)) |
 | `completion_tokens` | `u32` \| `null` | `usage.completion_tokens` as the upstream reported it; `null` when the turn carried no usage |
 | `reasoning_chars` | `usize` | Characters of reasoning the turn generated, `0` when none |
+| `interventions` | `[{ what: { kind, … }, word }]` | What gglib did to the request, in the order it was done, each with the word every surface shows: `repaired_tool_call`, `trimmed { messages }`, `constrained`, `noted_loop { detector }`, `stopped_loop { detector }`, `refused { reason: { kind: longer_than_context \| loop { detector } } }`. A repaired tool call is added when the repair lands |
 | `tool_calls` | `u32` | Tool calls queued for the client, each counted once however many fragments it streamed in |
 | `finish_reason` | `string` \| `null` | The `finish_reason` the turn ended with; `null` when it ended without one |
 | `generation_ms` | `u64` \| `null` | Milliseconds between the first and the last generated token (a reasoning, text or tool-call delta) the upstream streamed, timed before normalization, whatever the normalizer later made of them; `null` when it streamed none, and on every non-streaming turn |
