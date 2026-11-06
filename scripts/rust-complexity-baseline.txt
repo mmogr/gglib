@@ -46,7 +46,7 @@ crates/gglib-axum/src/handlers/agent/run.rs 391
 crates/gglib-axum/src/handlers/agent/run_fixture.rs 324
 crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 356
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 318
-crates/gglib-axum/src/handlers/proxy/wire_tests.rs 348
+crates/gglib-axum/src/handlers/proxy/wire_tests.rs 397
 crates/gglib-axum/src/routes.rs 467
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-bootstrap/src/builder.rs 323
@@ -71,7 +71,7 @@ crates/gglib-cli/src/handlers/config/sd.rs 326
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 416
 crates/gglib-cli/src/handlers/image_tests.rs 328
 crates/gglib-cli/src/handlers/inference/agent_question.rs 303
-crates/gglib-cli/src/handlers/inference/proxy_tests.rs 310
+crates/gglib-cli/src/handlers/inference/proxy_tests.rs 319
 crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 361
 crates/gglib-cli/src/handlers/mcp_cli.rs 405
 crates/gglib-cli/src/handlers/model/download/interactive.rs 400
