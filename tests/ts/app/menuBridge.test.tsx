@@ -135,7 +135,7 @@ describe('the menu bridge', () => {
     stop();
   });
 
-  it('Stop stops the selected running model and leaves its chat for its inspector', async () => {
+  it('Stop stops the selected running model, and nothing with another model picked', async () => {
     serve(7);
     const { at, router, fire, stop } = await bridged('/models/9');
     await fire(MENU_EVENTS.STOP_SERVER);
@@ -146,6 +146,18 @@ describe('the menu bridge', () => {
     expect(transport.stopServer).toHaveBeenCalledWith(7);
     expect(at()).toBe('/models/7');
     expect(menu.syncMenuStateSilent).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("on a chat, the menu's model is the chat's: told so, and Stop leaves the chat for its inspector", async () => {
+    serve(7);
+    const { at, fire, stop } = await bridged('/chat/7');
+    expect(menu.setSelectedModel).toHaveBeenLastCalledWith(7);
+
+    await fire(MENU_EVENTS.STOP_SERVER);
+
+    expect(transport.stopServer).toHaveBeenCalledWith(7);
+    expect(at()).toBe('/models/7');
     stop();
   });
 

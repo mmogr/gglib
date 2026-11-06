@@ -3,9 +3,9 @@
  *
  * The menu's items name places and actions: Settings, Add Model, Downloads,
  * Chat, Refresh, Start, Stop and Remove for the selected model. Navigation
- * goes through the router; a model action reads the selected model from the
- * address (`inspectorSubject`) and calls the registries, the transport and
- * the confirm store. The menu is told what is selected from the address too,
+ * goes through the router; a model action reads the model the address names
+ * (`menuModelId`: the inspector's, or the open chat's) and calls the
+ * registries, the transport and the confirm store. The menu is told what is selected from the address too,
  * on every move, so its Start, Stop and Remove act on the model the page
  * shows. Nothing here needs a component to be mounted, which is what
  * retires the callback bridge the library page used to fill.
@@ -24,15 +24,14 @@ import { safeStopServer } from '../services/server/safeActions';
 import { isServerRunning, runningModelIds } from '../services/serverRegistry';
 import { getTransport } from '../services/transport';
 import { confirm } from './confirm';
-import { inspectorSubject, paths, settingsAt } from './paths';
+import { menuModelId, paths, settingsAt } from './paths';
 import { appRouter } from './router';
 
 export type Notify = (message: string, type?: ToastType) => void;
 
-/** The model of this machine's the address names, or `null`. */
+/** The model the menu acts on: the inspector's, or the open chat's. */
 function selectedModelId(): number | null {
-  const subject = inspectorSubject(appRouter().state.location);
-  return subject?.kind === 'model' ? subject.id : null;
+  return menuModelId(appRouter().state.location);
 }
 
 function navigate(to: string): void {
@@ -78,7 +77,7 @@ async function removeSelected(): Promise<void> {
 /** The handlers, one per event the menu sends. */
 export function menuHandlers(notify: Notify) {
   return {
-    [MENU_EVENTS.OPEN_SETTINGS]: () => navigate(settingsAt(appRouter().state.location, 'general')),
+    [MENU_EVENTS.OPEN_SETTINGS]: () => void appRouter().navigate(settingsAt(appRouter().state.location, 'general'), { replace: true }),
     [MENU_EVENTS.ADD_MODEL_FILE]: () => navigate(paths.libraryAdd('add')),
     [MENU_EVENTS.SHOW_DOWNLOADS]: () => navigate(paths.libraryAdd('browse')),
     [MENU_EVENTS.SHOW_CHAT]: () => showChat(notify),

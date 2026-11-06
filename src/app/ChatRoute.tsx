@@ -35,7 +35,6 @@ function LocalChat({ modelId, view }: { modelId: number; view: 'chat' | 'console
   const { servers, stopServer } = useServers();
   const server = servers.find((s) => s.modelId === modelId);
   const [handoff] = useState(() => peekChatHandoff(modelId));
-  useEffect(() => () => clearChatHandoff(modelId), [modelId]);
   const { startingModel, switchTo } = useChatSwitch(servers);
   const inLibrary = useModel(modelId);
 
@@ -62,6 +61,10 @@ export function ChatRoute() {
   const { modelId: raw } = useParams();
   const [search] = useSearchParams();
   const modelId = /^\d+$/.test(raw ?? '') ? Number(raw) : null;
+  // The handoff is dropped on leaving the model's chat, here rather than in
+  // the page, which may never commit if its chunk is still loading when the
+  // person leaves.
+  useEffect(() => (modelId === null ? undefined : () => clearChatHandoff(modelId)), [modelId]);
   if (modelId === null) return <Navigate to={paths.library()} replace />;
   const view = search.get('view') === 'console' ? 'console' : 'chat';
   return (

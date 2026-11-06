@@ -7,10 +7,11 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { Outlet, RouterProvider } from 'react-router';
 
-import { createAppRouter } from '../../../src/app/router';
+import { appRouter, createAppRouter, disposeAppRouter } from '../../../src/app/router';
 
 describe('the app router', () => {
   afterEach(() => {
+    disposeAppRouter();
     window.history.replaceState(null, '', '/');
     window.localStorage.clear();
   });
@@ -24,7 +25,16 @@ describe('the app router', () => {
     expect(router.state.location.pathname).toBe('/library');
     expect(window.location.hash).toBe('');
     expect(window.localStorage.getItem('gglib_daemon_token')).toBe('s3cr3t');
-    router.dispose();
+  });
+
+  it('is one router however many times the browser asks, so the one on screen is the one the menu drives', () => {
+    // React runs a state initializer twice in development and keeps the
+    // first result; the second call must answer the same router.
+    const first = createAppRouter(<Outlet />);
+    const second = createAppRouter(<Outlet />);
+
+    expect(second).toBe(first);
+    expect(appRouter()).toBe(first);
   });
 
   it('takes / and an unknown address to the library', async () => {
@@ -33,7 +43,6 @@ describe('the app router', () => {
       const view = render(<RouterProvider router={router} />);
       await waitFor(() => expect(router.state.location.pathname).toBe('/library'));
       view.unmount();
-      router.dispose();
     }
   });
 });

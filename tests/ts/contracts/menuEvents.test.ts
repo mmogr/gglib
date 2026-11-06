@@ -11,11 +11,11 @@
 
 import { describe, it, expect } from 'vitest';
 import { MENU_EVENTS } from '../../../src/services/platform/menuEvents';
-import { rust } from './rustSource';
+import { rust, withoutComments } from './rustSource';
 
 /** The `names` module's body, the one block that declares the event names. */
 function namesModule(): string {
-  const source = rust('src-tauri/src/app/events.rs');
+  const source = withoutComments(rust('src-tauri/src/app/events.rs'));
   const open = source.indexOf('pub(crate) mod names {');
   if (open < 0) throw new Error('events.rs: no `pub(crate) mod names {` block');
   const close = source.indexOf('\n}', open);

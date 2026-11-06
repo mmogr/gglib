@@ -8,6 +8,7 @@ import {
   benchmarkModelIds,
   inspectorSubject,
   libraryIntent,
+  menuModelId,
   paths,
   settingsAt,
   settingsSection,
@@ -30,6 +31,15 @@ describe('paths', () => {
     expect(inspectorSubject({ pathname: '/library' })).toBeNull();
     expect(inspectorSubject({ pathname: '/chat/7' })).toBeNull();
     expect(inspectorSubject({ pathname: '/models/seven' })).toBeNull();
+  });
+
+  it("menuModelId is the inspector's model or the open chat's, and nothing elsewhere", () => {
+    expect(menuModelId({ pathname: '/models/7' })).toBe(7);
+    expect(menuModelId({ pathname: '/chat/7' })).toBe(7);
+    expect(menuModelId({ pathname: '/chat/far/3' })).toBeNull();
+    expect(menuModelId({ pathname: '/far/3' })).toBeNull();
+    expect(menuModelId({ pathname: '/library' })).toBeNull();
+    expect(menuModelId({ pathname: '/chat/7/log' })).toBeNull();
   });
 
   it('the settings dialog is a search parameter over the place, opened and closed without moving', () => {

@@ -39,7 +39,8 @@ export function AppContent() {
     error: llamaError,
     checkStatus: checkLlamaStatus,
   } = useLlamaStatus();
-  // The settings dialog is open when the address says so, over the place.
+  // The settings dialog is open when the address says so, over the place;
+  // opened and closed by replacing the entry, so Back never reopens it.
   const openSettings = settingsSection(location);
 
   // Show the llama install modal when the daemon's machine has no llama.cpp,
@@ -90,7 +91,7 @@ export function AppContent() {
     <SettingsProvider showToast={showToast}>
       <div className="flex flex-col h-screen overflow-hidden">
         <Header
-          onOpenSettings={() => navigate(settingsAt(location, 'general'))}
+          onOpenSettings={() => navigate(settingsAt(location, 'general'), { replace: true })}
           servers={servers}
           onStopServer={stopServer}
           onSelectModel={(modelId, view) => navigate(view ? paths.chat(modelId, view) : paths.model(modelId))}
@@ -102,7 +103,7 @@ export function AppContent() {
           <SettingsModal
             isOpen
             initialTab={openSettings}
-            onClose={() => navigate(withoutSettings(location))}
+            onClose={() => navigate(withoutSettings(location), { replace: true })}
           />
         )}
         {showLlamaModal && (

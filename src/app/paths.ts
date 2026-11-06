@@ -106,6 +106,18 @@ export function libraryIntent(search: string): LibraryIntent {
   return { add, serve: params.get('serve') === '1' };
 }
 
+/**
+ * The model of this machine's the native menu acts on: the one in the
+ * inspector, or the one an open chat is on. `null` elsewhere, where Start,
+ * Stop and Remove have nothing to act on.
+ */
+export function menuModelId(location: Pick<Location, 'pathname'>): number | null {
+  const subject = inspectorSubject(location);
+  if (subject?.kind === 'model') return subject.id;
+  const [, place, second, third] = location.pathname.split('/');
+  return place === 'chat' && second !== 'far' && third === undefined ? idOf(second) : null;
+}
+
 /** The model ids `/diagnostics/benchmarks?models=` names, in order, bad ones dropped. */
 export function benchmarkModelIds(search: string): number[] {
   const raw = new URLSearchParams(search).get('models') ?? '';

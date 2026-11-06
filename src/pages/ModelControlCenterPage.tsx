@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useModel, useModelLibrary } from '../services/modelRegistry';
 import { onModelLibraryChange, refreshLibrary, removeModel as removeLibraryModel, updateModel } from '../services/modelEvents';
@@ -89,8 +89,8 @@ export default function ModelControlCenterPage() {
   // HuggingFace model selection state (for preview in inspector)
   const [selectedHfModel, setSelectedHfModel] = useState<HfModelSummary | null>(null);
 
-  // Ref for opening serve modal from menu
-  const openServeModalRef = useRef<(() => void) | null>(null);
+  // The inspector's Serve dialog opener, state so an intent can wait for it.
+  const [openServeModal, setOpenServeModal] = useState<(() => void) | null>(null);
   
   // Panel width state (percentages) - now just two columns
   const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = useMccLayout();
@@ -108,17 +108,19 @@ export default function ModelControlCenterPage() {
   } = useMccFilters({ refreshFilterOptions, loadTags });
 
   // What the native menu asked for, carried in the address and acted on once:
-  // the Add pane on a tab, or the picked model's Serve dialog.
+  // the Add pane on a tab, or the picked model's Serve dialog, which waits
+  // until the inspector has an opener (a cold load of `?serve=1`).
   const intent = libraryIntent(location.search);
   useEffect(() => {
     if (intent.add === null && !intent.serve) return;
+    if (intent.serve && openServeModal === null) return;
     if (intent.add !== null) {
       setSidebarTab('add');
       setActiveSubTab(intent.add);
     }
-    if (intent.serve) openServeModalRef.current?.();
+    if (intent.serve) openServeModal?.();
     void navigate(location.pathname, { replace: true });
-  }, [intent.add, intent.serve, location.pathname, navigate, setActiveSubTab]);
+  }, [intent.add, intent.serve, openServeModal, location.pathname, navigate, setActiveSubTab]);
 
   // Handler for selecting a local model (clears HF selection)
   const handleSelectLocalModel = (id: number | null) => {
@@ -231,9 +233,9 @@ export default function ModelControlCenterPage() {
                 getModelDetail={(id) => getTransport().getModelDetail(id)}
                 onRefresh={refreshLibrary}
                 downloadQueue={downloadQueue}
-                onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
+                onRegisterServeModalOpener={(opener) => setOpenServeModal(() => opener)}
                 onBenchmark={(modelId) => navigate(paths.benchmarks([modelId]))}
-                onOpenSystemSettings={() => navigate(settingsAt(location, 'system'))}
+                onOpenSystemSettings={() => navigate(settingsAt(location, 'system'), { replace: true })}
               />
             )}
           </>
