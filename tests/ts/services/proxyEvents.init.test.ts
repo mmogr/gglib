@@ -38,8 +38,8 @@ describe('initProxyEvents', () => {
     getProxyStatus.mockReset().mockResolvedValue({
       running: false,
       port: null,
-      current_model: null,
-      model_port: null,
+      base_url: null,
+      key: null,
       pinned_model: null,
     });
     ingestProxyEvent.mockReset();
@@ -64,8 +64,8 @@ describe('initProxyEvents', () => {
     getProxyStatus.mockResolvedValue({
       running: true,
       port: PORT,
-      current_model: null,
-      model_port: null,
+      base_url: `http://127.0.0.1:${PORT}/v1`,
+      key: 'none_needed',
       pinned_model: null,
     });
 
@@ -113,8 +113,8 @@ describe('initProxyEvents', () => {
     resolveStatus({
       running: true,
       port: PORT,
-      current_model: null,
-      model_port: null,
+      base_url: `http://127.0.0.1:${PORT}/v1`,
+      key: 'none_needed',
       pinned_model: null,
     });
     await vi.waitFor(() => expect(ingestProxyEvent).toHaveBeenCalled());
@@ -191,8 +191,8 @@ describe('initProxyEvents', () => {
     resolveStatus({
       running: true,
       port: PORT,
-      current_model: null,
-      model_port: null,
+      base_url: `http://127.0.0.1:${PORT}/v1`,
+      key: 'none_needed',
       pinned_model: null,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -208,8 +208,8 @@ describe('initProxyEvents', () => {
   ])('says nothing for a status that is %s', async (_label, half) => {
     getProxyStatus.mockResolvedValue({
       ...half,
-      current_model: null,
-      model_port: null,
+      base_url: null,
+      key: null,
       pinned_model: null,
     });
 

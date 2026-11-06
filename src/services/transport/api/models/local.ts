@@ -16,7 +16,6 @@ import type {
   RetagResponse,
   SamplingExplanation,
   SetCapabilitiesRequest,
-  SystemMemoryInfo,
   UpgradeCheck,
   UpgradeQueued,
 } from '../../../../types';
@@ -190,13 +189,6 @@ export async function upgradeModel(modelId: number): Promise<UpgradeQueued> {
  */
 export async function getModelFilterOptions(): Promise<ModelFilterOptions> {
   return get<ModelFilterOptions>('/api/models/filter-options');
-}
-
-/**
- * Get system memory information.
- */
-export async function getSystemMemory(): Promise<SystemMemoryInfo | null> {
-  return get<SystemMemoryInfo>('/api/config/system/memory');
 }
 
 /**

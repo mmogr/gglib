@@ -1,11 +1,12 @@
 //! Where a chat run posts, and the key it presents.
 //!
-//! The daemon's own proxy, reached on loopback. The key follows the tunnel's
+//! The daemon's own proxy, reached where `gglib_core::access::reachable_at`
+//! says (a wildcard bind on loopback). The key follows the tunnel's
 //! rule, shared from `remote::key`: what the running proxy demands, else the
 //! stored `proxy_api_key`, which a proxy started with no key picks up once
 //! one is stored. A run never mints a key.
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -56,14 +57,4 @@ pub(crate) async fn bearer(proxy: &ProxyOps, core: &AppCore) -> Result<Option<St
         message: "The daemon could not read its settings.".to_owned(),
     })?;
     Ok(enforced(proxy.effective_api_key(), settings.proxy_api_key.as_deref()).map(|(key, _)| key))
-}
-
-/// The address to dial: a proxy bound to every interface is dialled on
-/// 127.0.0.1.
-pub(crate) fn dial(addr: SocketAddr) -> SocketAddr {
-    if addr.ip().is_unspecified() {
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), addr.port())
-    } else {
-        addr
-    }
 }

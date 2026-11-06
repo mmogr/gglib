@@ -3,7 +3,10 @@
 //! what the daemon sends.
 
 use super::*;
-use gglib_core::contracts::http::daemon::{PROXY_START_CLI_FIELDS, SERVERS_START_CLI_FIELDS};
+use gglib_core::contracts::http::daemon::{
+    PROXY_START_CLI_FIELDS, PROXY_STATUS_FIELDS, SERVERS_START_CLI_FIELDS,
+};
+use gglib_core::domain::{EndpointState, KeyState};
 
 /// The keys `body` puts on the wire, sorted.
 fn keys_of(body: &impl Serialize) -> Vec<String> {
@@ -146,4 +149,51 @@ fn a_start_server_response_deserializes_into_the_narrowing() {
         serde_json::from_value(json).expect("the narrowing reads what the daemon sends");
 
     assert_eq!(got.port, sent.port);
+}
+
+/// The daemon's status is read whole: every key in the shared list lands in
+/// a field with its value. The daemon's own test holds its struct to the same
+/// list, so the two ends of the answer meet in the contract.
+#[test]
+fn a_status_with_every_contract_field_is_read_whole() {
+    let sample = |name: &str| match name {
+        "running" => serde_json::json!(true),
+        "state" => serde_json::json!("on"),
+        "port" => serde_json::json!(8080),
+        "base_url" => serde_json::json!("http://127.0.0.1:8080/v1"),
+        "key" => serde_json::json!("required"),
+        "pinned_model" => serde_json::json!("qwen"),
+        other => panic!("no sample value for contract field `{other}` — add one"),
+    };
+    let answer: serde_json::Map<String, serde_json::Value> = PROXY_STATUS_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), sample(name)))
+        .collect();
+
+    let status: ProxyStatusDto = serde_json::from_value(serde_json::Value::Object(answer))
+        .expect("the CLI must read every field the daemon sends");
+
+    let ProxyStatusDto {
+        running,
+        state,
+        port,
+        base_url,
+        key,
+        pinned_model,
+    } = status;
+    let fields: [(&str, bool); 6] = [
+        ("running", running),
+        ("state", state == EndpointState::On),
+        ("port", port == Some(8080)),
+        (
+            "base_url",
+            base_url.as_deref() == Some("http://127.0.0.1:8080/v1"),
+        ),
+        ("key", key == Some(KeyState::Required)),
+        ("pinned_model", pinned_model.as_deref() == Some("qwen")),
+    ];
+    assert_eq!(fields.len(), PROXY_STATUS_FIELDS.len());
+    for (name, read) in fields {
+        assert!(read, "{name} was not read as sent");
+    }
 }

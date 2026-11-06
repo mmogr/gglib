@@ -73,7 +73,9 @@ and commit it, so the last chapter's `git diff` has something to compare
 against. The scripts set `HOME` and opencode's `XDG_*` folders under that
 copy, so neither the recording nor opencode touches your own setup. The copy
 serves on 8080 so the pictures show the default port, which means stopping
-your own proxy (`gglib proxy stop`) while you record:
+your own proxy (`gglib proxy stop`) while you record. A `daemon status`
+snippet alone can be recorded with the demo's proxy started on 8081 instead;
+`snippets.py` shows that one line on the stored port:
 
 ```bash
 export GGLIB_DATA_DIR=$HOME/.local/share/gglib-demo GGLIB_DAEMON_PORT=9907
