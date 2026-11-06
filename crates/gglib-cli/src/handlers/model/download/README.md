@@ -168,13 +168,13 @@ gglib model browse recent --size 7B
 ### `download` (exec + remote)
 Download a model from `HuggingFace` Hub, on the gglib daemon.
 
-**Module:** `exec.rs` (orchestrator), `companions.rs` (an image model's
+**Module:** `exec.rs` (orchestrator), `list_quants.rs` (`--list-quants`: the daemon's listing printed, each variant with its fit), `companions.rs` (an image model's
 companions, before the queue), `remote.rs` (daemon queue monitor);
 `interactive.rs` is the in-process monitor `gglib up` uses
 
 **Options:**
 - `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "`Q4_K_M`")
-- `--list-quants` - List available quantizations, then the repository's projectors with their sizes, each marked with the quantizations whose download fetches it (uses `--token` if provided)
+- `--list-quants` - List available quantizations, each with whether it fits this machine as the daemon judges it, then the repository's projectors with their sizes, the one every download fetches marked (uses `--token` if provided)
 - `--token <TOKEN>` - `HuggingFace` token (for `--list-quants` only; a download uses the `HF_TOKEN` of the environment the daemon started in)
 - `--skip-db` - Accepted and reported as not honoured: registration happens daemon-side
 

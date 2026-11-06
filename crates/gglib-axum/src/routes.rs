@@ -278,7 +278,6 @@ fn config_routes() -> Router<AppState> {
             post(handlers::config::settings::install_profile_templates),
         )
         // System
-        .route("/system/memory", get(handlers::config::settings::memory))
         .route(
             "/system/models-directory",
             get(handlers::config::settings::models_directory)
