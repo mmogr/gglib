@@ -213,7 +213,16 @@ impl ResidentSet {
         default_ctx: Option<u64>,
         overrides: &LaunchOverrides,
     ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
-        let others = others_for_a_primary_launch(self.queue.residents(), spec.id);
+        let residents = self.queue.residents();
+        // What the plan's verdict on unloading is read against: the primary's
+        // resident, whatever it is, and whether this model is already loaded
+        // in any slot (then it relaunches in place and displaces nothing).
+        let primary = residents
+            .iter()
+            .find(|(slot, _)| *slot == PRIMARY_SLOT)
+            .map(|(_, r)| r.clone());
+        let already_resident = residents.iter().any(|(_, r)| r.model_id == spec.id);
+        let others = others_for_a_primary_launch(residents, spec.id);
         explain::plan_launch(
             spec.clone(),
             &self.template_for(spec.id),
@@ -221,7 +230,11 @@ impl ResidentSet {
             num_ctx,
             default_ctx,
             overrides,
-            &others,
+            explain::Loaded {
+                primary: primary.as_ref(),
+                others: &others,
+                already_resident,
+            },
         )
     }
 

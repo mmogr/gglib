@@ -142,6 +142,7 @@ async fn a_local_upstream_names_the_model_it_holds() {
         port: 19_555,
         started_at: 0,
         runtime: gglib_core::domain::RuntimeKind::Llama,
+        launch: None,
     };
     assert_eq!(
         local(&state, &req, server).await.unwrap().local_model,

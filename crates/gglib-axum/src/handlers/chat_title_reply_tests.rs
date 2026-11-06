@@ -73,6 +73,7 @@ async fn a_title_request_reaches_the_server_with_its_cap_shaped_for_the_model_se
         port,
         started_at: 0,
         runtime: gglib_core::domain::RuntimeKind::Llama,
+        launch: None,
     };
     let request: ChatTitleRequest = serde_json::from_value(json!({
         "port": port,

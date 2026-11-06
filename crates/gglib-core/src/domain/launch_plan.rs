@@ -113,6 +113,34 @@ pub struct ContextFit {
     pub unsnapped: Option<u64>,
 }
 
+/// Why a launch unloads the model it names first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum UnloadReason {
+    /// The second slot refused this model beside the one loaded (too large
+    /// for it, no headroom, or nothing known to judge by), so the primary's
+    /// resident is swapped out.
+    WouldNotFitBeside,
+    /// The second slot is this model's place (granted it beside the primary,
+    /// or the primary is empty), but the slot already holds a model, and
+    /// there are two slots.
+    SecondSlotFull,
+    /// One image model is loaded at a time: this one takes the loaded image
+    /// model's slot.
+    OneImageModel,
+}
+
+/// The model a launch would unload first, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct Unload {
+    /// The loaded model, by name.
+    pub model: String,
+    pub reason: UnloadReason,
+}
+
 /// The launch gglib would make for a model now, without making it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -125,6 +153,14 @@ pub struct LaunchPlan {
     pub args: Vec<LaunchArg>,
     /// The decisions a launch prints, the same words.
     pub narration: LaunchNarration,
+    /// The loaded model this launch would unload first, and why, by the
+    /// rules placement follows. `None` when nothing is loaded, when this
+    /// model is already loaded (it relaunches in place), when it would load
+    /// beside what is, and for an image model too large for the only place
+    /// it may take, which waits instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub unloads: Option<Unload>,
     /// The context and its fit; `None` for an image model, which has no
     /// context.
     pub fit: Option<ContextFit>,
@@ -177,6 +213,7 @@ mod tests {
             program: "llama-server".to_owned(),
             args,
             narration: LaunchNarration::new("m", None, 0),
+            unloads: None,
             fit: None,
         }
     }

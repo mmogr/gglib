@@ -136,6 +136,11 @@ infrastructure concerns (database, filesystem, etc.).
   and why (`LaunchNarration`, `LaunchDecision`)
 - `launch_plan` - The launch gglib would make for a model, said flag by flag
   (`LaunchPlan`, `LaunchArg`, `ChoiceSource`, `ContextFit`): what `gglib
-  model explain` prints and `GET /api/models/{id}/explain` serves
+  model explain` prints and `GET /api/models/{id}/explain` serves, and what
+  it would unload first, and why (`unloads`)
+- `launch_facts` - How a loaded model was launched and what it is doing
+  (`LaunchFacts`): the context, the weights, the quant, the narration and
+  the one flag line, carried on the admission snapshot's rows and the server
+  list so `gglib proxy dashboard` and the GUI print one line
 
 <!-- module-docs:end -->

@@ -301,6 +301,7 @@ fn admission_section_names_each_resident_and_its_role() {
                 inflight: 2,
                 is_primary: true,
                 resident_for_secs: 95,
+                launch: None,
             },
             ResidentSlotSnapshot {
                 model_name: "nomic-embed".to_string(),
@@ -308,6 +309,7 @@ fn admission_section_names_each_resident_and_its_role() {
                 inflight: 0,
                 is_primary: false,
                 resident_for_secs: 30,
+                launch: None,
             },
         ],
         ..Default::default()
@@ -320,6 +322,107 @@ fn admission_section_names_each_resident_and_its_role() {
     assert!(frame.contains("nomic-embed"), "{frame}");
     assert!(frame.contains("secondary"), "{frame}");
     assert!(frame.contains("Loaded"), "{frame}");
+}
+
+/// The flag line under a resident is the daemon's (`LaunchFacts::flag_line`),
+/// printed as sent and indented under its row; a resident whose launch
+/// recorded nothing gets no line, not a blank one.
+#[test]
+fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
+    let flag_line = "Q4_K_M \u{b7} 32K \u{b7} 17.0 GiB".to_string();
+    let frame = frame_with_admission(AdmissionSnapshot {
+        slots: vec![
+            ResidentSlotSnapshot {
+                model_name: "qwen-coder".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
+                inflight: 0,
+                is_primary: true,
+                resident_for_secs: 95,
+                launch: Some(LaunchLine {
+                    flag_line: flag_line.clone(),
+                }),
+            },
+            ResidentSlotSnapshot {
+                model_name: "older-daemon".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
+                inflight: 0,
+                is_primary: false,
+                resident_for_secs: 30,
+                launch: None,
+            },
+        ],
+        ..Default::default()
+    });
+
+    let lines: Vec<&str> = frame.lines().collect();
+    let row = lines
+        .iter()
+        .position(|l| l.contains("qwen-coder"))
+        .expect("the row");
+    assert_eq!(
+        lines[row + 1].trim_end(),
+        format!("    {flag_line}"),
+        "{frame}"
+    );
+    let older = lines
+        .iter()
+        .position(|l| l.contains("older-daemon"))
+        .expect("the row");
+    assert!(
+        !lines[older + 1].starts_with("    "),
+        "no line under a resident without one: {frame}"
+    );
+}
+
+/// A flag line is one physical row whatever the terminal width, as every
+/// other server-phrased line is, so the redraw's cursor arithmetic holds.
+#[test]
+fn a_long_launch_line_is_clipped_to_the_terminal() {
+    let snapshot = DashboardSnapshot {
+        active_connections: vec![],
+        slots_available: false,
+        slots: vec![],
+        slots_status: None,
+        total_requests: 0,
+        cache: None,
+        agent_usage: CacheUsage::default(),
+        admission: AdmissionSnapshot {
+            slots: vec![ResidentSlotSnapshot {
+                model_name: "qwen-coder".to_string(),
+                state: gglib_core::domain::ResidencyState::Loaded,
+                inflight: 0,
+                is_primary: true,
+                resident_for_secs: 1,
+                launch: Some(LaunchLine {
+                    flag_line: "x".repeat(400),
+                }),
+            }],
+            ..Default::default()
+        },
+        per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
+        recent_requests: vec![],
+    };
+    let frame = render_frame("http://127.0.0.1:8123", &snapshot, 80);
+    for line in frame.lines() {
+        assert!(line.chars().count() <= 80, "{line:?}");
+    }
+}
+
+/// The default second-slot status carries "Room for one more" when the
+/// daemon knows the free VRAM; this prints it as it prints any detail.
+#[test]
+fn admission_section_prints_the_room_for_one_more() {
+    let frame = frame_with_admission(AdmissionSnapshot {
+        secondary_slot: SecondarySlotStatus {
+            detail: gglib_core::domain::SecondarySlotStatus::available_with(Some(9 << 30)).detail,
+        },
+        ..Default::default()
+    });
+    assert!(
+        frame.contains("Room for one more, about 9.0 GiB."),
+        "{frame}"
+    );
 }
 
 /// The whole reason the server sends prose: an idle second slot has to

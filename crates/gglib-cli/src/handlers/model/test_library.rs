@@ -229,7 +229,7 @@ impl ModelRuntimePort for Runtime {
             num_ctx,
             default_ctx,
             overrides,
-            &[],
+            gglib_runtime::process::residency::explain::Loaded::NOTHING,
         )
     }
 

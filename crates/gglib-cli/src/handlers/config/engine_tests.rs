@@ -23,6 +23,7 @@ fn server(name: &str, runtime: RuntimeKind) -> ServerInfo {
         port: 9000,
         started_at: 0,
         runtime,
+        launch: None,
     }
 }
 

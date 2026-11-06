@@ -2,6 +2,7 @@
 import type { ContextFit } from "./ContextFit";
 import type { LaunchArg } from "./LaunchArg";
 import type { LaunchNarration } from "./LaunchNarration";
+import type { Unload } from "./Unload";
 
 /**
  * The launch gglib would make for a model now, without making it.
@@ -20,6 +21,14 @@ args: Array<LaunchArg>,
  * The decisions a launch prints, the same words.
  */
 narration: LaunchNarration, 
+/**
+ * The loaded model this launch would unload first, and why, by the
+ * rules placement follows. `None` when nothing is loaded, when this
+ * model is already loaded (it relaunches in place), when it would load
+ * beside what is, and for an image model too large for the only place
+ * it may take, which waits instead.
+ */
+unloads?: Unload, 
 /**
  * The context and its fit; `None` for an image model, which has no
  * context.

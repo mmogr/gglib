@@ -9,7 +9,7 @@
 
 use std::fmt::Write as _;
 
-use gglib_core::domain::{ContextFit, LaunchPlan};
+use gglib_core::domain::{ContextFit, LaunchPlan, UnloadReason};
 
 /// Width of the flag column: `--spec-draft-n-max` and `--reasoning-format`
 /// are 18 characters, and the column keeps one space after them.
@@ -37,7 +37,26 @@ pub(crate) fn launch_text(name: &str, id: i64, plan: &LaunchPlan) -> String {
         out.push('\n');
         out.push_str(&context_text(fit));
     }
+    if let Some(line) = displacement_text(plan) {
+        out.push('\n');
+        out.push_str(&line);
+        out.push('\n');
+    }
     out
+}
+
+/// What the launch would do to the models loaded now: unload the one named,
+/// for the reason the plan gives, or nothing worth a line (nothing loaded,
+/// or room beside what is).
+#[must_use]
+pub(crate) fn displacement_text(plan: &LaunchPlan) -> Option<String> {
+    let unload = plan.unloads.as_ref()?;
+    let because = match unload.reason {
+        UnloadReason::WouldNotFitBeside => "it would not fit beside it",
+        UnloadReason::SecondSlotFull => "the second slot is taken",
+        UnloadReason::OneImageModel => "one image model is loaded at a time",
+    };
+    Some(format!("  Unloads {} first: {because}.", unload.model))
 }
 
 /// One string per argument: the flag, its value, and `← source: reason`.
@@ -108,7 +127,7 @@ fn gib(v: Option<u64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::{ChoiceSource, LaunchArg, LaunchNarration};
+    use gglib_core::domain::{ChoiceSource, LaunchArg, LaunchNarration, Unload};
     use gglib_core::server_config::ContextSizeSource;
 
     fn arg(flag: &str, value: Option<&str>, source: ChoiceSource, reason: &str) -> LaunchArg {
@@ -143,6 +162,7 @@ mod tests {
                 arg("--spec-draft-n-max", Some("2"), ChoiceSource::You, "set"),
             ],
             narration: LaunchNarration::new("q", None, 0),
+            unloads: None,
             fit: None,
         };
         assert_eq!(
@@ -156,6 +176,61 @@ mod tests {
         assert!(launch_text("q", 3, &plan).starts_with(
             "\n  Launch for q (id 3)\n  llama-server -m /m/q.gguf --metrics --spec-draft-n-max 2\n\n"
         ));
+        // Nothing loaded, or room beside it: no line about unloading.
+        assert!(!launch_text("q", 3, &plan).contains("Unload"));
+    }
+
+    /// A launch that would unload says which model goes and why, in the
+    /// plan's reason; one that unloads nothing has no line.
+    #[test]
+    fn a_launch_that_would_unload_says_so_at_the_end() {
+        let base = LaunchPlan {
+            program: "llama-server".to_owned(),
+            args: vec![],
+            narration: LaunchNarration::new("q", None, 0),
+            unloads: Some(Unload {
+                model: "qwen3-8b".to_owned(),
+                reason: UnloadReason::WouldNotFitBeside,
+            }),
+            fit: None,
+        };
+        assert_eq!(
+            displacement_text(&base).as_deref(),
+            Some("  Unloads qwen3-8b first: it would not fit beside it.")
+        );
+        assert!(
+            launch_text("q", 3, &base)
+                .ends_with("  Unloads qwen3-8b first: it would not fit beside it.\n")
+        );
+
+        let second = LaunchPlan {
+            unloads: Some(Unload {
+                model: "nomic".to_owned(),
+                reason: UnloadReason::SecondSlotFull,
+            }),
+            ..base.clone()
+        };
+        assert_eq!(
+            displacement_text(&second).as_deref(),
+            Some("  Unloads nomic first: the second slot is taken.")
+        );
+        let image = LaunchPlan {
+            unloads: Some(Unload {
+                model: "flux-a".to_owned(),
+                reason: UnloadReason::OneImageModel,
+            }),
+            ..base.clone()
+        };
+        assert_eq!(
+            displacement_text(&image).as_deref(),
+            Some("  Unloads flux-a first: one image model is loaded at a time.")
+        );
+
+        let beside = LaunchPlan {
+            unloads: None,
+            ..base
+        };
+        assert_eq!(displacement_text(&beside), None);
     }
 
     /// Every figure is printed, a refusal as `unknown`, never as a zero.

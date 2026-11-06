@@ -170,6 +170,7 @@ async fn a_page_run_on_a_port_an_sd_server_serves_is_refused_before_its_hold() {
         port: 19_555,
         started_at: 0,
         runtime: RuntimeKind::StableDiffusion,
+        launch: None,
     };
 
     let (status, code, message) = coded(local(&state, &req, server).await);
@@ -194,6 +195,7 @@ async fn a_page_run_on_a_llama_server_port_goes_on() {
         port: 19_555,
         started_at: 0,
         runtime: RuntimeKind::Llama,
+        launch: None,
     };
 
     assert!(local(&state, &req, server).await.is_ok());

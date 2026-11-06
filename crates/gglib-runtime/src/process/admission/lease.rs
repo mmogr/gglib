@@ -22,11 +22,17 @@
 //! [#721]: https://github.com/mmogr/gglib/issues/721
 
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 use tokio::time::Instant;
 
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{AdmissionLease, AdmissionRelease};
 use tokio::sync::Notify;
+
+/// How old a free-VRAM reading may be when it sizes the second slot's room
+/// for the dashboard: the figure is "about N GiB" and the probe can fork a
+/// process, so one reading serves many frames.
+const ROOM_READING_MAX_AGE: Duration = Duration::from_secs(30);
 
 use super::state::{AdmissionDecision, Candidate, QueueState, Resident, Ticket};
 
@@ -227,8 +233,34 @@ impl AdmissionQueue {
     }
 
     /// Project the queue for the dashboard.
+    ///
+    /// The free VRAM that sizes the second slot's room is read before the
+    /// lock is taken, and read only when that room can be shown (the second
+    /// slot empty, no refusal recorded): the dashboard publishes a frame every
+    /// second for the life of the proxy, and on an NVIDIA host the probe forks
+    /// `nvidia-smi`, so a reading up to [`ROOM_READING_MAX_AGE`] old is taken
+    /// rather than a fresh one per frame. "About 2 GiB" is not a figure that
+    /// moves by the second.
     pub fn snapshot(&self) -> AdmissionSnapshot {
-        self.lock().snapshot(Instant::now())
+        self.snapshot_reading(|| crate::system::free_gpu_memory_bytes_within(ROOM_READING_MAX_AGE))
+    }
+
+    /// [`Self::snapshot`] with the free-VRAM reader given, called outside
+    /// the lock and only when the room line can show.
+    pub(super) fn snapshot_reading(
+        &self,
+        read_free_vram: impl FnOnce() -> Option<u64>,
+    ) -> AdmissionSnapshot {
+        let wants_room = self.lock().second_slot_room_wanted();
+        let free_vram_bytes = wants_room.then(read_free_vram).flatten();
+        self.lock().snapshot(Instant::now(), free_vram_bytes)
+    }
+
+    /// The launch facts of the resident serving `model_id`, if one is.
+    pub fn launch_facts(&self, model_id: u32) -> Option<gglib_core::domain::LaunchFacts> {
+        let state = self.lock();
+        let slot = state.slot_of(model_id)?;
+        state.slot(slot).map(Resident::launch_facts)
     }
 }
 

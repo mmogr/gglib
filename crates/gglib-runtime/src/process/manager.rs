@@ -229,9 +229,12 @@ impl ProcessManager {
     ///
     /// The core's own records, projected onto the port type so callers that
     /// already speak `ProcessHandle` can consume a manager-backed runtime
-    /// without a second shape to handle.
+    /// without a second shape to handle. Each carries the launch facts of
+    /// the resident serving it, read from the admission queue, so the server
+    /// list says how a model was launched with the words the dashboard uses.
     pub async fn list_running(&self) -> Vec<ProcessHandle> {
         let core = self.core.read().await;
+        let queue = self.residency.queue();
         core.list_all()
             .into_iter()
             .map(|info| {
@@ -243,6 +246,7 @@ impl ProcessManager {
                     info.started_at,
                 )
                 .with_runtime(info.runtime)
+                .with_launch(queue.launch_facts(info.model_id))
             })
             .collect()
     }

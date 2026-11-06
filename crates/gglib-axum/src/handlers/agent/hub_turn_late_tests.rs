@@ -262,6 +262,7 @@ async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
         port: 19_555,
         started_at: 0,
         runtime: gglib_core::domain::RuntimeKind::Llama,
+        launch: None,
     };
     let at = Arc::clone(&state);
     let late: LatePrepare = Box::new(move |_| {

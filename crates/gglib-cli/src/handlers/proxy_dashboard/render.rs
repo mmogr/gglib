@@ -197,6 +197,16 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
             activity,
             format_duration_secs(slot.resident_for_secs),
         );
+        // The flag line under the row: how the model was launched, in the
+        // daemon's words (`LaunchFacts::flag_line`), the same line the GUI's
+        // Loaded rows show. Every resident has one; it is absent from a
+        // daemon older than the field, and empty when no fact could be said.
+        if let Some(flag_line) = slot.launch.as_ref().map(|l| l.flag_line.as_str())
+            && !flag_line.is_empty()
+        {
+            let max_chars = usize::from(term_width.saturating_sub(4));
+            let _ = writeln!(out, "    {}", truncate_string(flag_line, max_chars));
+        }
     }
 
     if !admission.secondary_slot.detail.is_empty() {

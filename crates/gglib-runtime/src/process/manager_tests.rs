@@ -343,3 +343,96 @@ async fn a_running_sd_server_is_listed_with_its_runtime() {
 
     assert_eq!(listed, [RuntimeKind::StableDiffusion]);
 }
+
+/// The server list carries each resident's launch facts, read from the
+/// admission queue by model id, and nothing for a process the queue holds
+/// no resident for.
+#[cfg(unix)]
+#[tokio::test]
+async fn the_server_list_carries_each_residents_launch_facts() {
+    use std::os::unix::fs::PermissionsExt;
+
+    use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults, RuntimeKind};
+    use gglib_core::ports::ServerConfig;
+    use tokio::time::Instant;
+
+    use crate::process::SpawnConfig;
+    use crate::process::admission::{PRIMARY_SLOT, Resident};
+
+    gglib_core::paths::isolate_data_root();
+    let dir = tempfile::tempdir().unwrap();
+    let binary = dir.path().join("server");
+    std::fs::write(&binary, "#!/bin/sh\nexec sleep 60\n").unwrap();
+    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let manager = ProcessManager::new(
+        19_640,
+        RuntimeBinaries::llama_only(binary.to_str().unwrap()),
+        Arc::new(StubCatalog),
+        ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        Arc::new(gglib_core::ports::NoopResidencyObserver),
+    );
+    let weights = dir.path().join("m.gguf");
+    std::fs::write(&weights, b"x").unwrap();
+    let (port, _pid) = manager
+        .core
+        .write()
+        .await
+        .spawn(SpawnConfig::Llama(ServerConfig::new(
+            999_641,
+            "with-facts".to_owned(),
+            weights.clone(),
+            0,
+        )))
+        .expect("the stand-in starts");
+    let (_other_port, _other_pid) = manager
+        .core
+        .write()
+        .await
+        .spawn(SpawnConfig::Llama(ServerConfig::new(
+            999_642,
+            "no-resident".to_owned(),
+            weights,
+            0,
+        )))
+        .expect("the stand-in starts");
+    let _lease = manager.residency.queue().install(
+        PRIMARY_SLOT,
+        Resident {
+            model_sampling: ModelSamplingDefaults::default(),
+            model_id: 999_641,
+            model_name: "with-facts".to_owned(),
+            context_size: 32_768,
+            port,
+            projector: None,
+            runtime: RuntimeKind::Llama,
+            components: Vec::new(),
+            slot_restore_supported: true,
+            cache_ram_health: CacheRamHealth::LlamaDefault,
+            narration: None,
+            inflight: 0,
+            resident_since: Instant::now(),
+            weights_bytes: 17 << 30,
+        },
+    );
+
+    let handles = manager.list_running().await;
+    let with = handles
+        .iter()
+        .find(|h| h.model_id == 999_641)
+        .expect("listed");
+    let facts = with
+        .launch
+        .as_ref()
+        .expect("the resident's launch facts travel with its handle");
+    assert_eq!(facts.context_size, 32_768);
+    assert_eq!(facts.flag_line, "32K \u{b7} 17.0 GiB");
+    let without = handles
+        .iter()
+        .find(|h| h.model_id == 999_642)
+        .expect("listed");
+    assert!(without.launch.is_none(), "no resident, no facts");
+
+    manager.core.write().await.kill(999_641).await.unwrap();
+    manager.core.write().await.kill(999_642).await.unwrap();
+}

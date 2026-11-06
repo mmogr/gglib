@@ -13,7 +13,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::{CacheRamHealth, LaunchPlan, ModelSamplingDefaults, RuntimeKind};
+use gglib_core::domain::{
+    CacheRamHealth, LaunchPlan, ModelSamplingDefaults, RuntimeKind, Unload, UnloadReason,
+};
 use gglib_core::ports::{
     LaunchOverrides, ModelLaunchSpec, ModelRuntimePort, NoopResidencyObserver, PinnedSpec,
     ServerConfig,
@@ -227,4 +229,54 @@ fn a_runtime_with_its_own_cache_setting_plans_with_it() {
         gglib_core::domain::ChoiceSource::Gglib,
         "{auto:?}"
     );
+}
+
+/// The plan's verdict on unloading reads what the set holds: a chat model
+/// refused the second slot (this stub has no footprint to judge by, so it
+/// always is) would swap the primary's resident out, and names it; the
+/// primary's own model, or one already in the second slot, relaunches in
+/// place and unloads nothing.
+#[test]
+fn a_plan_says_which_loaded_model_it_would_unload() {
+    let set = ResidentSet::unobserved(
+        Arc::new(StubCatalog),
+        ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+    );
+    let resident = |model_id: u32, name: &str| Resident {
+        model_sampling: ModelSamplingDefaults::default(),
+        model_id,
+        model_name: name.to_owned(),
+        context_size: 4096,
+        port: 1,
+        projector: None,
+        runtime: RuntimeKind::Llama,
+        components: Vec::new(),
+        slot_restore_supported: true,
+        cache_ram_health: CacheRamHealth::LlamaDefault,
+        narration: None,
+        inflight: 0,
+        resident_since: Instant::now(),
+        weights_bytes: 1,
+    };
+
+    let empty = plan(&set, &launch_spec(7, "llama-3-8b"));
+    assert_eq!(empty.unloads, None, "{empty:?}");
+
+    drop(set.queue().install(PRIMARY_SLOT, resident(3, "qwen2.5")));
+    let against_primary = plan(&set, &launch_spec(7, "llama-3-8b"));
+    assert_eq!(
+        against_primary.unloads,
+        Some(Unload {
+            model: "qwen2.5".to_owned(),
+            reason: UnloadReason::WouldNotFitBeside,
+        })
+    );
+
+    let itself = plan(&set, &launch_spec(3, "qwen2.5"));
+    assert_eq!(itself.unloads, None, "{itself:?}");
+
+    drop(set.queue().install(1, resident(7, "llama-3-8b")));
+    let in_second = plan(&set, &launch_spec(7, "llama-3-8b"));
+    assert_eq!(in_second.unloads, None, "{in_second:?}");
 }

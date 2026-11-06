@@ -51,6 +51,13 @@ pub struct ResidentSlotSnapshot {
     pub state: super::state_words::ResidencyState,
     /// The program serving it.
     pub runtime: RuntimeKind,
+    /// How it was launched: the context it serves, its weights, its quant,
+    /// the decisions its launch made and the one line that says them. Every
+    /// resident has them (a launch that recorded no narration still has its
+    /// context and weights); absent only from a daemon older than the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub launch: Option<super::launch_facts::LaunchFacts>,
 }
 
 /// Requests waiting for one model that is not currently resident.
@@ -96,6 +103,14 @@ pub struct SecondarySlotStatus {
     /// Ready-to-render explanation. Phrased for display rather than parsing —
     /// consumers branch on [`Self::state`].
     pub detail: String,
+    /// How much a second model may take while the slot is `available` and
+    /// the machine's free VRAM is known: the lesser of what the residency
+    /// rule lets a second model use of the free VRAM and the second slot's
+    /// ceiling (`secondary_headroom`). `None` while the slot holds a model,
+    /// after a refusal, and when free VRAM cannot be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional, type = "number"))]
+    pub headroom_bytes: Option<u64>,
 }
 
 impl Default for SecondarySlotStatus {
@@ -103,6 +118,7 @@ impl Default for SecondarySlotStatus {
         Self {
             state: "available",
             detail: "No second model has been requested yet.".to_string(),
+            headroom_bytes: None,
         }
     }
 }
@@ -114,7 +130,32 @@ impl SecondarySlotStatus {
         Self {
             state: "resident",
             detail: format!("{model_name} is co-resident and never waits for a swap."),
+            headroom_bytes: None,
         }
+    }
+
+    /// The slot while a model is loading into it beside a loaded primary:
+    /// granted, not landed yet. Said as `available`, since nothing is
+    /// resident, with no room figure, since the load has the room.
+    #[must_use]
+    pub fn loading() -> Self {
+        Self {
+            state: "available",
+            detail: "A second model fits and is being loaded.".to_string(),
+            headroom_bytes: None,
+        }
+    }
+
+    /// The status for an empty second slot on a machine whose free VRAM is
+    /// known: how much a second model may take, said once for every surface.
+    /// `None` headroom is the default status, since nothing can be promised.
+    #[must_use]
+    pub fn available_with(headroom_bytes: Option<u64>) -> Self {
+        headroom_bytes.map_or_else(Self::default, |bytes| Self {
+            state: "available",
+            detail: format!("Room for one more, about {}.", format_bytes(bytes)),
+            headroom_bytes: Some(bytes),
+        })
     }
 
     /// Render the most recent refusal as a status.
@@ -125,9 +166,7 @@ impl SecondarySlotStatus {
     #[must_use]
     pub fn from_decision(decision: SecondarySlotDecision) -> Self {
         let detail = match decision {
-            SecondarySlotDecision::Grant { .. } => {
-                "A second model fits and is being loaded.".to_string()
-            }
+            SecondarySlotDecision::Grant { .. } => return Self::loading(),
             SecondarySlotDecision::RefuseTooLarge {
                 footprint_bytes,
                 ceiling_bytes,
@@ -167,7 +206,11 @@ impl SecondarySlotStatus {
             decision.label()
         };
 
-        Self { state, detail }
+        Self {
+            state,
+            detail,
+            headroom_bytes: None,
+        }
     }
 }
 
@@ -272,6 +315,7 @@ mod tests {
             is_primary,
             resident_for_secs: 10,
             runtime: RuntimeKind::Llama,
+            launch: None,
         }
     }
 
@@ -281,6 +325,29 @@ mod tests {
         assert_eq!(snapshot.waiting(), 0);
         assert_eq!(snapshot.inflight(), 0);
         assert_eq!(snapshot.secondary_slot.state, "available");
+        assert_eq!(snapshot.secondary_slot.headroom_bytes, None);
+    }
+
+    /// An empty second slot on a machine whose free VRAM is known says how
+    /// much a second model may take, once, for every surface that prints the
+    /// detail; with no reading it says what it always said.
+    #[test]
+    fn an_available_slot_with_known_headroom_says_room_for_one_more() {
+        let room = SecondarySlotStatus::available_with(Some(9 * GIB));
+        assert_eq!(room.state, "available");
+        assert_eq!(room.headroom_bytes, Some(9 * GIB));
+        assert_eq!(room.detail, "Room for one more, about 9.0 GiB.");
+
+        assert_eq!(
+            SecondarySlotStatus::available_with(None),
+            SecondarySlotStatus::default()
+        );
+        assert_eq!(SecondarySlotStatus::resident("m").headroom_bytes, None);
+        assert_eq!(
+            SecondarySlotStatus::from_decision(SecondarySlotDecision::RefuseUnknownBudget)
+                .headroom_bytes,
+            None
+        );
     }
 
     #[test]

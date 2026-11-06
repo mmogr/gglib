@@ -99,6 +99,22 @@ pub struct Resident {
     pub resident_since: Instant,
 }
 
+impl Resident {
+    /// How this model was launched and what it is doing, in the one record
+    /// every surface reads: the admission snapshot's row and the server list
+    /// both carry it, so neither composes a line of its own.
+    #[must_use]
+    pub fn launch_facts(&self) -> gglib_core::domain::LaunchFacts {
+        gglib_core::domain::LaunchFacts::new(
+            gglib_core::domain::ResidencyState::of_inflight(self.inflight),
+            self.context_size,
+            self.weights_bytes,
+            self.narration.as_ref().and_then(|n| n.quantization.clone()),
+            self.narration.clone(),
+        )
+    }
+}
+
 /// What a slot is doing.
 #[derive(Debug, Clone, Default)]
 pub enum SlotState {
@@ -392,13 +408,19 @@ impl QueueState {
         // The co-residence verdict was computed by the caller *before* the
         // queue's lock was taken — no caller code runs inside this critical
         // section (see the locking notes in `lease.rs`; a callback here once
-        // re-entered the queue and deadlocked the daemon). Recorded only when
-        // a secondary slot could actually have used it, so the dashboard shows
-        // the last verdict that mattered rather than one for a moment when no
-        // slot was on offer.
+        // re-entered the queue and deadlocked the daemon). A refusal is
+        // recorded only when it mattered: a secondary slot could have used
+        // the verdict and another model holds the primary, so the second slot
+        // was what this model was refused. A verdict for the first model into
+        // an empty daemon, or a grant, records nothing: the resident says
+        // "co-resident" once it lands, and until then the slot is as free as
+        // the room line says.
         let secondary_available = Self::secondary_slots()
             .any(|slot| matches!(self.slots[slot], SlotState::Empty) || self.evictable(slot));
-        if secondary_available {
+        let primary_held_by_another = self
+            .slot(PRIMARY_SLOT)
+            .is_some_and(|r| r.model_id != ticket.model_id);
+        if secondary_available && primary_held_by_another && !secondary.is_grant() {
             self.secondary_slot = SecondarySlotStatus::from_decision(secondary);
         }
         let may_co_reside = secondary_available && secondary.is_grant();
@@ -681,8 +703,15 @@ impl QueueState {
     }
 
     /// Record that a launch completed and `resident` now occupies `slot`.
+    ///
+    /// A model landing in the primary changes what a second model would sit
+    /// beside, so a refusal recorded against the previous primary is dropped:
+    /// it was about a pairing that no longer exists.
     pub(super) fn install(&mut self, slot: usize, resident: Resident) {
         self.slots[slot] = SlotState::Resident(Box::new(resident));
+        if slot == PRIMARY_SLOT {
+            self.secondary_slot = SecondarySlotStatus::default();
+        }
         self.record_progress();
     }
 
