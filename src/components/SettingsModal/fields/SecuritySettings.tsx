@@ -98,7 +98,7 @@ export const SecuritySettings: FC<SecuritySettingsProps> = ({
         id="proxy-host-input"
         label="Endpoint address"
         defaultHint="127.0.0.1"
-        description="Literal IP the OpenAI-compatible endpoint binds, for Turn on, the tray, proxy, serve and up alike. 0.0.0.0 accepts LAN clients and makes the endpoint demand the API key. --host on proxy and serve overrides it for one run."
+        description="Literal IP the OpenAI-compatible endpoint binds, for Turn on, the tray, proxy and serve alike; up binds loopback by name. 0.0.0.0 accepts LAN clients and makes the endpoint demand the API key. --host on proxy and serve overrides it for one run."
       >
         <Input
           id="proxy-host-input"
@@ -146,7 +146,7 @@ export const SecuritySettings: FC<SecuritySettingsProps> = ({
         id="proxy-cache-disk-gb-input"
         label="Disk budget (GiB)"
         defaultHint="sized from free disk"
-        description="How much disk the on-disk prompt cache may hold before its oldest slots are swept, at least 1 GiB."
+        description="How much disk the on-disk prompt cache may hold before its oldest slots are swept, at least 1 GiB. A run started with --cache uses it whether or not the cache is on here."
       >
         <Input
           id="proxy-cache-disk-gb-input"
@@ -156,7 +156,7 @@ export const SecuritySettings: FC<SecuritySettingsProps> = ({
           value={network.proxyCacheDiskGb}
           onChange={(event) => setNetworkSetting('proxyCacheDiskGb', event.target.value)}
           placeholder="auto"
-          disabled={saving || !network.proxyCacheOnDisk}
+          disabled={saving}
         />
       </SettingField>
     </>

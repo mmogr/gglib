@@ -386,7 +386,7 @@ impl Settings {
             share_lan: None,
             proxy_host: None,
             proxy_allowed_hosts: None,
-            proxy_cache_on_disk: Some(false),
+            proxy_cache_on_disk: None,
             proxy_cache_disk_gb: None,
             proxy_api_key: None,
             trust_client_sampling: None,
@@ -611,19 +611,26 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
     {
         return Err(SettingsError::InvalidProxyHost(host.clone()));
     }
-    // An allowed host is a host: bare, or with a port, as a `Host` header
-    // arrives; a value that cannot be one would never match a request.
+    // An allowed host is one host: bare, or with a port, as a `Host` header
+    // arrives, with no comma or space in it. A value that cannot be one
+    // would never match a request, and a comma-joined pair typed as one
+    // value is the commonest way to store such a thing.
     if let Some(hosts) = &settings.proxy_allowed_hosts
-        && let Some(bad) = hosts
-            .iter()
-            .find(|host| crate::access::normalize_host(host).is_none())
+        && let Some(bad) = hosts.iter().find(|host| {
+            crate::access::normalize_host(host).is_none()
+                || host.contains(',')
+                || host.chars().any(char::is_whitespace)
+        })
     {
         return Err(SettingsError::InvalidAllowedHost(bad.clone()));
     }
     if let Some(gb) = settings.proxy_cache_disk_gb
         && gb < MIN_CACHE_DISK_GB
     {
-        return Err(SettingsError::CacheDiskBudgetTooSmall(gb));
+        return Err(SettingsError::CacheDiskBudgetTooSmall {
+            got: gb,
+            min: MIN_CACHE_DISK_GB,
+        });
     }
 
     // A stored blank would read as "authentication is on" while accepting

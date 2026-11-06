@@ -257,6 +257,7 @@ pub struct AccessArgs {
     /// malicious page from reaching it by DNS rebinding. A wildcard bind
     /// (`--host 0.0.0.0`) names no reachable address, so reaching it as
     /// `gglib.lan` or `192.168.1.5` needs that name given here.
+    /// Given, the list replaces the stored `proxy_allowed_hosts` for this run.
     #[arg(long = "allowed-host", value_name = "HOST")]
     pub allowed_hosts: Vec<String>,
 }

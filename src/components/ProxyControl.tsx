@@ -34,9 +34,11 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const proxyState = useProxyState();
   const { settings } = useSettings();
-  // Where a client reaches the endpoint: the stored address, loopback
-  // until one is stored, as the daemon binds it.
-  const endpointHost = settings?.proxyHost ?? '127.0.0.1';
+  // Where this app reaches the endpoint: loopback, which reaches a loopback
+  // and a wildcard bind alike. The stored address is where it BINDS, and
+  // `0.0.0.0` is nowhere a client can send; the reached address is the
+  // daemon's to say (`base_url` on its status, #1768), not worked out here.
+  const endpointHost = '127.0.0.1';
   const [loading, setLoading] = useState(false);
   const [pinnedModel, setPinnedModel] = useState<string | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);

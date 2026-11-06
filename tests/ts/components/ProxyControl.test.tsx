@@ -1,15 +1,10 @@
 /**
- * The proxy panel's Default context box, and what it says when nothing is set.
+ * The proxy panel: Turn on names nothing, so the daemon starts the endpoint
+ * as the settings say; View Dashboard closes the popover it opens over;
+ * Clear Cache presents the revealed key.
  *
- * It read `server default (from settings)`, which is wrong twice over: there
- * is no server default — `to_runtime_config` collapses the `BuiltInDefault`
- * rung to `None` precisely so the daemon sizes the launch — and it is not
- * from settings, because settings hold nothing. See ADR 0009.
- *
- * This surface is the reason the file exists. The claim shipped in #578 on
- * 2026-07-04 and survived until a phrase search found it seven weeks later;
- * a sweep scoped to the arc's own diff would have missed it. Correcting it
- * and leaving nothing to hold the correction would repeat exactly that.
+ * The per-run connection options this file once pinned are gone: where the
+ * endpoint binds, its hosts and its prompt cache are settings now.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -55,7 +50,26 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   <ToastProvider>{children}</ToastProvider>
 );
 
-/** Open the dropdown, then the connection options, and hand back the box. */
+describe('ProxyControl — Turn on', () => {
+  beforeEach(() => {
+    proxyStateRef.current = { running: false, port: null };
+    revealSecret.mockResolvedValue(null);
+    startProxy.mockReset();
+    startProxy.mockResolvedValue({ running: true, port: 8080 });
+  });
+
+  // Nothing is named, not even a port: the daemon resolves every field
+  // from the settings, the same start the tray and `gglib proxy` get.
+  it('names nothing, so the daemon starts the endpoint as the settings say', async () => {
+    settingsRef.current = appSettings({ proxyHost: '0.0.0.0', proxyCacheOnDisk: true });
+    render(<ProxyControl />, { wrapper });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /start proxy/i }));
+    await waitFor(() => expect(startProxy).toHaveBeenCalledTimes(1));
+    expect(startProxy).toHaveBeenCalledWith({});
+  });
+});
 
 describe('ProxyControl — View Dashboard', () => {
   beforeEach(() => {

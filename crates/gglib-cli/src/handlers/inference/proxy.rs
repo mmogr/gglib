@@ -77,7 +77,9 @@ fn start_body(
         host,
         port,
         default_context,
-        cache: Some(cache.cache),
+        // The flag as typed: absent, the daemon follows the stored
+        // `proxy_cache_on_disk`; an explicit `false` would outrank it.
+        cache: cache.cache.then_some(true),
         slot_dir: cache.slot_dir.clone(),
         pinned: None,
         cache_disk_gb: cache.cache_disk_gb,

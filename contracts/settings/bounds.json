@@ -27,7 +27,7 @@
     "mcp_drawing": null,
     "proxy_allowed_hosts": null,
     "proxy_cache_disk_gb": null,
-    "proxy_cache_on_disk": false,
+    "proxy_cache_on_disk": null,
     "proxy_host": null,
     "proxy_port": 8080
   },

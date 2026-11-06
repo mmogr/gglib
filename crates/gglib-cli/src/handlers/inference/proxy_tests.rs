@@ -260,3 +260,26 @@ async fn a_start_that_reports_no_port_answers_the_flag_then_the_stored_port() {
         DEFAULT_PROXY_PORT
     );
 }
+
+/// Without `--host` and `--cache` the daemon is sent neither, so the stored
+/// `proxy_host` and `proxy_cache_on_disk` decide; given, they go as typed.
+#[tokio::test]
+async fn without_a_host_or_cache_flag_the_daemon_is_sent_neither() {
+    let bare = started(
+        &body_for(&["gglib", "proxy"]),
+        Some(9000),
+        &Settings::default(),
+    )
+    .await;
+    assert!(bare.sent["host"].is_null(), "{}", bare.sent);
+    assert!(bare.sent["cache"].is_null(), "{}", bare.sent);
+
+    let named = started(
+        &body_for(&["gglib", "proxy", "--host", "0.0.0.0", "--cache"]),
+        Some(9000),
+        &Settings::default(),
+    )
+    .await;
+    assert_eq!(named.sent["host"], "0.0.0.0");
+    assert_eq!(named.sent["cache"], true);
+}

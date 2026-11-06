@@ -75,10 +75,14 @@ const hostsFrom = (typed: string): string[] | null => {
   return hosts.length > 0 ? hosts : null;
 };
 
-/** A whole number of GiB, or `null` for an empty or unreadable field. */
+/**
+ * The GiB as typed, or `null` for an empty field. A zero or a negative
+ * number goes to the daemon as typed, so its validator refuses it and says
+ * the floor, rather than being swallowed into "auto" here.
+ */
 const gibFrom = (typed: string): number | null => {
-  const parsed = Number.parseInt(typed.trim(), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  const trimmed = typed.trim();
+  return trimmed === '' ? null : Number(trimmed);
 };
 
 const requestFrom = (values: NetworkSettingsValues) => ({

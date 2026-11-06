@@ -133,6 +133,7 @@ pub(super) async fn serve_image(
     let body = start_body(
         plan.unified.to_proxy_config(),
         pinned,
+        options.host.clone(),
         options.port,
         cache,
         None,

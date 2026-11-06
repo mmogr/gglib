@@ -111,8 +111,8 @@ pub enum SettingsError {
     #[error("An allowed host is a host name or address, with or without a port, got '{0}'")]
     InvalidAllowedHost(String),
 
-    #[error("The on-disk prompt cache budget must be at least 1 GiB, got {0}")]
-    CacheDiskBudgetTooSmall(u64),
+    #[error("The on-disk prompt cache budget must be at least {min} GiB, got {got}")]
+    CacheDiskBudgetTooSmall { got: u64, min: u64 },
 
     #[error("Proxy API key cannot be blank — clear it instead to disable authentication")]
     BlankProxyApiKey,

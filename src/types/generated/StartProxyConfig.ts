@@ -9,7 +9,8 @@ export type StartProxyConfig = { host: string | null, port: number | null, llama
 /**
  * Enable KV cache session persistence (disk slot save/restore),
  * mirroring `gglib serve`/`gglib proxy --cache`. Omitted or `None`
- * means disabled, matching the CLI's own default.
+ * falls through to the stored `proxy_cache_on_disk`; `false` is an
+ * explicit off.
  */
 cache: boolean | null, 
 /**
@@ -26,7 +27,8 @@ slot_dir: string | null,
 pinned: PinnedSpec | null, 
 /**
  * Byte budget in GiB for the on-disk slot eviction sweep
- * (`--cache-disk-gb`). Omitted auto-sizes from free disk space.
+ * (`--cache-disk-gb`). Omitted falls through to the stored
+ * `proxy_cache_disk_gb`, then auto-sizes from free disk space.
  */
 cache_disk_gb: number | null, 
 /**
@@ -47,5 +49,7 @@ default_profile: string | null,
 api_key: string | null, 
 /**
  * Host header values to accept beyond loopback (`--allowed-host`).
+ * Empty falls through to the stored `proxy_allowed_hosts`; given, the
+ * list replaces it for this run.
  */
 allowed_hosts: Array<string>, };

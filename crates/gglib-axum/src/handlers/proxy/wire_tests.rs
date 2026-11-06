@@ -294,6 +294,11 @@ fn an_omitted_address_cache_and_hosts_come_from_settings() {
     assert_eq!(named.allowed_hosts, ["desk.local"]);
     assert!(!named.cache_enabled);
     assert_eq!(named.slot_dir, None);
+    assert_eq!(
+        named.disk_budget,
+        gglib_runtime::proxy::resolve_disk_budget(Some(9)),
+        "a named budget beats the stored one"
+    );
 
     let nothing = to_runtime_config(&StartProxyConfig::default(), &Settings::default());
     assert_eq!(nothing.host, "127.0.0.1");

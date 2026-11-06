@@ -35,7 +35,8 @@ pub(crate) struct StartProxyConfig {
     pub default_context: Option<u64>,
     /// Enable KV cache session persistence (disk slot save/restore),
     /// mirroring `gglib serve`/`gglib proxy --cache`. Omitted or `None`
-    /// means disabled, matching the CLI's own default.
+    /// falls through to the stored `proxy_cache_on_disk`; `false` is an
+    /// explicit off.
     #[serde(default)]
     pub cache: Option<bool>,
     /// Directory for KV cache slot files. Only consulted when `cache` is
@@ -49,7 +50,8 @@ pub(crate) struct StartProxyConfig {
     #[serde(default)]
     pub pinned: Option<gglib_core::ports::PinnedSpec>,
     /// Byte budget in GiB for the on-disk slot eviction sweep
-    /// (`--cache-disk-gb`). Omitted auto-sizes from free disk space.
+    /// (`--cache-disk-gb`). Omitted falls through to the stored
+    /// `proxy_cache_disk_gb`, then auto-sizes from free disk space.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default)]
     pub cache_disk_gb: Option<u64>,
@@ -67,6 +69,8 @@ pub(crate) struct StartProxyConfig {
     #[serde(default)]
     pub api_key: Option<String>,
     /// Host header values to accept beyond loopback (`--allowed-host`).
+    /// Empty falls through to the stored `proxy_allowed_hosts`; given, the
+    /// list replaces it for this run.
     #[serde(default)]
     pub allowed_hosts: Vec<String>,
 }

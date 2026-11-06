@@ -76,8 +76,9 @@ gglib config settings reveal proxy-api-key  # a stored secret, alone on stdout
   LAN clients and makes it demand the API key), the host names it answers
   to beyond its own, and whether its prompt cache lives on disk and within
   how many GiB. `proxy --host`, `--allowed-host`, `--cache` and
-  `--cache-disk-gb` override them for one run; the desktop app, the tray
-  and `up` follow them.
+  `--cache-disk-gb` override them for one run; the desktop app and the
+  tray follow them, and `up` binds loopback by name. A stored budget
+  outranks `GGLIB_CACHE_DISK_GB`, as the flag does.
 
 ## `default`
 
