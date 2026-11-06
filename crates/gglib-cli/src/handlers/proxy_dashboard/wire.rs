@@ -181,6 +181,10 @@ pub(super) struct ResidentSlotSnapshot {
     pub(super) is_primary: bool,
     #[serde(default)]
     pub(super) resident_for_secs: u64,
+    /// How the model was launched, with the line that says it; absent from
+    /// a daemon older than the field, and from a restored resident.
+    #[serde(default)]
+    pub(super) launch: Option<gglib_core::domain::LaunchFacts>,
 }
 
 /// Mirror of `gglib_core::domain::QueuedModelSnapshot`.

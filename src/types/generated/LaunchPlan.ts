@@ -21,6 +21,20 @@ args: Array<LaunchArg>,
  */
 narration: LaunchNarration, 
 /**
+ * Whether this launch would unload a loaded model to make room: one is
+ * resident and the second slot would refuse this one (too large for it,
+ * no headroom, or nothing known to judge by), or both slots are full.
+ * `false` when nothing is loaded, or when this model would load beside
+ * what is.
+ */
+wouldUnload: boolean, 
+/**
+ * The model it would unload, by name, when that is one model: the only
+ * resident. With two resident the admission queue picks at launch time,
+ * so none is named here.
+ */
+displaces?: string, 
+/**
  * The context and its fit; `None` for an image model, which has no
  * context.
  */

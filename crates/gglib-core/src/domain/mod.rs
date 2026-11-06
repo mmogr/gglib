@@ -28,6 +28,7 @@ pub mod inference_profile;
 pub mod intervention;
 pub(crate) mod kv_estimate;
 pub(crate) mod kv_memory;
+pub mod launch_facts;
 pub(crate) mod launch_narration;
 pub mod launch_plan;
 pub mod loop_guard_log;
@@ -128,11 +129,12 @@ pub use admission::{
     AdmissionSnapshot, GenerationSnapshot, QueuedModelSnapshot, RenderSnapshot,
     ResidentSlotSnapshot, SecondarySlotStatus,
 };
+pub use launch_facts::{LaunchFacts, flag_line, format_context};
 
 // Re-export the second-VRAM-slot decision at the domain level for convenience
 pub use residency::{
     RESIDENCY_UTILISATION, SecondarySlotDecision, SlotFootprint, decide_secondary_slot,
-    decide_secondary_slot_for,
+    decide_secondary_slot_for, secondary_headroom,
 };
 pub use server_config::ServerConfig;
 

@@ -57,6 +57,7 @@ impl ModelRuntimePort for Resident {
                     is_primary: slot == 0,
                     resident_for_secs: 1,
                     runtime: gglib_core::domain::RuntimeKind::Llama,
+                    launch: None,
                 })
                 .collect(),
             ..AdmissionSnapshot::default()

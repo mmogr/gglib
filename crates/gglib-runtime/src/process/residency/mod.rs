@@ -213,7 +213,14 @@ impl ResidentSet {
         default_ctx: Option<u64>,
         overrides: &LaunchOverrides,
     ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
-        let others = others_for_a_primary_launch(self.queue.residents(), spec.id);
+        let residents = self.queue.residents();
+        // The primary's resident is what a launch refused the second slot
+        // swaps out; the model itself relaunching displaces nothing.
+        let primary = residents
+            .iter()
+            .find(|(slot, r)| *slot == PRIMARY_SLOT && r.model_id != spec.id)
+            .map(|(_, r)| r.clone());
+        let others = others_for_a_primary_launch(residents, spec.id);
         explain::plan_launch(
             spec.clone(),
             &self.template_for(spec.id),
@@ -221,6 +228,7 @@ impl ResidentSet {
             num_ctx,
             default_ctx,
             overrides,
+            primary.as_ref(),
             &others,
         )
     }

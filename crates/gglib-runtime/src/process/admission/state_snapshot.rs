@@ -6,13 +6,23 @@ use tokio::time::Instant;
 
 use gglib_core::domain::{
     AdmissionSnapshot, QueuedModelSnapshot, ResidentSlotSnapshot, SecondarySlotStatus,
+    secondary_headroom,
 };
 
 use super::{PRIMARY_SLOT, QueueState};
 
 impl QueueState {
     /// Project the queue for the dashboard.
-    pub(in crate::process::admission) fn snapshot(&self, now: Instant) -> AdmissionSnapshot {
+    ///
+    /// `free_vram_bytes` is the machine's free VRAM as the caller read it,
+    /// outside this lock; it sizes the second slot's "room for one more" and
+    /// is wanted only while that slot is empty and no launch has been
+    /// refused it, so a caller with nothing to say passes `None`.
+    pub(in crate::process::admission) fn snapshot(
+        &self,
+        now: Instant,
+        free_vram_bytes: Option<u64>,
+    ) -> AdmissionSnapshot {
         let mut queued: Vec<QueuedModelSnapshot> = self
             .waiting
             .values()
@@ -40,16 +50,27 @@ impl QueueState {
                     is_primary: slot == PRIMARY_SLOT,
                     resident_for_secs: now.duration_since(r.resident_since).as_secs(),
                     runtime: r.runtime,
+                    launch: Some(r.launch_facts()),
                 })
                 .collect(),
             queued,
             total_queued: self.stats.total_queued,
             total_swaps: self.stats.total_swaps,
-            secondary_slot: self.slot(PRIMARY_SLOT + 1).map_or_else(
-                || self.secondary_slot.clone(),
-                |r| SecondarySlotStatus::resident(&r.model_name),
-            ),
+            secondary_slot: self.secondary_slot_status(free_vram_bytes),
             generation: self.generation_snapshot(),
         }
+    }
+
+    /// Why the second slot is or is not in use: the model it holds; the
+    /// refusal the last launch met, or the grant under way; else how much a
+    /// second model may take now, when the free VRAM is known.
+    fn secondary_slot_status(&self, free_vram_bytes: Option<u64>) -> SecondarySlotStatus {
+        if let Some(r) = self.slot(PRIMARY_SLOT + 1) {
+            return SecondarySlotStatus::resident(&r.model_name);
+        }
+        if self.secondary_slot == SecondarySlotStatus::default() {
+            return SecondarySlotStatus::available_with(secondary_headroom(free_vram_bytes));
+        }
+        self.secondary_slot.clone()
     }
 }

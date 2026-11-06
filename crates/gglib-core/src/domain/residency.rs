@@ -267,9 +267,7 @@ pub fn decide_secondary_slot_for(
         return SecondarySlotDecision::RefuseUnknownBudget;
     };
 
-    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
-    #[allow(clippy::cast_possible_truncation)]
-    let usable = (free_bytes as f64 * RESIDENCY_UTILISATION) as u64;
+    let usable = usable_share(free_bytes);
 
     if footprint_bytes > usable {
         return SecondarySlotDecision::RefuseNoHeadroom {
@@ -285,6 +283,24 @@ pub fn decide_secondary_slot_for(
 }
 
 /// The interaction between a fitted context and this slot's hard ceiling.
+/// How much a second chat model may take right now, from the machine's free
+/// VRAM: the share the residency rule lets a resident use of it, capped at the
+/// second slot's ceiling, since [`decide_secondary_slot`] refuses anything
+/// past either. `None` when free VRAM cannot be read, as the decision would
+/// refuse for the same reason. This is the figure "Room for one more" names.
+#[must_use]
+pub fn secondary_headroom(free_vram_bytes: Option<u64>) -> Option<u64> {
+    Some(usable_share(free_vram_bytes?).min(SECONDARY_MAX_BYTES))
+}
+
+/// The share of the free VRAM a resident may use: what a grant is judged
+/// against and what the headroom promises, one arithmetic for both.
+#[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
+#[allow(clippy::cast_possible_truncation)]
+fn usable_share(free_bytes: u64) -> u64 {
+    (free_bytes as f64 * RESIDENCY_UTILISATION) as u64
+}
+
 #[cfg(test)]
 #[path = "residency_fit_tests.rs"]
 mod fit_tests;
@@ -307,6 +323,28 @@ mod tests {
             weights_bytes: 275 * MIB,
             kv_bytes: 32 * MIB,
         }
+    }
+
+    /// The room a second model may take is what the grant would allow: the
+    /// residency share of the free VRAM, capped at the second slot's ceiling,
+    /// and nothing when the free VRAM is unknown, since the decision would
+    /// refuse for the same reason.
+    #[test]
+    fn the_second_slots_headroom_is_the_usable_free_vram_capped_at_the_ceiling() {
+        assert_eq!(secondary_headroom(None), None);
+        // 1 GiB free: 90% of it is usable, under the 2 GiB ceiling.
+        assert_eq!(
+            secondary_headroom(Some(GIB)),
+            Some((GIB as f64 * 0.9) as u64)
+        );
+        // 8 GiB free: the ceiling holds.
+        assert_eq!(secondary_headroom(Some(8 * GIB)), Some(SECONDARY_MAX_BYTES));
+        // The headroom is never more than a grant would accept.
+        let fits = SlotFootprint {
+            weights_bytes: secondary_headroom(Some(8 * GIB)).unwrap(),
+            kv_bytes: 0,
+        };
+        assert!(decide_secondary_slot(Some(fits), Some(8 * GIB)).is_grant());
     }
 
     #[test]

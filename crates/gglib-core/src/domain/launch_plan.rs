@@ -125,6 +125,19 @@ pub struct LaunchPlan {
     pub args: Vec<LaunchArg>,
     /// The decisions a launch prints, the same words.
     pub narration: LaunchNarration,
+    /// Whether this launch would unload a loaded model to make room: one is
+    /// resident and the second slot would refuse this one (too large for it,
+    /// no headroom, or nothing known to judge by), or both slots are full.
+    /// `false` when nothing is loaded, or when this model would load beside
+    /// what is.
+    #[serde(default)]
+    pub would_unload: bool,
+    /// The model it would unload, by name, when that is one model: the only
+    /// resident. With two resident the admission queue picks at launch time,
+    /// so none is named here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub displaces: Option<String>,
     /// The context and its fit; `None` for an image model, which has no
     /// context.
     pub fit: Option<ContextFit>,
@@ -177,6 +190,8 @@ mod tests {
             program: "llama-server".to_owned(),
             args,
             narration: LaunchNarration::new("m", None, 0),
+            would_unload: false,
+            displaces: None,
             fit: None,
         }
     }

@@ -230,6 +230,12 @@ pub struct ServerInfo {
     /// out.
     #[serde(default)]
     pub runtime: gglib_core::domain::RuntimeKind,
+    /// How the model was launched and what it is doing, the record the
+    /// admission snapshot's rows carry too; `None` when the runtime keeps
+    /// no resident for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub launch: Option<gglib_core::domain::LaunchFacts>,
 }
 
 impl ServerInfo {
@@ -242,6 +248,7 @@ impl ServerInfo {
             port: handle.port,
             started_at: handle.started_at,
             runtime: handle.runtime,
+            launch: handle.launch.clone(),
         }
     }
 }

@@ -56,6 +56,7 @@ fn server(model_id: i64) -> ServerInfo {
         port: 9000,
         started_at: 0,
         runtime: gglib_core::domain::RuntimeKind::Llama,
+        launch: None,
     }
 }
 

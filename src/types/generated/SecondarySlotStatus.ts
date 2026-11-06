@@ -25,4 +25,12 @@ state: "resident" | "available" | "too_large" | "no_headroom" | "unknown_footpri
  * Ready-to-render explanation. Phrased for display rather than parsing —
  * consumers branch on [`Self::state`].
  */
-detail: string, };
+detail: string, 
+/**
+ * How much a second model may take while the slot is `available` and
+ * the machine's free VRAM is known: the lesser of what the residency
+ * rule lets a second model use of the free VRAM and the second slot's
+ * ceiling (`secondary_headroom`). `None` while the slot holds a model,
+ * after a refusal, and when free VRAM cannot be read.
+ */
+headroom_bytes?: number, };

@@ -296,6 +296,7 @@ impl ModelRuntimePort for PlansOnly {
             num_ctx,
             default_ctx,
             overrides,
+            None,
             &[],
         )
     }

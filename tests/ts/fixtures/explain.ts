@@ -42,6 +42,7 @@ export function launchExplanation(sampling: SamplingExplanation): LaunchExplanat
       program: 'llama-server',
       args: [],
       narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [] },
+      wouldUnload: false,
       fit: null,
     },
     sampling,

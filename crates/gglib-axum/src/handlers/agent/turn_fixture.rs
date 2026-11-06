@@ -93,6 +93,7 @@ async fn turn_as(
         port,
         started_at: 0,
         runtime: gglib_core::domain::RuntimeKind::Llama,
+        launch: None,
     };
     let upstream = local(state, &chat, server).await.unwrap();
     let prepared = match prep {

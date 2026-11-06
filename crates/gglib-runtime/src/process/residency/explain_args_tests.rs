@@ -46,6 +46,7 @@ fn planned_with(
         None,
         None,
         &overrides,
+        None,
         &[],
     )
     .expect("a chat model plans")
@@ -338,6 +339,7 @@ fn a_global_default_context_is_yours() {
         None,
         Some(12_288),
         &overrides,
+        None,
         &[],
     )
     .unwrap();

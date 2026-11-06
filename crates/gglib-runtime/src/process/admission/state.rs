@@ -99,6 +99,22 @@ pub struct Resident {
     pub resident_since: Instant,
 }
 
+impl Resident {
+    /// How this model was launched and what it is doing, in the one record
+    /// every surface reads: the admission snapshot's row and the server list
+    /// both carry it, so neither composes a line of its own.
+    #[must_use]
+    pub fn launch_facts(&self) -> gglib_core::domain::LaunchFacts {
+        gglib_core::domain::LaunchFacts::new(
+            gglib_core::domain::ResidencyState::of_inflight(self.inflight),
+            self.context_size,
+            self.weights_bytes,
+            self.narration.as_ref().and_then(|n| n.quantization.clone()),
+            self.narration.clone(),
+        )
+    }
+}
+
 /// What a slot is doing.
 #[derive(Debug, Clone, Default)]
 pub enum SlotState {

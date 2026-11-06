@@ -14,13 +14,14 @@
 
 use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
 use gglib_core::domain::{
-    ContextFit, FitInputs, KvElemsPerToken, LaunchPlan, RuntimeKind, fit_context_explained,
+    ContextFit, FitInputs, KvElemsPerToken, LaunchPlan, RuntimeKind, SecondarySlotDecision,
+    fit_context_explained,
 };
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec, ModelRuntimeError};
 use gglib_core::server_config::ServerConfigOptions;
 
 use super::context::fit_or_undivided;
-use super::launch::{plan_llama, plan_sd};
+use super::launch::{LaunchRequest, LlamaResolutions, plan_llama, plan_sd};
 use super::{Prepared, explain_args, prepare, vram};
 use crate::process::SpawnConfig;
 use crate::process::admission::Resident;
@@ -86,6 +87,7 @@ pub fn plan_launch(
     num_ctx: Option<u64>,
     default_ctx: Option<u64>,
     overrides: &LaunchOverrides,
+    primary: Option<&Resident>,
     others: &[Resident],
 ) -> Result<LaunchPlan, ModelRuntimeError> {
     let Prepared { request, fit } =
@@ -110,10 +112,14 @@ pub fn plan_launch(
         }
     };
     let (serves_at, source) = request.context;
+    let decision = second_slot_decision(&request, planned.llama.as_ref());
+    let (would_unload, displaces) = displacement(&decision, primary, others);
     Ok(LaunchPlan {
         program: program.to_owned(),
         args,
         narration: planned.narration,
+        would_unload,
+        displaces,
         fit: fit.map(|(fitted, inputs)| ContextFit {
             serves_at,
             source,
@@ -125,6 +131,44 @@ pub fn plan_launch(
             unsnapped: inputs.unsnapped,
         }),
     })
+}
+
+/// The second-slot decision this launch would meet: the same arithmetic
+/// admission uses (`vram::secondary_slot_decision`), from the plan's own
+/// resolutions. A llama plan with no resolutions has no footprint to judge.
+fn second_slot_decision(
+    request: &LaunchRequest,
+    llama: Option<&LlamaResolutions>,
+) -> SecondarySlotDecision {
+    match (request.spec.runtime(), llama) {
+        (RuntimeKind::Llama, Some(resolved)) => {
+            vram::secondary_slot_decision(&request.spec, resolved.kv_types, request.context.0)
+        }
+        (RuntimeKind::StableDiffusion, _) => vram::image_slot_decision(&request.spec),
+        (RuntimeKind::Llama, None) => SecondarySlotDecision::RefuseUnknownFootprint,
+    }
+}
+
+/// Whether the launch would unload a loaded model, and which one when that
+/// is known, from the second-slot `decision` read against what is resident
+/// now. `primary` is the model in the primary slot, which a launch refused
+/// the second slot swaps out; `others` are the other slots' residents, one of
+/// which a granted co-load evicts when they are full, the queue choosing
+/// which at launch time.
+fn displacement(
+    decision: &SecondarySlotDecision,
+    primary: Option<&Resident>,
+    others: &[Resident],
+) -> (bool, Option<String>) {
+    match (primary, decision.is_grant()) {
+        // Nothing in the primary: the launch takes it, unloading nothing.
+        (None, _) => (false, None),
+        // Refused the second slot: the primary's resident is swapped out.
+        (Some(resident), false) => (true, Some(resident.model_name.clone())),
+        // Granted the second slot: beside the primary; an occupied second slot
+        // gives way, the queue picking which resident when there are several.
+        (Some(_), true) => (!others.is_empty(), None),
+    }
 }
 
 #[cfg(test)]

@@ -226,9 +226,19 @@ impl AdmissionQueue {
         self.lock().is_loading()
     }
 
-    /// Project the queue for the dashboard.
+    /// Project the queue for the dashboard. The free VRAM that sizes the
+    /// second slot's room is read before the lock is taken (the reading is
+    /// cached for a few seconds, so a dashboard frame costs no probe).
     pub fn snapshot(&self) -> AdmissionSnapshot {
-        self.lock().snapshot(Instant::now())
+        let free_vram_bytes = crate::system::free_gpu_memory_bytes();
+        self.lock().snapshot(Instant::now(), free_vram_bytes)
+    }
+
+    /// The launch facts of the resident serving `model_id`, if one is.
+    pub fn launch_facts(&self, model_id: u32) -> Option<gglib_core::domain::LaunchFacts> {
+        let state = self.lock();
+        let slot = state.slot_of(model_id)?;
+        state.slot(slot).map(Resident::launch_facts)
     }
 }
 
