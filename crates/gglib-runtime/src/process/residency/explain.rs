@@ -12,10 +12,18 @@
 //! second implementation: `fit_or_undivided` is the shared seam, and this
 //! module supplies the same two budgets to it.
 
-use gglib_core::cache_config::KvCacheType;
-use gglib_core::domain::{FitInputs, KvElemsPerToken, fit_context_explained};
+use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
+use gglib_core::domain::{
+    ContextFit, FitInputs, KvElemsPerToken, LaunchPlan, RuntimeKind, fit_context_explained,
+};
+use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec, ModelRuntimeError};
+use gglib_core::server_config::ServerConfigOptions;
 
-use super::{fit_or_undivided, vram};
+use super::context::fit_or_undivided;
+use super::launch::{plan_llama, plan_sd};
+use super::{Prepared, explain_args, prepare, vram};
+use crate::process::SpawnConfig;
+use crate::process::admission::Resident;
 
 /// What this machine would fit for a model, and what that answer worked from.
 ///
@@ -52,6 +60,71 @@ pub fn explain_fit(
         .into_inner()
         .expect("fit_or_undivided calls the closure at least once");
     (fitted, inputs)
+}
+
+/// The launch gglib would make for `spec` now, without making it.
+///
+/// The same resolutions a launch runs, in the same order (`prepare`, then
+/// the runtime's planner), over `template` and this request's overrides
+/// and the `others` loaded now, which the RAM cache is sized after. The
+/// arguments are the spawn's own token list with the port spelled `auto`,
+/// each with the decision behind it (`explain_args`); the fit is what the
+/// context was sized by. Planned as a launch into the primary slot: the
+/// queue chooses the slot when the launch happens, and a second slot's
+/// cache differs.
+///
+/// Nothing is checked on disk: a file that is missing is the inspector's
+/// to name, and a plan of a model whose weights are gone is still the plan.
+///
+/// # Errors
+///
+/// As a launch's planning: an image model with no family.
+pub fn plan_launch(
+    spec: ModelLaunchSpec,
+    template: &ServerConfigOptions,
+    cache_ram: CacheRamSetting,
+    num_ctx: Option<u64>,
+    default_ctx: Option<u64>,
+    overrides: &LaunchOverrides,
+    others: &[Resident],
+) -> Result<LaunchPlan, ModelRuntimeError> {
+    let Prepared { request, fit } =
+        prepare(spec, template, cache_ram, num_ctx, default_ctx, overrides);
+    let planned = match request.spec.runtime() {
+        RuntimeKind::Llama => plan_llama(others, &request),
+        RuntimeKind::StableDiffusion => plan_sd(&request)?,
+    };
+    let (program, args) = match (&planned.config, &planned.llama) {
+        (SpawnConfig::Llama(config), Some(resolved)) => (
+            RuntimeKind::Llama.server_name(),
+            explain_args::llama_args(config, resolved, &request),
+        ),
+        (SpawnConfig::Sd(config), _) => (
+            RuntimeKind::StableDiffusion.server_name(),
+            explain_args::sd_args(config),
+        ),
+        (SpawnConfig::Llama(_), None) => {
+            return Err(ModelRuntimeError::Internal(
+                "a llama-server plan carried no resolutions".to_owned(),
+            ));
+        }
+    };
+    let (serves_at, source) = request.context;
+    Ok(LaunchPlan {
+        program: program.to_owned(),
+        args,
+        narration: planned.narration,
+        fit: fit.map(|(fitted, inputs)| ContextFit {
+            serves_at,
+            source,
+            fitted,
+            budget_bytes: inputs.budget_bytes,
+            weights_bytes: inputs.weights_bytes,
+            kv_bytes_per_token: inputs.kv_bytes_per_token,
+            trained_ctx: inputs.trained_ctx,
+            unsnapped: inputs.unsnapped,
+        }),
+    })
 }
 
 #[cfg(test)]

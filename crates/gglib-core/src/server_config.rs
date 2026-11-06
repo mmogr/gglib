@@ -5,6 +5,7 @@
 //! logic for idle-model advertisements in `/v1/models`.
 
 use anyhow::{Result, anyhow};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::settings::DEFAULT_CONTEXT_SIZE;
@@ -251,7 +252,9 @@ impl ServerConfigOptions {
 /// only what that context is — the number alone cannot distinguish a value
 /// the user asked for from one inherited from the model's stored defaults or
 /// from the 4096 floor. See [`crate::domain::LaunchNarration`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "snake_case")]
 pub enum ContextSizeSource {
     /// Runtime request or CLI flag (`opts.context_size`).
     Explicit,

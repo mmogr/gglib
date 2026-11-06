@@ -74,7 +74,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model add <path>` | Add a GGUF model to the library; `--component <role>=<path>` links an image model's component as it is added |
 | `model list` | List all models with metadata, the Model ID a client sends for each, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
 | `model inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
-| `model explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
+| `model explain <id\|name> [--profile <name>]` | Show the launch gglib would make for the model, each argument with whose choice it was and why, the context fit, and every resolved inference parameter with the layer that supplied it |
 | `model load <id\|name> [--context <N\|max>] [--pin]` | Load a model into memory on the daemon, as the app's Load does; `--pin` pins the endpoint to it first |
 | `model unload <id\|name>` | Unload a model from memory on the daemon, as the app's Unload does |
 | `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |

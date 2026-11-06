@@ -3,6 +3,7 @@
 pub(crate) mod capability_flags;
 pub(crate) mod explain_display;
 pub(crate) mod inspect_display;
+pub(crate) mod launch_display;
 pub(crate) mod model_display;
 pub(crate) mod sampling_values;
 pub(crate) mod state_words;

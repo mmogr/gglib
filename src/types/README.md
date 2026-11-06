@@ -54,6 +54,12 @@ TypeScript type definitions shared across the gglib GUI.
 | `TemplateSupport` | `'yes' \| 'no' \| 'unknown'` — whether a model's chat template reads a kwarg. Three states on purpose: capabilities are read from a *running* server, so `unknown` is the common answer and must never render as a `no` |
 | `ProvenanceParamKey` | Every key the explain endpoint attributes a source to — `SamplingParamKey` plus `reasoningEffort`, which has no numeric bounds and so cannot join the bounds table |
 
+### Launch Types (re-exported from `index.ts`)
+
+| Type | Description |
+|------|-------------|
+| `LaunchExplanation` | `GET /api/models/:id/explain`: the launch the daemon would make (`plan`: program, arguments each with whose choice it was and why, narration, context fit) and the model's `sampling` |
+
 ### Benchmark Types (`benchmark.ts`, with `agenticEval.ts` re-exported from it)
 
 | Type | Description |

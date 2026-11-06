@@ -97,14 +97,26 @@ terminal pieces built on them.
 ### Explain Display
 **Module:** `explain_display.rs`
 
-Draws `gglib model explain`: each resolved sampling parameter beside the layer
-that supplied it, from the `SamplingExplanationDto` the explain call answers
-with.
+Draws the sampling half of `gglib model explain`: each resolved sampling
+parameter beside the layer that supplied it, from the `SamplingExplanationDto`
+inside the explanation the explain call answers with.
 
 **Key Functions:**
 - `print_explanation()` - Prints the table
 - `explanation_text()` - The table as text: heading, one row per parameter, caveats
 - `explanation_lines()` - One string per parameter
+
+### Launch Display
+**Module:** `launch_display.rs`
+
+Draws the launch half of `gglib model explain`: the command gglib would run,
+each argument beside whose choice it was and why, and the context section,
+from the `LaunchPlan` the explain call answers with.
+
+**Key Functions:**
+- `launch_text()` - The command line, the argument rows and the context section as text
+- `argument_lines()` - One string per argument
+- `context_text()` - The context chain and the fit's inputs
 
 ### Inspect Display
 **Module:** `inspect_display.rs`

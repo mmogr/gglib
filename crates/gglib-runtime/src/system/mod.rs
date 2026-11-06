@@ -45,7 +45,12 @@ pub use host::{free_disk_bytes, host_facts, this_machine_name};
 /// the same cache-RAM auto-sizing math (e.g. `gglib-app-services`' direct
 /// model-serve path) can call it without going through `ProcessManager`.
 pub fn total_system_ram_bytes() -> u64 {
-    get_system_memory_info().total_ram_bytes
+    // Read once: the figure does not change while the process runs, and the
+    // probe behind it builds a whole `System` and asks after the GPU each
+    // time. A plan of every launch (`gglib model explain`, the inspector)
+    // asks it as a launch does.
+    static TOTAL: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *TOTAL.get_or_init(|| get_system_memory_info().total_ram_bytes)
 }
 
 /// How long a free-VRAM reading is reused before the probe runs again.

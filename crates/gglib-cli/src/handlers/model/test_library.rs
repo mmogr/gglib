@@ -204,6 +204,24 @@ impl ModelRuntimePort for Runtime {
         unimplemented!("an update and a removal start nothing")
     }
 
+    fn plan(
+        &self,
+        spec: &gglib_core::ports::ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
+        gglib_runtime::process::residency::explain::plan_launch(
+            spec.clone(),
+            &gglib_core::server_config::ServerConfigOptions::default(),
+            gglib_core::cache_config::CacheRamSetting::Auto,
+            num_ctx,
+            default_ctx,
+            overrides,
+            &[],
+        )
+    }
+
     async fn current_model(&self) -> Option<RunningTarget> {
         None
     }

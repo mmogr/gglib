@@ -13,10 +13,11 @@ use super::core::GuiProcessCore;
 use super::spawn_config::RuntimeBinaries;
 use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::AdmissionSnapshot;
+use gglib_core::domain::{AdmissionSnapshot, LaunchPlan};
 use gglib_core::ports::{
     Admission, AdmissionLease, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides,
-    ModelCatalogPort, ModelRuntimeError, ProcessHandle, ResidencyObserver, RunningTarget,
+    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ProcessHandle, ResidencyObserver,
+    RunningTarget,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
@@ -159,6 +160,23 @@ impl ProcessManager {
                 observer,
             )
             .await
+    }
+
+    /// The launch [`Self::admit`] would make for `spec` now, without making
+    /// it, over the models loaded now. See
+    /// [`ModelRuntimePort::plan`](gglib_core::ports::ModelRuntimePort::plan).
+    ///
+    /// # Errors
+    ///
+    /// An image model with no family.
+    pub fn plan(
+        &self,
+        spec: &ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<LaunchPlan, ModelRuntimeError> {
+        self.residency.plan(spec, num_ctx, default_ctx, overrides)
     }
 
     /// What the admission queue and resident set look like right now.

@@ -167,10 +167,20 @@ fn llama_bench_uses() -> Uses {
     uses
 }
 
-/// Every flag literal `build_command` names is among those gathered.
+/// The flag literals `launch_tokens` names in `source`, in order: the first
+/// argument of each `bare(&mut tokens, "…")` and `with(&mut tokens, "…", …)`.
+fn token_literals(source: &str) -> Vec<&str> {
+    source
+        .split("&mut tokens, \"")
+        .skip(1)
+        .filter_map(|rest| rest.split_once('"').map(|(literal, _)| literal))
+        .collect()
+}
+
+/// Every flag literal `launch_tokens` names is among those gathered.
 fn assert_the_llama_server_builder_is_gathered(gathered: &Uses) {
     let source = before_tests(include_str!("command.rs"));
-    let literals: Vec<&str> = arg_literals(source)
+    let literals: Vec<&str> = token_literals(source)
         .into_iter()
         .filter(|l| is_flag(l))
         .collect();

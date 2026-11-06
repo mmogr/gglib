@@ -37,7 +37,7 @@ async fn a_value_set_on_the_model_outranks_the_global_one_as_model_explain_repor
         ..temperature(0.42)
     };
     global(&state, defaults).await;
-    let explained = state.models.explain_sampling(id, None).await.unwrap();
+    let explained = state.models.explain(id, None).await.unwrap().sampling;
     assert_eq!(explained.resolved.temperature, Some(0.55));
     assert_eq!(explained.resolved.top_k, Some(33));
 
@@ -164,7 +164,7 @@ async fn a_turn_that_names_nothing_sends_what_model_explain_reports() {
     global(&thinking, defaults).await;
 
     for (state, id) in [(&ordinary, plain), (&thinking, thinker)] {
-        let explained = state.models.explain_sampling(id, None).await.unwrap();
+        let explained = state.models.explain(id, None).await.unwrap().sampling;
         assert_eq!(explained.resolved.temperature, Some(0.42));
         let want = InferenceConfig {
             max_tokens: explained.resolved.max_tokens.or(Some(16_384)),

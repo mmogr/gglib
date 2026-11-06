@@ -8,6 +8,7 @@ use crate::process::spawn_stream_reader;
 use gglib_core::debug_switches;
 use gglib_core::ports::{JinjaMode, ServerConfig};
 use gglib_core::utils::process::cmd;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use tokio::process::Child;
 use tracing::{debug, info, warn};
@@ -28,7 +29,7 @@ pub(crate) const SERVER_PARALLEL: u32 = 1;
 ///
 /// Truthy values (case-insensitive): `1`, `true`, `yes`, `on`. Anything else
 /// (including unset) leaves MTP enabled.
-fn mtp_disabled_via_env() -> bool {
+pub(crate) fn mtp_disabled_via_env() -> bool {
     debug_switches::enabled("GGLIB_DISABLE_MTP")
 }
 
@@ -40,7 +41,7 @@ fn mtp_disabled_via_env() -> bool {
 /// RoPE-shifts cached keys into new positions) can be A/B tested as a
 /// suspect without editing whatever launch profile/script set it, e.g.
 /// `GGLIB_DISABLE_CACHE_REUSE=1 gglib proxy --cache-reuse 256`.
-fn cache_reuse_disabled_via_env() -> bool {
+pub(crate) fn cache_reuse_disabled_via_env() -> bool {
     debug_switches::enabled("GGLIB_DISABLE_CACHE_REUSE")
 }
 
@@ -171,13 +172,42 @@ pub(crate) fn build_command(
     port: u16,
 ) -> std::process::Command {
     let mut cmd = cmd(validated_path);
-    cmd.arg("-m")
-        .arg(&config.model_path)
-        .arg("--host")
-        .arg("127.0.0.1")
-        .arg("--port")
-        .arg(port.to_string())
-        .arg("--metrics");
+    // Said once per spawn, not per plan: a plan reads the same token list.
+    if config.cache_reuse.is_some() && cache_reuse_disabled_via_env() {
+        info!("cache-reuse suppressed via GGLIB_DISABLE_CACHE_REUSE");
+    }
+    if config.spec_draft_n_max.is_some() && mtp_disabled_via_env() {
+        info!("MTP speculative decoding suppressed via GGLIB_DISABLE_MTP");
+    }
+    for token in launch_tokens(config, &port.to_string()) {
+        cmd.arg(token.flag);
+        if let Some(value) = token.value {
+            cmd.arg(value);
+        }
+    }
+    cmd
+}
+
+/// One argument of the command line: a flag, and the value it takes if it
+/// takes one.
+pub(crate) struct Token {
+    pub flag: &'static str,
+    pub value: Option<OsString>,
+}
+
+/// The arguments `llama-server` is started with, in order, from a
+/// [`ServerConfig`]; `port` as the spawn knows it, or `auto` in a plan made
+/// before one is taken.
+///
+/// The one list the spawn and `gglib model explain` both read, so the
+/// command a plan shows is the command a launch runs. Pure: nothing is
+/// spawned, so each flag's emission can be asserted against the list.
+pub(crate) fn launch_tokens(config: &ServerConfig, port: &str) -> Vec<Token> {
+    let mut tokens: Vec<Token> = Vec::new();
+    with(&mut tokens, "-m", config.model_path.clone());
+    with(&mut tokens, "--host", "127.0.0.1");
+    with(&mut tokens, "--port", port);
+    bare(&mut tokens, "--metrics");
 
     // Serialize concurrent requests onto a single slot.
     //
@@ -195,11 +225,11 @@ pub(crate) fn build_command(
     // llama-server: it caps in-flight requests per resident model at
     // `SERVER_PARALLEL`, so the backlog stays visible, ordered, and out of the
     // way of a model swap.
-    cmd.arg("--parallel").arg(SERVER_PARALLEL.to_string());
+    with(&mut tokens, "--parallel", SERVER_PARALLEL.to_string());
 
     // Add context size if specified
     if let Some(ctx) = config.context_size {
-        cmd.arg("-c").arg(ctx.to_string());
+        with(&mut tokens, "-c", ctx.to_string());
     }
 
     // Jinja. Both flags are emitted, and the third state emits neither.
@@ -211,10 +241,10 @@ pub(crate) fn build_command(
     // "gglib takes no position", not "off" — see `llama::args::jinja`.
     match config.jinja {
         JinjaMode::On => {
-            cmd.arg("--jinja");
+            bare(&mut tokens, "--jinja");
         }
         JinjaMode::Off => {
-            cmd.arg("--no-jinja");
+            bare(&mut tokens, "--no-jinja");
         }
         JinjaMode::Defer => {}
     }
@@ -224,30 +254,30 @@ pub(crate) fn build_command(
     // chat completions. Resolved from the model's "embedding" tag, so the two
     // modes never collide on one model.
     if config.embeddings {
-        cmd.arg("--embeddings");
+        bare(&mut tokens, "--embeddings");
     }
 
     // The projector, which is what gives the model image input. Without it
     // llama-server answers an image request with a 500.
     if let Some(ref projector) = config.mmproj {
-        cmd.arg("--mmproj").arg(projector);
+        with(&mut tokens, "--mmproj", projector.clone());
     }
 
     // Add reasoning format if specified
     if let Some(ref format) = config.reasoning_format {
-        cmd.arg("--reasoning-format").arg(format);
+        with(&mut tokens, "--reasoning-format", format.clone());
     }
 
     // Add the KV cache disk slot-persistence flag if a slot-save directory is set.
     if let Some(ref slot_path) = config.slot_save_path {
-        cmd.arg("--slot-save-path").arg(slot_path);
+        with(&mut tokens, "--slot-save-path", slot_path.clone());
     }
 
     // `--cache-ram`: llama-server's own host-RAM prompt cache. Deliberately
     // independent of `--slot-save-path` above — the native RAM cache is
     // useful on its own even when disk persistence is off.
     if let Some(mb) = config.cache_ram_mb {
-        cmd.arg("--cache-ram").arg(mb.to_string());
+        with(&mut tokens, "--cache-ram", mb.to_string());
     }
     // else: llama-server's own built-in default (8192 MiB) applies
 
@@ -255,22 +285,20 @@ pub(crate) fn build_command(
     // the first prefix divergence — helps a follow-up prompt whose earlier
     // messages were edited or summarized, which plain prefix matching can't
     // reuse at all. See `cache_reuse_disabled_via_env` for the kill switch.
-    if let Some(n) = config.cache_reuse {
-        if cache_reuse_disabled_via_env() {
-            info!("cache-reuse suppressed via GGLIB_DISABLE_CACHE_REUSE");
-        } else {
-            cmd.arg("--cache-reuse").arg(n.to_string());
-        }
+    if let Some(n) = config.cache_reuse
+        && !cache_reuse_disabled_via_env()
+    {
+        with(&mut tokens, "--cache-reuse", n.to_string());
     }
 
     // `--cache-type-k` / `--cache-type-v`: KV cache element type. Resolved
     // (default q8_0) by `build_server_config` before this point, so these
     // are set on every launch that goes through the canonical builder.
     if let Some(t) = config.cache_type_k {
-        cmd.arg("--cache-type-k").arg(t.as_llama_arg());
+        with(&mut tokens, "--cache-type-k", t.as_llama_arg());
     }
     if let Some(t) = config.cache_type_v {
-        cmd.arg("--cache-type-v").arg(t.as_llama_arg());
+        with(&mut tokens, "--cache-type-v", t.as_llama_arg());
     }
 
     // Add MTP speculative decoding flags if enabled
@@ -281,15 +309,13 @@ pub(crate) fn build_command(
     // decoding can be A/B tested as a suspect for long-context degenerate
     // generations without editing any per-model config: `GGLIB_DISABLE_MTP=1
     // gglib proxy`.
-    if let Some(n) = config.spec_draft_n_max {
-        if mtp_disabled_via_env() {
-            info!("MTP speculative decoding suppressed via GGLIB_DISABLE_MTP");
-        } else {
-            cmd.arg("--spec-type").arg("draft-mtp");
-            cmd.arg("--spec-draft-n-max").arg(n.to_string());
-            if let Some(p) = config.spec_draft_p_min {
-                cmd.arg("--spec-draft-p-min").arg(p.to_string());
-            }
+    if let Some(n) = config.spec_draft_n_max
+        && !mtp_disabled_via_env()
+    {
+        with(&mut tokens, "--spec-type", "draft-mtp");
+        with(&mut tokens, "--spec-draft-n-max", n.to_string());
+        if let Some(p) = config.spec_draft_p_min {
+            with(&mut tokens, "--spec-draft-p-min", p.to_string());
         }
     }
 
@@ -297,7 +323,7 @@ pub(crate) fn build_command(
     // b10875 (ggml-org/llama.cpp#28334); `mmap+mlock` is what `--mlock` meant,
     // mmap being the default it was added to.
     if config.mlock {
-        cmd.arg("--load-mode").arg("mmap+mlock");
+        with(&mut tokens, "--load-mode", "mmap+mlock");
     }
 
     // Sampling. Resolves to nothing — sampling is a per-request decision that
@@ -311,10 +337,21 @@ pub(crate) fn build_command(
     // being asserted about. Hard-coding the absence here as a comment left the
     // guard watching a function nobody called.
     for arg in crate::llama::args::sampler_flags() {
-        cmd.arg(arg);
+        bare(&mut tokens, arg);
     }
 
-    cmd
+    tokens
+}
+
+fn bare(tokens: &mut Vec<Token>, flag: &'static str) {
+    tokens.push(Token { flag, value: None });
+}
+
+fn with(tokens: &mut Vec<Token>, flag: &'static str, value: impl Into<OsString>) {
+    tokens.push(Token {
+        flag,
+        value: Some(value.into()),
+    });
 }
 
 /// Spawn background tasks to stream stdout/stderr logs asynchronously.

@@ -183,6 +183,26 @@ export type SamplingExplanation = Omit<SamplingExplanationDto, 'sources' | 'publ
 };
 
 /**
+ * The launch gglib would make for a model now, and its sampling —
+ * `GET /api/models/:id/explain`, the whole of `gglib model explain`.
+ *
+ * Mirrors the backend `LaunchExplanationDto`, with `sampling` narrowed as
+ * {@link SamplingExplanation} is. `plan.args` is the command the daemon
+ * would run, each argument with whose choice it was (`source`) and why
+ * (`reason`), in the daemon's own words; the inspector arranges them and
+ * writes none of its own.
+ */
+import type { LaunchExplanationDto } from './generated/LaunchExplanationDto';
+export type LaunchExplanation = Omit<LaunchExplanationDto, 'sampling'> & {
+  sampling: SamplingExplanation;
+};
+export type { LaunchPlan } from './generated/LaunchPlan';
+export type { LaunchArg } from './generated/LaunchArg';
+export type { ChoiceSource } from './generated/ChoiceSource';
+export type { ContextFit } from './generated/ContextFit';
+export type { ContextSizeSource } from './generated/ContextSizeSource';
+
+/**
  * Where a model's stored `inferenceDefaults` came from.
  *
  * - `user` — set by a person. Outranks global settings.

@@ -96,7 +96,7 @@ pub fn fit_context(
 /// `admit` does. Before that it reached only a `debug!` line written after a
 /// launch, which is not a reading anyone could take across a catalog — and
 /// ADR 0009's first kill criterion needs exactly that.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct FitInputs {
     /// Device memory the fit was allowed to spend against.
     pub budget_bytes: Option<u64>,

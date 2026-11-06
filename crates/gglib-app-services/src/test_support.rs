@@ -263,6 +263,56 @@ impl RunningRuntime {
     }
 }
 
+/// A runtime with nothing running that plans a launch as the daemon's does,
+/// and starts nothing: for a test of what `explain` answers.
+#[derive(Debug, Default)]
+pub(crate) struct PlansOnly;
+
+#[async_trait]
+impl ModelRuntimePort for PlansOnly {
+    async fn admit(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: Option<u64>,
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        Err(ModelRuntimeError::Internal(
+            "this test runtime starts nothing".to_string(),
+        ))
+    }
+
+    fn plan(
+        &self,
+        spec: &gglib_core::ports::ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: &LaunchOverrides,
+    ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
+        gglib_runtime::process::residency::explain::plan_launch(
+            spec.clone(),
+            &gglib_core::server_config::ServerConfigOptions::default(),
+            gglib_core::cache_config::CacheRamSetting::Auto,
+            num_ctx,
+            default_ctx,
+            overrides,
+            &[],
+        )
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+}
+
 #[async_trait]
 impl ModelRuntimePort for RunningRuntime {
     async fn admit(

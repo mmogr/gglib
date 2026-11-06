@@ -134,5 +134,8 @@ infrastructure concerns (database, filesystem, etc.).
   budget (`select_evictions`); the scanning and deleting live in `gglib-proxy`
 - `launch_narration` - What the runtime decided for one llama-server launch,
   and why (`LaunchNarration`, `LaunchDecision`)
+- `launch_plan` - The launch gglib would make for a model, said flag by flag
+  (`LaunchPlan`, `LaunchArg`, `ChoiceSource`, `ContextFit`): what `gglib
+  model explain` prints and `GET /api/models/{id}/explain` serves
 
 <!-- module-docs:end -->
