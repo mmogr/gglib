@@ -15,7 +15,7 @@ stands in for.
 | 2. Engines | [`ensure_installed`](crate::handlers::config::engine::ensure_installed) for llama.cpp, as `gglib serve` uses, then for stable-diffusion.cpp, which is optional: skipping or failing it never stops `up` |
 | 3. Model | [`gglib_core::domain::recommend`], then `DownloadManagerPort::queue_smart` + the shared interactive monitor; the model becomes the default when none is set, so `gglib q` needs no `-m` after `up` |
 | 4. Proxy | [`DaemonHandle::start_proxy`], unpinned — identical to `gglib proxy` |
-| 5. Warm-up | one HTTP request to the endpoint it just started |
+| 5. Warm-up | the daemon's proof request (`POST /api/proxy/prove`) and client block (`GET /api/proxy/clients`), printed as answered; the same two `gglib proxy test` prints |
 
 [`DaemonHandle::start_proxy`]: crate::daemon_client::DaemonHandle::start_proxy
 

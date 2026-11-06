@@ -9,7 +9,7 @@
 use anyhow::{Context, Result};
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonHandle, ProxyStatusDto, StartProxyBody};
+use crate::daemon_client::{self, DaemonHandle, StartProxyBody};
 use crate::shared_args::{AccessArgs, CacheArgs, SamplingArgs};
 use gglib_core::settings::CONTEXT_SIZE_RANGE;
 
@@ -92,12 +92,9 @@ fn start_body(
     }
 }
 
-/// What a start answered: the daemon's status as it came, and the port the
-/// proxy is on.
+/// What a start answered: the port the daemon's status named, else where the
+/// body asked for it, else the stored `proxy_port`.
 pub(in crate::handlers) struct StartedProxy {
-    /// The daemon's answer: where a client reaches the proxy and whether a
-    /// request needs the key, for the surfaces that print them.
-    pub status: ProxyStatusDto,
     /// The port: the daemon's, else where the body asked for it, else the
     /// stored `proxy_port`.
     pub port: u16,
@@ -123,7 +120,7 @@ pub(in crate::handlers) async fn start_on(
         .port
         .or(body.port)
         .unwrap_or_else(|| settings.effective_proxy_port());
-    Ok(StartedProxy { status, port })
+    Ok(StartedProxy { port })
 }
 
 /// Execute the proxy command.

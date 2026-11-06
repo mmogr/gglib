@@ -13,8 +13,8 @@ use gglib_app_services::types::{McpServerInfo, QueueDownloadResponse, ServerInfo
 use gglib_core::download::{DownloadId, QueueSnapshot};
 
 use super::wire::{
-    ProxyStatusDto, QueueDownloadBody, StartPinnedBody, StartProxyBody, StartServerBody,
-    StartServerDto, StopServerBody,
+    ClientRecipesDto, ProofOutcomeDto, ProxyStatusDto, QueueDownloadBody, StartPinnedBody,
+    StartProxyBody, StartServerBody, StartServerDto, StopServerBody,
 };
 use super::{DaemonHandle, auth, base_url, paths};
 
@@ -103,6 +103,36 @@ impl DaemonHandle {
         let response = self
             .get(paths::PROXY_STATUS_PATH)
             .timeout(Duration::from_secs(5))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// How a client connects to the running endpoint for model `gglib_id`:
+    /// the daemon's address, key rule, the id a client sends, and a recipe
+    /// per client, printed as sent.
+    pub(crate) async fn proxy_clients(&self, gglib_id: Option<i64>) -> Result<ClientRecipesDto> {
+        let query = gglib_id.map_or_else(String::new, |id| format!("?model={id}"));
+        let response = self
+            .get(&format!("{}{query}", paths::PROXY_CLIENTS_PATH))
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// One real request through the running endpoint for model `gglib_id`,
+    /// the pin when `None`.
+    ///
+    /// Long timeout: the daemon holds the request open while the model
+    /// loads, up to its own bind and load limits (half a minute and ten
+    /// minutes); this waits past both so the daemon's own refusal, not a
+    /// client timeout, is what is printed.
+    pub(crate) async fn proxy_prove(&self, gglib_id: Option<i64>) -> Result<ProofOutcomeDto> {
+        let response = self
+            .post(paths::PROXY_PROVE_PATH)
+            .json(&serde_json::json!({ "model_id": gglib_id }))
+            .timeout(Duration::from_mins(11))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)

@@ -10,6 +10,7 @@ gglib proxy                       # every model, on the stored proxy_port (8080)
 gglib proxy --port 8081 --host 0.0.0.0 --allowed-host desk.local
 gglib serve Qwen3-4B-Instruct-2507        # one model; other names are refused
 gglib proxy dashboard             # live connections, slots, cache, requests
+gglib proxy test                  # one real request through it, then how a client connects
 gglib proxy stop
 ```
 
@@ -46,6 +47,19 @@ config builder, so a model behaves identically however it was started.
   it; `proxy stop` ends it.
 - The flag groups `proxy` shares with `serve`, sampling, cache and access,
   are in [the index](README.md#flags-several-commands-share).
+
+### `test`
+
+Sends one real request through the running endpoint and says who answered
+and in how long, the load included, then how a client connects to it: the
+address, whether a request needs the key, the Model ID a client sends, and a
+recipe per client (opencode, Cline / Roo / Continue, Open WebUI, VS Code
+Copilot, any OpenAI client). All of it is the daemon's: it sends the request
+to its own endpoint with the key the endpoint demands, and writes the
+recipes from the address it is bound at, so `gglib up`, this command and the
+desktop app show one block. With no model named it uses the pinned model,
+else the one loaded chat model, else asks you to name one. Exits non-zero
+when the proof fails, so a script can tell; the block is printed first.
 
 ### `dashboard`, `cache-clear`, `trips`, `stop`
 

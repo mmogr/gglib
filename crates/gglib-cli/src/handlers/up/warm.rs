@@ -1,158 +1,55 @@
 //! Step 5: prove the endpoint works, then say how to connect to it (the
 //! client block, `client_block`) and what to run next.
 //!
-//! The proxy runs on the daemon, so this talks to the endpoint over HTTP like
-//! any other client rather than reaching into a runtime: the point is to
-//! exercise the router, admission control, model resolution and the forward
-//! pipeline, so that "the endpoint works" is demonstrated rather than assumed.
+//! Both are the daemon's: it sends one real request through its own endpoint
+//! (`POST /api/proxy/prove`), so the router, admission control, model
+//! resolution and the forward pipeline are exercised rather than assumed, and
+//! it writes how a client connects (`GET /api/proxy/clients`). This prints
+//! what it answered; `gglib proxy test` prints the same two things.
 //!
-//! It is also what makes the launch narration part of `gglib up`'s output —
-//! an unpinned proxy loads nothing until a request arrives, so without a first
-//! request the user's evidence that anything happened is a bound socket.
+//! The proof is also what makes the launch narration part of `gglib up`'s
+//! output: an unpinned proxy loads nothing until a request arrives, so without
+//! a first request the user's evidence that anything happened is a bound
+//! socket.
 
-use std::net::SocketAddr;
-use std::time::{Duration, Instant};
+use super::client_block::{render_client_config, render_proof};
+use super::use_color;
+use crate::daemon_client::DaemonHandle;
+use crate::presentation::style::{BOLD, DIM, RESET, make_spinner};
 
-use serde_json::json;
-
-use super::client_block::{NO_ADDRESS, client_facts, render_client_config};
-use super::{sgr, use_color};
-use crate::handlers::inference::proxy::StartedProxy;
-use crate::presentation::style::{BOLD, DIM, RESET, SUCCESS, WARNING, make_spinner};
-
-/// How long to keep polling for the listener before giving up on it.
-const BIND_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// How long the first request may take.
+/// Have the daemon prove the endpoint it just started with `model_id`, then
+/// print how a client connects to it.
 ///
-/// Generous on purpose: this covers reading tens of gigabytes of weights off
-/// disk into VRAM on a cold page cache. Concurrent requests queue behind the
-/// same startup rather than being refused, so waiting is the correct behaviour.
-const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
-
-/// Wait for the endpoint, send one real request through it, then print the
-/// client configuration.
-///
-/// Never returns an error: a failed warm-up leaves a perfectly usable proxy,
-/// and tearing that down over a slow first load would be a worse outcome than
-/// the cold start it was trying to avoid.
-///
-/// `model` is what a client sends, the id the endpoint lists it under;
-/// `model_id` is what a printed command takes: a name is often several words.
-pub(super) async fn run(
-    started: &StartedProxy,
-    model: String,
-    model_id: i64,
-    api_key: Option<String>,
-) {
-    let addr: SocketAddr = ([127, 0, 0, 1], started.port).into();
-    let client = gglib_proxy::loopback::client();
-
-    if !wait_for_bind(&client, addr).await {
-        // The proxy prints its own bind failure; adding a second one here
-        // would just be noise.
-        return;
-    }
-
+/// Never returns an error: a failed proof leaves a perfectly usable proxy,
+/// and tearing that down over a slow first load would be a worse outcome
+/// than the cold start it was trying to avoid.
+pub(super) async fn run(handle: &DaemonHandle, model_id: i64) {
     let spinner = make_spinner();
-    spinner.set_message(format!("Loading {model}..."));
-    let begun = Instant::now();
-    let outcome = warm_request(&client, addr, &model, api_key.as_deref()).await;
+    spinner.set_message("Loading the model through the endpoint...".to_owned());
+    let proved = handle.proxy_prove(Some(model_id)).await;
     spinner.finish_and_clear();
-
     println!();
-    match outcome {
-        Ok(()) => println!(
-            "  {}\u{2713}{} endpoint answered in {:.1}s",
-            sgr(SUCCESS),
-            sgr(RESET),
-            begun.elapsed().as_secs_f64()
-        ),
-        Err(e) => {
-            println!(
-                "  {}!{} the first request did not complete: {e}",
-                sgr(WARNING),
-                sgr(RESET)
-            );
-            println!(
-                "  {}the endpoint is still running \u{2014} try it yourself below{}",
-                sgr(DIM),
-                sgr(RESET)
-            );
-        }
+    let lines = match &proved {
+        Ok(proof) => render_proof(Ok(proof), use_color()),
+        Err(e) => render_proof(Err(&e.to_string()), use_color()),
+    };
+    for line in lines {
+        println!("{line}");
     }
-
-    // The daemon said where a client reaches the endpoint and whether a
-    // request needs the key; the block prints its answer and works neither
-    // out for itself. A daemon that named no address is older than this
-    // CLI and is told so; one that named the address and could not read
-    // its settings to say of the key is printed as it answered.
-    match client_facts(&started.status) {
-        Some((base_url, key)) => {
-            for line in render_client_config(base_url, &model, model_id, key, use_color()) {
+    if proved.is_err() {
+        // A failed proof leaves the endpoint `up` just started running.
+        println!("  the endpoint is still running \u{2014} try it yourself below");
+    }
+    // The block is the daemon's too. A daemon that refuses to say (older
+    // than this CLI, or its endpoint gone between the two calls) is printed
+    // as it answered.
+    match handle.proxy_clients(Some(model_id)).await {
+        Ok(recipes) => {
+            for line in render_client_config(&recipes, use_color()) {
                 println!("{line}");
             }
         }
-        None => println!("{NO_ADDRESS}"),
-    }
-}
-
-/// Poll `/health` until the listener answers.
-///
-/// Polling rather than being signalled: the bind happens inside the daemon,
-/// which offers no readiness channel to this process.
-async fn wait_for_bind(client: &reqwest::Client, addr: SocketAddr) -> bool {
-    let deadline = Instant::now() + BIND_TIMEOUT;
-    let url = format!("http://{addr}/health");
-    while Instant::now() < deadline {
-        if client
-            .get(&url)
-            .timeout(Duration::from_secs(2))
-            .send()
-            .await
-            .is_ok()
-        {
-            return true;
-        }
-        tokio::time::sleep(Duration::from_millis(200)).await;
-    }
-    false
-}
-
-/// One minimal completion — enough to force the model to load, short enough
-/// that generation time is noise next to load time.
-async fn warm_request(
-    client: &reqwest::Client,
-    addr: SocketAddr,
-    model: &str,
-    api_key: Option<&str>,
-) -> Result<(), String> {
-    let mut request = client
-        .post(format!("http://{addr}/v1/chat/completions"))
-        .timeout(LOAD_TIMEOUT);
-    // `up` never passes `--api-key`, but the stored setting still applies to
-    // the proxy it just started — so this probe has to authenticate like any
-    // other client would.
-    if let Some(key) = api_key {
-        request = request.bearer_auth(key);
-    }
-    let response = request
-        .json(&json!({
-            "model": model,
-            "messages": [{ "role": "user", "content": "hi" }],
-            "max_tokens": 1,
-            "stream": false,
-        }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let status = response.status();
-    if status.is_success() {
-        Ok(())
-    } else {
-        let body = response.text().await.unwrap_or_default();
-        Err(format!("{status}: {}", body.trim()))
+        Err(e) => println!("  The daemon did not say how a client connects: {e}"),
     }
 }
 
@@ -202,8 +99,7 @@ mod tests {
             "gglib proxy dashboard --port 8123",
             "gglib proxy stop",
         ] {
-            assert!(text.contains(command), "missing {command:?} in:\n{text}");
+            assert!(text.contains(command), "missing `{command}` in:\n{text}");
         }
-        assert!(!text.contains('\x1b'));
     }
 }

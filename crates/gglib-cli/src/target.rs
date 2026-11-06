@@ -110,6 +110,7 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
                 ),
             ),
             Some(ProxyCommand::Trips { .. }) => ("proxy trips", Reach::Local),
+            Some(ProxyCommand::Test { .. }) => ("proxy test", Reach::Local),
             None => ("proxy", Reach::Local),
         },
         Commands::Up { .. } => ("up", Reach::Local),

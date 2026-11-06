@@ -71,6 +71,41 @@ pub(crate) async fn status(State(state): State<AppState>) -> Json<ProxyStatus> {
     Json(fetch_status(&state).await)
 }
 
+/// `?model=<gglib id>`: the model a client would send for.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ClientsQuery {
+    /// The model's gglib id; the pin when absent.
+    #[serde(default)]
+    pub model: Option<i64>,
+}
+
+/// How a client connects to the running endpoint for one model: the
+/// daemon's address, its key rule, the id a client sends, and the recipes
+/// per client, written once in `gglib_app_services::proxy_clients`.
+pub(crate) async fn clients(
+    State(state): State<AppState>,
+    Query(query): Query<ClientsQuery>,
+) -> Result<Json<gglib_app_services::ClientRecipes>, HttpError> {
+    Ok(Json(state.proxy.client_recipes(query.model).await?))
+}
+
+/// `{"model_id": <gglib id>}`: the model to prove the endpoint with; the
+/// pin when absent or null.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ProveBody {
+    #[serde(default)]
+    pub model_id: Option<i64>,
+}
+
+/// Send one real completion through the running endpoint and say who
+/// answered and in how long. Held open while the model loads.
+pub(crate) async fn prove(
+    State(state): State<AppState>,
+    Json(body): Json<ProveBody>,
+) -> Result<Json<gglib_app_services::ProofOutcome>, HttpError> {
+    Ok(Json(state.proxy.prove(body.model_id).await?))
+}
+
 /// Query for [`trips`].
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct TripsQuery {

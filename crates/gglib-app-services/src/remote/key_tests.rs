@@ -201,3 +201,25 @@ async fn a_cancelled_commit_stops_waiting_for_the_settings_cache() {
     .expect("a cancelled commit must not sit out the settings-cache window")
     .expect("committing a minted key cannot fail");
 }
+
+/// The key the proof presents is the one the endpoint's bearer policy
+/// demands now: a flag's key for the run; else the stored key, as soon as it
+/// is set or rotated after the start; else the key the run started with;
+/// none while the endpoint is open.
+#[test]
+fn the_demanded_key_is_what_the_bearer_policy_reads() {
+    let flag = Some(("k-flag".to_owned(), ApiKeySource::Flag));
+    let started = Some(("k-start".to_owned(), ApiKeySource::Settings));
+    assert_eq!(demanded(flag, Some("k-stored")).as_deref(), Some("k-flag"));
+    assert_eq!(
+        demanded(started.clone(), Some("k-rotated")).as_deref(),
+        Some("k-rotated")
+    );
+    assert_eq!(
+        demanded(None, Some("k-stored-later")).as_deref(),
+        Some("k-stored-later")
+    );
+    assert_eq!(demanded(started, None).as_deref(), Some("k-start"));
+    assert_eq!(demanded(None, Some("  ")), None);
+    assert_eq!(demanded(None, None), None);
+}

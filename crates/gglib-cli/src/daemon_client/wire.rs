@@ -73,6 +73,46 @@ pub(crate) struct ProxyStatusDto {
     pub pinned_model: Option<String>,
 }
 
+/// One copyable line of a client recipe, as the daemon sends it.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RecipeLineDto {
+    pub label: String,
+    pub value: String,
+}
+
+/// One client's recipe, as the daemon sends it.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ClientRecipeDto {
+    pub client: String,
+    #[serde(default)]
+    pub hint: String,
+    #[serde(default)]
+    pub lines: Vec<RecipeLineDto>,
+}
+
+/// `GET /api/proxy/clients?model=` response: how a client connects to the
+/// endpoint for one model, the daemon's facts and its recipes. Mirror of
+/// `gglib_app_services::ClientRecipes`, held to `PROXY_CLIENTS_FIELDS`.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ClientRecipesDto {
+    pub base_url: String,
+    /// `None` when the daemon could not read its settings to say.
+    pub key: Option<KeyState>,
+    pub model_id: String,
+    pub gglib_id: i64,
+    #[serde(default)]
+    pub recipes: Vec<ClientRecipeDto>,
+}
+
+/// `POST /api/proxy/prove` response: the endpoint answered. Mirror of
+/// `gglib_app_services::ProofOutcome`, held to `PROXY_PROVE_FIELDS`.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ProofOutcomeDto {
+    pub answered_by: String,
+    pub asked_for: String,
+    pub elapsed_ms: u64,
+}
+
 /// Body for `POST /api/servers/start` — the client-side twin of
 /// `gglib_axum::handlers::servers::StartServerBody`.
 ///

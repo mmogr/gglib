@@ -396,6 +396,110 @@ impl ProxyOps {
         self.supervisor.status().await
     }
 
+    /// Where a client on this machine reaches the running endpoint,
+    /// `http://<address>/v1` by the daemon's own dial rule, or a refusal
+    /// naming the fact that it is off.
+    async fn reached_base_url(&self) -> Result<String, GuiError> {
+        match self.supervisor.status().await {
+            ProxyStatus::Running { address } => Ok(gglib_core::access::endpoint_base_url(address)),
+            ProxyStatus::Stopped | ProxyStatus::Crashed => Err(GuiError::ValidationFailed(
+                "the endpoint is off: turn it on first (`gglib proxy`, or Turn on)".to_owned(),
+            )),
+        }
+    }
+
+    /// The model a request names, or the pin when it names none: the pinned
+    /// endpoint serves one model, and that is the one to prove and to write
+    /// recipes for. With no pin, a request must name the model.
+    fn target_model(&self, gglib_id: Option<i64>) -> Result<i64, GuiError> {
+        gglib_id
+            .or_else(|| self.pinned().map(|pin| pin.id))
+            .ok_or_else(|| {
+                GuiError::ValidationFailed(
+                    "no model named and none pinned: name the model (`model=<gglib id>`)"
+                        .to_owned(),
+                )
+            })
+    }
+
+    /// The id a client sends for model `gglib_id`, as `/v1/models` lists it,
+    /// and whether the model draws pictures: refused for an id the catalogue
+    /// does not hold.
+    async fn listed(&self, gglib_id: i64) -> Result<(String, bool), GuiError> {
+        let models = self.core.models().list().await?;
+        let draws = models
+            .iter()
+            .find(|m| m.id == gglib_id)
+            .map(|m| m.image_family.is_some());
+        let listed_id = crate::models::openai_ids(&models).remove(&gglib_id);
+        match (listed_id, draws) {
+            (Some(id), Some(draws)) => Ok((id, draws)),
+            _ => Err(GuiError::NotFound {
+                entity: "model",
+                id: gglib_id.to_string(),
+            }),
+        }
+    }
+
+    /// How a client connects to the running endpoint for model `gglib_id`
+    /// (the pin when `None`): the daemon's address, its key rule, the id a
+    /// client sends, and the recipes per client (`proxy_clients::recipes`),
+    /// written once here for `gglib up`, `gglib proxy test` and the Endpoint
+    /// page.
+    pub async fn client_recipes(
+        &self,
+        gglib_id: Option<i64>,
+    ) -> Result<crate::ClientRecipes, GuiError> {
+        let base_url = self.reached_base_url().await?;
+        let gglib_id = self.target_model(gglib_id)?;
+        let (model_id, _) = self.listed(gglib_id).await?;
+        let key = self.key_state().await;
+        Ok(crate::proxy_clients::recipes(&crate::ClientFacts {
+            base_url,
+            key,
+            model_id,
+            gglib_id,
+        }))
+    }
+
+    /// Send one real completion through the running endpoint for model
+    /// `gglib_id` (the pin when `None`), with the key the endpoint demands
+    /// of a request now (`remote::key::demanded`: a flag's, else the stored
+    /// key however lately set, else the run's), and say who answered and in
+    /// how long (`proxy_prove::prove`). The request is held open while the
+    /// model loads, up to [`crate::proxy_prove::LOAD_TIMEOUT`].
+    ///
+    /// # Errors
+    ///
+    /// The endpoint off, an id the catalogue does not hold, a model that
+    /// draws pictures (the proof is a chat completion, which the endpoint
+    /// refuses for one), or the proof's own refusal (no answer to `/health`,
+    /// a non-2xx answer, a transport error), each as the sentence every
+    /// surface prints.
+    pub async fn prove(&self, gglib_id: Option<i64>) -> Result<crate::ProofOutcome, GuiError> {
+        let base_url = self.reached_base_url().await?;
+        let gglib_id = self.target_model(gglib_id)?;
+        let (model_id, draws) = self.listed(gglib_id).await?;
+        if draws {
+            return Err(GuiError::ValidationFailed(format!(
+                "{model_id} draws pictures, and the proof is a chat completion: name a chat model"
+            )));
+        }
+        let stored = self.core.settings().get().await?;
+        let key =
+            crate::remote::key::demanded(self.effective_api_key(), stored.proxy_api_key.as_deref());
+        crate::proxy_prove::prove(
+            &gglib_proxy::loopback::client(),
+            &base_url,
+            &model_id,
+            key.as_deref(),
+            crate::proxy_prove::BIND_TIMEOUT,
+            crate::proxy_prove::LOAD_TIMEOUT,
+        )
+        .await
+        .map_err(|refusal| GuiError::ValidationFailed(refusal.reason))
+    }
+
     /// The model the shared runtime is currently pinned to, if any.
     ///
     /// `Some` while a pinned proxy run (`gglib serve`) is active; surfaced in

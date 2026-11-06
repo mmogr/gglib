@@ -1,7 +1,7 @@
 #![doc = include_str!("README.md")]
 
 mod choose;
-mod client_block;
+pub(crate) mod client_block;
 mod probe;
 mod warm;
 
@@ -9,7 +9,6 @@ use std::ffi::OsStr;
 use std::io::IsTerminal;
 
 use anyhow::Result;
-use gglib_core::Model;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
@@ -89,38 +88,18 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // fitted value at launch. Sending `None` lets the launch fit it.
     let default_context = settings.default_context_size;
 
-    // The stored key, if any, is what the proxy about to start will demand of
-    // this very probe: `up` binds loopback and passes no `--api-key`, so the
-    // supervisor resolves the same settings row we read here.
-    let api_key = daemon_client::auth::proxy_key(ctx, None).await;
-
     let handle = daemon_client::ensure_daemon(ctx).await?;
     let body = start_body(args.port, default_context);
     let started = proxy::start_on(&handle, &body, &settings).await?;
 
-    // Step 5: prove it. The warm request loads the model through the very
+    // Step 5: prove it. The daemon sends one real request through the very
     // endpoint the user is about to point their client at, by the id that
-    // endpoint lists it under.
-    let listed = listed_id(ctx, &model).await;
-    warm::run(&started, listed, model.id, api_key).await;
+    // endpoint lists it under, and says how a client connects.
+    warm::run(&handle, model.id).await;
     for line in warm::render_next_steps(started.port, model.id, use_color()) {
         println!("{line}");
     }
     Ok(())
-}
-
-/// The id `/v1/models` lists `model` under, which is what a client sends:
-/// the one listing's answer ([`ModelOps::openai_id`]), and the name when
-/// the catalogue cannot be read or does not hold the model.
-///
-/// [`ModelOps::openai_id`]: gglib_app_services::ModelOps::openai_id
-async fn listed_id(ctx: &CliContext, model: &Model) -> String {
-    crate::handlers::model::one_shot_model_ops(ctx)
-        .openai_id(model.id)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| model.name.clone())
 }
 
 // ─── Shared output helpers ───────────────────────────────────────────────────
@@ -130,7 +109,7 @@ async fn listed_id(ctx: &CliContext, model: &Model) -> String {
 /// Same two conditions the launch narration honours (`NO_COLOR`, non-TTY
 /// stdout), because the two blocks appear in the same output and disagreeing
 /// about colour would be visible.
-pub(super) fn use_color() -> bool {
+pub(crate) fn use_color() -> bool {
     color_allowed(
         std::env::var_os("NO_COLOR").as_deref(),
         std::io::stdout().is_terminal(),
@@ -273,45 +252,6 @@ mod tests {
             missed,
             "No model found matching: '__no_such_model__'\n\
              Use 'gglib model list' to see available models."
-        );
-    }
-
-    /// `up` names the model by the id the endpoint lists it under, read from
-    /// the one listing that names every model: the name, unless another
-    /// model has it; and the name alone for a model the catalogue does not
-    /// hold. `execute` itself is not run here: it needs a daemon.
-    #[tokio::test]
-    async fn the_model_is_named_by_the_id_the_endpoint_lists_it_under() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let ctx = crate::bootstrap::test_context(dir.path()).await;
-        let add = async |name: &str, file: &str, quantization: &str| {
-            let mut new = gglib_core::NewModel::new(
-                name.to_owned(),
-                dir.path().join(file),
-                7.0,
-                chrono::Utc::now(),
-            );
-            new.variant_label = Some(quantization.to_owned());
-            ctx.app.models().add(new).await.unwrap()
-        };
-        let q4 = add("qwen3", "q4.gguf", "Q4_K_M").await;
-        let q6 = add("qwen3", "q6.gguf", "Q6_K").await;
-        let mistral = add("mistral", "mistral.gguf", "Q4_K_M").await;
-
-        assert_eq!(listed_id(&ctx, &q4).await, "qwen3@Q4_K_M");
-        assert_eq!(listed_id(&ctx, &q6).await, "qwen3@Q6_K");
-        assert_eq!(listed_id(&ctx, &mistral).await, "mistral");
-
-        let elsewhere = gglib_core::NewModel::new(
-            "qwen3".to_owned(),
-            dir.path().join("elsewhere.gguf"),
-            7.0,
-            chrono::Utc::now(),
-        );
-        assert_eq!(
-            listed_id(&ctx, &Model::stored(999, &elsewhere)).await,
-            "qwen3",
-            "a model the catalogue does not hold is named by its name"
         );
     }
 

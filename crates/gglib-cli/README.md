@@ -131,6 +131,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
+| `proxy test [<id\|name>]` | Send one real request through the running endpoint and say who answered and in how long, then how a client connects to it: the address, the key rule, the Model ID and a recipe per client, all the daemon's; with no model named, the pinned model, else the one loaded model |
 | `proxy stop` | Stop the proxy on the running daemon; it keeps running there after `gglib proxy` or `gglib serve` detach |
 | `config settings show` | Show current configuration; a stored secret is shown as `(set, not shown)` with the command that prints it |
 | `config settings set [flags]` | Update application settings, one flag each |
