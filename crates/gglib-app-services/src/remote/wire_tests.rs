@@ -113,6 +113,7 @@ fn the_status_sends_exactly_its_contract_fields() {
             "pairing_active",
             "path",
             "peers",
+            "reach",
             "remote_enabled",
             "stored_ticket_fingerprint",
             "ticket_fingerprint",
@@ -171,6 +172,7 @@ fn a_row_with_only_an_id_reads_as_a_roster_row() {
 #[test]
 fn a_status_reads_back_as_the_status_that_was_sent() {
     let sent = RemoteStatus {
+        reach: gglib_core::domain::ReachState::default(),
         enabled: true,
         ticket_fingerprint: Some("3ca82708b995".to_owned()),
         pairing_active: true,

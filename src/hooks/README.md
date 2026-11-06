@@ -62,7 +62,6 @@ Custom React hooks for gglib GUI functionality.
 | Hook | Description |
 |------|-------------|
 | [`useLlamaStatus.ts`](useLlamaStatus.ts) | Whether llama.cpp is installed and can be downloaded, from the daemon's setup-status route |
-| [`useSystemMemory.ts`](useSystemMemory.ts) | System memory probes |
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |
 | [`useToolSupportCache.ts`](useToolSupportCache.ts) | Whether a HuggingFace model supports tool calling, cached in memory and shared across components |

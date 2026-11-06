@@ -205,7 +205,7 @@ pub(crate) async fn retag(
 /// downloads, distinct from the shard-level diff on `/{id}/updates`. It is
 /// the comparison `gglib model check-updates` makes, for a model an upgrade
 /// can be applied to: with no recorded revision it reports an update and no
-/// `currentSha`, which that command prints as nothing to compare with.
+/// `current`, which that command prints as nothing to compare with.
 pub(crate) async fn check_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,

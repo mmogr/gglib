@@ -32,33 +32,34 @@ async fn get_status_returns_ok_without_panicking() {
     assert!(result.is_ok(), "get_status should not fail, got {result:?}");
 }
 
-/// 256 MiB is a reading and one byte less is a failed probe, on the settings
-/// route and in the setup status alike. The two once disagreed at exactly
-/// 256 MiB.
+/// 256 MiB is a reading and one byte less is a failed probe, in the setup
+/// status and in the reading the download budget falls back to alike. The
+/// two once disagreed at exactly 256 MiB.
 #[tokio::test]
-async fn the_memory_floor_is_the_same_in_the_setup_status_and_on_the_settings_route() {
+async fn the_memory_floor_is_the_same_in_the_setup_status_and_the_budgets_reading() {
     const FLOOR: u64 = 256 * 1024 * 1024;
 
     for (total_ram_bytes, readable) in [(FLOOR, true), (FLOOR - 1, false)] {
-        let (setup, settings) = both_surfaces(total_ram_bytes).await;
+        let (setup, _settings) = both_surfaces(total_ram_bytes).await;
 
         let in_status = setup.get_status().await.expect("status").system_memory;
-        let on_settings = settings.get_system_memory().expect("memory");
+        let budgets = crate::settings::system_memory(&MockSystemProbePort { total_ram_bytes });
 
         assert_eq!(in_status.is_some(), readable, "{total_ram_bytes} bytes");
-        assert_eq!(on_settings.is_some(), readable, "{total_ram_bytes} bytes");
+        assert_eq!(budgets.is_some(), readable, "{total_ram_bytes} bytes");
     }
 }
 
-/// The status carries the directory and the memory as the settings routes
-/// send them, key for key, so there is one shape of each to read.
+/// The status carries the directory as the settings route sends it and the
+/// memory as the probe reads it, key for key, so there is one shape of each
+/// to read.
 #[tokio::test]
 async fn the_setup_status_sends_the_directory_and_the_memory_the_settings_routes_send() {
     let (setup, settings) = both_surfaces(MockSystemProbePort::default().total_ram_bytes).await;
 
     let status = serde_json::to_value(setup.get_status().await.expect("status")).expect("json");
     let directory = settings.get_models_directory_info().expect("directory");
-    let memory = settings.get_system_memory().expect("memory");
+    let memory = crate::settings::system_memory(&MockSystemProbePort::default());
 
     assert_eq!(
         status["modelsDirectory"],

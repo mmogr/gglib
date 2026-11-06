@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use gglib_core::domain::{ListedModel, openai_model_ids};
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort, ProcessHandle};
 use gglib_core::services::{AppCore, ImportMode};
@@ -122,6 +123,9 @@ impl ModelOps {
     /// files, looks once for the listing and not once a row.
     pub async fn list_with_query(&self, query: ModelListQuery) -> Result<Vec<GuiModel>, GuiError> {
         let models = self.deps.core.models().list().await?;
+        // Named over the whole catalogue, before the filter: a twin the
+        // filter drops still makes its sibling's id a longer one.
+        let mut ids = openai_ids(&models);
 
         let filtered = apply_query(models, &query);
 
@@ -130,16 +134,32 @@ impl ModelOps {
             .into_iter()
             .map(|model| {
                 let (is_serving, port) = Self::serving_status(&running, model.id);
-                GuiModel::from_model(model, is_serving, port)
+                let openai_id = ids.remove(&model.id);
+                GuiModel {
+                    openai_id,
+                    ..GuiModel::from_model(model, is_serving, port)
+                }
             })
             .collect())
+    }
+
+    /// The id `/v1/models` lists model `id` under, which a client sends:
+    /// named over the whole catalogue, as the listing names every row.
+    /// `None` for an id the catalogue does not hold.
+    pub async fn openai_id(&self, id: i64) -> Result<Option<String>, GuiError> {
+        let models = self.deps.core.models().list().await?;
+        Ok(openai_ids(&models).remove(&id))
     }
 
     /// Get a specific model by ID.
     pub async fn get(&self, id: i64) -> Result<GuiModel, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         let (is_serving, port) = self.get_server_status(id).await;
-        Ok(GuiModel::from_model(model, is_serving, port))
+        let openai_id = self.openai_id(id).await?;
+        Ok(GuiModel {
+            openai_id,
+            ..GuiModel::from_model(model, is_serving, port)
+        })
     }
 
     /// Get full details for a model by ID, for the inspect view.
@@ -430,6 +450,17 @@ impl ModelOps {
             },
         })
     }
+}
+
+/// Each model's `/v1/models` id, by its catalogue id: the one function the
+/// proxy's listing and `gglib up` name a model by.
+fn openai_ids(models: &[Model]) -> std::collections::HashMap<i64, String> {
+    let listed: Vec<ListedModel<'_>> = models.iter().map(ListedModel::from).collect();
+    models
+        .iter()
+        .zip(openai_model_ids(&listed))
+        .map(|(model, id)| (model.id, id))
+        .collect()
 }
 
 #[cfg(test)]
