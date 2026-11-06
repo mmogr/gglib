@@ -62,16 +62,32 @@ runs:
         docker-images: true
         swap-storage: true
 
+    # The runner's apt reads /etc/apt/apt-mirrors.txt, Azure's mirror first,
+    # and fails over only on an error, never on a slow transfer. One region's
+    # Azure mirror can serve packages at tens of kB/s, which outlasts a job's
+    # timeout (#1780). So the download gets four minutes, about 250 kB/s for
+    # the largest set a job installs; past that the Azure mirror is dropped
+    # and the download carries on from archive.ubuntu.com, keeping what has
+    # arrived. The install itself reads only the local cache.
     - name: Install system dependencies (Linux)
       if: runner.os == 'Linux' && inputs.apt-packages != ''
       shell: bash
       env:
         PACKAGES: ${{ inputs.apt-packages }}
       run: |
+        # Split on purpose, one element per package.
+        # shellcheck disable=SC2206
+        packages=($PACKAGES)
         sudo apt-get update
-        # Split on purpose, one argument per package.
-        # shellcheck disable=SC2086
-        sudo apt-get install -y $PACKAGES
+        if ! sudo timeout 240 apt-get install -y --download-only "${packages[@]}"; then
+          echo "::warning title=slow apt mirror::The package download did not finish in four minutes from the Azure mirror; fetching the rest from archive.ubuntu.com."
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --download-only "${packages[@]}"
+        fi
+        sudo apt-get install -y "${packages[@]}"
 
     # rust-toolchain.toml names the channel, the components and the Apple
     # targets, so this installs all of them. Each release leg builds for its
