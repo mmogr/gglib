@@ -160,7 +160,7 @@ export const ServeModal: FC<ServeModalProps> = ({
 
         {!isImage && (
           <div className="mb-lg">
-            <label htmlFor="context-input" className="block mb-sm font-medium text-text">
+            <label htmlFor="context-input" className="block mb-sm font-semibold text-text">
               Context Length
               <span className="font-normal text-text-secondary text-sm"> (optional)</span>
             </label>
@@ -183,7 +183,7 @@ export const ServeModal: FC<ServeModalProps> = ({
         )}
 
         <div className="mb-lg">
-          <label htmlFor="port-input" className="block mb-sm font-medium text-text">
+          <label htmlFor="port-input" className="block mb-sm font-semibold text-text">
             Port
             <span className="font-normal text-text-secondary text-sm"> (optional)</span>
           </label>
@@ -257,7 +257,7 @@ export const ServeModal: FC<ServeModalProps> = ({
 
             <div className="mb-lg">
               <div className="flex items-center justify-between gap-sm">
-                <label className="block mb-0 font-medium text-text">MTP Speculative Decoding</label>
+                <label className="block mb-0 font-semibold text-text">MTP Speculative Decoding</label>
                 <span className="text-sm text-text-muted">
                   {isAutoMtp
                     ? (model.serverDefaults?.mtp ? 'Auto (this model\'s own default)' : 'Auto (mtp tag)')
@@ -291,7 +291,7 @@ export const ServeModal: FC<ServeModalProps> = ({
               {effectiveMtpEnabled && (
                 <div className="flex gap-md mt-md">
                   <div className="flex-1">
-                    <label htmlFor="mtp-n-max" className="block mb-sm text-sm font-medium text-text">
+                    <label htmlFor="mtp-n-max" className="block mb-sm text-sm font-semibold text-text">
                       Draft tokens (n-max)
                     </label>
                     <Input
@@ -315,7 +315,7 @@ export const ServeModal: FC<ServeModalProps> = ({
                     />
                   </div>
                   <div className="flex-1">
-                    <label htmlFor="mtp-p-min" className="block mb-sm text-sm font-medium text-text">
+                    <label htmlFor="mtp-p-min" className="block mb-sm text-sm font-semibold text-text">
                       Min probability (p-min)
                     </label>
                     <Input

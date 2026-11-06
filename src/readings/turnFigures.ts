@@ -10,10 +10,10 @@
  * @module turnFigures
  */
 
-import type { GglibMessageCustom, PromptReading, TurnWaiting } from '../../../types/messages';
-import type { TurnMade } from '../../../utils/messages/turnMade';
-import { formatCount } from '../../../utils/format';
-import { formatPerSecond } from '../../../utils/formatPerSecond';
+import type { GglibMessageCustom, PromptReading, TurnWaiting } from '../types/messages';
+import type { TurnMade } from '../utils/messages/turnMade';
+import { formatCount } from '../utils/format';
+import { formatPerSecond } from '../utils/formatPerSecond';
 
 /** A turn's seconds: "5.2s" or "1m 23s", as its reasoning block says them. */
 export function formatThinkingDuration(seconds: number): string {

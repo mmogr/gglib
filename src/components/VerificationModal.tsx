@@ -293,7 +293,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <Loader2 className="animate-spin text-primary" size={16} />
-              <span className="text-sm font-medium text-primary">
+              <span className="text-sm font-semibold text-primary">
                 {progress ? `Verifying ${progress.shardName}...` : 'Starting verification...'}
               </span>
             </div>
@@ -316,7 +316,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <Loader2 className="animate-spin text-primary" size={16} />
-              <span className="text-sm font-medium text-primary">Checking HuggingFace for updates...</span>
+              <span className="text-sm font-semibold text-primary">Checking HuggingFace for updates...</span>
             </div>
           </div>
         )}
@@ -342,7 +342,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
                       {shard.health.type === 'missing' && <AlertCircle size={14} className="text-orange-500 flex-shrink-0" />}
                       {shard.health.type === 'no_oid' && <AlertCircle size={14} className="text-yellow-500 flex-shrink-0" />}
                       <span className="flex-shrink-0 text-secondary">{fileLabel(shard.kind)}</span>
-                      <span className="truncate text-primary font-medium">{shard.file_path.split('/').pop()}</span>
+                      <span className="truncate text-primary font-semibold">{shard.file_path.split('/').pop()}</span>
                     </div>
                     <div className="ml-6 text-xs text-secondary">
                       Status: <span className="font-mono">{shard.health.type}</span>
@@ -409,7 +409,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
                     <div key={idx} className="flex flex-col gap-1 text-xs p-2 bg-surface-elevated rounded border border-subtle">
                       <div className="flex items-center gap-2">
                         <RefreshCw size={12} className="text-blue-400" />
-                        <span className="truncate font-medium text-primary">{change.file_path.split('/').pop()}</span>
+                        <span className="truncate font-semibold text-primary">{change.file_path.split('/').pop()}</span>
                       </div>
                       <div className="ml-5 text-secondary space-y-0.5 font-mono text-xs">
                         <div className="truncate">Old: {change.old_oid.substring(0, 12)}...</div>

@@ -27,7 +27,8 @@ import type { Thinking } from '../../../src/types/generated/Thinking';
 import { agentRun, chatTransport, conversation, wrapper, type ChatFixture } from './chatPageHarness';
 import { FAR_FINGERPRINT, farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
 import { guiModel } from '../fixtures/model';
-import { CAPABILITY_FLAGS, type GgufModel } from '../../../src/types';
+import type { GgufModel } from '../../../src/types';
+import { CAPABILITY_FLAGS } from '../../../src/readings/capabilityFlags';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));

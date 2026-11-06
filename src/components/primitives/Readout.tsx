@@ -33,8 +33,8 @@ const intentClasses: Record<ReadoutIntent, string> = {
 
 const sizeClasses: Record<ReadoutSize, string> = {
   sm: 'text-sm',
-  md: 'text-lg',
-  lg: 'text-2xl',
+  md: 'text-base',
+  lg: 'text-lg',
 };
 
 /**
@@ -58,13 +58,13 @@ export const Readout: React.FC<ReadoutProps> = ({
     <span className="text-xs text-text-muted">{label}</span>
     <span
       className={cn(
-        'font-mono font-medium tabular-nums leading-tight',
+        'font-mono font-semibold tabular-nums leading-tight',
         sizeClasses[size],
         intentClasses[intent],
       )}
     >
       {value}
-      {unit ? <span className="text-2xs font-normal text-text-muted"> {unit}</span> : null}
+      {unit ? <span className="text-xs font-normal text-text-muted"> {unit}</span> : null}
     </span>
     {trend ? <span className="mt-xs">{trend}</span> : null}
   </div>

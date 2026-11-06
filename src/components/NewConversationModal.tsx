@@ -36,7 +36,7 @@ export const NewConversationModal: FC<NewConversationModalProps> = ({
     onMouseDown={(e) => e.target === e.currentTarget && !creating && onCancel()}
   >
     <div className="bg-surface border border-border rounded-lg p-xl w-[min(450px,90vw)] max-h-[90vh] overflow-y-auto flex flex-col gap-md">
-      <h3 className="text-lg font-semibold m-0">Start a new chat</h3>
+      <h3 className="text-base font-semibold m-0">Start a new chat</h3>
       <label className="flex flex-col gap-xs text-sm text-text-muted">
         Title
         <Input

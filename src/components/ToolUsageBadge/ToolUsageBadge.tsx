@@ -3,7 +3,6 @@ import { useMessage } from '@assistant-ui/react';
 import type { ThreadMessage } from '@assistant-ui/react';
 import ToolDetailsModal from './ToolDetailsModal';
 import { Wrench } from 'lucide-react';
-import { cn } from '../../utils/cn';
 import { Icon } from '../ui/Icon';
 import { Chip } from '../ui/Chip';
 
@@ -80,7 +79,7 @@ const ToolUsageBadge: React.FC = () => {
           : status === 'error' ? 'danger'
           : 'warning'
         }
-        className={cn('ml-2 rounded-full max-w-[220px]', status === 'running' && 'animate-pulse')}
+        className="ml-2 rounded-full max-w-[220px]"
         leftIcon={<Icon icon={Wrench} size={12} />}
         onClick={() => setIsModalOpen(true)}
         title={`Click to view tool execution details. ${ariaLabel}`}

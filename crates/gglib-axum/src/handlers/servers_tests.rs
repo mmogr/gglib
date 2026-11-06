@@ -81,3 +81,24 @@ fn the_daemon_reads_every_key_the_cli_sends() {
         assert!(arrived, "{name} was dropped");
     }
 }
+
+/// The stop body's one key reaches the field the handler stops the model
+/// from; the array's length is tied to the contract's as above.
+#[test]
+fn the_daemon_reads_the_stop_body_the_cli_sends() {
+    use gglib_core::contracts::http::daemon::SERVERS_STOP_CLI_FIELDS;
+
+    let body: serde_json::Map<String, serde_json::Value> = SERVERS_STOP_CLI_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), serde_json::json!(7)))
+        .collect();
+
+    let StopServerBody { model_id } = serde_json::from_value(serde_json::Value::Object(body))
+        .expect("the daemon must read the stop body the CLI sends");
+
+    let read: [(&str, bool); 1] = [("model_id", model_id == 7)];
+    assert_eq!(read.len(), SERVERS_STOP_CLI_FIELDS.len());
+    for (name, arrived) in read {
+        assert!(arrived, "{name} was dropped");
+    }
+}

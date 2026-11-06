@@ -126,7 +126,7 @@ export const AgentLimitsSection: FC<AgentLimitsSectionProps> = ({ effortSupport 
     <div className="px-[14px] py-[10px] border-t border-border-light flex flex-col gap-sm">
       <div className="flex items-baseline justify-between gap-sm">
         <span className="text-xs font-semibold text-text">Agent limits</span>
-        <span className="text-2xs text-text-muted">applies to all chats on this device</span>
+        <span className="text-xs text-text-muted">applies to all chats on this device</span>
       </div>
       <NumberRow
         id="agent-tool-timeout"
@@ -184,7 +184,7 @@ export const AgentLimitsSection: FC<AgentLimitsSectionProps> = ({ effortSupport 
         value={overrides.reasoningBudgetTokens}
         onChange={(v) => update({ reasoningBudgetTokens: v })}
       />
-      <p className="m-0 text-2xs text-text-muted">
+      <p className="m-0 text-xs text-text-muted">
         The budget is a hard cap llama.cpp enforces on any model, in every chat on this device. A
         chat with Thinking switched off runs with a budget of 0, whatever is set here.
       </p>
@@ -216,7 +216,7 @@ export const AgentLimitsSection: FC<AgentLimitsSectionProps> = ({ effortSupport 
             update({ observationTools: parseTools(e.target.value) });
           }}
         />
-        <p className="m-0 text-2xs text-text-muted">
+        <p className="m-0 text-xs text-text-muted">
           Comma-separated tool names counted as observations. Blank uses the built-ins.
         </p>
       </div>

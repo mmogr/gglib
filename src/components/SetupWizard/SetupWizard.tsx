@@ -195,7 +195,7 @@ const WizardShell: FC<{ children: React.ReactNode }> = ({ children }) => (
             <Icon icon={Sparkles} size={18} className="text-primary" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-text">gglib Setup</h1>
+            <h1 className="text-base font-semibold text-text">gglib Setup</h1>
             <p className="text-xs text-text-secondary">First-run system configuration</p>
           </div>
         </div>
@@ -226,7 +226,7 @@ const StepIndicator: FC<{ steps: readonly WizardStep[]; current: WizardStep }> =
         <div key={s} className="flex items-center gap-2">
           <div
             className={cn(
-              'flex items-center gap-1.5 text-xs font-medium transition-colors',
+              'flex items-center gap-1.5 text-xs font-semibold transition-colors',
               i < currentIndex && 'text-success',
               i === currentIndex && 'text-primary',
               i > currentIndex && 'text-text-muted',
@@ -237,7 +237,7 @@ const StepIndicator: FC<{ steps: readonly WizardStep[]; current: WizardStep }> =
             ) : (
               <span
                 className={cn(
-                  'w-5 h-5 rounded-full flex items-center justify-center text-2xs font-bold border',
+                  'w-5 h-5 rounded-full flex items-center justify-center text-xs font-semibold border',
                   i === currentIndex
                     ? 'border-primary bg-primary/20 text-primary'
                     : 'border-text-muted text-text-muted',
@@ -264,7 +264,7 @@ const StepIndicator: FC<{ steps: readonly WizardStep[]; current: WizardStep }> =
 const WelcomeStep: FC<{ status: SetupStatus; onNext: () => void }> = ({ status, onNext }) => (
   <div className="flex flex-col gap-6">
     <div>
-      <h2 className="text-xl font-semibold text-text mb-2">Welcome to gglib</h2>
+      <h2 className="text-base font-semibold text-text mb-2">Welcome to gglib</h2>
       <p className="text-text-secondary leading-relaxed">
         Let&apos;s get your system ready to run local AI models. This wizard will check
         your setup and help you configure the essentials.
@@ -325,7 +325,7 @@ const ModelsDirectoryStep: FC<{
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-xl font-semibold text-text mb-2">Models Directory</h2>
+        <h2 className="text-base font-semibold text-text mb-2">Models Directory</h2>
         <p className="text-text-secondary leading-relaxed">
           This is where your GGUF model files will be stored. The default location
           works for most users.
@@ -336,7 +336,7 @@ const ModelsDirectoryStep: FC<{
         <div className="flex items-start gap-3">
           <Icon icon={FolderOpen} size={20} className="text-primary mt-0.5 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-text mb-1">Current path</p>
+            <p className="text-sm font-semibold text-text mb-1">Current path</p>
             <p className="text-sm text-text-secondary font-mono break-all">
               {modelsDirectory.path || '(not set)'}
             </p>
@@ -396,7 +396,7 @@ const PythonSetupStep: FC<{
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <h2 className="text-xl font-semibold text-text mb-2">Fast Downloads</h2>
+          <h2 className="text-base font-semibold text-text mb-2">Fast Downloads</h2>
           <p className="text-text-secondary leading-relaxed">
             The hf_xet accelerator is ready. Large model downloads will use
             optimized transfer for maximum speed.
@@ -411,11 +411,11 @@ const PythonSetupStep: FC<{
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-xl font-semibold text-text mb-2">Fast Downloads</h2>
+        <h2 className="text-base font-semibold text-text mb-2">Fast Downloads</h2>
         <p className="text-text-secondary leading-relaxed">
           Downloads already work &mdash; gglib fetches models directly. If you have
           Python 3, it can also install a helper for{' '}
-          <span className="text-text font-medium">significantly faster</span>{' '}
+          <span className="text-text font-semibold">significantly faster</span>{' '}
           transfers from Hugging Face (via hf_xet). Entirely optional.
         </p>
       </div>
@@ -500,7 +500,7 @@ const CompleteStep: FC<{
       <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-success-subtle mb-4">
         <Icon icon={CheckCircle2} size={32} className="text-success" />
       </div>
-      <h2 className="text-xl font-semibold text-text mb-2">You&apos;re all set!</h2>
+      <h2 className="text-base font-semibold text-text mb-2">You&apos;re all set!</h2>
       <p className="text-text-secondary leading-relaxed max-w-[28rem] mx-auto">
         Your system is configured and ready to run local AI models. You can
         re-run this wizard anytime from Settings.
@@ -550,7 +550,7 @@ const InfoCard: FC<{
     </div>
     <div className="min-w-0">
       <p className="text-xs text-text-muted">{label}</p>
-      <p className="text-sm font-medium text-text truncate">{value}</p>
+      <p className="text-sm font-semibold text-text truncate">{value}</p>
     </div>
   </div>
 );

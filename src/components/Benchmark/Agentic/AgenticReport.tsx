@@ -20,7 +20,7 @@ const Td: FC<{ children: React.ReactNode; className?: string }> = ({ children, c
   <td className={cn('px-md py-xs text-sm text-text font-mono tabular-nums', className)}>{children}</td>
 );
 const Th: FC<{ children?: React.ReactNode }> = ({ children }) => (
-  <th className="px-md py-xs text-left text-xs font-medium text-text-muted">{children}</th>
+  <th className="px-md py-xs text-left text-xs font-semibold text-text-muted">{children}</th>
 );
 
 const deltaClass = (v: number | null | undefined) =>
@@ -132,7 +132,7 @@ export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => 
     <div className="bg-surface rounded-md p-base flex flex-col gap-md">
       <div className="flex items-start justify-between gap-md">
         <div>
-          <h2 className="m-0 text-lg font-semibold text-text">{report.model_name}</h2>
+          <h2 className="m-0 text-base font-semibold text-text">{report.model_name}</h2>
           <p className="m-0 text-xs text-text-muted font-mono tabular-nums">
             {report.param_count_b}B{report.quantization ? ` · ${report.quantization}` : ''} ·{' '}
             {report.ctx_size.toLocaleString()} ctx

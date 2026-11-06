@@ -153,6 +153,11 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
     out.push_str(&render_client_fields_section(audit));
 
     out.push('\n');
+    out.push_str(&super::render_recent::render_recent_section(
+        &snapshot.recent_requests,
+    ));
+
+    out.push('\n');
     let _ = writeln!(out, "Total requests served: {}", snapshot.total_requests);
     out
 }

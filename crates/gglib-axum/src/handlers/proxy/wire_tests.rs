@@ -346,3 +346,41 @@ fn a_body_with_no_allowed_hosts_still_deserializes() {
     let cfg: StartProxyConfig = serde_json::from_str("{}").expect("an empty body must deserialize");
     assert!(cfg.allowed_hosts.is_empty());
 }
+
+/// The pinned-start body's three keys reach the fields the handler plans the
+/// launch from, the options in the start body's `camelCase` and the proxy
+/// config in the proxy body's `snake_case`; the array's length is tied to the
+/// contract's.
+#[test]
+fn the_daemon_reads_the_pinned_start_body_the_cli_sends() {
+    use gglib_core::contracts::http::daemon::PROXY_START_PINNED_CLI_FIELDS;
+    use serde_json::json;
+
+    let sample = |name: &str| match name {
+        "model_id" => json!(7),
+        "options" => json!({ "contextLength": 8192 }),
+        "proxy" => json!({ "port": 8123 }),
+        other => panic!("no sample value for contract field `{other}` — add one"),
+    };
+    let body: serde_json::Map<String, serde_json::Value> = PROXY_START_PINNED_CLI_FIELDS
+        .iter()
+        .map(|name| ((*name).to_owned(), sample(name)))
+        .collect();
+
+    let StartPinnedBody {
+        model_id,
+        options,
+        proxy,
+    } = serde_json::from_value(serde_json::Value::Object(body))
+        .expect("the daemon must read the pinned-start body the CLI sends");
+
+    let read: [(&str, bool); 3] = [
+        ("model_id", model_id == 7),
+        ("options", options.context_length == Some(8192)),
+        ("proxy", proxy.port == Some(8123)),
+    ];
+    assert_eq!(read.len(), PROXY_START_PINNED_CLI_FIELDS.len());
+    for (name, arrived) in read {
+        assert!(arrived, "{name} was dropped");
+    }
+}

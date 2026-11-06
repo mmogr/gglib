@@ -75,7 +75,7 @@ function caption(support: TemplateSupport | undefined): string {
  */
 const UnsupportedNote: FC = () => (
   <div className="flex flex-col gap-[0.4rem]">
-    <span className="text-sm font-medium text-text">Reasoning Effort</span>
+    <span className="text-sm font-semibold text-text">Reasoning Effort</span>
     <span className="flex items-start gap-xs text-xs text-text-muted">
       <Icon icon={Info} size={13} className="mt-[2px] shrink-0" />
       <span>
@@ -104,7 +104,7 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
 
   return (
     <div className="flex flex-col gap-[0.4rem]">
-      <label htmlFor={id} className="text-sm font-medium text-text">
+      <label htmlFor={id} className="text-sm font-semibold text-text">
         Reasoning Effort
       </label>
       <Select

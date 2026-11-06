@@ -125,6 +125,7 @@ pub(super) fn forwarded_body(extra: &serde_json::Value) -> Bytes {
 
 pub(super) fn snapshot() -> ContextSnapshot {
     ContextSnapshot {
+        interventions: Vec::new(),
         model_name: "m".to_owned(),
         payload_chars_before: 0,
         payload_chars_after: 0,

@@ -62,7 +62,7 @@ export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
           {isRenaming ? (
             <Input
               aria-label="Conversation title"
-              className="text-2xl font-semibold bg-background border border-primary rounded-sm py-xs px-sm text-text min-w-[150px]"
+              className="text-lg font-semibold bg-background border border-primary rounded-sm py-xs px-sm text-text min-w-[150px]"
               value={titleDraft}
               autoFocus
               onChange={(e) => onChangeTitleDraft(e.target.value)}
@@ -73,7 +73,7 @@ export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
               }}
             />
           ) : (
-            <h2 className="text-3xl font-semibold leading-tight m-0 min-w-0 break-words">{title}</h2>
+            <h2 className="text-lg font-semibold leading-tight m-0 min-w-0 break-words">{title}</h2>
           )}
           <div hidden={readOnly} className={cn('flex gap-xs shrink-0', readOnly && 'hidden')}>
             <Button variant="ghost" size="sm" title="Rename conversation" onClick={onStartRename} iconOnly>

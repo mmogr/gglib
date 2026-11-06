@@ -54,7 +54,7 @@ const RemoteControl: FC<RemoteControlProps> = ({
     active && (buttonActiveClassName ?? 'text-text'),
   );
   const dotClasses = cn(
-    statusDotClassName ?? 'w-2 h-2 rounded-full bg-success animate-pulse',
+    statusDotClassName ?? 'w-2 h-2 rounded-full bg-success',
     active && statusDotActiveClassName,
   );
 
@@ -85,7 +85,7 @@ const RemoteControl: FC<RemoteControlProps> = ({
       {isOpen && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(380px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-surface-elevated rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[380px] phone:max-h-[80vh] phone:overflow-y-auto">
           <div className="flex justify-between items-center mb-base pb-md border-b border-border-light">
-            <h3 className="m-0 text-lg font-semibold text-text">Remote</h3>
+            <h3 className="m-0 text-base font-semibold text-text">Remote</h3>
             <span className="text-xs text-text-muted">end-to-end encrypted, no account</span>
           </div>
 

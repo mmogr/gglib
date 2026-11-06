@@ -38,14 +38,14 @@ describe('Header', () => {
     it('renders the app title', () => {
       render(<Header {...defaultProps} />);
       
-      expect(screen.getByText('GGLib')).toBeInTheDocument();
+      expect(screen.getByText('gglib')).toBeInTheDocument();
     });
 
     it('renders the logo icon', () => {
       render(<Header {...defaultProps} />);
       
       // Logo is a Lucide Library SVG icon, not emoji text
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('GGLib');
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('gglib');
     });
 
     it('renders the settings button in desktop nav', () => {
@@ -180,7 +180,7 @@ describe('Header', () => {
     it('renders heading for app title', () => {
       render(<Header {...defaultProps} />);
       
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('GGLib');
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('gglib');
     });
 
     it('all interactive elements are focusable', () => {

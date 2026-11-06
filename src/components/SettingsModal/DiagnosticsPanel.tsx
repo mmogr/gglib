@@ -31,7 +31,7 @@ const DependencyRow: FC<{ dep: DependencyInfo }> = ({ dep }) => {
           aria-hidden="true"
         />
         <span className="text-xs text-text font-mono">{dep.name}</span>
-        {!dep.required && <span className="text-2xs text-text-muted">optional</span>}
+        {!dep.required && <span className="text-xs text-text-muted">optional</span>}
       </div>
       <span className="text-xs text-text-secondary font-mono tabular-nums text-right">
         {dep.status === 'present' ? (dep.version ?? 'present') : dep.status}
@@ -154,7 +154,7 @@ export const DiagnosticsPanel: FC = () => {
               </span>
             </div>
           ))}
-          <p className="m-0 text-2xs text-text-muted text-right">
+          <p className="m-0 text-xs text-text-muted text-right">
             Models directory {MODELS_SOURCE_COPY[paths.modelsSource]}.
           </p>
         </Stack>

@@ -4,7 +4,8 @@
 
 use super::*;
 use gglib_core::contracts::http::daemon::{
-    PROXY_START_CLI_FIELDS, PROXY_STATUS_FIELDS, SERVERS_START_CLI_FIELDS,
+    PROXY_START_CLI_FIELDS, PROXY_START_PINNED_CLI_FIELDS, PROXY_STATUS_FIELDS,
+    SERVERS_START_CLI_FIELDS, SERVERS_STOP_CLI_FIELDS,
 };
 use gglib_core::domain::{EndpointState, KeyState};
 
@@ -149,6 +150,43 @@ fn a_start_server_response_deserializes_into_the_narrowing() {
         serde_json::from_value(json).expect("the narrowing reads what the daemon sends");
 
     assert_eq!(got.port, sent.port);
+    assert_eq!(got.message, sent.message, "the daemon's sentence is kept");
+}
+
+/// The stop body's key is the contract's: the one the daemon reads the
+/// model to stop from.
+#[test]
+fn a_stop_server_body_sends_exactly_the_contract_fields() {
+    let body = StopServerBody { model_id: 7 };
+    assert_eq!(keys_of(&body), sorted(SERVERS_STOP_CLI_FIELDS));
+    assert_eq!(
+        serde_json::to_value(&body).expect("serialises")["model_id"],
+        7
+    );
+}
+
+/// The pinned-start body's keys are the contract's, its options in the
+/// start body's `camelCase` and its proxy config in the proxy body's
+/// `snake_case`, as the daemon reads each.
+#[test]
+fn a_start_pinned_body_sends_exactly_the_contract_fields() {
+    let body = StartPinnedBody {
+        model_id: 7,
+        options: StartServerRequest {
+            context_length: Some(8192),
+            ..Default::default()
+        },
+        proxy: StartProxyBody {
+            port: Some(8123),
+            ..Default::default()
+        },
+    };
+
+    assert_eq!(keys_of(&body), sorted(PROXY_START_PINNED_CLI_FIELDS));
+    let json = serde_json::to_value(&body).expect("serialises");
+    assert_eq!(json["model_id"], 7);
+    assert_eq!(json["options"]["contextLength"], 8192);
+    assert_eq!(json["proxy"]["port"], 8123);
 }
 
 /// The daemon's status is read whole: every key in the shared list lands in

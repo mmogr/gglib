@@ -14,10 +14,10 @@
  * @module contextReading
  */
 
-import type { GglibMessageCustom } from '../../../types/messages';
-import type { TurnMade } from '../../../utils/messages/turnMade';
-import { formatCount } from '../../../utils/format';
-import { usagePercent, usageSeverity, type UsageSeverity } from '../../../utils/contextUsage';
+import type { GglibMessageCustom } from '../types/messages';
+import type { TurnMade } from '../utils/messages/turnMade';
+import { formatCount } from '../utils/format';
+import { usagePercent, usageSeverity, type UsageSeverity } from '../utils/contextUsage';
 
 /** A conversation's context reading, from one reply's figures. */
 export interface ContextReading {

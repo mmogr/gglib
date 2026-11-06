@@ -148,6 +148,28 @@ Context
 The layers, from strongest to weakest, are in
 [Sampling resolution](../sampling.md).
 
+## `load`, `unload`
+
+The app's Load and Unload, from the terminal. `load` asks the daemon to
+start the model's server, llama-server or sd-server for an image model,
+and the daemon keeps it resident after the command returns; `list` then
+shows it serving. A model already loaded is reused. `--context N` or
+`--context max` sets the context it is served at; omitted, the daemon
+fits one. `--pin` pins the endpoint to the model first, as `gglib serve`
+does, so every request for another model is refused while the pin holds;
+an endpoint already running unpinned is the daemon's refusal, and
+`gglib proxy stop` clears it. `unload` asks the daemon to stop the model's
+server; one that is not loaded is said so, in the daemon's words.
+
+Illustrative, not a recording: the two lines are the daemon's sentences.
+
+```console
+$ gglib model load 3
+  Server started on port 9301
+$ gglib model unload 3
+  Server for model 3 stopped
+```
+
 ## `download`, `search`, `browse`
 
 Hugging Face. `search <query>` and `browse` (popular repositories) find a

@@ -119,9 +119,9 @@ export const ModelSignalsSection: FC<SectionProps> = ({ snapshot }) => {
  *
  * The dashboard modal renders the two sections individually because its cache
  * panels sit between them; the tray popover has no such interleaving and uses
- * this. Presentational on purpose — the snapshot arrives as a prop, so each
- * surface owns its own `useProxyDashboard` subscription while rendering
- * identical output.
+ * this. Presentational on purpose — the snapshot arrives as a prop, from the
+ * one stream `dashboardRegistry` keeps open for the endpoint, so every
+ * surface renders identical output.
  */
 export const ProxyMetricsGrid: FC<SectionProps> = ({ snapshot, compact = false }) => (
   <>

@@ -218,6 +218,7 @@ fn record_unforwarded(
     now: u64,
 ) {
     metrics.record(ContextSnapshot {
+        interventions: crate::interventions::unforwarded_interventions(trip, ended),
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,

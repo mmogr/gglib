@@ -77,7 +77,7 @@ export const BranchSwitcher: FC<{ point: BranchPoint; open: (cid: number) => voi
               onClick={() => choose(at)}
               className={cn(
                 'justify-start rounded-none truncate',
-                at === index ? 'text-text font-medium' : 'text-text-secondary',
+                at === index ? 'text-text font-semibold' : 'text-text-secondary',
                 option.message_id === null && 'italic',
               )}
             >

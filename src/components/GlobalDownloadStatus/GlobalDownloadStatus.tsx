@@ -136,10 +136,10 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
       <div className="flex flex-col gap-sm">
         <div className="flex items-center justify-between gap-md">
           <div className="flex items-center gap-sm">
-            <span className="text-lg" aria-hidden>
+            <span className="text-base" aria-hidden>
               <Icon icon={Download} size={16} />
             </span>
-            <span className="text-sm font-medium text-text">
+            <span className="text-sm font-semibold text-text">
               {text.status}
             </span>
             {text.file && (
@@ -190,7 +190,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               style={row.percent !== undefined ? { width: `${row.percent}%` } : {}}
             />
           </div>
-          <span className="text-sm font-mono font-medium tabular-nums text-text min-w-[48px] text-right">
+          <span className="text-sm font-mono font-semibold tabular-nums text-text min-w-[48px] text-right">
             {text.percent}
           </span>
         </div>

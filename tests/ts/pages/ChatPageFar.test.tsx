@@ -20,6 +20,7 @@ import { farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
 import { act } from '@testing-library/react';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
+import { applyLibraryRead, resetModelLibrary } from '../../../src/services/modelRegistry';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../src/services/transport', async () => {
@@ -112,7 +113,10 @@ beforeEach(() => {
   };
   transport.current = farTransport();
 });
-afterEach(() => resetRemoteState());
+afterEach(() => {
+  resetRemoteState();
+  resetModelLibrary();
+});
 
 /** The row an element is in: the turn's grid. */
 function rowOf(element: HTMLElement): HTMLElement {
@@ -352,10 +356,7 @@ describe('ChatPage, the far machine’s chats', () => {
     const user = userEvent.setup();
     joined();
     act(() => ingestServerEvent({ type: 'running', modelId: '8', port: 5555, updatedAt: Date.now(), modelName: 'llama-3.2-3b' }));
-    (transport.current as { listModels: unknown }).listModels = vi.fn(async () => [
-      guiModel({ id: 7, name: 'qwen3' }),
-      guiModel({ id: 8, name: 'llama-3.2-3b' }),
-    ]);
+    applyLibraryRead({ models: [guiModel({ id: 7, name: 'qwen3' }), guiModel({ id: 8, name: 'llama-3.2-3b' })] });
     const onSwitchModel = vi.fn(
       async (_choice: ModelChoice, _context: () => { conversationId: number | null; draft: ChatDraft }) => {},
     );

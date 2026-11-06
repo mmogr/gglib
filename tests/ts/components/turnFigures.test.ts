@@ -12,7 +12,7 @@ import {
   replyName,
   waitingLines,
   writingRate,
-} from '../../../src/components/ChatMessagesPanel/components/turnFigures';
+} from '../../../src/readings/turnFigures';
 
 describe('madeLines', () => {
   it('says nothing it was not given', () => {

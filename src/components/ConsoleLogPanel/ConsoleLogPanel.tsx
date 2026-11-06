@@ -76,7 +76,7 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
     <div className="flex flex-col overflow-y-auto overflow-x-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
       <div className="p-md border-b border-border-light shrink-0">
         <div className="flex items-center justify-between gap-md">
-          <h3 className="m-0 text-lg font-semibold text-text">Server Output</h3>
+          <h3 className="m-0 text-base font-semibold text-text">Server Output</h3>
           <div className="flex gap-xs">
             <Button
               variant="secondary"

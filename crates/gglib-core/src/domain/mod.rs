@@ -25,6 +25,7 @@ pub mod image_family;
 pub(crate) mod image_family_goldens;
 pub(crate) mod inference;
 pub mod inference_profile;
+pub mod intervention;
 pub(crate) mod kv_estimate;
 pub(crate) mod kv_memory;
 pub(crate) mod launch_narration;
@@ -173,6 +174,7 @@ pub use image_family::{
     ComponentRole, ComponentSpec, FlashAttention, ImageFamily, Placement, Recipe, Sampling,
     SizeRule, UnknownName,
 };
+pub use intervention::{Intervention, InterventionKind, Refusal};
 pub use runtime_kind::RuntimeKind;
 
 // Re-export dialect types at the domain level for convenience

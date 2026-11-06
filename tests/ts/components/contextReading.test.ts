@@ -14,7 +14,7 @@ import {
   decidingMade,
   percentText,
   spokenReading,
-} from '../../../src/components/ChatMessagesPanel/components/contextReading';
+} from '../../../src/readings/contextReading';
 import type { TurnMade } from '../../../src/utils/messages/turnMade';
 
 const FIRST: TurnMade = { promptTokens: 8000, completionTokens: 200, contextSize: 32768 };

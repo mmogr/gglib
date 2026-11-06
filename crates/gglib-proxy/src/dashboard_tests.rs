@@ -54,6 +54,7 @@ fn build_reflects_active_connection_and_metrics() {
     let slots = SlotsCache::new();
     let metrics = ContextMetricsStore::new();
     metrics.record(crate::metrics::ContextSnapshot {
+        interventions: Vec::new(),
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,

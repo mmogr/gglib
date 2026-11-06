@@ -60,8 +60,8 @@ function proxyAuthHeaders(apiKey?: string | null): Record<string, string> {
  * @param onSnapshot Called with each decoded snapshot (hydration + every tick).
  * @param onError    Called when the stream drops or is refused. Reconnection
  *                   continues regardless; this is informational for the UI.
- * @returns An unsubscribe function that aborts the stream. Callers
- *          (see `hooks/useProxyDashboard.ts`) must invoke this on cleanup —
+ * @returns An unsubscribe function that aborts the stream. The caller
+ *          (`services/dashboardRegistry`) must invoke this on cleanup —
  *          the retry loop runs until it is aborted.
  */
 export function subscribeProxyDashboard(
