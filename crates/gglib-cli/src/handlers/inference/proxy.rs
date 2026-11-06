@@ -66,7 +66,7 @@ fn resolve_default_context(
 /// desktop app and the tray; a default filled in here would outrank that
 /// setting.
 fn start_body(
-    host: String,
+    host: Option<String>,
     port: Option<u16>,
     default_context: Option<u64>,
     sampling: SamplingArgs,
@@ -74,7 +74,7 @@ fn start_body(
     access: &AccessArgs,
 ) -> StartProxyBody {
     StartProxyBody {
-        host: Some(host),
+        host,
         port,
         default_context,
         cache: Some(cache.cache),
@@ -120,7 +120,7 @@ pub(in crate::handlers) async fn start_on(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute(
     ctx: &CliContext,
-    host: String,
+    host: Option<String>,
     port: Option<u16>,
     default_context: Option<String>,
     sampling: SamplingArgs,

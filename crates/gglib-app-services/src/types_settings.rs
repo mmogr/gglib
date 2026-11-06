@@ -43,6 +43,10 @@ pub struct AppSettings {
     // Network binding (see `gglib_core::Settings`)
     pub bind_host: Option<String>,
     pub share_lan: Option<bool>,
+    pub proxy_host: Option<String>,
+    pub proxy_allowed_hosts: Option<Vec<String>>,
+    pub proxy_cache_on_disk: Option<bool>,
+    pub proxy_cache_disk_gb: Option<u64>,
     /// Whether a proxy key is stored. Never the key: a read says whether a
     /// secret is held, and `POST /api/secrets/reveal` is where its value
     /// comes from (ADR 0027). A blank stored key is no key. Defaults to
@@ -104,6 +108,10 @@ impl From<gglib_core::Settings> for AppSettings {
             title_generation_prompt: settings.title_generation_prompt,
             bind_host: settings.bind_host,
             share_lan: settings.share_lan,
+            proxy_host: settings.proxy_host,
+            proxy_allowed_hosts: settings.proxy_allowed_hosts,
+            proxy_cache_on_disk: settings.proxy_cache_on_disk,
+            proxy_cache_disk_gb: settings.proxy_cache_disk_gb,
             has_proxy_api_key: held(settings.proxy_api_key.as_deref()).is_some(),
             trust_client_sampling: settings.trust_client_sampling,
             loop_guard_mode: settings.loop_guard_mode,
@@ -196,6 +204,18 @@ pub struct UpdateSettingsRequest {
     pub share_lan: Option<Option<bool>>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
+    pub proxy_host: Option<Option<String>>,
+    #[serde(default, with = "::serde_with::rust::double_option")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional, type = "Array<string> | null"))]
+    pub proxy_allowed_hosts: Option<Option<Vec<String>>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub proxy_cache_on_disk: Option<Option<bool>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub proxy_cache_disk_gb: Option<Option<u64>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_api_key: Option<Option<String>>,
     // Sampling authority (see `gglib_core::Settings`)
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
@@ -260,6 +280,10 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             title_generation_prompt: request.title_generation_prompt,
             bind_host: request.bind_host,
             share_lan: request.share_lan,
+            proxy_host: request.proxy_host,
+            proxy_allowed_hosts: request.proxy_allowed_hosts,
+            proxy_cache_on_disk: request.proxy_cache_on_disk,
+            proxy_cache_disk_gb: request.proxy_cache_disk_gb,
             proxy_api_key: request.proxy_api_key,
             trust_client_sampling: request.trust_client_sampling,
             loop_guard_mode: request.loop_guard_mode,

@@ -269,12 +269,13 @@ pub struct ServeOptions {
     pub jinja: bool,
     /// Host the OpenAI-compatible endpoint binds to.
     ///
-    /// Defaults to loopback. `0.0.0.0` accepts LAN clients, and binding off
-    /// loopback generates an API key if none is configured. A wildcard bind
-    /// names no reachable address, so clients reaching it by hostname or LAN
-    /// IP need that value passed to `--allowed-host`.
-    #[arg(long, default_value = "127.0.0.1")]
-    pub host: String,
+    /// Omit to use the stored `proxy_host` setting, loopback until one is
+    /// stored. `0.0.0.0` accepts LAN clients, and binding off loopback
+    /// generates an API key if none is configured. A wildcard bind names no
+    /// reachable address, so clients reaching it by hostname or LAN IP need
+    /// that value passed to `--allowed-host`.
+    #[arg(long)]
+    pub host: Option<String>,
     /// Port the OpenAI-compatible endpoint listens on. Omit to use the stored
     /// `proxy_port` setting.
     ///

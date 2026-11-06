@@ -117,7 +117,7 @@ pub(super) async fn serve_image(
         &settings,
         &StartServerRequest::default(),
         ProxyGlobals {
-            host: Some(options.host.clone()),
+            host: options.host.clone(),
             proxy_port: options.port,
             cache_enabled: cache.cache,
             slot_dir: cache.slot_dir.clone(),

@@ -321,14 +321,8 @@ impl ProxyOps {
         }
 
         let settings = self.core.settings().get().await?;
-        let config = ProxyConfig {
-            port: settings.effective_proxy_port(),
-            // Passed through, not resolved: resolving here turned "the user
-            // set nothing" into "the user set 4096", which is what made every
-            // rung below the global default unreachable.
-            default_context: settings.default_context_size,
-            ..ProxyConfig::default()
-        };
+        // The stored answers, as every start that names nothing gets them.
+        let config = crate::proxy_settings::proxy_config_from_settings(&settings);
 
         match self.start_raw(config).await {
             Ok(address) => Ok(address),

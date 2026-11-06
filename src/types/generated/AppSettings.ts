@@ -23,7 +23,7 @@ defaultImageModelId: number | null, inferenceDefaults: InferenceConfig | null,
 /**
  * Named sampling profiles, selectable per request as `{model}:{profile}`.
  */
-inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, bindHost: string | null, shareLan: boolean | null, 
+inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, bindHost: string | null, shareLan: boolean | null, proxyHost: string | null, proxyAllowedHosts: Array<string> | null, proxyCacheOnDisk: boolean | null, proxyCacheDiskGb: bigint | null, 
 /**
  * Whether a proxy key is stored. Never the key: a read says whether a
  * secret is held, and `POST /api/secrets/reveal` is where its value

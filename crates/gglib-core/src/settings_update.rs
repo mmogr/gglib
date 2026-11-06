@@ -42,6 +42,10 @@ pub struct SettingsUpdate {
     pub title_generation_prompt: Option<Option<String>>,
     pub bind_host: Option<Option<String>>,
     pub share_lan: Option<Option<bool>>,
+    pub proxy_host: Option<Option<String>>,
+    pub proxy_allowed_hosts: Option<Option<Vec<String>>>,
+    pub proxy_cache_on_disk: Option<Option<bool>>,
+    pub proxy_cache_disk_gb: Option<Option<u64>>,
     pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
     /// See [`Settings::loop_guard_mode`](super::Settings::loop_guard_mode).
@@ -100,6 +104,15 @@ pub enum SettingsError {
 
     #[error("Bind host must be an IP address (e.g. 127.0.0.1 or 0.0.0.0), got '{0}'")]
     InvalidBindHost(String),
+
+    #[error("The endpoint's address must be an IP address (e.g. 127.0.0.1 or 0.0.0.0), got '{0}'")]
+    InvalidProxyHost(String),
+
+    #[error("An allowed host is a host name or address, with or without a port, got '{0}'")]
+    InvalidAllowedHost(String),
+
+    #[error("The on-disk prompt cache budget must be at least 1 GiB, got {0}")]
+    CacheDiskBudgetTooSmall(u64),
 
     #[error("Proxy API key cannot be blank — clear it instead to disable authentication")]
     BlankProxyApiKey,

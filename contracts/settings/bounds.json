@@ -11,6 +11,9 @@
       "min": 1,
       "max": 50
     },
+    "proxy_cache_disk_gb": {
+      "min": 1
+    },
     "proxy_port": {
       "min": 1024
     }
@@ -22,6 +25,10 @@
     "max_download_queue_size": 10,
     "max_tool_iterations": 25,
     "mcp_drawing": null,
+    "proxy_allowed_hosts": null,
+    "proxy_cache_disk_gb": null,
+    "proxy_cache_on_disk": false,
+    "proxy_host": null,
     "proxy_port": 8080
   },
   "inference": {

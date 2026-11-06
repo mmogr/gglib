@@ -158,7 +158,7 @@ async fn serve_here(
             mlock: context.mlock,
         },
         ProxyGlobals {
-            host: Some(options.host.clone()),
+            host: options.host.clone(),
             default_ctx: None,
             proxy_port: options.port,
             // The daemon owns llama-server port allocation; a per-run value

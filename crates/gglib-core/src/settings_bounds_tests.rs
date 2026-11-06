@@ -15,7 +15,9 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::domain::{FieldIssue, InferenceConfig};
-use crate::settings::{Settings, SettingsError, validate_inference_config, validate_settings};
+use crate::settings::{
+    MIN_CACHE_DISK_GB, Settings, SettingsError, validate_inference_config, validate_settings,
+};
 
 /// What a validator accepts for one number: `min` and up, or anything greater
 /// than `above`, and no further than `max` where there is a ceiling.
@@ -75,6 +77,7 @@ fn bounds() -> Bounds {
             ("proxy_port", at_least(MIN_PORT)),
             ("llama_base_port", at_least(MIN_PORT)),
             ("max_download_queue_size", within(&DOWNLOAD_QUEUE_RANGE)),
+            ("proxy_cache_disk_gb", at_least(MIN_CACHE_DISK_GB)),
         ]),
         settings_defaults: BTreeMap::from([
             default_of("default_context_size"),
@@ -84,6 +87,10 @@ fn bounds() -> Bounds {
             default_of("max_tool_iterations"),
             default_of("default_image_model_id"),
             default_of("mcp_drawing"),
+            default_of("proxy_host"),
+            default_of("proxy_allowed_hosts"),
+            default_of("proxy_cache_on_disk"),
+            default_of("proxy_cache_disk_gb"),
         ]),
         inference: BTreeMap::from([
             ("temperature", within(&TEMPERATURE_RANGE)),
@@ -118,6 +125,7 @@ fn written_out() -> Value {
             "llama_base_port": {"min": 1024},
             "max_download_queue_size": {"min": 1, "max": 50},
             "proxy_port": {"min": 1024},
+            "proxy_cache_disk_gb": {"min": 1},
         },
         "inference": {
             "temperature": {"min": 0.0, "max": 2.0},
