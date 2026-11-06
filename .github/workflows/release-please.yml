@@ -11,6 +11,16 @@
 # Promotion to a stable version is promote.yml's job, made from the
 # candidate's tag, not this one's.
 #
+# release-please's own choice of version is checked before it touches the pull
+# request. A dry run says what it would propose, and scripts/release_lines.py
+# keeps that unless the release lines refuse it. Three proposals are refused
+# with one right answer each, which the real run is then made to propose:
+# after a promotion, the shipped version's rc.N+1 (Promote tags the stable
+# version from the candidate's commit, so release-please still counts the
+# candidate as the last release); and the stable X.Y.0 that a feat over a
+# patch candidate makes it propose. So the release PR never waits on a
+# `Release-As:` line, and one written on purpose still decides the version.
+#
 # release-please knows nothing of Cargo.lock or package-lock.json, and CI
 # builds with --locked, so after every update this workflow adds a commit that
 # moves the workspace's own versions in both lockfiles.
@@ -73,9 +83,11 @@ jobs:
     env:
       BRANCH: ${{ github.event.workflow_run.head_branch || inputs.branch }}
     outputs:
-      updated: ${{ steps.release.outputs.prs_created }}
-      # The pull request the action opened or updated, as JSON.
-      pr: ${{ steps.release.outputs.pr }}
+      # The open release PR of the branch, after the update: its number, its
+      # head branch and its base. Empty when there is none.
+      number: ${{ steps.pr.outputs.number }}
+      head: ${{ steps.pr.outputs.head }}
+      base: ${{ steps.pr.outputs.base }}
     steps:
       # The commit CI tested, whose version that run's release job tagged.
       # The branch can be ahead by then, at a version whose own CI run has
@@ -94,9 +106,10 @@ jobs:
       # CI run on the branch they are, so this checks once and fails if not.
       # It opens nothing while a merged release PR of this branch still
       # carries `autorelease: pending`: it stops with "untagged, merged
-      # release PRs outstanding". It never tags (skip-github-release below),
-      # so release-tag.yml, inside the CI run this follows, swaps that label
-      # for `autorelease: tagged` once it has tagged the version. And it
+      # release PRs outstanding". It never tags (only its `release-pr`
+      # command runs here), so release-tag.yml, inside the CI run this
+      # follows, swaps that label for `autorelease: tagged` once it has
+      # tagged the version. And it
       # reads the last release from the tag `v<version>`: with no tag, it
       # reads the branch's whole history as unreleased. A failure here means
       # the release job of that CI run did not tag: re-run it, then run this
@@ -126,33 +139,121 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # skip-github-release because release-please never tags here:
-      # release-tag.yml tags a candidate and promote.yml a stable version, and
-      # each makes the GitHub release itself, with generated notes. release-please
-      # only keeps the pull request. With `always-update` in the config it
-      # rewrites the pull request on every run, so the pull request is never
-      # behind its branch, which the ruleset requires before a merge.
+      # The tools the steps below run, from the commit this workflow file
+      # came from: main's after CI, the dispatched branch's by hand. The
+      # checkout above is the branch being released, and a line cut before
+      # a tool existed would not have it; a hand run from a branch tries that
+      # branch's tools against the branch it names.
+      - name: Checkout this workflow's tools
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: tools
+          sparse-checkout: |
+            scripts/release_lines.py
+            .github/release-please
+            .nvmrc
+          sparse-checkout-cone-mode: false
+
+      # The release-please CLI, pinned in .github/release-please with a
+      # lockfile that Dependabot keeps current. The action is not used: it
+      # ignores its `release-as` input once the config comes from a manifest
+      # file, and the step after next needs that input.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: tools/.nvmrc
+
+      - name: Install release-please
+        run: npm ci --prefix tools/.github/release-please --no-audit --no-fund
+
+      # What release-please would propose, and whether the release lines take
+      # it: scripts/release_lines.py `choose` prints `release_as`, empty when
+      # the proposal stands and the version to force when it does not. A
+      # proposal it cannot put right stops the run here, before the pull
+      # request is touched, with the same words the lock job's guard uses.
+      # The dry run reads the branch's tip, as the real run does.
+      - name: Choose the release PR's version
+        id: choose
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          tools/.github/release-please/node_modules/.bin/release-please release-pr --dry-run \
+            --token "$TOKEN" --repo-url "$GITHUB_REPOSITORY" --target-branch "$BRANCH" \
+            --config-file release-please-config.json --manifest-file .release-please-manifest.json \
+            > "$RUNNER_TEMP/dry-run.txt"
+          echo "::group::release-please's dry run"
+          cat "$RUNNER_TEMP/dry-run.txt"
+          echo "::endgroup::"
+          git ls-remote --tags origin > "$RUNNER_TEMP/tags.txt"
+          git ls-remote --heads origin 'refs/heads/release/*' > "$RUNNER_TEMP/release-branches.txt"
+          tools/scripts/release_lines.py choose --branch "$BRANCH" --dry-run "$RUNNER_TEMP/dry-run.txt" \
+            --config release-please-config.json --tags "$RUNNER_TEMP/tags.txt" \
+            --branches "$RUNNER_TEMP/release-branches.txt" | tee -a "$GITHUB_OUTPUT"
+
+      # `release-pr` only keeps the pull request; it never tags or makes a
+      # release. release-tag.yml tags a candidate and promote.yml a stable
+      # version, and each makes the GitHub release itself, with generated
+      # notes. With `always-update` in the config it rewrites the pull request
+      # on every run, so the pull request is never behind its branch, which
+      # the ruleset requires before a merge.
       #
-      # target-branch is the branch it reads and opens against: the config,
+      # --target-branch is the branch it reads and opens against: the config,
       # the manifest, the commits since the last release and the pull
       # request's base are all that branch's. A line cut from vX.Y.0 has a
       # manifest reading X.Y.0 and that tag on its first commit, so
       # release-please counts the cherry-picks since it and proposes
       # X.Y.1-rc.1 on its own.
+      #
+      # --release-as, when the step above chose one, beats both release-please's
+      # own reckoning and any `Release-As:` line in the commits. It is chosen
+      # only when the proposal is refused, which a `Release-As:` line naming a
+      # version the lines accept never is.
       - name: Open or update the release PR
-        id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          target-branch: ${{ env.BRANCH }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          skip-github-release: true
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+          PROPOSED: ${{ steps.choose.outputs.proposed }}
+          RELEASE_AS: ${{ steps.choose.outputs.release_as }}
+        run: |
+          force=()
+          if [ -n "$RELEASE_AS" ]; then
+            force=(--release-as "$RELEASE_AS")
+            echo "::notice::release-please would propose $PROPOSED, which the release lines refuse; the release PR proposes $RELEASE_AS"
+          fi
+          tools/.github/release-please/node_modules/.bin/release-please release-pr \
+            --token "$TOKEN" --repo-url "$GITHUB_REPOSITORY" --target-branch "$BRANCH" \
+            --config-file release-please-config.json --manifest-file .release-please-manifest.json \
+            "${force[@]}"
+
+      # The pull request release-please keeps carries `autorelease: pending`
+      # while it is open; a merged one waiting for its tag was ruled out
+      # above. None open means nothing on the branch adds to the changelog.
+      - name: Find the release PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr list -R "$GITHUB_REPOSITORY" --base "$BRANCH" --state open --label 'autorelease: pending' \
+            --json number,headRefName > "$RUNNER_TEMP/prs.json"
+          count=$(jq length "$RUNNER_TEMP/prs.json")
+          if [ "$count" = 0 ]; then
+            echo "✓ no release PR is open on $BRANCH"
+            exit 0
+          fi
+          if [ "$count" != 1 ]; then
+            echo "::error::$count open pull requests into $BRANCH carry 'autorelease: pending'; release-please keeps one. Close the ones it did not open, then run this workflow by hand for $BRANCH."
+            exit 1
+          fi
+          {
+            echo "number=$(jq -r '.[0].number' "$RUNNER_TEMP/prs.json")"
+            echo "head=$(jq -r '.[0].headRefName' "$RUNNER_TEMP/prs.json")"
+            echo "base=$BRANCH"
+          } >> "$GITHUB_OUTPUT"
 
   lock:
     name: Lock the release's version
     needs: release-pr
-    if: needs.release-pr.outputs.updated == 'true'
+    if: needs.release-pr.outputs.number != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -166,29 +267,21 @@ jobs:
       - name: Checkout the release PR
         uses: actions/checkout@v7
         with:
-          ref: ${{ fromJSON(needs.release-pr.outputs.pr).headBranchName }}
+          ref: ${{ needs.release-pr.outputs.head }}
           token: ${{ steps.app-token.outputs.token }}
 
-      # A stable version comes only from promote.yml, never from this pull
-      # request, and the pull request must propose a candidate of a version
-      # that has not shipped, and of its own branch's line: main the next
-      # minor, a line release/X.Y.x its next patch. scripts/release_lines.py
-      # holds all of that, with fixtures, and each refusal names the
-      # `Release-As: X.Y.Z-rc.1` line that puts it right, at the end of the
-      # message of a commit that merges next. release-please needs that line
-      # in three cases. A feat merged while main is a patch candidate such as
-      # 0.29.1-rc.1 makes it propose 0.30.0 rather than 0.30.0-rc.1. After a
-      # promotion it proposes the shipped version's rc.N+1: promote.yml tags
-      # the stable version from the candidate's commit, not from the branch,
-      # so the candidate is still the last release it can see from there.
-      # And once a line is cut, fixes on main alone would propose that line's
-      # next patch, which the line cuts; main goes on to the next minor. A
-      # feat cherry-picked onto a line proposes the next minor there, and is
-      # refused outright: it does not belong on a line.
+      # The backstop. The version was chosen above to pass these same rules
+      # (scripts/release_lines.py `guard-pr`, with fixtures): a candidate, of
+      # a version that has not shipped, and of its own branch's line, main
+      # the next minor or a patch no line has taken, a line release/X.Y.x its
+      # next patch. So this refuses only what `choose` let through by a bug,
+      # or a branch or a tag that moved between the two runs. Each refusal
+      # names the `Release-As: X.Y.Z-rc.1` line that puts it right, at the end
+      # of the message of a commit that merges next.
       - name: Require a release candidate of an unshipped version of this line
         id: guard
         env:
-          BASE: ${{ fromJSON(needs.release-pr.outputs.pr).baseBranchName }}
+          BASE: ${{ needs.release-pr.outputs.base }}
         run: |
           VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           git ls-remote --tags origin > "$RUNNER_TEMP/tags.txt"
@@ -213,7 +306,7 @@ jobs:
       - name: Keep the release PR from closing issues
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          NUMBER: ${{ fromJSON(needs.release-pr.outputs.pr).number }}
+          NUMBER: ${{ needs.release-pr.outputs.number }}
         run: |
           gh pr view "$NUMBER" --json body --jq .body > "$RUNNER_TEMP/body.md"
           if grep -q ', closes \[#' "$RUNNER_TEMP/body.md"; then
@@ -231,7 +324,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           SLUG: ${{ steps.app-token.outputs.app-slug }}
-          BRANCH: ${{ fromJSON(needs.release-pr.outputs.pr).headBranchName }}
+          BRANCH: ${{ needs.release-pr.outputs.head }}
         run: |
           git add Cargo.lock package-lock.json
           if git diff --cached --quiet; then

@@ -17,11 +17,12 @@
 # title.
 #
 # Each entry runs once a week at 06:00 in the maintainer's timezone: cargo
-# on Monday, npm on Wednesday, the actions and pip on Friday, so their CI runs
-# do not queue behind each other. When the set of updates a group would carry
-# changes, Dependabot opens a new pull request for the group and closes the
-# old one as superseded. Run daily, most of the CI it started went on pull
-# requests that were superseded before anyone merged them.
+# on Monday, npm on Wednesday, the actions, the release-please CLI and pip on
+# Friday, so their CI runs do not queue behind each other. When the set of
+# updates a group would carry changes, Dependabot opens a new pull request for
+# the group and closes the old one as superseded. Run daily, most of the CI it
+# started went on pull requests that were superseded before anyone merged
+# them.
 #
 # No `target-branch` anywhere: with one set, none of these options would
 # reach security updates, which always target the default branch.
@@ -114,7 +115,8 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: npm
-    # The root package.json is the only one tracked. web_ui/ is build output.
+    # The root package.json, the GUI's. web_ui/ is build output, and the
+    # release-please CLI's package.json has an entry of its own below.
     directory: "/"
     schedule:
       interval: cron
@@ -182,6 +184,31 @@ updates:
         applies-to: security-updates
         patterns: ["*"]
 
+  # The release-please CLI that release-please.yml runs, pinned with a
+  # lockfile of its own so a new version arrives as a pull request. Nothing in
+  # PR CI runs it: release-please.yml runs only after CI passes on a branch
+  # that releases, so a version is first used by the next update of the
+  # release PR, which shows what it did before anything ships. A major is
+  # bumped by hand, as the actions only a release runs are below.
+  - package-ecosystem: npm
+    directory: "/.github/release-please"
+    schedule:
+      interval: cron
+      cronjob: "0 6 * * 5"
+      timezone: Australia/Brisbane
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - dependencies
+      - automated
+      - "type: chore"
+      - "component: ci"
+    ignore:
+      - dependency-name: release-please
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     # "/" points Dependabot at .github/workflows; the composite actions each
     # have a directory of their own. A third-party action is pinned to a
@@ -233,8 +260,6 @@ updates:
       - dependency-name: actions/create-github-app-token
         update-types: ["version-update:semver-major"]
       - dependency-name: peter-evans/create-pull-request
-        update-types: ["version-update:semver-major"]
-      - dependency-name: googleapis/release-please-action
         update-types: ["version-update:semver-major"]
       - dependency-name: actions/github-script
         update-types: ["version-update:semver-major"]

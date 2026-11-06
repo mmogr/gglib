@@ -25,11 +25,12 @@
 # older. That is the rule that only the newest stable line is maintained.
 #
 # release-please cannot do this: with no commit since the candidate's tag it
-# opens no pull request. And once a stable version has shipped this way, the
-# release PR it next opens proposes rc.N+1 of that same version;
-# release-please.yml refuses that and names the Release-As line that starts
-# the next cycle: on main the next minor's rc.1 (or the next patch's, while
-# the version has no line of its own), on a line its next patch's.
+# opens no pull request. And once a stable version has shipped this way,
+# release-please would next propose rc.N+1 of that same version;
+# release-please.yml sees that and makes the release PR propose the next
+# cycle's rc.1 instead: on main the next minor's after a feat or a breaking
+# change and the next patch's otherwise (the next minor's once the version
+# has a line of its own), on a line its next patch's.
 #
 # The push uses the GitHub App token, as release-tag.yml's tag does:
 # GITHUB_TOKEN may create a ref only at the run's own commit. The release and
