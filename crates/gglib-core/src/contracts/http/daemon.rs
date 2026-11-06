@@ -27,6 +27,10 @@ pub const VERSION_PATH: &str = "/api/version";
 /// Start the proxy.
 pub const PROXY_START_PATH: &str = "/api/proxy/start";
 
+/// Start the proxy pinned to one model, the daemon running the launch
+/// cascade itself: the app's pinned start, and `gglib model load --pin`.
+pub const PROXY_START_PINNED_PATH: &str = "/api/proxy/start-pinned";
+
 /// Stop the proxy.
 pub const PROXY_STOP_PATH: &str = "/api/proxy/stop";
 
@@ -59,6 +63,9 @@ pub const SERVERS_LIST_PATH: &str = "/api/servers";
 
 /// Start (or reuse) a llama-server for a model.
 pub const SERVERS_START_PATH: &str = "/api/servers/start";
+
+/// Stop a model's server: the app's Unload, and `gglib model unload`.
+pub const SERVERS_STOP_PATH: &str = "/api/servers/stop";
 
 /// Ask the daemon to shut down.
 pub const DAEMON_SHUTDOWN_PATH: &str = "/api/daemon/shutdown";
@@ -316,8 +323,10 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["POST"], PROXY_START_PATH),
     (&["POST"], PROXY_STOP_PATH),
     (&["GET"], PROXY_STATUS_PATH),
+    (&["POST"], PROXY_START_PINNED_PATH),
     (&["GET"], SERVERS_LIST_PATH),
     (&["POST"], SERVERS_START_PATH),
+    (&["POST"], SERVERS_STOP_PATH),
     (&["POST"], DAEMON_SHUTDOWN_PATH),
     (&["GET"], MCP_SERVERS_PATH),
     (&["POST"], EVENTS_PATH),
@@ -413,3 +422,14 @@ pub const SERVERS_START_CLI_FIELDS: &[&str] = &[
     "inferenceParams",
     "mlock",
 ];
+
+/// The keys of a stop-server body ([`SERVERS_STOP_PATH`]), pinned at both
+/// ends as the start body's are.
+pub const SERVERS_STOP_CLI_FIELDS: &[&str] = &["model_id"];
+
+/// The keys of a pinned-start body ([`PROXY_START_PINNED_PATH`]).
+///
+/// The model, its launch options in the start body's `camelCase`, and the
+/// proxy's own start config in the proxy body's `snake_case`. Pinned at both
+/// ends.
+pub const PROXY_START_PINNED_CLI_FIELDS: &[&str] = &["model_id", "options", "proxy"];

@@ -24,7 +24,7 @@ import {
   decidingMade,
   percentText,
   spokenReading,
-} from '../../../src/components/ChatMessagesPanel/components/contextReading';
+} from '../../../src/readings/contextReading';
 import { rust } from './rustSource';
 
 /** One reply's figures, under the names the wire gives them. */

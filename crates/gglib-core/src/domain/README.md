@@ -16,6 +16,9 @@ infrastructure concerns (database, filesystem, etc.).
   (`ModelDefectLedger`); `defects_agent` holds the one the agent loop writes,
   and `defect_counts` the counts a reader is handed (`ModelDefectCounts`,
   `LoopGuardTrip`)
+- `intervention` - What gglib did to one request on its way through the
+  endpoint (`Intervention`, `InterventionKind`, `Refusal`), each kind with
+  the word every surface shows, written once.
 - `loop_guard_log` - The loop guard's log, which survives a restart: one row
   per decision (`LoopGuardTripEvent`) and one per day, model, version and mode
   counting the requests it scanned (`LoopGuardTripDay`)

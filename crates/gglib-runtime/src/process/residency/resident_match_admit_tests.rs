@@ -40,7 +40,7 @@ fn set_for(weights: &Path, projector: Option<&Path>) -> ResidentSet {
         projector: projector.map(Path::to_path_buf),
         ..launch_spec(1, "qwen")
     };
-    ResidentSet::new(
+    ResidentSet::unobserved(
         Arc::new(OneModel(spec)),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
@@ -171,7 +171,7 @@ async fn a_launched_resident_records_its_projector_and_serves_the_next_request()
         projector: Some(projector.clone()),
         ..launch_spec(LAUNCHED_ID, "qwen")
     };
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(OneModel(linked)),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

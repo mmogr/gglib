@@ -108,7 +108,7 @@ export const ConversationRail: FC<ConversationRailProps> = ({
         >
           <Icon icon={List} size={16} />
           {unread > 0 && (
-            <span aria-hidden className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-[3px] rounded-full bg-primary text-text-inverse font-mono text-2xs leading-[16px] text-center">
+            <span aria-hidden className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-[3px] rounded-full bg-primary text-text-inverse font-mono text-xs leading-[16px] text-center">
               {unread}
             </span>
           )}
@@ -124,7 +124,7 @@ export const ConversationRail: FC<ConversationRailProps> = ({
         <SourceSwitch source={source} onSource={onSource} connection={connection} machine={pairedName(status)} />
       ) : (
         <div
-          className="flex flex-col items-center gap-xs px-xs text-center text-2xs text-text-secondary"
+          className="flex flex-col items-center gap-xs px-xs text-center text-xs text-text-secondary"
           title={machine.title}
         >
           <span aria-hidden className={cn('w-[7px] h-[7px] rounded-full', TONE[machine.tone])} />

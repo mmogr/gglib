@@ -82,7 +82,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
           <Icon icon={isExpanded ? ChevronDown : ChevronRight} size={14} />
         </span>
 
-        <span className="flex-1 truncate font-mono text-2xs text-text-secondary">
+        <span className="flex-1 truncate font-mono text-xs text-text-secondary">
           {summary}
         </span>
 

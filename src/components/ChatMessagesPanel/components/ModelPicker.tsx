@@ -1,11 +1,10 @@
-import { ChangeEvent, FC, useEffect, useState } from 'react';
+import { ChangeEvent, FC } from 'react';
 import { Select } from '../../ui/Select';
 import { Button } from '../../ui/Button';
 import { useServers } from '../../../hooks/useServers';
-import { getTransport } from '../../../services/transport';
+import { useModelLibrary } from '../../../services/modelRegistry';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { formatError } from '../../../utils/errors';
-import type { GgufModel } from '../../../types';
 
 /** A model to move the chat to, as the picker names it. */
 export interface ModelChoice {
@@ -42,23 +41,14 @@ interface ModelPickerProps {
 export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantization, onPick, starting = null, onUnload }) => {
   const { servers } = useServers();
   const { showToast } = useToastContext();
-  const [models, setModels] = useState<GgufModel[]>([]);
+  const { models } = useModelLibrary();
   const canPick = onPick !== undefined && modelId !== undefined;
-
-  useEffect(() => {
-    if (!canPick) return;
-    let cancelled = false;
-    getTransport().listModels()
-      .then((list) => { if (!cancelled) setModels(list); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [canPick]);
 
   const quant = quantization && <span className="font-mono">{quantization}</span>;
   if (!canPick) {
     return (
       <>
-        <span className="font-mono text-sm font-medium text-text-secondary">{modelName}</span>
+        <span className="font-mono text-sm font-semibold text-text-secondary">{modelName}</span>
         {quant}
       </>
     );
@@ -97,7 +87,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantiza
         value={modelId}
         onChange={(event) => void handleChange(event)}
         disabled={starting !== null}
-        className="font-mono font-medium text-text-secondary bg-transparent border-transparent max-w-[220px] truncate"
+        className="font-mono font-semibold text-text-secondary bg-transparent border-transparent max-w-[220px] truncate"
       >
         <option value={modelId}>{modelName}</option>
         {running.length > 0 && (

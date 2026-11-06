@@ -87,16 +87,34 @@ pub(crate) struct StartServerBody {
     pub config: StartServerRequest,
 }
 
-/// `POST /api/servers/start` response.
+/// `POST /api/servers/start` response: the port, and the daemon's own
+/// sentence about the start, which `gglib model load` prints as it came.
 ///
-/// A narrowing of `gglib_app_services::types::StartServerResponse`, which also
-/// carries a `message` the CLI has no use for. Reading only what is used keeps
-/// a daemon of a different build from failing this deserialize over a field
-/// nothing renders; `a_start_server_response_deserializes_into_the_narrowing`
-/// pins the half that is used.
+/// The CLI's reading of `gglib_app_services::types::StartServerResponse`;
+/// `a_start_server_response_deserializes_into_the_narrowing` pins it.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct StartServerDto {
     pub port: u16,
+    pub message: String,
+}
+
+/// Body for `POST /api/servers/stop` — the client-side twin of
+/// `gglib_axum::handlers::servers::StopServerBody`.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct StopServerBody {
+    pub model_id: i64,
+}
+
+/// Body for `POST /api/proxy/start-pinned` — the client-side twin of
+/// `gglib_axum::handlers::proxy::StartPinnedBody`: the app's pinned start,
+/// which the daemon runs `gglib serve`'s launch cascade for.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct StartPinnedBody {
+    pub model_id: i64,
+    /// The model's launch options, in the start body's `camelCase`.
+    pub options: StartServerRequest,
+    /// The proxy's own start config, in the proxy body's `snake_case`.
+    pub proxy: StartProxyBody,
 }
 
 /// `POST /api/models/downloads/queue` request body.

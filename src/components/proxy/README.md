@@ -4,7 +4,7 @@
 
 Display components shared by every surface that shows proxy state: the `ProxyControl` dropdown in the header, the `ProxyDashboardModal`, and the system tray popover (`pages/TrayPanel`).
 
-The tray popover shows the same information as the in-app dashboard, so without a shared home the two would have been the same markup maintained twice and drifting apart on the first styling change. Everything here is presentational — the dashboard snapshot arrives as a prop rather than being subscribed to internally, so each surface owns its own `useProxyDashboard` subscription while rendering identical output.
+The tray popover shows the same information as the in-app dashboard, so without a shared home the two would have been the same markup maintained twice and drifting apart on the first styling change. Everything here is presentational — the dashboard snapshot arrives as a prop rather than being subscribed to internally; each surface takes it from `services/dashboardRegistry`, the one stream per endpoint, and renders identical output.
 
 ## Key Files
 

@@ -16,7 +16,7 @@ use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
     Admission, AdmissionLease, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides,
-    ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
+    ModelCatalogPort, ModelRuntimeError, ProcessHandle, ResidencyObserver, RunningTarget,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
@@ -63,6 +63,9 @@ impl ProcessManager {
     ///   perturb prefill timings. (Omitting the flag entirely, so llama-server's
     ///   own default applies, is what [`CacheRamSetting::Auto`] does when
     ///   autosizing is suppressed by env.)
+    /// * `observer` — told of every load and unload, whoever caused it, once
+    ///   the queue has recorded it and with no lock held. The daemon hands
+    ///   in the one that announces them to its clients.
     ///
     /// Use [`Self::set_pin`] afterwards when the manager must refuse every
     /// model but one (`gglib serve`).
@@ -72,11 +75,12 @@ impl ProcessManager {
         catalog: Arc<dyn ModelCatalogPort>,
         launch_overrides: ServerConfigOptions,
         cache_ram: CacheRamSetting,
+        observer: Arc<dyn ResidencyObserver>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, binaries);
         Self {
             core: Arc::new(RwLock::new(core)),
-            residency: ResidentSet::new(catalog, launch_overrides, cache_ram),
+            residency: ResidentSet::new(catalog, launch_overrides, cache_ram, observer),
         }
     }
 
@@ -274,10 +278,7 @@ impl ProcessManager {
                 tracing::warn!(model_id, error = %e, "could not stop the image model cleanly");
             }
         };
-        self.residency
-            .queue()
-            .retire_render(turn, model_id, kill)
-            .await
+        self.residency.retire_render(turn, model_id, kill).await
     }
 
     /// Whether a person's Stop was asked of model `model_id` while a render

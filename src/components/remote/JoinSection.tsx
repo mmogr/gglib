@@ -119,7 +119,7 @@ export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
           <p className="text-xs text-text-muted m-0">
             {connected.ticket_fingerprint ? (
               <>
-                Connected to <span className="font-medium text-text-secondary">{machine}</span>{' '}
+                Connected to <span className="font-semibold text-text-secondary">{machine}</span>{' '}
                 {connected.away_for_s === null
                   ? `(${connected.path}).`
                   : `— away ${awayFor(connected.away_for_s)}; the address stays, and it reconnects when that machine is back.`}

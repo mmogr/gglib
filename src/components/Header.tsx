@@ -49,9 +49,9 @@ const Header: FC<HeaderProps> = ({
     <header className="bg-background-elevated text-text h-header-height px-lg border-b border-border shrink-0 flex items-center">
       <div className="flex justify-between items-center w-full">
         <div className="flex flex-row items-center gap-sm">
-          <h1 className="flex items-center gap-sm text-lg font-semibold m-0">
+          <h1 className="flex items-center gap-sm text-base font-semibold m-0">
             <Library className="w-[18px] h-[18px] text-primary" aria-hidden />
-            <span>GGLib</span>
+            <span>gglib</span>
           </h1>
         </div>
         <div className="relative flex items-center gap-sm" ref={menuRef}>
@@ -72,8 +72,8 @@ const Header: FC<HeaderProps> = ({
                 <Icon icon={Monitor} size={18} />
                 {hasRunningServers && (
                   // Neutral count chip; the green dot alone says "running".
-                  <span className="absolute -top-1 -right-1 h-[18px] px-1.5 rounded-full bg-surface-hover text-text text-2xs font-semibold flex items-center gap-1 shadow-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" aria-hidden />
+                  <span className="absolute -top-1 -right-1 h-[18px] px-1.5 rounded-full bg-surface-hover text-text text-xs font-semibold flex items-center gap-1 shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success" aria-hidden />
                     {serverCount}
                   </span>
                 )}

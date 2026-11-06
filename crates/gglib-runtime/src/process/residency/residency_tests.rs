@@ -87,7 +87,7 @@ pub(in crate::process) fn pin(id: i64, name: &str) -> PinnedSpec {
 }
 
 fn swapping_set() -> ResidentSet {
-    ResidentSet::new(
+    ResidentSet::unobserved(
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
@@ -159,7 +159,7 @@ fn pinning_does_not_alter_launch_configuration() {
         cache_reuse: Some(256),
         ..Default::default()
     };
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(StubCatalog),
         template.clone(),
         CacheRamSetting::ExplicitMb(4096),

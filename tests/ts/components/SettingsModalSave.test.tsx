@@ -102,8 +102,8 @@ vi.mock('../../../src/hooks/useMcpServers', () => ({
   }),
 }));
 
-vi.mock('../../../src/hooks/useModels', () => ({
-  useModels: () => ({
+vi.mock('../../../src/services/modelRegistry', () => ({
+  useModelLibrary: () => ({
     models: [
       { id: 3, name: 'three' },
       { id: 4, name: 'four' },
@@ -112,7 +112,6 @@ vi.mock('../../../src/hooks/useModels', () => ({
     ],
     loading: false,
     error: null,
-    refresh: vi.fn(),
   }),
 }));
 

@@ -10,6 +10,7 @@ use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 
 fn snapshot(model: &str) -> ContextSnapshot {
     ContextSnapshot {
+        interventions: Vec::new(),
         model_name: model.to_owned(),
         payload_chars_before: 1_000,
         payload_chars_after: 800,
@@ -147,6 +148,7 @@ fn the_readings_serialise_beside_the_snapshots_other_keys() {
             "loop_guard_trip": null,
             "loop_guard_ended": false,
             "recorded_at_secs": 7,
+            "interventions": [],
             "completion_tokens": null,
             "reasoning_chars": 0,
             "tool_calls": 0,

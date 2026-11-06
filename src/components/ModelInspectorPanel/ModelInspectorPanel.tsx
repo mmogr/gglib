@@ -49,7 +49,7 @@ interface ModelInspectorPanelProps {
   onStopServer: (modelId: number) => Promise<void>;
   servers: ServerViewModel[];
   onRemoveModel: (id: number, force: boolean) => void;
-  onUpdateModel: (id: number, updates: import('../../hooks/useModels').ModelUpdates) => Promise<void>;
+  onUpdateModel: (id: number, updates: import('../../services/modelRegistry').ModelUpdates) => Promise<void>;
   onAddTag: (modelId: number, tag: string) => Promise<void>;
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
   getModelDetail: (modelId: number) => Promise<ModelDetail | null>;

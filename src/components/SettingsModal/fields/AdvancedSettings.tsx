@@ -59,7 +59,7 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
       type="button"
       variant="ghost"
       size="sm"
-      className="px-0 font-semibold text-text hover:bg-transparent hover:text-primary"
+      className="px-0 font-semibold text-text hover:bg-transparent hover:underline"
       onClick={onToggle}
       aria-expanded={isOpen}
       leftIcon={<Icon icon={isOpen ? ChevronDown : ChevronRight} size={14} />}

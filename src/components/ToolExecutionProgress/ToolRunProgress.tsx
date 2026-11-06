@@ -54,7 +54,7 @@ export const ToolRunProgress: FC<{ progress?: ToolProgress; preview?: PreviewFra
     <div className="flex flex-col gap-xs px-2 pb-2">
       {progress && bar && (
         <>
-          <span className="font-mono tabular-nums text-2xs text-text-muted">
+          <span className="font-mono tabular-nums text-xs text-text-muted">
             {progressWords(progress)}
           </span>
           <PromptProgressBar processed={bar.done} total={bar.total} className="max-w-[256px]" />

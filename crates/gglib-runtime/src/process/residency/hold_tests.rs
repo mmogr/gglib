@@ -35,7 +35,7 @@ fn dead_port() -> u16 {
 
 /// A set whose primary holds `qwen` (model 1) at 4096 tokens on `port`.
 pub(super) fn set_with_resident(port: u16) -> ResidentSet {
-    let set = ResidentSet::new(
+    let set = ResidentSet::unobserved(
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

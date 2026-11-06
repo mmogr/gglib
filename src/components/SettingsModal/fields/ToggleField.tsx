@@ -32,7 +32,7 @@ export const ToggleField: FC<ToggleFieldProps> = ({
     checked={checked}
     onChange={(event) => onChange(event.target.checked)}
     disabled={disabled}
-    label={<span className="font-medium">{label}</span>}
+    label={<span className="font-semibold">{label}</span>}
     description={children}
   />
 );

@@ -43,6 +43,7 @@ pub(crate) mod image_refusal;
 // Public: the daemon mounts the same handler at `/api/images/generations`.
 pub mod images;
 pub(crate) mod images_stream;
+mod interventions;
 pub(crate) mod load_endpoint;
 pub(crate) mod loop_guard;
 pub(crate) mod loop_guard_end;

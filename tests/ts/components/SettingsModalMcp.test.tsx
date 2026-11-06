@@ -40,7 +40,7 @@ const { stored, lists, settingsHook, directoryHook, modelsHook } = vi.hoisted(()
     refresh: async () => {},
     save: async () => {},
   },
-  modelsHook: { models: [], loading: false, error: null, refresh: async () => {} },
+  modelsHook: { models: [], loading: false, error: null },
 }));
 
 vi.mock('../../../src/services/transport', () => ({
@@ -59,7 +59,7 @@ vi.mock('../../../src/services/transport', () => ({
 
 vi.mock('../../../src/hooks/useSettings', () => ({ useSettings: () => settingsHook }));
 vi.mock('../../../src/hooks/useModelsDirectory', () => ({ useModelsDirectory: () => directoryHook }));
-vi.mock('../../../src/hooks/useModels', () => ({ useModels: () => modelsHook }));
+vi.mock('../../../src/services/modelRegistry', () => ({ useModelLibrary: () => modelsHook }));
 
 vi.mock('../../../src/contexts/ConfirmContext', () => ({
   useConfirmContext: () => ({ confirm: () => Promise.resolve(true) }),

@@ -30,7 +30,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         </div>
       )}
       <div className="flex flex-col gap-sm">
-        <h3 className="text-lg font-semibold text-text">
+        <h3 className="text-base font-semibold text-text">
           {title}
         </h3>
         {description && (

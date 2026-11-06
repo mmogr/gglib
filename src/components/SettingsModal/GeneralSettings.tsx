@@ -14,7 +14,7 @@ import {
 import type { DesktopSettingsValues } from "./useDesktopSettings";
 import type { NetworkSettingsValues } from "./useNetworkSettings";
 import type { AgentGuardSettingsValues } from "./useAgentGuardSettings";
-import type { DrawingSettingsValues } from "./useDrawingSettings";
+import type { DrawingSettingsValues } from '../../readings/drawingValues';
 import type { SecretEdit } from "../ui/SecretField";
 
 interface GeneralSettingsProps {

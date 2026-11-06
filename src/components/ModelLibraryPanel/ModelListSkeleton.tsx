@@ -22,7 +22,7 @@ const SkeletonRow: React.FC = () => (
  * Full-panel skeleton for the model library list.
  * Replaces the "Loading models..." text while the model list is being fetched.
  *
- * The shimmer is decorative, so it is hidden from assistive tech — but it
+ * The placeholder is decorative, so it is hidden from assistive tech — but it
  * replaced a literal "Loading models..." string that screen readers used to
  * announce, so the announcement is carried here explicitly rather than lost
  * with the text.

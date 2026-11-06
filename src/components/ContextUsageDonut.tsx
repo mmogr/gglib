@@ -83,7 +83,7 @@ export const ContextUsageDonut: FC<ContextUsageDonutProps> = ({
       {!compact && (
         <span className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-sm font-semibold text-text">{used != null && total ? `${pct}%` : '—'}</span>
-          {label && <span className="text-2xs text-text-muted">{label}</span>}
+          {label && <span className="text-xs text-text-muted">{label}</span>}
         </span>
       )}
     </span>

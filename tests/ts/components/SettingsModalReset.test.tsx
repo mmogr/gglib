@@ -83,8 +83,8 @@ vi.mock('../../../src/hooks/useMcpServers', () => ({
   }),
 }));
 
-vi.mock('../../../src/hooks/useModels', () => ({
-  useModels: () => ({ models: [], loading: false, error: null, refresh: vi.fn() }),
+vi.mock('../../../src/services/modelRegistry', () => ({
+  useModelLibrary: () => ({ models: [], loading: false, error: null }),
 }));
 
 describe('SettingsModal — reset to default', () => {

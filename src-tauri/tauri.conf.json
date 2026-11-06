@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "GGLib \u2014 Local Model Runtime",
+        "title": "gglib",
         "width": 1200,
         "height": 800,
         "minWidth": 800,

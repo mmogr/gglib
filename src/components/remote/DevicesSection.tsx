@@ -117,7 +117,7 @@ export const DevicesSection: FC<DevicesSectionProps> = ({ onNotice }) => {
               className="flex justify-between items-center gap-sm py-xs border-b border-border last:border-b-0"
             >
               <div className="min-w-0">
-                <div className="text-xs font-medium text-text truncate">
+                <div className="text-xs font-semibold text-text truncate">
                   {device.label ?? device.id}
                 </div>
                 {/* The id is always shown, never only as a fallback title.

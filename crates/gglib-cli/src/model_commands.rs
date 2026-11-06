@@ -399,4 +399,40 @@ pub enum ModelCommand {
         #[arg(long, value_name = "NAME")]
         profile: Option<String>,
     },
+
+    /// Load a model into memory on the daemon, as the app's Load does.
+    ///
+    /// The daemon starts the model's server (llama-server, or sd-server
+    /// for an image model) and keeps it resident after this command
+    /// returns; `gglib model list` shows it serving. A model already
+    /// loaded is reused. With --pin the endpoint is pinned to the model
+    /// first, as `gglib serve` pins it, and then the model is loaded.
+    ///
+    /// # Examples
+    ///
+    ///   gglib model load 3
+    ///   gglib model load "Qwen3-30B" --context 32768
+    ///   gglib model load 3 --pin          # and pin the endpoint to it
+    Load {
+        /// Name or ID of the model to load
+        identifier: String,
+        /// Context size to serve at: a number of tokens, or `max` for the
+        /// model's trained window. Omitted, the daemon fits it.
+        #[arg(long, alias = "ctx-size", value_name = "N|max")]
+        context: Option<String>,
+        /// Pin the endpoint to this model first: every request for another
+        /// model is refused while the pin holds.
+        #[arg(long)]
+        pin: bool,
+    },
+
+    /// Unload a model from memory on the daemon, as the app's Unload does.
+    ///
+    /// # Examples
+    ///
+    ///   gglib model unload 3
+    Unload {
+        /// Name or ID of the model to unload
+        identifier: String,
+    },
 }

@@ -27,7 +27,7 @@ import {
   ProxyStatusPill,
   ProxyToggleButton,
 } from '../components/proxy';
-import { useProxyDashboard } from '../hooks/useProxyDashboard';
+import { useDashboard } from '../services/dashboardRegistry';
 import { useProxyKey } from '../hooks/useProxyKey';
 import { useDaemonReachable } from '../hooks/useDaemonReachable';
 import { useProxyState } from '../services/proxyRegistry';
@@ -102,11 +102,11 @@ export const TrayPanel: FC = () => {
   // `null` keeps the hook idle. A key that could not be read leaves a keyed
   // proxy's dashboard blank, and the panel's start/stop still work.
   const proxyApiKey = useProxyKey(proxy.running);
-  const { snapshot, connected } = useProxyDashboard({
-    host: PROXY_HOST,
-    port: proxy.running && proxyApiKey !== undefined ? proxy.port : null,
-    apiKey: proxyApiKey,
-  });
+  const { snapshot, connected } = useDashboard(
+    proxy.running && proxy.port !== null && proxyApiKey !== undefined
+      ? { host: PROXY_HOST, port: proxy.port, apiKey: proxyApiKey }
+      : null,
+  );
 
   useEffect(() => {
     if (!copied) return undefined;

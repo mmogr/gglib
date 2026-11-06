@@ -1,6 +1,6 @@
 import { FC, useState } from 'react';
 import { Checkbox } from '../../ui/Checkbox';
-import { CAPABILITY_FLAGS, type CapabilityFlagName } from '../../../types';
+import { CAPABILITY_FLAGS, type CapabilityFlagName } from '../../../readings/capabilityFlags';
 import { setModelCapabilities } from '../../../services/transport/api/models/local';
 import { formatError } from '../../../utils/errors';
 

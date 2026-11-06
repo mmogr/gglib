@@ -15,7 +15,7 @@ Root CSS custom-property design token system establishing the application's comp
 
 | Category | Examples |
 |----------|---------|
-| Colour — primitive | `--color-primary: #f08c26`, `--color-danger: #e05252` |
+| Colour — primitive | `--color-primary: #edece8`, `--color-danger: #e17a89` |
 | Colour — semantic | `--color-background`, `--color-surface`, `--color-text-muted` |
 | Colour — state tints | `--color-primary-subtle`, `--color-danger-border` |
 | Spacing | `--spacing-xs: 4px` … `--spacing-2xl: 48px` |
