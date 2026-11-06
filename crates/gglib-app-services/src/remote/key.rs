@@ -59,10 +59,6 @@ pub(super) fn decide(
     }
 }
 
-/// Steps 1 and 2 of [`decide`]: the key the local proxy demands or is about
-/// to, and whether it is pinned; `None` when nothing is enforced. Never
-/// mints, so a caller that only needs to present the key (a run posting to
-/// the proxy) uses this rather than `decide`.
 /// The key the endpoint demands of a request right now, as its bearer
 /// policy reads it (`gglib_core::access::BearerPolicy::current`): a key
 /// given on the command line is pinned for the run; otherwise the stored
@@ -81,6 +77,10 @@ pub(crate) fn demanded(
         .or_else(|| effective.map(|(key, _)| key))
 }
 
+/// Steps 1 and 2 of [`decide`]: the key the local proxy demands or is about
+/// to, and whether it is pinned; `None` when nothing is enforced. Never
+/// mints, so a caller that only needs to present the key (a run posting to
+/// the proxy) uses this rather than `decide`.
 pub(crate) fn enforced(
     effective: Option<(String, ApiKeySource)>,
     stored: Option<&str>,

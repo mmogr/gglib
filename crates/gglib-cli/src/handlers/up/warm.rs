@@ -38,7 +38,8 @@ pub(super) async fn run(handle: &DaemonHandle, model_id: i64) {
     }
     if proved.is_err() {
         // A failed proof leaves the endpoint `up` just started running.
-        println!("  the endpoint is still running \u{2014} try it yourself below");
+        let (dim, reset) = if use_color() { (DIM, RESET) } else { ("", "") };
+        println!("  {dim}the endpoint is still running \u{2014} try it yourself below{reset}");
     }
     // The block is the daemon's too. A daemon that refuses to say (older
     // than this CLI, or its endpoint gone between the two calls) is printed

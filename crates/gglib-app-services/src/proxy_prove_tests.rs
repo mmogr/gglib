@@ -242,3 +242,79 @@ async fn the_proof_presents_the_key_the_endpoint_demands_now() {
     ));
     proxy.stop().await.expect("stop");
 }
+
+/// The endpoint config every proof test starts with: loopback, any port.
+fn any_port() -> gglib_runtime::proxy::ProxyConfig {
+    gglib_runtime::proxy::ProxyConfig {
+        port: 0,
+        ..gglib_runtime::proxy::ProxyConfig::default()
+    }
+}
+
+/// With no model named, a pinned endpoint is described and proved by its
+/// pin's id: another model in the catalogue, listed first, is never the one
+/// asked for.
+#[tokio::test]
+async fn the_pin_is_proved_and_described_when_no_model_is_named() {
+    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    let other = a_catalogued_model(&core).await;
+    let pin = core
+        .models()
+        .add(gglib_core::domain::NewModel::new(
+            "gemma-4b".to_owned(),
+            std::path::PathBuf::from("/models/absent-too.gguf"),
+            4.0,
+            chrono::Utc::now(),
+        ))
+        .await
+        .expect("a model")
+        .id;
+    proxy
+        .start(
+            any_port(),
+            Some(gglib_core::ports::PinnedSpec {
+                id: pin,
+                name: "gemma-4b".to_owned(),
+                launch_overrides: gglib_core::server_config::ServerConfigOptions::default(),
+            }),
+        )
+        .await
+        .expect("the proxy starts pinned");
+    let listed = crate::models::openai_ids(&core.models().list().await.unwrap());
+
+    let recipes = proxy.client_recipes(None).await.expect("the pin's recipes");
+    assert_eq!(recipes.model_id, listed[&pin]);
+    assert_ne!(recipes.model_id, listed[&other]);
+
+    // The proof reaches the endpoint, which admits the pin and refuses on
+    // its missing file; a proof that named no model would never get there.
+    let refusal = proxy.prove(None).await.expect_err("no file").to_string();
+    assert!(refusal.contains("404"), "{refusal}");
+    proxy.stop().await.expect("stop");
+}
+
+/// An image model is refused before any request: the proof is a chat
+/// completion, which the endpoint refuses for a model that draws.
+#[tokio::test]
+async fn an_image_model_is_refused_before_any_request() {
+    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    let mut new = gglib_core::domain::NewModel::new(
+        "flux-schnell".to_owned(),
+        std::path::PathBuf::from("/models/absent-flux.gguf"),
+        12.0,
+        chrono::Utc::now(),
+    );
+    new.image_family = Some(gglib_core::domain::ImageFamily::Flux1);
+    let id = core.models().add(new).await.expect("a model").id;
+    proxy
+        .start(any_port(), None)
+        .await
+        .expect("the proxy starts");
+    match proxy.prove(Some(id)).await {
+        Err(crate::GuiError::ValidationFailed(reason)) => {
+            assert!(reason.contains("draws pictures"), "{reason}");
+        }
+        other => panic!("an image model must be refused up front: {other:?}"),
+    }
+    proxy.stop().await.expect("stop");
+}
