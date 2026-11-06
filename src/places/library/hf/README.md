@@ -15,8 +15,8 @@ suggestion's rationale and the bytes it was sized by.
 
 | File | Role |
 |------|------|
-| `useLibrarySearch.ts` | The field's text and what Enter made of it (`enterAction`, from `utils/modelSearchParser`), the scope its first focus sets, and opening a named repo |
+| `useLibrarySearch.ts` | The field's text and what Enter made of it (`enterAction`, from `utils/modelSearchParser`), the scope its first focus sets, and opening a named repo, whose answer is dropped after an edit, a later Enter or a library pick (`cancelOpen`) |
 | `useHuggingFaceSearch.ts` | The Hub search: kind, sort, the pages so far and the cursor after them; a kind or sort change asks again, and an overtaken answer is dropped |
-| `HfGroup.tsx` | The Hugging Face group: `[Chat · Image]`, `Sort ▾`, the suggestion, the direct download, the repos as rows with More results, and the empty and failed lines |
+| `HfGroup.tsx` | The Hugging Face group: `[Chat · Image]` and `Sort ▾` over a search, the suggestion (its budget in the daemon's words), the direct download, the repos as rows with More results, and the empty and failed lines |
 
 <!-- module-docs:end -->

@@ -24,4 +24,9 @@ budgetBytes: number,
 /**
  * Where that figure came from: `"vram" | "unifiedMemory" | "systemRam"`.
  */
-budgetSource: string, headroomBytes: number, context: number, };
+budgetSource: string, 
+/**
+ * That source in the words `gglib up` prints it in: "VRAM", "unified
+ * memory", "system RAM".
+ */
+budgetLabel: string, headroomBytes: number, context: number, };

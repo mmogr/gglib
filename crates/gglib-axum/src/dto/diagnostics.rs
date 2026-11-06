@@ -121,6 +121,9 @@ pub(crate) struct RecommendationDto {
     pub budget_bytes: u64,
     /// Where that figure came from: `"vram" | "unifiedMemory" | "systemRam"`.
     pub budget_source: String,
+    /// That source in the words `gglib up` prints it in: "VRAM", "unified
+    /// memory", "system RAM".
+    pub budget_label: String,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub headroom_bytes: u64,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
@@ -142,6 +145,7 @@ impl From<gglib_core::domain::recommendation::Recommendation> for Recommendation
                 BudgetSource::SystemRam => "systemRam",
             }
             .to_string(),
+            budget_label: rec.budget_source.label().to_string(),
             headroom_bytes: rec.headroom_bytes,
             context: rec.candidate.context,
         }
@@ -183,5 +187,25 @@ mod tests {
         let json = serde_json::to_value(DependencyDto::from(&dep)).unwrap();
         assert_eq!(json["status"], "missing");
         assert!(json["version"].is_null());
+    }
+
+    #[test]
+    fn recommendation_names_its_budget_as_the_cli_prints_it() {
+        use gglib_core::domain::recommendation::{BudgetSource, recommend};
+        use gglib_core::utils::system::SystemMemoryInfo;
+
+        let mem = SystemMemoryInfo {
+            total_ram_bytes: 64 << 30,
+            gpu_memory_bytes: Some(48 << 30),
+            is_unified_memory: true,
+            has_nvidia_gpu: false,
+        };
+        let rec = recommend(&mem).expect("48 GiB of unified memory fits the shortlist");
+        assert_eq!(rec.budget_source, BudgetSource::UnifiedMemory);
+
+        let json = serde_json::to_value(RecommendationDto::from(rec)).unwrap();
+        assert_eq!(json["budgetSource"], "unifiedMemory");
+        assert_eq!(json["budgetLabel"], BudgetSource::UnifiedMemory.label());
+        assert_eq!(json["budgetLabel"], "unified memory");
     }
 }

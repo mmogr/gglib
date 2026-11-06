@@ -50,6 +50,15 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
   getRecommendedModel: vi.fn(async () => suggestion.answer),
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn() }));
+// The desktop app's native picker, when a test makes this window the desktop's.
+const platform = vi.hoisted(() => ({
+  desktop: false,
+  pick: vi.fn(async (): Promise<{ path: string | null; cancelled: boolean }> => ({ path: null, cancelled: true })),
+}));
+vi.mock('../../../src/services/platform', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('../../../src/services/platform');
+  return { ...actual, isDesktop: () => platform.desktop, pickGgufFile: platform.pick };
+});
 
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
@@ -87,6 +96,10 @@ describe('the one search', () => {
     suggestion.answer = null;
     for (const mock of Object.values(transport)) mock.mockClear();
     transport.browseHfModels.mockImplementation(async () => page([]));
+    transport.getHfModelSummary.mockImplementation(async (id) => hfRepo(id));
+    transport.addModel.mockImplementation(async () => ({}));
+    platform.desktop = false;
+    platform.pick.mockClear();
   });
   afterEach(() => {
     cleanupModelEvents();
@@ -139,15 +152,16 @@ describe('the one search', () => {
     await waitFor(() => expect(asked()).toHaveLength(2));
     expect(asked()[1]).toMatchObject({ query: 'flux', kind: 'image', cursor: null });
 
+    // Each sort starts in its own direction: Alphabetical ascending, after Downloads descending.
     await user.click(within(group).getByRole('button', { name: 'Sort Hugging Face' }));
-    await user.click(screen.getByRole('menuitemradio', { name: 'Updated' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Alphabetical' }));
     await waitFor(() => expect(asked()).toHaveLength(3));
-    expect(asked()[2]).toMatchObject({ kind: 'image', sort_by: 'modified', sort_ascending: false });
+    expect(asked()[2]).toMatchObject({ kind: 'image', sort_by: 'id', sort_ascending: true });
 
     await user.click(within(group).getByRole('button', { name: 'Sort Hugging Face' }));
-    await user.click(screen.getByRole('menuitemradio', { name: 'Ascending' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Descending' }));
     await waitFor(() => expect(asked()).toHaveLength(4));
-    expect(asked()[3]).toMatchObject({ sort_by: 'modified', sort_ascending: true });
+    expect(asked()[3]).toMatchObject({ sort_by: 'id', sort_ascending: false });
   });
 
   it('carries on from the last page\'s cursor with More results, until the Hub has no more', async () => {
@@ -241,6 +255,7 @@ describe('the one search', () => {
       requiredBytes: 5 * 2 ** 30,
       budgetBytes: 16 * 2 ** 30,
       budgetSource: 'unifiedMemory',
+      budgetLabel: 'unified memory',
       headroomBytes: 11 * 2 ** 30,
       context: 32768,
     };
@@ -293,9 +308,166 @@ describe('the one search', () => {
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Add a GGUF file' })).not.toBeInTheDocument());
   });
 
+  it('Add a GGUF file… on the desktop adds what the native picker chose, and keeps the path only to say why it failed', async () => {
+    platform.desktop = true;
+    platform.pick.mockResolvedValue({ path: '/models/b.gguf', cancelled: false });
+    renderLibrary('/library?add=file');
+    await waitFor(() => expect(transport.addModel).toHaveBeenCalledWith({ filePath: '/models/b.gguf' }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(screen.queryByRole('form', { name: 'Add a GGUF file' })).not.toBeInTheDocument();
+  });
+
+  it('a desktop add the daemon refuses opens the row with the picked path and the reason', async () => {
+    platform.desktop = true;
+    platform.pick.mockResolvedValue({ path: '/tmp/x.bin', cancelled: false });
+    transport.addModel.mockRejectedValueOnce(new Error('Not a GGUF file: /tmp/x.bin'));
+    renderLibrary('/library?add=file');
+
+    const form = await screen.findByRole('form', { name: 'Add a GGUF file' });
+    expect(within(form).getByRole('textbox', { name: 'Path to a GGUF file' })).toHaveValue('/tmp/x.bin');
+    expect(within(form).getByText('Not a GGUF file: /tmp/x.bin')).toBeInTheDocument();
+  });
+
   it("opens the menu's Add Model File address as the typed path", async () => {
     renderLibrary('/library?add=file');
     expect(await screen.findByRole('form', { name: 'Add a GGUF file' })).toBeInTheDocument();
+  });
+
+  it("drops a repo's late answer once the field is edited and a library model picked", async () => {
+    let answer: (m: HfModelSummary) => void = () => {};
+    transport.getHfModelSummary.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    const { at } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'owner/slow-GGUF{Enter}');
+    await user.clear(field());
+    await user.type(field(), 'qwen');
+    await user.click(screen.getByRole('option', { name: /Qwen3-4B/ }));
+    expect(at()).toBe('/models/1');
+
+    await act(async () => answer(hfRepo('owner/slow-GGUF')));
+    expect(screen.queryByRole('heading', { name: 'slow-GGUF' })).not.toBeInTheDocument();
+    expect(field()).toHaveValue('qwen');
+    const rows = within(screen.getByRole('region', { name: 'Library' }));
+    expect(rows.getAllByRole('option', { selected: true }).map((o) => o.textContent)).toEqual([expect.stringContaining('Qwen3-4B')]);
+  });
+
+  it("drops an open's answer a later Enter has overtaken", async () => {
+    let answerFirst: (m: HfModelSummary) => void = () => {};
+    transport.getHfModelSummary
+      .mockImplementationOnce(() => new Promise((resolve) => (answerFirst = resolve)))
+      .mockImplementationOnce(async () => hfRepo('owner/b-GGUF'));
+    renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'owner/a-GGUF{Enter}');
+    await user.clear(field());
+    await user.type(field(), 'owner/b-GGUF{Enter}');
+    const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
+    expect(within(inspector).getByRole('heading', { name: 'b-GGUF' })).toBeInTheDocument();
+
+    await act(async () => answerFirst(hfRepo('owner/a-GGUF')));
+    expect(within(inspector).getByRole('heading', { name: 'b-GGUF' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'a-GGUF' })).not.toBeInTheDocument();
+  });
+
+  /** Enter `repo`, whose answer waits for the returned function. */
+  async function enterSlowRepo(repo: string) {
+    let answer: (m: HfModelSummary) => void = () => {};
+    transport.getHfModelSummary.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    await userEvent.setup().type(field(), `${repo}{Enter}`);
+    return (m: HfModelSummary) => act(async () => answer(m));
+  }
+
+  it("drops a repo's late answer once the field is edited", async () => {
+    renderLibrary();
+    const answer = await enterSlowRepo('owner/slow-GGUF');
+    await userEvent.setup().type(field(), '-v2');
+
+    await answer(hfRepo('owner/slow-GGUF'));
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument();
+    expect(field()).toHaveValue('owner/slow-GGUF-v2');
+  });
+
+  it("drops a repo's late answer once the address picks a library model", async () => {
+    const { router, at } = renderLibrary();
+    await screen.findByRole('option', { name: /Qwen3-4B/ });
+    const answer = await enterSlowRepo('owner/slow-GGUF');
+    await act(() => router.navigate('/models/1'));
+
+    await answer(hfRepo('owner/slow-GGUF'));
+    expect(at()).toBe('/models/1');
+    expect(screen.queryByRole('heading', { name: 'slow-GGUF' })).not.toBeInTheDocument();
+    expect(field()).toHaveValue('owner/slow-GGUF');
+  });
+
+  it("keeps a second Enter's refusal over the first Enter's late answer", async () => {
+    renderLibrary();
+    const answer = await enterSlowRepo('owner/slow-GGUF');
+    transport.getHfModelSummary.mockRejectedValueOnce(new Error('rate limited'));
+    await userEvent.setup().type(field(), '{Enter}');
+    expect(await screen.findByText('rate limited')).toBeInTheDocument();
+
+    await answer(hfRepo('owner/slow-GGUF'));
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument();
+    expect(screen.getByText('rate limited')).toBeInTheDocument();
+    expect(field()).toHaveValue('owner/slow-GGUF');
+  });
+
+  it('says why a named repo could not be opened, and keeps the field', async () => {
+    transport.getHfModelSummary.mockRejectedValueOnce(new Error('Repository owner/gone not found'));
+    renderLibrary();
+    await userEvent.setup().type(field(), 'owner/gone{Enter}');
+
+    const group = await screen.findByRole('region', { name: 'Hugging Face' });
+    expect(await within(group).findByText('Repository owner/gone not found')).toBeInTheDocument();
+    expect(field()).toHaveValue('owner/gone');
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument();
+  });
+
+  it('takes the results and More results away once the field says something else', async () => {
+    transport.browseHfModels.mockImplementation(async () => page(['owner/a'], 'c1'));
+    renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'llama{Enter}');
+    await screen.findByRole('option', { name: /owner\/a/ });
+
+    await user.type(field(), 'x');
+    expect(screen.queryByRole('region', { name: 'Hugging Face' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More results' })).not.toBeInTheDocument();
+  });
+
+  it('keeps showing the search as running until the newest one answers', async () => {
+    const answers: ((r: HfSearchResponse) => void)[] = [];
+    transport.browseHfModels.mockImplementation(() => new Promise((resolve) => answers.push(resolve)));
+    renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'first{Enter}');
+    await user.clear(field());
+    await user.type(field(), 'second{Enter}');
+    await waitFor(() => expect(answers).toHaveLength(2));
+
+    await act(async () => answers[0](page(['owner/first'])));
+    expect(screen.getByText('Loading models…')).toBeInTheDocument();
+    await act(async () => answers[1](page(['owner/second'])));
+    expect(screen.queryByText('Loading models…')).not.toBeInTheDocument();
+    expect(hfRows()).toEqual(['owner/second']);
+  });
+
+  it('draws Chat/Image and Sort only over a search', async () => {
+    renderLibrary();
+    const user = userEvent.setup();
+    await user.click(field());
+    const group = await screen.findByRole('region', { name: 'Hugging Face' });
+    expect(within(group).queryByRole('group', { name: 'Kind' })).not.toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: 'Sort Hugging Face' })).not.toBeInTheDocument();
+
+    await user.type(field(), 'owner/z-GGUF:Q8_0{Enter}');
+    expect(within(await screen.findByRole('region', { name: 'Hugging Face' })).queryByRole('group', { name: 'Kind' })).not.toBeInTheDocument();
+
+    await user.clear(field());
+    await user.type(field(), 'llama{Enter}');
+    const searched = await screen.findByRole('region', { name: 'Hugging Face' });
+    expect(within(searched).getByRole('group', { name: 'Kind' })).toBeInTheDocument();
+    expect(within(searched).getByRole('button', { name: 'Sort Hugging Face' })).toBeInTheDocument();
   });
 
   it('reads Enter: a search, a repo to open, a download, or nothing', () => {

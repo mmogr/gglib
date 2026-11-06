@@ -68,11 +68,6 @@ export default function LibraryPlace() {
   const intent = libraryIntent(location.search);
   const subjectKey = subject && `${subject.kind}:${subject.id}`;
 
-  // An address with a subject is the inspector's one subject.
-  useEffect(() => {
-    if (subjectKey !== null) setSelectedHfModel(null);
-  }, [subjectKey]);
-
   const pickHf = useCallback(
     (model: HfModelSummary) => {
       if (subjectKey !== null) navigate(paths.library());
@@ -81,6 +76,15 @@ export default function LibraryPlace() {
     [subjectKey, navigate],
   );
   const search = useLibrarySearch(pickHf);
+  const { cancelOpen } = search;
+
+  // An address with a subject is the inspector's one subject: it drops the
+  // Hugging Face pick, and a repo still being read.
+  useEffect(() => {
+    if (subjectKey === null) return;
+    setSelectedHfModel(null);
+    cancelOpen();
+  }, [subjectKey, cancelOpen]);
 
   // `?add=` acts once, then leaves the address.
   const handled = useRef<string | null>(null);

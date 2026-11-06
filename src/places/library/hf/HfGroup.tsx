@@ -1,6 +1,7 @@
 /**
  * The Hugging Face group, under the library's own: what the one search's
- * Enter found, with `[Chat · Image]` and its own `Sort ▾`.
+ * Enter found; a search's results come with `[Chat · Image]` and their own
+ * `Sort ▾`.
  *
  * With the field empty it holds the model `gglib up` would suggest for this
  * machine, from the daemon's shortlist, with the figures it was sized by.
@@ -10,7 +11,8 @@
  *
  * Every figure is the daemon's: a repo's parameter count is the summary's
  * (#1740: the Hub's, which can be a draft's), whether it calls tools is the
- * daemon's reading of its chat template, and a refusal is said as it came.
+ * daemon's reading of its chat template, the suggestion's budget is named
+ * in the words `gglib up` prints it in, and a refusal is said as it came.
  *
  * @module places/library/hf/HfGroup
  */
@@ -24,7 +26,7 @@ import { queueDownload } from '../../../services/downloadsEvents';
 import { useModelLibrary } from '../../../services/modelRegistry';
 import { getRecommendedModel } from '../../../services/transport/api/setup';
 import type { HfModelKind, HfModelSummary } from '../../../types';
-import type { ModelRecommendation } from '../../../types/setup';
+import type { RecommendationDto } from '../../../types/setup';
 import { formatError } from '../../../utils/errors';
 import { formatMemorySize, formatNumber, formatParamCount } from '../../../utils/format';
 import { Group, Note } from '../Group';
@@ -33,13 +35,6 @@ import { ModelListSkeleton } from '../ModelListSkeleton';
 import { ModelRow } from '../ModelRow';
 import { HF_SORTS } from './useHuggingFaceSearch';
 import type { LibrarySearch } from './useLibrarySearch';
-
-/** `BudgetSource::label()`'s words, as `gglib up` prints the budget. */
-const BUDGET_LABEL: Record<ModelRecommendation['budgetSource'], string> = {
-  vram: 'VRAM',
-  unifiedMemory: 'unified memory',
-  systemRam: 'system RAM',
-};
 
 const KINDS: { id: HfModelKind; label: string }[] = [
   { id: 'chat', label: 'Chat' },
@@ -85,7 +80,7 @@ const ActionRow: FC<{ name: string; line?: string; action: ReactNode }> = ({ nam
 const Suggestion: FC<{ queueFull: boolean }> = ({ queueFull }) => {
   // `undefined` while asked; a failed read shows nothing, since it says
   // nothing about what fits.
-  const [answer, setAnswer] = useState<ModelRecommendation | null | 'failed' | undefined>(undefined);
+  const [answer, setAnswer] = useState<RecommendationDto | null | 'failed' | undefined>(undefined);
   const { models } = useModelLibrary();
   const queue = useQueue();
   useEffect(() => {
@@ -101,7 +96,7 @@ const Suggestion: FC<{ queueFull: boolean }> = ({ queueFull }) => {
   if (answer === undefined || answer === 'failed') return null;
   if (answer === null) return <Note>Nothing gglib would suggest fits. Search for a smaller model below.</Note>;
   const why = answer.rationale.charAt(0).toUpperCase() + answer.rationale.slice(1);
-  const needs = `Needs ${formatMemorySize(answer.requiredBytes)} of ${formatMemorySize(answer.budgetBytes)} ${BUDGET_LABEL[answer.budgetSource]}.`;
+  const needs = `Needs ${formatMemorySize(answer.requiredBytes)} of ${formatMemorySize(answer.budgetBytes)} ${answer.budgetLabel}.`;
   return (
     <section aria-label="Suggested for this Mac">
       <Note>Suggested for this Mac</Note>
@@ -146,7 +141,8 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
   // Nothing to say while a named repo is still being read.
   if (shown === null || (shown.kind === 'open' && openError === null)) return null;
 
-  const controls = (
+  // Kind and sort act on a search, so they are drawn only with one.
+  const controls = shown.kind === 'search' && (
     <span className="flex items-center gap-xs">
       <span role="group" aria-label="Kind" className="flex items-center gap-xs">
         {KINDS.map((k) => (
