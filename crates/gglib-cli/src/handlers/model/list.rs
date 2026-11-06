@@ -126,6 +126,10 @@ fn draws(model: &GuiModel) -> String {
 /// four-digit id does not push its row out of line with the rest, and the
 /// `Draws` column is as wide as its widest entry, so the roles an image
 /// model needs are never cut.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one table in two layouts, with and without the speed column; the rows read whole"
+)]
 fn render_table(models: &[GuiModel]) -> String {
     let show_speed = models.iter().any(|m| m.benchmark_summary.is_some());
     let id_width = models
@@ -134,6 +138,17 @@ fn render_table(models: &[GuiModel]) -> String {
         .max()
         .unwrap_or(0)
         .max(3);
+    // The id a client sends, which is the name unless twins share it.
+    let model_ids: Vec<&str> = models
+        .iter()
+        .map(|m| m.openai_id.as_deref().unwrap_or("--"))
+        .collect();
+    let model_id_width = model_ids
+        .iter()
+        .map(|id| id.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max("Model ID".len());
     let drawn: Vec<String> = models.iter().map(draws).collect();
     let draws_width = drawn
         .iter()
@@ -146,9 +161,10 @@ fn render_table(models: &[GuiModel]) -> String {
     if show_speed {
         let _ = writeln!(
             out,
-            "{:<id_width$} {:<25} {:<8} {:<10} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
+            "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<10} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
             "ID",
             "Name",
+            "Model ID",
             "Params",
             "⚡ t/s",
             "Arch",
@@ -158,17 +174,34 @@ fn render_table(models: &[GuiModel]) -> String {
             "Draws",
             "Added"
         );
-        let _ = writeln!(out, "{}", "-".repeat(134 + id_width + draws_width));
+        let _ = writeln!(
+            out,
+            "{}",
+            "-".repeat(135 + id_width + model_id_width + draws_width)
+        );
     } else {
         let _ = writeln!(
             out,
-            "{:<id_width$} {:<25} {:<8} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
-            "ID", "Name", "Params", "Arch", "Quant", "Context", "Images", "Draws", "Added"
+            "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
+            "ID",
+            "Name",
+            "Model ID",
+            "Params",
+            "Arch",
+            "Quant",
+            "Context",
+            "Images",
+            "Draws",
+            "Added"
         );
-        let _ = writeln!(out, "{}", "-".repeat(121 + id_width + draws_width));
+        let _ = writeln!(
+            out,
+            "{}",
+            "-".repeat(122 + id_width + model_id_width + draws_width)
+        );
     }
 
-    for (model, draws) in models.iter().zip(&drawn) {
+    for ((model, draws), model_id) in models.iter().zip(&drawn).zip(&model_ids) {
         let arch = model.architecture.as_deref().unwrap_or("--");
         let quant = model.quantization.as_deref().unwrap_or("--");
         let context = model
@@ -185,9 +218,10 @@ fn render_table(models: &[GuiModel]) -> String {
                 .map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} {}",
+                "{:<id_width$} {:<25} {:<model_id_width$} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
+                model_id,
                 model.param_count_b,
                 truncate_string(&speed, 9),
                 truncate_string(arch, 11),
@@ -201,9 +235,10 @@ fn render_table(models: &[GuiModel]) -> String {
         } else {
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<8.1} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} {}",
+                "{:<id_width$} {:<25} {:<model_id_width$} {:<8.1} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
+                model_id,
                 model.param_count_b,
                 truncate_string(arch, 11),
                 truncate_string(quant, 7),

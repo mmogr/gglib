@@ -55,7 +55,13 @@ fn the_id_column_is_as_wide_as_the_widest_id() {
     let lines: Vec<&str> = table.lines().collect();
     assert_eq!(lines[0].find("Name"), lines[2].find("small"), "{table}");
     assert_eq!(lines[2].find("small"), lines[3].find("big"), "{table}");
-    assert_eq!(lines[1].len(), 126 + 4, "the rule spans the wider column");
+    // The rule spans the wider id column and the `Model ID` column, eight
+    // wide for rows named by nothing.
+    assert_eq!(
+        lines[1].len(),
+        126 + 4 + 9,
+        "the rule spans the wider column"
+    );
     assert!(lines[2].starts_with("3    "), "{table}");
     assert!(lines[3].starts_with("1000 "), "{table}");
 }
@@ -66,7 +72,7 @@ fn short_ids_get_a_column_three_wide() {
     let table = render_table(&[model(3, "small")]);
 
     assert!(table.starts_with("ID  Name"), "{table}");
-    assert_eq!(table.lines().nth(1).map(str::len), Some(129));
+    assert_eq!(table.lines().nth(1).map(str::len), Some(129 + 9));
 }
 
 /// The paired machine's line follows the table.
@@ -143,7 +149,10 @@ fn the_draws_column_names_the_family_and_what_it_needs() {
     for row in &lines[2..] {
         assert_eq!(row.find("2026-10-01"), Some(added), "{table}");
     }
-    assert_eq!(lines[1].len(), 121 + 3 + "Flux.1, needs VAE, T5-XXL".len());
+    assert_eq!(
+        lines[1].len(),
+        122 + 3 + "Model ID".len() + "Flux.1, needs VAE, T5-XXL".len()
+    );
 }
 
 /// A library of three models, each added a day after the one before:
@@ -193,17 +202,17 @@ async fn the_library_is_listed_newest_first() {
     let dir = tempfile::tempdir().unwrap();
     let ctx = three_models(dir.path()).await;
 
-    let rule = "-".repeat(129);
+    let rule = "-".repeat(138);
     assert_eq!(
         printed(&one_shot_model_ops(&ctx), &[]).await,
         format!(
             "Found 3 model(s):
 
-ID  Name                      Params   Arch         Quant    Context    Images  Draws Added                File Path
+ID  Name                      Model ID Params   Arch         Quant    Context    Images  Draws Added                File Path
 {rule}
-3   charlie                   27.0     --           --       131072     --      --    2026-10-03 12:00:00  /models/charlie.gguf
-2   bravo                     3.0      --           --       8192       --      --    2026-10-02 12:00:00  /models/bravo.gguf
-1   alpha                     7.5      --           --       32768      --      --    2026-10-01 12:00:00  /models/alpha.gguf
+3   charlie                   charlie  27.0     --           --       131072     --      --    2026-10-03 12:00:00  /models/charlie.gguf
+2   bravo                     bravo    3.0      --           --       8192       --      --    2026-10-02 12:00:00  /models/bravo.gguf
+1   alpha                     alpha    7.5      --           --       32768      --      --    2026-10-01 12:00:00  /models/alpha.gguf
 "
         )
     );
@@ -312,4 +321,25 @@ async fn an_imported_image_model_is_listed_with_what_it_still_needs() {
     let text = printed(&one_shot_model_ops(&ctx), &[]).await;
 
     assert!(text.contains(" Flux.1, needs CLIP-L, T5-XXL "), "{text}");
+}
+
+/// The `Model ID` column is the id a client sends, as the listing named it,
+/// and `--` on a row the listing did not name; it is as wide as the widest.
+#[test]
+fn the_model_id_column_prints_the_id_a_client_sends() {
+    let mut twin = model(4, "qwen");
+    twin.openai_id = Some("qwen@Q4_K_M".to_owned());
+    let table = render_table(&[twin, model(5, "plain")]);
+
+    let lines: Vec<&str> = table.lines().collect();
+    assert_eq!(
+        lines[0].find("Model ID"),
+        lines[2].find("qwen@Q4_K_M"),
+        "{table}"
+    );
+    assert_eq!(lines[0].find("Model ID"), lines[3].find("--"), "{table}");
+    assert_eq!(
+        lines[0].find("Params"),
+        Some(lines[0].find("Model ID").unwrap() + 12)
+    );
 }

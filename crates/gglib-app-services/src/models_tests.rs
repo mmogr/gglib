@@ -895,3 +895,50 @@ async fn explain_sampling_reads_the_reasoning_tag_from_the_stored_model() {
         gglib_core::domain::InferenceConfig::reasoning_profile()
     );
 }
+
+/// The id a client sends is named over the whole catalogue: a listing a
+/// filter narrows still names a twin's id as `/v1/models` does, with the
+/// hidden twin counted; `get` names it the same way; a name no other model
+/// has is its own id.
+#[tokio::test]
+async fn the_client_id_is_named_over_the_whole_catalogue_whatever_the_filter_shows() {
+    let core = test_core().await;
+    let ops = make_ops(core.clone());
+    let add = async |name: &str, file: &str, quantization: &str| {
+        let mut new = gglib_core::NewModel::new(
+            name.to_owned(),
+            std::path::PathBuf::from(format!("/models/{file}")),
+            7.0,
+            chrono::Utc::now(),
+        );
+        new.variant_label = Some(quantization.to_owned());
+        core.models().add(new).await.unwrap()
+    };
+    let q4 = add("qwen3", "q4.gguf", "Q4_K_M").await;
+    let q6 = add("qwen3", "q6.gguf", "Q6_K").await;
+    let mistral = add("mistral", "mistral.gguf", "Q4_K_M").await;
+    ops.add_tag(q4.id, "fast".to_owned()).await.unwrap();
+
+    let shown = ops
+        .list_with_query(ModelListQuery {
+            tags: Some(vec!["fast".to_owned()]),
+            ..ModelListQuery::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        shown.len(),
+        1,
+        "the filter shows one of the twins: {shown:?}"
+    );
+    assert_eq!(
+        shown[0].openai_id.as_deref(),
+        Some("qwen3@Q4_K_M"),
+        "named as /v1/models names it, the hidden twin counted"
+    );
+
+    let id_of = async |id: i64| ops.get(id).await.unwrap().openai_id;
+    assert_eq!(id_of(q4.id).await.as_deref(), Some("qwen3@Q4_K_M"));
+    assert_eq!(id_of(q6.id).await.as_deref(), Some("qwen3@Q6_K"));
+    assert_eq!(id_of(mistral.id).await.as_deref(), Some("mistral"));
+}
