@@ -16,7 +16,7 @@ import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 import { InspectorCapabilities } from '../../../src/components/ModelInspectorPanel/components/InspectorCapabilities';
-import { CAPABILITY_FLAGS } from '../../../src/types';
+import { CAPABILITY_FLAGS } from '../../../src/readings/capabilityFlags';
 
 import { rust } from './rustSource';
 

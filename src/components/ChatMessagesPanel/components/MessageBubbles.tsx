@@ -18,7 +18,7 @@ import { MessageImages, ToolImages } from './MessageImages';
 import { ComposerImages, ImageInputContext } from './ComposerImages';
 import { TurnRow } from './TurnRow';
 import { ReplyArriving, ReplyMade, TurnWho } from './TurnMargin';
-import { arrivingPhase, replyFacts, replyName } from './turnFigures';
+import { arrivingPhase, replyFacts, replyName } from '../../../readings/turnFigures';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { useRunPreviews } from '../context/RunPreviewsContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';

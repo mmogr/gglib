@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { thinks } from '../../../src/utils/thinks';
-import { CAPABILITY_FLAGS } from '../../../src/types';
+import { CAPABILITY_FLAGS } from '../../../src/readings/capabilityFlags';
 import { guiModel } from '../fixtures/model';
 
 describe('thinks', () => {

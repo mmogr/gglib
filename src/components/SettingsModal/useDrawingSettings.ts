@@ -11,14 +11,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings, UpdateSettingsRequest } from '../../types';
+import { drawingValuesFrom, type DrawingSettingsValues } from '../../readings/drawingValues';
 import { changedFields } from './settingsRequest';
-
-export interface DrawingSettingsValues {
-  /** The chosen image model's id as the select holds it; blank = none. */
-  defaultImageModel: string;
-  /** Unset on the wire reads as off. */
-  mcpDrawing: boolean;
-}
 
 const DEFAULTS: DrawingSettingsValues = {
   defaultImageModel: '',
@@ -34,12 +28,6 @@ export interface UseDrawingSettingsResult {
   /** The fields changed since settings loaded, as update-request fields. */
   updates: Partial<Pick<UpdateSettingsRequest, 'defaultImageModelId' | 'mcpDrawing'>>;
 }
-
-export const drawingValuesFrom = (settings: AppSettings): DrawingSettingsValues => ({
-  defaultImageModel: settings.defaultImageModelId?.toString() ?? '',
-  // Off unless switched on: the backend reads an absent value the same way.
-  mcpDrawing: settings.mcpDrawing === true,
-});
 
 const requestFrom = (values: DrawingSettingsValues) => {
   const id = parseInt(values.defaultImageModel, 10);
