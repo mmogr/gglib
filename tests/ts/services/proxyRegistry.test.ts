@@ -42,13 +42,26 @@ describe('the proxy registry', () => {
     expect(getProxyState().port).toBeNull();
   });
 
-  it('an event moves running and the port at once and keeps the last status for the read to replace', () => {
+  it('an event moves running and the port at once and drops the status of the run before it', () => {
     applyProxyStatus(UP);
     ingestProxyEvent({ type: 'proxy_stopped' });
-    expect(getProxyState()).toEqual({ running: false, port: null, status: UP });
+    expect(getProxyState()).toEqual({ running: false, port: null, status: null });
 
     ingestProxyEvent({ type: 'proxy_started', port: 8081 });
-    expect(getProxyState()).toEqual({ running: true, port: 8081, status: UP });
+    expect(getProxyState()).toEqual({ running: true, port: 8081, status: null });
+  });
+
+  /**
+   * A stop and a start that both land before the stop's re-read: the old
+   * run's status must not be shown against the new run's port, since its
+   * address and key rule may both have changed.
+   */
+  it('a stop then a start before any read shows nothing of the old run', () => {
+    applyProxyStatus({ ...UP, key: 'required' });
+    ingestProxyEvent({ type: 'proxy_stopped' });
+    ingestProxyEvent({ type: 'proxy_started', port: 9090 });
+    expect(getProxyState().port).toBe(9090);
+    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null });
   });
 });
 
@@ -90,5 +103,19 @@ describe('the endpoint facts', () => {
   it('before any read, a start event alone says on and no more', () => {
     ingestProxyEvent({ type: 'proxy_started', port: 8080 });
     expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null });
+  });
+
+  /**
+   * A daemon older than this GUI answers without the state word, the
+   * address and the key rule. The two ship together, but a dev build that
+   * adopts an installed daemon does not: a missing field is "not said".
+   */
+  it('a status from a daemon that predates the fields says on and nothing more, not a crash', () => {
+    const older = { running: true, port: 8080, pinned_model: null } as unknown as ProxyStatus;
+    applyProxyStatus(older);
+    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null });
+
+    applyProxyStatus({ ...older, pinned_model: 'qwen3-8b' });
+    expect(endpointFacts(getProxyState()).state).toBe('pinned');
   });
 });

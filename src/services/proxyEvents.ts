@@ -41,16 +41,6 @@ export function initProxyEvents(): void {
 }
 
 /**
- * Ask the daemon again, for a surface that just changed something and wants
- * the registry to say so. Resolves `true` once a read at least as new as the
- * call has been applied; a read an event overtook is retried once.
- */
-export async function refreshProxyStatus(): Promise<boolean> {
-  const first = await bridge.refresh();
-  return (first === 'superseded' ? await bridge.refresh() : first) === 'applied';
-}
-
-/**
  * Cleanup proxy event handling.
  * Should be called on app unmount or hot-reload.
  */

@@ -112,20 +112,58 @@ describe('the sidebar', () => {
     await waitFor(() => expect(app.at()).toBe('/diagnostics/benchmarks'));
   });
 
-  it('under 720 px, the sidebar is a drawer behind a menu button, closed by a move', async () => {
-    const app = renderShell('/library');
-    const user = userEvent.setup();
-    expect(screen.queryByTestId('sidebar-drawer')).not.toBeInTheDocument();
+  describe('under 720 px, the sidebar is a drawer', () => {
+    async function opened(path = '/library') {
+      const app = renderShell(path);
+      const user = userEvent.setup();
+      expect(screen.queryByTestId('sidebar-drawer')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Open the sidebar' }));
+      expect(screen.getByTestId('sidebar-drawer')).toBeInTheDocument();
+      // The sidebar is drawn twice: the one the wide window shows (hidden by
+      // the stylesheet under 720 px) and the drawer's.
+      expect(screen.getAllByRole('navigation', { name: 'gglib' })).toHaveLength(2);
+      return { app, user };
+    }
+    const gone = () => waitFor(() => expect(screen.queryByTestId('sidebar-drawer')).not.toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'Open the sidebar' }));
-    const drawer = screen.getByTestId('sidebar-drawer');
-    expect(drawer).toBeInTheDocument();
-    expect(screen.getAllByRole('navigation', { name: 'gglib' })).toHaveLength(2);
+    it('closes on a move to another place', async () => {
+      const { app, user } = await opened();
+      await user.click(screen.getAllByRole('button', { name: 'Diagnostics' })[1]);
+      await waitFor(() => expect(app.at()).toBe('/diagnostics/benchmarks'));
+      await gone();
+    });
 
-    // A move to another place closes it.
-    await user.click(screen.getAllByRole('button', { name: 'Diagnostics' })[1]);
-    await waitFor(() => expect(app.at()).toBe('/diagnostics/benchmarks'));
-    await waitFor(() => expect(screen.queryByTestId('sidebar-drawer')).not.toBeInTheDocument());
+    it('closes when a dialog is opened over the place from it', async () => {
+      const { app, user } = await opened();
+      await user.click(screen.getAllByRole('button', { name: 'Settings' })[1]);
+      await waitFor(() => expect(app.at()).toBe('/library?settings=general'));
+      await gone();
+    });
+
+    it('closes on the scrim, and on its own close button', async () => {
+      const { user } = await opened();
+      await user.click(screen.getByTestId('sidebar-scrim'));
+      await gone();
+
+      await user.click(screen.getByRole('button', { name: 'Open the sidebar' }));
+      await user.click(screen.getByRole('button', { name: 'Close the sidebar' }));
+      await gone();
+    });
+
+    it('closes on Escape, unless a dialog has already handled that keypress', async () => {
+      const { user } = await opened();
+      // A dialog consumes Escape on a capture listener and marks it handled.
+      const consume = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') event.preventDefault();
+      };
+      document.addEventListener('keydown', consume, true);
+      await user.keyboard('{Escape}');
+      expect(screen.getByTestId('sidebar-drawer')).toBeInTheDocument();
+      document.removeEventListener('keydown', consume, true);
+
+      await user.keyboard('{Escape}');
+      await gone();
+    });
   });
 });
 

@@ -122,4 +122,21 @@ describe('the devices line', () => {
     await user.click(line());
     expect(screen.queryByRole('heading', { name: 'Remote' })).not.toBeInTheDocument();
   });
+
+  it('a click anywhere else closes the panel; a click inside it does not', async () => {
+    applyRemoteStatus(IDLE_STATUS);
+    render(
+      <>
+        <DevicesLine />
+        <p>elsewhere</p>
+      </>,
+      { wrapper: PlaceProviders },
+    );
+    const user = userEvent.setup();
+    await user.click(line());
+    await user.click(screen.getByRole('heading', { name: 'Remote' }));
+    expect(screen.getByRole('heading', { name: 'Remote' })).toBeInTheDocument();
+    await user.click(screen.getByText('elsewhere'));
+    expect(screen.queryByRole('heading', { name: 'Remote' })).not.toBeInTheDocument();
+  });
 });

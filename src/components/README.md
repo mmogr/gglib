@@ -15,7 +15,8 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
                      └──────────────────────┴───────┬───────┘
                                                     │
 ┌───────────────────────────────────────────────────┴─┐
-│      ModelControlCenterPage (/library, /models/:id) │
+│ ModelControlCenterPage                              │
+│ (/library, /models/:id, /far/:id)                   │
 │  ┌─────────────┬─────────────┐                      │
 │  │   Library   │  Inspector  │                      │
 │  │    Panel    │    Panel    │                      │

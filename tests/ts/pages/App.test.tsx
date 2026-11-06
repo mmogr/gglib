@@ -58,6 +58,8 @@ describe('App', () => {
     // a second router would take the menu's navigation off screen.
     render(<StrictMode><App /></StrictMode>);
     await screen.findByRole('main', { name: 'Library' });
+    // The place sits in the shell: the sidebar is beside it.
+    expect(screen.getByRole('navigation', { name: 'gglib' })).toBeInTheDocument();
 
     await act(() => appRouter().navigate('/diagnostics/benchmarks'));
 

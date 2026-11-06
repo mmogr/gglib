@@ -53,7 +53,8 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
   clearProxyCache,
 }));
 vi.mock('../../../src/components/ProxyDashboardModal', () => ({
-  ProxyDashboardModal: () => null,
+  ProxyDashboardModal: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div role="dialog" aria-label="Live numbers" /> : null,
 }));
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -100,6 +101,9 @@ describe('The proxy panel — View Dashboard', () => {
 
     await user.click(screen.getByRole('button', { name: /view dashboard/i }));
     expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
+    // The dashboard it opened outlives the panel: the line owns the panel's
+    // open state now, and the dashboard must not go with it.
+    expect(screen.getByRole('dialog', { name: 'Live numbers' })).toBeInTheDocument();
   });
 });
 

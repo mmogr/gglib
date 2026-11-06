@@ -8,12 +8,14 @@ the foot. It replaces the header. The open row is read from the address and
 every row navigates through `app/paths`, so the sidebar, the native menu and
 a test move the app the same way.
 
-Every word it shows is the daemon's: the endpoint's state word, reached
+Every fact it shows is the daemon's: the endpoint's state word, reached
 address and key rule come from `services/proxyRegistry` (the status the
 daemon answers, re-read after each event), the loaded count from
-`services/serverRegistry`, the devices' reach from `services/remoteRegistry`,
-and the words themselves from `components/status/words.ts`. Nothing is
-computed here.
+`services/serverRegistry`, the devices' reach and roster from
+`services/remoteRegistry`, and the state words themselves from
+`components/status/words.ts`. No fact is computed here; the short sentences
+around a count ("2 loaded", "Sharing · 2 paired", "Code waiting") are this
+folder's own until the places that own them say them (N1, V1).
 
 Interim homes, each named with the PR that removes it: the endpoint line
 opens today's proxy panel (`components/ProxyControl.tsx`, → N1); the devices
