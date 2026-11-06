@@ -164,6 +164,16 @@ pub enum ModelCommand {
         /// Clear all inference parameter defaults (revert to inherit mode)
         #[arg(long)]
         clear_inference_defaults: bool,
+        /// This model's own Jinja default: `on` sends --jinja at every
+        /// launch, `off` sends --no-jinja, `auto` leaves it to the tags and
+        /// llama-server. A launch's own --jinja outranks it.
+        #[arg(long, value_name = "auto|on|off", value_parser = ["auto", "on", "off"])]
+        jinja: Option<String>,
+        /// This model's own speculative-decoding default: `on` drafts with
+        /// the default counts, `off` never drafts, `auto` leaves it to the
+        /// mtp tag. A launch's own --mtp-draft-n-max outranks it.
+        #[arg(long, value_name = "auto|on|off", value_parser = ["auto", "on", "off"])]
+        mtp: Option<String>,
         /// Show preview without applying changes
         #[arg(long)]
         dry_run: bool,

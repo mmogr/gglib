@@ -24,11 +24,16 @@ pub(super) fn resolve_launch_opts(
     num_ctx: Option<u64>,
     default_ctx: Option<u64>,
     fitted_ctx: Option<u64>,
-    model_server_ctx: Option<usize>,
+    model_defaults: Option<&gglib_core::domain::ServerConfig>,
 ) -> (ServerConfigOptions, u64, ContextSizeSource) {
     let mut opts = template.overlay(per_call);
     opts.context_size = num_ctx.or(opts.context_size);
-    opts.model_server_ctx = model_server_ctx;
+    // The model's own rung, set from this model and never inherited from
+    // the template: a context, and since M2 its templates and speculative
+    // decoding, each below what this launch chose and above the tags.
+    opts.model_server_ctx = model_defaults.and_then(|d| d.context_length);
+    opts.model_jinja = model_defaults.and_then(|d| d.jinja);
+    opts.model_mtp = model_defaults.and_then(|d| d.mtp);
     opts.fitted_ctx = fitted_ctx;
     // Assigned as given, not `Some(default_ctx)`: a user who set nothing must
     // fall through to the fitted rung rather than be handed the floor as

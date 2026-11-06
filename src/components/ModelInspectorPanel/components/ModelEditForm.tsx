@@ -6,10 +6,25 @@ import { openUrl } from '../../../services/platform';
 import { Icon } from '../../ui/Icon';
 import { IconButton } from '../../ui/IconButton';
 import { Input } from '../../ui/Input';
+import { Select } from '../../ui/Select';
 import { InfoRow } from './InfoRow';
 import { MetadataSection } from './MetadataSection';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 import { useSamplingExplanation } from '../hooks/useSamplingExplanation';
+
+/** A stored tri-state as the select shows it: absent or `null` is `auto`. */
+function triState(value: boolean | null | undefined): 'auto' | 'on' | 'off' {
+  if (value === true) return 'on';
+  if (value === false) return 'off';
+  return 'auto';
+}
+
+/** The select's choice as the row stores it: `auto` is `null`, which clears the field. */
+function fromTriState(value: string): boolean | null {
+  if (value === 'on') return true;
+  if (value === 'off') return false;
+  return null;
+}
 
 interface ModelEditFormProps {
   model: GgufModel;
@@ -52,6 +67,9 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
   // defaults, so saving an edit re-resolves rather than leaving the captions
   // describing the previous configuration.
   const resolution = useSamplingExplanation(model.id, null, model.inferenceDefaults);
+  // The model's own defaults as edited so far, or none: one field changes
+  // and the others ride along. Only the ✕ clears the whole override.
+  const edited = (): ServerConfig => editedServerDefaults ?? { contextLength: null };
 
   return (
     <>
@@ -78,8 +96,10 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
                 step={1}
                 value={editedServerDefaults?.contextLength ?? ''}
                 onChange={(e) => {
-                  const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
-                  onServerDefaultsChange(val !== undefined ? { contextLength: val } : null);
+                  const val = e.target.value ? parseInt(e.target.value, 10) : null;
+                  // One field of the model's own defaults; the others ride
+                  // along. Only the ✕ clears the whole override.
+                  onServerDefaultsChange({ ...edited(), contextLength: val });
                 }}
                 placeholder="No override"
                 className="w-32 font-mono tabular-nums"
@@ -111,6 +131,36 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
                 </IconButton>
               )}
             </span>
+          </InfoRow>
+          <InfoRow label="Jinja templates">
+            <Select
+              size="sm"
+              aria-label="Jinja templates default"
+              className="max-w-[16rem]"
+              value={triState(editedServerDefaults?.jinja)}
+              onChange={(e) =>
+                onServerDefaultsChange({ ...edited(), jinja: fromTriState(e.target.value) })
+              }
+            >
+              <option value="auto">Auto: the tags and llama-server decide</option>
+              <option value="on">On: --jinja at every launch</option>
+              <option value="off">Off: --no-jinja at every launch</option>
+            </Select>
+          </InfoRow>
+          <InfoRow label="Speculative decoding">
+            <Select
+              size="sm"
+              aria-label="Speculative decoding default"
+              className="max-w-[16rem]"
+              value={triState(editedServerDefaults?.mtp)}
+              onChange={(e) =>
+                onServerDefaultsChange({ ...edited(), mtp: fromTriState(e.target.value) })
+              }
+            >
+              <option value="auto">Auto: the mtp tag decides</option>
+              <option value="on">On: draft ahead at every launch</option>
+              <option value="off">Off: never draft</option>
+            </Select>
           </InfoRow>
           <InfoRow label="Path">
             <Input

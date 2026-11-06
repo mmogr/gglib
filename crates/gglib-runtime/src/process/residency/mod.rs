@@ -771,9 +771,7 @@ fn prepare(
         num_ctx,
         default_ctx,
         fitted_ctx,
-        spec.server_defaults
-            .as_ref()
-            .and_then(|sc| sc.context_length),
+        spec.server_defaults.as_ref(),
     );
 
     Prepared {

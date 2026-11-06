@@ -302,3 +302,67 @@ async fn clearing_an_edited_reasoning_model_gives_back_its_import() {
     assert_eq!(row.inference_defaults, None);
     assert_eq!(row.defaults_origin, None);
 }
+
+/// The model's own templates and speculative-decoding defaults: the flags
+/// change those two fields of what the model holds and keep its context,
+/// and the inspector sends the same row whole; `auto` clears a field back
+/// to the tags.
+#[tokio::test]
+async fn jinja_and_mtp_defaults_store_the_row_the_inspector_stores() {
+    let (cli, gui) = from_both_surfaces(
+        &["--jinja", "off", "--mtp", "on"],
+        json!({ "serverDefaults": { "jinja": false, "mtp": true } }),
+    )
+    .await;
+    assert_eq!(whole(&cli), whole(&gui));
+    let defaults = cli.server_defaults.expect("stored");
+    assert_eq!((defaults.jinja, defaults.mtp), (Some(false), Some(true)));
+
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, seed, _heard, ops) = seeded_library(&dir).await;
+    let id = seed.id.to_string();
+    run_with(
+        &ctx,
+        &ops,
+        &[
+            "gglib",
+            "model",
+            "update",
+            &id,
+            "--yes",
+            "--context-length",
+            "8192",
+        ],
+    )
+    .await
+    .expect("a context first");
+    let mut with_ctx = stored(&ctx, seed.id).await;
+    with_ctx.server_defaults = Some(gglib_core::domain::ServerConfig {
+        context_length: Some(4096),
+        ..Default::default()
+    });
+    ctx.app
+        .models()
+        .update(&with_ctx)
+        .await
+        .expect("a stored context");
+    run_with(
+        &ctx,
+        &ops,
+        &["gglib", "model", "update", &id, "--yes", "--jinja", "on"],
+    )
+    .await
+    .expect("the flag");
+    let kept = stored(&ctx, seed.id).await.server_defaults.expect("stored");
+    assert_eq!(kept.context_length, Some(4096), "the context rides along");
+    assert_eq!(kept.jinja, Some(true));
+    run_with(
+        &ctx,
+        &ops,
+        &["gglib", "model", "update", &id, "--yes", "--jinja", "auto"],
+    )
+    .await
+    .expect("back to auto");
+    let cleared = stored(&ctx, seed.id).await.server_defaults.expect("stored");
+    assert_eq!((cleared.context_length, cleared.jinja), (Some(4096), None));
+}

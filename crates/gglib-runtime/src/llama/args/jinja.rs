@@ -35,6 +35,11 @@ pub enum JinjaResolutionSource {
     /// The only source that yields [`JinjaMode::Off`], and therefore the only
     /// one that puts `--no-jinja` on the command line.
     ExplicitFalse,
+    /// The model's own default (`ServerConfig::jinja`), set on the model
+    /// with `gglib model update --jinja` or in the inspector. Either
+    /// direction: it is the one rung besides an explicit choice that can
+    /// put `--no-jinja` on the command line.
+    ModelDefault,
     /// Auto-enabled because the model has the
     /// [`AGENT`](capability_tags::AGENT) tag.
     AgentTag,
@@ -56,9 +61,14 @@ pub struct JinjaResolution {
 
 /// Determine what a llama-server launch says about Jinja templates.
 ///
-/// See the module docs for why the three outcomes are not two.
+/// The launch's own choice first, then the model's own default, then the
+/// tags. See the module docs for why the three outcomes are not two.
 #[must_use]
-pub fn resolve_jinja_flag(explicit: Option<bool>, tags: &[String]) -> JinjaResolution {
+pub fn resolve_jinja_flag(
+    explicit: Option<bool>,
+    model_default: Option<bool>,
+    tags: &[String],
+) -> JinjaResolution {
     match explicit {
         Some(true) => JinjaResolution {
             mode: JinjaMode::On,
@@ -67,6 +77,14 @@ pub fn resolve_jinja_flag(explicit: Option<bool>, tags: &[String]) -> JinjaResol
         Some(false) => JinjaResolution {
             mode: JinjaMode::Off,
             source: JinjaResolutionSource::ExplicitFalse,
+        },
+        None if model_default.is_some() => JinjaResolution {
+            mode: if model_default == Some(true) {
+                JinjaMode::On
+            } else {
+                JinjaMode::Off
+            },
+            source: JinjaResolutionSource::ModelDefault,
         },
         None => {
             if capability_tags::has(tags, capability_tags::AGENT) {
@@ -97,21 +115,21 @@ mod tests {
     /// jinja-on default.
     #[test]
     fn an_explicit_false_resolves_to_off_not_to_silence() {
-        let r = resolve_jinja_flag(Some(false), &tags(&["agent"]));
+        let r = resolve_jinja_flag(Some(false), None, &tags(&["agent"]));
         assert_eq!(r.mode, JinjaMode::Off);
         assert_eq!(r.source, JinjaResolutionSource::ExplicitFalse);
     }
 
     #[test]
     fn an_explicit_true_resolves_to_on() {
-        let r = resolve_jinja_flag(Some(true), &[]);
+        let r = resolve_jinja_flag(Some(true), None, &[]);
         assert_eq!(r.mode, JinjaMode::On);
         assert_eq!(r.source, JinjaResolutionSource::ExplicitTrue);
     }
 
     #[test]
     fn the_agent_tag_resolves_to_on() {
-        let r = resolve_jinja_flag(None, &tags(&["reasoning", "agent"]));
+        let r = resolve_jinja_flag(None, None, &tags(&["reasoning", "agent"]));
         assert_eq!(r.mode, JinjaMode::On);
         assert_eq!(r.source, JinjaResolutionSource::AgentTag);
     }
@@ -122,7 +140,7 @@ mod tests {
     #[test]
     fn the_agent_tag_match_is_case_insensitive() {
         assert_eq!(
-            resolve_jinja_flag(None, &tags(&["Agent"])).mode,
+            resolve_jinja_flag(None, None, &tags(&["Agent"])).mode,
             JinjaMode::On
         );
     }
@@ -133,7 +151,7 @@ mod tests {
     /// does not make.
     #[test]
     fn an_untagged_model_defers_rather_than_disabling() {
-        let r = resolve_jinja_flag(None, &tags(&["reasoning", "code"]));
+        let r = resolve_jinja_flag(None, None, &tags(&["reasoning", "code"]));
         assert_eq!(r.mode, JinjaMode::Defer);
         assert_eq!(r.source, JinjaResolutionSource::Default);
     }
@@ -143,8 +161,30 @@ mod tests {
     #[test]
     fn an_explicit_false_overrides_the_agent_tag() {
         assert_eq!(
-            resolve_jinja_flag(Some(false), &tags(&["agent", "mtp"])).mode,
+            resolve_jinja_flag(Some(false), None, &tags(&["agent", "mtp"])).mode,
             JinjaMode::Off
         );
+    }
+
+    /// The model's own default sits between a launch's choice and the tags:
+    /// it turns an agent-tagged model's templates off, and a launch's
+    /// choice turns them back on.
+    #[test]
+    fn the_models_own_default_outranks_the_tags_and_yields_to_the_launch() {
+        let off = resolve_jinja_flag(None, Some(false), &tags(&["agent"]));
+        assert_eq!(off.mode, JinjaMode::Off);
+        assert_eq!(off.source, JinjaResolutionSource::ModelDefault);
+
+        let on = resolve_jinja_flag(None, Some(true), &[]);
+        assert_eq!(on.mode, JinjaMode::On);
+        assert_eq!(on.source, JinjaResolutionSource::ModelDefault);
+
+        let launch = resolve_jinja_flag(Some(true), Some(false), &[]);
+        assert_eq!(launch.mode, JinjaMode::On);
+        assert_eq!(launch.source, JinjaResolutionSource::ExplicitTrue);
+
+        let off = resolve_jinja_flag(Some(false), Some(true), &[]);
+        assert_eq!(off.mode, JinjaMode::Off);
+        assert_eq!(off.source, JinjaResolutionSource::ExplicitFalse);
     }
 }

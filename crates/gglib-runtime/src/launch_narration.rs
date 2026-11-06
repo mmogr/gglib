@@ -244,6 +244,7 @@ fn mtp_decision(inputs: &NarrationInputs<'_>, disabled_by_env: bool) -> Option<L
     }
     let source = match mtp.source {
         MtpResolutionSource::Explicit => "explicit",
+        MtpResolutionSource::ModelDefault => "model default",
         MtpResolutionSource::MtpTag => "mtp tag",
         MtpResolutionSource::Default => "default",
     };
@@ -265,6 +266,7 @@ fn mtp_decision(inputs: &NarrationInputs<'_>, disabled_by_env: bool) -> Option<L
 fn jinja_flag(res: JinjaResolution) -> Option<String> {
     let why = match res.source {
         JinjaResolutionSource::AgentTag => "agent tag",
+        JinjaResolutionSource::ModelDefault => "model default",
         JinjaResolutionSource::ExplicitTrue | JinjaResolutionSource::ExplicitFalse => "explicit",
         // Only ever pairs with `Defer`, which yields `None` below — matched
         // rather than wildcarded so a new source cannot render as the wrong
@@ -705,6 +707,33 @@ mod tests {
         };
         let n = narrate(&inputs(&s, &c, &r));
         assert_eq!(n.decision("flags").unwrap().value, "--no-jinja (explicit)");
+    }
+
+    /// A default stored on the model is the model's, not an explicit choice
+    /// of this launch, and the line says which.
+    #[test]
+    fn flags_and_mtp_lines_name_the_models_own_default() {
+        let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
+        let mut c = caps();
+        c.jinja = JinjaResolution {
+            mode: JinjaMode::Off,
+            source: JinjaResolutionSource::ModelDefault,
+        };
+        c.mtp = MtpResolution {
+            enabled: true,
+            draft_n_max: 2,
+            draft_p_min: 0.75,
+            source: MtpResolutionSource::ModelDefault,
+        };
+        let n = narrate(&inputs(&s, &c, &r));
+        assert_eq!(
+            n.decision("flags").unwrap().value,
+            "--no-jinja (model default)"
+        );
+        assert_eq!(
+            n.decision("mtp").unwrap().source.as_deref(),
+            Some("model default")
+        );
     }
 
     /// Deferring is not a flag, so it is not a line. Claiming one would

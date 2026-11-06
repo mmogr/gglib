@@ -99,9 +99,11 @@ export const ServeModal: FC<ServeModalProps> = ({
   const sd = useSdStatus(isImage);
   const imageBlocked =
     isImage && (model.missingComponents.length > 0 || sd.status?.installed !== true);
-  // MTP: auto-enabled when tag present and no explicit override
-  const effectiveMtpEnabled = mtpNMaxOverride !== null ? mtpNMaxOverride > 0 : hasMtpTag;
-  const isAutoMtp = mtpNMaxOverride === null && hasMtpTag;
+  // MTP when nothing is chosen for this launch: the model's own default,
+  // else the tag.
+  const mtpByDefault = model.serverDefaults?.mtp ?? hasMtpTag;
+  const effectiveMtpEnabled = mtpNMaxOverride !== null ? mtpNMaxOverride > 0 : mtpByDefault;
+  const isAutoMtp = mtpNMaxOverride === null && mtpByDefault;
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // What this model's parameters resolve to before this session overrides
@@ -220,6 +222,7 @@ export const ServeModal: FC<ServeModalProps> = ({
           <>
             <JinjaModeField
               value={jinjaOverride}
+              modelDefault={model.serverDefaults?.jinja ?? null}
               hasAgentTag={hasAgentTag}
               disabled={isServing}
               onChange={onJinjaChange}
@@ -227,7 +230,7 @@ export const ServeModal: FC<ServeModalProps> = ({
             />
 
             {/* MTP Speculative Decoding section (shown for all models; auto-banner when tagged) */}
-            {hasMtpTag && (
+            {hasMtpTag && model.serverDefaults?.mtp !== false && (
               <Banner
                 variant="info"
                 title="MTP speculative decoding detected"
@@ -257,7 +260,7 @@ export const ServeModal: FC<ServeModalProps> = ({
                 <label className="block mb-0 font-semibold text-text">MTP Speculative Decoding</label>
                 <span className="text-sm text-text-muted">
                   {isAutoMtp
-                    ? 'Auto (mtp tag)'
+                    ? (model.serverDefaults?.mtp ? 'Auto (this model\'s own default)' : 'Auto (mtp tag)')
                     : (mtpNMaxOverride === null
                       ? 'Disabled'
                       : (mtpNMaxOverride === 0 ? 'Disabled manually' : `Enabled (n=${mtpNMaxOverride})`))}
@@ -265,14 +268,16 @@ export const ServeModal: FC<ServeModalProps> = ({
               </div>
               <Checkbox
                 id="mtp-toggle"
+                aria-label="MTP speculative decoding"
                 wrapperClassName="mt-sm"
                 checked={effectiveMtpEnabled}
                 onChange={(e) => {
                   if (!e.target.checked) {
                     onMtpNMaxChange(0);
                   } else {
-                    // Restore to auto (tag) or default explicit n=2
-                    onMtpNMaxChange(hasMtpTag ? null : 2);
+                    // Back to auto when auto is on (the model's own default,
+                    // else the tag); otherwise an explicit two draft tokens.
+                    onMtpNMaxChange(mtpByDefault ? null : 2);
                   }
                 }}
                 disabled={isServing}

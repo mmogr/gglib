@@ -78,7 +78,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model load <id\|name> [--context <N\|max>] [--pin]` | Load a model into memory on the daemon, as the app's Load does; `--pin` pins the endpoint to it first |
 | `model unload <id\|name>` | Unload a model from memory on the daemon, as the app's Unload does |
 | `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |
-| `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
+| `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its own launch defaults (`--jinja auto|on|off`, `--mtp auto|on|off`), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
 | `model retag [<id\|name>] [--all] [--full]` | Re-derive auto-tags from the stored GGUF metadata; additive unless `--full` |
 | `model capabilities <id\|name> [--set FLAG] [--unset FLAG]` | Show a model's capability flags, or override them |
 | `model download <repo>` | Download a model from `HuggingFace`; an image model's companions come too, named with their sizes before it is queued |

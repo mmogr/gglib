@@ -33,7 +33,11 @@ speed.
   is being served under the same data root, and says how to stop it;
   `-y` / `--yes` skips the confirmation and stops nothing.
 - `update` changes a model's metadata, including the companion files of an
-  image model (below).
+  image model (below), and the model's own launch defaults: `--jinja
+  auto|on|off` for chat templates and `--mtp auto|on|off` for speculative
+  decoding, each below what a launch itself asks for and above the model's
+  tags. [`explain`](#explain) shows the flag each one puts on the command
+  line, and that it was yours.
 
 ## `inspect`
 

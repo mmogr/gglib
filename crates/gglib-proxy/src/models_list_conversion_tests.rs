@@ -110,6 +110,7 @@ fn models_response_respects_server_defaults_context_length() {
         context_length: Some(32_768), // GGUF ceiling is large
         server_defaults: Some(ServerConfig {
             context_length: Some(8192),
+            ..Default::default()
         }),
         ..ModelSummary::bare(1, "server-ctx-model")
     };
@@ -127,6 +128,7 @@ fn models_response_falls_through_when_server_defaults_context_length_none() {
         context_length: Some(32_768),
         server_defaults: Some(ServerConfig {
             context_length: None, // exists but context_length is None
+            ..Default::default()
         }),
         ..ModelSummary::bare(1, "fallback-ctx-model")
     };

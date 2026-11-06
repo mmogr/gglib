@@ -114,7 +114,10 @@ fn llama_why(flag: &str, resolved: &LlamaResolutions, request: &LaunchRequest) -
                 "tagged agent: tool calls need the model's own template",
             ),
             JinjaResolutionSource::ExplicitTrue | JinjaResolutionSource::ExplicitFalse => {
-                why("templates", You, "set on this model or this launch")
+                why("templates", You, "set on this launch")
+            }
+            JinjaResolutionSource::ModelDefault => {
+                why("templates", You, "this model's own default")
             }
             JinjaResolutionSource::Default => why("templates", Gglib, "llama-server's own default"),
         },
@@ -167,6 +170,7 @@ fn llama_why(flag: &str, resolved: &LlamaResolutions, request: &LaunchRequest) -
                     "tagged mtp: the model drafts its own tokens ahead",
                 ),
                 MtpResolutionSource::Explicit => why("mtp", You, "set on this launch"),
+                MtpResolutionSource::ModelDefault => why("mtp", You, "this model's own default"),
                 MtpResolutionSource::Default => why("mtp", Gglib, "the default"),
             }
         }

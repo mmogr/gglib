@@ -189,6 +189,7 @@ fn the_context_flags_source_is_the_rung_that_chose_it() {
         ModelLaunchSpec {
             server_defaults: Some(gglib_core::domain::ServerConfig {
                 context_length: Some(16_384),
+                ..Default::default()
             }),
             ..launch_spec(3, "qwen")
         },
@@ -402,4 +403,27 @@ fn every_image_familys_command_is_explained() {
             "{flag} was emitted by no family: {emitted:?}"
         );
     }
+}
+
+/// A default stored on the model is yours, and the reason says it is the
+/// model's own rather than this launch's.
+#[test]
+fn a_models_own_default_is_yours_and_says_so() {
+    let plan = planned(
+        ModelLaunchSpec {
+            server_defaults: Some(gglib_core::domain::ServerConfig {
+                context_length: None,
+                jinja: Some(false),
+                mtp: Some(true),
+            }),
+            ..tagged()
+        },
+        ServerConfigOptions::default(),
+    );
+    for flag in ["--no-jinja", "--spec-type", "--spec-draft-n-max"] {
+        let arg = plan.args.iter().find(|a| a.flag == flag).expect(flag);
+        assert_eq!(arg.source, ChoiceSource::You, "{flag}");
+        assert_eq!(arg.reason, "this model's own default", "{flag}");
+    }
+    assert!(plan.args.iter().all(|a| a.flag != "--jinja"));
 }

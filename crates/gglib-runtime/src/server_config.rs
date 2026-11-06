@@ -23,9 +23,9 @@
 //!
 //! | Feature | Explicit override wins over… | Tag-based default |
 //! |---------|------------------------------|-------------------|
-//! | Jinja templates | `opts.jinja = Some(true)` → `--jinja`, `Some(false)` → `--no-jinja` | `"agent"` tag → `--jinja`; otherwise **no flag**, and llama-server's own default (jinja on) stands |
+//! | Jinja templates | `opts.jinja = Some(true)` → `--jinja`, `Some(false)` → `--no-jinja`; then the model's own default (`opts.model_jinja`) | `"agent"` tag → `--jinja`; otherwise **no flag**, and llama-server's own default (jinja on) stands |
 //! | Reasoning format | `opts.reasoning_format = Some(…)` | model tags |
-//! | MTP speculative decoding | `opts.mtp_draft_n_max = Some(0)` (off) or `Some(n)` (on) | `"mtp"` tag → enabled |
+//! | MTP speculative decoding | `opts.mtp_draft_n_max = Some(0)` (off) or `Some(n)` (on); then the model's own default (`opts.model_mtp`) | `"mtp"` tag → enabled |
 //! | Embedding mode | *(no override — see below)* | `"embedding"` tag → enabled |
 //!
 //! The jinja row is the one where gglib's silence is not a "no". llama-server
@@ -168,7 +168,7 @@ pub(crate) fn build_server_config_narrated(
     // Carried through as a mode, unconditionally: the "no flag" outcome is a
     // decision in its own right here (see the module docs), so there is nothing
     // to branch on.
-    let jinja = resolve_jinja_flag(opts.jinja, tags);
+    let jinja = resolve_jinja_flag(opts.jinja, opts.model_jinja, tags);
     debug!(mode = ?jinja.mode, source = ?jinja.source, "resolved jinja mode for model");
     config = config.with_jinja_mode(jinja.mode);
 
@@ -235,7 +235,12 @@ pub(crate) fn build_server_config_narrated(
         .with_cache_type_v(kv_types.v);
 
     // --- MTP speculative decoding ----------------------------------------------
-    let mtp = resolve_mtp_args(opts.mtp_draft_n_max, opts.mtp_draft_p_min, tags);
+    let mtp = resolve_mtp_args(
+        opts.mtp_draft_n_max,
+        opts.mtp_draft_p_min,
+        opts.model_mtp,
+        tags,
+    );
     if mtp.enabled {
         debug!(
             n_max = mtp.draft_n_max,

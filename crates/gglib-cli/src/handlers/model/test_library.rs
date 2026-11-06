@@ -126,13 +126,24 @@ fn parsed(argv: &[&str]) -> Result<crate::ModelCommand> {
 }
 
 /// `argv` parsed as the CLI parses it and run as `gglib model …` runs it.
+///
+/// The dispatch is boxed: its future holds every subcommand's state, and
+/// on Windows it outgrew what clippy lets a test await in place.
 pub(super) async fn run(ctx: &CliContext, argv: &[&str]) -> Result<()> {
-    super::dispatch(ctx, parsed(argv)?, crate::target::Target::Local).await
+    let command = parsed(argv)?;
+    Box::pin(super::dispatch(ctx, command, crate::target::Target::Local)).await
 }
 
 /// [`run`], through `ops` in place of the ones a command builds for itself.
 pub(super) async fn run_with(ctx: &CliContext, ops: &ModelOps, argv: &[&str]) -> Result<()> {
-    super::dispatch_with(ctx, ops, parsed(argv)?, crate::target::Target::Local).await
+    let command = parsed(argv)?;
+    Box::pin(super::dispatch_with(
+        ctx,
+        ops,
+        command,
+        crate::target::Target::Local,
+    ))
+    .await
 }
 
 /// An emitter that keeps what it was told, in the order it was told.
