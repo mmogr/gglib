@@ -13,7 +13,7 @@
  * @module places/library/hf/useLibrarySearch
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HfModelSummary } from '../../../types';
 import { getTransport } from '../../../services/transport';
 import { formatError } from '../../../utils/errors';
@@ -69,6 +69,8 @@ export function useLibrarySearch(onOpen: (model: HfModelSummary) => void): Libra
   const cancelOpen = useCallback(() => {
     opening.current += 1;
   }, []);
+  // Leaving the library drops an answer still to come: it would navigate.
+  useEffect(() => cancelOpen, [cancelOpen]);
   const edit = useCallback((next: string) => {
     opening.current += 1;
     setQuery(next);

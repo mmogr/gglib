@@ -194,18 +194,29 @@ mod tests {
         use gglib_core::domain::recommendation::{BudgetSource, recommend};
         use gglib_core::utils::system::SystemMemoryInfo;
 
-        let mem = SystemMemoryInfo {
-            total_ram_bytes: 64 << 30,
-            gpu_memory_bytes: Some(48 << 30),
-            is_unified_memory: true,
-            has_nvidia_gpu: false,
-        };
-        let rec = recommend(&mem).expect("48 GiB of unified memory fits the shortlist");
-        assert_eq!(rec.budget_source, BudgetSource::UnifiedMemory);
+        let machines = [
+            (
+                Some(48 << 30),
+                true,
+                BudgetSource::UnifiedMemory,
+                "unifiedMemory",
+            ),
+            (Some(48 << 30), false, BudgetSource::Vram, "vram"),
+            (None, false, BudgetSource::SystemRam, "systemRam"),
+        ];
+        for (gpu, unified, source, key) in machines {
+            let mem = SystemMemoryInfo {
+                total_ram_bytes: 64 << 30,
+                gpu_memory_bytes: gpu,
+                is_unified_memory: unified,
+                has_nvidia_gpu: gpu.is_some() && !unified,
+            };
+            let rec = recommend(&mem).expect("48 GiB fits the shortlist");
+            assert_eq!(rec.budget_source, source);
 
-        let json = serde_json::to_value(RecommendationDto::from(rec)).unwrap();
-        assert_eq!(json["budgetSource"], "unifiedMemory");
-        assert_eq!(json["budgetLabel"], BudgetSource::UnifiedMemory.label());
-        assert_eq!(json["budgetLabel"], "unified memory");
+            let json = serde_json::to_value(RecommendationDto::from(rec)).unwrap();
+            assert_eq!(json["budgetSource"], key);
+            assert_eq!(json["budgetLabel"], source.label());
+        }
     }
 }

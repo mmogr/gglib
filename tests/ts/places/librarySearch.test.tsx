@@ -412,6 +412,29 @@ describe('the one search', () => {
     expect(field()).toHaveValue('owner/slow-GGUF');
   });
 
+  it("drops a first Enter's late refusal while a second Enter is still opening", async () => {
+    renderLibrary();
+    let refuse: (e: Error) => void = () => {};
+    transport.getHfModelSummary.mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject)));
+    const user = userEvent.setup();
+    await user.type(field(), 'owner/slow-GGUF{Enter}');
+    transport.getHfModelSummary.mockImplementationOnce(() => new Promise(() => {}));
+    await user.type(field(), '{Enter}');
+
+    await act(async () => refuse(new Error('rate limited')));
+    expect(screen.queryByText('rate limited')).not.toBeInTheDocument();
+  });
+
+  it("drops a repo's late answer once the library is left", async () => {
+    const { router, at } = renderLibrary('/models/1');
+    await screen.findByRole('option', { name: /Qwen3-4B/ });
+    const answer = await enterSlowRepo('owner/slow-GGUF');
+    await act(() => router.navigate('/diagnostics/benchmarks'));
+
+    await answer(hfRepo('owner/slow-GGUF'));
+    expect(at()).toBe('/diagnostics/benchmarks');
+  });
+
   it('says why a named repo could not be opened, and keeps the field', async () => {
     transport.getHfModelSummary.mockRejectedValueOnce(new Error('Repository owner/gone not found'));
     renderLibrary();
