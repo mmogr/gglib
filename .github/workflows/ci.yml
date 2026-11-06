@@ -1072,6 +1072,11 @@ jobs:
   # A skip is a pass only where its gate says `false`, so a gate that comes
   # out wrong, or empty because `scope` failed, cannot turn a run green with
   # the job unrun. A matrix job reports one result for all its legs.
+  #
+  # The errors put the jobs that went wrong first. A cross-OS job skipped
+  # because `clippy`, which it waits on, did not succeed is named last, with
+  # `clippy` as the cause. A cancelled job either ran past its timeout or
+  # was replaced by a newer run, and the error says both.
   ci-success:
     name: CI Success
     runs-on: ubuntu-24.04
@@ -1093,11 +1098,18 @@ jobs:
               "ffi-apple": "apple",
               "phone-llama": "apple",
           }
+          # The job each gated job waits on besides `scope`: GitHub skips the
+          # gated job when it does not succeed.
+          WAITS_ON = {
+              "cli-cross-os": "clippy",
+              "clippy-cross-os": "clippy",
+          }
           OUTPUTS = ("version_only", "rust", "ffi", "ios", "lock", "cross_os", "apple")
 
           needs = json.loads(os.environ["NEEDS"])
           scope = needs.get("scope", {}).get("outputs", {})
           bad = []
+          skipped_after = []
           for name in OUTPUTS:
               value = scope.get(name)
               print(f"scope: {name}={value}")
@@ -1106,16 +1118,32 @@ jobs:
           for job in GATES:
               if job not in needs:
                   bad.append(f"{job} is gated here but missing from needs")
+          for job, waits_on in WAITS_ON.items():
+              if waits_on not in needs:
+                  bad.append(f"{job} waits on {waits_on} here, but {waits_on} is missing from needs")
           for job, info in sorted(needs.items()):
               gate = GATES.get(job)
               want = "success" if gate is None or scope.get(gate) == "true" else "skipped"
               got = info["result"]
               print(f"{job}: {got}" + (f" ({gate}={scope.get(gate)})" if gate else ""))
-              if got != want:
+              if got == want:
+                  continue
+              waits_on = WAITS_ON.get(job)
+              cause = needs.get(waits_on, {}).get("result")
+              if got == "skipped" and waits_on and cause != "success":
+                  skipped_after.append(
+                      f"{job} is skipped because {waits_on} is {cause}; it runs once {waits_on} passes"
+                  )
+              elif got == "cancelled":
+                  bad.append(
+                      f"{job} is cancelled, and must be {want}: it ran past its "
+                      "timeout-minutes, or a newer run replaced this one"
+                  )
+              else:
                   bad.append(f"{job} is {got}, and must be {want}")
-          for line in bad:
+          for line in bad + skipped_after:
               print(f"::error::{line}")
-          sys.exit(1 if bad else 0)
+          sys.exit(1 if bad or skipped_after else 0)
 
   # On a push to main or to a maintenance line, release/X.Y.x: each cuts its
   # own candidates, and release-tag.yml holds each to its own versions.
