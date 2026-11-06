@@ -55,6 +55,13 @@ export type { SlotParams } from '../../../types/generated/SlotParams';
  * after failing schema validation. The proxy has always sent it.
  */
 export type { ContextSnapshot } from '../../../types/generated/ContextSnapshot';
+/**
+ * What gglib did to one request, each with the word the proxy chose for it:
+ * the Recent ledger shows `word` and reads no kind of its own.
+ */
+export type { Intervention } from '../../../types/generated/Intervention';
+export type { InterventionKind } from '../../../types/generated/InterventionKind';
+export type { Refusal } from '../../../types/generated/Refusal';
 
 export type { CacheUsage } from '../../../types/generated/CacheUsage';
 

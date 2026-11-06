@@ -8,6 +8,7 @@ use super::*;
 
 fn make_snapshot(model: &str) -> ContextSnapshot {
     ContextSnapshot {
+        interventions: Vec::new(),
         model_name: model.to_string(),
         payload_chars_before: 1_000,
         payload_chars_after: 800,
@@ -281,4 +282,58 @@ fn repair_totals_survive_eviction() {
 
     assert_eq!(store.tool_repairs_attempted(), 1);
     assert_eq!(store.tool_repairs_succeeded(), 1);
+}
+
+// ── What was done to a request ───────────────────────────────────────────
+
+/// Each record site says what it did, in the order it was done (the note
+/// goes on the body before the pipeline trims and constrains it), and the
+/// repair that lands later is added to the row it belongs to.
+#[test]
+fn what_was_done_to_a_request_is_said_in_words() {
+    use crate::interventions::{
+        clamped_interventions, forwarded_interventions, unforwarded_interventions,
+    };
+    let words = |done: Vec<gglib_core::domain::Intervention>| -> Vec<String> {
+        done.into_iter().map(|i| i.word).collect()
+    };
+    assert!(forwarded_interventions(0, false, None).is_empty());
+    assert_eq!(
+        words(forwarded_interventions(4, true, Some(LoopGuardTrip::Loop))),
+        [
+            "Noted a loop",
+            "Trimmed 4 old messages",
+            "Constrained tool calls"
+        ]
+    );
+    assert_eq!(
+        words(unforwarded_interventions(LoopGuardTrip::Stagnation, true)),
+        ["Stopped stagnation"]
+    );
+    assert_eq!(
+        words(unforwarded_interventions(LoopGuardTrip::Loop, false)),
+        ["Refused: a loop"]
+    );
+    assert_eq!(
+        words(clamped_interventions(None)),
+        ["Refused: longer than the context"]
+    );
+    assert_eq!(
+        words(clamped_interventions(Some(LoopGuardTrip::Loop))),
+        ["Noted a loop", "Refused: longer than the context"],
+        "a noted request that is then clamped keeps its note"
+    );
+
+    let store = ContextMetricsStore::new();
+    let seq = store.record(make_snapshot("m"));
+    store.flag_tool_repair(seq, false);
+    assert!(
+        store.recent(1)[0].interventions.is_empty(),
+        "a failed repair did nothing"
+    );
+    store.flag_tool_repair(seq, true);
+    assert_eq!(
+        words(store.recent(1)[0].interventions.clone()),
+        ["Repaired a tool call"]
+    );
 }

@@ -56,6 +56,9 @@ pub(super) struct DashboardSnapshot {
     /// step for no reader.
     #[serde(default)]
     pub(super) sampling_audit: Option<SamplingAudit>,
+    /// The last requests, oldest first, with what gglib did to each.
+    #[serde(default)]
+    pub(super) recent_requests: Vec<super::wire_recent::RecentRequest>,
 }
 
 /// Mirror of `gglib_core::domain::defects::ModelDefectCounts`.
