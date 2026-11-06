@@ -10,6 +10,7 @@ The main window's shell: its addresses, its router, and what navigates or acts f
 |------|------|
 | `paths.ts` | Every path the app navigates to (`paths.library()`, `paths.model(id)`, `paths.chat(id)` …), `inspectorSubject` reading the selection back from the address, the settings dialog as a search parameter over the current place (`settingsAt`, `settingsSection`, `withoutSettings`), and the interim intents the menu carries in the address (`libraryIntent`) |
 | `router.tsx` | The routes and the one router: the library as a layout route over `/library`, `/models/:id` and `/far/:id` so a pick does not remount it; `createAppRouter(layout)` after the daemon's token has left the address; `appRouter()` for navigation from outside React; a memory router for tests |
+| `Shell.tsx` | The window: the sidebar (`src/sidebar/`) beside the place the address names, no header; under 720 px the sidebar is a drawer behind a menu button, closed by a move, the scrim or Escape |
 | `menuBridge.ts` | The native menu's events, handled from outside React: navigation through the router, model actions on the model the address names, the menu told what is selected on every move |
 | `confirm.ts` | The confirmation question as a store, askable from outside React and drawn by `ConfirmProvider` |
 | `ChatRoute.tsx` | `/chat/:modelId`: a chat on this machine's model, keyed by the model, its port from the server registry or the start that opened it |

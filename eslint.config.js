@@ -155,7 +155,7 @@ export default [
     // Design-system guardrails: feature code must use the primitive layer.
     // The primitive layer itself (ui/, primitives/) is the only place raw
     // buttons and native checkboxes may be rendered.
-    files: ['src/components/**/*.tsx', 'src/pages/**/*.tsx', 'src/app/**/*.tsx'],
+    files: ['src/{app,sidebar,places,inspector,tray,components,pages}/**/*.tsx'],
     ignores: ['src/components/ui/**', 'src/components/primitives/**'],
     rules: {
       'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...componentRestrictedSyntax],
@@ -167,7 +167,7 @@ export default [
     // src/services/platform. This is the real rule behind the
     // `lint:boundaries` npm script, which previously enabled
     // no-restricted-imports with no options — a permanent no-op.
-    files: ['src/components/**/*.{ts,tsx}', 'src/pages/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
+    files: ['src/{app,sidebar,places,inspector,tray,components,pages}/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',

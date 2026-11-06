@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { Outlet, RouterProvider, useLocation, useNavigate } from "react-router";
-import Header from "./components/Header";
+import { RouterProvider, useLocation, useNavigate } from "react-router";
 import SettingsModal from "./components/SettingsModal";
 import LlamaInstallModal from "./components/LlamaInstallModal";
 import SetupWizard from "./components/SetupWizard";
 import { ToastContainer } from "./components/Toast";
-import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { useFileDropGuard } from "./hooks/useFileDropGuard";
 import { useOfferOutcomes } from "./components/remote/useOfferOutcomes";
@@ -13,8 +11,9 @@ import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { startMenuBridge } from "./app/menuBridge";
-import { paths, settingsAt, settingsSection, withoutSettings } from "./app/paths";
+import { settingsSection, withoutSettings } from "./app/paths";
 import { createAppRouter } from "./app/router";
+import { Shell } from "./app/Shell";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
@@ -23,15 +22,14 @@ import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
 
 /**
- * The layout every place sits in: the header, the place itself (the
- * router's outlet), and the dialogs drawn over whichever place is open.
+ * The layout every place sits in: the shell (the sidebar and the place the
+ * address names) and the dialogs drawn over whichever place is open.
  * Separated from `App` so it can use the toast context and the router.
  */
 export function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const [showLlamaModal, setShowLlamaModal] = useState(false);
-  const { servers, stopServer } = useServers();
   const { toasts, showToast, dismissToast } = useToastContext();
   const {
     status: llamaStatus,
@@ -89,16 +87,8 @@ export function AppContent() {
 
   return (
     <SettingsProvider showToast={showToast}>
-      <div className="flex flex-col h-screen overflow-hidden">
-        <Header
-          onOpenSettings={() => navigate(settingsAt(location, 'general'), { replace: true })}
-          servers={servers}
-          onStopServer={stopServer}
-          onSelectModel={(modelId, view) => navigate(view ? paths.chat(modelId, view) : paths.model(modelId))}
-        />
-        <div className="flex-1 min-h-0 overflow-hidden flex">
-          <Outlet />
-        </div>
+      <>
+        <Shell />
         {openSettings && (
           <SettingsModal
             isOpen
@@ -116,7 +106,7 @@ export function AppContent() {
           />
         )}
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </div>
+      </>
     </SettingsProvider>
   );
 }

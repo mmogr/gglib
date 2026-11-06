@@ -121,7 +121,6 @@
   --spacing-2xl: var(--spacing-2xl);
 
   /* Layout (as spacing so they work with w-*, h-*, etc.) */
-  --spacing-header-height: var(--header-height);
   --spacing-sidebar-width: var(--sidebar-width);
 
   /* Component Sizes (as spacing for h-*, min-h-*, etc.) */
@@ -179,6 +178,7 @@
      Custom tokens below handle fine-grained small-screen adjustments. */
   --breakpoint-mobile: 30rem;      /* 480px — standard phone → phablet */
   --breakpoint-phone: 37.5rem;     /* 600px — phablet → tablet */
+  --breakpoint-wide: 45rem;        /* 720px — the sidebar stays open; below it, a drawer */
 
   /* ---------- Custom Animations ---------- */
   /* Nothing pulses at rest (styles/README.md, "Motion"): the default

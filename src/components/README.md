@@ -7,22 +7,23 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
 ## Architecture
 
 ```text
-┌─────────────┐      ┌────────────────┐
-│   App.tsx   │ ───► │    Header      │
-│ (Providers) │      │ (Settings/Srv) │
-└──────┬──────┘      └───────┬────────┘
-       │                     │
-       ▼                     ▼
-┌─────────────────────────────────────┐
-│      ModelControlCenterPage         │
-│  ┌─────────────┬─────────────┐      │
-│  │   Library   │  Inspector  │      │
-│  │    Panel    │    Panel    │      │
-│  └─────────────┴─────────────┘      │
-└─────────────────┬───────────────────┘
-                  │  lazy-loaded, in place of the panels
+┌─────────────┐      ┌──────────────────────────────────────┐
+│   App.tsx   │ ───► │  app/Shell: sidebar/ │ the place     │
+│ (Providers) │      │  Library · Endpoint  │ (router       │
+└─────────────┘      │  Devices · Chats     │  outlet)      │
+                     │  Settings · Diag.    │               │
+                     └──────────────────────┴───────┬───────┘
+                                                    │
+┌───────────────────────────────────────────────────┴─┐
+│      ModelControlCenterPage (/library, /models/:id) │
+│  ┌─────────────┬─────────────┐                      │
+│  │   Library   │  Inspector  │                      │
+│  │    Panel    │    Panel    │                      │
+│  └─────────────┴─────────────┘                      │
+└─────────────────┬───────────────────────────────────┘
+                  │  other addresses, lazy-loaded
        ┌──────────┴──────────────────┐
-       ▼ (chat open)                 ▼ (Benchmark)
+       ▼ (/chat/:id)                 ▼ (/diagnostics/benchmarks)
 ┌─────────────────────────┐   ┌───────────────┐
 │        ChatPage         │   │ BenchmarkPage │
 │ ┌────────────┬────────┐ │   └───────────────┘
@@ -34,21 +35,21 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
 
 ## Layout Structure
 
-The UI uses a clean 2-panel layout:
+The window is a sidebar (`src/sidebar/`) beside the place the address names
+(`app/Shell.tsx`); there is no header. The Library place is a 2-panel layout:
 
 1. **Model Library Panel** (left): Browse models, search/filter, add new models
 2. **Model Inspector Panel** (right): View details, serve models, manage servers
 
-When a model is served, the view transitions to a Chat layout with tab switching:
+A chat is its own address, with tab switching:
 1. **Chat View**: Conversation List (left) + Messages Panel (right)
 2. **Console View**: the same conversation rail and notebook head, with Server Info Panel (left) + Live Logs (right) below
 
 ## Core Components
 
 ### Layout & Navigation
-- **`Header.tsx`**: Top navigation with settings button and running servers popover
-- **`RunsPopover/`**: Displays active llama-server processes with stop controls
-- **`SettingsModal.tsx`**: Configuration modal for models directory and preferences
+- **`SettingsModal.tsx`**: Configuration modal for models directory and preferences, opened from the sidebar's foot
+- **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and tells its caller, which says "copied" where it lives
 
 ### Model Management
 - **`ModelLibraryPanel/`**: Main model browser with tabbed interface:
@@ -74,10 +75,8 @@ When a model is served, users can switch between Chat and Console views:
 - **`ConsoleInfoPanel/`**: Left panel showing server info (port, uptime, context usage), live metrics from `/metrics` endpoint, and an Unload model button. Uses `useServerState` hook to subscribe to backend lifecycle events - polling automatically stops when server stops and resumes on the next `server_started` frame.
 
 ### Server Management
-- **`ServerHealthIndicator.tsx`**: Server health at a glance
-- **`ServerList/`**: List of running server instances
-- **`ProxyControl.tsx`**: OpenAI-compatible proxy controls
-- **`RemoteControl.tsx`**: The remote tunnel popover (ADR 0012) — this machine's proxy on another machine, or another's here; its two halves live in `remote/`
+- **`ProxyControl.tsx`**: `ProxyPopover`, today's proxy panel (Turn on / off, the URL, the dashboard, Clear Cache), anchored by the sidebar's endpoint line until the Endpoint place replaces it
+- **`RemoteControl.tsx`**: `RemotePopover`, the remote tunnel panel (ADR 0012) — this machine's proxy on another machine, or another's here; its two halves live in `remote/`; anchored by the sidebar's devices line until the Devices place replaces it
 - **`LlamaInstallModal.tsx`**: Offers to install llama.cpp and runs the daemon's install stream, the one the setup wizard uses
 
 ### Support Components

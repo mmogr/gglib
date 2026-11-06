@@ -8,26 +8,27 @@
  *
  * The ordering is `bridgeEvents`'s: subscribe FIRST, then fetch the status,
  * and drop a status that a real event or a cleanup overtook.
+ *
+ * An event carries the port and nothing else, so each one moves the
+ * registry at once and then asks the daemon for the rest (the state word,
+ * the reached address, the key rule, the pin), as the remote bridge does.
  */
 
 import { bridgeEvents } from './bridgeEvents';
 import { getTransport } from './transport';
-import { ingestProxyEvent, resetProxyState } from './proxyRegistry';
+import { applyProxyStatus, ingestProxyEvent, resetProxyState } from './proxyRegistry';
 
 const bridge = bridgeEvents({
   category: 'proxy',
-  onEvent: ingestProxyEvent,
-  // Hydration — seed initial state from current backend status
-  read: () => getTransport().getProxyStatus(),
-  apply: (status) => {
-    // A running proxy always reports a port — `to_api_status` sets the two
-    // together — but they are separate fields, so narrow on the one being
-    // read rather than trusting the pair. The impossible case skips
-    // hydration, which live events would correct anyway.
-    if (status.running && status.port !== null) {
-      ingestProxyEvent({ type: 'proxy_started', port: status.port });
-    }
+  onEvent: (evt) => {
+    ingestProxyEvent(evt);
+    // The event overtook any read still out, so that answer is dropped in
+    // favour of this one's.
+    void bridge.refresh();
   },
+  // Hydration — seed initial state from the daemon's whole answer
+  read: () => getTransport().getProxyStatus(),
+  apply: applyProxyStatus,
   reset: resetProxyState,
 });
 
@@ -37,6 +38,16 @@ const bridge = bridgeEvents({
  */
 export function initProxyEvents(): void {
   bridge.init();
+}
+
+/**
+ * Ask the daemon again, for a surface that just changed something and wants
+ * the registry to say so. Resolves `true` once a read at least as new as the
+ * call has been applied; a read an event overtook is retried once.
+ */
+export async function refreshProxyStatus(): Promise<boolean> {
+  const first = await bridge.refresh();
+  return (first === 'superseded' ? await bridge.refresh() : first) === 'applied';
 }
 
 /**

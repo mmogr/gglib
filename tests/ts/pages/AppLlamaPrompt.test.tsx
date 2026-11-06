@@ -21,7 +21,7 @@ interface PromptProps {
 }
 
 vi.mock('../../../src/pages/ModelControlCenterPage', () => ({ default: () => <main aria-label="Library" /> }));
-vi.mock('../../../src/components/Header', () => ({ default: () => null }));
+vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
 vi.mock('../../../src/components/SettingsModal', () => ({ default: () => null }));
 vi.mock('../../../src/components/SetupWizard', () => ({ default: () => null }));
 vi.mock('../../../src/components/LlamaInstallModal', () => ({
