@@ -205,6 +205,33 @@ export default [
     },
   },
   {
+    // `src/readings` is pure: data in, a reading out. No React, no component,
+    // no service and no Tauri, so a reader can be held by a contract test
+    // alone and survive every screen that shows it.
+    files: ['src/readings/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['react', 'react-dom', 'react/*'],
+              message: 'src/readings has no React. A reader is a function; the component that shows it lives elsewhere.',
+            },
+            {
+              group: ['**/components/**', '**/pages/**', '**/hooks/**'],
+              message: 'src/readings imports no component, page or hook. It reads data and returns a reading.',
+            },
+            {
+              group: ['**/services/**', '@tauri-apps/*'],
+              message: 'src/readings does no IO. What it reads is passed in.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Allow specific patterns
     files: ['src/**/*.{ts,tsx}'],
     rules: {

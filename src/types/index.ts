@@ -36,16 +36,6 @@ export type { InferenceConfig };
  */
 export type SparseInferenceConfig = Partial<InferenceConfig>;
 
-/** Capability bitflags, mirroring `gglib_core::domain::ModelCapabilities` (a bare u32 on the wire). */
-export const CAPABILITY_FLAGS = {
-  supportsSystemRole: 0b0001,
-  requiresStrictTurns: 0b0010,
-  supportsToolCalls: 0b0100,
-  supportsReasoning: 0b1000,
-} as const;
-
-export type CapabilityFlagName = keyof typeof CAPABILITY_FLAGS;
-
 /**
  * `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged.
  *

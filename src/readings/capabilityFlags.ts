@@ -1,7 +1,7 @@
 /**
  * The capability bitflags, mirroring `gglib_core::domain::ModelCapabilities`
  * (a bare u32 on the wire). The contract test `capabilityFlags.test.tsx`
- * holds these values to the Rust source.
+ * holds these values to `contracts/models/capability_flags.json`.
  *
  * @module readings/capabilityFlags
  */
