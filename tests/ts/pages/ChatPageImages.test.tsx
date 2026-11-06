@@ -27,6 +27,7 @@ import type { AttachmentUpload } from '../../../src/types/generated/AttachmentUp
 import type { ModelChoice } from '../../../src/components/ChatMessagesPanel';
 import type { ChatDraft } from '../../../src/types/messages';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
+import { applyLibraryRead, resetModelLibrary } from '../../../src/services/modelRegistry';
 import { useToastContext } from '../../../src/contexts/ToastContext';
 import { TransportError } from '../../../src/services/transport/errors';
 
@@ -103,6 +104,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  resetModelLibrary();
 });
 
 describe('ChatPage, images in the composer', () => {
@@ -409,9 +411,8 @@ describe('ChatPage, images over a model switch', () => {
     act(() => ingestServerEvent({ type: 'running', modelId: '8', port: 5555, updatedAt: Date.now(), modelName: 'llama-3.2-3b' }));
     const user = userEvent.setup();
     const onSwitchModel = vi.fn(async (_c: ModelChoice, _ctx: () => { conversationId: number | null; draft: ChatDraft }) => {});
-    page({ imageInput: true }, {
-      listModels: vi.fn(async () => [guiModel({ id: 7, name: 'Qwen3.8-27B' }), guiModel({ id: 8, name: 'llama-3.2-3b' })]),
-    });
+    page({ imageInput: true });
+    applyLibraryRead({ models: [guiModel({ id: 7, name: 'Qwen3.8-27B' }), guiModel({ id: 8, name: 'llama-3.2-3b' })] });
     const first = renderLocal({ onSwitchModel });
     const box = await composerBox();
     await waitFor(() => expect(attachButton()).toBeEnabled());

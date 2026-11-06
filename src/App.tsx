@@ -16,6 +16,7 @@ import { listenToMenuEvents, MENU_EVENTS, appLogger } from "./services/platform"
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
+import { initModelEvents, cleanupModelEvents } from "./services/modelEvents";
 import { getTransport } from "./services/transport";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
@@ -59,15 +60,17 @@ function AppContent() {
     }
   }, [llamaLoading, llamaStatus]);
 
-  // Initialize server and proxy lifecycle events
+  // Initialize the registries: servers, proxy, remote and the model library
   useEffect(() => {
     initServerEvents();
     initProxyEvents();
     initRemoteEvents();
+    initModelEvents();
     return () => {
       cleanupServerEvents();
       cleanupProxyEvents();
       cleanupRemoteEvents();
+      cleanupModelEvents();
     };
   }, []);
 
