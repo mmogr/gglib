@@ -75,7 +75,6 @@ vi.mock('../../../src/services/transport', async () => {
       getPairedModel: vi.fn(async (id: number) => ({ detail: farDetail(id, 'qwen3-8b') })),
       loadPairedModel: vi.fn(async () => ({ model: 'qwen3-8b', started: true, context: 30000 })),
       serveModel,
-      listTags: vi.fn(async () => []),
       getDownloadQueue: vi.fn(async () => downloads.queue),
       queueDownload,
       browseHfModels: vi.fn(async () => ({ models: [], next_cursor: null })),

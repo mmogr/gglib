@@ -3,23 +3,9 @@
  * Handles tag CRUD and model-tag associations.
  */
 
-import { get, post, del } from './client';
+import { post, del } from './client';
 import type { ModelId } from '../types/ids';
 import type { AddTagRequest } from '../../../types/generated/AddTagRequest';
-
-/**
- * List all available tags.
- */
-export async function listTags(): Promise<string[]> {
-  return get<string[]>('/api/models/tags');
-}
-
-/**
- * Get tags assigned to a specific model.
- */
-export async function getModelTags(modelId: ModelId): Promise<string[]> {
-  return get<string[]>(`/api/models/${modelId}/tags`);
-}
 
 /**
  * Add a tag to a model (creates tag if it doesn't exist).

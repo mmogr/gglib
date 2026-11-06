@@ -29,7 +29,7 @@ const transport = vi.hoisted(() => ({
   listPairedModels: vi.fn(),
 }));
 // The proxy's live dashboard: the test sends its frames.
-const dashboard = vi.hoisted(() => ({ send: null as ((snapshot: unknown) => void) | null }));
+const dashboard = vi.hoisted(() => ({ send: null as ((snapshot: unknown) => void) | null, host: null as string | null }));
 const install = vi.hoisted(() => ({
   stream: vi.fn((_kind: string, _onEvent: (e: unknown) => void, _onError: (m: string) => void) => () => {}),
 }));
@@ -40,7 +40,6 @@ vi.mock('../../../src/services/transport', async () => {
     ...actual,
     getTransport: () => ({
       ...transport,
-      listTags: vi.fn(async () => []),
       getModelDetail: vi.fn(async () => null),
       getSettings: vi.fn(async () => ({})),
       subscribe: vi.fn((category: string, handler: (evt: unknown) => void) => {
@@ -59,7 +58,8 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn() }));
 vi.mock('../../../src/services/clients/proxyDashboard', () => ({
-  subscribeProxyDashboard: (_h: string, _p: number, _k: unknown, onSnapshot: (s: unknown) => void) => {
+  subscribeProxyDashboard: (host: string, _p: number, _k: unknown, onSnapshot: (s: unknown) => void) => {
+    dashboard.host = host;
     dashboard.send = onSnapshot;
     return () => {
       dashboard.send = null;
@@ -71,7 +71,7 @@ import { cleanupModelEvents, initModelEvents } from '../../../src/services/model
 import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
 import { cleanupServerEvents, initServerEvents } from '../../../src/services/serverEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
-import { ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
+import { applyProxyStatus, ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
 import { resetEngineInstall } from '../../../src/places/library/engineInstall';
 import { INSTALL_PHASE_LABELS } from '../../../src/types/setup';
 import { getSetupStatus } from '../../../src/services/transport/api/setup';
@@ -189,6 +189,24 @@ describe('the library place', () => {
     // Another model's slot says nothing of this one.
     act(() => dashboard.send?.(frame([2, 'working'])));
     expect(within(row).getByText('Loaded')).toBeInTheDocument();
+  });
+
+  it('reaches the live stream where the daemon says the endpoint is, not always on loopback', async () => {
+    library.models = [guiModel({ id: 1, name: 'Qwen3-4B' })];
+    servers.list = [listed(1, 'Qwen3-4B')];
+    act(() =>
+      applyProxyStatus({
+        running: true,
+        state: 'on',
+        port: 8080,
+        base_url: 'http://192.168.1.5:8080/v1',
+        key: 'none_needed',
+        pinned_model: null,
+      }),
+    );
+    renderLibrary();
+    await waitFor(() => expect(dashboard.send).not.toBeNull());
+    expect(dashboard.host).toBe('192.168.1.5');
   });
 
   it("says the facts under a model's name, and a missing part as the one accessory", async () => {

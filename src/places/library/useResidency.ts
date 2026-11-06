@@ -17,14 +17,25 @@ import { useDashboard } from '../../services/dashboardRegistry';
 import { useProxyState } from '../../services/proxyRegistry';
 import type { ResidencyState } from '../../types/generated/ResidencyState';
 
-/** Host the daemon's proxy is bound to, as the tray reads it. */
-const PROXY_HOST = '127.0.0.1';
+/**
+ * Where this app reaches the endpoint: the host of the status's `base_url`
+ * (the daemon's dial rule, so an endpoint bound to one interface is reached
+ * there), and loopback until the status has been read.
+ */
+function dialHost(baseUrl: string | null | undefined): string {
+  if (!baseUrl) return '127.0.0.1';
+  try {
+    return new URL(baseUrl).hostname;
+  } catch {
+    return '127.0.0.1';
+  }
+}
 
 export function useResidency(): ReadonlyMap<number, ResidencyState> {
   const proxy = useProxyState();
   const apiKey = useProxyKey(proxy.running);
   const { snapshot } = useDashboard(
-    proxy.running && proxy.port !== null && apiKey !== undefined ? { host: PROXY_HOST, port: proxy.port, apiKey } : null,
+    proxy.running && proxy.port !== null && apiKey !== undefined ? { host: dialHost(proxy.status?.base_url), port: proxy.port, apiKey } : null,
   );
   return useMemo(() => {
     const states = new Map<number, ResidencyState>();
