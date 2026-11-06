@@ -50,6 +50,7 @@ $ gglib up
     opencode                 opencode.json, in the project or in ~/.config/opencode/
       provider.gglib.npm             @ai-sdk/openai-compatible
       provider.gglib.options.baseURL http://127.0.0.1:8080/v1
+      provider.gglib.options.apiKey  gglib
       provider.gglib.models          { "Qwen3.8-27B": {} }
       model                          gglib/Qwen3.8-27B
 
@@ -65,7 +66,8 @@ $ gglib up
     VS Code Copilot (BYOK)   needs one fixed model, so serve only this one
       Run                            gglib serve 3
 
-    Any OpenAI client        environment variables, as aider and most SDKs read them
+    Any OpenAI client        environment variables: the official SDKs read OPENAI_BASE_URL, aider and litellm OPENAI_API_BASE
+      OPENAI_BASE_URL                http://127.0.0.1:8080/v1
       OPENAI_API_BASE                http://127.0.0.1:8080/v1
       OPENAI_API_KEY                 gglib
       model                          Qwen3.8-27B

@@ -74,7 +74,9 @@ pub(crate) async fn status(State(state): State<AppState>) -> Json<ProxyStatus> {
 /// `?model=<gglib id>`: the model a client would send for.
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ClientsQuery {
-    pub model: i64,
+    /// The model's gglib id; the pin when absent.
+    #[serde(default)]
+    pub model: Option<i64>,
 }
 
 /// How a client connects to the running endpoint for one model: the
@@ -87,10 +89,12 @@ pub(crate) async fn clients(
     Ok(Json(state.proxy.client_recipes(query.model).await?))
 }
 
-/// `{"model_id": <gglib id>}`: the model to prove the endpoint with.
+/// `{"model_id": <gglib id>}`: the model to prove the endpoint with; the
+/// pin when absent or null.
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ProveBody {
-    pub model_id: i64,
+    #[serde(default)]
+    pub model_id: Option<i64>,
 }
 
 /// Send one real completion through the running endpoint and say who

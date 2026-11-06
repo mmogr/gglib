@@ -1,8 +1,9 @@
 //! The client block `gglib up` and `gglib proxy test` end with: where a
 //! client reaches the endpoint, whether it needs a key, the id a client
 //! sends, and a recipe per client, all as the daemon answered
-//! (`GET /api/proxy/clients`), laid out in columns and printed. Nothing here
-//! works a value out; the daemon wrote every one.
+//! (`GET /api/proxy/clients`), laid out in columns and printed. The daemon
+//! wrote every value; the one thing decided here is which lines are key
+//! lines, so a key the endpoint checks is shown as the stored secret.
 
 use gglib_core::domain::KeyState;
 use gglib_core::secret::{SettingSecret, held_line};
@@ -19,8 +20,8 @@ pub(crate) fn render_proof(outcome: Result<&ProofOutcomeDto, &str>, color: bool)
         ("", "", "", "")
     };
     match outcome {
-        // A pinned endpoint answers with its pin whatever was asked for, so
-        // the two are both said when they differ.
+        // The answer names the model that answered; when that is not what
+        // was asked for, both are said.
         Ok(proof) => {
             let asked = if proof.answered_by == proof.asked_for {
                 String::new()
@@ -36,10 +37,9 @@ pub(crate) fn render_proof(outcome: Result<&ProofOutcomeDto, &str>, color: bool)
                 proof.answered_by
             )]
         }
-        Err(reason) => vec![
-            format!("  {warning}!{reset} the first request did not complete: {reason}"),
-            format!("  {dim}the endpoint is still running \u{2014} try it yourself below{reset}"),
-        ],
+        Err(reason) => vec![format!(
+            "  {warning}!{reset} the first request did not complete: {reason}"
+        )],
     }
 }
 
@@ -241,7 +241,7 @@ mod tests {
         let proof = ProofOutcomeDto {
             answered_by: "qwen3-8b".to_owned(),
             asked_for: "Qwen3 8B".to_owned(),
-            elapsed_ms: 1_400,
+            elapsed_ms: 1_350,
         };
         assert_eq!(
             render_proof(Ok(&proof), false),
@@ -260,6 +260,6 @@ mod tests {
             refused[0].contains("503 Service Unavailable: loading"),
             "{refused:?}"
         );
-        assert!(refused[1].contains("still running"));
+        assert_eq!(refused.len(), 1, "{refused:?}");
     }
 }

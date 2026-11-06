@@ -111,22 +111,24 @@ impl DaemonHandle {
     /// How a client connects to the running endpoint for model `gglib_id`:
     /// the daemon's address, key rule, the id a client sends, and a recipe
     /// per client, printed as sent.
-    pub(crate) async fn proxy_clients(&self, gglib_id: i64) -> Result<ClientRecipesDto> {
+    pub(crate) async fn proxy_clients(&self, gglib_id: Option<i64>) -> Result<ClientRecipesDto> {
+        let query = gglib_id.map_or_else(String::new, |id| format!("?model={id}"));
         let response = self
-            .get(&format!("{}?model={gglib_id}", paths::PROXY_CLIENTS_PATH))
+            .get(&format!("{}{query}", paths::PROXY_CLIENTS_PATH))
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)
     }
 
-    /// One real request through the running endpoint for model `gglib_id`.
+    /// One real request through the running endpoint for model `gglib_id`,
+    /// the pin when `None`.
     ///
     /// Long timeout: the daemon holds the request open while the model
-    /// loads, up to its own bind and load limits; this waits a little past
-    /// both so the daemon's own refusal, not a client timeout, is what is
-    /// printed.
-    pub(crate) async fn proxy_prove(&self, gglib_id: i64) -> Result<ProofOutcomeDto> {
+    /// loads, up to its own bind and load limits (half a minute and ten
+    /// minutes); this waits past both so the daemon's own refusal, not a
+    /// client timeout, is what is printed.
+    pub(crate) async fn proxy_prove(&self, gglib_id: Option<i64>) -> Result<ProofOutcomeDto> {
         let response = self
             .post(paths::PROXY_PROVE_PATH)
             .json(&serde_json::json!({ "model_id": gglib_id }))

@@ -31,8 +31,9 @@ pub const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ProofOutcome {
-    /// The model named in the answer, which is the one that answered: a
-    /// pinned endpoint answers with its pin whatever was asked for.
+    /// The model the answer names, which is the one that answered. A
+    /// pinned endpoint refuses every other model, so a proof of one asks
+    /// for the pin.
     pub answered_by: String,
     /// The id the request named.
     pub asked_for: String,
@@ -42,8 +43,8 @@ pub struct ProofOutcome {
 }
 
 /// Why a proof did not get an answer, as a sentence every surface prints.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+/// The route answers it as the daemon's error envelope, not as this shape.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofRefusal {
     pub reason: String,
 }

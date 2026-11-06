@@ -44,7 +44,6 @@ const NOT_IMPORTED = [
   'ModelAgenticHistoryQuery',
   'ModelsResponse',
   'ProofOutcome',
-  'ProofRefusal',
   'PublishedStateDto',
   'RecipeLine',
   'StartServerBody',

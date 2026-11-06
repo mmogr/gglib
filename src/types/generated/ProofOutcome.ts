@@ -5,8 +5,9 @@
  */
 export type ProofOutcome = { 
 /**
- * The model named in the answer, which is the one that answered: a
- * pinned endpoint answers with its pin whatever was asked for.
+ * The model the answer names, which is the one that answered. A
+ * pinned endpoint refuses every other model, so a proof of one asks
+ * for the pin.
  */
 answered_by: string, 
 /**

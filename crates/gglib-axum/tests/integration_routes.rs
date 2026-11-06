@@ -1050,17 +1050,5 @@ async fn proxy_clients_and_prove_refuse_while_the_endpoint_is_off() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let body_str = std::str::from_utf8(&body).unwrap();
     assert!(body_str.contains("the endpoint is off"), "{body_str}");
-
-    // The model is required: a recipe is for one model.
-    let response = app
-        .oneshot(
-            authed()
-                .header("Host", "127.0.0.1:9887")
-                .uri("/api/proxy/clients")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    drop(app);
 }

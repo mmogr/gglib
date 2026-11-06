@@ -109,6 +109,7 @@ pub fn recipes(facts: &ClientFacts) -> ClientRecipes {
                 lines: vec![
                     line("provider.gglib.npm", "@ai-sdk/openai-compatible".to_owned()),
                     line("provider.gglib.options.baseURL", base.to_owned()),
+                    line("provider.gglib.options.apiKey", key_literal.to_owned()),
                     line("provider.gglib.models", format!("{{ \"{model}\": {{}} }}")),
                     line("model", format!("gglib/{model}")),
                 ],
@@ -137,8 +138,9 @@ pub fn recipes(facts: &ClientFacts) -> ClientRecipes {
             },
             ClientRecipe {
                 client: "Any OpenAI client".to_owned(),
-                hint: "environment variables, as aider and most SDKs read them".to_owned(),
+                hint: "environment variables: the official SDKs read OPENAI_BASE_URL, aider and litellm OPENAI_API_BASE".to_owned(),
                 lines: vec![
+                    line("OPENAI_BASE_URL", base.to_owned()),
                     line("OPENAI_API_BASE", base.to_owned()),
                     line("OPENAI_API_KEY", key_literal.to_owned()),
                     line("model", model.to_owned()),
@@ -202,6 +204,77 @@ mod tests {
         }
     }
 
+    /// Each recipe's lines are the ones its client reads, by label: the
+    /// official OpenAI client libraries read `OPENAI_BASE_URL` and ignore
+    /// `OPENAI_API_BASE` (which aider and litellm read), so a recipe with
+    /// only the latter would send the key to api.openai.com; opencode's
+    /// provider sends no bearer without `apiKey`.
+    #[test]
+    fn every_recipe_carries_exactly_the_lines_its_client_reads() {
+        let r = recipes(&facts(Some(KeyState::NoneNeeded)));
+        let labels = |client: &str| -> Vec<String> {
+            r.recipes
+                .iter()
+                .find(|x| x.client == client)
+                .unwrap()
+                .lines
+                .iter()
+                .map(|l| l.label.clone())
+                .collect()
+        };
+        assert_eq!(
+            labels("opencode"),
+            [
+                "provider.gglib.npm",
+                "provider.gglib.options.baseURL",
+                "provider.gglib.options.apiKey",
+                "provider.gglib.models",
+                "model"
+            ]
+        );
+        assert_eq!(
+            labels("Cline / Roo / Continue"),
+            ["Base URL", "API Key", "Model ID"]
+        );
+        assert_eq!(labels("Open WebUI"), ["URL", "Key"]);
+        assert_eq!(labels("VS Code Copilot (BYOK)"), ["Run"]);
+        assert_eq!(
+            labels("Any OpenAI client"),
+            [
+                "OPENAI_BASE_URL",
+                "OPENAI_API_BASE",
+                "OPENAI_API_KEY",
+                "model"
+            ]
+        );
+        let opencode = r.recipes.iter().find(|x| x.client == "opencode").unwrap();
+        assert_eq!(opencode.lines[0].value, "@ai-sdk/openai-compatible");
+        assert_eq!(opencode.lines[4].value, "gglib/qwen3-30b-a3b@Q4_K_M");
+    }
+
+    /// Every recipe that dials the endpoint carries a key line, since every
+    /// such client must send the key when the endpoint checks one; the CLI
+    /// finds those lines by their label.
+    #[test]
+    fn every_recipe_that_dials_the_endpoint_carries_a_key_line() {
+        let r = recipes(&facts(Some(KeyState::Required)));
+        for recipe in r
+            .recipes
+            .iter()
+            .filter(|x| x.client != "VS Code Copilot (BYOK)")
+        {
+            assert!(
+                recipe
+                    .lines
+                    .iter()
+                    .any(|l| l.label.to_ascii_lowercase().contains("key")),
+                "{}: {:?}",
+                recipe.client,
+                recipe.lines
+            );
+        }
+    }
+
     /// Copilot cannot use the unpinned endpoint; its recipe is the pinned
     /// command with the model by id, which a shell passes as one argument.
     #[test]
@@ -242,6 +315,21 @@ mod tests {
         let r = recipes(&facts(Some(KeyState::NoneNeeded)));
         let webui = r.recipes.iter().find(|x| x.client == "Open WebUI").unwrap();
         assert_eq!(webui.lines[1].value, KEY_PLACEHOLDER);
+        let cline = r
+            .recipes
+            .iter()
+            .find(|x| x.client.starts_with("Cline"))
+            .unwrap();
+        assert_eq!(
+            cline.lines[1].value,
+            "gglib  (unused, but most clients demand one)"
+        );
+        let env = r
+            .recipes
+            .iter()
+            .find(|x| x.client == "Any OpenAI client")
+            .unwrap();
+        assert_eq!(env.lines[2].value, KEY_PLACEHOLDER);
         let unknown = recipes(&facts(None));
         assert_eq!(unknown.key, None);
         let cline = unknown

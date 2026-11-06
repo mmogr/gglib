@@ -26,7 +26,7 @@ use crate::presentation::style::{BOLD, DIM, RESET, make_spinner};
 pub(super) async fn run(handle: &DaemonHandle, model_id: i64) {
     let spinner = make_spinner();
     spinner.set_message("Loading the model through the endpoint...".to_owned());
-    let proved = handle.proxy_prove(model_id).await;
+    let proved = handle.proxy_prove(Some(model_id)).await;
     spinner.finish_and_clear();
     println!();
     let lines = match &proved {
@@ -36,10 +36,14 @@ pub(super) async fn run(handle: &DaemonHandle, model_id: i64) {
     for line in lines {
         println!("{line}");
     }
+    if proved.is_err() {
+        // A failed proof leaves the endpoint `up` just started running.
+        println!("  the endpoint is still running \u{2014} try it yourself below");
+    }
     // The block is the daemon's too. A daemon that refuses to say (older
     // than this CLI, or its endpoint gone between the two calls) is printed
     // as it answered.
-    match handle.proxy_clients(model_id).await {
+    match handle.proxy_clients(Some(model_id)).await {
         Ok(recipes) => {
             for line in render_client_config(&recipes, use_color()) {
                 println!("{line}");

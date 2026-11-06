@@ -58,7 +58,8 @@ Copilot, any OpenAI client). All of it is the daemon's: it sends the request
 to its own endpoint with the key the endpoint demands, and writes the
 recipes from the address it is bound at, so `gglib up`, this command and the
 desktop app show one block. With no model named it uses the pinned model,
-else the one loaded model, else asks you to name one.
+else the one loaded chat model, else asks you to name one. Exits non-zero
+when the proof fails, so a script can tell; the block is printed first.
 
 ### `dashboard`, `cache-clear`, `trips`, `stop`
 

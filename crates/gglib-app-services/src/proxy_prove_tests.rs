@@ -70,6 +70,14 @@ async fn the_answer_names_who_answered_and_the_key_travels_as_the_bearer() {
         request.line()
     );
     assert_eq!(request.header("authorization"), Some("Bearer k3y-5f3a"));
+    // The key travels as the bearer and nowhere else: not in the line, not
+    // in the body.
+    assert!(!request.line().contains("k3y-5f3a"), "{}", request.line());
+    assert!(
+        !request.body_text().contains("k3y-5f3a"),
+        "{}",
+        request.body_text()
+    );
     let sent: serde_json::Value = serde_json::from_str(&request.body_text()).unwrap();
     assert_eq!(sent["model"], "Qwen3 8B");
     assert_eq!(sent["max_tokens"], 1);
@@ -120,6 +128,7 @@ async fn a_listener_that_never_comes_is_said_within_the_bind_timeout() {
         .local_addr()
         .unwrap();
     let base = format!("http://{free}/v1");
+    let begun = std::time::Instant::now();
     let refusal = prove(
         &gglib_proxy::loopback::client(),
         &base,
@@ -134,6 +143,12 @@ async fn a_listener_that_never_comes_is_said_within_the_bind_timeout() {
         refusal.reason.contains("did not answer /health"),
         "{}",
         refusal.reason
+    );
+    // Said within the bind timeout, not some longer wait of its own.
+    assert!(
+        begun.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        begun.elapsed()
     );
 }
 
@@ -156,4 +171,74 @@ fn the_answer_carries_exactly_the_fields_the_contract_names() {
     let mut named = gglib_core::contracts::http::daemon::PROXY_PROVE_FIELDS.to_vec();
     named.sort_unstable();
     assert_eq!(keys, named);
+}
+
+/// A model the catalogue holds but no file backs: enough for the endpoint
+/// to pass the bearer check and refuse on the file, which is what these
+/// tests read.
+async fn a_catalogued_model(core: &gglib_core::services::AppCore) -> i64 {
+    core.models()
+        .add(gglib_core::domain::NewModel::new(
+            "qwen3-8b".to_owned(),
+            std::path::PathBuf::from("/models/absent.gguf"),
+            8.0,
+            chrono::Utc::now(),
+        ))
+        .await
+        .expect("a model")
+        .id
+}
+
+/// The proof presents the key the endpoint demands of a request now, not
+/// the one the run started with: an endpoint started open that has a key
+/// stored later (`gglib remote enable`, a rotate) demands the stored key,
+/// and the proof gets past the bearer check with it. Waits out the
+/// endpoint's settings cache, as the endpoint itself does.
+#[tokio::test]
+async fn the_proof_presents_the_key_the_endpoint_demands_now() {
+    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    let id = a_catalogued_model(&core).await;
+    proxy
+        .start(
+            gglib_runtime::proxy::ProxyConfig {
+                port: 0,
+                ..gglib_runtime::proxy::ProxyConfig::default()
+            },
+            None,
+        )
+        .await
+        .expect("the proxy starts");
+    let past_the_bearer = |refusal: &crate::GuiError| {
+        let text = refusal.to_string();
+        assert!(!text.contains("401"), "{text}");
+        assert!(text.contains("404"), "{text}");
+    };
+    past_the_bearer(&proxy.prove(Some(id)).await.expect_err("no file"));
+
+    core.settings()
+        .update(gglib_core::SettingsUpdate {
+            proxy_api_key: Some(Some("stored-later".to_owned())),
+            ..gglib_core::SettingsUpdate::default()
+        })
+        .await
+        .unwrap();
+    // The endpoint's settings cache lives five seconds (`SettingsCache`).
+    tokio::time::sleep(Duration::from_secs(6)).await;
+    assert_eq!(
+        proxy.key_state().await,
+        Some(gglib_core::domain::KeyState::Required)
+    );
+    past_the_bearer(&proxy.prove(Some(id)).await.expect_err("no file"));
+
+    // An id the catalogue does not hold is a not-found, before any request.
+    assert!(matches!(
+        proxy.client_recipes(Some(id + 1000)).await,
+        Err(crate::GuiError::NotFound { .. })
+    ));
+    // With no pin, a request must name the model.
+    assert!(matches!(
+        proxy.prove(None).await,
+        Err(crate::GuiError::ValidationFailed(_))
+    ));
+    proxy.stop().await.expect("stop");
 }
