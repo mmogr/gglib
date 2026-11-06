@@ -45,6 +45,9 @@ interface QuantizationTableProps {
   disabledReason?: string;
 }
 
+/** One grid for the header and every row; the quant column keeps the room a 380 px inspector leaves. */
+const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_4rem_3rem_1.5rem_5rem] gap-xs px-md';
+
 /**
  * The variant table: one row per variant, by its uploader's label, with its
  * size, shard count, the daemon's fit verdict and download button. One row
@@ -66,7 +69,7 @@ export const QuantizationTable: FC<QuantizationTableProps> = ({
 
   return (
     <div className="flex flex-col border border-border rounded-lg overflow-hidden bg-surface">
-      <div className="grid grid-cols-[1fr_80px_60px_50px_90px] gap-sm px-base py-md bg-surface-elevated text-sm font-semibold text-text">
+      <div className={cn(COLUMNS, 'py-md bg-surface-elevated text-sm font-semibold text-text')}>
         <span>Quant</span>
         <span>Size</span>
         <span>Shards</span>
@@ -84,12 +87,12 @@ export const QuantizationTable: FC<QuantizationTableProps> = ({
             onClick={() => onSelect(quant)}
             onFocus={() => onSelect(quant)}
             className={cn(
-              'grid grid-cols-[1fr_80px_60px_50px_90px] gap-sm px-base py-md items-center border-b border-border-light last:border-b-0 cursor-pointer transition-colors duration-150 ease-linear hover:bg-surface-hover',
+              COLUMNS, 'py-md items-center border-b border-border-light last:border-b-0 cursor-pointer transition-colors duration-150 ease-linear hover:bg-surface-hover',
               quant.label === selectedName && 'bg-surface-hover',
             )}
           >
-            <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-semibold text-text">{quant.label}</span>
+            <span className="overflow-hidden text-ellipsis whitespace-nowrap" title={quant.label}>
+              <span className="text-sm font-semibold text-text">{quant.label}</span>
               {helper && (
                 <span className="ml-sm text-xs text-text-secondary" title={HELPER_FILES_REFUSAL}>
                   draft or helper
