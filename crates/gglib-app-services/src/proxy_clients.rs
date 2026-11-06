@@ -205,7 +205,7 @@ mod tests {
     }
 
     /// Each recipe's lines are the ones its client reads, by label: the
-    /// official OpenAI client libraries read `OPENAI_BASE_URL` and ignore
+    /// official `OpenAI` client libraries read `OPENAI_BASE_URL` and ignore
     /// `OPENAI_API_BASE` (which aider and litellm read), so a recipe with
     /// only the latter would send the key to api.openai.com; opencode's
     /// provider sends no bearer without `apiKey`.
