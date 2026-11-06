@@ -61,7 +61,7 @@ export function Chip({
   const shared = cn(
     "inline-flex items-center font-semibold whitespace-nowrap max-w-full",
     sizeClasses[size],
-    selected ? "bg-primary-subtle text-primary-light" : variantClasses[variant],
+    selected ? "bg-primary text-text-inverse" : variantClasses[variant],
     className,
   );
 

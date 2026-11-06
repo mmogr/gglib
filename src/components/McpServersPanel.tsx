@@ -471,7 +471,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
             href="https://modelcontextprotocol.io/introduction"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary no-underline hover:underline"
+            className="text-primary underline underline-offset-2 hover:text-text-secondary"
           >
             Model Context Protocol
           </a>

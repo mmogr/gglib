@@ -162,7 +162,7 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
       >
         <Icon icon={Wrench} size={14} />
         {enabledTools.size > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 text-xs font-semibold leading-[14px] text-center text-white bg-accent rounded-full">{enabledTools.size}</span>
+          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 text-xs font-semibold leading-[14px] text-center text-text-inverse bg-primary rounded-full">{enabledTools.size}</span>
         )}
       </Button>
 

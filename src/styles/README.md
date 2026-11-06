@@ -27,7 +27,7 @@ Tokens are layered: a foundation value, then aliases named for their purpose.
 
 ```css
 /* Foundation tokens (primitives) */
---color-primary: #f08c26;
+--color-primary: #edece8;
 --spacing-base: 1rem;
 
 /* Semantic aliases (purpose-based) */
@@ -289,7 +289,9 @@ has an accessible name.
   neutral text** — never a filled pill, and never "usage is fine".
 - Amber (`warning`) means attention: an update to take, a part missing, a
   device away. It is always a mark or label **plus text**.
-- `primary` is selection, focus, links, and the single primary CTA.
+- `primary` is ink, the highest-contrast neutral: one inverted Button per
+  screen is the action, and selection and focus share it. Amber marks no
+  action; it is the attention colour only.
 
 ### Motion
 
