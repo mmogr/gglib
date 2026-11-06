@@ -33,6 +33,20 @@ pub const PROXY_STOP_PATH: &str = "/api/proxy/stop";
 /// Current proxy status.
 pub const PROXY_STATUS_PATH: &str = "/api/proxy/status";
 
+/// The keys of the answer to [`PROXY_STATUS_PATH`], and to a proxy start
+/// and stop.
+///
+/// The daemon's test holds its `ProxyStatus` to this list and the CLI's holds
+/// its `ProxyStatusDto` to it, as the start body's lists do.
+pub const PROXY_STATUS_FIELDS: &[&str] = &[
+    "running",
+    "state",
+    "port",
+    "base_url",
+    "key",
+    "pinned_model",
+];
+
 /// The loop guard's log, a day per row (#1052).
 ///
 /// Not in [`CLI_ROUTE_CONTRACT`]: `gglib proxy trips` reads the log from this

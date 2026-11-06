@@ -27,25 +27,39 @@ pub struct Companion {
 }
 
 /// The family of the image model whose first weights file is `first_weights`
-/// in `model_id`, and the companions its recipe draws with; `None` for any
-/// other model.
+/// in `model_id`, and the companions its recipe draws with.
 ///
-/// The head of the file is read and its tensor table sniffed. A chat
-/// model's metadata runs past the head, and a head that cannot be read at
-/// all is logged: either is `None`, so a download of anything that is not an
-/// image model goes on as it always has.
+/// `None` for any other model: [`image_family_of`], then [`companions_of`].
 ///
 /// # Errors
 ///
-/// When the head names a family and a companion its recipe names cannot be
-/// looked up: [`HfPortError::FileNotFound`] naming the companion's repository
-/// and path when the Hub holds no file there, or what the client answered.
+/// What [`companions_of`] answers.
 pub async fn image_companions(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     first_weights: &HfFileInfo,
 ) -> HfPortResult<Option<(ImageFamily, Vec<Companion>)>> {
+    let Some(family) = image_family_of(client, parser, model_id, first_weights).await else {
+        return Ok(None);
+    };
+    let companions = companions_of(client, family).await?;
+    Ok(Some((family, companions)))
+}
+
+/// The family of the image model whose first weights file is `first_weights`
+/// in `model_id`, from one head read of it; `None` for any other model.
+///
+/// The head of the file is read and its tensor table sniffed. A chat
+/// model's metadata runs past the head, and a head that cannot be read at
+/// all is logged: either is `None`, so a download of anything that is not an
+/// image model goes on as it always has.
+pub async fn image_family_of(
+    client: &dyn HfClientPort,
+    parser: &dyn GgufParserPort,
+    model_id: &str,
+    first_weights: &HfFileInfo,
+) -> Option<ImageFamily> {
     let head = match client
         .read_head(model_id, &first_weights.path, SNIFF_HEAD_BYTES)
         .await
@@ -58,17 +72,27 @@ pub async fn image_companions(
                 error = %unread,
                 "the weights' head could not be read; downloading them as a chat model's"
             );
-            return Ok(None);
+            return None;
         }
     };
-    let Some(family) = parser
+    parser
         .tensor_table_of_head(&head)
         .ok()
         .and_then(|table| ImageFamily::sniff(&table))
-    else {
-        return Ok(None);
-    };
+}
 
+/// The companions `family`'s recipe draws with, each looked up on the Hub
+/// so its size and OID are known.
+///
+/// # Errors
+///
+/// When a companion the recipe names cannot be looked up:
+/// [`HfPortError::FileNotFound`] naming the companion's repository and path
+/// when the Hub holds no file there, or what the client answered.
+pub async fn companions_of(
+    client: &dyn HfClientPort,
+    family: ImageFamily,
+) -> HfPortResult<Vec<Companion>> {
     let mut companions = Vec::new();
     for spec in family.recipe().components {
         let file = client.file_at(spec.repo, spec.path).await?.ok_or_else(|| {
@@ -83,7 +107,7 @@ pub async fn image_companions(
             file,
         });
     }
-    Ok(Some((family, companions)))
+    Ok(companions)
 }
 
 #[cfg(test)]

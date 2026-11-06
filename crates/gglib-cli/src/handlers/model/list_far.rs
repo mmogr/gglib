@@ -103,11 +103,16 @@ async fn summary_from(ctx: &CliContext, daemon: &impl ConnectionReport) -> Optio
 fn summary_line(name: Option<&str>, connection: Option<&RemoteConnection>) -> String {
     let name = name.unwrap_or(UNNAMED_PAIRED);
     match connection.map(|c| (c.away_for_s, &c.path)) {
-        None => format!("{name}: not connected"),
-        Some((Some(secs), _)) => format!("{name}: away {}", for_how_long(secs)),
-        Some((None, path)) => {
-            format!("Paired with {name} ({path}). Its models: gglib model list --remote")
-        }
+        None => format!("{name}: {}", gglib_core::domain::ReachState::Disconnected),
+        Some((Some(secs), _)) => format!(
+            "{name}: {} {}",
+            gglib_core::domain::ReachState::Away,
+            for_how_long(secs)
+        ),
+        Some((None, path)) => format!(
+            "{name}: {} ({path}). Its models: gglib model list --remote",
+            gglib_core::domain::ReachState::Connected
+        ),
     }
 }
 

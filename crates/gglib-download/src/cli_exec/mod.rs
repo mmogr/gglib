@@ -1,11 +1,10 @@
 #![doc = include_str!("README.md")]
 mod api;
 mod exec;
-mod quant_listing;
 mod types;
 mod utils;
 
-pub use api::{list_quantizations, stored_variant_label};
+pub use api::{hub_client, stored_variant_label};
 pub use exec::{check_update, update_model};
 pub use types::*;
 

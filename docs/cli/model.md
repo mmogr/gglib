@@ -10,11 +10,11 @@ names a model by the id or name shown here.
 $ gglib model list
 Found 3 model(s):
 
-ID  Name                      Params   Arch         Quant    Context    Images  Draws Added                File Path
----------------------------------------------------------------------------------------------------------------------------------
-3   Qwen3.8-27B               27.0     qwen35       Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
-2   Qwen3-4B-Instruct-2507    4.0      qwen3        Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
-1   Qwen3-30B-A3B             30.0     qwen3moe     Q4_K_M   40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf
+ID  Name                      Model ID               Params   ⚡ t/s      Arch         Quant    Context    Images  Draws Added                File Path
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+3   Qwen3.8-27B               Qwen3.8-27B            27.0     --         qwen35       Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
+2   Qwen3-4B-Instruct-2507    Qwen3-4B-Instruct-2507 4.0      --         qwen3        Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
+1   Qwen3-30B-A3B             Qwen3-30B-A3B          30.0     --         qwen3moe     Q4_K_M   40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf
 ```
 <!-- /snippet -->
 
@@ -148,7 +148,9 @@ The layers, from strongest to weakest, are in
 
 Hugging Face. `search <query>` and `browse` (popular repositories) find a
 model; `download <repo>` fetches it, `-q <QUANT>` picks a quantization, and
-`--list-quants` lists the ones a repository offers.
+`--list-quants` lists the ones a repository offers, each with whether it
+fits this machine, judged as a download without `-q` picks one (the same
+listing the GUI's table shows).
 
 <!-- snippet: model-search -->
 ```console

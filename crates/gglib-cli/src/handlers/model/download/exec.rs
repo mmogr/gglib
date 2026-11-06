@@ -10,12 +10,11 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use gglib_download::cli_exec::list_quantizations;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
 
-use super::{companions, remote};
+use super::{companions, list_quants, remote};
 
 /// Download command arguments passed from CLI.
 pub(crate) struct DownloadArgs<'a> {
@@ -36,15 +35,9 @@ pub(crate) struct DownloadArgs<'a> {
 /// Ctrl-C detaches; the daemon keeps downloading and registers the model
 /// itself.
 pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
-    // --list-quants: show available quantizations and exit (uses cli_exec directly).
+    // --list-quants: the daemon's listing, printed, and nothing queued.
     if args.list_quants {
-        list_quantizations(
-            args.model_id,
-            args.token.map(String::from),
-            ctx.gguf_parser.as_ref(),
-        )
-        .await?;
-        return Ok(());
+        return list_quants::execute(ctx, args.model_id, args.token).await;
     }
 
     let handle = daemon_client::ensure_daemon(ctx).await?;

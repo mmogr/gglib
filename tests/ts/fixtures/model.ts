@@ -22,6 +22,8 @@ const BASE: GgufModel = {
   quantization: null,
   contextLength: null,
   hfRepoId: null,
+  // The id a client sends, named by the listing; a row built alone has none.
+  openaiId: null,
   // `GuiModel::from_model` formats as `%Y-%m-%d %H:%M:%S` — no `T`, no
   // zone. Nothing in `src/` parses it, but a fixture claiming to be what
   // the wire sends should be.

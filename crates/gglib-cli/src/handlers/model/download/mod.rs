@@ -6,6 +6,7 @@ mod check_updates;
 mod companions;
 mod exec;
 mod interactive;
+mod list_quants;
 mod monitor;
 mod remote;
 mod search;

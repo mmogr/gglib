@@ -109,12 +109,20 @@ infrastructure concerns (database, filesystem, etc.).
   fits, tight, too big, or unknown with the missing input named), read off the
   launch's own context fit at the default KV cache types, with the inputs it
   was reached from as the reason
+- `variant_fit` - Whether a repository's variant fits this machine, as a
+  listing says it (`VariantFit`, with its words), the picker's verdict on
+  the wire
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
+- `revision` - The revision a model's files came from, a commit sha or a
+  ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine
   (`recommend`, `Recommendation`)
 - `residency` - Whether a second model may stay resident in VRAM beside the
   first (`decide_secondary_slot`, `SecondarySlotDecision`)
+- `state_words` - The word every surface uses for a state (`EndpointState`,
+  `ResidencyState`, `ReachState`, `KeyState`), written once and recorded in
+  `contracts/vocabulary/words.json`.
 - `admission` - What the admission queue and the VRAM resident set look like
   right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in
 - `cache_budget` - Auto-sizing of llama-server's host-RAM prompt cache
