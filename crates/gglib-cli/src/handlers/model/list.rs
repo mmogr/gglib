@@ -4,9 +4,10 @@
 //! rows are [`ModelOps::list_with_query`]'s, the listing `GET /api/models`
 //! answers with, so a flag here and a filter on the library page narrow by
 //! one rule; a single table function renders them. A speed column (`⚡ t/s`)
-//! is shown only when at least one returned model has benchmark data, and an
-//! `Images` column says which models are linked to a projector. The `Draws`
-//! column names an image model's family, and the components it still needs
+//! is shown only when at least one returned model has benchmark data. A
+//! `Size` column says what each model takes on disk (weights, projector and
+//! components), an `Images` column says which models are linked to a
+//! projector, and the `Draws` column names an image model's family, and the components it still needs
 //! linked before it can draw. While this machine is paired, the list ends
 //! with one line on how the paired machine stands, which asks that machine
 //! nothing.
@@ -17,6 +18,7 @@ use anyhow::Result;
 use gglib_app_services::ModelOps;
 use gglib_app_services::types::GuiModel;
 use gglib_core::domain::ModelListQuery;
+use gglib_core::download::format_size;
 
 use crate::bootstrap::CliContext;
 use crate::model_list_args::ListArgs;
@@ -161,7 +163,7 @@ fn render_table(models: &[GuiModel]) -> String {
     if show_speed {
         let _ = writeln!(
             out,
-            "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<10} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
+            "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<10} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
             "ID",
             "Name",
             "Model ID",
@@ -169,6 +171,7 @@ fn render_table(models: &[GuiModel]) -> String {
             "⚡ t/s",
             "Arch",
             "Quant",
+            "Size",
             "Context",
             "Images",
             "Draws",
@@ -177,18 +180,19 @@ fn render_table(models: &[GuiModel]) -> String {
         let _ = writeln!(
             out,
             "{}",
-            "-".repeat(135 + id_width + model_id_width + draws_width)
+            "-".repeat(146 + id_width + model_id_width + draws_width)
         );
     } else {
         let _ = writeln!(
             out,
-            "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
+            "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
             "ID",
             "Name",
             "Model ID",
             "Params",
             "Arch",
             "Quant",
+            "Size",
             "Context",
             "Images",
             "Draws",
@@ -197,7 +201,7 @@ fn render_table(models: &[GuiModel]) -> String {
         let _ = writeln!(
             out,
             "{}",
-            "-".repeat(122 + id_width + model_id_width + draws_width)
+            "-".repeat(133 + id_width + model_id_width + draws_width)
         );
     }
 
@@ -209,6 +213,12 @@ fn render_table(models: &[GuiModel]) -> String {
             .map_or_else(|| "--".to_string(), |c| c.to_string());
         // A model reads images exactly when it is linked to a projector.
         let images = if model.image_input { "yes" } else { "--" };
+        // What it takes on disk, all its files; `--` when none could be read.
+        let size = if model.size_bytes == 0 {
+            "--".to_owned()
+        } else {
+            format_size(model.size_bytes)
+        };
 
         if show_speed {
             let speed = model
@@ -218,7 +228,7 @@ fn render_table(models: &[GuiModel]) -> String {
                 .map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<model_id_width$} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} {}",
+                "{:<id_width$} {:<25} {:<model_id_width$} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model_id,
@@ -226,6 +236,7 @@ fn render_table(models: &[GuiModel]) -> String {
                 truncate_string(&speed, 9),
                 truncate_string(arch, 11),
                 truncate_string(quant, 7),
+                size,
                 truncate_string(&context, 9),
                 images,
                 draws,
@@ -235,13 +246,14 @@ fn render_table(models: &[GuiModel]) -> String {
         } else {
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<model_id_width$} {:<8.1} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} {}",
+                "{:<id_width$} {:<25} {:<model_id_width$} {:<8.1} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model_id,
                 model.param_count_b,
                 truncate_string(arch, 11),
                 truncate_string(quant, 7),
+                size,
                 truncate_string(&context, 9),
                 images,
                 draws,

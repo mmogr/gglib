@@ -286,6 +286,9 @@ mod image_model_tests {
 
         assert_eq!(list["imageFamily"], "flux1");
         assert_eq!(list["missingComponents"], json!(["t5xxl"]));
+        // Its size is every file it has on disk: the VAE's three bytes, as
+        // the weights and the CLIP-L are not there.
+        assert_eq!(list["sizeBytes"], 3);
         assert_eq!(detail["imageFamily"], "flux1");
         assert_eq!(detail["missingComponents"], json!(["t5xxl"]));
         assert_eq!(
@@ -306,6 +309,7 @@ mod image_model_tests {
 
         assert!(list.get("imageFamily").is_none(), "{list}");
         assert_eq!(list["missingComponents"], json!([]));
+        assert_eq!(list["sizeBytes"], 0, "no file on disk");
         assert!(detail.get("imageFamily").is_none(), "{detail}");
         assert_eq!(detail["components"], json!([]));
         assert_eq!(detail["missingComponents"], json!([]));

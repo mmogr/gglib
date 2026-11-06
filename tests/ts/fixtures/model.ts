@@ -21,6 +21,8 @@ const BASE: GgufModel = {
   architecture: null,
   quantization: null,
   contextLength: null,
+  // What its files take on disk; 0 when none could be read.
+  sizeBytes: 2_684_354_560,
   hfRepoId: null,
   // The id a client sends, named by the listing; a row built alone has none.
   openaiId: null,

@@ -43,6 +43,12 @@ pub struct GuiModel {
     pub bits_per_weight: Option<f64>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub context_length: Option<u64>,
+    /// What the model takes on disk: its weights (every shard), its
+    /// projector and its linked components (`resident_bytes`). `0` when no
+    /// file could be read.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    #[serde(default)]
+    pub size_bytes: u64,
     // ── MoE topology (omitted for dense models) ───────────────────────────────
     // The list view renders *active* parameters from these, the same way the
     // inspector does off [`ModelDetailDto`]; without them it silently shows the
@@ -122,6 +128,7 @@ impl GuiModel {
     /// Convert a domain Model to `GuiModel` format.
     pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
         Self {
+            size_bytes: gglib_core::services::resident_bytes(&model),
             quantization: model.quant_label().map(str::to_owned),
             bits_per_weight: model.bits_per_weight,
             image_input: model.image_input(),
