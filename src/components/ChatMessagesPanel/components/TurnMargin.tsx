@@ -4,7 +4,7 @@ import { Button } from '../../ui/Button';
 import { PromptProgressBar } from '../../PromptProgressBar';
 import type { PromptReading, TurnWaiting } from '../../../types/messages';
 import { formatCount } from '../../../utils/format';
-import { madeLines, turnTime, waitingLines, type ArrivingPhase, type ReplyFacts } from './turnFigures';
+import { madeLines, turnTime, waitingLines, type ArrivingPhase, type ReplyFacts } from '../../../readings/turnFigures';
 
 /**
  * The margin's head: who wrote the turn, then when and, for a reply, the

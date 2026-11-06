@@ -32,7 +32,7 @@ import { describe, it, expect } from 'vitest';
 
 import * as settingsDefaults from '../../../src/constants/settingsDefaults';
 import { INFERENCE_PARAMS } from '../../../src/constants/inferenceDefaults';
-import { drawingValuesFrom } from '../../../src/components/SettingsModal/useDrawingSettings';
+import { drawingValuesFrom } from '../../../src/readings/drawingValues';
 import { appSettings } from '../fixtures/settings';
 import type { SamplingParamKey } from '../../../src/types';
 

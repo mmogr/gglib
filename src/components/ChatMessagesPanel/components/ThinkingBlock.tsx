@@ -7,7 +7,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { cn } from '../../../utils/cn';
 import { Icon } from '../../ui/Icon';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
-import { formatThinkingDuration } from './turnFigures';
+import { formatThinkingDuration } from '../../../readings/turnFigures';
 
 interface ThinkingBlockProps {
   /** Message ID for timing tracker lookup */

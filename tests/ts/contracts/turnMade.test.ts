@@ -24,12 +24,12 @@ import {
   madeLines,
   replyFacts,
   replyName,
-} from '../../../src/components/ChatMessagesPanel/components/turnFigures';
+} from '../../../src/readings/turnFigures';
 import {
   contextLines,
   contextReading,
   decidingMade,
-} from '../../../src/components/ChatMessagesPanel/components/contextReading';
+} from '../../../src/readings/contextReading';
 
 const CONTRACT = JSON.parse(rust('contracts/runs/turn_made.json')) as {
   frames: AgentEvent[];
