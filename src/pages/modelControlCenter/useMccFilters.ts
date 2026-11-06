@@ -2,18 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FilterState } from '../../components/FilterPopover';
 import type { AddDownloadSubTab } from '../../components/ModelLibraryPanel/AddDownloadContent';
 import type { GgufModel } from '../../types';
+import { addModel, refreshModels } from '../../services/modelEvents';
+import { getModelLibrary, useModelLibrary } from '../../services/modelRegistry';
 import { getTransport } from '../../services/transport';
 import type { ModelListQuery } from '../../services/transport/api/models/local';
 
-type RefreshDeps = {
-  loadModels: () => Promise<void>;
+interface UseMccFiltersArgs {
   refreshFilterOptions: () => Promise<void>;
   loadTags: () => Promise<void>;
-};
-
-interface UseMccFiltersArgs extends RefreshDeps {
-  models: GgufModel[];
-  addModel: (filePath: string) => Promise<void>;
 }
 
 export interface UseMccFiltersResult {
@@ -51,20 +47,17 @@ function modelListQuery(filters: FilterState): ModelListQuery {
   };
 }
 
-export function useMccFilters({
-  models,
-  addModel,
-  loadModels,
-  refreshFilterOptions,
-  loadTags,
-}: UseMccFiltersArgs): UseMccFiltersResult {
+export function useMccFilters({ refreshFilterOptions, loadTags }: UseMccFiltersArgs): UseMccFiltersResult {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('browse');
+  // The registry's list, read for its identity: a new one means the library
+  // was read again, and this list must be too.
+  const { models } = useModelLibrary();
 
-  // Server-fetched model list.  Initialised from the parent's `models` prop so
+  // The daemon's filtered and sorted list. Initialised from the registry so
   // the first render shows data immediately (no empty flash while the first
   // debounced request is in-flight).
-  const [serverModels, setServerModels] = useState<GgufModel[]>(models);
+  const [serverModels, setServerModels] = useState<GgufModel[]>(() => getModelLibrary().models);
 
   const [filters, setFilters] = useState<FilterState>({
     sortBy: 'added_at',
@@ -94,11 +87,9 @@ export function useMccFilters({
   }, []);
 
   // Debounced server-side fetch.  Runs 300 ms after the last filter change,
-  // and after every reload of the parent's `models` — the refresh button, a
-  // finished download and a library event reload the page's `models`, not
-  // this list, and without it in the deps the list shown here never heard of
-  // them. So `models` must be the parent's state: a new array every render
-  // would re-fetch every 300 ms.
+  // and after every read of the registry — the refresh button, a finished
+  // download and a library event re-read the registry, not this list, and
+  // without it in the deps the list shown here never heard of them.
   // On cleanup the timer is cleared and any in-flight answer is ignored, so
   // stale results never overwrite a newer response.
   useEffect(() => {
@@ -132,8 +123,8 @@ export function useMccFilters({
   }, [serverModels, searchQuery]);
 
   const refreshFilterDeps = useCallback(async () => {
-    await Promise.all([loadModels(), refreshFilterOptions(), loadTags()]);
-  }, [loadModels, refreshFilterOptions, loadTags]);
+    await Promise.all([refreshModels(), refreshFilterOptions(), loadTags()]);
+  }, [refreshFilterOptions, loadTags]);
 
   // After a mutation (add/remove) we refresh shared state then immediately
   // re-fetch the filtered list so the new model appears without the 300 ms lag.
@@ -149,7 +140,7 @@ export function useMccFilters({
         // Ignore; the debounced effect will retry shortly.
       }
     },
-    [addModel, refreshFilterDeps, filters],
+    [refreshFilterDeps, filters],
   );
 
   return {

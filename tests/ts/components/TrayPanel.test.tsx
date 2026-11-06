@@ -29,7 +29,7 @@ const proxyState = vi.hoisted(() => ({
 const dashboard = vi.hoisted(() => ({
   current: { snapshot: null as DashboardSnapshot | null, connected: false },
   /** What the panel last asked the stream for. */
-  asked: null as { port: number | null; apiKey?: string | null } | null,
+  asked: null as { port: number; apiKey: string | null } | null,
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
@@ -46,9 +46,9 @@ vi.mock('../../../src/services/proxyEvents', () => ({
   cleanupProxyEvents: vi.fn(),
 }));
 
-vi.mock('../../../src/hooks/useProxyDashboard', () => ({
-  useProxyDashboard: (options: { port: number | null; apiKey?: string | null }) => {
-    dashboard.asked = options;
+vi.mock('../../../src/services/dashboardRegistry', () => ({
+  useDashboard: (target: { port: number; apiKey: string | null } | null) => {
+    dashboard.asked = target;
     return dashboard.current;
   },
 }));
@@ -114,7 +114,7 @@ describe('TrayPanel', () => {
 
     render(<TrayPanel />);
 
-    expect(dashboard.asked?.port).toBeNull();
+    expect(dashboard.asked).toBeNull();
   });
 
   it('stops the proxy when running', async () => {

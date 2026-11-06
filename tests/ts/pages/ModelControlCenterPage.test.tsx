@@ -22,7 +22,7 @@
  * chooses and what it hands it, and the stub shows both.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
@@ -171,6 +171,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
 }));
 
 import ModelControlCenterPage from '../../../src/pages/ModelControlCenterPage';
+import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
 import { guiModel } from '../fixtures/model';
 import { farDetail, farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
@@ -209,7 +210,9 @@ const CONNECTED = {
 const stopServer = vi.fn(async () => {});
 
 /** Render the page with nothing served here — the laptop this PR is about. */
+/** What `App` does once: fill the model registry, which the page reads. */
 function renderPage() {
+  initModelEvents();
   return render(
     <ModelControlCenterPage servers={[]} stopServer={stopServer} />,
     { wrapper },
@@ -225,6 +228,7 @@ async function pickFar(name: RegExp) {
 }
 
 describe('ModelControlCenterPage', () => {
+  afterEach(() => cleanupModelEvents());
   beforeEach(() => {
     library.models = [];
     listModels.mockClear();
@@ -322,6 +326,7 @@ describe('ModelControlCenterPage', () => {
     // so no serve here ever fired the handler that opens chat by itself.
     library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true })];
     const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }];
+    initModelEvents();
     render(
       <ModelControlCenterPage servers={running} stopServer={stopServer} />,
       { wrapper },
@@ -356,6 +361,7 @@ describe('ModelControlCenterPage', () => {
   async function openChatOnQwen(extra: { modelId: number; modelName: string; port: number; status: 'running' }[] = []) {
     library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true }), guiModel({ id: 9, name: 'gemma-3-12b' })];
     const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }, ...extra];
+    initModelEvents();
     render(
       <ModelControlCenterPage servers={running} stopServer={stopServer} />,
       { wrapper },

@@ -18,6 +18,7 @@ vi.mock('../../../src/services/platform', () => ({
 import type { FilterState } from '../../../src/components/FilterPopover';
 import type { GgufModel } from '../../../src/types';
 import { useMccFilters } from '../../../src/pages/modelControlCenter/useMccFilters';
+import { applyLibraryRead, resetModelLibrary } from '../../../src/services/modelRegistry';
 import { listModels } from '../../../src/services/transport/api/models/local';
 
 const fetchMock = vi.fn();
@@ -38,18 +39,7 @@ const UNFILTERED: FilterState = {
 
 function mounted() {
   const refresh = vi.fn(async () => {});
-  // One array for every render, as the page's state is: a new one each time
-  // would read as a reload and ask again.
-  const models: GgufModel[] = [];
-  return renderHook(() =>
-    useMccFilters({
-      models,
-      addModel: vi.fn(async () => {}),
-      loadModels: refresh,
-      refreshFilterOptions: refresh,
-      loadTags: refresh,
-    }),
-  );
+  return renderHook(() => useMccFilters({ refreshFilterOptions: refresh, loadTags: refresh }));
 }
 
 describe('the model list the library page asks for', () => {
@@ -62,6 +52,7 @@ describe('the model list the library page asks for', () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetModelLibrary();
   });
 
   it('asks for the sort alone while no filter is set', async () => {
@@ -121,28 +112,26 @@ describe('the model list the library page asks for', () => {
 
     await act(() => result.current.handleModelAdded());
 
-    expect(paths()).toHaveLength(2);
-    expect(paths()[1]).toBe('/api/models?sort=added_at&order=desc&min_context=8192&max_context=32768');
-    expect(paths()[1]).toBe(paths()[0]);
+    // The registry is read again (the bare list), then this list is, with
+    // the same filters.
+    const filtered = '/api/models?sort=added_at&order=desc&min_context=8192&max_context=32768';
+    expect(paths()[0]).toBe(filtered);
+    expect(paths()).toContain('/api/models');
+    expect(paths().at(-1)).toBe(filtered);
   });
 
-  it('asks again, and shows the answer, when the page reloads its own list', async () => {
-    const refresh = vi.fn(async () => {});
-    const { result, rerender } = renderHook(
-      ({ models }: { models: GgufModel[] }) =>
-        useMccFilters({ models, addModel: vi.fn(async () => {}), loadModels: refresh, refreshFilterOptions: refresh, loadTags: refresh }),
-      { initialProps: { models: [] as GgufModel[] } },
-    );
+  it('asks again, and shows the answer, when the library is read again', async () => {
+    const { result } = mounted();
     await waitFor(() => expect(paths()).toHaveLength(1));
     expect(result.current.filteredModels).toEqual([]);
 
-    // A finished download or the refresh button: the page's list is a new
-    // array, the filters are untouched.
+    // A finished download or the refresh button: the registry has a new
+    // list, the filters are untouched.
     const downloaded = { id: 7, name: 'Downloaded' } as GgufModel;
     fetchMock.mockImplementation(
       async () => new Response(JSON.stringify([downloaded]), { status: 200, headers: { 'content-type': 'application/json' } }),
     );
-    rerender({ models: [downloaded] });
+    act(() => applyLibraryRead({ models: [downloaded] }));
 
     await waitFor(() => expect(paths()).toHaveLength(2));
     expect(paths()[1]).toBe(paths()[0]);

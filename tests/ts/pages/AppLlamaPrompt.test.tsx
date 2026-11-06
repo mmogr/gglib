@@ -50,6 +50,7 @@ vi.mock('../../../src/services/platform', () => ({
 vi.mock('../../../src/services/serverEvents', () => ({ initServerEvents: vi.fn(), cleanupServerEvents: vi.fn() }));
 vi.mock('../../../src/services/proxyEvents', () => ({ initProxyEvents: vi.fn(), cleanupProxyEvents: vi.fn() }));
 vi.mock('../../../src/services/remoteEvents', () => ({ initRemoteEvents: vi.fn(), cleanupRemoteEvents: vi.fn() }));
+vi.mock('../../../src/services/modelEvents', () => ({ initModelEvents: vi.fn(), cleanupModelEvents: vi.fn() }));
 vi.mock('../../../src/services/transport', () => ({ getTransport: () => ({ getSettings: async () => ({}) }) }));
 vi.mock('../../../src/services/transport/api/setup', () => ({ getSetupStatus: vi.fn() }));
 vi.mock('../../../src/services/tools', () => ({ syncBuiltinTools: async () => {} }));
