@@ -6,15 +6,15 @@ Top-level page components for the gglib GUI application.
 
 ## Architecture
 
-Two entry points build two windows from this directory:
+Two entry points build two windows; the main one routes by address (`app/router`):
 
 ```text
-main.tsx ──► App.tsx                        tray-main.tsx ──► TrayPanel.tsx
-                │                           (separate "tray" Tauri window:
-                ▼                            proxy status, endpoint, metrics)
-  ┌────────────────────────┐
-  │ ModelControlCenterPage │──swaps to──► ChatPage / BenchmarkPage
-  └───────────┬────────────┘
+main.tsx ──► App.tsx ──► router                tray-main.tsx ──► TrayPanel.tsx
+                │  /library /models/:id /far/:id   (separate "tray" Tauri window:
+                │  /chat/:modelId  /chat/far/:id    proxy status, endpoint, metrics)
+                │  /diagnostics/benchmarks
+                ▼
+  ModelControlCenterPage · ChatPage · BenchmarkPage
               ▼
         components/
    (Shared UI Components)
@@ -24,9 +24,9 @@ main.tsx ──► App.tsx                        tray-main.tsx ──► TrayPa
 
 | Page | Description |
 |------|-------------|
-| [`ModelControlCenterPage.tsx`](ModelControlCenterPage.tsx) | Model catalog and control: library, server control, and downloads — the main window's landing page |
-| [`ChatPage.tsx`](ChatPage.tsx) | Chat interface for interacting with running models |
-| [`BenchmarkPage.tsx`](BenchmarkPage.tsx) | Benchmark workflows: compare, perf, and sampling-parameter tune |
+| [`ModelControlCenterPage.tsx`](ModelControlCenterPage.tsx) | Model catalog and control: library, server control, and downloads — the main window's landing page, at `/library`, `/models/:id` and `/far/:id`, whose selection is the address |
+| [`ChatPage.tsx`](ChatPage.tsx) | Chat interface for interacting with running models, at `/chat/:modelId` and `/chat/far/:id` through `app/ChatRoute` and `app/FarChatRoute` |
+| [`BenchmarkPage.tsx`](BenchmarkPage.tsx) | Benchmark workflows: compare, perf, and sampling-parameter tune, at `/diagnostics/benchmarks` through `app/BenchmarkRoute` |
 | [`TrayPanel.tsx`](TrayPanel.tsx) | Proxy tray window — is the endpoint up, and what is it doing (status, endpoint copy bar, connections, slots) |
 
 `chatTabs.tsx` is a supporting piece of `ChatPage`, not a routed page: the view tabs, and the controls the notebook's head carries in its margin. So is `useChatConversations.ts`: the conversation list, from this machine or, on a computer joined with `gglib remote join`, the far machine, read live through this machine's daemon and never copied; this machine's list holds only the chats the session's machine can carry on, since a chat's machine is fixed. And `useConversationActions.ts`: delete, rename, restart, export and the system prompt, which act on this machine's daemon and so do nothing while a far chat is open.
