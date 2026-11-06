@@ -50,7 +50,8 @@ state: ResidencyState,
 runtime: RuntimeKind, 
 /**
  * How it was launched: the context it serves, its weights, its quant,
- * the decisions its launch made and the one line that says them. `None`
- * for a resident whose launch recorded nothing (a restored one).
+ * the decisions its launch made and the one line that says them. Every
+ * resident has them (a launch that recorded no narration still has its
+ * context and weights); absent only from a daemon older than the field.
  */
 launch?: LaunchFacts, };

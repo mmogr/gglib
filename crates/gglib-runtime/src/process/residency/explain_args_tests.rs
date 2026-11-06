@@ -11,7 +11,7 @@ use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec};
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use std::collections::BTreeMap;
 
-use super::super::explain::plan_launch;
+use super::super::explain::{Loaded, plan_launch};
 use super::super::residency_tests::launch_spec;
 
 /// A chat model tagged for everything a tag can turn on.
@@ -46,9 +46,7 @@ fn planned_with(
         None,
         None,
         &overrides,
-        None,
-        &[],
-        false,
+        Loaded::NOTHING,
     )
     .expect("a chat model plans")
 }
@@ -340,9 +338,7 @@ fn a_global_default_context_is_yours() {
         None,
         Some(12_288),
         &overrides,
-        None,
-        &[],
-        false,
+        Loaded::NOTHING,
     )
     .unwrap();
     let ctx = plan.args.iter().find(|a| a.flag == "-c").unwrap();

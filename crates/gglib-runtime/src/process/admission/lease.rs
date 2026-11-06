@@ -242,10 +242,17 @@ impl AdmissionQueue {
     /// rather than a fresh one per frame. "About 2 GiB" is not a figure that
     /// moves by the second.
     pub fn snapshot(&self) -> AdmissionSnapshot {
+        self.snapshot_reading(|| crate::system::free_gpu_memory_bytes_within(ROOM_READING_MAX_AGE))
+    }
+
+    /// [`Self::snapshot`] with the free-VRAM reader given, called outside
+    /// the lock and only when the room line can show.
+    pub(super) fn snapshot_reading(
+        &self,
+        read_free_vram: impl FnOnce() -> Option<u64>,
+    ) -> AdmissionSnapshot {
         let wants_room = self.lock().second_slot_room_wanted();
-        let free_vram_bytes = wants_room
-            .then(|| crate::system::free_gpu_memory_bytes_within(ROOM_READING_MAX_AGE))
-            .flatten();
+        let free_vram_bytes = wants_room.then(read_free_vram).flatten();
         self.lock().snapshot(Instant::now(), free_vram_bytes)
     }
 

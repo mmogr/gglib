@@ -13,7 +13,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::{CacheRamHealth, LaunchPlan, ModelSamplingDefaults, RuntimeKind};
+use gglib_core::domain::{
+    CacheRamHealth, LaunchPlan, ModelSamplingDefaults, RuntimeKind, Unload, UnloadReason,
+};
 use gglib_core::ports::{
     LaunchOverrides, ModelLaunchSpec, ModelRuntimePort, NoopResidencyObserver, PinnedSpec,
     ServerConfig,
@@ -259,26 +261,22 @@ fn a_plan_says_which_loaded_model_it_would_unload() {
     };
 
     let empty = plan(&set, &launch_spec(7, "llama-3-8b"));
-    assert!(
-        !empty.would_unload && empty.displaces.is_none(),
-        "{empty:?}"
-    );
+    assert_eq!(empty.unloads, None, "{empty:?}");
 
     drop(set.queue().install(PRIMARY_SLOT, resident(3, "qwen2.5")));
     let against_primary = plan(&set, &launch_spec(7, "llama-3-8b"));
-    assert!(against_primary.would_unload);
-    assert_eq!(against_primary.displaces.as_deref(), Some("qwen2.5"));
+    assert_eq!(
+        against_primary.unloads,
+        Some(Unload {
+            model: "qwen2.5".to_owned(),
+            reason: UnloadReason::WouldNotFitBeside,
+        })
+    );
 
     let itself = plan(&set, &launch_spec(3, "qwen2.5"));
-    assert!(
-        !itself.would_unload && itself.displaces.is_none(),
-        "{itself:?}"
-    );
+    assert_eq!(itself.unloads, None, "{itself:?}");
 
     drop(set.queue().install(1, resident(7, "llama-3-8b")));
     let in_second = plan(&set, &launch_spec(7, "llama-3-8b"));
-    assert!(
-        !in_second.would_unload && in_second.displaces.is_none(),
-        "{in_second:?}"
-    );
+    assert_eq!(in_second.unloads, None, "{in_second:?}");
 }

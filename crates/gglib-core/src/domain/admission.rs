@@ -137,6 +137,18 @@ impl SecondarySlotStatus {
     /// The status for an empty second slot on a machine whose free VRAM is
     /// known: how much a second model may take, said once for every surface.
     /// `None` headroom is the default status, since nothing can be promised.
+    /// The slot while a model is loading into it: granted, not landed yet.
+    /// Said as `available`, since nothing is resident, with no room figure,
+    /// since the load has the room.
+    #[must_use]
+    pub fn loading() -> Self {
+        Self {
+            state: "available",
+            detail: "A second model fits and is being loaded.".to_string(),
+            headroom_bytes: None,
+        }
+    }
+
     #[must_use]
     pub fn available_with(headroom_bytes: Option<u64>) -> Self {
         headroom_bytes.map_or_else(Self::default, |bytes| Self {
@@ -154,9 +166,7 @@ impl SecondarySlotStatus {
     #[must_use]
     pub fn from_decision(decision: SecondarySlotDecision) -> Self {
         let detail = match decision {
-            SecondarySlotDecision::Grant { .. } => {
-                "A second model fits and is being loaded.".to_string()
-            }
+            SecondarySlotDecision::Grant { .. } => return Self::loading(),
             SecondarySlotDecision::RefuseTooLarge {
                 footprint_bytes,
                 ceiling_bytes,

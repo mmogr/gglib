@@ -87,7 +87,8 @@ The launch gglib would make for the model, without making it: the command
 it would run, each argument beside whose choice it was (the model author's,
 gglib's, or yours) and why, then the context size the model would be served
 at and how it was fitted. When a loaded model would have to go first, one
-more line says which (or, with both slots full, that one of the two goes).
+more line says which and why: it would not fit beside it, the second slot is
+taken, or one image model is loaded at a time.
 Then every resolved sampling parameter, beside the layer that supplied it.
 All of it comes from the same code a launch runs, so it cannot describe a
 launch or a hierarchy different from the one that happens, and

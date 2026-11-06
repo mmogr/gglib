@@ -106,10 +106,12 @@ pub fn free_gpu_memory_bytes() -> Option<u64> {
 }
 
 /// [`free_gpu_memory_bytes`] for a reader content with a reading up to
-/// `max_age` old: the dashboard's "room for one more", which is drawn every
-/// second for the life of the proxy and must not fork `nvidia-smi` each time.
-/// A reading younger than `max_age` is answered from the cache; an older one
-/// is probed anew, and the probe refreshes the cache for every reader.
+/// `max_age` old.
+///
+/// The dashboard's "room for one more" is drawn every second for the life of
+/// the proxy and must not fork `nvidia-smi` each time. A reading younger than
+/// `max_age` is answered from the cache; an older one is probed anew, and the
+/// probe refreshes the cache for every reader.
 #[must_use]
 pub fn free_gpu_memory_bytes_within(max_age: std::time::Duration) -> Option<u64> {
     let now = std::time::Instant::now();

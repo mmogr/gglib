@@ -199,8 +199,8 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
         );
         // The flag line under the row: how the model was launched, in the
         // daemon's words (`LaunchFacts::flag_line`), the same line the GUI's
-        // Loaded rows show. Absent for a resident whose launch recorded
-        // nothing, and from a daemon older than the field.
+        // Loaded rows show. Every resident has one; it is absent from a
+        // daemon older than the field, and empty when no fact could be said.
         if let Some(flag_line) = slot.launch.as_ref().map(|l| l.flag_line.as_str())
             && !flag_line.is_empty()
         {

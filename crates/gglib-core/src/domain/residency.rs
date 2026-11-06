@@ -334,11 +334,10 @@ mod tests {
     #[test]
     fn the_second_slots_headroom_is_the_usable_free_vram_capped_at_the_ceiling() {
         assert_eq!(secondary_headroom(None), None);
-        // 1 GiB free: 90% of it is usable, under the 2 GiB ceiling.
-        assert_eq!(
-            secondary_headroom(Some(GIB)),
-            Some((GIB as f64 * 0.9) as u64)
-        );
+        // 1 GiB free: the usable share of it, under the 2 GiB ceiling, and
+        // the share is less than the whole.
+        assert_eq!(secondary_headroom(Some(GIB)), Some(usable_share(GIB)));
+        assert!(usable_share(GIB) < GIB);
         // 8 GiB free: the ceiling holds.
         assert_eq!(secondary_headroom(Some(8 * GIB)), Some(SECONDARY_MAX_BYTES));
         // The headroom is never more than a grant would accept.

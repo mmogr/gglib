@@ -14,7 +14,7 @@ use gglib_core::ports::{
 };
 use gglib_core::server_config::ServerConfigOptions;
 use gglib_runtime::pidfile::{list_pidfiles, server_runtime};
-use gglib_runtime::process::residency::explain::plan_launch;
+use gglib_runtime::process::residency::explain::{Loaded, plan_launch};
 
 /// The model servers recorded under this data root that are still running.
 ///
@@ -69,9 +69,7 @@ impl ModelRuntimePort for RecordedServers {
             num_ctx,
             default_ctx,
             overrides,
-            None,
-            &[],
-            false,
+            Loaded::NOTHING,
         )
     }
 

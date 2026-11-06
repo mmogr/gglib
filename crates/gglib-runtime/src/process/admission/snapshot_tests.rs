@@ -208,3 +208,124 @@ async fn the_room_line_shows_once_the_first_model_has_loaded() {
         "Room for one more, about 2.0 GiB."
     );
 }
+
+/// The room line needs a first model: with nothing loaded there is no "one
+/// more", and while the first model is still loading its verdict is not a
+/// refusal of the second slot, so nothing is recorded. With both slots full
+/// the slot says its resident, and no reading is wanted.
+#[tokio::test]
+async fn the_room_line_needs_a_loaded_primary_and_an_empty_second_slot() {
+    let q = Arc::new(AdmissionQueue::new());
+    assert!(!q.lock().second_slot_room_wanted());
+    let empty = q.lock().snapshot(Instant::now(), Some(8 * GIB));
+    assert_eq!(
+        empty.secondary_slot,
+        SecondarySlotStatus::default(),
+        "{empty:?}"
+    );
+
+    // The first model, refused the second slot by the arithmetic while the
+    // primary is empty: it takes the primary, and the refusal is not the
+    // second slot's to show.
+    let ticket = q.enqueue(1, "qwen-coder");
+    let decision = q.poll(&ticket, NEVER_FITS);
+    assert!(matches!(
+        decision,
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            ..
+        }
+    ));
+    let loading = q.lock().snapshot(Instant::now(), Some(8 * GIB));
+    assert_eq!(
+        loading.secondary_slot,
+        SecondarySlotStatus::default(),
+        "{loading:?}"
+    );
+    assert!(!q.lock().second_slot_room_wanted());
+
+    let _primary = q.install(PRIMARY_SLOT, resident(1, "qwen-coder", None));
+    q.lock().forget(&ticket);
+    assert!(q.lock().second_slot_room_wanted());
+
+    // Both slots full: the resident, and no reading wanted.
+    let _second = q.install(PRIMARY_SLOT + 1, resident(2, "nomic", None));
+    assert!(!q.lock().second_slot_room_wanted());
+    let full = q.lock().snapshot(Instant::now(), Some(8 * GIB));
+    assert_eq!(full.secondary_slot.state, "resident", "{full:?}");
+}
+
+/// A second model granted the slot and still loading: the slot is not room,
+/// it says the load; once the model lands it is the resident; once it is
+/// unloaded the room line is back, since a grant records nothing that
+/// outlives the load.
+#[tokio::test]
+async fn a_second_slot_being_loaded_is_not_room() {
+    let q = Arc::new(AdmissionQueue::new());
+    let _primary = q.install(PRIMARY_SLOT, resident(1, "qwen-coder", None));
+    let ticket = q.enqueue(2, "nomic");
+    let decision = q.poll(
+        &ticket,
+        SecondarySlotDecision::Grant {
+            footprint_bytes: GIB / 4,
+            headroom_bytes: 8 * GIB,
+        },
+    );
+    assert!(
+        matches!(decision, AdmissionDecision::Launch { slot, .. } if slot == PRIMARY_SLOT + 1),
+        "{decision:?}"
+    );
+    assert!(!q.lock().second_slot_room_wanted());
+    let loading = q.lock().snapshot(Instant::now(), Some(8 * GIB));
+    assert_eq!(
+        loading.secondary_slot,
+        SecondarySlotStatus::loading(),
+        "{loading:?}"
+    );
+
+    let lease = q.install(PRIMARY_SLOT + 1, resident(2, "nomic", None));
+    q.lock().forget(&ticket);
+    assert_eq!(
+        q.lock()
+            .snapshot(Instant::now(), Some(8 * GIB))
+            .secondary_slot
+            .state,
+        "resident"
+    );
+
+    drop(lease);
+    assert!(q.evict(PRIMARY_SLOT + 1).is_some());
+    assert!(q.lock().second_slot_room_wanted());
+    assert_eq!(
+        q.lock()
+            .snapshot(Instant::now(), Some(8 * GIB))
+            .secondary_slot
+            .detail,
+        "Room for one more, about 2.0 GiB."
+    );
+}
+
+/// The free VRAM is read only when the room line can show: not on an empty
+/// daemon, and once a first model is loaded.
+#[tokio::test]
+async fn the_free_vram_is_read_only_when_the_room_line_can_show() {
+    let q = Arc::new(AdmissionQueue::new());
+    let read = std::cell::Cell::new(0);
+    let snapshot = q.snapshot_reading(|| {
+        read.set(read.get() + 1);
+        Some(8 * GIB)
+    });
+    assert_eq!(read.get(), 0, "{snapshot:?}");
+    assert_eq!(snapshot.secondary_slot, SecondarySlotStatus::default());
+
+    let _primary = q.install(PRIMARY_SLOT, resident(1, "qwen-coder", None));
+    let snapshot = q.snapshot_reading(|| {
+        read.set(read.get() + 1);
+        Some(8 * GIB)
+    });
+    assert_eq!(read.get(), 1);
+    assert_eq!(
+        snapshot.secondary_slot.detail,
+        "Room for one more, about 2.0 GiB."
+    );
+}

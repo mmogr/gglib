@@ -70,15 +70,14 @@ fn the_explanation_agrees_with_the_budget_it_reports() {
     );
 }
 
-/// What a launch would do to what is loaded, apart from any machine's VRAM,
-/// by the rules placement follows. A chat model: nothing in the primary
-/// unloads nothing; refused the second slot, it swaps the primary's resident
-/// out and names it; granted, it sits beside the primary, and a model in the
-/// second slot gives way first. An image model takes the loaded image model's
-/// slot, else a free second slot, else the second slot's resident. A model
-/// already loaded relaunches in place.
-#[test]
-fn a_plan_says_what_it_would_unload() {
+/// The residents and decisions the unload verdicts are read against.
+fn unload_fixtures() -> (
+    Resident,
+    Resident,
+    Resident,
+    gglib_core::domain::SecondarySlotDecision,
+    gglib_core::domain::SecondarySlotDecision,
+) {
     use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults, SecondarySlotDecision};
     let resident = |model_id: u32, name: &str, runtime: RuntimeKind| Resident {
         model_sampling: ModelSamplingDefaults::default(),
@@ -94,70 +93,145 @@ fn a_plan_says_what_it_would_unload() {
         narration: None,
         inflight: 0,
         resident_since: tokio::time::Instant::now(),
-        weights_bytes: 1,
+        weights_bytes: GIB,
     };
     let grant = SecondarySlotDecision::Grant {
         footprint_bytes: 1,
         headroom_bytes: 1,
     };
     let refusal = SecondarySlotDecision::RefuseUnknownFootprint;
-    let qwen = resident(7, "qwen", RuntimeKind::Llama);
-    let nomic = resident(9, "nomic", RuntimeKind::Llama);
-    let flux = resident(11, "flux-a", RuntimeKind::StableDiffusion);
-    let chat = RuntimeKind::Llama;
-    let image = RuntimeKind::StableDiffusion;
+    (
+        resident(7, "qwen", RuntimeKind::Llama),
+        resident(9, "nomic", RuntimeKind::Llama),
+        resident(11, "flux-a", RuntimeKind::StableDiffusion),
+        grant,
+        refusal,
+    )
+}
 
-    // A chat model.
-    assert_eq!(
-        displacement(chat, &refusal, None, &[], false),
-        (false, None)
-    );
-    assert_eq!(
-        displacement(chat, &grant, None, &[nomic.clone()], false),
-        (false, None)
-    );
+const GIB: u64 = 1024 * 1024 * 1024;
+
+fn unloads(model: &str, reason: UnloadReason) -> Unload {
+    Unload {
+        model: model.to_owned(),
+        reason,
+    }
+}
+
+/// What a chat plan would unload, by placement's rules, apart from any
+/// machine's VRAM: nothing with the primary empty; refused the second slot,
+/// the primary's resident; granted it, the second slot's resident if one is
+/// there, else nothing; and nothing for a model already loaded in either
+/// slot, which relaunches in place.
+#[test]
+fn a_chat_plan_says_what_it_would_unload() {
+    let (qwen, nomic, _flux, grant, refusal) = unload_fixtures();
+    let chat = RuntimeKind::Llama;
+    let one = std::slice::from_ref(&nomic);
+    assert_eq!(displacement(chat, &refusal, None, &[], false), None);
+    assert_eq!(displacement(chat, &grant, None, one, false), None);
     assert_eq!(
         displacement(chat, &refusal, Some(&qwen), &[], false),
-        (true, Some("qwen".to_owned()))
+        Some(unloads("qwen", UnloadReason::WouldNotFitBeside))
     );
     assert_eq!(
-        displacement(chat, &grant, Some(&qwen), &[], false),
-        (false, None)
+        displacement(chat, &refusal, Some(&qwen), one, false),
+        Some(unloads("qwen", UnloadReason::WouldNotFitBeside))
     );
+    assert_eq!(displacement(chat, &grant, Some(&qwen), &[], false), None);
     assert_eq!(
-        displacement(chat, &grant, Some(&qwen), &[nomic.clone()], false),
-        (true, Some("nomic".to_owned()))
+        displacement(chat, &grant, Some(&qwen), one, false),
+        Some(unloads("nomic", UnloadReason::SecondSlotFull))
     );
     // Already loaded, in either slot: a relaunch in place.
-    assert_eq!(
-        displacement(chat, &refusal, Some(&qwen), &[], true),
-        (false, None)
-    );
-    assert_eq!(
-        displacement(chat, &refusal, Some(&qwen), &[nomic.clone()], true),
-        (false, None)
-    );
+    assert_eq!(displacement(chat, &refusal, Some(&qwen), &[], true), None);
+    assert_eq!(displacement(chat, &refusal, Some(&qwen), one, true), None);
+}
 
-    // An image model: the loaded image model's slot, whichever slot that is.
+/// What an image plan would unload, by placement's rules: the loaded image
+/// model, whichever slot it is in, when the newcomer fits in its place; the
+/// second slot's resident only when granted the slot or with the primary
+/// empty; else the primary's resident, as a refused image model beside a
+/// chat model is swapped into the primary. One too large for the only place
+/// it may take waits, and nothing is named.
+#[test]
+fn an_image_plan_says_what_it_would_unload() {
+    use gglib_core::domain::SecondarySlotDecision;
+    let (qwen, nomic, flux, grant, refusal) = unload_fixtures();
+    let image = RuntimeKind::StableDiffusion;
+    let nomic_only = std::slice::from_ref(&nomic);
+    let flux_only = std::slice::from_ref(&flux);
+
+    // Nothing loaded: an image model alone is placed whatever the budget.
+    assert_eq!(displacement(image, &refusal, None, &[], false), None);
+
+    // The loaded image model's slot, whichever slot that is, on a grant or a
+    // refusal whose budget is unknown.
+    for decision in [&grant, &refusal] {
+        assert_eq!(
+            displacement(image, decision, Some(&qwen), flux_only, false),
+            Some(unloads("flux-a", UnloadReason::OneImageModel))
+        );
+        assert_eq!(
+            displacement(image, decision, Some(&flux), nomic_only, false),
+            Some(unloads("flux-a", UnloadReason::OneImageModel))
+        );
+        assert_eq!(
+            displacement(image, decision, Some(&flux), &[], false),
+            Some(unloads("flux-a", UnloadReason::OneImageModel))
+        );
+    }
+
+    // No image model loaded, beside a chat primary: granted the second slot,
+    // it takes it free or from its resident; refused it, the primary's
+    // resident is swapped out, whatever the second slot holds.
+    assert_eq!(displacement(image, &grant, Some(&qwen), &[], false), None);
     assert_eq!(
-        displacement(image, &refusal, Some(&qwen), &[flux.clone()], false),
-        (true, Some("flux-a".to_owned()))
+        displacement(image, &grant, Some(&qwen), nomic_only, false),
+        Some(unloads("nomic", UnloadReason::SecondSlotFull))
     );
-    assert_eq!(
-        displacement(image, &refusal, Some(&flux), &[nomic.clone()], false),
-        (true, Some("flux-a".to_owned()))
-    );
-    // No image model loaded: a free second slot takes it, a held one gives way.
     assert_eq!(
         displacement(image, &refusal, Some(&qwen), &[], false),
-        (false, None)
+        Some(unloads("qwen", UnloadReason::WouldNotFitBeside))
     );
     assert_eq!(
-        displacement(image, &refusal, Some(&qwen), &[nomic.clone()], false),
-        (true, Some("nomic".to_owned()))
+        displacement(image, &refusal, Some(&qwen), nomic_only, false),
+        Some(unloads("qwen", UnloadReason::WouldNotFitBeside))
+    );
+    // The primary empty: the second slot is open to it, free or held.
+    assert_eq!(
+        displacement(image, &refusal, None, nomic_only, false),
+        Some(unloads("nomic", UnloadReason::SecondSlotFull))
+    );
+
+    // Too large for the only place it may take, judged with that model's
+    // weights given back: it waits, and nothing is named. Beside a chat
+    // primary of one GiB with two GiB free, a four GiB image model does not
+    // fit in the primary's place; a one GiB one does.
+    let too_large = SecondarySlotDecision::RefuseNoHeadroom {
+        footprint_bytes: 4 * GIB,
+        free_bytes: 2 * GIB,
+    };
+    assert_eq!(
+        displacement(image, &too_large, Some(&qwen), &[], false),
+        None
     );
     assert_eq!(
-        displacement(image, &refusal, None, &[nomic], false),
-        (true, Some("nomic".to_owned()))
+        displacement(image, &too_large, Some(&qwen), flux_only, false),
+        None
+    );
+    let fits_in_place = SecondarySlotDecision::RefuseNoHeadroom {
+        footprint_bytes: GIB,
+        free_bytes: GIB,
+    };
+    assert_eq!(
+        displacement(image, &fits_in_place, Some(&qwen), &[], false),
+        Some(unloads("qwen", UnloadReason::WouldNotFitBeside))
+    );
+
+    // Already loaded: a relaunch in place.
+    assert_eq!(
+        displacement(image, &refusal, Some(&qwen), flux_only, true),
+        None
     );
 }

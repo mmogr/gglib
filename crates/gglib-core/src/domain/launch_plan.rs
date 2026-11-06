@@ -113,6 +113,33 @@ pub struct ContextFit {
     pub unsnapped: Option<u64>,
 }
 
+/// Why a launch unloads the model it names first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum UnloadReason {
+    /// The second slot refused this model beside the one loaded (too large
+    /// for it, no headroom, or nothing known to judge by), so the primary's
+    /// resident is swapped out.
+    WouldNotFitBeside,
+    /// This model fits beside the primary, but the second slot already holds
+    /// a model, and there are two slots.
+    SecondSlotFull,
+    /// One image model is loaded at a time: this one takes the loaded image
+    /// model's slot.
+    OneImageModel,
+}
+
+/// The model a launch would unload first, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct Unload {
+    /// The loaded model, by name.
+    pub model: String,
+    pub reason: UnloadReason,
+}
+
 /// The launch gglib would make for a model now, without making it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -125,19 +152,14 @@ pub struct LaunchPlan {
     pub args: Vec<LaunchArg>,
     /// The decisions a launch prints, the same words.
     pub narration: LaunchNarration,
-    /// Whether this launch would unload a loaded model to make room: one is
-    /// resident and the second slot would refuse this one (too large for it,
-    /// no headroom, or nothing known to judge by), or both slots are full.
-    /// `false` when nothing is loaded, or when this model would load beside
-    /// what is.
-    #[serde(default)]
-    pub would_unload: bool,
-    /// The model it would unload, by name, when that is one model: the only
-    /// resident. With two resident the admission queue picks at launch time,
-    /// so none is named here.
+    /// The loaded model this launch would unload first, and why, by the
+    /// rules placement follows. `None` when nothing is loaded, when this
+    /// model is already loaded (it relaunches in place), when it would load
+    /// beside what is, and for an image model too large for the only place
+    /// it may take, which waits instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub displaces: Option<String>,
+    pub unloads: Option<Unload>,
     /// The context and its fit; `None` for an image model, which has no
     /// context.
     pub fit: Option<ContextFit>,
@@ -190,8 +212,7 @@ mod tests {
             program: "llama-server".to_owned(),
             args,
             narration: LaunchNarration::new("m", None, 0),
-            would_unload: false,
-            displaces: None,
+            unloads: None,
             fit: None,
         }
     }

@@ -112,7 +112,7 @@ pub use model_sampling::{
 
 // Re-export launch narration types at the domain level for convenience
 pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};
-pub use launch_plan::{ChoiceSource, ContextFit, LaunchArg, LaunchPlan};
+pub use launch_plan::{ChoiceSource, ContextFit, LaunchArg, LaunchPlan, Unload, UnloadReason};
 
 // Re-export the first-run model recommendation at the domain level.
 pub use recommendation::BUDGET_UTILISATION;

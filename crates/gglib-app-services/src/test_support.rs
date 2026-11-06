@@ -296,9 +296,7 @@ impl ModelRuntimePort for PlansOnly {
             num_ctx,
             default_ctx,
             overrides,
-            None,
-            &[],
-            false,
+            gglib_runtime::process::residency::explain::Loaded::NOTHING,
         )
     }
 

@@ -9,7 +9,7 @@ use gglib_core::domain::{
     secondary_headroom,
 };
 
-use super::{PRIMARY_SLOT, QueueState};
+use super::{PRIMARY_SLOT, QueueState, SlotState};
 
 impl QueueState {
     /// Project the queue for the dashboard.
@@ -61,12 +61,16 @@ impl QueueState {
         }
     }
 
-    /// Why the second slot is or is not in use: the model it holds; the
-    /// refusal the last launch met while a model held the primary; else how
-    /// much a second model may take now, when the free VRAM is known.
+    /// Why the second slot is or is not in use: the model it holds, or the
+    /// one loading into it; the refusal the last launch met while a model
+    /// held the primary; else how much a second model may take now, when
+    /// the free VRAM is known.
     fn secondary_slot_status(&self, free_vram_bytes: Option<u64>) -> SecondarySlotStatus {
         if let Some(r) = self.slot(PRIMARY_SLOT + 1) {
             return SecondarySlotStatus::resident(&r.model_name);
+        }
+        if matches!(self.slots[PRIMARY_SLOT + 1], SlotState::Loading { .. }) {
+            return SecondarySlotStatus::loading();
         }
         if self.second_slot_room_wanted() {
             return SecondarySlotStatus::available_with(secondary_headroom(free_vram_bytes));
@@ -74,11 +78,14 @@ impl QueueState {
         self.secondary_slot.clone()
     }
 
-    /// Whether the snapshot would say how much room the second slot has: it
-    /// holds nothing and no launch has been refused it. The caller reads the
-    /// free VRAM only then.
+    /// Whether the snapshot would say how much room the second slot has: a
+    /// model is in the primary, the second slot is empty (nothing resident,
+    /// nothing loading) and no launch has been refused it. The caller reads
+    /// the free VRAM only then: with nothing loaded there is no "one more",
+    /// and a load under way has the room.
     pub(in crate::process::admission) fn second_slot_room_wanted(&self) -> bool {
-        self.slot(PRIMARY_SLOT + 1).is_none()
+        self.slot(PRIMARY_SLOT).is_some()
+            && matches!(self.slots[PRIMARY_SLOT + 1], SlotState::Empty)
             && self.secondary_slot == SecondarySlotStatus::default()
     }
 }

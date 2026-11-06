@@ -230,9 +230,11 @@ impl ResidentSet {
             num_ctx,
             default_ctx,
             overrides,
-            primary.as_ref(),
-            &others,
-            already_resident,
+            explain::Loaded {
+                primary: primary.as_ref(),
+                others: &others,
+                already_resident,
+            },
         )
     }
 
