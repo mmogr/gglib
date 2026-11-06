@@ -29,6 +29,8 @@ export interface LibrarySelection {
   pickFar: (model: ModelRef) => void;
   /** Pick a model of this machine's, or nothing. */
   pickLocal: (id: number | null) => void;
+  /** A model of this machine's is gone: drop the local pick if it was that one, and tell the menu. */
+  dropLocal: (id: number) => void;
 }
 
 function sameMachine(group: PairedGroup | null, model: ModelRef): boolean {
@@ -74,5 +76,12 @@ export function useLibrarySelection(group: PairedGroup | null): LibrarySelection
     [holdLocal],
   );
 
-  return { localPick, farPick, pickFar, pickLocal };
+  const dropLocal = useCallback(
+    (id: number) => {
+      if (localPick === id) holdLocal(null);
+    },
+    [localPick, holdLocal],
+  );
+
+  return { localPick, farPick, pickFar, pickLocal, dropLocal };
 }

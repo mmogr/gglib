@@ -28,7 +28,7 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
   },
 }));
 
-import { acquireDashboard, openDashboardStreams, useDashboard } from '../../../src/services/dashboardRegistry';
+import { acquireDashboard, getDashboard, openDashboardStreams, useDashboard } from '../../../src/services/dashboardRegistry';
 
 const LOOPBACK = { host: '127.0.0.1', port: 8080, apiKey: null };
 
@@ -103,15 +103,17 @@ describe('the dashboard registry', () => {
   it('a frame that arrives after the last release writes nothing', () => {
     const release = acquireDashboard(LOOPBACK);
     const stream = streams.opened[0];
+    act(() => stream.onSnapshot(dashboardSnapshot({ total_requests: 3 })));
+    expect(getDashboard(LOOPBACK).snapshot?.total_requests).toBe(3);
     release();
+    expect(getDashboard(LOOPBACK)).toEqual({ snapshot: null, connected: false });
 
     act(() => stream.onSnapshot(dashboardSnapshot({ total_requests: 4 })));
+    act(() => stream.onError?.(new Error('late')));
 
-    const { result } = renderHook(() => useDashboard(null));
-    expect(result.current).toEqual({ snapshot: null, connected: false });
-    const late = renderHook(() => useDashboard(LOOPBACK));
-    expect(late.result.current.snapshot).toBeNull();
-    late.unmount();
+    // Read without reopening: a hook for the key would open a new stream.
+    expect(getDashboard(LOOPBACK)).toEqual({ snapshot: null, connected: false });
+    expect(openDashboardStreams()).toBe(0);
   });
 
   it('null keeps the hook idle, with no stream and no snapshot', () => {

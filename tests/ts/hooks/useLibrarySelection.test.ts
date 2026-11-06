@@ -37,6 +37,19 @@ describe('useLibrarySelection', () => {
     expect(setSelectedModel).toHaveBeenLastCalledWith(3);
   });
 
+  it('a removed model drops the local pick only when it was the one picked', () => {
+    const hook = mount();
+    act(() => hook.result.current.pickLocal(3));
+
+    act(() => hook.result.current.dropLocal(4));
+    expect(hook.result.current.localPick).toBe(3);
+    expect(setSelectedModel).toHaveBeenLastCalledWith(3);
+
+    act(() => hook.result.current.dropLocal(3));
+    expect(hook.result.current.localPick).toBeNull();
+    expect(setSelectedModel).toHaveBeenLastCalledWith(null);
+  });
+
   it('a far pick clears this machine’s, which the native menu then holds as none', () => {
     const hook = mount();
     act(() => hook.result.current.pickLocal(3));

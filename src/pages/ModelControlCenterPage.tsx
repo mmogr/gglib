@@ -52,12 +52,12 @@ export default function ModelControlCenterPage({
   const { models, loading, error } = useModelLibrary();
   // The paired machine's rows, and one selection across both machines.
   const paired = usePairedModels();
-  const { localPick: selectedModelId, farPick, pickFar, pickLocal } = useLibrarySelection(paired.group);
+  const { localPick: selectedModelId, farPick, pickFar, pickLocal, dropLocal } = useLibrarySelection(paired.group);
   const selectedModel = useModel(selectedModelId);
   const removeModel = useCallback(async (id: number) => {
     await removeLibraryModel(id);
-    if (selectedModelId === id) pickLocal(null);
-  }, [selectedModelId, pickLocal]);
+    dropLocal(id);
+  }, [dropLocal]);
   const { tags, loadTags, addTagToModel, removeTagFromModel } = useTags();
   const { showToast } = useToastContext();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();

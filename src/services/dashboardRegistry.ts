@@ -60,8 +60,10 @@ function write(key: string, live: DashboardLive): void {
 function open(key: string, target: DashboardTarget): Handle {
   write(key, IDLE);
   const handle: Handle = { count: 0, close: () => {} };
-  // A frame already read when the stream is closed must not bring the key
-  // back: only the stream this handle holds may write under it.
+  // Held before the stream is opened, so a stream that spoke at once would
+  // be heard; and a frame already read when the stream is closed must not
+  // bring the key back: only the stream this handle holds may write under it.
+  handles.set(key, handle);
   const held = () => handles.get(key) === handle;
   handle.close = subscribeProxyDashboard(
     target.host,
@@ -86,7 +88,6 @@ function open(key: string, target: DashboardTarget): Handle {
 export function acquireDashboard(target: DashboardTarget): () => void {
   const key = keyOf(target);
   const handle = handles.get(key) ?? open(key, target);
-  handles.set(key, handle);
   handle.count += 1;
   let released = false;
   return () => {
@@ -105,6 +106,11 @@ export function acquireDashboard(target: DashboardTarget): () => void {
 /** How many streams are open now, for tests and diagnostics. */
 export function openDashboardStreams(): number {
   return handles.size;
+}
+
+/** The live dashboard for `target` as it stands, for code outside React; idle when no stream holds it. */
+export function getDashboard(target: DashboardTarget): DashboardLive {
+  return store.getState().get(keyOf(target)) ?? IDLE;
 }
 
 /**

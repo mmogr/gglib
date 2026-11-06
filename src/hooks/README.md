@@ -37,7 +37,7 @@ Custom React hooks for gglib GUI functionality.
 | Hook | Description |
 |------|-------------|
 | [`usePairedModels.ts`](usePairedModels.ts) | The paired machine's models for the library and a chat on one of them: read while it is reached and the caller needs them, kept and marked stale while it is away or a read fails, cleared on disconnect or once another machine answers |
-| [`useLibrarySelection.ts`](useLibrarySelection.ts) | The library's one selection, a model here or a far one, never both; the local pick is the native menu's, and a far pick tells the menu nothing here is selected |
+| [`useLibrarySelection.ts`](useLibrarySelection.ts) | The library's one selection, a model here or a far one, never both; the local pick is the native menu's, a far pick tells the menu nothing here is selected, and a removed model drops the pick only if it was the one picked |
 | [`useServers.ts`](useServers.ts) | Running servers from the event-driven registry, and stopping one |
 | [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, quantisation, whether it reads images, its context, and whether it thinks |
 | [`useImageInput.ts`](useImageInput.ts) | Whether the chat's composers offer images, by `canSee` (this machine's model, or the paired machine's row for it, read only for a chat on its model; always for a far chat), why not, and the context their cost is read against |
