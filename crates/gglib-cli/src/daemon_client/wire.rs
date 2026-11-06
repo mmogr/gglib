@@ -65,7 +65,9 @@ pub(crate) struct ProxyStatusDto {
     /// Where a client reaches it, `http://<address>/v1`; `None` while not
     /// listening.
     pub base_url: Option<String>,
-    /// Whether a request must carry the API key; `None` while not listening.
+    /// Whether a request must carry the API key; `None` while not listening,
+    /// and while listening when the daemon could not read its settings to
+    /// say.
     pub key: Option<KeyState>,
     #[serde(default)]
     pub pinned_model: Option<String>,

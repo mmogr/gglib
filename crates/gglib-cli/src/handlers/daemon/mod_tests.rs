@@ -42,6 +42,13 @@ fn the_proxy_report_says_where_it_is_reached_and_whether_a_key_is_needed() {
         ]
     );
 
+    let unread = ProxyStatusDto { key: None, ..open };
+    assert_eq!(
+        proxy_lines(&unread),
+        ["  Proxy:   On at http://127.0.0.1:8080/v1"],
+        "a key the daemon could not read gets no line, not a guessed word"
+    );
+
     let off = ProxyStatusDto {
         running: false,
         state: EndpointState::Off,

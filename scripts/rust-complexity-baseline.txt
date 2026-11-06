@@ -76,7 +76,7 @@ crates/gglib-cli/src/handlers/model/update_surface_tests.rs 304
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 362
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 536
 crates/gglib-cli/src/handlers/up/choose.rs 351
-crates/gglib-cli/src/handlers/up/mod.rs 380
+crates/gglib-cli/src/handlers/up/mod.rs 381
 crates/gglib-cli/src/handlers/up/probe.rs 310
 crates/gglib-cli/src/handlers/up/warm.rs 413
 crates/gglib-cli/src/model_commands.rs 402

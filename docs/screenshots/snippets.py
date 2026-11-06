@@ -15,9 +15,10 @@ record.py records it, render.mjs --text writes what the terminal showed to
 as a ```console block. Names on the command line limit the recording to
 those snippets; the splice always covers every page.
 
-Two renames are applied, as the GIFs rename this machine's user: $HOME
-becomes /Users/mmogr, and the demo copy's folder becomes the folder gglib
-uses by default on a Mac, so a page shows the paths a reader would see.
+Renames are applied, as the GIFs rename this machine's user: $HOME becomes
+/Users/mmogr, the demo copy's folder becomes the folder gglib uses by default
+on a Mac, and a `daemon status` line that found the demo's proxy on 8081 is
+shown on its stored port, so a page shows what a reader would see.
 
 A recording that times out is named at the end and the others still run.
 --splice records nothing and splices the .txt files already there, after a
@@ -43,8 +44,9 @@ RENAMES = [
     f"{HOME}=/Users/mmogr",
     "/Users/mmogr/.local/share/gglib-demo=/Users/mmogr/Library/Application Support/gglib",
     # A recording machine whose own daemon holds 8080 records the demo copy's
-    # proxy on 8081; the pages show the demo's stored port.
-    "http://127.0.0.1:8081/v1=http://127.0.0.1:8080/v1",
+    # proxy on 8081; the status line shows the demo's stored port. Only that
+    # line, so an example that really names 8081 is left alone.
+    "Proxy:   On at http://127.0.0.1:8081/v1=Proxy:   On at http://127.0.0.1:8080/v1",
 ]
 
 

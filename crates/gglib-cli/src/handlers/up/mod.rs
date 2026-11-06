@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 
 mod choose;
+mod client_block;
 mod probe;
 mod warm;
 
