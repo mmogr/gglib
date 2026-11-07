@@ -7,10 +7,13 @@
  * unfolded and content parts were dropped, so a mid-thread delete silently
  * stripped tool blocks off the surviving assistant messages until the next
  * hydrate. These tests pin that down.
+ *
+ * Delete… asks first through the one confirm sheet, saying how many
+ * messages after it go too; a no deletes nothing.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 
 const transport = vi.hoisted(() => ({
@@ -27,7 +30,7 @@ vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
-import { useMessageDeletion } from '../../../src/components/ChatMessagesPanel/hooks/useMessageDeletion';
+import { deleteQuestion, useMessageDeletion } from '../../../src/components/ChatMessagesPanel/hooks/useMessageDeletion';
 import { TransportError } from '../../../src/services/transport';
 import type { ChatMessage, ConversationSummary } from '../../../src/services/transport';
 
@@ -71,7 +74,7 @@ const messagesWithToolCall: ChatMessage[] = [
   },
 ];
 
-function setup(dbMessages: ChatMessage[], runtimeMessages: Array<{ id: string; role: string }>) {
+function setup(dbMessages: ChatMessage[], runtimeMessages: Array<{ id: string; role: string }>, answer = true) {
   const reset = vi.fn();
   const threadRuntime = {
     getState: () => ({ messages: runtimeMessages }),
@@ -80,6 +83,7 @@ function setup(dbMessages: ChatMessage[], runtimeMessages: Array<{ id: string; r
 
   const syncConversations = vi.fn().mockResolvedValue(undefined);
   const showToast = vi.fn();
+  const confirm = vi.fn(async () => answer);
 
   transport.getThread.mockResolvedValue({ messages: dbMessages });
   transport.deleteMessage.mockResolvedValue(1);
@@ -91,10 +95,14 @@ function setup(dbMessages: ChatMessage[], runtimeMessages: Array<{ id: string; r
       activeConversation: conversation,
       syncConversations,
       showToast,
+      confirm,
     })
   );
 
-  return { hook, reset, syncConversations, showToast };
+  /** Delete `id`, as Delete… does, the sheet answered `answer`. */
+  const remove = (id: string) => act(async () => { await hook.result.current(id); });
+
+  return { hook, reset, syncConversations, showToast, confirm, remove };
 }
 
 describe('useMessageDeletion', () => {
@@ -102,37 +110,44 @@ describe('useMessageDeletion', () => {
     vi.clearAllMocks();
   });
 
-  it('opens and closes the confirmation modal', async () => {
-    const { hook } = setup([], []);
+  it('asks first, through the confirm sheet, and deletes nothing on a no', async () => {
+    const { confirm, remove, reset } = setup(messagesWithToolCall, [{ id: 'db-4', role: 'user' }], false);
 
-    expect(hook.result.current.isDeleteModalOpen).toBe(false);
+    await remove('db-4');
 
-    act(() => hook.result.current.initiateDelete('db-4'));
-    await waitFor(() => expect(hook.result.current.isDeleteModalOpen).toBe(true));
-
-    act(() => hook.result.current.cancelDelete());
-    await waitFor(() => expect(hook.result.current.isDeleteModalOpen).toBe(false));
+    expect(confirm).toHaveBeenCalledWith(deleteQuestion(1));
+    expect(transport.deleteMessage).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
   });
 
-  it('reports the cascade count for the pending message', async () => {
-    const { hook } = setup([], [
+  it('says how many messages after it go too: every following non-system message', async () => {
+    const { confirm, remove } = setup([], [
       { id: 'system-7', role: 'system' },
       { id: 'db-1', role: 'user' },
       { id: 'db-2', role: 'assistant' },
       { id: 'db-4', role: 'user' },
-    ]);
+    ], false);
 
-    act(() => hook.result.current.initiateDelete('db-2'));
+    await remove('db-2');
 
-    // The target plus every following non-system message.
-    await waitFor(() => expect(hook.result.current.pendingDeleteCount).toBe(2));
+    expect(confirm).toHaveBeenCalledWith(deleteQuestion(2));
+  });
+
+  it('words the question for none, one and several messages after it', () => {
+    expect(deleteQuestion(1)).toEqual({
+      title: 'Delete this message?',
+      description: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    expect(deleteQuestion(2).description).toBe('The 1 message after it is deleted too. This cannot be undone.');
+    expect(deleteQuestion(4).description).toBe('The 3 messages after it are deleted too. This cannot be undone.');
   });
 
   it('deletes by the DB id encoded in the runtime message id', async () => {
-    const { hook } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
+    const { remove } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
 
-    act(() => hook.result.current.initiateDelete('db-9'));
-    await act(async () => { await hook.result.current.confirmDelete(); });
+    await remove('db-9');
 
     expect(transport.deleteMessage).toHaveBeenCalledWith(9);
   });
@@ -140,20 +155,18 @@ describe('useMessageDeletion', () => {
   it('deletes nothing for a message that is not saved yet, and still reloads', async () => {
     // A reply being drawn has no row until its run ends; every saved row
     // carries its id in its runtime id.
-    const { hook, reset } = setup(messagesWithToolCall, [{ id: 'temp-abc', role: 'user' }]);
+    const { remove, reset } = setup(messagesWithToolCall, [{ id: 'temp-abc', role: 'user' }]);
 
-    act(() => hook.result.current.initiateDelete('temp-abc'));
-    await act(async () => { await hook.result.current.confirmDelete(); });
+    await remove('temp-abc');
 
     expect(transport.deleteMessage).not.toHaveBeenCalled();
     expect(reset).toHaveBeenCalledTimes(1);
   });
 
   it('preserves tool-call content parts on the reloaded thread', async () => {
-    const { hook, reset } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
+    const { remove, reset } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
 
-    act(() => hook.result.current.initiateDelete('db-9'));
-    await act(async () => { await hook.result.current.confirmDelete(); });
+    await remove('db-9');
 
     expect(reset).toHaveBeenCalledTimes(1);
     const reloaded = reset.mock.calls[0][0] as ThreadMessageLike[];
@@ -174,26 +187,22 @@ describe('useMessageDeletion', () => {
     });
   });
 
-  it('reports failure without leaving the modal open', async () => {
-    const { hook, showToast } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
+  it('reports a failure', async () => {
+    const { remove, showToast } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
     transport.deleteMessage.mockRejectedValueOnce(new Error('boom'));
 
-    act(() => hook.result.current.initiateDelete('db-9'));
-    await act(async () => { await hook.result.current.confirmDelete(); });
+    await remove('db-9');
 
     expect(showToast).toHaveBeenCalledWith('Failed to delete message', 'error');
-    expect(hook.result.current.isDeleteModalOpen).toBe(false);
-    expect(hook.result.current.isDeleting).toBe(false);
   });
 
   it('says a chat whose reply is still being written is not deleted from', async () => {
-    const { hook, showToast } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
+    const { remove, showToast } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
     transport.deleteMessage.mockRejectedValueOnce(
       new TransportError('CONFLICT', 'conversation 7 already has a live reply, run e1; stop it or wait'),
     );
 
-    act(() => hook.result.current.initiateDelete('db-9'));
-    await act(async () => { await hook.result.current.confirmDelete(); });
+    await remove('db-9');
 
     expect(showToast).toHaveBeenCalledWith(
       'A reply is still being written here. Stop it or wait, then delete.',

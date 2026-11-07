@@ -64,10 +64,10 @@ async function fromPicker(user: ReturnType<typeof userEvent.setup>, name: string
   return screen.getByRole('menuitem', { name });
 }
 
-/** The notebook head, once the saved turn is drawn and the thread has stopped remounting. */
+/** The chat's head, once the saved turn is drawn and the thread has stopped remounting. */
 async function head() {
   await screen.findByText('What does KeepAlive do?');
-  return screen.getByRole('heading', { name: 'launchd KeepAlive' }).closest('.grid') as HTMLElement;
+  return screen.getByRole('heading', { name: 'launchd KeepAlive' }).closest('[data-head]') as HTMLElement;
 }
 
 beforeEach(() => {

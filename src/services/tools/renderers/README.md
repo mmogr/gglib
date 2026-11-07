@@ -15,13 +15,13 @@ React components and rendering logic for displaying tool execution results in th
 ## Dispatch Flow
 
 ```
-Tool execution complete → ToolResultDisplay(toolName, result)
+A tool call's row in a reply's fold, opened → ToolResultDisplay(toolName, result)
        ▼
   registry.getRenderer(toolName)
        ├── Found: renderer.renderResult(result) → ReactNode
        └── Not found: FallbackRenderer.renderResult(result) → ReactNode
        ▼
-  Inserted into ChatMessage content
+  Drawn under the call's arguments, then Copy
 ```
 
 <!-- module-docs:end -->

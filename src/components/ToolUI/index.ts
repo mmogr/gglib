@@ -1,6 +1,5 @@
 /**
- * Tool UI components for rendering tool calls in chat.
+ * Tool results as a reply's fold shows them.
  */
 
-export { GenericToolUI } from './GenericToolUI';
-export { ToolResultDisplay } from './ToolResultDisplay';
+export { ToolResultDisplay, resultText } from './ToolResultDisplay';

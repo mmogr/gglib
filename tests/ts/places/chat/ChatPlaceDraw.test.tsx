@@ -244,7 +244,7 @@ describe('ChatPlace, a render in its reply', () => {
     await user.click(drawItem());
     await ask(user, 'draw a lighthouse');
     emit(toolStart);
-    return screen.findByRole('list', { name: 'Tool execution status' });
+    return screen.findByRole('list', { name: 'Tool calls' });
   }
 
   it('says how far the tool has got, in words and a bar', async () => {
@@ -272,7 +272,8 @@ describe('ChatPlace, a render in its reply', () => {
 
   it('shows the picture so far, the newest frame only, scaled up, and takes it away with the tool\'s result', async () => {
     const rows = await drawing();
-    expect(within(rows).queryByRole('img')).not.toBeInTheDocument();
+    const frame = { name: /^Preview of the image/ };
+    expect(within(rows).queryByRole('img', frame)).not.toBeInTheDocument();
 
     preview('call_1', 3);
     const shown = await within(rows).findByRole('img', { name: 'Preview of the image being made, step 3 of 20' });
@@ -282,10 +283,10 @@ describe('ChatPlace, a render in its reply', () => {
 
     preview('call_1', 4);
     await within(rows).findByRole('img', { name: 'Preview of the image being made, step 4 of 20' });
-    expect(within(rows).getAllByRole('img')).toHaveLength(1);
+    expect(within(rows).getAllByRole('img', frame)).toHaveLength(1);
 
     emit(toolDone);
-    await waitFor(() => expect(within(rows).queryByRole('img')).not.toBeInTheDocument());
+    await waitFor(() => expect(within(rows).queryByRole('img', frame)).not.toBeInTheDocument());
     expect(within(rows).queryByRole('progressbar')).not.toBeInTheDocument();
     // A frame that comes after its tool's result is not drawn.
     preview('call_1', 20);
@@ -301,7 +302,7 @@ describe('ChatPlace, a render in its reply', () => {
 
     emit({ type: 'waiting', reason: 'image_render', step: 3, total: 20, position: 1 });
     const status = (await screen.findByText('Queued behind an image render')).closest('[role="status"]') as HTMLElement;
-    const row = status.closest('.grid') as HTMLElement;
+    const row = status.closest('[data-turn]') as HTMLElement;
     expect(within(row).getByText('step 3 of 20')).toBeInTheDocument();
 
     emit({ type: 'waiting', reason: 'image_render', step: 9, total: 20, position: 1 });
@@ -322,6 +323,6 @@ describe('ChatPlace, a render in its reply', () => {
 
     emit({ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0 });
     const status = (await screen.findByText('Waiting for the model to load')).closest('[role="status"]') as HTMLElement;
-    expect(status.closest('.grid')).not.toHaveTextContent(/step \d+ of/);
+    expect(status.closest('[data-turn]')).not.toHaveTextContent(/step \d+ of/);
   });
 });

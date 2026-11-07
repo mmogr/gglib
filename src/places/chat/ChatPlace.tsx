@@ -16,7 +16,6 @@ import { useState, useEffect, useRef } from 'react';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { useConversationActions } from './useConversationActions';
 import { ChatMessagesPanel, type ModelChoice } from '../../components/ChatMessagesPanel';
-import { GenericToolUI } from '../../components/ToolUI';
 import { useGglibRuntime } from '../../hooks/useGglibRuntime';
 import { useSettings } from '../../hooks/useSettings';
 import { useChatModelFacts } from '../../hooks/useChatModelFacts';
@@ -232,8 +231,6 @@ export default function ChatPlace(props: ChatPlaceProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-background">
       <AssistantRuntimeProvider runtime={runtime}>
-        {/* Tool UI Components - render tool calls in chat messages */}
-        <GenericToolUI />
         <ChatMessagesPanel
           key={activeConversationId ?? 'none'}
           activeConversation={activeConversation}

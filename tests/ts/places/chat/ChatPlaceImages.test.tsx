@@ -370,12 +370,12 @@ describe('ChatPlace, a tool\'s images', () => {
     expect(fetchAttachmentBlob).toHaveBeenCalledWith('this', DRAWN_TOO);
     // Only by id from this machine's store: nothing else is asked for.
     expect(new Set(fetchAttachmentBlob.mock.calls.map(([source, id]) => `${source}:${id}`))).toEqual(new Set([`this:${DRAWN}`, `this:${DRAWN_TOO}`]));
-    const tools = screen.getByRole('list', { name: 'Tool execution status' });
+    const tools = screen.getByRole('list', { name: 'Tool calls' });
     expect(within(tools).queryByRole('img')).not.toBeInTheDocument();
     expect(tools).not.toContainElement(strip());
   });
 
-  it('shows a finished reply\'s tool images under its text while "How this was made" is closed, once, in the order made', async () => {
+  it('shows a finished reply\'s tool images under its text while its fold is closed, once, in the order made', async () => {
     const user = userEvent.setup();
     fixture.rows = {
       1: [asked, savedReply('Here is your fox.', ['draw_1', 'draw_2']), toolRow(13, 'draw_1', drawn), toolRow(14, 'draw_2', drawnLater)],
@@ -388,7 +388,7 @@ describe('ChatPlace, a tool\'s images', () => {
     expect(strips()).toHaveLength(1);
     expect(shownSizes()).toEqual(['Image, 1024 × 1024', 'Image, 640 × 480', 'Image, 512 × 512']);
 
-    const toggle = screen.getByRole('button', { name: 'How this was made' });
+    const toggle = screen.getByRole('button', { name: '2 tool calls' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     const detail = document.getElementById(toggle.getAttribute('aria-controls')!)!;
     expect(detail).not.toBeVisible();
@@ -397,7 +397,7 @@ describe('ChatPlace, a tool\'s images', () => {
     // Under the text, not above it.
     expect(text.compareDocumentPosition(strip()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    // Opening the detail shows the tool's row, and the images are not drawn again.
+    // Opening the fold shows the tool's rows, and the images are not drawn again.
     await user.click(toggle);
     expect(detail).toBeVisible();
     expect(within(detail).queryByRole('img')).not.toBeInTheDocument();
@@ -421,14 +421,15 @@ describe('ChatPlace, a tool\'s images', () => {
   });
 
   it('shows a tool call without images as before: its row, no strip, nothing read', async () => {
+    const user = userEvent.setup();
     fixture.rows = { 1: [asked, savedReply('', ['draw_1']), toolRow(13, 'draw_1')] };
     page({ imageInput: false });
     renderLocal();
 
-    const rows = await screen.findByRole('list', { name: 'Tool execution status' });
+    await user.click(await screen.findByRole('button', { name: '1 tool call' }));
+    const rows = screen.getByRole('list', { name: 'Tool calls' });
     const [item] = within(rows).getAllByRole('listitem');
-    expect(item).toHaveTextContent(/^Draw$/);
-    expect(item.children).toHaveLength(1);
+    expect(within(item).getByRole('button', { name: 'Draw' })).toBeInTheDocument();
     expect(strips()).toHaveLength(0);
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(fetchAttachmentBlob).not.toHaveBeenCalled();

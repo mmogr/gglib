@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { ThreadRuntime } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
 import { getTransport, TransportError } from '../../../services/transport';
 import type { ConversationSummary } from '../../../services/transport';
+import type { ConfirmOptions } from '../../ui/ConfirmDialog';
 import { extractDbId } from '../components/MessageActionsContext';
 import { buildThreadMessages } from '../../../hooks/useChatPersistence/buildThreadMessages';
 import type { ToastType } from '../../Toast';
@@ -13,6 +14,8 @@ export interface UseMessageDeletionOptions {
   activeConversation: ConversationSummary | null;
   syncConversations: (options?: { preferredId?: number | null; silent?: boolean }) => Promise<void>;
   showToast: (message: string, type?: ToastType, duration?: number) => void;
+  /** The one confirm sheet's question (`app/confirm`), answered by the person. */
+  confirm: (opts: ConfirmOptions) => Promise<boolean>;
   /**
    * A far chat: its rows are the far machine's, and a delete here would
    * reach this machine's daemon with its ids. Nothing is deleted.
@@ -20,24 +23,24 @@ export interface UseMessageDeletionOptions {
   readOnly?: boolean;
 }
 
-export interface UseMessageDeletionResult {
-  /** Open the confirmation modal for a message. */
-  initiateDelete: (runtimeMessageId: string) => void;
-  /** Delete the pending message and reload the thread. */
-  confirmDelete: () => Promise<void>;
-  /** Dismiss the confirmation modal without deleting. */
-  cancelDelete: () => void;
-  /** Whether the confirmation modal is open. */
-  isDeleteModalOpen: boolean;
-  /** Whether a delete is in flight. */
-  isDeleting: boolean;
-  /** How many messages the cascade will remove, for the modal copy. */
-  pendingDeleteCount: number;
+/** What the confirm sheet says of deleting a message and the `count - 1` after it. */
+export function deleteQuestion(count: number): ConfirmOptions {
+  const after = count - 1;
+  return {
+    title: 'Delete this message?',
+    description:
+      after > 0
+        ? `The ${after} ${after === 1 ? 'message' : 'messages'} after it ${after === 1 ? 'is' : 'are'} deleted too. This cannot be undone.`
+        : 'This cannot be undone.',
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  };
 }
 
 /**
  * Message deletion with cascade, driven from the component that owns the
- * thread context.
+ * thread context: Delete… asks through the one confirm sheet, saying how
+ * many messages after it go too, then deletes.
  *
  * Deleting a message also deletes everything after it, so the thread is
  * reloaded from the database afterwards rather than patched in place.
@@ -45,7 +48,8 @@ export interface UseMessageDeletionResult {
  * Only a saved row can be deleted, and every saved row carries its id in its
  * runtime id (`db-<id>`): a reply is shown from its saved rows once its run
  * ends. A message still being drawn has none, and deleting it deletes
- * nothing.
+ * nothing. The daemon refuses (409) while a reply to the chat is being
+ * written, and the toast says so.
  */
 export function useMessageDeletion({
   threadRuntime,
@@ -53,50 +57,34 @@ export function useMessageDeletion({
   activeConversation,
   syncConversations,
   showToast,
+  confirm,
   readOnly = false,
-}: UseMessageDeletionOptions): UseMessageDeletionResult {
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  /** Count the target message plus every non-system message after it. */
-  const getSubsequentMessageCount = useCallback((runtimeMessageId: string): number => {
-    if (!threadRuntime) return 1;
-
-    const state = threadRuntime.getState();
-    const messageIndex = state.messages.findIndex((m) => m.id === runtimeMessageId);
-    if (messageIndex === -1) return 1;
-
-    let count = 0;
-    for (let i = messageIndex; i < state.messages.length; i++) {
-      if (state.messages[i].role !== 'system') {
-        count++;
-      }
-    }
-    return count;
-  }, [threadRuntime]);
-
-  const initiateDelete = useCallback((runtimeMessageId: string) => {
-    if (readOnly) return;
-    setDeleteTargetId(runtimeMessageId);
-    setIsDeleteModalOpen(true);
+}: UseMessageDeletionOptions): (runtimeMessageId: string) => Promise<void> {
+  // Read again once the question is answered: the page may have turned to a far chat meanwhile.
+  const readOnlyNow = useRef(readOnly);
+  useEffect(() => {
+    readOnlyNow.current = readOnly;
   }, [readOnly]);
 
-  const cancelDelete = useCallback(() => {
-    setIsDeleteModalOpen(false);
-    setDeleteTargetId(null);
-  }, []);
+  /** The target message plus every non-system message after it. */
+  const cascadeCount = useCallback((runtimeMessageId: string): number => {
+    const messages = threadRuntime?.getState().messages ?? [];
+    const at = messages.findIndex((m) => m.id === runtimeMessageId);
+    if (at === -1) return 1;
+    return messages.slice(at).filter((m) => m.role !== 'system').length;
+  }, [threadRuntime]);
 
-  const confirmDelete = useCallback(async () => {
-    if (readOnly || !deleteTargetId || !threadRuntime || !activeConversationId) return;
+  return useCallback(async (runtimeMessageId: string) => {
+    if (readOnly || !threadRuntime || !activeConversationId) return;
+    if (!(await confirm(deleteQuestion(cascadeCount(runtimeMessageId))))) return;
+    if (readOnlyNow.current) return;
 
-    setIsDeleting(true);
     try {
-      const dbId = extractDbId(deleteTargetId);
+      const dbId = extractDbId(runtimeMessageId);
       if (dbId) {
         await getTransport().deleteMessage(dbId);
       } else {
-        appLogger.debug('component.chat', 'Could not find DB ID for message', { messageId: deleteTargetId });
+        appLogger.debug('component.chat', 'Could not find DB ID for message', { messageId: runtimeMessageId });
       }
 
       const dbMessages = (await getTransport().getThread(activeConversationId)).messages;
@@ -105,7 +93,7 @@ export function useMessageDeletion({
       await syncConversations({ silent: true });
       showToast('Message deleted', 'success');
     } catch (error) {
-      appLogger.error('component.chat', 'Failed to delete message', { error, messageId: deleteTargetId });
+      appLogger.error('component.chat', 'Failed to delete message', { error, messageId: runtimeMessageId });
       // The daemon refuses while a reply to the chat is still being written.
       showToast(
         TransportError.hasCode(error, 'CONFLICT')
@@ -113,27 +101,6 @@ export function useMessageDeletion({
           : 'Failed to delete message',
         'error',
       );
-    } finally {
-      setIsDeleting(false);
-      setIsDeleteModalOpen(false);
-      setDeleteTargetId(null);
     }
-  }, [
-    readOnly,
-    deleteTargetId,
-    threadRuntime,
-    activeConversationId,
-    activeConversation,
-    syncConversations,
-    showToast,
-  ]);
-
-  return {
-    initiateDelete,
-    confirmDelete,
-    cancelDelete,
-    isDeleteModalOpen,
-    isDeleting,
-    pendingDeleteCount: deleteTargetId ? getSubsequentMessageCount(deleteTargetId) : 1,
-  };
+  }, [readOnly, threadRuntime, activeConversationId, activeConversation, syncConversations, showToast, confirm, cascadeCount]);
 }
