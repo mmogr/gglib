@@ -179,7 +179,9 @@ Hugging Face. `search <query>` and `browse` (popular repositories) find a
 model; `download <repo>` fetches it, `-q <QUANT>` picks a quantization, and
 `--list-quants` lists the ones a repository offers, each with whether it
 fits this machine, judged as a download without `-q` picks one, and ★ on
-the one it would take (the same listing the GUI's table shows).
+the one it would take when the listing can tell (a quantized file's type
+often lies past the part the listing reads; the download reads further).
+The GUI's table shows the same listing.
 
 <!-- snippet: model-search -->
 ```console

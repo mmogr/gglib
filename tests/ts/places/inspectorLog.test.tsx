@@ -190,11 +190,36 @@ describe('the log, in the inspector', () => {
     expect(within(inspector()).getByRole('button', { name: 'Following' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('says so for a model that has not run since gglib started', async () => {
+  it("never shows another model's log under this one when the daemon gave its port to that model", async () => {
+    serve();
+    renderAt('/models/9/log');
+    await screen.findByRole('log', { name: 'Server output' });
+    serve('stopped');
+    act(() => ingestServerEvent({ type: 'running', modelId: '77', port: 9001, updatedAt: (clock += 1e6), modelName: 'Other' }));
+
+    expect(await within(inspector()).findByText("Gemma-3-4B-It's last log is gone: its port now serves another model.")).toBeInTheDocument();
+    expect(screen.queryByRole('log')).not.toBeInTheDocument();
+    // The registry outlives the test: the other model leaves, as a stop names no port.
+    act(() => ingestServerEvent({ type: 'stopped', modelId: '77', updatedAt: (clock += 1e6), modelName: 'Other' }));
+  });
+
+  it('keeps a pause made with the switch when scrolling reaches the end', async () => {
+    serve();
+    renderAt('/models/9/log');
+    const log = await screen.findByRole('log', { name: 'Server output' });
+    await userEvent.setup().click(within(inspector()).getByRole('button', { name: 'Paused' }));
+    Object.defineProperty(log, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, value: 100 });
+    log.scrollTop = 900;
+    fireEvent.scroll(log);
+    expect(within(inspector()).getByRole('button', { name: 'Paused' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('says so for a model that is not loaded and has no earlier log in this window', async () => {
     library.models = [guiModel({ id: 12, name: 'Phi-4' })];
     initModelEvents();
     renderApp('/models/12/log');
-    expect(await within(inspector()).findByText('Phi-4 has not run since gglib started; its log starts when it loads.')).toBeInTheDocument();
+    expect(await within(inspector()).findByText('Phi-4 is not loaded, and this window has no earlier log of it. Its log shows from its next load.')).toBeInTheDocument();
     expect(screen.queryByRole('log')).not.toBeInTheDocument();
   });
 

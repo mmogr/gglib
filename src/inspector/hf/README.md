@@ -15,8 +15,11 @@ daemon's fit verdict in its own words (`fit_word`), always shown. The size
 and the fit are the weights alone, judged as `gglib model download` picks a
 variant. gglib's pick carries ★: the variant `gglib model download <repo>`
 takes without `-q`, which the daemon marks (`picked`, from `pick_variant`
-over the heads the listing read; the CLI's `--list-quants` marks it too).
-It is selected to begin with and scrolled into view; only the selected row
+over the heads the listing read; the CLI's `--list-quants` marks it too),
+marked only when those heads can tell it. Unmarked, the largest variant
+that fits is selected, quantized before full precision (F16, BF16, F32),
+as the download's picker prefers: a GUI-only rule until the listing can
+name the pick for every repository. The selected row is scrolled into view; only the selected row
 carries `[■ Download]`, which queues that variant. Sizes are the library's
 (`formatSize`, two decimals). A draft or helper (`role: Sidecar`, its header's word) is dimmed,
 "not a model on its own", and cannot be selected; a projector is no row.

@@ -105,6 +105,22 @@ describe('the inspector, a Hugging Face repo', () => {
     expect(within(inspector()).getByText(/^8\.0B/)).toBeInTheDocument();
   });
 
+  it('selects the largest quantized variant that fits when the listing marks no pick, with no ★', async () => {
+    // As real repositories list: the heads cannot tell gglib's pick, so none is marked.
+    renderHf([quant('Q4_K_M', 4000), quant('UD-Q8_K_XL', 4900), quant('Q8_0', 3900), quant('BF16', 7400), quant('F32', 16000, TOO_BIG)]);
+    await within(inspector()).findByRole('listbox', { name: 'Sizes' });
+
+    expect(size('UD-Q8_K_XL')).toHaveAttribute('aria-selected', 'true');
+    expect(size('BF16')).toHaveAttribute('aria-selected', 'false');
+    expect(within(inspector()).queryByRole('img', { name: "gglib's pick" })).not.toBeInTheDocument();
+  });
+
+  it('selects full precision only when nothing quantized fits', async () => {
+    renderHf([quant('Q8_0', 9000, TOO_BIG), quant('F16', 7300), quant('BF16', 7400)]);
+    await within(inspector()).findByRole('listbox', { name: 'Sizes' });
+    expect(size('BF16')).toHaveAttribute('aria-selected', 'true');
+  });
+
   it("selects gglib's pick, marked ★, scrolled into view, and only it carries Download, which queues it", async () => {
     const scrolled = vi.fn();
     Element.prototype.scrollIntoView = scrolled;

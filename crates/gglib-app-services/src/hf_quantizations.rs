@@ -88,12 +88,24 @@ impl VariantReader for ListedHeads<'_> {
 
 /// The index in `quants` of the variant `gglib model download` would take,
 /// chosen by `pick_variant` over the heads already read, against
-/// `budget_bytes`; `None` for a repository with no weights.
+/// `budget_bytes`; `None` for a repository with no weights, and `None` when
+/// the heads cannot tell: a model's head that stops before its
+/// `general.file_type` (llama-quantize appends it past the first 64 KiB),
+/// where the download reads further and would choose differently.
 pub(crate) async fn listed_pick(
     quants: &[(HfQuantInfo, Option<HeadMetadata>)],
     is_image: bool,
     budget_bytes: Option<u64>,
 ) -> Option<usize> {
+    let untold = |(q, head): &(HfQuantInfo, Option<HeadMetadata>)| {
+        q.role.is_none_or(GgufFileRole::is_weights)
+            && head
+                .as_ref()
+                .is_none_or(|h| h.metadata.file_type.is_none() && !h.complete)
+    };
+    if !is_image && quants.iter().any(untold) {
+        return None;
+    }
     let contenders: Vec<Contender> = quants
         .iter()
         .map(|(q, _)| Contender {
@@ -390,6 +402,22 @@ mod tests {
         assert_eq!(listed_pick(&listed, false, Some(32 << 30)).await, Some(1));
         assert_eq!(listed_pick(&listed, false, None).await, Some(0));
 
+        // As real repositories ship them: the quantized heads stop before
+        // their type, the full-precision head names it. The download reads
+        // further; the listing cannot, so it marks nothing.
+        let untyped = || {
+            let mut head = shaped_head(true);
+            head.metadata.file_type = None;
+            head.complete = false;
+            Some(head)
+        };
+        let shipped = vec![
+            (quant("Q4_K_M", 1, 4 << 30), untyped()),
+            (quant("Q8_0", 1, 7 << 30), untyped()),
+            (quant("BF16", 1, 8 << 30), typed(32)),
+        ];
+        assert_eq!(listed_pick(&shipped, false, Some(32 << 30)).await, None);
+
         let mut helper = quant("MTP", 1, 1 << 30);
         helper.role = Some(GgufFileRole::Sidecar);
         assert_eq!(
@@ -462,9 +490,8 @@ mod tests {
                 size_bytes: 7
             })
         );
-        // The route marks the picker's one choice, a model's weights.
-        let picked: Vec<_> = listed.quantizations.iter().filter(|q| q.picked).collect();
-        assert_eq!(picked.len(), 1);
-        assert_eq!(picked[0].role, GgufFileRole::Weights);
+        // The fake hub serves no head bytes, so the listing cannot tell what
+        // the download would take, and marks nothing rather than guess.
+        assert!(listed.quantizations.iter().all(|q| !q.picked));
     }
 }

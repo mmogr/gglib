@@ -17,20 +17,23 @@ longer token scrolls. Colours are the ANSI colours llama.cpp wrote.
 
 The port is the running server's, or the last the server registry heard
 for the model: a stop or a crash names no port, so the registry keeps the
-last one, and that server's log stays on the daemon and on screen. With
-neither, one sentence says why: the model has not run since gglib started,
-or, after a failed load's Show log, the daemon named no port for that start
-(a first start that fails before `server_started`), so its output is not
-available.
+last one, and that server's log stays on the daemon and on screen, unless
+the daemon has since given that port to another model (it keeps logs by
+port), which is said instead. With no port, one sentence says why: after a
+failed load's Show log, the daemon named no port for that start (a first
+start that fails before `server_started`); else the model is not loaded and
+this window heard of no earlier run.
 
 Words with no Rust twin: "Log", "Following", "Paused", "Clear view", "Back
 to <name>", "Copy the log", "Waiting for server output" and its line, "<name>
-has not run since gglib started; its log starts when it loads.", "The output
-of this start is not available: the daemon named no port for it."
+is not loaded, and this window has no earlier log of it. Its log shows from
+its next load.", "<name>'s last log is gone: its port now serves another
+model.", "The output of this start is not available: the daemon named no
+port for it."
 
 | File | Role |
 |------|------|
-| `LogInspector.tsx` | The subject: the port from the server registry (the last known after a stop or crash), or the sentence for a model that has not run or a failed start with no port |
+| `LogInspector.tsx` | The subject: the port from the server registry (the last known after a stop or crash, unless another model now serves it), or the sentence for a port given away, a failed start with no port, or a model not loaded |
 | `ConsoleLogPanel.tsx` | The header (`LogHeader`) and the log: ANSI parsing (Anser), the time before each line, following, copy and Clear view |
 | `ConsoleLogPanel.css` | Terminal appearance and the ANSI colour classes |
 
