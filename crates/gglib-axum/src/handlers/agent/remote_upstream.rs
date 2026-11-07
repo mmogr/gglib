@@ -23,6 +23,7 @@ use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use gglib_runtime::Door;
 
 use super::AgentChatRequest;
+use super::chat_sampling::ChatSampling;
 use super::hub_model::Loaded;
 use crate::handlers::remote::far_error;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
@@ -132,7 +133,7 @@ pub(super) async fn resolve(
         ));
     }
     let proxy = state.remote.far_for(&far.machine).await?;
-    remote(&proxy, far).await
+    remote(&proxy, far, &req.saved).await
 }
 
 /// A local request's upstream, once its port is known to serve `server`.
@@ -264,7 +265,9 @@ pub(super) async fn endpoint(
         door: Some(door),
         model_context,
         layers,
-        model: Some(by_id),
+        // The chat's saved profile rides on the id, which the endpoint
+        // routes to that profile whether or not it trusts clients' sampling.
+        model: Some(req.saved.model(by_id)),
         counted_as: name.clone(),
         made_by: MadeBy {
             model: name,
@@ -320,14 +323,20 @@ pub(super) async fn through_endpoint(
 
 /// A far request's upstream: the far proxy's root through the tunnel, the
 /// far machine as the adapter carries it, and `model`'s id as the body's
-/// model. The id is looked up there first, so the run is counted under,
+/// model, with the profile the chat `saved` as its `{id}:{profile}` suffix,
+/// which that machine routes to a profile of its own. The id is looked up
+/// there first, so the run is counted under,
 /// and its turns made by, the name and quantisation that machine has for
 /// it, and a model it does not have is refused before any turn starts.
 ///
 /// # Errors
 ///
 /// The far machine's refusal of the lookup, with its status and message.
-pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream, HttpError> {
+pub(super) async fn remote(
+    far: &FarProxy,
+    model: &ModelRef,
+    saved: &ChatSampling,
+) -> Result<Upstream, HttpError> {
     let id = model.id.to_string();
     let detail = far.lookup(&id).await.map_err(far_error)?.detail;
     Ok(Upstream {
@@ -359,7 +368,7 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
             device: None,
             context_size: None,
         },
-        model: Some(id),
+        model: Some(saved.model(id)),
         local_model: None,
         far_model: Some(model.clone()),
     })

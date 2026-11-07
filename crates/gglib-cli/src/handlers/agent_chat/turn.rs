@@ -10,6 +10,7 @@
 
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use anyhow::Result;
 use gglib_core::domain::agent::AgentEvent;
@@ -41,18 +42,34 @@ pub(crate) struct Shown {
 pub(crate) async fn send(daemon: &DaemonHandle, turn: &LocalTurn, shown: Shown) -> Result<bool> {
     let id = new_run_id();
     let started = daemon.run_turn(&id, turn).await?;
-    Ok(follow(daemon, &started.id, shown, tokio::signal::ctrl_c()).await)
+    let followed = follow(daemon, &started.id, shown, tokio::signal::ctrl_c()).await;
+    if let Some(line) = &followed.line {
+        eprintln!("\n{line}");
+    }
+    Ok(followed.answered)
+}
+
+/// How long a cancelled run is waited for to end, so the next turn on its
+/// chat is not refused as one still being answered.
+const CANCEL_WAIT: Duration = Duration::from_secs(30);
+
+/// How a reply that was followed ended.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Followed {
+    /// Whether it gave its answer.
+    pub answered: bool,
+    /// What to say of how it ended, on stderr, when there is anything.
+    pub line: Option<String>,
 }
 
 /// Show run `id`'s reply until it ends, or until `stop` resolves, which
-/// cancels the run on the daemon. `true` only when the reply gave its
-/// answer.
+/// cancels the run on the daemon and waits for it to end there.
 pub(super) async fn follow(
     daemon: &DaemonHandle,
     id: &str,
     shown: Shown,
     stop: impl Future<Output = std::io::Result<()>>,
-) -> bool {
+) -> Followed {
     let (tx, mut rx) = mpsc::unbounded_channel::<AgentEvent>();
     let failed_aloud = AtomicBool::new(false);
     // Read in this task, beside the drain, not spawned: the channel closes
@@ -68,24 +85,43 @@ pub(super) async fn follow(
             reading
         )
     };
-    let (completed, end) = tokio::select! {
+    let (answered, end) = tokio::select! {
         biased;
         both = shown_reply => both,
         _ = stop => {
             if let Err(e) = daemon.run_cancel(id).await {
                 tracing::warn!("the run could not be cancelled: {e}");
             }
-            eprintln!("\n[agent response cancelled — Ctrl+C]");
-            return false;
+            // Its reply is saved when it ends, and a turn on the chat before
+            // then would be refused.
+            let ended = daemon.run_events(id, 0, |_| ControlFlow::Continue(()));
+            if tokio::time::timeout(CANCEL_WAIT, ended).await.is_err() {
+                tracing::warn!("the cancelled run {id} did not end within {CANCEL_WAIT:?}");
+            }
+            let line = Some("[agent response cancelled — Ctrl+C]".to_owned());
+            return Followed { answered: false, line };
         }
     };
-    if let Ok(Some(end)) = end
-        && !failed_aloud.load(Ordering::SeqCst)
-        && let Some(line) = failure(&end)
-    {
-        eprintln!("\n  ✗  {line}");
+    let said = failed_aloud.load(Ordering::SeqCst);
+    let line = (!answered).then(|| ending(id, &end, said)).flatten();
+    Followed { answered, line }
+}
+
+/// What to say of a reply that gave no answer, by how its stream ended:
+/// a run that failed, unless an error event said why; a stream that ended,
+/// or could not be read, before the run did, with how to read the rest.
+fn ending(id: &str, end: &Result<Option<RunInfo>>, failed_aloud: bool) -> Option<String> {
+    let rest = format!("`gglib run show {id} --follow` reads the rest");
+    match end {
+        Ok(Some(_)) if failed_aloud => None,
+        Ok(Some(info)) => failure(info).map(|why| format!("  ✗  {why}")),
+        Ok(None) => Some(format!(
+            "  ✗  the daemon's stream ended before the reply did; {rest}"
+        )),
+        Err(e) => Some(format!(
+            "  ✗  the reply could not be read from the daemon ({e:#}); {rest}"
+        )),
     }
-    completed
 }
 
 /// Read run `id`'s frames into `tx` as events until the run ends, and

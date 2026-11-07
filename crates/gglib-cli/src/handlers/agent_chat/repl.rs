@@ -113,6 +113,54 @@ impl Session<'_> {
     }
 }
 
+/// What a line typed at the prompt comes to.
+#[derive(Debug)]
+pub(super) enum Typed {
+    /// `/quit` or `/exit`.
+    Quit,
+    /// A command, done: nothing to send.
+    Done,
+    /// A turn to send.
+    Turn(LocalTurn),
+}
+
+impl Session<'_> {
+    /// Do what `input`, a trimmed line, asks: a command is done here, and a
+    /// message, or a change that leaves a question to answer, is a turn.
+    pub(super) async fn typed(&mut self, input: &str) -> Typed {
+        match repl_line::read(input, &mut self.images).await {
+            Line::Empty => Typed::Done,
+            Line::Quit => Typed::Quit,
+            Line::Help => {
+                println!("{REPL_HELP}");
+                Typed::Done
+            }
+            Line::Image(reply) => {
+                eprintln!("{reply}");
+                Typed::Done
+            }
+            Line::Branches => {
+                branches::list(&self.conversation).await;
+                Typed::Done
+            }
+            // A change that leaves a question to answer is answered by a
+            // turn that adds no message.
+            Line::Change(ask) => {
+                if branches::go(&self.daemon, &mut self.conversation, ask).await {
+                    Typed::Turn(self.turn(String::new(), Vec::new(), true))
+                } else {
+                    Typed::Done
+                }
+            }
+            Line::Draw(what) => {
+                eprintln!("{}", self.draw.say(what.as_deref()).await);
+                Typed::Done
+            }
+            Line::Send { content, images } => Typed::Turn(self.turn(content, images, false)),
+        }
+    }
+}
+
 /// Run the interactive agent REPL until the user quits or reaches EOF.
 ///
 /// Each message typed is a turn on the session's conversation, which the
@@ -157,36 +205,13 @@ pub(crate) async fn run_repl(mut session: Session<'_>) -> Result<()> {
             Err(e) => return Err(anyhow::anyhow!("readline error: {e}")),
         };
 
-        let turn = match repl_line::read(input.trim(), &mut session.images).await {
-            Line::Empty => continue,
-            Line::Quit => break,
-            Line::Help => {
-                println!("{REPL_HELP}");
-                continue;
+        match session.typed(input.trim()).await {
+            Typed::Quit => break,
+            Typed::Done => {}
+            Typed::Turn(turn) => {
+                session.send(&turn).await;
             }
-            Line::Image(reply) => {
-                eprintln!("{reply}");
-                continue;
-            }
-            Line::Branches => {
-                branches::list(&session.conversation).await;
-                continue;
-            }
-            Line::Change(ask) => {
-                // A change that leaves a question to answer is answered by
-                // a turn that adds no message.
-                if !branches::go(&mut session.conversation, ask).await {
-                    continue;
-                }
-                session.turn(String::new(), Vec::new(), true)
-            }
-            Line::Draw(what) => {
-                eprintln!("{}", session.draw.say(what.as_deref()).await);
-                continue;
-            }
-            Line::Send { content, images } => session.turn(content, images, false),
-        };
-        session.send(&turn).await;
+        }
     }
 
     let id = session.conversation.id;

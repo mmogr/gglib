@@ -358,6 +358,20 @@ pub fn run_cancel_path(id: &str) -> String {
 /// The verbs [`run_cancel_path`] is called with.
 pub const RUN_CANCEL_METHODS: &[&str] = &["POST"];
 
+/// A change to one of this machine's chats (ADR 0017), interpolating its `id`.
+///
+/// `POST` an edit, a regenerate or a branch, answered with the chat the
+/// change leaves and whether that chat is to be answered. The daemon
+/// branches a change it would otherwise make in place while a reply to the
+/// chat is being written.
+#[must_use]
+pub fn conversation_changes_path(id: i64) -> String {
+    format!("/api/conversations/{id}/changes")
+}
+
+/// The verbs [`conversation_changes_path`] is called with.
+pub const CONVERSATION_CHANGES_METHODS: &[&str] = &["POST"];
+
 /// Every fixed path above, paired with the verbs the CLI sends to it.
 ///
 /// The verb is half the contract: a deleted route often still *matches* some

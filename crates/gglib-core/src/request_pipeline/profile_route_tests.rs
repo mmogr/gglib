@@ -142,3 +142,18 @@ async fn catalog_errors_still_allow_a_known_profile() {
         other => panic!("expected Profiled, got {other:?}"),
     }
 }
+
+/// A turn on a saved chat names its model by catalogue id, with the chat's
+/// profile: `12:coding` routes to the profile, on the model the id names.
+#[tokio::test]
+async fn an_id_with_a_profile_suffix_resolves_to_profiled() {
+    let catalog = NamedCatalog::new(&["12"]);
+    let profiles = profiles();
+    match resolve_route("12:coding", &profiles, &catalog).await {
+        ModelRoute::Profiled { model, profile } => {
+            assert_eq!(model, "12");
+            assert_eq!(profile.name, "coding");
+        }
+        other => panic!("expected Profiled, got {other:?}"),
+    }
+}

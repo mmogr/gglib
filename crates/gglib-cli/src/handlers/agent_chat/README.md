@@ -15,8 +15,9 @@ as they always were.
 Entry point: [`run`].  Sub-modules keep each concern small and
 independently readable:
 - [`turn`]     — one turn: put to the daemon, its run's frames read back as
-  [`gglib_core::AgentEvent`]s into the drain, Ctrl+C a cancel of the run,
-  and a refusal or a failure said in the daemon's words
+  [`gglib_core::AgentEvent`]s into the drain, Ctrl+C a cancel of the run
+  that then waits for it to end, and a refusal, a failure, or a stream that
+  stopped before the run did, each said in one line
 - [`resume_settings`] — what a session saves on its chat: a new chat what
   its command line names, a resume what the chat saved with what its
   command line names in its place; and `resume_machine`, which machine a
@@ -36,10 +37,11 @@ independently readable:
 - [`repl_line`] — what one line typed at the prompt asks for: a command, or
   the next message with the images attached to it
 - [`branches`] — `/retry`, `/edit`, `/branch` and `/branches`: a change to the
-  session's saved chat, made by the chat history service as the branching
-  rules say (ADR 0017), in place or on a new branch the session goes on in;
-  the turn after a change that leaves a question says `answer_saved`, and
-  adds no message
+  session's saved chat, made by the daemon (`POST
+  /api/conversations/{id}/changes`) as the branching rules say (ADR 0017),
+  in place or on a new branch the session goes on in, and on a new branch
+  while a reply is still being written; the turn after a change that leaves
+  a question says `answer_saved`, and adds no message
 - [`images`]   — the images a turn carries: `--image` and the REPL's `/image`,
   each file through core's one ingest, with a receipt line on stderr;
   whether the chat's model can read them is the daemon's to say
@@ -49,12 +51,13 @@ independently readable:
   `/draw default` and `/draw list` choose, forget and list the image model
   the session draws with, held by the switch for the session and said on
   each turn that draws as its `image_model`
-- `files`      — the folder gglib's own file tools read: the directory the
-  session was launched in, never home or `/`
+- `files`      — the folder gglib's own file tools read: for a new chat the
+  directory the session was launched in, never home or `/`
   (`gglib_core::domain::folder::launched`), said on each turn, and only for
-  a `--tools` list that admits a file tool; and the one `Files:` line on
-  stderr that names it, says it is read on this machine for `--remote`, or
-  says why there is none
+  a `--tools` list that admits a file tool; for a resumed chat the folder it
+  remembers, its turns saying none; and the one `Files:` line on stderr that
+  names it, says it is read on this machine for `--remote`, or says why
+  there is none
 - [`tool_format`] — tool-result summary formatters
 - [`markdown`] — Markdown normalisation + termimad rendering
 - [`thinking_dispatch`] — `RenderContext`, thinking-event dispatch, spinner coordination
@@ -71,6 +74,7 @@ reads a running daemon's listing of its runs and applies
 `gglib_core::domain::runs::RunInfo::holds`, which the daemon's registry
 refuses a second run by. No daemon is started to ask, and one that does not
 answer with its runs, as another data root's does not, is no refusal. The
-daemon is found, or started, once the chat is ready.
+daemon is found, or started, once the model is known and before the chat
+is written.
 
 <!-- module-docs:end -->

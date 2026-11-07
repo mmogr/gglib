@@ -1,17 +1,20 @@
 //! What `/retry`, `/edit`, `/branch` and `/branches` do to a session's saved
 //! chat (ADR 0017).
 //!
-//! Each change is the chat history service's to make, as the branching
-//! rules say: one that would discard or alter a saved reply is made on a new
+//! Each change is the daemon's to make (`POST
+//! /api/conversations/{id}/changes`, as the chat page makes one), as the
+//! branching rules say: one that would discard or alter a saved reply is
+//! made on a new
 //! branch of the chat, a copy as far as the change, and the chat it was made
 //! on is kept as it was. Only an edit of the last question, while nothing
 //! answers it, is made in place. The session then goes on in the chat the
 //! change leaves, and when the change says so answers it, with a turn that
 //! says `answer_saved` and adds no message.
 //!
-//! The session's chat is its own: `--continue` is refused while the daemon
-//! is replying to it, so a change here is never made under a reply being
-//! written.
+//! The daemon knows whether a reply to the chat is still being written, as
+//! one stopped by Ctrl+C may be for a moment, and then makes on a new
+//! branch a change it would otherwise make in place. `/branches` reads the
+//! chat here.
 
 use std::fmt::Write as _;
 
@@ -19,6 +22,7 @@ use gglib_core::domain::branching::{self, ChatChange, ChatThread};
 use gglib_core::domain::chat::{Message, MessageRole};
 
 use super::persistence::Conversation;
+use crate::daemon_client::DaemonHandle;
 
 /// What `/edit` says when it names no text.
 pub(super) const EDIT_USAGE: &str = "Usage: /edit <the last question, asked again>";
@@ -66,11 +70,15 @@ fn change_for(ask: Ask, rows: &[Message]) -> Result<Option<ChatChange>, &'static
     }
 }
 
-/// Make `ask` to the session's chat, `conversation`, and move the session
-/// to the chat the change leaves. `true` when that chat ends in a question
-/// it is now to answer; `false` when nothing was made, and why is said on
-/// stderr, or when the change leaves nothing to answer.
-pub(super) async fn go(conversation: &mut Conversation<'_>, ask: Ask) -> bool {
+/// Have `daemon` make `ask` to the session's chat, `conversation`, and move
+/// the session to the chat the change leaves. `true` when that chat ends in
+/// a question it is now to answer; `false` when nothing was made, and why is
+/// said on stderr, or when the change leaves nothing to answer.
+pub(super) async fn go(
+    daemon: &DaemonHandle,
+    conversation: &mut Conversation<'_>,
+    ask: Ask,
+) -> bool {
     let history = conversation.history();
     let rows = match history.get_messages(conversation.id).await {
         Ok(rows) => rows,
@@ -89,7 +97,7 @@ pub(super) async fn go(conversation: &mut Conversation<'_>, ask: Ask) -> bool {
     let Some(change) = made else {
         return true;
     };
-    match history.change(conversation.id, &change, false).await {
+    match daemon.change_chat(conversation.id, &change).await {
         Ok(changed) => {
             if changed.forked {
                 eprintln!(

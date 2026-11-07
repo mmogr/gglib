@@ -1,13 +1,14 @@
 //! A stand-in for the daemon's door, for the tests of a turn and of the
 //! REPL: it answers a turn's `PUT` as it is told, the run's events as the
-//! frames it is given and the run's end, and a cancel as done, and keeps
-//! every request.
+//! frames it is given and the run's end, a cancel as done, and a chat's
+//! change as it is told, and keeps every request.
 
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
+use gglib_core::domain::branching::ChatChanged;
 use gglib_core::domain::runs::{RunError, RunFrames, RunInfo, RunKind, RunStatus};
 use gglib_test_http::blocking;
 use serde_json::{Value, json};
@@ -30,6 +31,15 @@ pub(crate) enum Answer {
     },
     /// It refuses the turn with this status and coded body.
     Refuses(u16, Value),
+    /// It runs the turn, and its events are `frames` with no end after
+    /// them: the stream closes before the run ends.
+    Cut(Vec<String>),
+    /// It runs the turn, and its events cannot be read.
+    Unreadable,
+    /// It changes a chat, answering what [`ChatChanged`] says, or refuses
+    /// the change with this status and coded body; and runs a turn, which
+    /// answers `Done.`
+    Changes(Result<ChatChanged, (u16, Value)>),
 }
 
 /// A run as the stand-in reports it.
@@ -73,10 +83,35 @@ fn reply(line: &str, answer: &Answer) -> (u16, &'static str, String) {
         return (200, "application/json", json!(info).to_string());
     }
     match answer {
+        Answer::Changes(changed) if line.contains("/changes") => match changed {
+            Ok(changed) => (200, "application/json", json!(changed).to_string()),
+            Err((status, body)) => (*status, "application/json", body.to_string()),
+        },
+        Answer::Cut(frames) if line.contains("/events") => {
+            let mut sse = String::new();
+            for (n, frame) in frames.iter().enumerate() {
+                let _ = write!(sse, "id: {}\ndata: {frame}\n\n", n + 1);
+            }
+            (200, "text/event-stream", sse)
+        }
+        Answer::Changes(_) if line.contains("/events") => {
+            let done = json!({"type": "final_answer", "content": "Done."});
+            let end = run(&id, RunStatus::Completed, None);
+            let sse = format!(
+                "id: 1\ndata: {done}\n\nevent: run\ndata: {}\n\n",
+                json!(end)
+            );
+            (200, "text/event-stream", sse)
+        }
+        Answer::Unreadable if line.contains("/events") => {
+            (500, "application/json", r#"{"error":"boom"}"#.to_owned())
+        }
         Answer::Refuses(status, body) if line.starts_with("PUT ") => {
             (*status, "application/json", body.to_string())
         }
-        Answer::Runs { .. } if line.starts_with("PUT ") => {
+        Answer::Runs { .. } | Answer::Cut(_) | Answer::Unreadable | Answer::Changes(_)
+            if line.starts_with("PUT ") =>
+        {
             let info = run(&id, RunStatus::Queued, None);
             (201, "application/json", json!(info).to_string())
         }

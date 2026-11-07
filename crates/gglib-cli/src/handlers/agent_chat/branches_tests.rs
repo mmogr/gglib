@@ -9,8 +9,13 @@ use gglib_core::domain::branching::{BranchOption, BranchPoint};
 use gglib_core::domain::chat::MessageRole::{Assistant, User};
 use gglib_core::domain::chat::{ConversationSettings, NewMessage};
 
+use gglib_core::domain::branching::ChatChanged;
+use serde_json::{Value, json};
+
 use super::*;
 use crate::bootstrap::{CliContext, test_context};
+use crate::daemon_client::STAND_IN_PORT;
+use crate::handlers::agent_chat::turn::turn_stand_in::{Answer, handle, stand_in};
 
 /// A chat holding `rows`, and the session saved to it.
 async fn chat<'a>(ctx: &'a CliContext, rows: &[(MessageRole, &str)]) -> Conversation<'a> {
@@ -30,35 +35,70 @@ async fn chat<'a>(ctx: &'a CliContext, rows: &[(MessageRole, &str)]) -> Conversa
     conversation
 }
 
-async fn contents(ctx: &CliContext, id: i64) -> Vec<String> {
-    let rows = ctx.app.chat_history().get_messages(id).await.expect("read");
-    rows.into_iter().map(|row| row.content).collect()
-}
-
 const ANSWERED: [(MessageRole, &str); 2] = [
     (User, "Plan a trip to Kyoto"),
     (Assistant, "Day 1: temples"),
 ];
 
+/// A stand-in daemon that makes a change as `answer` says: the change it
+/// was sent, as JSON, and the session's chat after `ask`.
+async fn changed(
+    session: &mut Conversation<'_>,
+    ask: Ask,
+    answer: Result<ChatChanged, (u16, Value)>,
+) -> (bool, Vec<Value>) {
+    let (port, taken) = stand_in(Answer::Changes(answer));
+    let went = STAND_IN_PORT.scope(port, go(&handle(), session, ask)).await;
+    let sent = taken
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(line, _)| line.contains("/changes"))
+        .map(|(_, body)| serde_json::from_str(body).unwrap())
+        .collect();
+    (went, sent)
+}
+
+const FORKED: ChatChanged = ChatChanged {
+    conversation_id: 99,
+    forked: true,
+    answer: true,
+};
+
+/// `/retry` on a chat that ends in a reply asks the daemon to answer the
+/// reply's question again, by the reply's last message, and the session
+/// goes on in the chat the daemon leaves, to answer it there.
 #[tokio::test]
-async fn retry_answers_a_saved_reply_again_on_a_new_branch_and_the_session_goes_on_there() {
+async fn retry_asks_the_daemon_to_answer_again_and_the_session_goes_on_where_it_says() {
     let dir = tempfile::tempdir().expect("a directory");
     let ctx = test_context(dir.path()).await;
     let mut session = chat(&ctx, &ANSWERED).await;
-    let id = session.id;
+    let rows = ctx
+        .app
+        .chat_history()
+        .get_messages(session.id)
+        .await
+        .unwrap();
+    let reply = rows.last().unwrap().id;
+    let posted = format!("POST /api/conversations/{}/changes HTTP/1.1", session.id);
 
-    let answer = go(&mut session, Ask::Retry).await;
+    let (port, taken) = stand_in(Answer::Changes(Ok(FORKED)));
+    let answer = STAND_IN_PORT
+        .scope(port, go(&handle(), &mut session, Ask::Retry))
+        .await;
 
-    let branch = session.id;
-    assert_ne!(branch, id);
     assert!(answer);
+    assert_eq!(session.id, 99);
+    let taken = taken.lock().unwrap().clone();
+    assert_eq!(taken[0].0, posted);
     assert_eq!(
-        contents(&ctx, id).await,
-        ["Plan a trip to Kyoto", "Day 1: temples"]
+        serde_json::from_str::<Value>(&taken[0].1).unwrap(),
+        json!({"kind": "regenerate", "message_id": reply})
     );
-    assert_eq!(contents(&ctx, branch).await, ["Plan a trip to Kyoto"]);
 }
 
+/// `/retry` on a chat that ends in a question changes nothing: the daemon
+/// is asked nothing, and the question is answered where it is.
 #[tokio::test]
 async fn retry_answers_a_question_nothing_answers_where_it_is() {
     let dir = tempfile::tempdir().expect("a directory");
@@ -66,60 +106,59 @@ async fn retry_answers_a_question_nothing_answers_where_it_is() {
     let mut session = chat(&ctx, &[(User, "Plan a trip to Kyoto")]).await;
     let id = session.id;
 
-    let answer = go(&mut session, Ask::Retry).await;
+    let (answer, sent) = changed(&mut session, Ask::Retry, Ok(FORKED)).await;
 
+    assert!(answer);
     assert_eq!(session.id, id);
-    assert!(answer);
-    assert_eq!(contents(&ctx, id).await, ["Plan a trip to Kyoto"]);
-    assert_eq!(
-        ctx.app
-            .chat_history()
-            .list_conversations()
-            .await
-            .expect("read")
-            .len(),
-        1
-    );
+    assert!(sent.is_empty(), "{sent:?}");
 }
 
+/// `/edit` sends the last question's new text, and `/branch` the chat's
+/// last message; the session follows the daemon's answer either way,
+/// answering only where it says to.
 #[tokio::test]
-async fn an_edit_of_an_answered_question_branches_and_one_nothing_answers_is_made_in_place() {
+async fn edit_and_branch_send_their_change_and_follow_the_answer() {
     let dir = tempfile::tempdir().expect("a directory");
     let ctx = test_context(dir.path()).await;
     let mut session = chat(&ctx, &ANSWERED).await;
-    let id = session.id;
+    let rows = ctx
+        .app
+        .chat_history()
+        .get_messages(session.id)
+        .await
+        .unwrap();
+    let question = rows[0].id;
 
-    let answer = go(&mut session, Ask::Edit("Plan a trip to Osaka".into())).await;
-    let branch = session.id;
+    let edit = Ask::Edit("Plan a trip to Osaka".into());
+    let (answer, sent) = changed(&mut session, edit, Ok(FORKED)).await;
     assert!(answer);
-    assert_ne!(branch, id);
-    assert_eq!(contents(&ctx, branch).await, ["Plan a trip to Osaka"]);
+    assert_eq!(session.id, 99);
     assert_eq!(
-        contents(&ctx, id).await,
-        ["Plan a trip to Kyoto", "Day 1: temples"]
+        sent,
+        [json!({"kind": "edit", "message_id": question, "content": "Plan a trip to Osaka"})]
     );
 
-    let answer = go(&mut session, Ask::Edit("Plan a trip to Nara".into())).await;
-    assert!(answer);
-    assert_eq!(session.id, branch);
-    assert_eq!(contents(&ctx, branch).await, ["Plan a trip to Nara"]);
-}
-
-#[tokio::test]
-async fn branch_copies_the_chat_to_go_on_in_and_answers_nothing() {
-    let dir = tempfile::tempdir().expect("a directory");
-    let ctx = test_context(dir.path()).await;
     let mut session = chat(&ctx, &ANSWERED).await;
-    let id = session.id;
-
-    let answer = go(&mut session, Ask::Branch).await;
-
-    let branch = session.id;
-    assert_ne!(branch, id);
+    let rows = ctx
+        .app
+        .chat_history()
+        .get_messages(session.id)
+        .await
+        .unwrap();
+    let last = rows[1].id;
+    let copied = ChatChanged {
+        conversation_id: 100,
+        forked: true,
+        answer: false,
+    };
+    let (answer, sent) = changed(&mut session, Ask::Branch, Ok(copied)).await;
     assert!(!answer);
-    assert_eq!(contents(&ctx, branch).await, contents(&ctx, id).await);
+    assert_eq!(session.id, 100);
+    assert_eq!(sent, [json!({"kind": "branch", "message_id": last})]);
 }
 
+/// A change the chat cannot take asks the daemon nothing, and one the
+/// daemon refuses leaves the session where it was: neither is answered.
 #[tokio::test]
 async fn a_change_that_cannot_be_made_leaves_the_session_where_it_was() {
     let dir = tempfile::tempdir().expect("a directory");
@@ -127,19 +166,21 @@ async fn a_change_that_cannot_be_made_leaves_the_session_where_it_was() {
     let mut session = chat(&ctx, &[(Assistant, "Hello! Ask me anything.")]).await;
     let id = session.id;
 
-    for ask in [Ask::Retry, Ask::Edit("Hi".into()), Ask::Edit(String::new())] {
-        assert!(!go(&mut session, ask).await);
+    for ask in [Ask::Edit("Hi".into()), Ask::Edit(String::new())] {
+        let (answer, sent) = changed(&mut session, ask, Ok(FORKED)).await;
+        assert!(!answer);
+        assert!(sent.is_empty(), "{sent:?}");
+    }
+    for ask in [Ask::Retry, Ask::Branch] {
+        let refused = Err((
+            409,
+            json!({"error": "nothing to answer", "code": "conflict"}),
+        ));
+        let (answer, sent) = changed(&mut session, ask, refused).await;
+        assert!(!answer);
+        assert_eq!(sent.len(), 1);
     }
     assert_eq!(session.id, id);
-    assert_eq!(
-        ctx.app
-            .chat_history()
-            .list_conversations()
-            .await
-            .expect("read")
-            .len(),
-        1
-    );
 }
 
 #[test]

@@ -1,4 +1,5 @@
-//! The daemon's runs, on a [`DaemonHandle`]: replies it owns until they end.
+//! The daemon's runs, on a [`DaemonHandle`]: replies it owns until they end;
+//! and the change to a chat that a turn answering it follows.
 //!
 //! Every id reaching here has passed `is_run_id`, since it is interpolated
 //! into a path.
@@ -8,6 +9,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures_util::StreamExt as _;
+use gglib_core::domain::branching::{ChatChange, ChatChanged};
 use gglib_core::domain::hub_chats::LocalTurn;
 use gglib_core::domain::runs::{RunInfo, RunList};
 use gglib_core::sse::DataFrames;
@@ -48,13 +50,35 @@ impl DaemonHandle {
             .timeout(Duration::from_secs(15))
             .send()
             .await?;
+        Ok(Self::refused_in_its_words(response).await?.json().await?)
+    }
+
+    /// Make `change` to chat `id` (ADR 0017), as the chat page makes one:
+    /// the daemon makes it on a new branch where it would otherwise rewrite
+    /// a reply still being written. Answers the chat the change leaves and
+    /// whether that chat is to be answered. A change the daemon refuses is an
+    /// error in its own words.
+    pub(crate) async fn change_chat(&self, id: i64, change: &ChatChange) -> Result<ChatChanged> {
+        let response = self
+            .post(&paths::conversation_changes_path(id))
+            .json(change)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await?;
+        Ok(Self::refused_in_its_words(response).await?.json().await?)
+    }
+
+    /// `response` when it succeeded; a refusal of what was asked, a 4xx
+    /// other than an unknown credential, as the daemon's own sentence; any
+    /// other failure as [`Self::expect_ok`] says it.
+    async fn refused_in_its_words(response: reqwest::Response) -> Result<reqwest::Response> {
         if response.status().is_client_error()
             && response.status() != reqwest::StatusCode::UNAUTHORIZED
         {
             let body = response.text().await.unwrap_or_default();
             anyhow::bail!("{}", Self::error_message(body));
         }
-        Ok(Self::expect_ok(response).await?.json().await?)
+        Self::expect_ok(response).await
     }
 
     /// Every run, newest first.

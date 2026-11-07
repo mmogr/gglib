@@ -215,10 +215,111 @@ fn a_failed_run_says_why_in_the_daemons_words() {
     assert_eq!(failure(&run("r4", RunStatus::Cancelled, None)), None);
 }
 
-/// Ctrl+C while a reply is being shown cancels its run on the daemon, and
-/// is no answer.
+/// Follow run `run-0123abcd` on a stand-in that answers as `answer` says,
+/// with nothing to stop it.
+async fn followed(answer: Answer) -> (Followed, Vec<String>) {
+    let (port, taken) = stand_in(answer);
+    let never = std::future::pending::<std::io::Result<()>>();
+    let followed = STAND_IN_PORT
+        .scope(port, follow(&handle(), "run-0123abcd", QUIET, never))
+        .await;
+    let lines = taken.lock().unwrap().iter().map(|t| t.0.clone()).collect();
+    (followed, lines)
+}
+
+/// A run that failed is no answer, and says why in the daemon's words,
+/// unless an error event among its frames has said so already.
 #[tokio::test]
-async fn ctrl_c_cancels_the_run_on_the_daemon() {
+async fn a_failed_run_says_why_once() {
+    let error = RunError {
+        code: "model_unavailable".to_owned(),
+        message: "The model could not be loaded.".to_owned(),
+    };
+    let half = json!({"type": "text_delta", "content": "Half"}).to_string();
+    let said = json!({"type": "error", "message": "The model stopped."}).to_string();
+
+    let (quiet_fail, _) = followed(Answer::Runs {
+        frames: vec![half.clone()],
+        status: RunStatus::Failed,
+        error: Some(error.clone()),
+    })
+    .await;
+    let (said_fail, _) = followed(Answer::Runs {
+        frames: vec![half, said],
+        status: RunStatus::Failed,
+        error: Some(error),
+    })
+    .await;
+
+    assert_eq!(
+        quiet_fail,
+        Followed {
+            answered: false,
+            line: Some("  ✗  The model could not be loaded.".to_owned())
+        }
+    );
+    assert_eq!(
+        said_fail,
+        Followed {
+            answered: false,
+            line: None
+        }
+    );
+}
+
+/// A stream that closes before the run ends, and one that cannot be read,
+/// each say so in one line, with how to read the rest; neither is an answer.
+#[tokio::test]
+async fn a_reply_whose_stream_stops_says_so_and_how_to_read_the_rest() {
+    let half = json!({"type": "text_delta", "content": "Half"}).to_string();
+
+    let (cut, _) = followed(Answer::Cut(vec![half])).await;
+    let (unread, _) = followed(Answer::Unreadable).await;
+
+    assert_eq!(
+        cut,
+        Followed {
+            answered: false,
+            line: Some(
+                "  ✗  the daemon's stream ended before the reply did; `gglib run show \
+                 run-0123abcd --follow` reads the rest"
+                    .to_owned()
+            )
+        }
+    );
+    assert!(!unread.answered);
+    let line = unread.line.expect("a line");
+    assert!(
+        line.starts_with("  ✗  the reply could not be read from the daemon (")
+            && line.ends_with("; `gglib run show run-0123abcd --follow` reads the rest"),
+        "{line}"
+    );
+}
+
+/// An answered reply says nothing more.
+#[tokio::test]
+async fn an_answered_reply_says_nothing_more() {
+    let (answered, _) = followed(Answer::Runs {
+        frames: vec![json!({"type": "final_answer", "content": "hi"}).to_string()],
+        status: RunStatus::Completed,
+        error: None,
+    })
+    .await;
+
+    assert_eq!(
+        answered,
+        Followed {
+            answered: true,
+            line: None
+        }
+    );
+}
+
+/// Ctrl+C while a reply is being shown cancels its run on the daemon, then
+/// reads on until the run has ended there, so the chat's next turn is not
+/// refused as one still being answered. It is no answer.
+#[tokio::test]
+async fn ctrl_c_cancels_the_run_and_waits_for_it_to_end() {
     let (port, taken) = stand_in(Answer::Runs {
         frames: Vec::new(),
         status: RunStatus::Completed,
@@ -232,10 +333,17 @@ async fn ctrl_c_cancels_the_run_on_the_daemon() {
         )
         .await;
 
-    assert!(!stopped);
-    let lines: Vec<String> = taken.lock().unwrap().iter().map(|t| t.0.clone()).collect();
-    assert!(
-        lines.contains(&"POST /api/runs/run-0123abcd/cancel HTTP/1.1".to_owned()),
-        "{lines:?}"
+    assert_eq!(
+        stopped,
+        Followed {
+            answered: false,
+            line: Some("[agent response cancelled — Ctrl+C]".to_owned())
+        }
     );
+    let lines: Vec<String> = taken.lock().unwrap().iter().map(|t| t.0.clone()).collect();
+    let cancel = "POST /api/runs/run-0123abcd/cancel HTTP/1.1".to_owned();
+    let at = lines.iter().position(|l| *l == cancel);
+    let at = at.unwrap_or_else(|| panic!("no cancel: {lines:?}"));
+    let events = "GET /api/runs/run-0123abcd/events?after=0 HTTP/1.1";
+    assert!(lines[at..].iter().any(|line| line == events), "{lines:?}");
 }

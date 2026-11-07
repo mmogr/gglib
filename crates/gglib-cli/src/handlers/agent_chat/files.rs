@@ -1,11 +1,12 @@
 //! A `gglib chat` session's files: the folder gglib's own file tools read,
-//! which is the directory the session was launched in, and the one stderr
-//! line the session starts with about it ([ADR 0023], decision 2).
+//! and the one stderr line the session starts with about it ([ADR 0023],
+//! decision 2).
 //!
-//! The folder goes on each of the session's turns, as the chat page's does,
-//! and the daemon remembers it on the chat: launched in home or `/`, or in a
-//! directory that cannot be read, the turn says `""`, and the chat reads no
-//! folder.
+//! A new chat's folder is the directory the session was launched in, never
+//! home or `/`: its turns say it, as the chat page's do, and the daemon
+//! remembers it on the chat. A resumed chat keeps the folder it remembers,
+//! the one the chat page chose included: its turns say none, and the line
+//! names that folder.
 //!
 //! [ADR 0023]: https://github.com/mmogr/gglib/blob/main/docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md
 
@@ -17,23 +18,44 @@ use gglib_mcp::{BUILTIN_PREFIX, FILE_TOOLS};
 
 use crate::handlers::inference::chat::ChatArgs;
 
-/// The folder a session's turns say, and the line that says so; `sent_to`
-/// names the paired machine a `--remote` session's turns are answered on.
+/// Which chat a session is on, as its folder goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Chat<'a> {
+    /// A chat this session makes.
+    New,
+    /// A chat it resumes, and the folder that chat remembers, if any.
+    Resumed(Option<&'a str>),
+}
+
+/// The folder a session's turns say, and the line that says what it reads;
+/// `sent_to` names the paired machine a `--remote` session's turns are
+/// answered on.
 ///
-/// The folder is where this process runs, every invocation, `--continue`
-/// included, by [`folder::launched`]'s rule: never home or `/`, for which it
-/// is `""`, no folder. A session with `--no-tools`, or whose `--tools` list
-/// admits no file tool, says none, and its directory is not read.
+/// A new chat's turns say where this process runs, by [`folder::launched`]'s
+/// rule: never home or `/`, where they say none. A resumed chat's say none,
+/// and it reads the folder it keeps. A session with `--no-tools`, or whose
+/// `--tools` list admits no file tool, says none and nothing of files.
 pub(super) fn of_session(
     args: &ChatArgs,
     sent_to: Option<&str>,
+    chat: Chat<'_>,
 ) -> (Option<String>, Option<String>) {
     if args.no_tools || !admits_a_file_tool(&args.tools) {
         return (None, None);
     }
+    if let Chat::Resumed(kept) = chat {
+        return (None, Some(kept_line(kept, sent_to)));
+    }
     let (root, line) = in_dir(std::env::current_dir(), sent_to);
-    let folder = root.map_or_else(String::new, |dir| dir.display().to_string());
-    (Some(folder), Some(line))
+    (root.map(|dir| dir.display().to_string()), Some(line))
+}
+
+/// What a resumed chat says of the folder it keeps.
+fn kept_line(kept: Option<&str>, sent_to: Option<&str>) -> String {
+    kept.map_or_else(
+        || "Files: off; this chat keeps no folder (the chat page chooses one)".to_owned(),
+        |dir| files_line(Some(Path::new(dir)), sent_to),
+    )
 }
 
 /// [`of_session`] for a session whose list admits a file tool, launched in

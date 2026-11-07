@@ -172,6 +172,10 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
             daemon::run_events_path("run-1", 0),
         ),
         (daemon::RUN_CANCEL_METHODS, daemon::run_cancel_path("run-1")),
+        (
+            daemon::CONVERSATION_CHANGES_METHODS,
+            daemon::conversation_changes_path(1),
+        ),
     ] {
         if let Some(complaint) = check(&app, methods, &path).await {
             broken.push(format!("  {complaint}"));

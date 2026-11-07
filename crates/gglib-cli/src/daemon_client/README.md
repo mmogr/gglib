@@ -46,7 +46,8 @@ and an error event or a refused request the daemon's code and words;
 whether it can draw is the daemon's `GET /api/images/drawing`, asked by
 `/draw`. `runs.rs` holds the run calls, a turn put to one of this
 machine's chats (`?kind=agent`, refused in the daemon's own words) among
-them, and reads a run's event stream, whose events `drain_items` turns into
+them, and the change to a chat a turn answering it follows
+(`/api/conversations/{id}/changes`), and reads a run's event stream, whose events `drain_items` turns into
 numbered frames and the run's final state; a tool's preview, which carries
 no number, is skipped. `sse.rs`
 reads a stream of JSON events, such as a benchmark's. Neither cuts its stream

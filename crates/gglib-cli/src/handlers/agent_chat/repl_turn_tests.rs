@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::contracts::http::images::DrawingAvailability;
+use gglib_core::domain::branching::ChatChanged;
 use gglib_core::domain::chat::MessageRole::{Assistant, User};
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewMessage};
-use gglib_core::domain::runs::RunStatus;
+
 use gglib_core::ports::{ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -16,7 +17,6 @@ use tokio::sync::mpsc;
 use super::*;
 use crate::bootstrap::{CliContext, test_context};
 use crate::daemon_client::STAND_IN_PORT;
-use crate::handlers::agent_chat::branches::{Ask, go};
 use crate::handlers::agent_chat::images::images_tests::{attached, service};
 use crate::handlers::agent_chat::turn::turn_stand_in::{Answer, handle, stand_in};
 
@@ -113,37 +113,62 @@ async fn a_message_is_a_turn_with_the_sessions_folder_thinking_and_draw() {
     assert!(drawn.draw);
 }
 
-/// `/retry` on an answered chat moves the session to the branch it makes,
-/// and the turn after it answers that branch's question, already saved,
-/// adding no message: `answer_saved` on the branch, with nothing else said.
+/// `/retry` typed on an answered chat has the daemon branch it, moves the
+/// session to the branch, and comes to a turn that answers that branch's
+/// question, already saved, adding no message: `answer_saved` on the
+/// branch, with nothing else said.
 #[tokio::test]
-async fn a_retry_is_a_turn_that_answers_the_saved_question_on_its_branch() {
+async fn a_retry_typed_is_a_turn_that_answers_the_saved_question_on_its_branch() {
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
     let (attachments, _) = service();
     let (images, _) = attached(&attachments, &[], true).await.unwrap();
     let answered = [(User, "Plan a trip"), (Assistant, "Day 1: temples")];
-    let conversation = chat(&ctx, &answered).await;
-    let original = conversation.id;
-    let mut session = session(conversation, images, None, None);
-    let (port, taken) = stand_in(Answer::Runs {
-        frames: vec![json!({"type": "final_answer", "content": "Day 1: a market"}).to_string()],
-        status: RunStatus::Completed,
-        error: None,
-    });
+    let mut session = session(chat(&ctx, &answered).await, images, None, None);
+    let branched = ChatChanged {
+        conversation_id: 42,
+        forked: true,
+        answer: true,
+    };
+    let (port, taken) = stand_in(Answer::Changes(Ok(branched)));
 
-    assert!(go(&mut session.conversation, Ask::Retry).await, "to answer");
-    let turn = session.turn(String::new(), Vec::new(), true);
+    let typed = STAND_IN_PORT.scope(port, session.typed("/retry")).await;
+    let Typed::Turn(turn) = typed else {
+        panic!("/retry on an answered chat is a turn: {typed:?}");
+    };
     let answered = STAND_IN_PORT.scope(port, session.send(&turn)).await;
 
-    let branch = session.conversation.id;
-    assert_ne!(branch, original);
+    assert_eq!(session.conversation.id, 42);
     assert!(answered);
-    let body = taken.lock().unwrap()[0].1.clone();
+    let put = taken
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(line, _)| line.starts_with("PUT "))
+        .map(|(_, body)| body.clone())
+        .expect("the turn was sent");
     assert_eq!(
-        serde_json::from_str::<Value>(&body).unwrap(),
-        json!({"conversation_id": branch, "content": "", "answer_saved": true})
+        serde_json::from_str::<Value>(&put).unwrap(),
+        json!({"conversation_id": 42, "content": "", "answer_saved": true})
     );
+}
+
+/// A message typed is a turn that adds it, and a command is no turn.
+#[tokio::test]
+async fn a_message_typed_is_a_turn_that_adds_it_and_a_command_is_none() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = test_context(dir.path()).await;
+    let (attachments, _) = service();
+    let (images, _) = attached(&attachments, &[], true).await.unwrap();
+    let mut session = session(chat(&ctx, &[]).await, images, None, None);
+
+    let Typed::Turn(turn) = session.typed("hello").await else {
+        panic!("a message is a turn");
+    };
+    assert!(!turn.answer_saved);
+    assert_eq!(turn.content, "hello");
+    assert!(matches!(session.typed("/help").await, Typed::Done));
+    assert!(matches!(session.typed("/quit").await, Typed::Quit));
 }
 
 /// Draw is for one message: once its turn is sent, refused or not, the

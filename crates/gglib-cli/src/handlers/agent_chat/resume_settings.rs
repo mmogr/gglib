@@ -11,7 +11,6 @@ use anyhow::Result;
 use gglib_core::domain::InferenceProfile;
 use gglib_core::domain::chat::ConversationSettings;
 
-use super::persistence::Conversation;
 use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::inference::chat::ChatArgs;
@@ -77,25 +76,6 @@ fn session_profile(profile: Option<&InferenceProfile>, turn: &TurnModel) -> Opti
     profile
         .map(|p| p.name.clone())
         .or_else(|| turn.far_profile.clone())
-}
-
-/// Create a new conversation for a fresh session on `turn`'s model.
-///
-/// # Errors
-///
-/// A model this machine's catalogue does not hold, which no turn could run
-/// on, and a write that failed.
-pub(super) async fn new_conversation<'a>(
-    ctx: &'a CliContext,
-    args: &ChatArgs,
-    profile: Option<&InferenceProfile>,
-    turn: &TurnModel,
-) -> Result<Conversation<'a>> {
-    require_a_model(ctx, turn).await?;
-    let settings = session_settings(args, profile, turn);
-    let machine = turn.machine.clone();
-    let history = ctx.app.chat_history();
-    Conversation::create(history, args.system_prompt.clone(), settings, machine).await
 }
 
 /// Refuse a turn whose model this machine's catalogue does not hold, in the

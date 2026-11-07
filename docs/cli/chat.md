@@ -117,6 +117,9 @@ Session #10 saved. Resume with: gglib chat --continue 10
   `--no-tools`, the tool limits, `--max-iterations`, `--profile` and five
   sampling flags. `--continue` keeps what the chat saved, with what its
   command line names in its place; `-s` replaces the chat's system prompt.
+- `/retry`, `/edit` and `/branch` are made by the daemon, as the chat page
+  makes them: a change it would make in place while a reply is still being
+  written, as one just stopped by Ctrl+C may be, it makes on a new branch.
 - A model this machine does not have is refused before a chat is made.
 - A chat the daemon is still replying to, for the chat page or a paired
   device, is not continued: `--continue` says the chat is running elsewhere
@@ -125,14 +128,16 @@ Session #10 saved. Resume with: gglib chat --continue 10
 
 ### The folder it reads
 
-The file tools, `read_file`, `list_directory` and `grep_search`, read the
-directory `chat` was launched in, read-only, and nothing outside it. The
-session says so once, on stderr: `Files: <dir> (read-only)`.
+The file tools, `read_file`, `list_directory` and `grep_search`, read a new
+chat's folder: the directory `chat` was launched in, read-only, and nothing
+outside it. The session says so once, on stderr: `Files: <dir> (read-only)`.
 
-- That is where each invocation runs, `--continue` included. Each turn says
-  the folder, as the chat page's does, and the chat remembers it: the folder
-  the chat page chose for it is replaced.
-- Launched in your home folder or in `/` it reads no files, and says
+- A new chat's turns say that folder, as the chat page's do, and the chat
+  remembers it.
+- `--continue` keeps the folder the chat remembers, the one the chat page
+  chose included, wherever it is run: the line names it, or says `Files:
+  off; this chat keeps no folder (the chat page chooses one)`.
+- A new chat launched in your home folder or in `/` reads no files, and says
   `Files: off in your home folder or /; cd into a project to read it, or
   --no-tools`; launched in a directory deleted since, it reads none and says
   it cannot read it.
@@ -174,14 +179,20 @@ carries them.
 
 ### Sampling
 
-A chat keeps five sampling flags: `--temperature`, `--top-p`, `--top-k`,
-`--max-tokens` and `--repeat-penalty`. Any other sampling flag does not
-take effect, and the session says so on stderr.
+A chat keeps five sampling flags, `--temperature`, `--top-p`, `--top-k`,
+`--max-tokens` and `--repeat-penalty`, and `--profile`. Any other sampling
+flag does not take effect, and the session says so on stderr.
 
-- The endpoint takes a client's sampling only while **Let clients set
-  sampling** is on (`gglib config settings set --trust-client-sampling
-  true`). While it is off, a session that names one of the four it gates
-  says so once, on stderr, before its first turn.
+- Each turn sends the five as a client's sampling. The endpoint takes them
+  only while **Let clients set sampling** is on (`gglib config settings set
+  --trust-client-sampling true`), `--max-tokens` whatever it is; while it is
+  off, a session that names one of the other four says so once, on stderr,
+  before its first turn.
+- Each turn names the chat's profile on its model, `<id>:<profile>`, and the
+  endpoint applies it whether or not it trusts clients' sampling. Under
+  `--remote` the profile is the paired machine's.
+- `--reasoning-budget-tokens` is not kept: `--thinking off` stops a chat's
+  thinking.
 
 ### `/draw`
 

@@ -208,3 +208,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "agent_question_tests.rs"]
+mod agent_question_tests;

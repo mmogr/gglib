@@ -99,7 +99,8 @@ async fn a_saved_session_stores_the_id_of_this_machines_model_and_not_the_paired
         };
         let settings = session_settings(&chat_args(), None, &turn);
         let (chats, machine) = (ctx.app.chat_history(), turn.machine.clone());
-        let saved = Conversation::create(chats, None, settings.clone(), machine);
+        let saved =
+            super::super::persistence::Conversation::create(chats, None, settings.clone(), machine);
         let made = row(&ctx, saved.await.expect("saved").id).await;
         assert_eq!((made.model_id, made.settings), (stored, Some(settings)));
     }

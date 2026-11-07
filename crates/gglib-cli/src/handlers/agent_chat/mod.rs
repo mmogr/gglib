@@ -19,6 +19,7 @@ pub(crate) mod turn;
 
 use anyhow::{Result, bail};
 
+use gglib_core::domain::InferenceProfile;
 use gglib_core::domain::chat::ConversationSettings;
 
 use crate::bootstrap::CliContext;
@@ -28,6 +29,7 @@ use crate::handlers::inference::chat::ChatArgs;
 use self::images::TurnImages;
 use self::persistence::Conversation;
 use self::turn::Shown;
+use crate::target::TurnModel;
 
 /// Entry point: start the interactive agentic REPL.
 ///
@@ -46,9 +48,13 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // is made or a model asked for.
     let (attachments, mut receipts) = (ctx.app.attachments(), std::io::stderr());
     let images = TurnImages::attach(attachments, &args.images, false, &mut receipts).await?;
-    let (args, conversation) = prepare(ctx, args).await?;
-    // The daemon runs the turns: found, or started, once the chat is ready.
+    let (args, plan) = plan(ctx, args).await?;
+    // The daemon runs the turns: found, or started, once the model is known
+    // and before anything is written, so a chat is never made for a turn
+    // nothing can answer.
     let daemon = daemon_client::ensure_daemon(ctx).await?;
+    let kept = plan.resumed.as_ref().map(|resumed| resumed.folder.clone());
+    let conversation = save(ctx, &args, plan).await?;
     let settings = ctx.app.settings().get().await?;
     for line in sampling_warning::notices(&args.sampling, args.target, &settings) {
         eprintln!("{line}");
@@ -56,7 +62,11 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
 
     // The session's Draw switch (`/draw`), and the folder its file tools read.
     let draw = draw::DrawSwitch::for_session(&daemon, args.target);
-    let (folder, files_line) = files::of_session(&args, conversation.machine.as_deref());
+    let sent_to = conversation.machine.as_deref();
+    let chat = kept.as_ref().map_or(files::Chat::New, |folder| {
+        files::Chat::Resumed(folder.as_deref())
+    });
+    let (folder, files_line) = files::of_session(&args, sent_to, chat);
     if let Some(line) = files_line {
         eprintln!("{line}");
     }
@@ -97,11 +107,62 @@ async fn refuse_running_elsewhere(ctx: &CliContext, id: i64) -> Result<()> {
     Ok(())
 }
 
-/// What [`run`] does before its first turn: read the settings, settle the
-/// model and the profile, and make or resume the conversation with what this
-/// command line names. The conversation is the session's: the daemon reads
-/// its settings on every turn, and saves the turn to it.
+/// What a session writes before its first turn, decided with nothing
+/// written yet.
+struct Plan {
+    /// The model, as the machine that serves the turn resolved it.
+    turn: TurnModel,
+    /// The profile selected here, if any.
+    profile: Option<InferenceProfile>,
+    /// The chat resumed, when one is.
+    resumed: Option<Resumed>,
+}
+
+/// A chat a session resumes.
+struct Resumed {
+    id: i64,
+    /// The settings it saves in place of the chat's; `None` changes none.
+    kept: Option<ConversationSettings>,
+    /// The folder the chat remembers, which the session keeps.
+    folder: Option<String>,
+}
+
+/// [`plan`], then [`save`]: what [`run`] does before its first turn, but
+/// for the daemon it finds or starts between them.
+#[cfg(test)]
 async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<(ChatArgs, Conversation<'a>)> {
+    let (args, plan) = plan(ctx, args).await?;
+    let conversation = save(ctx, &args, plan).await?;
+    Ok((args, conversation))
+}
+
+/// Make or resume the conversation as `plan` says, with what this command
+/// line names. The conversation is the session's: the daemon reads its
+/// settings on every turn, and saves the turn to it.
+async fn save<'a>(ctx: &'a CliContext, args: &ChatArgs, plan: Plan) -> Result<Conversation<'a>> {
+    let Plan {
+        turn,
+        profile,
+        resumed,
+    } = plan;
+    let history = ctx.app.chat_history();
+    let Some(Resumed { id, kept, .. }) = resumed else {
+        let settings = resume_settings::session_settings(args, profile.as_ref(), &turn);
+        let prompt = args.system_prompt.clone();
+        return Conversation::create(history, prompt, settings, turn.machine).await;
+    };
+    let conv = Conversation::resume(history, id, turn.machine);
+    conv.record_settings(kept).await?;
+    if let Some(prompt) = &args.system_prompt {
+        conv.record_system_prompt(prompt).await?;
+    }
+    Ok(conv)
+}
+
+/// Read the settings, settle the model and the profile, and decide what the
+/// session saves, writing nothing: a model this machine does not have is
+/// refused here.
+async fn plan(ctx: &CliContext, args: &ChatArgs) -> Result<(ChatArgs, Plan)> {
     let mut args = args.clone();
 
     // Strip any `{model}:{profile}` suffix before a conversation is created:
@@ -173,21 +234,22 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<(ChatArgs, 
         .await?;
     args.identifier.clone_from(&turn.identifier);
     let profile = selected_profile.as_ref();
-    let conversation = match resumed {
-        Some((id, saved)) => {
-            let typed = typed_this_invocation;
-            let kept =
-                resume_settings::resumed_settings(ctx, saved, &args, typed, profile, &turn).await?;
-            let conv = Conversation::resume(ctx.app.chat_history(), id, turn.machine.clone());
-            conv.record_settings(kept).await?;
-            if let Some(prompt) = &args.system_prompt {
-                conv.record_system_prompt(prompt).await?;
-            }
-            conv
-        }
-        None => resume_settings::new_conversation(ctx, &args, profile, &turn).await?,
+    let resumed = if let Some((id, saved)) = resumed {
+        let typed = typed_this_invocation;
+        let folder = saved.as_ref().and_then(|s| s.folder.clone());
+        let kept =
+            resume_settings::resumed_settings(ctx, saved, &args, typed, profile, &turn).await?;
+        Some(Resumed { id, kept, folder })
+    } else {
+        resume_settings::require_a_model(ctx, &turn).await?;
+        None
     };
-    Ok((args, conversation))
+    let plan = Plan {
+        turn,
+        profile: selected_profile,
+        resumed,
+    };
+    Ok((args, plan))
 }
 
 /// Show a previous conversation's last turns, and take from what it saved

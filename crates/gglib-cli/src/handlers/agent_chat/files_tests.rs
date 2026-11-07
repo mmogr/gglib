@@ -3,7 +3,7 @@
 use std::io;
 use std::path::Path;
 
-use super::{admits_a_file_tool, files_line, in_dir, of_session};
+use super::{Chat, admits_a_file_tool, files_line, in_dir, of_session};
 use crate::handlers::agent_chat::resume_settings::tests::chat_args;
 use crate::handlers::inference::chat::ChatArgs;
 
@@ -78,7 +78,7 @@ fn a_session_reads_where_it_runs_unless_its_list_admits_no_file_tool() {
             no_tools,
             ..chat_args()
         };
-        of_session(&args, None)
+        of_session(&args, None, Chat::New)
     };
 
     let (folder, line) = session(&[], false);
@@ -88,4 +88,27 @@ fn a_session_reads_where_it_runs_unless_its_list_admits_no_file_tool() {
     assert_eq!(session(&["builtin:read_file"], false).0, Some(here));
     assert_eq!(session(&["tavily_search"], false), (None, None));
     assert_eq!(session(&[], true), (None, None));
+}
+
+/// A resumed chat keeps the folder it remembers, one the chat page chose
+/// included, wherever the session runs: its turns say none, and its line
+/// names that folder, or says it keeps none.
+#[test]
+fn a_resumed_chat_keeps_its_folder_and_its_turns_say_none() {
+    let args = chat_args();
+
+    let chosen = of_session(&args, None, Chat::Resumed(Some("/work/site")));
+    let none = of_session(&args, None, Chat::Resumed(None));
+
+    assert_eq!(
+        chosen,
+        (None, Some("Files: /work/site (read-only)".to_owned()))
+    );
+    assert_eq!(
+        none,
+        (
+            None,
+            Some("Files: off; this chat keeps no folder (the chat page chooses one)".to_owned())
+        )
+    );
 }

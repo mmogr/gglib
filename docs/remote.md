@@ -466,8 +466,7 @@ answering with clap's "unexpected argument".
 `proxy stop --remote` is refused with its own sentence, because the far
 proxy is what carries the request; so are `web --remote` and `gui --remote`,
 because the page they open already lists the desktop's models beside this
-machine's. `--remote` and `--port` are exclusive:
-they name different machines. [ADR 0013](adr/0013-the-target-is-a-value.md)
+machine's. [ADR 0013](adr/0013-the-target-is-a-value.md)
 and [ADR 0028](adr/0028-remote-is-declared-on-each-command-that-reaches-the-paired-machine.md)
 have the reasoning.
 
@@ -1130,7 +1129,6 @@ here is one the desktop can retire on its own.
 | `looking up '7' on desk`, caused by a 404 | `chat`, `q` or `model inspect --remote` asked the desktop for a model it does not have. Nothing was sent as a turn. `gglib model list --remote` lists what it has. |
 | `this chat ran on a machine this one is no longer paired with, so it cannot be resumed here` | `gglib chat --continue` on a chat that ran on a desktop the laptop has since replaced with another pairing. Its model is that desktop's; join it again to resume the chat, or start a new one. |
 | `this chat ran on this machine and continues here; drop --remote to resume it` | `--continue` with `--remote` on a chat that ran on the laptop. Leave out `--remote`. |
-| `this chat ran on the paired machine, and --port names a server on this one; drop --port to resume it there` | `--continue` with `--port` on a chat that ran on the desktop. Leave out `--port`; the chat goes back to the desktop through the daemon. |
 | `403 device_not_paired` | The request reached the desktop's proxy marked as tunnelled but naming no device, which the tunnel edge never sends: markers forged by a client that reached the proxy directly. A pairing code used as an API key does not get this far; the edge refuses it like any key it does not hold. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 ORIGIN_NOT_ALLOWED` from `:9887`, or `origin_not_allowed` from the proxy | A page on another site asked to change something. A page of your own gets this behind a reverse proxy that rewrites `Host`: pass `Host` through, and name it with `--allowed-host`. A browser extension gets it from the proxy on every change: its `chrome-extension://` or `moz-extension://` origin is not a local page, and no setting admits one. |

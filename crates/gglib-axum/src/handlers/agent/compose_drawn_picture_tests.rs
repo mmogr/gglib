@@ -187,7 +187,13 @@ async fn a_far_run_shows_the_picture_when_the_far_machine_says_the_model_reads_i
 
     for sees in [true, false] {
         let (_fake, proxy) = far(200, &lookup(sees)).await;
-        let upstream = remote(&proxy, &named).await.expect("looked up");
+        let upstream = remote(
+            &proxy,
+            &named,
+            &crate::handlers::agent::chat_sampling::ChatSampling::default(),
+        )
+        .await
+        .expect("looked up");
         let want = ModelContext {
             image_input: sees,
             ..ModelContext::passthrough()
