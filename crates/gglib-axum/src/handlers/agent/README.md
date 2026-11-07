@@ -189,7 +189,7 @@ thinking budget of `0` and the conversation remembers; `default` runs it with
 the request's own `reasoning_budget_tokens` and the conversation forgets;
 nothing runs it as the conversation remembers, and a remembered `off` beats
 the request's own budget, which a device's turn never has and the page's run
-carries once one is set in its Tools popover. A request's own budget and
+carries once one is set in its agent limits (Tools ▸ › Agent limits…). A request's own budget and
 effort level are never remembered. What is remembered is
 `ConversationSettings.thinking`,
 written by `launch` beside the run's model, so a refused run, or a repeated

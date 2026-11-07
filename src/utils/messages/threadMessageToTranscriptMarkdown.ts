@@ -26,7 +26,7 @@ const warnedUnknownTypes = new Set<string>();
  * 
  * Skips:
  * - `{type: 'reasoning'}` parts → persisted in metadata, not in content
- * - `{type: 'tool-call'}` parts → rendered separately by ToolUsageBadge UI
+ * - `{type: 'tool-call'}` parts → rendered separately, in the reply's fold (`ToolCallRow`)
  * - `{type: 'image'}`, `{type: 'file'}`, etc. → not text-based
  * - Unknown part types → skipped with dev warning (once per type)
  * 

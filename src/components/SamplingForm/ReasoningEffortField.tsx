@@ -66,8 +66,8 @@ function caption(support: TemplateSupport | undefined): string {
  *
  * Hiding the control alone would be indistinguishable from the field not
  * existing, which is how a user concludes gglib cannot do this at all. The
- * `ToolSupportIndicator` split is the precedent — unknown renders nothing,
- * a definite "no" renders something visible.
+ * composer's Tools ▸ is the precedent — unknown shows the checklist,
+ * a definite "no" says "This model can't call tools".
  *
  * No state colour: whether a template reads a kwarg is a fact about the model,
  * not a degraded state, and `SamplingProvenanceSection` makes the same call

@@ -30,7 +30,7 @@ import { getTransport } from '../../services/transport';
 import type { RemoteStatus } from '../../services/transport/types/remote';
 import { formatError } from '../../utils/errors';
 import { Group } from '../library/Group';
-import { Menu } from '../library/Menu';
+import { Menu } from '../../components/ui/Menu';
 import { awaySince } from './devices';
 import { useBlockError, type PageActions } from './pageActions';
 

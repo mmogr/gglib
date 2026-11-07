@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { RouterProvider } from "react-router";
-import SetupWizard from "./components/SetupWizard";
 import { ToastContainer } from "./components/Toast";
 import { useDownloadToasts } from "./hooks/useDownloadToasts";
 import { useFileDropGuard } from "./hooks/useFileDropGuard";
@@ -10,18 +9,19 @@ import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { startMenuBridge } from "./app/menuBridge";
 import { createAppRouter } from "./app/router";
+import { SetupGate } from "./app/SetupGate";
 import { Shell } from "./app/Shell";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
 import { initModelEvents, cleanupModelEvents } from "./services/modelEvents";
 import { initDownloadEvents, cleanupDownloadEvents } from "./services/downloadsEvents";
-import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
 
 /**
  * The layout every place sits in: the shell (the sidebar and the place the
- * address names) and the toasts drawn over whichever place is open.
+ * address names) and the toasts drawn over whichever place is open, or
+ * setup in the shell's place until it has been completed.
  * Separated from `App` so it can use the toast context and the router.
  */
 export function AppContent() {
@@ -65,7 +65,9 @@ export function AppContent() {
   return (
     <SettingsProvider showToast={showToast}>
       <>
-        <Shell />
+        <SetupGate>
+          <Shell />
+        </SetupGate>
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </>
     </SettingsProvider>
@@ -73,42 +75,13 @@ export function AppContent() {
 }
 
 /**
- * Root App component - wraps everything in providers.
- * Shows setup wizard on first run before main app; past it, the router.
+ * Root App component: the providers around the router. Setup is a gate
+ * inside the layout (`SetupGate`), above the outlet, so it has the
+ * registries and the router the places have.
  */
 function App() {
-  const [setupDone, setSetupDone] = useState<boolean | null>(null);
   // Created once, after main.tsx has taken the daemon's token out of the address.
   const [router] = useState(() => createAppRouter(<AppContent />));
-
-  useEffect(() => {
-    getSetupStatus()
-      .then((status) => setSetupDone(status.setupCompleted))
-      .catch(() => {
-        // If we can't check, assume setup is done to avoid blocking
-        setSetupDone(true);
-      });
-  }, []);
-
-  // Still checking setup status
-  if (setupDone === null) {
-    return (
-      <div className="fixed inset-0 bg-background flex items-center justify-center">
-        <div className="text-text-secondary text-sm">Loading...</div>
-      </div>
-    );
-  }
-
-  // First run: show wizard
-  if (!setupDone) {
-    return (
-      <ToastProvider>
-        <ConfirmProvider>
-          <SetupWizard onComplete={() => setSetupDone(true)} />
-        </ConfirmProvider>
-      </ToastProvider>
-    );
-  }
 
   return (
     <ToastProvider>

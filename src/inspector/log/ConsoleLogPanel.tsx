@@ -5,7 +5,7 @@ import { useServerLogs, ServerLogEntry } from '../../hooks/useServerLogs';
 import { Icon } from '../../components/ui/Icon';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/primitives';
-import { Menu } from '../../places/library/Menu';
+import { Menu } from '../../components/ui/Menu';
 import { cn } from '../../utils/cn';
 import './ConsoleLogPanel.css';
 

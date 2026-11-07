@@ -5,12 +5,12 @@ import {
   useThread,
 } from '@assistant-ui/react';
 import type { ToastType } from '../Toast';
+import { useConfirmContext } from '../../contexts/ConfirmContext';
 import {
   ChatPanelHeader,
   SystemPromptLine,
   ChatStatusBanners,
   ComposerFooter,
-  ConfirmDeleteModal,
   MessageActionsContext,
   AssistantMessageBubble,
   UserMessageBubble,
@@ -21,7 +21,7 @@ import {
   BranchingContext,
   BranchEnd,
 } from './components';
-import type { MessageActionsContextValue, ModelChoice } from './components';
+import type { MessageActionsContextValue, ModelChoice, ModelGone } from './components';
 import {
   useTitleGeneration,
   useMessageDeletion,
@@ -69,7 +69,7 @@ interface ChatMessagesPanelProps {
   supportsToolCalls?: boolean | null;
   /** Detected tool-calling format, e.g. "hermes" or "llama3". */
   toolFormat?: string | null;
-  /** The model the next send goes to, as the page names it. */
+  /** The model the next send goes to, by its bare name; empty for a far chat, whose machine picks it. */
   modelName: string;
   /** Its registry id; absent for a chat with another machine. */
   modelId?: number;
@@ -98,11 +98,30 @@ interface ChatMessagesPanelProps {
   draw?: DrawSwitch;
   /** The frames the run's tools are making, by call, for the reply that shows them. */
   previews?: RunPreviews;
+  /** The paired machine the chat's model is on (a paired or a far chat), for the composer's away line. */
+  deskName?: string;
+  /** This machine's model was unloaded or crashed: the composer is replaced by a line that says so. */
+  modelGone?: ModelGone | null;
+  /** Open the model's inspector (the picker's Show <model>). */
+  onShowModel?: () => void;
+  /** Open the model's log (a crash's Show log). */
+  onShowLog?: () => void;
+  /** Open a new chat on the paired machine's model, from an empty chat's picker. */
+  onOpenFar?: (id: number) => void;
 }
 
-/** The notebook's column: the width its rows are laid out in. */
+/**
+ * The panel's column: the head and the turns, 680 px wide at most inside
+ * its gutters, the composer's width (`ComposerFooter`), so the title, the
+ * turns and the composer share one left edge.
+ */
 const NotebookColumn: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="@container mx-auto w-full max-w-[1000px] px-lg pt-xl">{children}</div>
+  <div className="@container mx-auto w-full max-w-[728px] px-lg pt-xl">{children}</div>
+);
+
+/** The turns' column: at most 680 px, the turns 32 px apart with no lines between them. */
+const ReadingColumn: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="mx-auto w-full max-w-[680px] flex flex-col gap-xl pt-lg pb-xl">{children}</div>
 );
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
@@ -138,6 +157,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   branching,
   draw,
   previews = NO_PREVIEWS,
+  deskName,
+  modelGone = null,
+  onShowModel,
+  onShowLog,
+  onOpenFar,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   // The system prompt's editor, opened from its line or from the title ▾.
@@ -177,19 +201,14 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Delete flow — lives here because the cascade reload resets the thread
   // runtime this component owns
   // ─────────────────────────────────────────────────────────────────────────────
-  const {
-    initiateDelete,
-    confirmDelete,
-    cancelDelete,
-    isDeleteModalOpen,
-    isDeleting,
-    pendingDeleteCount,
-  } = useMessageDeletion({
+  const { confirm } = useConfirmContext();
+  const initiateDelete = useMessageDeletion({
     threadRuntime,
     activeConversationId,
     activeConversation,
     syncConversations,
     showToast,
+    confirm,
     readOnly: source === 'far',
   });
 
@@ -205,7 +224,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
   // Context value for message actions
   const messageActionsValue = useMemo<MessageActionsContextValue>(
-    () => ({ onDeleteMessage: initiateDelete, source, ...(pictures && { pictures }) }),
+    () => ({ onDeleteMessage: (id: string) => void initiateDelete(id), source, ...(pictures && { pictures }) }),
     [initiateDelete, source, pictures]
   );
 
@@ -225,6 +244,15 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     : !serverPort
       ? 'Start a server to generate titles'
       : null;
+
+  // The run read here failed: its line under the turns says why (`Unanswered`),
+  // so the banner does not say the same failure again.
+  const failure = endedRun?.status === 'failed' ? (endedRun.error?.message ?? '') : null;
+  const failureShown = failure !== null && isServerConnected && !isThreadRunning;
+  const bannerError =
+    failureShown && chatError !== null && (failure ? chatError.includes(failure) : chatError === 'The reply failed.')
+      ? null
+      : chatError;
 
   const head = (
     <>
@@ -256,7 +284,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           />
         )}
       </ChatPanelHeader>
-      <ChatStatusBanners chatError={chatError} isServerConnected={isServerConnected} />
+      <ChatStatusBanners chatError={bannerError} />
     </>
   );
 
@@ -285,11 +313,13 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     <ThreadPrimitive.Viewport className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth" autoScroll>
                       <NotebookColumn>
                         {head}
-                        <RunPreviewsProvider value={previews}>
-                          <ThreadPrimitive.Messages components={messageComponents} />
-                        </RunPreviewsProvider>
-                        <BranchEnd />
-                        {isServerConnected && <Unanswered />}
+                        <ReadingColumn>
+                          <RunPreviewsProvider value={previews}>
+                            <ThreadPrimitive.Messages components={messageComponents} />
+                          </RunPreviewsProvider>
+                          <BranchEnd />
+                          {isServerConnected && <Unanswered failure={failure} />}
+                        </ReadingColumn>
                       </NotebookColumn>
                       <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                         Jump to latest
@@ -311,6 +341,13 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       thinking={thinking}
                       folder={folder}
                       draw={draw}
+                      far={source === 'far'}
+                      saved={activeConversationId !== null}
+                      deskName={deskName}
+                      modelGone={modelGone}
+                      onShowModel={onShowModel}
+                      onShowLog={onShowLog}
+                      onOpenFar={onOpenFar}
                     />
                   </ThreadPrimitive.Root>
                 </ThinkingTimingProvider>
@@ -319,15 +356,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           </MessageActionsContext.Provider>
         )}
       </div>
-
-      {/* Delete confirmation modal */}
-      <ConfirmDeleteModal
-        isOpen={isDeleteModalOpen}
-        messageCount={pendingDeleteCount}
-        isDeleting={isDeleting}
-        onConfirm={confirmDelete}
-        onCancel={cancelDelete}
-      />
     </div>
   );
 };

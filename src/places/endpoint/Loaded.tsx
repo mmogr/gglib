@@ -28,7 +28,7 @@ import type { PairedModelsState } from '../../hooks/usePairedModels';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 import { cn } from '../../utils/cn';
 import { Group, Note } from '../library/Group';
-import { Menu } from '../library/Menu';
+import { Menu } from '../../components/ui/Menu';
 import { loadedRows, queuedLines, roomLine, type LoadedRow } from './lines';
 import { LoadPalette } from './LoadPalette';
 

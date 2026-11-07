@@ -2,14 +2,16 @@
  * Edits, branches and Retry on the chat page (ADR 0017). A reply is edited
  * in place on screen, by Save; a question by Send. An edit that would
  * rewrite a saved reply is saved on a new branch of the chat, which the page
- * lists and opens, saying the original is kept; so is Branch from here. A
- * turn where the chat's family parts shows its options in the margin, and
- * one chosen opens its chat; the list marks a branch. A chat that ends in a
- * question nothing answers offers Retry beneath it, which answers it.
+ * lists and opens, saying the original is kept; so is Branch from here,
+ * in a turn's ⋯. A turn where the chat's family parts shows `‹ 1/2 ›` in its
+ * foot, and one chosen opens its chat; past the last message, a line says
+ * other branches go on from here. A chat that ends in a question nothing
+ * answers offers Retry beneath it, which answers it; one whose run failed
+ * says why, with the same Retry.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
@@ -120,8 +122,9 @@ describe('ChatPlace edits and Retry', () => {
     await renderPage();
 
     await user.click(screen.getByRole('button', { name: 'Edit message' }));
-    expect(await screen.findByRole('textbox', { name: 'Edit message' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+    const edit = (await screen.findByRole('textbox', { name: 'Edit message' })).closest('form') as HTMLElement;
+    // The page's composer below has its own Send.
+    expect(within(edit).getByRole('button', { name: 'Send' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
@@ -130,7 +133,7 @@ describe('ChatPlace edits and Retry', () => {
     const user = userEvent.setup();
     await renderPage();
 
-    expect(await screen.findByText('Nothing answers this question yet.')).toBeInTheDocument();
+    expect(await screen.findByText('Nothing answers this yet.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Retry' }));
 
     await waitFor(() => expect(stub().startAgentRun).toHaveBeenCalledTimes(1));
@@ -138,7 +141,7 @@ describe('ChatPlace edits and Retry', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument());
   });
 
-  it('a turn where the branches part shows them in its margin, and the next one opens its chat', async () => {
+  it('a turn where the branches part shows them in its foot, and the next one opens its chat', async () => {
     fixture.conversations.unshift({ ...conversation(2, 'Kyoto'), branch_of: 1 });
     save(2, 'user', 'Plan a trip to Kyoto');
     save(2, 'assistant', 'Day 1: gardens');
@@ -166,7 +169,8 @@ describe('ChatPlace edits and Retry', () => {
     const user = userEvent.setup();
     await renderPage();
 
-    await user.click(screen.getAllByRole('button', { name: 'Branch from here' })[1]);
+    await user.click(screen.getByRole('button', { name: 'More for this reply' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Branch from here' }));
 
     await waitFor(() => expect(stub().changeConversation).toHaveBeenCalledWith(1, { kind: 'branch', message_id: 2 }));
     await waitFor(() => expect(stub().getThread).toHaveBeenLastCalledWith(2));
@@ -175,6 +179,58 @@ describe('ChatPlace edits and Retry', () => {
 
   it('a chat that ends in a reply offers no Retry', async () => {
     await renderPage();
-    expect(screen.queryByText('Nothing answers this question yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nothing answers this yet.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
+
+  it('Branch from here is offered on a question too, beside Delete…', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'More for this message' }));
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Branch from here', 'Delete…']);
+    await user.click(screen.getByRole('menuitem', { name: 'Branch from here' }));
+
+    await waitFor(() => expect(stub().changeConversation).toHaveBeenCalledWith(1, { kind: 'branch', message_id: 1 }));
+  });
+
+  it('past the last message, says other branches go on from here, with their switcher', async () => {
+    const user = userEvent.setup();
+    const options = [
+      { conversation_id: 1, message_id: null, role: null, preview: '' },
+      { conversation_id: 2, message_id: 3, role: 'user' as const, preview: 'Make it cheaper' },
+    ];
+    points = { 1: [{ message_id: null, index: 0, options }] };
+    const onOpened = vi.fn();
+    render(<ChatPlace modelName="qwen3" modelId={7} serverPort={4321} conversationId={1} onOpened={onOpened} />, { wrapper });
+    await screen.findByText('Day 1: temples');
+
+    const line = screen.getByText('Other branches go on from here.').parentElement as HTMLElement;
+    await user.click(within(line).getByRole('button', { name: 'Branch 1 of 2' }));
+    const list = screen.getByRole('group', { name: 'Branches here' });
+    expect(within(list).getAllByRole('button').map((b) => b.textContent)).toEqual(['Nothing here yet', 'Make it cheaper']);
+    await user.click(within(list).getByRole('button', { name: 'Make it cheaper' }));
+    expect(onOpened).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('ChatPlace, a reply that failed', () => {
+  it('says the run\'s own reason, and Retry answers the question again', async () => {
+    const user = userEvent.setup();
+    save(1, 'user', 'Make it cheaper');
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    // The run ends failed; the daemon saved nothing for it, so the question stands.
+    (stub() as { readRunEvents: unknown }).readRunEvents = async function* (id: string) {
+      yield { type: 'end' as const, info: { ...agentRun(id, 1, 'failed'), error: { code: 'model_unavailable', message: 'The model stopped responding.' } } };
+    };
+    await renderPage();
+
+    expect(await screen.findByText('The reply failed: The model stopped responding.')).toBeInTheDocument();
+    expect(screen.queryByText('Nothing answers this yet.')).not.toBeInTheDocument();
+    // Said once: the banner above the turns does not say it again.
+    await waitFor(() => expect(screen.queryByText(/stopped responding/)).toBe(screen.getByText('The reply failed: The model stopped responding.')));
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(stub().startAgentRun).toHaveBeenCalledTimes(1));
+    expect(stub().startAgentRun.mock.calls[0][1]).toMatchObject({ conversation_id: 1, answer_saved: true });
   });
 });

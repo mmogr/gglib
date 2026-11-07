@@ -105,10 +105,15 @@ export function onDownloadEndings(listener: DownloadEndings): () => void {
   };
 }
 
-/** Queue `modelId` (at `quantization`, or the daemon's pick), then read the queue. */
-export async function queueDownload(modelId: string, quantization?: string): Promise<void> {
-  await getTransport().queueDownload({ modelId, quantization });
+/**
+ * Queue `modelId` (at `quantization`, or the daemon's pick), then read the
+ * queue. Answers the download's canonical id, its row's and its finished
+ * entry's `id`.
+ */
+export async function queueDownload(modelId: string, quantization?: string): Promise<string> {
+  const { id } = await getTransport().queueDownload({ modelId, quantization });
   await bridge.refresh();
+  return id;
 }
 
 /**
