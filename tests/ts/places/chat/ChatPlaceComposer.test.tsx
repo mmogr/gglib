@@ -254,12 +254,12 @@ describe('ChatPlace, the composer', () => {
     expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Reply…');
   });
 
-  it('says nothing in the box of a saved chat whose turns are not there, rather than a new chat\'s "Ask"', async () => {
+  it('asks in a saved chat with no turns, as Start over leaves one: the thread is empty', async () => {
     fixture.rows[1] = [];
     renderLocal();
     const box = await screen.findByRole('textbox', { name: 'Message' });
     await act(async () => {});
-    expect(box).toHaveAttribute('placeholder', '');
+    expect(box).toHaveAttribute('placeholder', 'Ask Qwen3.8-27B anything');
   });
 
   it('has Send, in ink, which becomes Stop while a reply is written', async () => {

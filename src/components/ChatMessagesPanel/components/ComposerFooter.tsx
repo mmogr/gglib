@@ -214,8 +214,10 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   );
 
   const sendable = isServerConnected && away === null;
-  // A new chat asks; a saved one replies, once its turns are known to be there.
-  const placeholder = !saved && !far ? `Ask ${modelName} anything` : empty ? '' : 'Reply…';
+  // An empty thread asks (a new chat, or a saved one with no turns, as Start
+  // over leaves it); one with turns replies. The composer mounts only once a
+  // saved chat's turns are read, so "empty" is known here.
+  const placeholder = empty && !far ? `Ask ${modelName} anything` : 'Reply…';
 
   return (
     <div className="mx-auto w-full max-w-[1000px] shrink-0 px-lg pb-lg pt-md">

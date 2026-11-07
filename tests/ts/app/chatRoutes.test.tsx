@@ -90,8 +90,11 @@ import { HANDED, peekChatHandoff, setChatHandoff } from '../../../src/app/chatHa
 import { refreshChats, resetChats } from '../../../src/services/chatRegistry';
 import { IDLE_STATUS, applyRemoteStatus, ingestRemoteEvent, resetRemoteState } from '../../../src/services/remoteRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
-import { cleanupServerEvents, initServerEvents } from '../../../src/services/serverEvents';
-import { renderApp } from '../places/harness';
+import { cleanupServerEvents, forgetServerList, initServerEvents } from '../../../src/services/serverEvents';
+import { createAppRouter } from '../../../src/app/router';
+import { PlaceProviders, renderApp } from '../places/harness';
+import { Outlet, RouterProvider } from 'react-router';
+import { render } from '@testing-library/react';
 
 const DESK = '3ca82708b995';
 
@@ -125,8 +128,13 @@ describe('the chat routes', () => {
     daemon.chats = [];
     daemon.settings = {};
     mounts.count = 0;
+    // The app's server bridge, as `AppContent` starts it: the list it reads
+    // is what lets a chat say nothing serves its model.
+    forgetServerList();
+    initServerEvents();
   });
   afterEach(() => {
+    cleanupServerEvents();
     resetRemoteState();
     // Nothing a test served stays running for the next.
     served.splice(0).forEach(stop);
@@ -164,12 +172,65 @@ describe('the chat routes', () => {
   describe('on a cold load, before the server list is heard', () => {
     let answer: (list: unknown[]) => void = () => {};
     beforeEach(() => {
+      // A fresh start, with the list still out.
+      cleanupServerEvents();
+      forgetServerList();
       transport.listServers.mockImplementation(() => new Promise<unknown[]>((resolve) => (answer = resolve)));
       initServerEvents();
     });
     afterEach(() => {
-      cleanupServerEvents();
       transport.listServers.mockImplementation(async () => []);
+    });
+
+    it('waits in the order the app starts: the bridge from the layout\'s effect, after the routes have rendered', async () => {
+      cleanupServerEvents();
+      forgetServerList();
+      // As `AppContent`: the place renders first, and the bridge starts in the layout's effect.
+      function AppOrder() {
+        useEffect(() => {
+          initServerEvents();
+        }, []);
+        return (
+          <PlaceProviders>
+            <Outlet />
+          </PlaceProviders>
+        );
+      }
+      const router = createAppRouter(<AppOrder />, ['/chat/new?model=31']);
+      render(<RouterProvider router={router} />);
+      await act(async () => {});
+      expect(`${router.state.location.pathname}${router.state.location.search}`).toBe('/chat/new?model=31');
+      served.push(31);
+      await act(async () => answer([listed(31, 5031)]));
+      expect(await page()).toHaveAttribute('data-port', '5031');
+    });
+
+    it('reads the list again after reads that failed, waiting longer each time, rather than wait for ever', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      cleanupServerEvents();
+      forgetServerList();
+      const busy = async () => {
+        throw new Error('daemon busy');
+      };
+      // The first read and the first retry fail; the second retry lands.
+      transport.listServers.mockClear();
+      transport.listServers.mockImplementationOnce(busy).mockImplementationOnce(busy).mockImplementation(async () => [listed(32, 5032)]);
+      initServerEvents();
+      served.push(32);
+      const { at } = renderApp('/chat/new?model=32');
+      await act(async () => {});
+      expect(at()).toBe('/chat/new?model=32');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1100);
+      });
+      expect(transport.listServers).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(await page()).toHaveAttribute('data-port', '5032');
+      expect(at()).toBe('/chat/new?model=32');
+      vi.useRealTimers();
     });
     const listed = (modelId: number, port: number) => ({
       model_id: modelId, model_name: 'qwen3', pid: 1, port, started_at: Math.floor(++clock / 1000), runtime: 'llama',

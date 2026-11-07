@@ -43,6 +43,8 @@ const bridge = bridgeEvents({
     if (normalized) {
       ingestServerEvent(normalized);
     }
+    // An event overtakes a read still out, which is then dropped.
+    readUntilHeard();
   },
   // Hydration: seed the registry with servers already running at load. No
   // event carries those, so they are read from the REST list, which has the
@@ -71,18 +73,42 @@ export function refreshServers(): void {
 }
 
 /**
+ * Until a read lands, a read that failed or that an event overtook is tried
+ * again, waiting longer each time: a page that waits on "nothing serves
+ * this model" (a chat's address) must not wait for ever on a dropped read.
+ */
+const RETRY_MS = [1000, 2000, 4000, 8000];
+let retry: ReturnType<typeof setTimeout> | null = null;
+let bridged = false;
+function readUntilHeard(attempt = 0): void {
+  if (retry !== null || !bridged || listHeard.getState()) return;
+  retry = setTimeout(() => {
+    retry = null;
+    if (!bridged || listHeard.getState()) return;
+    void bridge.refresh().then((outcome) => {
+      if (outcome !== 'applied') readUntilHeard(Math.min(attempt + 1, RETRY_MS.length - 1));
+    });
+  }, RETRY_MS[attempt]);
+}
+
+/**
  * Start bridging server lifecycle events into the registry.
  *
  * Safe to call multiple times — only the first call does anything.
  */
 export function initServerEvents(): void {
+  bridged = true;
   bridge.init();
+  readUntilHeard();
 }
 
 /**
  * Stop bridging server lifecycle events. Call on app unmount.
  */
 export function cleanupServerEvents(): void {
+  bridged = false;
+  if (retry !== null) clearTimeout(retry);
+  retry = null;
   bridge.cleanup();
 }
 
