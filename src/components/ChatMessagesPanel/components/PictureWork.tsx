@@ -17,8 +17,8 @@
  * @module components/ChatMessagesPanel/components/PictureWork
  */
 
-import { FC, RefObject, useEffect, useMemo, useState } from 'react';
-import { confirm } from '../../../app/confirm';
+import { FC, RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { confirm, dismissConfirm } from '../../../app/confirm';
 import { StatusMark } from '../../status/StatusMark';
 import { Button } from '../../ui/Button';
 import { Select } from '../../ui/Select';
@@ -98,6 +98,14 @@ export const PictureWork: FC<PictureWorkProps> = ({ url, size, picture, prompt, 
     models.some((row) => row.id === picked && row.complete) ? picked : null,
   );
   const [comparing, setComparing] = useState(false);
+  // The question asked on closing, open now: a sheet that goes answers it no.
+  const asking = useRef(false);
+  useEffect(
+    () => () => {
+      if (asking.current) dismissConfirm();
+    },
+    [],
+  );
 
   const source = useMemo<RedrawSource>(
     () => ({
@@ -133,11 +141,13 @@ export const PictureWork: FC<PictureWorkProps> = ({ url, size, picture, prompt, 
   const mayClose: MayClose = () => {
     if (state.phase === 'keeping') return false;
     if (state.phase !== 'drawn') return true;
+    asking.current = true;
     return confirm({
       title: 'Discard the new picture?',
       description: 'It has not been kept. The picture it came from stays in the chat.',
       confirmLabel: 'Discard',
-      variant: 'danger',
+    }).finally(() => {
+      asking.current = false;
     });
   };
 

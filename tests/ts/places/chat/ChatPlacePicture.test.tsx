@@ -105,13 +105,13 @@ const strip = () => screen.getByRole('group', { name: 'Images from tools' });
 /** The chat, its pictures read, and the one named `size` opened. */
 async function open(size: string) {
   const user = userEvent.setup();
-  renderApp('/chat/1');
+  const app = renderApp('/chat/1');
   const thumbnail = await screen.findByRole('button', { name: `Enlarge image, ${size}` }, SLOW);
   // The drawn picture is fixed only once the chat knows its image models.
   await waitFor(() => expect(transport.current.drawingAvailability).toHaveBeenCalled());
   await user.click(thumbnail);
   await screen.findByRole('dialog');
-  return { user, thumbnail: () => screen.getByRole('button', { name: `Enlarge image, ${size}` }) };
+  return { user, app, thumbnail: () => screen.getByRole('button', { name: `Enlarge image, ${size}` }) };
 }
 
 /** Brush a stroke on the shown picture, shown 200 by 100. */
@@ -192,7 +192,9 @@ describe('the picture sheet', () => {
     act(() => handlers.onProgress({ stage: 'sampling', step: 6, total: 20, frame: 'RlJBTUU=' }));
 
     expect(within(sheet()).getByRole('status')).toHaveTextContent('step 6 of 20');
-    expect(within(sheet()).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '30');
+    const bar = within(sheet()).getByRole('progressbar');
+    expect(bar).toHaveAttribute('aria-valuenow', '30');
+    expect(bar.firstElementChild).toHaveStyle({ width: '30%' });
     expect(screen.getByAltText('The picture so far')).toHaveAttribute('src', 'data:image/png;base64,RlJBTUU=');
 
     await user.click(screen.getByRole('button', { name: 'Stop' }));
@@ -209,6 +211,9 @@ describe('the picture sheet', () => {
     fireEvent.pointerDown(hold);
     expect(within(sheet()).getByRole('img', { name: 'Image, 1000 × 500' })).toHaveAttribute('src', original);
     fireEvent.pointerUp(hold);
+    expect(screen.getByAltText('The picture drawn again')).toBeInTheDocument();
+    fireEvent.pointerDown(hold);
+    fireEvent.pointerCancel(hold);
     expect(screen.getByAltText('The picture drawn again')).toBeInTheDocument();
 
     fireEvent.keyDown(hold, { key: ' ' });
@@ -329,6 +334,95 @@ describe('the picture sheet', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(stopRender).toHaveBeenCalledTimes(1);
+  });
+
+  /** The dim backdrop around the sheet, which a click outside lands on. */
+  const outside = () => document.querySelector('[data-modal-overlay]') as HTMLElement;
+
+  it('Cancel in Fix a part and in Redo goes back to the picture, not out of the sheet', async () => {
+    const { user } = await open('1000 × 500');
+    await user.click(screen.getByRole('button', { name: 'Fix a part' }));
+    expect(sheet()).toHaveAccessibleName('Fix a part');
+    await user.click(within(sheet()).getByRole('button', { name: 'Cancel' }));
+    expect(sheet()).toHaveAccessibleName('Picture');
+    expect(screen.queryByLabelText('Brush over the part to fix')).not.toBeInTheDocument();
+
+    await user.click(within(sheet()).getByRole('button', { name: 'Redo' }));
+    expect(sheet()).toHaveAccessibleName('Redo');
+    await user.click(within(sheet()).getByRole('button', { name: 'Cancel' }));
+    expect(sheet()).toHaveAccessibleName('Picture');
+    expect(within(sheet()).getByRole('button', { name: 'Fix a part' })).toBeInTheDocument();
+  });
+
+  it('× asks before it throws an unkept picture away', async () => {
+    const { user } = await open('1000 × 500');
+    await redrawn(user);
+
+    await user.click(within(sheet()).getByRole('button', { name: 'Close' }));
+    const question = await screen.findByRole('dialog', { name: 'Discard the new picture?' });
+    await user.click(within(question).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByAltText('The picture drawn again')).toBeInTheDocument();
+
+    await user.click(within(screen.getByRole('dialog', { name: 'Keep this picture?' })).getByRole('button', { name: 'Close' }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Discard the new picture?' })).getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(transport.current.uploadAttachment).not.toHaveBeenCalled();
+  });
+
+  it('a click outside asks before it throws an unkept picture away: No keeps it, Discard closes', async () => {
+    const { user } = await open('1000 × 500');
+    await redrawn(user);
+
+    await user.click(outside());
+    await user.click(within(await screen.findByRole('dialog', { name: 'Discard the new picture?' })).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByAltText('The picture drawn again')).toBeInTheDocument();
+
+    await user.click(outside());
+    await user.click(within(await screen.findByRole('dialog', { name: 'Discard the new picture?' })).getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('a click outside closes at once with nothing drawn', async () => {
+    const { user } = await open('1000 × 500');
+    await user.click(outside());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('a click outside while it draws closes, and stops the render once', async () => {
+    const { user } = await open('1000 × 500');
+    await user.click(screen.getByRole('button', { name: 'Redo' }));
+    await user.click(screen.getByRole('button', { name: 'Draw it again' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+
+    await user.click(outside());
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(stopRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds Keep, Try again and Discard while the picture is being kept', async () => {
+    const { user } = await open('1000 × 500');
+    await redrawn(user);
+    (transport.current.uploadAttachment as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise(() => {}));
+
+    await user.click(screen.getByRole('button', { name: 'Keep' }));
+
+    expect(await screen.findByRole('button', { name: 'Keeping…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
+  });
+
+  it('answers its open question no when the sheet goes from under it', async () => {
+    const { user, app } = await open('1000 × 500');
+    await redrawn(user);
+    await user.keyboard('{Escape}');
+    await screen.findByRole('dialog', { name: 'Discard the new picture?' });
+
+    await act(async () => {
+      await app.router.navigate('/library');
+    });
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Discard the new picture?' })).not.toBeInTheDocument());
   });
 });
 

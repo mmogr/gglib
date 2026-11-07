@@ -108,7 +108,7 @@ export const BrushCanvas: FC<{ picture: PictureSize; brush: Brush }> = ({ pictur
 };
 
 /** The brush row: its size, from 1% to 25% of the picture's longer side; Rub out; Undo; Clear. */
-export const BrushRow: FC<{ picture: PictureSize; brush: Brush; disabled?: boolean }> = ({ picture, brush, disabled }) => (
+export const BrushRow: FC<{ picture: PictureSize; brush: Brush }> = ({ picture, brush }) => (
   <div className="flex flex-wrap items-center gap-sm" role="group" aria-label="Brush">
     <input
       type="range"
@@ -116,17 +116,16 @@ export const BrushRow: FC<{ picture: PictureSize; brush: Brush; disabled?: boole
       min={Math.round(side(picture) * 0.01)}
       max={Math.round(side(picture) * 0.25)}
       value={brush.size}
-      disabled={disabled}
       onChange={(event) => brush.setSize(Number(event.target.value))}
       aria-label="Brush size"
     />
-    <Button variant={brush.erasing ? 'secondary' : 'ghost'} size="sm" aria-pressed={brush.erasing} disabled={disabled} onClick={() => brush.setErasing(!brush.erasing)}>
+    <Button variant={brush.erasing ? 'secondary' : 'ghost'} size="sm" aria-pressed={brush.erasing} onClick={() => brush.setErasing(!brush.erasing)}>
       Rub out
     </Button>
-    <Button variant="ghost" size="sm" onClick={brush.undo} disabled={disabled || brush.strokes.length === 0}>
+    <Button variant="ghost" size="sm" onClick={brush.undo} disabled={brush.strokes.length === 0}>
       Undo
     </Button>
-    <Button variant="ghost" size="sm" onClick={brush.clear} disabled={disabled || brush.strokes.length === 0}>
+    <Button variant="ghost" size="sm" onClick={brush.clear} disabled={brush.strokes.length === 0}>
       Clear
     </Button>
   </div>

@@ -101,3 +101,14 @@ describe('the picture sheet, with no words', () => {
     expect(screen.getByText('Say what the picture should show.')).toBeInTheDocument();
   });
 });
+
+describe('the picture sheet, where the chat keeps no pictures', () => {
+  it('shows the drawing tool\'s picture with no Fix a part and no Redo', () => {
+    render(
+      <PictureSheet url="blob:original" size="1000 × 500" drawn={{ image: PICTURE, prompt: 'a red fox' }} from={createRef()} onClose={vi.fn()} />,
+    );
+    expect(screen.getByRole('img', { name: 'Image, 1000 × 500' })).toHaveAttribute('src', 'blob:original');
+    expect(screen.queryByRole('button', { name: 'Fix a part' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Redo' })).not.toBeInTheDocument();
+  });
+});

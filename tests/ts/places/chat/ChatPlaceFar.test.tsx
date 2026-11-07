@@ -181,6 +181,32 @@ describe('ChatPlace, the far machine’s chats', () => {
     made.mockRestore();
   });
 
+  it('a far chat\'s drawn picture opens in the sheet to be viewed only: this machine keeps none of its pictures', async () => {
+    const user = userEvent.setup();
+    const drawn = { id: 'd'.repeat(64), mime: 'image/png', width: 1000, height: 500 };
+    const far = transport.current as Record<string, unknown>;
+    far.openFarChat = vi.fn(async (id: number) => ({
+      conversation: { id, title: 'Why the build broke', model_id: null, system_prompt: null, created_at: '', updated_at: '' },
+      messages: [
+        FAR_ROWS[0],
+        { ...FAR_ROWS[1], metadata: { ...FAR_ROWS[1].metadata, tool_calls: [{ id: 'draw_1', name: 'builtin:generate_image', arguments: { prompt: 'a red fox' } }] } },
+        { id: 43, conversation_id: 1, role: 'tool', content: '[image stored]', created_at: '2026-09-30T09:13:09Z', metadata: { tool_call_id: 'draw_1' }, images: [drawn] },
+      ],
+    }));
+    far.fetchAttachmentBlob = vi.fn(async () => new Blob(['png'], { type: 'image/png' }));
+    const made = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:far-drawn');
+    joined();
+    renderDesk();
+
+    await user.click(await screen.findByRole('button', { name: 'Enlarge image, 1000 × 500' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Picture' });
+    expect(within(sheet).getByRole('img', { name: 'Image, 1000 × 500' })).toHaveAttribute('src', 'blob:far-drawn');
+    expect(within(sheet).queryByRole('button', { name: 'Fix a part' })).not.toBeInTheDocument();
+    expect(within(sheet).queryByRole('button', { name: 'Redo' })).not.toBeInTheDocument();
+    made.mockRestore();
+  });
+
   /** Open the far chat with these figures on its reply's row, as the far machine saved them. */
   async function openFarWith(figures: Record<string, unknown>) {
     (transport.current as Record<string, unknown>).openFarChat = vi.fn(async (id: number) => ({
