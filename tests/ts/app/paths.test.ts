@@ -43,23 +43,24 @@ describe('paths', () => {
   });
 
   it('the settings dialog is a search parameter over the place, opened and closed without moving', () => {
-    const at = { pathname: '/models/7', search: '?view=add' };
+    const at = { pathname: '/models/7', search: '?serve=1' };
     const opened = settingsAt(at, 'system');
-    expect(opened).toBe('/models/7?view=add&settings=system');
-    expect(settingsSection({ search: '?view=add&settings=system' })).toBe('system');
+    expect(opened).toBe('/models/7?serve=1&settings=system');
+    expect(settingsSection({ search: '?serve=1&settings=system' })).toBe('system');
     expect(settingsSection({ search: '?settings=nope' })).toBeNull();
     expect(settingsSection({ search: '' })).toBeNull();
-    expect(withoutSettings({ pathname: '/models/7', search: '?view=add&settings=system' })).toBe('/models/7?view=add');
+    expect(withoutSettings({ pathname: '/models/7', search: '?serve=1&settings=system' })).toBe('/models/7?serve=1');
     expect(withoutSettings({ pathname: '/library', search: '?settings=general' })).toBe('/library');
   });
 
-  it("reads the menu's interim intents and the benchmark ids, dropping what is not one", () => {
-    expect(libraryIntent('?view=add&sub=browse')).toEqual({ add: 'browse', serve: false });
-    expect(libraryIntent('?view=add&sub=add')).toEqual({ add: 'add', serve: false });
-    expect(libraryIntent('?view=add')).toEqual({ add: 'browse', serve: false });
+  it("reads the library's intents and the benchmark ids, dropping what is not one", () => {
+    expect(libraryIntent(paths.libraryAdd('browse').slice('/library'.length))).toEqual({ add: 'browse', serve: false });
+    expect(libraryIntent(paths.libraryAdd('add').slice('/library'.length))).toEqual({ add: 'add', serve: false });
+    expect(libraryIntent('?add=other')).toEqual({ add: null, serve: false });
     expect(libraryIntent('?serve=1')).toEqual({ add: null, serve: true });
     expect(libraryIntent('')).toEqual({ add: null, serve: false });
-    expect(paths.libraryAdd('add')).toBe('/library?view=add&sub=add');
+    expect(paths.libraryAdd('add')).toBe('/library?add=file');
+    expect(paths.libraryAdd('browse')).toBe('/library?add=browse');
     expect(paths.serve(7)).toBe('/models/7?serve=1');
 
     expect(benchmarkModelIds('?models=9,11')).toEqual([9, 11]);

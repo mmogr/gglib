@@ -1,5 +1,5 @@
 /**
- * Parser utility for detecting user intent from HuggingFace Browser search input.
+ * What the library's search text asks of Hugging Face (`places/library/hf`).
  *
  * Supports 4 intent types:
  * - search: Normal text search query
@@ -180,27 +180,3 @@ export function parseModelSearchIntent(input: string): ModelSearchIntent {
   // Default: treat as search query
   return { kind: "search", query: normalized };
 }
-
-/**
- * Get display text for the search button based on current intent
- */
-export function getButtonTextForIntent(intent: ModelSearchIntent): string {
-  switch (intent.kind) {
-    case "download":
-      return "Download";
-    case "repo":
-      return "View Model";
-    case "url":
-      if (intent.quant) {
-        return "Download";
-      }
-      if (intent.repo) {
-        return "View Model";
-      }
-      return "Search";
-    case "search":
-    default:
-      return "Search";
-  }
-}
-

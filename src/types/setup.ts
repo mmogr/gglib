@@ -112,7 +112,7 @@ export type { EngineStatus } from './generated/EngineStatus';
 export type { EngineInstall } from './generated/EngineInstall';
 /** What an engine's removal took. */
 export type { UninstallOutcome } from './generated/UninstallOutcome';
-export type { PinStanding, PinState, RuntimeKind };
+export type { PinStanding, PinState, RecommendationDto, RuntimeKind };
 
 /*
  * The diagnostics bundle behind the System tab, and the recommendation `gglib
@@ -170,13 +170,3 @@ export type DiagnosticsKeysAreComplete = AssertNoUnlistedFields<
   | Exclude<keyof Diagnostics, keyof DiagnosticsDto>
   | Exclude<keyof DiagnosticsDto, keyof Diagnostics>
 >;
-
-/**
- * A hardware-sized model suggestion — the shortlist `gglib up` picks from.
- *
- * The route returns `null` when nothing fits, which is a real answer: a
- * machine too small for the smallest candidate should be told so.
- */
-export type ModelRecommendation = RecommendationDto & {
-  budgetSource: 'vram' | 'unifiedMemory' | 'systemRam';
-};

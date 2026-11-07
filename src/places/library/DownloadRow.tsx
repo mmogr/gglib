@@ -8,7 +8,7 @@
  *
  * Hovering shows ×: on the running download it cancels, on a waiting one it
  * takes it off the queue. `Downloads` is the group of them, the running one
- * first, drawn over the rows and over the Add pane alike.
+ * first, drawn over the rows.
  *
  * @module places/library/DownloadRow
  */

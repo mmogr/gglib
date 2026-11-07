@@ -10,7 +10,7 @@ import type {
   LlamaProgressEvent,
   Diagnostics,
   EngineStatus,
-  ModelRecommendation,
+  RecommendationDto,
   RuntimeKind,
   UninstallOutcome,
 } from '../../../types/setup';
@@ -100,6 +100,6 @@ export async function disableFastDownloads(): Promise<{ removed: boolean }> {
  *
  * Resolves to `null` when nothing fits — that is the answer, not a failure.
  */
-export async function getRecommendedModel(): Promise<ModelRecommendation | null> {
-  return get<ModelRecommendation | null>('/api/config/system/recommend-model');
+export async function getRecommendedModel(): Promise<RecommendationDto | null> {
+  return get<RecommendationDto | null>('/api/config/system/recommend-model');
 }

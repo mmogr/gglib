@@ -2,12 +2,13 @@
  * The library's head: its title, `Sort ▾` and `+ ▾`, and the search field
  * under them. Sort orders each group on this screen (`groups.ts`); `+`
  * finds a model on Hugging Face, adds a GGUF file, or adds a tool server in
- * Settings, each by its address.
+ * Settings, each by its address. The field filters the library as it is
+ * typed; Enter takes it to Hugging Face (`hf/useLibrarySearch`).
  *
  * @module places/library/LibraryHeader
  */
 
-import type { FC } from 'react';
+import type { FC, Ref } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Plus, Search } from 'lucide-react';
 import { Icon } from '../../components/ui/Icon';
@@ -26,12 +27,14 @@ const SORTS: { key: SortKey; label: string }[] = [
 interface LibraryHeaderProps {
   sort: LibrarySort;
   onSort: (sort: LibrarySort) => void;
-  /** The search, or `null` where no search is drawn (the Add pane). */
-  query: string | null;
+  query: string;
   onQuery: (query: string) => void;
+  onEnter: () => void;
+  onFocus: () => void;
+  inputRef: Ref<HTMLInputElement>;
 }
 
-export const LibraryHeader: FC<LibraryHeaderProps> = ({ sort, onSort, query, onQuery }) => {
+export const LibraryHeader: FC<LibraryHeaderProps> = ({ sort, onSort, query, onQuery, onEnter, onFocus, inputRef }) => {
   const location = useLocation();
   const navigate = useNavigate();
   return (
@@ -60,17 +63,22 @@ export const LibraryHeader: FC<LibraryHeaderProps> = ({ sort, onSort, query, onQ
           ]}
         />
       </div>
-      {query !== null && (
-        <Input
-          type="search"
-          size="sm"
-          aria-label="Search your models"
-          placeholder="Search your models"
-          leftIcon={<Icon icon={Search} size={14} />}
-          value={query}
-          onChange={(e) => onQuery(e.target.value)}
-        />
-      )}
+      <Input
+        ref={inputRef}
+        type="search"
+        size="sm"
+        aria-label="Search your models, or Hugging Face"
+        placeholder="Search your models, or Hugging Face"
+        leftIcon={<Icon icon={Search} size={14} />}
+        value={query}
+        onChange={(e) => onQuery(e.target.value)}
+        onFocus={onFocus}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          onEnter();
+        }}
+      />
     </div>
   );
 };

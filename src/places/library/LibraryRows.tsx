@@ -131,7 +131,7 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
       ) : models.length === 0 ? (
         <Note>{far ? `No models on this Mac. ${paired.name}'s models below work as they are.` : 'No models on this Mac.'}</Note>
       ) : loaded.length + here.length === 0 ? (
-        <Note>Nothing in your library matches.</Note>
+        <Note>Nothing in your library matches. Press ↵ to search Hugging Face.</Note>
       ) : null}
 
       {loaded.length > 0 && (

@@ -26,8 +26,8 @@ export const paths = {
     view === 'console' ? `/chat/${modelId}?view=console` : `/chat/${modelId}`,
   /** A chat on the paired machine's model `id` (its id there). */
   farChat: (id: number) => `/chat/far/${id}`,
-  /** The library's Add pane, on its Browse or Add tab. */
-  libraryAdd: (sub: 'browse' | 'add') => `/library?view=add&sub=${sub}`,
+  /** The library with its search focused for Hugging Face (`browse`), or adding a GGUF file (`add`). */
+  libraryAdd: (sub: 'browse' | 'add') => `/library?add=${sub === 'add' ? 'file' : 'browse'}`,
   /** A model's inspector with its Serve dialog opened. */
   serve: (id: number) => `/models/${id}?serve=1`,
   /** The benchmarks, with `modelIds` picked to run. */
@@ -89,10 +89,10 @@ export function settingsSection(location: Pick<Location, 'search'>): SettingsSec
 }
 
 /**
- * What the native menu asked the library to do, carried as search
- * parameters the page acts on once and strips: open the Add pane on a tab,
- * or open the picked model's Serve dialog. Interim, until the library's
- * rows and the Load sheet take these over.
+ * What the native menu or `+ ▾` asked the library to do, carried as search
+ * parameters the page acts on once and strips: focus the search for Hugging
+ * Face, add a GGUF file, or open the picked model's Serve dialog (interim,
+ * until the Load sheet takes it over).
  */
 export interface LibraryIntent {
   add: 'browse' | 'add' | null;
@@ -101,8 +101,8 @@ export interface LibraryIntent {
 
 export function libraryIntent(search: string): LibraryIntent {
   const params = new URLSearchParams(search);
-  const sub = params.get('sub');
-  const add = params.get('view') === 'add' ? (sub === 'add' ? 'add' : 'browse') : null;
+  const sub = params.get('add');
+  const add = sub === 'file' ? 'add' : sub === 'browse' ? 'browse' : null;
   return { add, serve: params.get('serve') === '1' };
 }
 

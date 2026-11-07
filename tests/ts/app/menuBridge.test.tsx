@@ -97,16 +97,16 @@ describe('the menu bridge', () => {
     expect(menu.handlers).toBeNull();
   });
 
-  it('Settings opens the dialog over the place; Add Model and Downloads open the Add pane', async () => {
+  it('Settings opens the dialog over the place; Add Model adds a file and Downloads finds on Hugging Face', async () => {
     const { at, router, fire, stop } = await bridged('/models/7');
     await fire(MENU_EVENTS.OPEN_SETTINGS);
     expect(at()).toBe('/models/7?settings=general');
     // Over the place, not after it: Back from here leaves the dialog behind.
     expect(router.state.historyAction).toBe('REPLACE');
     await fire(MENU_EVENTS.ADD_MODEL_FILE);
-    expect(at()).toBe('/library?view=add&sub=add');
+    expect(at()).toBe('/library?add=file');
     await fire(MENU_EVENTS.SHOW_DOWNLOADS);
-    expect(at()).toBe('/library?view=add&sub=browse');
+    expect(at()).toBe('/library?add=browse');
     stop();
   });
 
