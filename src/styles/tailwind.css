@@ -190,6 +190,8 @@
   --animate-slide-down: slide-down 0.2s ease-out;
   --animate-indeterminate: indeterminate 1.5s infinite ease-in-out;
   --animate-blink: blink 1s ease-in-out infinite;
+  /* The endpoint dot's once-per-request blink: one run, never a loop. */
+  --animate-request-blink: request-blink 150ms ease-out 1;
   --animate-spin-360: spin-360 0.8s linear infinite;
   --animate-research-pulse: research-pulse 1.5s ease-in-out infinite;
 }
@@ -279,6 +281,16 @@
   }
   50% {
     opacity: 0.3;
+  }
+}
+
+@keyframes request-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
   }
 }
 

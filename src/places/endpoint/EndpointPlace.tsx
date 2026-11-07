@@ -8,7 +8,8 @@
  * re-read after each event), the rest from the one dashboard stream
  * (`useEndpointDashboard`), the devices from `remoteRegistry`. The
  * sections that need the dashboard are drawn once it has spoken, so
- * nothing says "nothing loaded" before it knows. ⋯ holds Live numbers
+ * nothing says "nothing loaded" before it knows. Off, Loaded still lists
+ * the running servers, which stay in memory. ⋯ holds Live numbers
  * (Diagnostics › Live), Clear prompt cache, and Endpoint settings….
  *
  * Connect a client's Model ID starts at the inspected model, else the
@@ -43,6 +44,7 @@ import { useEndpointDashboard } from '../library/useResidency';
 import { Activity } from './Activity';
 import { Header } from './Header';
 import { Loaded } from './Loaded';
+import { residentRows } from './lines';
 import { Recent } from './Recent';
 import { Serves } from './Serves';
 import { useClearCache } from './useClearCache';
@@ -77,6 +79,10 @@ export default function EndpointPlace() {
   const smallest = [...chatModels].sort((a, b) => a.sizeBytes - b.sizeBytes)[0]?.id ?? null;
   const modelId = picked ?? inspected ?? pinnedId ?? lastLoaded ?? settled ?? smallest;
   const up = facts.state === 'on' || facts.state === 'pinned';
+  // Up, the dashboard's rows once it has spoken; off, the running servers,
+  // drawn only when there are some.
+  const resident = residentRows(snapshot, servers);
+  const showLoaded = up ? snapshot !== null : resident.length > 0;
   // The menu's Connect a Client… (`?connect=1`): scrolled to once the block
   // is drawn, and the ask dropped from the address. With the endpoint off
   // there is no block to scroll to, and the ask is dropped at once, so it
@@ -123,8 +129,8 @@ export default function EndpointPlace() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pb-md">
           <Header facts={facts} actions={actions} onTest={() => void actions.test(facts.pinnedModel !== null ? null : modelId)} />
-          {up && snapshot && (
-            <Loaded snapshot={snapshot} inspected={inspected} paired={paired} onUnload={unload} onPin={(id) => void actions.serve(id)} pinning={actions.busy !== null} />
+          {showLoaded && (
+            <Loaded snapshot={snapshot} rows={resident} inspected={inspected} paired={paired} onUnload={unload} onPin={(id) => void actions.serve(id)} pinning={actions.busy !== null} />
           )}
           {up && (
             <Serves loaded={loaded} library={chatModels} pinnedModel={facts.pinnedModel} disabled={actions.busy !== null} onServe={(id) => void actions.serve(id)} />

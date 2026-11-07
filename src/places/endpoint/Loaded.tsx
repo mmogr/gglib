@@ -1,6 +1,9 @@
 /**
  * Loaded: what the endpoint holds in memory and what each model is doing,
- * from the dashboard's resident slots.
+ * from the dashboard's resident slots; while the endpoint is off, the
+ * running servers, each Loaded, since a model stays in memory with it off
+ * (`residentRows`, the tray's too). Off, only the rows are drawn: no queue,
+ * no room, no palette, and nothing at all when nothing is loaded.
  *
  * A row is the model's name and its state word (Working, Loaded, or
  * "Reading 61%" with a thin bar while a prompt is read), and under it the
@@ -29,11 +32,14 @@ import type { DashboardSnapshot } from '../../services/transport/types/dashboard
 import { cn } from '../../utils/cn';
 import { Group, Note } from '../library/Group';
 import { Menu } from '../../components/ui/Menu';
-import { loadedRows, queuedLines, roomLine, type LoadedRow } from './lines';
+import { queuedLines, roomLine, type LoadedRow } from './lines';
 import { LoadPalette } from './LoadPalette';
 
 interface LoadedProps {
-  snapshot: DashboardSnapshot;
+  /** The dashboard's frame; `null` while the endpoint is off. */
+  snapshot: DashboardSnapshot | null;
+  /** The rows (`residentRows`). */
+  rows: LoadedRow[];
   /** The model inspected beside the place, if any. */
   inspected: number | null;
   /** The paired machine's models, for the palette's On <machine> group. */
@@ -44,7 +50,7 @@ interface LoadedProps {
   pinning: boolean;
 }
 
-const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapshot' | 'inspected' | 'paired'>> = ({ row, selected, onUnload, onPin, pinning }) => {
+const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapshot' | 'rows' | 'inspected' | 'paired'>> = ({ row, selected, onUnload, onPin, pinning }) => {
   const navigate = useNavigate();
   const inspect = () => navigate(paths.endpointInspect(row.modelId));
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -107,8 +113,7 @@ const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapsho
   );
 };
 
-export const Loaded: FC<LoadedProps> = ({ snapshot, inspected, paired, onUnload, onPin, pinning }) => {
-  const rows = loadedRows(snapshot);
+export const Loaded: FC<LoadedProps> = ({ snapshot, rows, inspected, paired, onUnload, onPin, pinning }) => {
   const room = roomLine(snapshot);
   return (
     <Group label="Loaded" aside={room && <span className="font-normal">{room}</span>}>
@@ -124,7 +129,7 @@ export const Loaded: FC<LoadedProps> = ({ snapshot, inspected, paired, onUnload,
       {queuedLines(snapshot).map((line) => (
         <Note key={line}>{line}</Note>
       ))}
-      <LoadPalette loaded={new Set(rows.map((r) => r.modelId))} paired={paired} />
+      {snapshot !== null && <LoadPalette loaded={new Set(rows.map((r) => r.modelId))} paired={paired} />}
     </Group>
   );
 };

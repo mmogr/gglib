@@ -275,6 +275,21 @@ describe('the endpoint place', () => {
       expect(at()).toBe('/endpoint');
     });
 
+    it('off: lists the models still in memory, each Loaded, and only them; with none, no Loaded at all', async () => {
+      const { user } = renderEndpoint(DOWN);
+      expect(screen.queryByRole('region', { name: 'Loaded' })).not.toBeInTheDocument();
+
+      act(() => ingestServerEvent({ type: 'running', modelId: '1', port: 9001, updatedAt: Date.now(), modelName: 'Qwen3-4B' }));
+      expect(within(loadedRow('Qwen3-4B')).getByText(RESIDENCY_WORDS.loaded)).toBeInTheDocument();
+      // Off, nothing queues and nothing loads by name: no palette.
+      expect(screen.queryByRole('button', { name: 'Load a model…' })).not.toBeInTheDocument();
+      await user.click(within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'Unload' }));
+      expect(transport.stopServer).toHaveBeenCalledWith(1);
+
+      act(() => ingestServerEvent({ type: 'stopped', modelId: '1', port: 9001, updatedAt: Date.now(), modelName: 'Qwen3-4B' }));
+      expect(screen.queryByRole('region', { name: 'Loaded' })).not.toBeInTheDocument();
+    });
+
     it('Unload asks the daemon even when this window has not heard the model is loaded', async () => {
       const { user } = renderEndpoint();
       await frame(admitted([residentSlot(1, 'Qwen3-4B')]));

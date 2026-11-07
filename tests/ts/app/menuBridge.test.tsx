@@ -155,7 +155,7 @@ describe('the menu bridge', () => {
     // A place of its own: Back returns to the one it was opened from.
     expect(router.state.historyAction).toBe('PUSH');
     await go('diagnostics');
-    expect(at()).toBe('/diagnostics/benchmarks');
+    expect(at()).toBe('/diagnostics/live');
     await go('new-chat');
     expect(at()).toBe('/chat/new');
     stop();
@@ -238,7 +238,7 @@ describe('the menu bridge', () => {
     const { fire, stop } = await bridged('/models/7');
     await waitFor(() => expect(transport.listModels).toHaveBeenCalled());
     await fire(MENU_EVENTS.LOAD_MODEL);
-    expect(notify).toHaveBeenCalledWith('Could not load qwen3-8b: llama-server is not installed', 'error');
+    expect(notify).toHaveBeenCalledWith("Didn't load: llama-server is not installed", 'error');
     expect(menu.syncMenuStateSilent).not.toHaveBeenCalled();
 
     serve(7);

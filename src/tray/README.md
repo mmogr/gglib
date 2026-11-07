@@ -15,8 +15,8 @@ the
 endpoint's state word, reached address, key rule and pin from
 `services/proxyRegistry`; the residents and their words from the one
 dashboard stream (`places/library/useResidency` `useEndpointDashboard`,
-rows by `places/endpoint/lines` `loadedRows`), or the running servers from
-`services/serverRegistry` while the stream is idle, once the list's read
+rows by `places/endpoint/lines` `residentRows`), or the running servers from
+`services/serverRegistry` while the stream is idle (the same function), once the list's read
 has landed (`serverEvents` `useServerListHeard`); the joined machine, its
 reach and the roster from `services/remoteRegistry`. State words are
 `components/status/words.ts`'s. Turn on and Turn off are the endpoint
