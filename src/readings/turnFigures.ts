@@ -22,16 +22,18 @@ import { formatPerSecond } from '../utils/formatPerSecond';
 import { tokensPerSecond } from './throughput';
 
 /**
- * Seconds as a turn says them: "0.4 s", "4.7 s" under ten, "19 s", "1 min 23 s".
- * Rounded to the precision shown before the unit is chosen, so 9.96 is
- * "10 s" and 59.6 is "1 min 0 s", never "10.0 s" or "60 s".
+ * Seconds as a turn says them: "0.4 s", "4.7 s" and "3 s" under ten, "19 s",
+ * "1 min 23 s", "2 min". Rounded to the precision shown before the unit is
+ * chosen, so 9.96 is "10 s" and 59.6 is "1 min", never "10.0 s" or "60 s";
+ * a whole number drops its ".0", and a whole minute its "0 s".
  */
 export function secondsWords(seconds: number): string {
   const tenths = Math.round(seconds * 10) / 10;
-  if (tenths < 10) return `${tenths.toFixed(1)} s`;
+  if (tenths < 10) return `${Number.isInteger(tenths) ? tenths : tenths.toFixed(1)} s`;
   const whole = Math.round(seconds);
   if (whole < 60) return `${whole} s`;
-  return `${Math.floor(whole / 60)} min ${whole % 60} s`;
+  const rest = whole % 60;
+  return rest === 0 ? `${whole / 60} min` : `${Math.floor(whole / 60)} min ${rest} s`;
 }
 
 /** The facts about one reply its figures are drawn from. */
@@ -97,11 +99,6 @@ export function figureParts(facts: ReplyFacts): string[] {
     rate != null ? `${formatPerSecond(rate)} tok/s` : null,
     made?.cachedTokens != null ? `${formatCount(made.cachedTokens)} tokens reused` : null,
   ].filter((part): part is string => part !== null);
-}
-
-/** The figure line, as it reads: its parts with " · " between them; empty with none. */
-export function figureLine(facts: ReplyFacts): string {
-  return figureParts(facts).join(' · ');
 }
 
 /** The figure line's tooltip: every figure the reply has, one line each. */

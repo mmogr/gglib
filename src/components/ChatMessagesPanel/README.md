@@ -36,7 +36,7 @@ On this machine's chats a question and a reply can each be edited, a reply retri
 
 State words come from `components/status/words.ts`; figures and their words from `readings/turnFigures`.
 
-- the fold: `Thought for 3.0 s · 2 tool calls`, `Thinking… 4.2 s`, `Thought`, `1 tool call`; a tool row: `on <server>`, `running`, `failed · <reason>`, Arguments, Result, Copy / Copied (named Copy arguments, Copy result); said to a screen reader: `<tool> done.`, `<tool> failed.`
+- the fold: `Thought for 3 s · 2 tool calls`, `Thinking… 4.2 s`, `Thought`, `1 tool call`; a tool row: `on <server>`, `running`, `failed · <reason>`, Arguments, Result, Copy / Copied (named Copy arguments, Copy result); said to a screen reader: `<tool> done.`, `<tool> failed.`
 - the figure line: `unfinished · 4.7 s · 117 tok/s · 282 tokens reused`; its tooltip: `<model> · <quant>`, `for <device>`, `cut off before it finished`, `thought for 19 s`, `3,180 tokens read`, `496 tokens written`
 - the action line: Copy / Copied · Retry · Edit · ⋯ (Branch from here · Delete…); their names Copy reply, Copy message, Retry this reply, Edit reply, Edit message, More for this reply, More for this message
 - the confirm sheet: "Delete this message?" / "The N messages after it are deleted too. This cannot be undone." / Delete; the refusal: "A reply is still being written here. Stop it or wait, then delete."

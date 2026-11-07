@@ -23,7 +23,7 @@ import { dispatchAgentEvent } from '../../../src/hooks/useGglibRuntime/agentEven
 import { buildLoadedMessage } from '../../../src/hooks/useChatPersistence/buildLoadedMessage';
 import {
   figureDetail,
-  figureLine,
+  figureParts,
   replyFacts,
 } from '../../../src/readings/turnFigures';
 import {
@@ -69,8 +69,8 @@ describe('turn_made contract', () => {
 
   it('says the same figures either way, the rate computed from what was saved', () => {
     const line = '41 s · 13 tok/s · 2,100 tokens reused';
-    expect(figureLine(facts(drawn()))).toBe(line);
-    expect(figureLine(facts(loaded()))).toBe(line);
+    expect(figureParts(facts(drawn())).join(' · ')).toBe(line);
+    expect(figureParts(facts(loaded())).join(' · ')).toBe(line);
     const detail = figureDetail(facts(loaded()));
     expect(detail[0]).toMatch(/^Qwen3\.8-27B\b/);
     expect(detail).toContain('3,180 tokens read');

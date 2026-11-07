@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
   arrivingPhase,
   figureDetail,
-  figureLine,
+  figureParts,
   foldSummary,
   modelShown,
   promptLines,
@@ -32,6 +32,8 @@ const MADE = {
 describe('secondsWords', () => {
   it('says tenths under ten seconds, whole seconds under a minute, then minutes', () => {
     expect(secondsWords(0.4)).toBe('0.4 s');
+    expect(secondsWords(3)).toBe('3 s');
+    expect(secondsWords(2.96)).toBe('3 s');
     expect(secondsWords(4.74)).toBe('4.7 s');
     expect(secondsWords(19)).toBe('19 s');
     expect(secondsWords(83)).toBe('1 min 23 s');
@@ -41,20 +43,21 @@ describe('secondsWords', () => {
     expect(secondsWords(9.95)).toBe('10 s');
     expect(secondsWords(9.94)).toBe('9.9 s');
     expect(secondsWords(9.96)).toBe('10 s');
-    expect(secondsWords(59.5)).toBe('1 min 0 s');
+    expect(secondsWords(59.5)).toBe('1 min');
     expect(secondsWords(59.4)).toBe('59 s');
-    expect(secondsWords(59.6)).toBe('1 min 0 s');
-    expect(secondsWords(60)).toBe('1 min 0 s');
+    expect(secondsWords(59.6)).toBe('1 min');
+    expect(secondsWords(60)).toBe('1 min');
+    expect(secondsWords(61)).toBe('1 min 1 s');
     expect(secondsWords(90)).toBe('1 min 30 s');
-    expect(secondsWords(119.6)).toBe('2 min 0 s');
-    expect(secondsWords(3599.6)).toBe('60 min 0 s');
+    expect(secondsWords(119.6)).toBe('2 min');
+    expect(secondsWords(3599.6)).toBe('60 min');
   });
 });
 
 describe('foldSummary', () => {
   it('says how long it thought, then the tool calls, singular and plural', () => {
-    expect(foldSummary({ thinking: true, live: false, seconds: 3, toolCalls: 2 })).toBe('Thought for 3.0 s · 2 tool calls');
-    expect(foldSummary({ thinking: true, live: false, seconds: 3, toolCalls: 1 })).toBe('Thought for 3.0 s · 1 tool call');
+    expect(foldSummary({ thinking: true, live: false, seconds: 3, toolCalls: 2 })).toBe('Thought for 3 s · 2 tool calls');
+    expect(foldSummary({ thinking: true, live: false, seconds: 3, toolCalls: 1 })).toBe('Thought for 3 s · 1 tool call');
     expect(foldSummary({ thinking: false, live: false, seconds: null, toolCalls: 1 })).toBe('1 tool call');
     expect(foldSummary({ thinking: true, live: false, seconds: null, toolCalls: 0 })).toBe('Thought');
   });
@@ -65,22 +68,25 @@ describe('foldSummary', () => {
   });
 });
 
-describe('figureLine', () => {
+describe('figureParts', () => {
+  /** The parts as the line reads them, with the dots between. */
+  const line = (facts: Parameters<typeof figureParts>[0]) => figureParts(facts).join(' · ');
+
   it('says nothing it was not given', () => {
-    expect(figureLine({ toolCalls: 0, unfinished: false })).toBe('');
-    expect(figureLine({ toolCalls: 2, unfinished: false, thinkingSeconds: 3 })).toBe('');
+    expect(line({ toolCalls: 0, unfinished: false })).toBe('');
+    expect(line({ toolCalls: 2, unfinished: false, thinkingSeconds: 3 })).toBe('');
   });
 
   it('says how long it took, how fast it wrote and what the cache saved', () => {
-    expect(figureLine({ toolCalls: 0, unfinished: false, made: MADE })).toBe('41 s · 12 tok/s · 2,100 tokens reused');
-    expect(figureLine({ toolCalls: 0, unfinished: true, made: { turnDurationMs: 900 } })).toBe('unfinished · 0.9 s');
-    expect(figureLine({ toolCalls: 0, unfinished: false, made: { cachedTokens: 0 } })).toBe('0 tokens reused');
+    expect(line({ toolCalls: 0, unfinished: false, made: MADE })).toBe('41 s · 12 tok/s · 2,100 tokens reused');
+    expect(line({ toolCalls: 0, unfinished: true, made: { turnDurationMs: 900 } })).toBe('unfinished · 0.9 s');
+    expect(line({ toolCalls: 0, unfinished: false, made: { cachedTokens: 0 } })).toBe('0 tokens reused');
   });
 
   it('says no rate for a turn of one token, nor one not streamed', () => {
-    expect(figureLine({ toolCalls: 0, unfinished: false, made: { completionTokens: 1, writingDurationMs: 0, turnDurationMs: 300 } })).toBe('0.3 s');
-    expect(figureLine({ toolCalls: 0, unfinished: false, made: { completionTokens: 1, writingDurationMs: 40 } })).toBe('');
-    expect(figureLine({ toolCalls: 0, unfinished: false, made: { completionTokens: 50 } })).toBe('');
+    expect(line({ toolCalls: 0, unfinished: false, made: { completionTokens: 1, writingDurationMs: 0, turnDurationMs: 300 } })).toBe('0.3 s');
+    expect(line({ toolCalls: 0, unfinished: false, made: { completionTokens: 1, writingDurationMs: 40 } })).toBe('');
+    expect(line({ toolCalls: 0, unfinished: false, made: { completionTokens: 50 } })).toBe('');
   });
 });
 

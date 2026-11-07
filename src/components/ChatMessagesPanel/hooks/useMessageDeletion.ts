@@ -55,8 +55,10 @@ export function deleteQuestion(count: number): ConfirmOptions {
  * The question belongs to the chat it was asked in. The confirm store is
  * the app's, and outlives this panel: leaving the chat while it is open
  * (⌘N, the native menu's Show Chat) answers it no, and an answer that
- * comes after the chat was left, or turned far, deletes nothing. One delete
- * at a time: Delete… asks nothing while one is asked or under way.
+ * comes after the chat was left, or turned far, deletes nothing; a delete
+ * already under way when the chat is left leaves the next chat's thread
+ * alone. One delete at a time: Delete… asks nothing while one is asked or
+ * under way.
  */
 export function useMessageDeletion({
   threadRuntime,
@@ -110,7 +112,12 @@ export function useMessageDeletion({
       }
 
       const dbMessages = (await getTransport().getThread(conversationId)).messages;
-      threadRuntime?.reset(buildThreadMessages(dbMessages, activeConversation, conversationId));
+      // The page may have left the chat while the delete ran: the runtime is
+      // the next chat's then, and is not this one's to reset.
+      const still = now.current;
+      if (still.alive && still.conversationId === conversationId) {
+        threadRuntime?.reset(buildThreadMessages(dbMessages, activeConversation, conversationId));
+      }
 
       await syncConversations({ silent: true });
       showToast('Message deleted', 'success');

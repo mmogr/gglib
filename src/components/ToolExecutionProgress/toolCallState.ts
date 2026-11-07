@@ -72,13 +72,13 @@ function isToolCall(part: unknown): part is ToolCallPartLike {
 
 /**
  * What a screen reader is told of a reply's tool calls as they settle: one
- * sentence per call that has, in the order called.
+ * sentence per call that has, in the order called, each keyed by its call so
+ * a live region adds only the new one and never reads the others again.
  */
-export function settledWords(rows: readonly ToolCallRow[]): string {
+export function settledWords(rows: readonly ToolCallRow[]): { id: string; words: string }[] {
   return rows
     .filter((row) => row.state !== 'running')
-    .map((row) => (row.state === 'failed' ? `${row.label} failed.` : `${row.label} done.`))
-    .join(' ');
+    .map((row) => ({ id: row.id, words: row.state === 'failed' ? `${row.label} failed.` : `${row.label} done.` }));
 }
 
 /** One row per tool call of a reply's content, in the order called. */

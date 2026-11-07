@@ -175,7 +175,7 @@ describe('ChatPlace, the thread', () => {
     ];
     renderLocal();
     expect(await screen.findByRole('button', { name: '1 tool call' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Thought for 2.0 s' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thought for 2 s' })).toBeInTheDocument();
     expect(screen.queryByText('No text.')).not.toBeInTheDocument();
   });
 
@@ -282,7 +282,7 @@ describe('ChatPlace, a reply\'s tool calls', () => {
     feed({ type: 'end', info: agentRun('r1', 1, 'completed') });
 
     // Closed by default once it has arrived; open, as the person left it.
-    const done = await screen.findByRole('button', { name: 'Thought for 3.0 s' });
+    const done = await screen.findByRole('button', { name: 'Thought for 3 s' });
     expect(done).toHaveAttribute('aria-expanded', 'true');
   });
 
@@ -299,6 +299,7 @@ describe('ChatPlace, a reply\'s tool calls', () => {
 
     settle('c1', true, '<plist/>');
     await waitFor(() => expect(live()).toHaveTextContent(/^Read File done\.$/));
+    const first = live()!.firstElementChild;
     settle('c2', false, 'permission denied');
 
     const failed = await within(calls).findByText('failed · permission denied');
@@ -306,6 +307,25 @@ describe('ChatPlace, a reply\'s tool calls', () => {
     expect(within(calls).getAllByRole('img', { name: 'Failed' })).toHaveLength(1);
     expect(within(calls).getByText('1.2 s')).not.toHaveClass('text-danger');
     expect(live()).toHaveTextContent(/^Read File done\. Read File failed\.$/);
+    // Additions only: the first call's sentence is the same node, not said again.
+    expect(live()).toHaveAttribute('aria-relevant', 'additions');
+    expect(live()!.children).toHaveLength(2);
+    expect(live()!.firstElementChild).toBe(first);
+  });
+
+  it('drops the screen reader line once the reply has arrived', async () => {
+    fedRun();
+    renderLocal();
+    await screen.findByText('What does KeepAlive do?');
+    start('c1');
+    settle('c1', true, '<plist/>');
+    const live = () => document.querySelector('[aria-live="polite"]');
+    await waitFor(() => expect(live()).toHaveTextContent('Read File done.'));
+
+    emit({ type: 'text_delta', content: ANSWER });
+    fixture.rows[1].push(savedExchange()[1]);
+    feed({ type: 'end', info: agentRun('r1', 1, 'completed') });
+    await waitFor(() => expect(live()).not.toBeInTheDocument());
   });
 
   it('copies a call\'s arguments, also while it runs', async () => {

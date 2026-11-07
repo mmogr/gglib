@@ -292,6 +292,48 @@ describe('useMessageDeletion, a question and the chat it was asked in', () => {
     expect(transport.deleteMessage).not.toHaveBeenCalled();
   });
 
+  it('leaves the next chat\'s thread alone when the chat is left while the delete runs', async () => {
+    let finish: () => void = () => {};
+    transport.deleteMessage.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(1); }));
+    const { hook, reset } = mount(async () => true);
+    let deleting: Promise<void> = Promise.resolve();
+    await act(async () => {
+      deleting = hook.result.current('db-9');
+      await Promise.resolve();
+    });
+    expect(transport.deleteMessage).toHaveBeenCalledTimes(1);
+
+    hook.rerender({ cid: CONVERSATION_ID + 1 });
+    await act(async () => {
+      finish();
+      await deleting;
+    });
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it('asks again after a no: the one-at-a-time guard is let go', async () => {
+    const ask = vi.fn(async () => false);
+    const { hook } = mount(ask);
+    await act(async () => { await hook.result.current('db-9'); });
+    await act(async () => { await hook.result.current('db-9'); });
+    expect(ask).toHaveBeenCalledTimes(2);
+  });
+
+  it('once answered, leaving the chat does not dismiss a question some other surface asked', async () => {
+    const pending = renderHook(() => usePendingConfirm());
+    const { hook } = mount(async () => false);
+    await act(async () => { await hook.result.current('db-9'); });
+
+    let other: Promise<boolean> = Promise.resolve(false);
+    act(() => { other = appConfirm({ title: 'Delete this chat?', confirmLabel: 'Delete' }); });
+    expect(pending.result.current?.opts.title).toBe('Delete this chat?');
+
+    hook.rerender({ cid: CONVERSATION_ID + 1 });
+    expect(pending.result.current?.opts.title).toBe('Delete this chat?');
+    act(() => { pending.result.current?.answer(false); });
+    await act(async () => { await other; });
+  });
+
   it('asks nothing while a delete is asked or under way', async () => {
     let finish: () => void = () => {};
     transport.deleteMessage.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(1); }));

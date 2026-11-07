@@ -45,7 +45,7 @@ const COMPONENTS: Partial<Components> = {
 };
 
 /**
- * A reply's fold: one 12 px line, `▸ Thought for 3.0 s · 2 tool calls`,
+ * A reply's fold: one 12 px line, `▸ Thought for 3 s · 2 tool calls`,
  * that opens in place onto the reasoning and one row per tool call. While
  * the reply thinks the line is live ("Thinking… 4.2 s", from the timing
  * tracker until the transcript has a duration). It is open while the reply

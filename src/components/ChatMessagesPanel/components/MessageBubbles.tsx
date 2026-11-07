@@ -121,11 +121,14 @@ export const AssistantMessageBubble: React.FC = () => {
           )}
         </ThinkingBlock>
       )}
-      {/* While the reply arrives, each tool call that settles is said, once, politely. */}
+      {/* While the reply arrives, each tool call that settles is said, once,
+          politely: one span per call, so the region announces only additions. */}
       {isStreaming && rows.length > 0 && (
-        <span className="sr-only" aria-live="polite">
-          {settledWords(rows)}
-        </span>
+        <div className="sr-only" aria-live="polite" aria-relevant="additions">
+          {settledWords(rows).map((call) => (
+            <span key={call.id}>{call.words} </span>
+          ))}
+        </div>
       )}
       {contentText && (
         <div className="text-base leading-relaxed text-text">

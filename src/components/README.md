@@ -54,7 +54,7 @@ A chat is its own address: the conversation list (left) and the messages panel (
 
 ### Chat Interface
 - **`ChatMessagesPanel/`**: Message display with markdown rendering and composer
-  - **`ThinkingBlock.tsx`**: A reply's fold, `▸ Thought for 3.0 s · 2 tool calls`, live while it thinks, opening in place onto the reasoning and one row per tool call (`ToolCallRow`: arguments, result, Copy)
+  - **`ThinkingBlock.tsx`**: A reply's fold, `▸ Thought for 3 s · 2 tool calls`, live while it thinks, opening in place onto the reasoning and one row per tool call (`ToolCallRow`: arguments, result, Copy)
   - The figure line and the action line under each turn (`TurnFoot`, `TurnActions`), always on the newest reply and on hover or focus elsewhere
   - The title ▾ (Rename, Generate title, System prompt…, Export, Start over, Delete…) and the "Custom system prompt · Edit" line
   - **Message Editing**: Inline edit of a question (Send, asked again) or a reply (Save, kept as written); an edit that would rewrite a saved reply is made on a new branch of the chat, Branch from here in every turn's ⋯, `‹ 2/3 ›` in the foot of a turn where a chat's branches part, and Retry answering a chat that ends in a question (ADR 0017)
