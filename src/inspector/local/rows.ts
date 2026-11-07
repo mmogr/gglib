@@ -3,7 +3,10 @@
  * pinned without a screen. The rows are the plan's arguments grouped by
  * `LaunchArg.decision` (the wire's own grouping key), labelled by the one
  * table here; a row says the plan's narration where it has a decision of
- * that label (the words How it ran uses), else its arguments; the fit sentence and the Context row's note are composed from
+ * the same key (the words How it ran uses), else its arguments. Templates
+ * has no decision of its own in the narration (its `flags` line also holds
+ * the reasoning and embeddings flags), so it reads its arguments. The fit
+ * sentence and the Context row's note are composed from
  * `ContextFit`'s figures; the Sampling and Reasoning rows count the
  * explanation's sources. Nothing is worked out that the daemon did not say.
  *
@@ -31,7 +34,7 @@ export const DECISION_LABELS: Readonly<Record<string, string | null>> = {
   ctx: 'Context',
   images: 'Images',
   templates: 'Templates',
-  flags: 'Templates',
+  flags: 'Flags',
   sampling: 'Sampling',
   reasoning: 'Reasoning',
   mtp: 'Speculative',
@@ -79,7 +82,7 @@ export function runRows(plan: Pick<LaunchPlan, 'args' | 'fit'>, draws: boolean, 
     if (DECISION_LABELS[arg.decision] === null) continue;
     byKey.set(arg.decision, [...(byKey.get(arg.decision) ?? []), arg]);
   }
-  const wanted = draws ? ['parts', ...also] : ['images', 'templates', 'sampling', 'reasoning', ...also];
+  const wanted = draws ? ['parts'] : ['images', 'templates', 'sampling', 'reasoning', ...also];
   for (const key of wanted) if (!byKey.has(key)) byKey.set(key, []);
   return [...byKey]
     .map(([key, args]) => ({ key, label: labelOf(key), args }))
@@ -90,7 +93,7 @@ export function runRows(plan: Pick<LaunchPlan, 'args' | 'fit'>, draws: boolean, 
 export const fileName = (value: string): string => (value.includes('/') ? (value.split('/').pop() ?? value) : value);
 
 /** A whole number grouped (`131,072`); any other value as sent. */
-export const grouped = (value: string): string => (/^\d+$/.test(value) ? Number(value).toLocaleString() : value);
+export const grouped = (value: string): string => (/^\d+$/.test(value) ? Number(value).toLocaleString('en-US') : value);
 
 /** An argument's value for a person: a whole number grouped, a path as its file's name. */
 const readable = (value: string): string => fileName(grouped(value));
@@ -101,12 +104,9 @@ export function argsValue(args: LaunchArg[]): string {
   return args.map((a) => (a.value == null ? a.flag : `${a.flag} ${readable(a.value)}`)).join(' · ');
 }
 
-/** The narration's label for a row: the same key, but templates are narrated as `flags`. */
-const narratedAs = (key: string) => (key === 'templates' ? 'flags' : key);
-
 /** What the narration says of a row's decision, in Rust's words; `null` when it says nothing. */
 export function narrated(narration: LaunchNarration | null | undefined, key: string): string | null {
-  const said = narration?.decisions.find((d) => d.label === narratedAs(key));
+  const said = narration?.decisions.find((d) => d.label === key);
   return said ? grouped(said.value) : null;
 }
 
@@ -124,7 +124,7 @@ export function chosenBy(args: LaunchArg[]): string {
 }
 
 /** A context size: `32K` when it is whole thousands of 1,024, else the number. */
-export const tokens = (n: number): string => (n % 1024 === 0 ? `${n / 1024}K` : n.toLocaleString());
+export const tokens = (n: number): string => (n % 1024 === 0 ? `${n / 1024}K` : n.toLocaleString('en-US'));
 
 /** What a refused fit was missing, from the figures that are `null`. */
 function missing(fit: ContextFit): string {

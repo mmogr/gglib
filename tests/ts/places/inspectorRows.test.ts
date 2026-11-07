@@ -92,7 +92,8 @@ describe('the rows', () => {
       ],
     };
     expect(narrated(narration, 'ctx')).toBe('131,072');
-    expect(narrated(narration, 'templates')).toBe('--jinja (agent tag)');
+    // The narration's `flags` line holds more than Templates' flag, so Templates never reads it.
+    expect(narrated(narration, 'templates')).toBeNull();
     expect(narrated(narration, 'kv')).toBeNull();
     expect(argsValue([arg('-c', 'ctx', '131072')])).toBe('131,072');
   });
@@ -100,6 +101,7 @@ describe('the rows', () => {
   it('are Parts alone for an image model, and keep a decision the table does not know under its own name', () => {
     const plan = { args: [arg('--vae', 'parts', '/m/ae.safetensors'), arg('--steps', 'recipe', '4'), arg('--new', 'novel')], fit: null };
     expect(runRows(plan, true).map((r) => r.label)).toEqual(['Parts', 'novel']);
+    expect(runRows(plan, true, ['mtp']).map((r) => r.label)).toEqual(['Parts', 'novel']);
   });
 
   it("read one argument as its value's file name, several as flag and value", () => {

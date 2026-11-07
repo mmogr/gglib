@@ -374,14 +374,16 @@ describe('the inspector, a model on this machine', () => {
       'title',
       'gglib: q8_0 halves the KV cache at no measured cost',
     );
-    expect(within(row('Templates')).getByText('--jinja (agent tag)')).toBeInTheDocument();
+    expect(row('Templates')).not.toHaveTextContent('(agent tag)');
     expect(within(row('Context')).getByText(/^32,768 · fits/)).toBeInTheDocument();
     // A row the narration says nothing of reads its arguments.
     expect(within(row('Images')).getByText('mmproj-F16.gguf')).toBeInTheDocument();
   });
 
   it('draws Templates as Auto when gglib sends no flag, and Change saves On with the stored rest', async () => {
-    explain.answer = launchExplanation(samplingExplanation(), noJinja());
+    // The narration's flags line names the reasoning flag; it is not Templates' value.
+    const narration = { model_name: 'Gemma-3-4B-It', quantization: null, weights_bytes: 1, decisions: [{ label: 'flags', value: '--reasoning-format deepseek (reasoning tag)', source: null }] };
+    explain.answer = launchExplanation(samplingExplanation(), { ...noJinja(), narration });
     renderInspector(guiModel({ ...GEMMA, serverDefaults: { contextLength: 16384 } }));
     const user = userEvent.setup();
     await screen.findByRole('group', { name: 'Templates' });
@@ -476,6 +478,30 @@ describe('the inspector, a model on this machine', () => {
     await user.type(field, '/models/other.gguf{Enter}');
     await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, filePath: '/models/other.gguf' }));
     await waitFor(() => expect(explain.reads).toBeGreaterThan(reads));
+  });
+
+  it('reads the launch again after a tag is removed in Details', async () => {
+    localStorage.setItem('gglib.inspector.details', 'open');
+    transport.getModelDetail.mockResolvedValue({ tags: ['agent'] } as never);
+    renderInspector();
+    const user = userEvent.setup();
+    const remove = await screen.findByRole('button', { name: 'Remove tag agent' });
+    const reads = explain.reads;
+    await user.click(remove);
+
+    await waitFor(() => expect(transport.removeModelTag).toHaveBeenCalledWith(9, 'agent'));
+    await waitFor(() => expect(explain.reads).toBeGreaterThan(reads));
+    transport.getModelDetail.mockResolvedValue(null);
+  });
+
+  it('says a refused llama.cpp install as a failed load', async () => {
+    setup.status = { llamaInstalled: false, llamaCanDownload: true };
+    renderInspector();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Install llama.cpp' }));
+    act(() => install.onEvent?.({ type: 'failed', message: 'no build for this Mac' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Didn't load: no build for this Mac");
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('reads the launch again after the tags are re-detected', async () => {

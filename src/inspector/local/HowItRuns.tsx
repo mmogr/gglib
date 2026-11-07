@@ -97,7 +97,7 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
         <Caption title="How it ran" aside="as launched" />
         <dl className="m-0">
           {narration.decisions.map((d) => {
-            const kind = d.label === 'flags' ? 'templates' : d.label;
+            const kind = d.label;
             return (
               <Row
                 key={d.label}

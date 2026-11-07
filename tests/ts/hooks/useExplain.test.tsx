@@ -39,6 +39,21 @@ describe('useExplain', () => {
     expect(result.current.failed).toBe(false);
   });
 
+  it('keeps the newer answer when an overtaken read fails after it', async () => {
+    // The first read (the older profile) fails late; the second answers first.
+    explainModel.mockImplementationOnce(() => new Promise((_resolve, reject) => setTimeout(() => reject(new Error('gone')), 0)));
+    const second = held();
+    const { result, rerender } = renderHook(({ profile }) => useExplain(9, profile), {
+      initialProps: { profile: 'coding' as string | null },
+    });
+    rerender({ profile: null });
+    const fresh = launchExplanation(samplingExplanation({ profile: null }));
+    await second(fresh);
+    await act(async () => new Promise((r) => setTimeout(r, 5)));
+    expect(result.current.explanation).toBe(fresh);
+    expect(result.current.failed).toBe(false);
+  });
+
   it('is a failure when the daemon has no explanation', async () => {
     explainModel.mockResolvedValueOnce(null);
     const { result } = renderHook(() => useExplain(9, null));

@@ -24,7 +24,7 @@ import { REASONING_KEYS, SAMPLING_KEYS } from './rows';
 export type Update = (id: number, updates: ModelUpdates) => Promise<void>;
 
 /** The rows Change can turn into a control, by decision key. */
-export const CHANGEABLE: ReadonlySet<string> = new Set(['ctx', 'images', 'parts', 'sampling', 'reasoning', 'templates', 'flags', 'mtp']);
+export const CHANGEABLE: ReadonlySet<string> = new Set(['ctx', 'images', 'parts', 'sampling', 'reasoning', 'templates', 'mtp']);
 
 const stored = (model: GgufModel): ServerConfig => model.serverDefaults ?? { contextLength: null };
 
@@ -38,7 +38,7 @@ function without(model: GgufModel, keys: readonly string[]): SparseInferenceConf
 /** What a row's Reset sends: its stored value cleared, the rest kept. */
 export function reset(key: string, model: GgufModel): ModelUpdates | null {
   if (key === 'ctx') return { serverDefaults: { ...stored(model), contextLength: null } };
-  if (key === 'templates' || key === 'flags') return { serverDefaults: { ...stored(model), jinja: null } };
+  if (key === 'templates') return { serverDefaults: { ...stored(model), jinja: null } };
   if (key === 'mtp') return { serverDefaults: { ...stored(model), mtp: null } };
   if (key === 'sampling') return { inferenceDefaults: without(model, SAMPLING_KEYS) };
   if (key === 'reasoning') return { inferenceDefaults: without(model, REASONING_KEYS) };
@@ -120,7 +120,7 @@ export const Change: FC<ChangeProps> = ({ kind, model, detail, sampling, servesA
         {buttons(valid ? submit : undefined)}
       </>
     );
-  } else if (kind === 'templates' || kind === 'flags' || kind === 'mtp') {
+  } else if (kind === 'templates' || kind === 'mtp') {
     const field = kind === 'mtp' ? 'mtp' : 'jinja';
     control = (
       <>
