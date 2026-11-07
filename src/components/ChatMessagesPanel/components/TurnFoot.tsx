@@ -1,5 +1,5 @@
-import { FC, ReactNode, useState, type FocusEvent } from 'react';
-import { figureDetail, figureLine, turnTime, type ReplyFacts } from '../../../readings/turnFigures';
+import { FC, Fragment, ReactNode, useState, type FocusEvent } from 'react';
+import { UNFINISHED, figureDetail, figureParts, turnTime, type ReplyFacts } from '../../../readings/turnFigures';
 import { cn } from '../../../utils/cn';
 
 /**
@@ -23,13 +23,22 @@ export function useTurnReveal() {
   };
 }
 
-/** A reply's figure line, one 12 px line, with every figure it has in its tooltip; nothing when it has none. */
+/**
+ * A reply's figure line, one 12 px line, with every figure it has in its
+ * tooltip; nothing when it has none. "unfinished" is in the warning colour:
+ * the reply is degraded (SY-1).
+ */
 export const FigureLine: FC<{ facts: ReplyFacts }> = ({ facts }) => {
-  const line = figureLine(facts);
-  if (!line) return null;
+  const parts = figureParts(facts);
+  if (parts.length === 0) return null;
   return (
     <span className="tabular-nums" title={figureDetail(facts).join('\n')}>
-      {line}
+      {parts.map((part, at) => (
+        <Fragment key={part}>
+          {at > 0 && ' · '}
+          {part === UNFINISHED ? <span className="text-warning">{part}</span> : part}
+        </Fragment>
+      ))}
     </span>
   );
 };

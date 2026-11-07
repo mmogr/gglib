@@ -32,6 +32,8 @@ vi.mock('../../../src/services/platform', () => ({
 
 import { deleteQuestion, useMessageDeletion } from '../../../src/components/ChatMessagesPanel/hooks/useMessageDeletion';
 import { TransportError } from '../../../src/services/transport';
+import { confirm as appConfirm, usePendingConfirm } from '../../../src/app/confirm';
+import type { ConfirmOptions } from '../../../src/components/ui/ConfirmDialog';
 import type { ChatMessage, ConversationSummary } from '../../../src/services/transport';
 
 const CONVERSATION_ID = 7;
@@ -208,5 +210,107 @@ describe('useMessageDeletion', () => {
       'A reply is still being written here. Stop it or wait, then delete.',
       'error',
     );
+  });
+});
+
+describe('useMessageDeletion, a question and the chat it was asked in', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    transport.getThread.mockResolvedValue({ messages: messagesWithToolCall });
+    transport.deleteMessage.mockResolvedValue(1);
+  });
+
+  function mount(ask: (opts: ConfirmOptions) => Promise<boolean>) {
+    const reset = vi.fn();
+    const threadRuntime = { getState: () => ({ messages: [{ id: 'db-9', role: 'user' }] }), reset } as any;
+    const hook = renderHook(
+      ({ cid }: { cid: number }) =>
+        useMessageDeletion({
+          threadRuntime,
+          activeConversationId: cid,
+          activeConversation: conversation,
+          syncConversations: vi.fn().mockResolvedValue(undefined),
+          showToast: vi.fn(),
+          confirm: ask,
+        }),
+      { initialProps: { cid: CONVERSATION_ID } },
+    );
+    return { hook, reset };
+  }
+
+  /** A confirm the test answers by hand. */
+  function heldConfirm() {
+    let answer: (yes: boolean) => void = () => {};
+    const ask = vi.fn(() => new Promise<boolean>((resolve) => { answer = resolve; }));
+    return { ask, answer: (yes: boolean) => answer(yes) };
+  }
+
+  it('deletes nothing when the answer comes after the panel is gone', async () => {
+    const held = heldConfirm();
+    const { hook, reset } = mount(held.ask);
+    let deleting: Promise<void> = Promise.resolve();
+    act(() => { deleting = hook.result.current('db-9'); });
+
+    hook.unmount();
+    await act(async () => {
+      held.answer(true);
+      await deleting;
+    });
+
+    expect(transport.deleteMessage).not.toHaveBeenCalled();
+    expect(transport.getThread).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it('deletes nothing when the answer comes after the panel turned to another chat', async () => {
+    const held = heldConfirm();
+    const { hook, reset } = mount(held.ask);
+    let deleting: Promise<void> = Promise.resolve();
+    act(() => { deleting = hook.result.current('db-9'); });
+
+    hook.rerender({ cid: CONVERSATION_ID + 1 });
+    await act(async () => {
+      held.answer(true);
+      await deleting;
+    });
+
+    expect(transport.deleteMessage).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it('answers its open question no when the chat is left, through the app\'s confirm store', async () => {
+    const pending = renderHook(() => usePendingConfirm());
+    const { hook } = mount(appConfirm);
+    let deleting: Promise<void> = Promise.resolve();
+    act(() => { deleting = hook.result.current('db-9'); });
+    expect(pending.result.current?.opts.title).toBe('Delete this message?');
+
+    hook.unmount();
+    await act(async () => { await deleting; });
+
+    expect(pending.result.current).toBeNull();
+    expect(transport.deleteMessage).not.toHaveBeenCalled();
+  });
+
+  it('asks nothing while a delete is asked or under way', async () => {
+    let finish: () => void = () => {};
+    transport.deleteMessage.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(1); }));
+    const ask = vi.fn(async () => true);
+    const { hook } = mount(ask);
+
+    let first: Promise<void> = Promise.resolve();
+    await act(async () => {
+      first = hook.result.current('db-9');
+      await Promise.resolve();
+    });
+    await act(async () => { await hook.result.current('db-9'); });
+    expect(ask).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      finish();
+      await first;
+    });
+    await act(async () => { await hook.result.current('db-9'); });
+    expect(ask).toHaveBeenCalledTimes(2);
   });
 });

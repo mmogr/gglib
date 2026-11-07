@@ -13,7 +13,7 @@ import { QuestionActions, ReplyActions } from './TurnActions';
 import { arrivingPhase, modelShown, replyFacts } from '../../../readings/turnFigures';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { useRunPreviews } from '../context/RunPreviewsContext';
-import { toolCallRows } from '../../ToolExecutionProgress';
+import { settledWords, toolCallRows } from '../../ToolExecutionProgress';
 import { extractReasoningText } from '../../../utils/messages';
 import { replyImages, type GglibMessageCustom } from '../../../types/messages';
 
@@ -97,13 +97,7 @@ export const AssistantMessageBubble: React.FC = () => {
       {model && <p className="m-0 text-xs text-text-muted">{model}</p>}
       {arriving && (
         <ReplyArrival
-          phase={arrivingPhase({
-            prompt: facts.prompt,
-            waiting: facts.waiting,
-            hasReasoning: false,
-            hasText: false,
-            toolCallsRunning: false,
-          })}
+          phase={arrivingPhase({ prompt: facts.prompt, waiting: facts.waiting })}
           prompt={facts.prompt}
           waiting={facts.waiting}
         />
@@ -126,6 +120,12 @@ export const AssistantMessageBubble: React.FC = () => {
             </ul>
           )}
         </ThinkingBlock>
+      )}
+      {/* While the reply arrives, each tool call that settles is said, once, politely. */}
+      {isStreaming && rows.length > 0 && (
+        <span className="sr-only" aria-live="polite">
+          {settledWords(rows)}
+        </span>
       )}
       {contentText && (
         <div className="text-base leading-relaxed text-text">

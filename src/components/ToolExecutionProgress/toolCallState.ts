@@ -70,6 +70,17 @@ function isToolCall(part: unknown): part is ToolCallPartLike {
   return typeof part === 'object' && part !== null && (part as { type?: unknown }).type === 'tool-call';
 }
 
+/**
+ * What a screen reader is told of a reply's tool calls as they settle: one
+ * sentence per call that has, in the order called.
+ */
+export function settledWords(rows: readonly ToolCallRow[]): string {
+  return rows
+    .filter((row) => row.state !== 'running')
+    .map((row) => (row.state === 'failed' ? `${row.label} failed.` : `${row.label} done.`))
+    .join(' ');
+}
+
 /** One row per tool call of a reply's content, in the order called. */
 export function toolCallRows(content: readonly unknown[]): ToolCallRow[] {
   return content.filter(isToolCall).map((part) => {

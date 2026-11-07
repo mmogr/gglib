@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-React components and rendering logic for displaying tool execution results in the chat UI. Each renderer is a plain object implementing `renderResult()` for full display and optionally `renderSummary()` for compact inline headers. Renderers are stored on `RegisteredTool` objects in the tool registry and looked up at render time.
+React components and rendering logic for displaying tool execution results in the chat UI. Each renderer is a plain object implementing `renderResult()`, which draws the result under a tool call's arguments in a reply's fold. Renderers are stored on `RegisteredTool` objects in the tool registry and looked up at render time.
 
 ## Key Files
 

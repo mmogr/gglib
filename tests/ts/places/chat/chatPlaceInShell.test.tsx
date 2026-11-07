@@ -80,8 +80,8 @@ describe('a chat in the window', () => {
 
     await waitFor(() => expect(app.at()).toBe('/chat/1'), SLOW);
     expect(app.router.state.historyAction).toBe('REPLACE');
-    const row = await within(chats).findByRole('button', { name: 'New Chat' }, SLOW);
-    expect(row).toHaveAttribute('aria-current', 'page');
+    // The row comes with the list, its mark with the address: each waited for.
+    await waitFor(() => expect(within(chats).getByRole('button', { name: 'New Chat' })).toHaveAttribute('aria-current', 'page'), SLOW);
     expect(await screen.findByText('Five largest files?', {}, SLOW)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^Library/ }));

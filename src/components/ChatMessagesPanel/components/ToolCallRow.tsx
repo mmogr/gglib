@@ -24,17 +24,17 @@ function stateWords(row: Row): string | null {
   return row.durationMs !== undefined ? secondsWords(row.durationMs / 1000) : null;
 }
 
-/** Copy, then "Copied" for two seconds. */
-const CopyResult: FC<{ result: unknown }> = ({ result }) => {
+/** Copy `value` as JSON, then "Copied" for two seconds. */
+const CopyJson: FC<{ value: unknown; name: string }> = ({ value, name }) => {
   const [copied, setCopied] = useState(false);
   return (
     <Button
       variant="ghost"
       size="sm"
       className={TEXT_BUTTON}
-      aria-label="Copy result"
+      aria-label={name}
       onClick={() => {
-        navigator.clipboard.writeText(resultText(result)).then(() => {
+        navigator.clipboard.writeText(resultText(value)).then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
         }).catch(() => {});
@@ -48,8 +48,9 @@ const CopyResult: FC<{ result: unknown }> = ({ result }) => {
 /**
  * One tool call in a reply's fold: its name, the MCP server it belongs to,
  * and its state (how far it has got while it runs, its time once done, why
- * it failed), opening in place onto the arguments, then the result, drawn
- * as JSON or a table by the generic renderer, then Copy. A tool still
+ * it failed), opening in place onto the arguments and their Copy (while it
+ * runs too), then the result, drawn by the tool's renderer or the generic
+ * one (JSON, Markdown or a sortable table), then its Copy. A tool still
  * running shows its progress and the picture it is making under the line,
  * open or not; the images a finished tool made are the reply's, not here.
  */
@@ -76,17 +77,20 @@ export const ToolCallRow: FC<{ row: Row; preview?: PreviewFrame }> = ({ row, pre
       </Button>
       {row.state === 'running' && <ToolRunProgress progress={row.progress} preview={preview} />}
       <div id={detailId} hidden={!open} className="pl-base flex flex-col gap-xs">
-        <span className={LABEL}>
-          Arguments <span className="font-mono font-normal">{row.toolName}</span>
-        </span>
+        <div className="flex items-baseline gap-sm">
+          <span className={LABEL}>
+            Arguments <span className="font-mono font-normal">{row.toolName}</span>
+          </span>
+          <CopyJson value={row.args ?? {}} name="Copy arguments" />
+        </div>
         <pre className="m-0 p-sm bg-surface rounded-base font-mono text-xs text-text overflow-x-auto whitespace-pre max-h-[300px]">
-          {JSON.stringify(row.args ?? {}, null, 2)}
+          {resultText(row.args ?? {})}
         </pre>
         {row.state !== 'running' && (
           <>
             <span className={LABEL}>Result</span>
             <ToolResultDisplay toolName={row.toolName} result={row.result} />
-            <CopyResult result={row.result} />
+            <CopyJson value={row.result} name="Copy result" />
           </>
         )}
       </div>

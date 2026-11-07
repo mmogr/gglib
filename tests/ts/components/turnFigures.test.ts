@@ -36,6 +36,19 @@ describe('secondsWords', () => {
     expect(secondsWords(19)).toBe('19 s');
     expect(secondsWords(83)).toBe('1 min 23 s');
   });
+
+  it('rounds to the precision it shows before it chooses the unit', () => {
+    expect(secondsWords(9.95)).toBe('10 s');
+    expect(secondsWords(9.94)).toBe('9.9 s');
+    expect(secondsWords(9.96)).toBe('10 s');
+    expect(secondsWords(59.5)).toBe('1 min 0 s');
+    expect(secondsWords(59.4)).toBe('59 s');
+    expect(secondsWords(59.6)).toBe('1 min 0 s');
+    expect(secondsWords(60)).toBe('1 min 0 s');
+    expect(secondsWords(90)).toBe('1 min 30 s');
+    expect(secondsWords(119.6)).toBe('2 min 0 s');
+    expect(secondsWords(3599.6)).toBe('60 min 0 s');
+  });
 });
 
 describe('foldSummary', () => {
@@ -147,33 +160,27 @@ describe('replyFacts', () => {
 });
 
 describe('arrivingPhase', () => {
-  const none = { hasReasoning: false, hasText: false, toolCallsRunning: false };
+  const none = {};
 
   it('follows the events so far', () => {
     expect(arrivingPhase(none)).toBe('Waiting for the model');
     expect(arrivingPhase({ ...none, prompt: { processed: 1, total: 2, cached: 0 } })).toBe('Reading the prompt');
     expect(arrivingPhase({ ...none, prompt: { processed: 2, total: 2, cached: 0 } })).toBe('Starting the reply');
-    expect(arrivingPhase({ ...none, hasReasoning: true })).toBe('Thinking');
-    expect(arrivingPhase({ ...none, hasReasoning: true, hasText: true })).toBe('Writing');
-    expect(arrivingPhase({ ...none, hasText: true, toolCallsRunning: true })).toBe('Calling tools');
   });
 });
 
 describe('a reply that waits', () => {
-  const none = { hasReasoning: false, hasText: false, toolCallsRunning: false };
+  const none = {};
   const render = { reason: 'image_render' as const, step: 3, total: 20, position: 1 };
   const load = { reason: 'model_load' as const, step: 0, total: 0, position: 0 };
 
-  it('says what it waits for, until the model writes, thinks or calls a tool', () => {
+  it('says what it waits for, until the model reads the prompt', () => {
     expect(arrivingPhase({ ...none, waiting: render })).toBe('Queued behind an image render');
     expect(arrivingPhase({ ...none, waiting: load })).toBe('Waiting for the model to load');
     // A wait still on the turn is newer than its prompt reading, which takes an older one off.
     expect(arrivingPhase({ ...none, waiting: render, prompt: { processed: 2, total: 2, cached: 0 } })).toBe(
       'Queued behind an image render',
     );
-    expect(arrivingPhase({ ...none, waiting: render, hasReasoning: true })).toBe('Thinking');
-    expect(arrivingPhase({ ...none, waiting: render, hasText: true })).toBe('Writing');
-    expect(arrivingPhase({ ...none, waiting: render, toolCallsRunning: true })).toBe('Calling tools');
   });
 
   it('says the step the render is on, and its place in line only when it is not next', () => {

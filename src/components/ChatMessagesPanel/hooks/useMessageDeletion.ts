@@ -4,6 +4,7 @@ import { appLogger } from '../../../services/platform';
 import { getTransport, TransportError } from '../../../services/transport';
 import type { ConversationSummary } from '../../../services/transport';
 import type { ConfirmOptions } from '../../ui/ConfirmDialog';
+import { dismissConfirm } from '../../../app/confirm';
 import { extractDbId } from '../components/MessageActionsContext';
 import { buildThreadMessages } from '../../../hooks/useChatPersistence/buildThreadMessages';
 import type { ToastType } from '../../Toast';
@@ -50,6 +51,12 @@ export function deleteQuestion(count: number): ConfirmOptions {
  * ends. A message still being drawn has none, and deleting it deletes
  * nothing. The daemon refuses (409) while a reply to the chat is being
  * written, and the toast says so.
+ *
+ * The question belongs to the chat it was asked in. The confirm store is
+ * the app's, and outlives this panel: leaving the chat while it is open
+ * (⌘N, the native menu's Show Chat) answers it no, and an answer that
+ * comes after the chat was left, or turned far, deletes nothing. One delete
+ * at a time: Delete… asks nothing while one is asked or under way.
  */
 export function useMessageDeletion({
   threadRuntime,
@@ -60,11 +67,29 @@ export function useMessageDeletion({
   confirm,
   readOnly = false,
 }: UseMessageDeletionOptions): (runtimeMessageId: string) => Promise<void> {
-  // Read again once the question is answered: the page may have turned to a far chat meanwhile.
-  const readOnlyNow = useRef(readOnly);
+  // Read again once the question is answered: the page may have left the
+  // chat, or turned to a far chat, meanwhile.
+  const now = useRef({ alive: true, readOnly, conversationId: activeConversationId });
   useEffect(() => {
-    readOnlyNow.current = readOnly;
-  }, [readOnly]);
+    now.current.readOnly = readOnly;
+    now.current.conversationId = activeConversationId;
+  }, [readOnly, activeConversationId]);
+  useEffect(() => {
+    const state = now.current;
+    state.alive = true;
+    return () => {
+      state.alive = false;
+    };
+  }, []);
+
+  /** A question this hook asked is open. */
+  const asking = useRef(false);
+  /** A delete is asked or under way. */
+  const busy = useRef(false);
+  // Leaving the chat answers its open question no.
+  useEffect(() => () => {
+    if (asking.current) dismissConfirm();
+  }, [activeConversationId]);
 
   /** The target message plus every non-system message after it. */
   const cascadeCount = useCallback((runtimeMessageId: string): number => {
@@ -74,11 +99,8 @@ export function useMessageDeletion({
     return messages.slice(at).filter((m) => m.role !== 'system').length;
   }, [threadRuntime]);
 
-  return useCallback(async (runtimeMessageId: string) => {
-    if (readOnly || !threadRuntime || !activeConversationId) return;
-    if (!(await confirm(deleteQuestion(cascadeCount(runtimeMessageId))))) return;
-    if (readOnlyNow.current) return;
-
+  /** Delete the row (and every one after it), then show the chat as the daemon now has it. */
+  const deleteAndReload = useCallback(async (runtimeMessageId: string, conversationId: number) => {
     try {
       const dbId = extractDbId(runtimeMessageId);
       if (dbId) {
@@ -87,8 +109,8 @@ export function useMessageDeletion({
         appLogger.debug('component.chat', 'Could not find DB ID for message', { messageId: runtimeMessageId });
       }
 
-      const dbMessages = (await getTransport().getThread(activeConversationId)).messages;
-      threadRuntime.reset(buildThreadMessages(dbMessages, activeConversation, activeConversationId));
+      const dbMessages = (await getTransport().getThread(conversationId)).messages;
+      threadRuntime?.reset(buildThreadMessages(dbMessages, activeConversation, conversationId));
 
       await syncConversations({ silent: true });
       showToast('Message deleted', 'success');
@@ -102,5 +124,25 @@ export function useMessageDeletion({
         'error',
       );
     }
-  }, [readOnly, threadRuntime, activeConversationId, activeConversation, syncConversations, showToast, confirm, cascadeCount]);
+  }, [threadRuntime, activeConversation, syncConversations, showToast]);
+
+  return useCallback(async (runtimeMessageId: string) => {
+    if (readOnly || !threadRuntime || !activeConversationId || busy.current) return;
+    busy.current = true;
+    try {
+      asking.current = true;
+      let yes: boolean;
+      try {
+        yes = await confirm(deleteQuestion(cascadeCount(runtimeMessageId)));
+      } finally {
+        asking.current = false;
+      }
+      const still = now.current;
+      if (!yes || !still.alive || still.readOnly || still.conversationId !== activeConversationId) return;
+      await deleteAndReload(runtimeMessageId, activeConversationId);
+    } finally {
+      busy.current = false;
+    }
+  }, [readOnly, threadRuntime, activeConversationId, confirm, cascadeCount, deleteAndReload]);
 }
+

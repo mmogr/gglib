@@ -13,13 +13,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
 import { useToastContext } from '../../../../src/contexts/ToastContext';
 import type { ChatMessage } from '../../../../src/services/transport';
-import { agentRun, chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, ChatPlaceWithList, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../../src/services/transport', async () => {
@@ -29,6 +29,8 @@ vi.mock('../../../../src/services/transport', async () => {
 
 import ChatPlace from '../../../../src/places/chat/ChatPlace';
 import { TransportError } from '../../../../src/services/transport';
+import { getToolRegistry } from '../../../../src/services/tools/registry';
+import { mcpGenericRenderer } from '../../../../src/services/tools/renderers';
 
 /** The toasts, which `ToastProvider` holds but does not draw. */
 const ToastProbe = () => {
@@ -218,6 +220,139 @@ describe('ChatPlace, the thread', () => {
   });
 });
 
+describe('ChatPlace, a reply\'s tool calls', () => {
+  type Item = { type: 'frame'; seq: number; data: string } | { type: 'end'; info: ReturnType<typeof agentRun> };
+  let feed: (item: Item) => void = () => {};
+  let seq = 0;
+  /** The run in chat 1 is read as the test feeds it, until it ends. */
+  function fedRun() {
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    (stub() as { readRunEvents: unknown }).readRunEvents = async function* (_id: string, _after: number, signal: AbortSignal) {
+      const queue: Item[] = [];
+      let wake = () => {};
+      feed = (item) => {
+        queue.push(item);
+        wake();
+      };
+      signal.addEventListener('abort', () => wake());
+      while (!signal.aborted) {
+        while (queue.length > 0) {
+          const item = queue.shift()!;
+          yield item;
+          if (item.type === 'end') return;
+        }
+        await new Promise<void>((resolve) => (wake = resolve));
+      }
+    };
+  }
+  const emit = (event: object) => feed({ type: 'frame', seq: ++seq, data: JSON.stringify(event) });
+  const start = (id: string, args: object = {}) =>
+    emit({ type: 'tool_call_start', tool_call: { id, name: 'read_file', arguments: args }, display_name: 'Read File' });
+  const settle = (id: string, success: boolean, content: string) =>
+    emit({
+      type: 'tool_call_complete',
+      tool_name: 'read_file',
+      result: { tool_call_id: id, content, success },
+      wait_ms: 0,
+      execute_duration_ms: 1200,
+      display_name: 'Read File',
+      duration_display: '1.2s',
+    });
+
+  beforeEach(() => {
+    fixture.rows[1] = [savedExchange()[0]];
+    seq = 0;
+  });
+
+  it('keeps the person\'s choice of the fold after the reply finishes', async () => {
+    const user = userEvent.setup();
+    fedRun();
+    renderLocal();
+    await screen.findByText('What does KeepAlive do?');
+    emit({ type: 'reasoning_delta', content: 'Looking at the plist.' });
+
+    const fold = await screen.findByRole('button', { name: /^Thinking…/ });
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+    await user.click(fold);
+    await user.click(fold);
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+
+    emit({ type: 'text_delta', content: ANSWER });
+    fixture.rows[1].push({ ...savedExchange()[1], metadata: { thinking: 'Looking at the plist.', thinkingDurationSeconds: 3 } });
+    feed({ type: 'end', info: agentRun('r1', 1, 'completed') });
+
+    // Closed by default once it has arrived; open, as the person left it.
+    const done = await screen.findByRole('button', { name: 'Thought for 3.0 s' });
+    expect(done).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('says a tool that failed, and why, in the danger colour, and tells a screen reader as each call settles', async () => {
+    fedRun();
+    renderLocal();
+    await screen.findByText('What does KeepAlive do?');
+    start('c1');
+    start('c2');
+    const calls = await screen.findByRole('list', { name: 'Tool calls' });
+    const live = () => document.querySelector('[aria-live="polite"]');
+    await waitFor(() => expect(live()).toBeInTheDocument());
+    expect(live()).toHaveTextContent(/^$/);
+
+    settle('c1', true, '<plist/>');
+    await waitFor(() => expect(live()).toHaveTextContent(/^Read File done\.$/));
+    settle('c2', false, 'permission denied');
+
+    const failed = await within(calls).findByText('failed · permission denied');
+    expect(failed).toHaveClass('text-danger');
+    expect(within(calls).getAllByRole('img', { name: 'Failed' })).toHaveLength(1);
+    expect(within(calls).getByText('1.2 s')).not.toHaveClass('text-danger');
+    expect(live()).toHaveTextContent(/^Read File done\. Read File failed\.$/);
+  });
+
+  it('copies a call\'s arguments, also while it runs', async () => {
+    const user = userEvent.setup();
+    fedRun();
+    renderLocal();
+    await screen.findByText('What does KeepAlive do?');
+    start('c1', { path: 'job.plist' });
+
+    const call = await screen.findByRole('button', { name: /Read File/ });
+    await user.click(call);
+    const detail = document.getElementById(call.getAttribute('aria-controls')!)!;
+    expect(within(detail).queryByRole('button', { name: 'Copy result' })).not.toBeInTheDocument();
+    await user.click(within(detail).getByRole('button', { name: 'Copy arguments' }));
+    expect(await navigator.clipboard.readText()).toBe('{\n  "path": "job.plist"\n}');
+  });
+
+  it('draws a result through the tool\'s registered renderer: the generic one for an MCP tool (CH-12)', async () => {
+    const registry = getToolRegistry();
+    registry.registerWithNameMapping(
+      'notes',
+      '3',
+      'notes',
+      { type: 'function', function: { name: 'notes', description: 'Notes', parameters: { type: 'object', properties: {} } } },
+      'mcp:3',
+      mcpGenericRenderer,
+    );
+    try {
+      fixture.rows[1] = [
+        savedExchange()[0],
+        { ...savedExchange()[1], metadata: { tool_calls: [{ id: 'c1', name: 'notes', arguments: {} }] } },
+        { ...savedExchange()[2], content: '# Release notes\n\n- **fast** paths everywhere' },
+      ];
+      const user = userEvent.setup();
+      renderLocal();
+      await user.click(await screen.findByRole('button', { name: '1 tool call' }));
+      const call = screen.getByRole('button', { name: /^Notes/ });
+      await user.click(call);
+      const detail = document.getElementById(call.getAttribute('aria-controls')!)!;
+      expect(within(detail).getByRole('heading', { name: 'Release notes' })).toBeVisible();
+      expect(within(detail).getByText('fast').tagName).toBe('STRONG');
+    } finally {
+      registry.unregister('notes');
+    }
+  });
+});
+
 describe('ChatPlace, a reply\'s figures', () => {
   it('shows the newest reply\'s figure line always, with every figure in its tooltip', async () => {
     fixture.rows[1][1].metadata = { ...fixture.rows[1][1].metadata, ...MADE };
@@ -249,6 +384,15 @@ describe('ChatPlace, a reply\'s figures', () => {
     expect(within(earlier).getByText('41 s · 12 tok/s · 2,100 tokens reused')).toBeInTheDocument();
     await user.unhover(earlier);
     expect(within(earlier).queryByText(/tokens reused/)).not.toBeInTheDocument();
+  });
+
+  it('says "unfinished" in the warning colour', async () => {
+    fixture.rows[1][1].metadata = { ...fixture.rows[1][1].metadata, ...MADE, incomplete: true };
+    renderLocal();
+    await screen.findByText(ANSWER);
+    const word = screen.getByText('unfinished');
+    expect(word).toHaveClass('text-warning');
+    expect(word.parentElement).toHaveTextContent('unfinished · 41 s · 12 tok/s · 2,100 tokens reused');
   });
 
   it('says no rate for a reply of one token', async () => {
@@ -335,6 +479,29 @@ describe('ChatPlace, the action line', () => {
 
     await user.click(within(sheet).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(stub().deleteMessage).toHaveBeenCalledWith(11));
+  });
+
+  it('leaving the chat while Delete… is asked takes the question with it, and deletes nothing', async () => {
+    const user = userEvent.setup();
+    fixture.conversations.push(conversation(2, 'Parsing GGUF'));
+    fixture.rows[2] = [
+      { id: 21, conversation_id: 2, role: 'user', content: 'What is a tensor?', created_at: '2026-09-01T10:00:00Z' },
+      { id: 22, conversation_id: 2, role: 'assistant', content: 'A block of numbers.', created_at: '2026-09-01T10:00:09Z' },
+    ];
+    render(<ChatPlaceWithList modelName="Qwen3.8-27B" modelId={7} serverPort={4321} conversationId={1} />, { wrapper });
+    await screen.findByText(ANSWER);
+
+    await user.click(screen.getByRole('button', { name: 'More for this message' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete…' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    // Another chat opens under the sheet, as ⌘N or the menu's Show Chat opens one.
+    fireEvent.click(screen.getByRole('option', { name: /Parsing GGUF/, hidden: true }));
+    await screen.findByText('A block of numbers.');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(stub().deleteMessage).not.toHaveBeenCalled();
+    expect(screen.getByText('A block of numbers.')).toBeInTheDocument();
   });
 
   it('says why a delete is refused while a reply is being written', async () => {

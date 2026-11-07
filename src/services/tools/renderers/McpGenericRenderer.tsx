@@ -82,8 +82,4 @@ export const mcpGenericRenderer: ToolResultRenderer = {
 
     return fallbackRenderer.renderResult(data, toolName);
   },
-
-  renderSummary(data, toolName) {
-    return fallbackRenderer.renderSummary!(data, toolName);
-  },
 };

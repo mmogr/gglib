@@ -21,12 +21,17 @@ import { formatCount } from '../utils/format';
 import { formatPerSecond } from '../utils/formatPerSecond';
 import { tokensPerSecond } from './throughput';
 
-/** Seconds as a turn says them: "0.4 s", "4.7 s" under ten, "19 s", "1 min 23 s". */
+/**
+ * Seconds as a turn says them: "0.4 s", "4.7 s" under ten, "19 s", "1 min 23 s".
+ * Rounded to the precision shown before the unit is chosen, so 9.96 is
+ * "10 s" and 59.6 is "1 min 0 s", never "10.0 s" or "60 s".
+ */
 export function secondsWords(seconds: number): string {
-  if (seconds < 10) return `${seconds.toFixed(1)} s`;
-  if (seconds < 60) return `${Math.round(seconds)} s`;
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes} min ${Math.round(seconds % 60)} s`;
+  const tenths = Math.round(seconds * 10) / 10;
+  if (tenths < 10) return `${tenths.toFixed(1)} s`;
+  const whole = Math.round(seconds);
+  if (whole < 60) return `${whole} s`;
+  return `${Math.floor(whole / 60)} min ${whole % 60} s`;
 }
 
 /** The facts about one reply its figures are drawn from. */
@@ -75,22 +80,28 @@ export function foldSummary(parts: { thinking: boolean; live: boolean; seconds: 
   return words.join(' · ');
 }
 
+/** The word the figure line starts with for a reply the daemon saved unfinished. */
+export const UNFINISHED = 'unfinished';
+
 /**
- * The figure line: whether it finished, how long it took, how fast it
- * wrote, and how much of the prompt the cache saved; empty when the reply
+ * The figure line's parts: whether it finished, how long it took, how fast
+ * it wrote, and how much of the prompt the cache saved; none when the reply
  * has none of them.
  */
-export function figureLine(facts: ReplyFacts): string {
+export function figureParts(facts: ReplyFacts): string[] {
   const made = facts.made;
   const rate = writingRate(made);
   return [
-    facts.unfinished ? 'unfinished' : null,
+    facts.unfinished ? UNFINISHED : null,
     made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
     rate != null ? `${formatPerSecond(rate)} tok/s` : null,
     made?.cachedTokens != null ? `${formatCount(made.cachedTokens)} tokens reused` : null,
-  ]
-    .filter((part): part is string => part !== null)
-    .join(' · ');
+  ].filter((part): part is string => part !== null);
+}
+
+/** The figure line, as it reads: its parts with " · " between them; empty with none. */
+export function figureLine(facts: ReplyFacts): string {
+  return figureParts(facts).join(' · ');
 }
 
 /** The figure line's tooltip: every figure the reply has, one line each. */
@@ -128,32 +139,23 @@ export function modelShown(facts: ReplyFacts, previous: string | null | undefine
   return previous === name ? null : name;
 }
 
-/** What a reply still arriving is doing, as its events so far say. */
+/**
+ * What a reply with no token yet is waiting for, as its events so far say.
+ * Once a token comes the fold and the text say what it is doing.
+ */
 export type ArrivingPhase =
   | 'Waiting for the model'
   | 'Queued behind an image render'
   | 'Waiting for the model to load'
   | 'Reading the prompt'
-  | 'Starting the reply'
-  | 'Thinking'
-  | 'Writing'
-  | 'Calling tools';
+  | 'Starting the reply';
 
 /**
  * A wait is said only until the model reads the prompt: a prompt reading
  * that comes after it takes it off the turn, so one still there is the
  * newer of the two.
  */
-export function arrivingPhase(parts: {
-  prompt?: PromptReading;
-  waiting?: TurnWaiting;
-  hasReasoning: boolean;
-  hasText: boolean;
-  toolCallsRunning: boolean;
-}): ArrivingPhase {
-  if (parts.toolCallsRunning) return 'Calling tools';
-  if (parts.hasText) return 'Writing';
-  if (parts.hasReasoning) return 'Thinking';
+export function arrivingPhase(parts: { prompt?: PromptReading; waiting?: TurnWaiting }): ArrivingPhase {
   if (parts.waiting) {
     return parts.waiting.reason === 'image_render' ? 'Queued behind an image render' : 'Waiting for the model to load';
   }

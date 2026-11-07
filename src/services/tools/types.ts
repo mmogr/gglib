@@ -66,8 +66,6 @@ export interface ToolDefinition {
 export interface ToolResultRenderer {
   /** Render the full result as a React node for display in the chat. */
   renderResult(data: unknown, toolName: string): ReactNode;
-  /** Render a compact plain-text summary (used in collapsed headers). Must not throw. */
-  renderSummary?(data: unknown, toolName: string): string;
 }
 
 /**
