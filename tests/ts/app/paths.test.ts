@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
   benchmarkModelIds,
   inspectorClosed,
+  chatAddress,
   inspectorSubject,
   libraryIntent,
   menuModelId,
@@ -26,6 +27,9 @@ describe('paths', () => {
     expect(paths.log(7)).toBe('/models/7/log');
     expect(paths.hf('owner/Qwen3-8B-GGUF')).toBe('/get/owner/Qwen3-8B-GGUF');
     expect(paths.farChat(3)).toBe('/chat/far/3');
+    expect(paths.newChat()).toBe('/chat/new');
+    expect(paths.newChat({ model: 9 })).toBe('/chat/new?model=9');
+    expect(paths.newChat({ far: 3 })).toBe('/chat/new?far=3');
     expect(paths.benchmarks([9, 11])).toBe('/diagnostics/benchmarks?models=9,11');
     expect(paths.benchmarks()).toBe('/diagnostics/benchmarks');
     expect(paths.devices()).toBe('/devices');
@@ -62,15 +66,28 @@ describe('paths', () => {
     expect(withoutParam({ pathname: '/endpoint', search: '?inspect=model:7&serve=1' }, 'serve')).toBe('/endpoint?inspect=model%3A7');
   });
 
-  it("menuModelId is the inspector's model or the open chat's, and nothing elsewhere", () => {
+  it("menuModelId is the inspector's model, and nothing elsewhere: a chat's address names a conversation", () => {
     expect(menuModelId({ pathname: '/models/7' })).toBe(7);
     expect(menuModelId({ pathname: '/models/7/log' })).toBe(7);
     expect(menuModelId({ pathname: '/get/owner/name' })).toBeNull();
-    expect(menuModelId({ pathname: '/chat/7' })).toBe(7);
+    expect(menuModelId({ pathname: '/chat/7' })).toBeNull();
     expect(menuModelId({ pathname: '/chat/far/3' })).toBeNull();
     expect(menuModelId({ pathname: '/far/3' })).toBeNull();
     expect(menuModelId({ pathname: '/library' })).toBeNull();
     expect(menuModelId({ pathname: '/chat/7/log' })).toBeNull();
+  });
+
+  it('chatAddress reads a chat back: a saved conversation, an empty one on a model, the far machine\'s own', () => {
+    expect(chatAddress({ pathname: '/chat/7', search: '' })).toEqual({ kind: 'saved', id: 7 });
+    expect(chatAddress({ pathname: '/chat/new', search: '' })).toEqual({ kind: 'new', model: null, far: null });
+    expect(chatAddress({ pathname: '/chat/new', search: '?model=9' })).toEqual({ kind: 'new', model: 9, far: null });
+    expect(chatAddress({ pathname: '/chat/new', search: '?far=3' })).toEqual({ kind: 'new', model: null, far: 3 });
+    expect(chatAddress({ pathname: '/chat/new', search: '?model=x' })).toEqual({ kind: 'new', model: null, far: null });
+    expect(chatAddress({ pathname: '/chat/far/3', search: '' })).toEqual({ kind: 'far', id: 3 });
+    expect(chatAddress({ pathname: '/chat/far/x', search: '' })).toBeNull();
+    expect(chatAddress({ pathname: '/chat/7/log', search: '' })).toBeNull();
+    expect(chatAddress({ pathname: '/chat/seven', search: '' })).toBeNull();
+    expect(chatAddress({ pathname: '/models/7', search: '' })).toBeNull();
   });
 
   it('the settings dialog is a search parameter over the place, opened and closed without moving', () => {

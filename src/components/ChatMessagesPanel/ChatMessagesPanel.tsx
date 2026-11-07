@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ThreadPrimitive,
   useThreadRuntime,
@@ -7,7 +7,7 @@ import {
 import type { ToastType } from '../Toast';
 import {
   ChatPanelHeader,
-  SystemPromptSection,
+  SystemPromptLine,
   ChatStatusBanners,
   ComposerFooter,
   ConfirmDeleteModal,
@@ -51,7 +51,8 @@ interface ChatMessagesPanelProps {
   onClearConversation: () => Promise<void>;
   onExportConversation: () => void;
   onUpdateSystemPrompt: (prompt: string | null) => Promise<void>;
-  onClose?: () => void;
+  /** Delete the open conversation, from its title ▾; the place asks first. */
+  onDeleteConversation: () => void;
   /** Whether the conversation's saved messages are still loading. */
   messageLoading: boolean;
   syncConversations: (options?: { preferredId?: number | null; silent?: boolean }) => Promise<void>;
@@ -80,8 +81,6 @@ interface ChatMessagesPanelProps {
   onUnloadModel?: () => Promise<void>;
   /** Its quantisation, from its catalogue entry, when known. */
   quantization?: string | null;
-  /** The head's margin: the page's own controls. */
-  headMargin?: React.ReactNode;
   /**
    * Whose chat it is. A far chat is read and continued here, never changed:
    * no rename, restart, export or prompt edit, and no turn edited or deleted.
@@ -116,7 +115,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   onClearConversation,
   onExportConversation,
   onUpdateSystemPrompt,
-  onClose,
+  onDeleteConversation,
   messageLoading,
   syncConversations,
   chatError,
@@ -132,7 +131,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   startingModel,
   onUnloadModel,
   quantization,
-  headMargin,
   source = 'this',
   imageInput,
   thinking,
@@ -142,6 +140,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   previews = NO_PREVIEWS,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
+  // The system prompt's editor, opened from its line or from the title ▾.
+  const [editingPrompt, setEditingPrompt] = useState(false);
   const threadState = useThread({ optional: true });
   const isThreadRunning = threadState?.isRunning ?? false;
 
@@ -240,14 +240,23 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         onCommitRename={commitRename}
         onCancelRename={cancelRenaming}
         onGenerateTitle={() => generateTitle()}
+        onEditSystemPrompt={() => setEditingPrompt(true)}
         onClearConversation={onClearConversation}
         onExportConversation={onExportConversation}
-        margin={headMargin}
-        readOnly={source === 'far'}
+        onDeleteConversation={onDeleteConversation}
+        readOnly={source === 'far' || !activeConversation}
       >
-        {source === 'this' && <SystemPromptSection conversation={activeConversation} onSave={onUpdateSystemPrompt} />}
+        {source === 'this' && (
+          <SystemPromptLine
+            conversation={activeConversation}
+            editing={editingPrompt && !!activeConversation}
+            onEdit={() => setEditingPrompt(true)}
+            onDone={() => setEditingPrompt(false)}
+            onSave={onUpdateSystemPrompt}
+          />
+        )}
       </ChatPanelHeader>
-      <ChatStatusBanners chatError={chatError} isServerConnected={isServerConnected} onClose={onClose} />
+      <ChatStatusBanners chatError={chatError} isServerConnected={isServerConnected} />
     </>
   );
 

@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal, X } from 'lucide-react';
+import { openChatOn } from '../../app/openChat';
 import { inspectorClosed, libraryIntent, paths, withoutParam } from '../../app/paths';
 import { CopyValue } from '../../components/CopyValue';
 import { InstallProgress } from '../../components/SetupWizard/InstallProgress';
@@ -215,7 +216,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
           <div className="flex items-center gap-sm">
             {loaded ? (
               <>
-                <Button onClick={() => navigate(paths.chat(model.id))}>Chat</Button>
+                <Button onClick={() => void openChatOn(navigate, { id: model.id })}>Chat</Button>
                 <Button variant="secondary" onClick={load.unload} isLoading={load.busy === 'unload'}>
                   Unload
                 </Button>

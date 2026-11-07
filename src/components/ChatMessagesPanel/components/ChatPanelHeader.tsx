@@ -1,9 +1,7 @@
 import { FC, ReactNode } from 'react';
-import { Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
-import { Button } from '../../ui/Button';
-import { Icon } from '../../ui/Icon';
 import { Input } from '../../ui/Input';
-import { cn } from '../../../utils/cn';
+import { StatusMark } from '../../status/StatusMark';
+import { Menu, type MenuItem } from '../../../places/library/Menu';
 import { TurnRow } from './TurnRow';
 
 interface ChatPanelHeaderProps {
@@ -20,20 +18,24 @@ interface ChatPanelHeaderProps {
   onCommitRename: () => void;
   onCancelRename: () => void;
   onGenerateTitle: () => void;
+  /** Open the system prompt's editor above the first turn. */
+  onEditSystemPrompt: () => void;
   onClearConversation: () => Promise<void>;
   onExportConversation: () => void;
-  /** The head's margin: the page's own controls. */
-  margin?: ReactNode;
-  /** Under the title: the system prompt. */
+  onDeleteConversation: () => void;
+  /** Under the title: the system prompt's line, or its editor. */
   children?: ReactNode;
-  /** A chat this page reads but does not change: the title alone. */
+  /** A chat this page reads but does not change: the title alone, no ▾. */
   readOnly?: boolean;
 }
 
+const TITLE = 'text-base font-semibold leading-tight';
+
 /**
- * The notebook's head, on the turns' grid: the conversation's title (or its
- * rename field) and its actions in the body, the page's controls in the
- * margin.
+ * The chat's head: its title (16/600), which is the menu button for what
+ * changes the chat: Rename · Generate title · System prompt… · Export ·
+ * Start over (same prompt)… — Delete…. A far chat is changed only on its
+ * own machine, so its title is plain text.
  */
 export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
   title,
@@ -47,63 +49,64 @@ export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
   onCommitRename,
   onCancelRename,
   onGenerateTitle,
+  onEditSystemPrompt,
   onClearConversation,
   onExportConversation,
-  margin,
+  onDeleteConversation,
   children,
   readOnly = false,
-}) => (
-  <TurnRow
-    className="border-t-0 pt-0"
-    who={margin}
-    body={
-      <div className="flex flex-col gap-md">
-        <div className="flex flex-wrap items-center gap-sm min-w-0">
-          {isRenaming ? (
-            <Input
-              aria-label="Conversation title"
-              className="text-lg font-semibold bg-background border border-primary rounded-sm py-xs px-sm text-text min-w-[150px]"
-              value={titleDraft}
-              autoFocus
-              onChange={(e) => onChangeTitleDraft(e.target.value)}
-              onBlur={onCommitRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') onCommitRename();
-                else if (e.key === 'Escape') onCancelRename();
-              }}
-            />
-          ) : (
-            <h2 className="text-lg font-semibold leading-tight m-0 min-w-0 break-words">{title}</h2>
-          )}
-          <div hidden={readOnly} className={cn('flex gap-xs shrink-0', readOnly && 'hidden')}>
-            <Button variant="ghost" size="sm" title="Rename conversation" onClick={onStartRename} iconOnly>
-              <Icon icon={Pencil} size={14} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(isGeneratingTitle && 'pointer-events-none')}
-              title={generateTitleBlockedReason ?? 'Generate title with AI'}
-              onClick={onGenerateTitle}
-              disabled={!!generateTitleBlockedReason || isGeneratingTitle || isThreadRunning}
-              iconOnly
-            >
-              {isGeneratingTitle ? (
-                <span className="inline-block w-[14px] h-[14px] border-2 border-text-muted border-t-primary rounded-full animate-spin-360" aria-label="Generating title…" />
-              ) : (
-                <Icon icon={Sparkles} size={14} />
-              )}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onClearConversation} title="Restart conversation" iconOnly>
-              <Icon icon={RotateCcw} size={14} />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onExportConversation} title="Export conversation" iconOnly>
-              <Icon icon={Download} size={14} />
-            </Button>
+}) => {
+  const generateBlocked = generateTitleBlockedReason ?? (isThreadRunning ? 'Wait for the reply to finish' : null);
+  const items: MenuItem[] = [
+    { label: 'Rename', onPick: onStartRename },
+    {
+      label: 'Generate title',
+      onPick: onGenerateTitle,
+      disabled: generateBlocked !== null || isGeneratingTitle,
+      title: generateBlocked ?? 'Ask the model for a title',
+    },
+    { label: 'System prompt…', onPick: onEditSystemPrompt },
+    { label: 'Export', onPick: onExportConversation },
+    { label: 'Start over (same prompt)…', onPick: () => void onClearConversation() },
+    { label: 'Delete…', onPick: onDeleteConversation, danger: true, gapBefore: true },
+  ];
+  return (
+    <TurnRow
+      className="border-t-0 pt-0"
+      who={null}
+      body={
+        <div className="flex flex-col gap-sm">
+          <div className="flex flex-wrap items-center gap-sm min-w-0">
+            {isRenaming ? (
+              <Input
+                aria-label="Conversation title"
+                className={`${TITLE} bg-background border border-border rounded-sm py-xs px-sm text-text min-w-[150px]`}
+                value={titleDraft}
+                autoFocus
+                onChange={(e) => onChangeTitleDraft(e.target.value)}
+                onBlur={onCommitRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onCommitRename();
+                  else if (e.key === 'Escape') onCancelRename();
+                }}
+              />
+            ) : readOnly ? (
+              <h2 className={`${TITLE} m-0 min-w-0 break-words`}>{title}</h2>
+            ) : (
+              <h2 className="m-0 min-w-0">
+                <Menu
+                  label={<span className={`${TITLE} text-text break-words text-left`}>{title}</span>}
+                  items={items}
+                  align="start"
+                  className="h-auto px-0 hover:bg-transparent"
+                />
+              </h2>
+            )}
+            {isGeneratingTitle && <StatusMark kind="changing" label="Generating title…" />}
           </div>
+          {children}
         </div>
-        {children}
-      </div>
-    }
-  />
-);
+      }
+    />
+  );
+};

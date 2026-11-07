@@ -78,7 +78,7 @@ vi.mock('../../../src/services/platform/serverLogs', () => ({
   getServerLogs: vi.fn(async () => []),
   listenToServerLogs: vi.fn(async () => () => {}),
 }));
-vi.mock('../../../src/pages/ChatPage', () => ({
+vi.mock('../../../src/places/chat/ChatPlace', () => ({
   default: ({ modelName, serverPort }: { modelName: string; serverPort?: number }) => (
     <div data-testid="chat-page" data-port={serverPort}>{`Chatting with ${modelName}`}</div>
   ),

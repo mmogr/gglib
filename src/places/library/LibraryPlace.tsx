@@ -24,7 +24,7 @@ import { Button } from '../../components/ui/Button';
 import { useToastContext } from '../../contexts/ToastContext';
 import { usePairedModels } from '../../hooks/usePairedModels';
 import { useServers, type ServerViewModel } from '../../hooks/useServers';
-import { HANDED, setChatHandoff } from '../../app/chatHandoff';
+import { openChatOn } from '../../app/openChat';
 import { inspectorSubject, libraryIntent, paths, settingsAt } from '../../app/paths';
 import { useDownloads } from '../../services/downloadsRegistry';
 import type { HfPickState } from '../../inspector/hf/HfInspector';
@@ -101,9 +101,8 @@ export default function LibraryPlace() {
 
   // A server started from the inspector for a chat opens that chat; the
   // port is handed on, since the registry may not have heard of it yet.
-  const handleServerStarted = async (server: ServerViewModel) => {
-    setChatHandoff({ modelId: server.modelId, port: server.port, modelName: server.modelName });
-    navigate(paths.chat(server.modelId), { state: HANDED });
+  const handleServerStarted = (server: ServerViewModel) => {
+    void openChatOn(navigate, { id: server.modelId, port: server.port, name: server.modelName });
   };
 
   return (

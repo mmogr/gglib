@@ -2,7 +2,7 @@
  * The library as the way into a chat, and into the inspector's controls.
  *
  * A laptop with no local models must reach a chat with the paired machine's
- * model: every other route into `ChatPage` starts from a server running
+ * model: every other route into a chat starts from a server running
  * here, and `openChatSession` does nothing when the model id matches no
  * server. So the paired machine's models are rows of the library, after this
  * machine's, and a far row's inspector opens the chat.
@@ -17,7 +17,7 @@
  * shell before it offers them: one case queues a download in a desktop
  * window whose shell says nothing.
  *
- * `ChatPage` itself is stubbed. It is lazily imported and drags in the whole
+ * `ChatPlace` itself is stubbed. It is lazily imported and drags in the whole
  * assistant-ui runtime; what is under test here is which screen the page
  * chooses and what it hands it, and the stub shows both.
  */
@@ -27,6 +27,7 @@ import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 
 // The library the page loads. Empty for the paired cases; one model for the
 // case about a model already running here.
@@ -80,6 +81,8 @@ vi.mock('../../../src/services/transport', async () => {
       queueDownload,
       browseHfModels: vi.fn(async () => ({ models: [], next_cursor: null })),
       getSettings: vi.fn(async () => ({})),
+      // No chats yet: Chat on a model opens an empty one on it.
+      listConversations: vi.fn(async () => []),
       subscribe: vi.fn(() => () => {}),
       onEventStreamOpen: vi.fn(() => () => {}),
     }),
@@ -118,7 +121,7 @@ vi.mock('../../../src/services/remoteEvents', () => ({
 // Unload when it was handed one.
 // The port is held as the real page holds its session, from its first
 // render, so a switch that does not remount the page shows the old one.
-vi.mock('../../../src/pages/ChatPage', () => ({
+vi.mock('../../../src/places/chat/ChatPlace', () => ({
   default: ({
     modelName,
     serverPort,
@@ -128,7 +131,6 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     paired,
     onSwitchModel,
     onUnloadModel,
-    onClose,
   }: {
     modelName: string;
     serverPort?: number;
@@ -141,9 +143,10 @@ vi.mock('../../../src/pages/ChatPage', () => ({
       context: () => { conversationId: number | null; draft: { text: string; images: File[] } },
     ) => Promise<void>;
     onUnloadModel?: () => Promise<void>;
-    onClose: () => void;
   }) => {
     const [mountedPort] = useState(serverPort);
+    // There is no Close: the sidebar (here, Back) leaves the chat.
+    const navigate = useNavigate();
     return (
       <div
         data-testid="chat-page"
@@ -169,8 +172,8 @@ vi.mock('../../../src/pages/ChatPage', () => ({
             Unload
           </button>
         )}
-        <button type="button" onClick={onClose}>
-          Close chat
+        <button type="button" onClick={() => void navigate(-1)}>
+          Leave chat
         </button>
       </div>
     );
@@ -180,6 +183,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
+import { resetChats } from '../../../src/services/chatRegistry';
 import { renderApp } from '../places/harness';
 import { guiModel } from '../fixtures/model';
 import { farDetail, farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
@@ -235,6 +239,7 @@ describe('the library, into a chat', () => {
     for (const id of [7, 8, 9, 11]) serve(id, '', 0, 'stopped');
   });
   beforeEach(() => {
+    resetChats();
     library.models = [];
     listModels.mockClear();
     downloads.queue = queueSnapshot();
@@ -267,7 +272,7 @@ describe('the library, into a chat', () => {
     expect(chat).toHaveAttribute('data-paired', 'desk:7');
   });
 
-  it('leaves the far machine running when its chat is closed', async () => {
+  it('leaves the far machine running when its chat is left', async () => {
     applyRemoteStatus(CONNECTED);
     renderPage();
     const user = await pickFar(/qwen3-8b/);
@@ -277,7 +282,7 @@ describe('the library, into a chat', () => {
     // There is no server here to stop, and the tunnel is not this page's to
     // tear down; nor is there a model here to unload.
     expect(screen.queryByRole('button', { name: 'Unload' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /close chat/i }));
+    await user.click(screen.getByRole('button', { name: 'Leave chat' }));
 
     await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
     expect(stopServer).not.toHaveBeenCalled();
@@ -471,11 +476,11 @@ describe('the library, into a chat', () => {
     expect(vi.mocked(get).mock.calls.map(([path]) => path)).not.toContain('/api/models/9/components');
   });
 
-  it('leaves the model loaded when a local chat is closed', async () => {
+  it('leaves the model loaded when a local chat is left', async () => {
     // The proxy serves it to every client, Copilot included (#1211).
     const user = await openChatOnQwen();
 
-    await user.click(screen.getByRole('button', { name: 'Close chat' }));
+    await user.click(screen.getByRole('button', { name: 'Leave chat' }));
 
     await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
     expect(stopServer).not.toHaveBeenCalled();
@@ -518,12 +523,12 @@ describe('the library, into a chat', () => {
     expect(serveModel).not.toHaveBeenCalled();
   });
 
-  it('stays closed when the chat is closed while the new model starts', async () => {
+  it('stays away when the chat is left while the new model starts', async () => {
     const answer = heldServe();
     const user = await openChatOnQwen();
 
     await user.click(screen.getByRole('button', { name: 'Switch model' }));
-    await user.click(screen.getByRole('button', { name: 'Close chat' }));
+    await user.click(screen.getByRole('button', { name: 'Leave chat' }));
     await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
     expect(stopServer).not.toHaveBeenCalled();
 
@@ -588,7 +593,7 @@ describe('the library, into a chat', () => {
     const first = screen.getByTestId('chat-page');
 
     await user.click(screen.getByRole('button', { name: 'Switch model' }));
-    await user.click(screen.getByRole('button', { name: 'Close chat' }));
+    await user.click(screen.getByRole('button', { name: 'Leave chat' }));
     await user.click(await screen.findByRole('button', { name: 'Chat' }));
     const reopened = await screen.findByTestId('chat-page');
     expect(reopened).not.toBe(first);

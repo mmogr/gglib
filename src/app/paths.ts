@@ -3,11 +3,11 @@
  *
  * A screen is a place with an address: the library, a model in it (or its
  * log), the paired machine's model, a Hugging Face repo, the endpoint (with
- * a model inspected beside it), a chat on a model, the devices, the
- * settings, the diagnostics.
+ * a model inspected beside it), a chat (by its conversation, not its model),
+ * the devices, the settings, the diagnostics.
  * The sidebar, the native menu, a row's click and a test all go through
  * these, so a path's shape is changed in one file. Reading a path back is
- * `inspectorSubject`, the one reader of what the address names.
+ * `inspectorSubject` and `chatAddress`, the readers of what the address names.
  *
  * @module app/paths
  */
@@ -33,9 +33,16 @@ export const paths = {
   endpointInspect: (id: number) => `/endpoint?inspect=model:${id}`,
   /** The endpoint place with model `id` inspected and its Load with options sheet opened. */
   endpointServe: (id: number) => `/endpoint?inspect=model:${id}&serve=1`,
-  /** A chat on this machine's model `id`, served here. */
-  chat: (modelId: number) => `/chat/${modelId}`,
-  /** A chat on the paired machine's model `id` (its id there). */
+  /** This machine's conversation `id`, on the model it names. */
+  chat: (id: number) => `/chat/${id}`,
+  /**
+   * An empty chat: on this machine's model `model`, on the paired machine's
+   * model `far` (its id there), or with neither on the model the chat route
+   * picks. The first send makes the conversation and the address becomes it.
+   */
+  newChat: (on: { model?: number; far?: number } = {}) =>
+    on.far !== undefined ? `/chat/new?far=${on.far}` : on.model !== undefined ? `/chat/new?model=${on.model}` : '/chat/new',
+  /** The paired machine's own conversation `id` (its id there), which that machine runs. */
   farChat: (id: number) => `/chat/far/${id}`,
   /** The library with its search focused for Hugging Face (`browse`), or adding a GGUF file (`add`). */
   libraryAdd: (sub: 'browse' | 'add') => `/library?add=${sub === 'add' ? 'file' : 'browse'}`,
@@ -163,14 +170,39 @@ export function libraryIntent(search: string): LibraryIntent {
 
 /**
  * The model of this machine's the native menu acts on: the one in the
- * inspector (beside the library or the endpoint), or the one an open chat
- * is on. `null` elsewhere, where Start, Stop and Remove have nothing to act on.
+ * inspector (beside the library or the endpoint). `null` elsewhere, where
+ * Start, Stop and Remove have nothing to act on; a chat's address names its
+ * conversation, not a model.
  */
 export function menuModelId(location: Pick<Location, 'pathname'> & Partial<Pick<Location, 'search'>>): number | null {
   const subject = inspectorSubject(location);
-  if (subject?.kind === 'model') return subject.id;
-  const [, place, second, third] = location.pathname.split('/');
-  return place === 'chat' && second !== 'far' && third === undefined ? idOf(second) : null;
+  return subject?.kind === 'model' ? subject.id : null;
+}
+
+/**
+ * The chat the address names: one of this machine's conversations
+ * (`/chat/:id`), an empty one (`/chat/new`, on `?model=` or `?far=` when
+ * given), or the paired machine's own (`/chat/far/:id`); `null` elsewhere.
+ */
+export type ChatAddress =
+  | { kind: 'saved'; id: number }
+  | { kind: 'new'; model: number | null; far: number | null }
+  | { kind: 'far'; id: number };
+
+export function chatAddress(location: Pick<Location, 'pathname' | 'search'>): ChatAddress | null {
+  const [, place, second, third, ...rest] = location.pathname.split('/');
+  if (place !== 'chat' || rest.length > 0) return null;
+  if (second === 'far') {
+    const id = idOf(third);
+    return id === null ? null : { kind: 'far', id };
+  }
+  if (third !== undefined) return null;
+  if (second === 'new') {
+    const params = new URLSearchParams(location.search);
+    return { kind: 'new', model: idOf(params.get('model') ?? undefined), far: idOf(params.get('far') ?? undefined) };
+  }
+  const id = idOf(second);
+  return id === null ? null : { kind: 'saved', id };
 }
 
 /** The model ids `/diagnostics/benchmarks?models=` names, in order, bad ones dropped. */

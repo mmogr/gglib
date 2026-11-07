@@ -67,7 +67,7 @@ vi.mock('../../../src/services/platform/serverLogs', () => ({
   }),
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn() }));
-vi.mock('../../../src/pages/ChatPage', () => ({ default: () => <div data-testid="chat-page" /> }));
+vi.mock('../../../src/places/chat/ChatPlace', () => ({ default: () => <div data-testid="chat-page" /> }));
 
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';

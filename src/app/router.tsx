@@ -38,7 +38,8 @@ export const routes: RouteObject[] = [
   },
   { path: 'endpoint', element: <EndpointPlace /> },
   { path: 'chat/far/:id', element: <FarChatRoute /> },
-  { path: 'chat/:modelId', element: <ChatRoute /> },
+  // `/chat/new` too: one route, so the address a first send replaces keeps the page.
+  { path: 'chat/:id', element: <ChatRoute /> },
   { path: 'devices', element: <DevicesPlace /> },
   { path: 'diagnostics/benchmarks', element: <BenchmarkRoute /> },
   { path: '*', element: <Navigate to={paths.library()} replace /> },

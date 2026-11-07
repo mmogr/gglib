@@ -10,18 +10,17 @@
  * here could fail. The first assertion checks the zone took.
  */
 
-import { afterAll, beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { parseDbTimestamp } from '../../../src/utils/dbTimestamp';
 import { buildLoadedMessage } from '../../../src/hooks/useChatPersistence/buildLoadedMessage';
 import { buildThreadMessages } from '../../../src/hooks/useChatPersistence/buildThreadMessages';
-import ConversationListPanel from '../../../src/components/ConversationListPanel/ConversationListPanel';
 import { FarDetails } from '../../../src/inspector/far/FarDetails';
 import { Details } from '../../../src/inspector/local/Details';
 import type { ModelDetailState } from '../../../src/inspector/local/useModelDetail';
 import type { Verification, VerifyStatus } from '../../../src/inspector/local/useVerification';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
-import type { ChatMessage, ConversationSummary } from '../../../src/services/transport';
+import type { ChatMessage } from '../../../src/services/transport';
 import type { ModelDetail } from '../../../src/types';
 import { guiModel } from '../fixtures/model';
 
@@ -85,38 +84,6 @@ describe('every place a database time is shown', () => {
       1,
     );
     expect(prompt.createdAt?.getHours()).toBe(18);
-  });
-
-  describe('the conversation list', () => {
-    beforeEach(() => {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(INSTANT + 30 * 60 * 1000);
-    });
-    afterEach(() => vi.useRealTimers());
-
-    it('says how long ago a conversation changed', () => {
-      const conversation: ConversationSummary = {
-        id: 1,
-        title: 'A chat',
-        model_id: null,
-        system_prompt: null,
-        created_at: SAVED,
-        updated_at: SAVED,
-      };
-      render(
-        <ConversationListPanel
-          conversations={[conversation]}
-          activeConversationId={null}
-          onSelectConversation={vi.fn()}
-          searchQuery=""
-          onSearchChange={vi.fn()}
-          loading={false}
-        />,
-      );
-      const thirtyMinutesAgo = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
-        .format(-30, 'minute');
-      expect(screen.getByText(thirtyMinutesAgo)).toBeInTheDocument();
-    });
   });
 
   it("the paired machine's model: downloaded, exact on hover", () => {

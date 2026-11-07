@@ -1,76 +1,181 @@
 /**
- * `/chat/:modelId`: a chat on one of this machine's models, served here.
+ * `/chat/:id` and `/chat/new`: one of this machine's conversations, on the
+ * model it names, or an empty chat whose first send makes one.
  *
- * The port is the server registry's, or the one the start that opened this
- * chat handed on (`chatHandoff`, read only by the navigation that set it),
- * since the registry may not have heard of it yet; with neither, the model
- * is not running, and the address goes to its inspector, where Load is. Keyed by the model, so a switch remounts the page on the
- * new one. Close leaves the chat for the model's inspector: the proxy serves
- * its model to every client, Copilot included, so unloading it is a separate
- * action.
+ * The model is, in order: the one a handoff names (a model switch, or a
+ * start that just served it); the conversation's own; the one this route
+ * just opened the chat on (a first send, a branch, Start over, before a run
+ * has named it); for an empty chat, `?far=` or `?model=`. Failing those
+ * (a chat that has not run, or `/chat/new` alone): the last one used if it
+ * is loaded, else the default model if it is, else the first loaded; with
+ * none loaded, the inspector of the last one used (or the default), where
+ * Load is, else the library.
+ *
+ * A chat on this machine's model needs its port: the server registry's, or
+ * the handoff's, since the registry may not have heard of it yet; with
+ * neither, the model is not running, and the address goes to its inspector.
+ * A chat on the paired machine's model is `PairedChat`. One route serves
+ * `/chat/new` and `/chat/:id`, and the place is keyed by its model, so the
+ * address a first send replaces keeps the page. Leaving keeps the model
+ * loaded: the endpoint serves it to every client, Copilot included.
  *
  * @module app/ChatRoute
  */
 
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Navigate, useLocation, useNavigate, useParams } from 'react-router';
+import { Navigate, useLocation, useNavigate, type Location } from 'react-router';
 
-import { useServers } from '../hooks/useServers';
+import { useServers, type ServerViewModel } from '../hooks/useServers';
+import { useSettings } from '../hooks/useSettings';
+import { lastUsedModel, modelOf, refreshChats, useChats, type ChatModel } from '../services/chatRegistry';
 import { useModel } from '../services/modelRegistry';
-import { clearChatHandoff, peekChatHandoff, wasHanded } from './chatHandoff';
-import { paths } from './paths';
+import type { ConversationSummary } from '../services/transport';
+import type { Machine } from '../types/generated/Machine';
+import { clearChatHandoff, peekChatHandoff, wasHanded, type ChatHandoff } from './chatHandoff';
+import { CHAT_LOADING } from './chatLoading';
+import { PairedChat } from './PairedChat';
+import { chatAddress, paths } from './paths';
 import { useChatSwitch } from './useChatSwitch';
 
 // Lazy: the chat brings assistant-ui, which the library does not need.
-const ChatPage = lazy(() => import('../pages/ChatPage'));
+const ChatPlace = lazy(() => import('../places/chat/ChatPlace'));
 
-export const CHAT_LOADING = (
-  <div className="flex flex-col h-full w-full overflow-hidden">
-    <div className="loading-chat">Loading chat...</div>
-  </div>
-);
+/** Where a chat opens: on a model, or (`to`) somewhere else entirely. */
+type Target = { kind: 'local'; id: number } | { kind: 'paired'; id: number; machine?: Machine } | { kind: 'go'; to: string };
 
-function LocalChat({ modelId }: { modelId: number }) {
-  const navigate = useNavigate();
-  const location = useLocation();
+/**
+ * The model for a chat that names none: the last used, then the default,
+ * whichever is loaded; else the first loaded; else the inspector of one of
+ * them, where Load is; else the library.
+ */
+function fallback(list: readonly ConversationSummary[], defaultId: number | null, servers: ServerViewModel[]): Target {
+  const running = servers.filter((s) => s.status === 'running').map((s) => s.modelId);
+  const wanted = [lastUsedModel(list), defaultId].filter((id): id is number => id !== null);
+  const loaded = wanted.find((id) => running.includes(id)) ?? running[0];
+  if (loaded !== undefined) return { kind: 'local', id: loaded };
+  return { kind: 'go', to: wanted[0] === undefined ? paths.library() : paths.model(wanted[0]) };
+}
+
+function targetOf(model: ChatModel): Target | null {
+  if (model === null) return null;
+  return model.kind === 'local' ? { kind: 'local', id: model.id } : { kind: 'paired', id: model.model.id, machine: model.model.machine };
+}
+
+/**
+ * The handoff the navigation to `location` set, held for as long as the
+ * route stays at that location, and dropped from the store once committed.
+ */
+function useHandoff(location: Location): ChatHandoff | null {
+  const read = () => ({ key: location.key, handoff: wasHanded(location.state) ? peekChatHandoff() : null });
+  const [held, setHeld] = useState(read);
+  let current = held;
+  if (held.key !== location.key) {
+    current = read();
+    setHeld(current);
+  }
+  useEffect(() => clearChatHandoff(current.handoff), [current.handoff]);
+  return current.handoff;
+}
+
+interface LocalChatProps {
+  modelId: number;
+  conversationId: number | null;
+  handoff: ChatHandoff | null;
+  onOpened: (id: number) => void;
+  onDeleted: () => void;
+}
+
+function LocalChat({ modelId, conversationId, handoff, onOpened, onDeleted }: LocalChatProps) {
   const { servers, stopServer } = useServers();
   const server = servers.find((s) => s.modelId === modelId);
-  // Peeked during render, so a render that runs twice reads the same; taken
-  // once a page has committed, handed or not, so one that never did (left
-  // while its chunk loaded) leaves it for nobody: a later visit is not
-  // handed, and drops it.
-  const [handoff] = useState(() => (wasHanded(location.state) ? peekChatHandoff(modelId) : null));
-  useEffect(() => {
-    clearChatHandoff(modelId);
-  }, [modelId]);
   const { startingModel, switchTo } = useChatSwitch(servers);
   const inLibrary = useModel(modelId);
+  const handed = handoff?.modelId === modelId ? handoff : null;
 
-  const port = server?.port ?? handoff?.port;
+  const port = server?.port ?? handed?.port;
   if (port === undefined) return <Navigate to={paths.model(modelId)} replace />;
 
   return (
-    <ChatPage
+    <ChatPlace
       serverPort={port}
       modelId={modelId}
-      modelName={server?.modelName ?? handoff?.modelName ?? inLibrary?.name ?? `Model #${modelId}`}
-      conversationId={handoff?.conversationId}
-      draft={handoff?.draft}
+      modelName={server?.modelName ?? handed?.modelName ?? inLibrary?.name ?? `Model #${modelId}`}
+      conversationId={conversationId}
+      draft={handed?.draft}
       startingModel={startingModel}
       onSwitchModel={switchTo}
       onUnloadModel={() => stopServer(modelId)}
-      onClose={() => navigate(paths.model(modelId))}
+      onOpened={onOpened}
+      onDeleted={onDeleted}
     />
   );
 }
 
 export function ChatRoute() {
-  const { modelId: raw } = useParams();
-  const modelId = /^\d+$/.test(raw ?? '') ? Number(raw) : null;
-  if (modelId === null) return <Navigate to={paths.library()} replace />;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const address = chatAddress(location);
+  const handoff = useHandoff(location);
+  const { list } = useChats('this');
+  const { servers } = useServers();
+  const { settings } = useSettings();
+  // The chat this route just opened, and on what: kept until a run names it.
+  const [opened, setOpened] = useState<{ id: number; target: Target } | null>(null);
+  // The location whose missing conversation the list was read again for.
+  const [rechecked, setRechecked] = useState<string | null>(null);
+
+  const conversationId = address?.kind === 'saved' ? address.id : null;
+  const conversation = conversationId === null ? null : list?.find((c) => c.id === conversationId) ?? null;
+  const justOpened = opened !== null && opened.id === conversationId ? opened.target : null;
+  const missing = conversationId !== null && list !== null && conversation === null && !handoff && !justOpened;
+
+  useEffect(() => {
+    if (list === null) void refreshChats('this');
+  }, [list]);
+  useEffect(() => {
+    if (!missing || rechecked === location.key) return;
+    const key = location.key;
+    void refreshChats('this').then(() => setRechecked(key));
+  }, [missing, rechecked, location.key]);
+
+  if (address === null || address.kind === 'far') return <Navigate to={paths.library()} replace />;
+
+  let target: Target | null = handoff ? { kind: 'local', id: handoff.modelId } : null;
+  if (target === null && conversation) target = targetOf(modelOf(conversation));
+  if (target === null) target = justOpened;
+  if (target === null && address.kind === 'new') {
+    if (address.far !== null) target = { kind: 'paired', id: address.far };
+    else if (address.model !== null) target = { kind: 'local', id: address.model };
+  }
+  if (target === null) {
+    if (missing) return rechecked === location.key ? <Navigate to={paths.newChat()} replace /> : CHAT_LOADING;
+    if (list === null) return CHAT_LOADING;
+    target = fallback(list, settings?.defaultModelId ?? null, servers);
+  }
+  if (target.kind === 'go') return <Navigate to={target.to} replace />;
+
+  const on = target;
+  const onOpened = (id: number) => {
+    setOpened({ id, target: on });
+    navigate(paths.chat(id), { replace: true });
+  };
+  const onDeleted = () =>
+    navigate(paths.newChat(on.kind === 'local' ? { model: on.id } : { far: on.id }), { replace: true });
+
   return (
     <Suspense fallback={CHAT_LOADING}>
-      <LocalChat key={modelId} modelId={modelId} />
+      {on.kind === 'local' ? (
+        <LocalChat key={`local:${on.id}`} modelId={on.id} conversationId={conversationId} handoff={handoff} onOpened={onOpened} onDeleted={onDeleted} />
+      ) : (
+        <PairedChat
+          key={`paired:${on.id}`}
+          id={on.id}
+          machine={on.machine}
+          conversationId={conversationId}
+          onOpened={onOpened}
+          onDeleted={onDeleted}
+        />
+      )}
     </Suspense>
   );
 }

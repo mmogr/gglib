@@ -24,6 +24,7 @@ const transport = vi.hoisted(() => ({
   startProxy: vi.fn(async () => ({ running: true, port: 8080 })),
   stopProxy: vi.fn(async () => {}),
   getSettings: vi.fn(async () => ({})),
+  listConversations: vi.fn(async (): Promise<unknown[]> => []),
 }));
 
 vi.mock('../../../src/services/platform', async (importOriginal) => ({
@@ -43,10 +44,11 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
 }));
 // The places are not under test; each names itself.
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
-vi.mock('../../../src/app/ChatRoute', () => ({ ChatRoute: () => <main aria-label="Chat" />, CHAT_LOADING: null }));
+vi.mock('../../../src/app/ChatRoute', () => ({ ChatRoute: () => <main aria-label="Chat" /> }));
 
 import { startMenuBridge } from '../../../src/app/menuBridge';
 import { MENU_EVENTS } from '../../../src/services/platform/menuEvents';
+import { resetChats } from '../../../src/services/chatRegistry';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { renderApp } from '../places/harness';
@@ -73,6 +75,7 @@ describe('the menu bridge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     menu.handlers = null;
+    resetChats();
   });
   afterEach(() => {
     cleanupModelEvents();
@@ -116,15 +119,47 @@ describe('the menu bridge', () => {
     expect(at()).toBe('/models/7');
     expect(notify).toHaveBeenCalledWith(expect.stringMatching(/no servers/i), 'warning');
 
+    // No chat on it yet: an empty one on it.
     serve(9);
     await fire(MENU_EVENTS.SHOW_CHAT);
-    expect(at()).toBe('/chat/9');
+    expect(at()).toBe('/chat/new?model=9');
 
+    // Its latest chat, where it has one.
+    transport.listConversations.mockResolvedValue([
+      { id: 4, title: 'older', model_id: 7, system_prompt: null, created_at: '2026-11-01 09:00:00', updated_at: '2026-11-01 09:00:00' },
+      { id: 6, title: 'newer', model_id: 7, system_prompt: null, created_at: '2026-11-02 09:00:00', updated_at: '2026-11-02 09:00:00' },
+    ]);
+    resetChats();
     serve(7);
     await act(() => router.navigate('/models/7'));
     await fire(MENU_EVENTS.SHOW_CHAT);
-    expect(at()).toBe('/chat/7');
+    expect(at()).toBe('/chat/6');
     stop();
+  });
+
+  it('⌘N or Ctrl+N starts a chat from anywhere, until the bridge stops', async () => {
+    const { at, router, stop } = await bridged('/models/7');
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true }));
+    });
+    expect(at()).toBe('/chat/new');
+
+    await act(() => router.navigate('/library'));
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'N', ctrlKey: true, shiftKey: true }));
+    });
+    expect(at()).toBe('/library');
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true }));
+    });
+    expect(at()).toBe('/chat/new');
+
+    stop();
+    await act(() => router.navigate('/library'));
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true }));
+    });
+    expect(at()).toBe('/library');
   });
 
   it('Start opens the picked model’s Load with options sheet, and does nothing with none picked', async () => {
@@ -151,15 +186,15 @@ describe('the menu bridge', () => {
     stop();
   });
 
-  it("on a chat, the menu's model is the chat's: told so, and Stop leaves the chat for its inspector", async () => {
+  it("on a chat the menu has no model: a chat's address names its conversation, so Stop stops nothing", async () => {
     serve(7);
     const { at, fire, stop } = await bridged('/chat/7');
-    expect(menu.setSelectedModel).toHaveBeenLastCalledWith(7);
+    expect(menu.setSelectedModel).toHaveBeenLastCalledWith(null);
 
     await fire(MENU_EVENTS.STOP_SERVER);
 
-    expect(transport.stopServer).toHaveBeenCalledWith(7);
-    expect(at()).toBe('/models/7');
+    expect(transport.stopServer).not.toHaveBeenCalled();
+    expect(at()).toBe('/chat/7');
     stop();
   });
 
@@ -188,14 +223,14 @@ describe('the menu bridge', () => {
 
   it('a refused Remove is said, and the address stays', async () => {
     transport.removeModel.mockRejectedValueOnce(new Error('the model is being served'));
-    const { at, stop } = await bridged('/chat/7');
+    const { at, stop } = await bridged('/models/7');
     const user = userEvent.setup();
     const asked = menu.handlers?.[MENU_EVENTS.REMOVE_MODEL]?.();
     await user.click(await screen.findByRole('button', { name: 'Remove' }));
     await asked;
 
     expect(notify).toHaveBeenCalledWith(expect.stringMatching(/could not remove qwen3-8b/i), 'error');
-    expect(at()).toBe('/chat/7');
+    expect(at()).toBe('/models/7');
     expect(menu.syncMenuStateSilent).not.toHaveBeenCalled();
     stop();
   });
