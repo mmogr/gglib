@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 mod profiles;
+mod queue_size;
 mod reset;
 mod reveal;
 mod set;

@@ -12,8 +12,8 @@ use anyhow::Result;
 
 use gglib_core::SettingsUpdate;
 
-use super::resolve_model_display;
 use super::settings_display::{print_display_rows, settings_display_rows};
+use super::{queue_size, resolve_model_display};
 use crate::bootstrap::CliContext;
 use crate::config_commands::SettingsSetArgs;
 use crate::handlers::model::resolver;
@@ -89,6 +89,7 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
         return Ok(());
     }
 
+    let sets_queue_size = update.max_download_queue_size.is_some();
     let updated = ctx.app.settings().update(update).await?;
     let (model_display, image_display) = resolve_model_display(ctx, &updated).await?;
     let all_rows =
@@ -107,6 +108,11 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
 
     println!("✓ Settings updated successfully:");
     print_display_rows(&changed_rows);
+    if sets_queue_size
+        && let Some(warning) = queue_size::tell_daemon(ctx, updated.max_download_queue_size).await
+    {
+        eprintln!("{warning}");
+    }
     Ok(())
 }
 

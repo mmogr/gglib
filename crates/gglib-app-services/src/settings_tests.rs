@@ -317,3 +317,29 @@ async fn update_settings_json_null_clears_title_generation_prompt() {
         "explicit JSON null must clear title_generation_prompt"
     );
 }
+
+/// A write that names the queue size hands the running download manager the
+/// size now stored: the one set, or the default once it is cleared. A write
+/// that leaves the field alone tells the manager nothing.
+#[tokio::test]
+async fn a_queue_size_write_reaches_the_running_download_manager() {
+    let core = test_core().await;
+    let downloads = Arc::new(MockDownloadManager::new());
+    let ops = SettingsOps::new(SettingsDeps {
+        core,
+        system_probe: Arc::new(MockSystemProbePort::default()),
+        downloads: Arc::clone(&downloads) as Arc<dyn DownloadManagerPort>,
+    });
+
+    for json in [
+        r#"{"maxDownloadQueueSize": 3}"#,
+        r#"{"defaultContextSize": 8192}"#,
+        r#"{"maxDownloadQueueSize": null}"#,
+    ] {
+        let request: UpdateSettingsRequest = serde_json::from_str(json).unwrap();
+        ops.update(request).await.expect("update should succeed");
+    }
+
+    let calls = downloads.calls.lock().unwrap().clone();
+    assert_eq!(calls, ["set_max_queue_size 3", "set_max_queue_size 10"]);
+}

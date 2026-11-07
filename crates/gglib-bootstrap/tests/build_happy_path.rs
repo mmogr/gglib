@@ -62,3 +62,26 @@ async fn a_core_built_with_a_hub_holds_that_hub() {
     assert!(Arc::ptr_eq(&core.hf_client, &hub));
     assert!(core.repos.models.list().await.unwrap().is_empty());
 }
+
+/// The download manager is built with the queue size stored before the
+/// start, not the default: a size set in an earlier run holds after a
+/// restart.
+#[tokio::test]
+async fn the_download_manager_starts_with_the_stored_queue_size() {
+    let dir = TempDir::new().unwrap();
+    let first = build_core(&dir).await;
+    let snapshot = first.downloads.get_queue_snapshot().await.unwrap();
+    assert_eq!(snapshot.max_size, 10, "nothing stored yet: the default");
+    let store = |s: &mut gglib_core::Settings| {
+        s.max_download_queue_size = Some(3);
+        Ok(())
+    };
+    first.repos.settings.modify(&store).await.unwrap();
+    first.pool.close().await;
+    drop(first);
+
+    let second = build_core(&dir).await;
+
+    let snapshot = second.downloads.get_queue_snapshot().await.unwrap();
+    assert_eq!(snapshot.max_size, 3);
+}

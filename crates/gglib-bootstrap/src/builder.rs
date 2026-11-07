@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort, HfClientPort,
-    ModelRegistrarPort,
+    ModelRegistrarPort, Repos,
 };
 use gglib_core::services::AppCore;
 use gglib_core::{ModelRegistrar, hf_token};
@@ -139,11 +139,27 @@ impl CoreBootstrap {
 
         let Holders {
             client_config: _,
-            download_config,
+            mut download_config,
             core_token,
         } = holders;
+
+        // Repositories. The model-files repository among them is the one the
+        // registrar and the verification service share. The stored queue
+        // size is read from them before the download manager is built, so
+        // a size set before this start holds from it.
+        let repos = CoreFactory::build_repos(pool.clone());
+        match repos.settings.load().await {
+            Ok(settings) => {
+                download_config.max_queue_size = settings.effective_max_download_queue_size();
+            }
+            Err(e) => tracing::warn!(
+                "could not read the stored download queue size, so it is {}: {e}",
+                download_config.max_queue_size
+            ),
+        }
         let built = wire(
             pool,
+            repos,
             hf_client,
             gguf_parser,
             download_config,
@@ -164,16 +180,13 @@ impl CoreBootstrap {
 /// Hub client.
 fn wire(
     pool: SqlitePool,
+    repos: Repos,
     hf_client: Arc<dyn HfClientPort>,
     gguf_parser: Arc<dyn GgufParserPort>,
     download_config: DownloadManagerConfig,
     core_token: Option<String>,
     emitter: Arc<dyn AppEventEmitter>,
 ) -> BuiltCore {
-    // 3. Repositories. The model-files repository among them is the one the
-    //    registrar and the verification service share.
-    let repos = CoreFactory::build_repos(pool.clone());
-
     // 4. Model registrar — composes model repository + GGUF parser so that
     //    both GUI and CLI download paths use the identical registration
     //    logic. It holds the Hub client to look up a model author's

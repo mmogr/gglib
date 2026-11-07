@@ -137,6 +137,17 @@ pub const GENERATION_TURN_REFUSED: &str = "refused";
 /// own process sends the event its change emitted there.
 pub const EVENTS_PATH: &str = "/api/events";
 
+/// The settings, as the app writes them.
+///
+/// `PUT` stores the fields its body names and hands what the daemon holds
+/// live the values now stored. A `gglib config settings` command that
+/// stored the download queue size in its own process sends that one field,
+/// so the daemon's queue takes it.
+pub const SETTINGS_PATH: &str = "/api/config/settings";
+
+/// The key of the download queue size in a [`SETTINGS_PATH`] body.
+pub const SETTINGS_QUEUE_SIZE_FIELD: &str = "maxDownloadQueueSize";
+
 /// Bring the remote tunnel up and arm a pairing (ADR 0012).
 pub const REMOTE_ENABLE_PATH: &str = "/api/remote/enable";
 
@@ -364,6 +375,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["POST"], DAEMON_SHUTDOWN_PATH),
     (&["GET"], MCP_SERVERS_PATH),
     (&["POST"], EVENTS_PATH),
+    (&["PUT"], SETTINGS_PATH),
     (&["POST"], REMOTE_ENABLE_PATH),
     (&["POST"], REMOTE_DISABLE_PATH),
     (&["GET"], REMOTE_STATUS_PATH),
