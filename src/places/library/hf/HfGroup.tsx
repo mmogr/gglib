@@ -149,7 +149,13 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
   const queue = useQueue();
   // The key pick waiting, and whether the run it ends began on the picked repo.
   const pending = useRef<{ timer: ReturnType<typeof setTimeout>; replace: boolean } | null>(null);
-  useEffect(() => () => clearTimeout(pending.current?.timer), []);
+  /** Forget a key pick still waiting: a click, a new search or an opened repo says where the person is now. */
+  const cancelKeyPick = () => {
+    clearTimeout(pending.current?.timer);
+    pending.current = null;
+  };
+  useEffect(() => cancelKeyPick, []);
+  useEffect(cancelKeyPick, [hf.models, shown?.kind]);
   const pickByKey = (model: HfModelSummary, replace: boolean) => {
     const run = pending.current;
     clearTimeout(run?.timer);
@@ -230,7 +236,10 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
                   model={m}
                   picked={m.id === pickedId}
                   tabIndex={tabStop(i, hf.models.findIndex((h) => h.id === pickedId))}
-                  onPick={() => onPick(m)}
+                  onPick={() => {
+                    cancelKeyPick();
+                    onPick(m);
+                  }}
                 />
               ))}
             </Listbox>

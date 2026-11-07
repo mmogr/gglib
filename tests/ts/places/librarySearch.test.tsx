@@ -274,6 +274,48 @@ describe('the one search', () => {
     expect(at()).toBe('/library');
   });
 
+  it('a click during a run of keys wins: the waiting key pick is dropped', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b', 'owner/c']));
+    const { at } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    await user.click(await screen.findByRole('option', { name: /owner\/a/ }));
+    await user.keyboard('{ArrowDown}');
+    await user.click(screen.getByRole('option', { name: /owner\/c/ }));
+    expect(at()).toBe('/get/owner/c');
+    await act(() => new Promise((done) => setTimeout(done, 400)));
+    expect(at()).toBe('/get/owner/c');
+  });
+
+  it('a second run of keys takes its own history rule, not the first run\'s', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b', 'owner/c']));
+    const { at, router } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    const a = await screen.findByRole('option', { name: /owner\/a/ });
+    // Nothing picked: the first run pushes an entry.
+    a.focus();
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(at()).toBe('/get/owner/b'));
+    // Pressed on the picked row: the second run replaces it.
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(at()).toBe('/get/owner/c'));
+    await act(() => router.navigate(-1));
+    expect(at()).toBe('/library');
+  });
+
+  it('a run of keys left waiting when the results go never moves the address', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b', 'owner/c']));
+    const { at, unmount } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    await user.click(await screen.findByRole('option', { name: /owner\/a/ }));
+    await user.keyboard('{ArrowDown}');
+    unmount();
+    await act(() => new Promise((done) => setTimeout(done, 400)));
+    expect(at()).toBe('/get/owner/a');
+  });
+
   it("offers user/repo:QUANT's download as the first row, and queues it", async () => {
     renderLibrary();
     const user = userEvent.setup();

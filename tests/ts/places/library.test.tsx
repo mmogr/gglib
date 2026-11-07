@@ -416,7 +416,7 @@ describe('the library place', () => {
     servers.list = [listed(1, 'la'), listed(2, 'lb')];
     transport.listPairedModels.mockResolvedValue(pairedModels([farEntry('fa', 7), farEntry('fb', 8)]));
     applyRemoteStatus(DESK);
-    const { at } = renderLibrary();
+    const { at, router } = renderLibrary();
     const user = userEvent.setup();
     await screen.findByRole('listbox', { name: 'On desk' });
     const [la, lb] = within(await screen.findByRole('listbox', { name: 'Loaded' })).getAllByRole('option');
@@ -430,12 +430,21 @@ describe('the library place', () => {
     expect(document.activeElement).toBe(lb);
     expect(at()).toBe('/models/2');
     expect([la.tabIndex, lb.tabIndex]).toEqual([-1, 0]);
+    // A key pressed on the picked row replaces its entry: one Back leaves the library's pick.
+    await user.keyboard('{ArrowUp}');
+    expect(at()).toBe('/models/1');
+    await act(() => router.navigate(-1));
+    expect(at()).toBe('/library');
 
     fa.focus();
     await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(fb);
     expect(at()).toBe('/far/8');
     expect([fa.tabIndex, fb.tabIndex]).toEqual([-1, 0]);
+    await user.keyboard('{ArrowUp}');
+    expect(at()).toBe('/far/7');
+    await act(() => router.navigate(-1));
+    expect(at()).toBe('/library');
   });
 
   it('walking the rows with the keys leaves one history entry; Back leaves the library', async () => {
