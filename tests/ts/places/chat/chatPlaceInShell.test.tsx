@@ -17,7 +17,6 @@ vi.mock('../../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('../../../../src/services/transport');
   return { ...actual, getTransport: () => transport.current };
 });
-vi.mock('../../../../src/components/ProxyDashboardModal', () => ({ ProxyDashboardModal: () => null }));
 vi.mock('../../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
 import { resetChats } from '../../../../src/services/chatRegistry';

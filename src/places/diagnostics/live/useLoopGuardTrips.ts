@@ -1,0 +1,48 @@
+/**
+ * State for the loop guard's log on Diagnostics › Live.
+ *
+ * One request, one loading state and a reload, like `useDiagnostics`. It is
+ * read when the Live tab opens, which draws the log only once it has a day.
+ */
+
+import { useCallback, useEffect, useState } from 'react';
+import { getLoopGuardTrips } from '../../../services/transport/api/proxy';
+import type { LoopGuardTripDay } from '../../../types/generated/LoopGuardTripDay';
+import { formatError } from '../../../utils/errors';
+
+/**
+ * The window the panel reads, in days: the same default the daemon's route and
+ * `gglib proxy trips` use (`LOOP_GUARD_LOG_DEFAULT_DAYS` in gglib-core), sent
+ * explicitly so the panel's heading and the rows it shows cannot disagree.
+ */
+export const LOOP_GUARD_LOG_DAYS = 30;
+
+export interface LoopGuardTripsState {
+  days: LoopGuardTripDay[] | null;
+  loading: boolean;
+  error: string | null;
+  reload: () => Promise<void>;
+}
+
+export function useLoopGuardTrips(): LoopGuardTripsState {
+  const [days, setDays] = useState<LoopGuardTripDay[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return getLoopGuardTrips(LOOP_GUARD_LOG_DAYS)
+      .then(setDays)
+      .catch((err: unknown) => {
+        setError(formatError(err));
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { days, loading, error, reload };
+}

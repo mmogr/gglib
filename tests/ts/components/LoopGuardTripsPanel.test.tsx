@@ -3,20 +3,26 @@
  *
  * The load-bearing behaviours: a day the guard scanned without a trip is
  * shown with zero trips, an empty log says so, and a failed read offers a
- * Retry that does not submit the settings form the panel sits in.
+ * Retry that does not submit a form around it.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import { LoopGuardTripsPanel } from '../../../src/places/settings/LoopGuardTripsPanel';
+import { LoopGuardTripsPanel as Panel } from '../../../src/places/diagnostics/live/LoopGuardTripsPanel';
+import { useLoopGuardTrips } from '../../../src/places/diagnostics/live/useLoopGuardTrips';
 import { getLoopGuardTrips } from '../../../src/services/transport/api/proxy';
 import type { LoopGuardTripDay } from '../../../src/types/generated/LoopGuardTripDay';
 
 vi.mock('../../../src/services/transport/api/proxy', () => ({
   getLoopGuardTrips: vi.fn(),
 }));
+
+/** The panel over the hook's state, as the Live tab draws it. */
+function LoopGuardTripsPanel() {
+  return <Panel state={useLoopGuardTrips()} />;
+}
 
 const day = (overrides: Partial<LoopGuardTripDay> = {}): LoopGuardTripDay => ({
   day: '2026-09-18',

@@ -1,9 +1,9 @@
-src/components/Benchmark/Tune/TuneTab.tsx 306
+src/places/diagnostics/benchmarks/Tune/TuneTab.tsx 306
 src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 335
 src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
 src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/McpServersPanel.tsx 482
-src/components/ProxySamplingPanel.tsx 403
+src/places/diagnostics/live/ProxySamplingPanel.tsx 403
 src/components/SamplingForm/SamplingForm.tsx 312
 src/components/SetupWizard/SetupWizard.tsx 705
 src/hooks/useGglibRuntime/agentMessageState.ts 340

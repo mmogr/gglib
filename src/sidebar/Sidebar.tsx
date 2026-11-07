@@ -7,8 +7,8 @@
  * while the rest stays); Settings and Diagnostics pinned at the foot,
  * Diagnostics in tertiary text. The place that is open is the address, so
  * the open row is read from it, and every row navigates through
- * `app/paths`. Settings opens the settings place on General;
- * Diagnostics opens the benchmarks until Diagnostics has its tabs (G1).
+ * `app/paths`. Settings opens the settings place on General, Diagnostics
+ * the diagnostics place on Live.
  *
  * @module sidebar/Sidebar
  */
@@ -105,7 +105,7 @@ export function Sidebar() {
         <Row current={place === 'settings'} onClick={() => navigate(paths.settings())}>
           <span>Settings</span>
         </Row>
-        <Row current={place === 'diagnostics'} tertiary onClick={() => navigate(paths.benchmarks())}>
+        <Row current={place === 'diagnostics'} tertiary onClick={() => navigate(paths.diagnostics())}>
           <span>Diagnostics</span>
         </Row>
       </div>

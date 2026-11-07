@@ -16,7 +16,7 @@ import {
   noiseFloor,
   passCounts,
   unstableTasks,
-} from '../../../src/components/Benchmark/Agentic/verdicts';
+} from '../../../src/places/diagnostics/benchmarks/Agentic/verdicts';
 import type {
   AgenticEvalReport,
   AgenticTaskComparison,

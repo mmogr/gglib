@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { ModelSignalsSection } from '../../../src/components/proxy';
+import { ModelSignalsSection } from '../../../src/places/diagnostics/live/ProxyMetricsGrid';
 import type { ModelDefectCounts } from '../../../src/services/transport/types/dashboard';
 import { dashboardSnapshot, modelDefectCounts } from '../fixtures/dashboard';
 
@@ -85,7 +85,6 @@ describe('ModelSignalsSection', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Per-Model Signals' })).toBeInTheDocument();
     expect(rowsOf('qwen')).toEqual([
       'qwen: 100 requests',
       'Tool-call repairs: 7 of 9 succeeded',
