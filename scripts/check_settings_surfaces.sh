@@ -20,7 +20,7 @@
 #         field appears in `SettingsSetArgs`, in
 #         `config_commands/settings_args.rs`.
 #   GUI — the camelCase name appears in `src/`, which is where the TypeScript
-#         mirror and the settings modal both live.
+#         mirror and the settings place both live.
 #
 # One is enough. Several settings are deliberately CLI-only (a scripted
 # install has no modal) and a few are deliberately GUI-only (`close_to_tray`
@@ -73,7 +73,6 @@ declare -A EXEMPT=(
   [default_model_id]="set by \`gglib model default\`, not by config settings"
   [inference_defaults]="edited through \`gglib config inference\` and the model inspector"
   [inference_profiles]="edited through \`gglib config profile\` and the profile editor"
-  [title_generation_prompt]="edited through the chat UI's title settings"
   [remote_pairing]="the ticket and key \`gglib remote join\` receives when a pairing code is redeemed, not chosen"
   [remote_enabled]="the switch \`gglib remote enable\`/\`disable\` set; a settings field that could claim a machine is reachable with nothing bound would be a lie"
   [remote_serve]="the flags \`gglib remote enable\` was given, recorded so a restart arms the tunnel the same way, not configured"
@@ -282,7 +281,7 @@ person has. Pick one:
      `crates/gglib-cli/src/handlers/config/settings/set.rs`. That is the one
      place: a test there fails for a flag left out of it.
   2. Give it a GUI control: add the camelCase field to `src/types/index.ts`
-     and a control in the settings modal.
+     and a control in the settings place (`src/places/settings/`).
   3. Delete the setting, and whatever reads it.
   4. Exempt it in this script, with a reason — but only if something other
      than a person is meant to write it.
@@ -350,7 +349,7 @@ scan_double_options() {
     #
     # Only the text *before* the declaration joins the attribute buffer. The
     # declaration itself must never vouch for the field: `default_model_id`
-    # and `default_download_path` both contain "default" in their names, and
+    # and `default_context_size` both contain "default" in their names, and
     # would otherwise satisfy the check on their own spelling.
     # `pub(crate)` and friends are matched too. Requiring whitespace straight
     # after `pub` reproduced the original bug exactly: the field was invisible

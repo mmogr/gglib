@@ -204,7 +204,7 @@ async fn another_rows_bad_value_does_not_stop_the_copy() {
         &[
             ON,
             ("remote_serve", r#"{"mcpServers":["tavily"]}"#),
-            ("bind_host", "0.0.0.0"),
+            ("proxy_host", "0.0.0.0"),
         ],
     )
     .await;

@@ -221,15 +221,12 @@ fn settings_display_rows_model_display_override() {
 
 #[test]
 fn settings_display_rows_null_displays_as_none() {
-    let settings = Settings {
-        default_download_path: None,
-        ..Default::default()
-    };
+    let settings = Settings::default();
     let rows = settings_display_rows(&settings, None, None);
     let row = rows
         .iter()
-        .find(|(k, _)| k == "default-download-path")
-        .expect("default-download-path should be present");
+        .find(|(k, _)| k == "title-generation-prompt")
+        .expect("title-generation-prompt should be present");
     assert_eq!(row.1, "None");
 }
 

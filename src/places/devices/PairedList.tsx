@@ -17,9 +17,9 @@
  */
 
 import { FC, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { MoreHorizontal } from 'lucide-react';
-import { settingsAt } from '../../app/paths';
+import { paths } from '../../app/paths';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
@@ -48,7 +48,6 @@ export const PairedList: FC<{ status: RemoteStatus; actions: PageActions }> = ({
   const { confirm } = useConfirmContext();
   const { showToast } = useToastContext();
   const navigate = useNavigate();
-  const location = useLocation();
   // `?? []`: a daemon from before the roster answers status without one.
   const devices = status.devices ?? [];
   const peers = status.peers.length;
@@ -114,7 +113,7 @@ export const PairedList: FC<{ status: RemoteStatus; actions: PageActions }> = ({
           <span className="min-w-0 flex-1">
             Tool servers shared with them: {status.mcp_servers.length > 0 ? status.mcp_servers.join(', ') : 'none'}
           </span>
-          <Button variant="ghost" size="sm" onClick={() => navigate(settingsAt(location, 'mcp'), { replace: true })}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(paths.settings('tools'))}>
             Change ›
           </Button>
         </div>

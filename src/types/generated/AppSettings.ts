@@ -10,7 +10,7 @@ import type { LoopGuardMode } from "./LoopGuardMode";
  * for a fresh install with no saved values, which is what callers resolving
  * their own fallbacks need to test against.
  */
-export type AppSettings = { defaultDownloadPath: string | null, defaultContextSize: number | null, proxyPort: number | null, llamaBasePort: number | null, maxDownloadQueueSize: number | null, showMemoryFitIndicators: boolean | null, maxToolIterations: number | null, maxStagnationSteps: number | null, 
+export type AppSettings = { defaultContextSize: number | null, proxyPort: number | null, llamaBasePort: number | null, maxDownloadQueueSize: number | null, maxToolIterations: number | null, maxStagnationSteps: number | null, 
 /**
  * Default model ID for quick commands (e.g., `gglib question`).
  */
@@ -23,7 +23,7 @@ defaultImageModelId: number | null, inferenceDefaults: InferenceConfig | null,
 /**
  * Named sampling profiles, selectable per request as `{model}:{profile}`.
  */
-inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, bindHost: string | null, shareLan: boolean | null, proxyHost: string | null, proxyAllowedHosts: Array<string> | null, proxyCacheOnDisk: boolean | null, proxyCacheDiskGb: number | null, 
+inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, proxyHost: string | null, proxyAllowedHosts: Array<string> | null, proxyCacheOnDisk: boolean | null, proxyCacheDiskGb: number | null, 
 /**
  * Whether a proxy key is stored. Never the key: a read says whether a
  * secret is held, and `POST /api/secrets/reveal` is where its value

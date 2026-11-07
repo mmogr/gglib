@@ -96,6 +96,7 @@ const SETTINGS_FIELDS: {
     rustField: 'max_download_queue_size',
   },
   { label: 'Default Context Size', spec: settingsDefaults.CONTEXT_SIZE, rustField: 'default_context_size' },
+  { label: 'Disk budget (GiB)', spec: settingsDefaults.PROXY_CACHE_DISK_GB, rustField: 'proxy_cache_disk_gb' },
 ];
 
 /** A spec's default as the file writes one: a number, or null for unset. */
@@ -105,7 +106,7 @@ const statedDefault = (spec: settingsDefaults.NumericSettingSpec) =>
 describe('settings fields vs validate_settings', () => {
   it.each(SETTINGS_FIELDS)('$label offers only values the backend accepts', ({ spec, rustField }) => {
     expectOffersOnlyAccepted(
-      { min: Number(spec.min), max: Number(spec.max) },
+      { min: Number(spec.min), max: spec.max === undefined ? Infinity : Number(spec.max) },
       recorded<Accepted>('settings', rustField),
     );
   });

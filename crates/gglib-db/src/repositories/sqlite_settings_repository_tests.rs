@@ -38,52 +38,52 @@ async fn test_save_and_load() {
 /// The settings table is key-value, so a new field needs no DDL — it
 /// round-trips as its own row keyed by the serde field name.
 #[tokio::test]
-async fn test_save_and_load_bind_host() {
+async fn test_save_and_load_proxy_host() {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     let repo = SqliteSettingsRepository::new(pool.clone());
     repo.ensure_table().await.unwrap();
 
     let settings = Settings {
-        bind_host: Some("0.0.0.0".to_owned()),
+        proxy_host: Some("0.0.0.0".to_owned()),
         ..Settings::default()
     };
     repo.save(&settings).await.unwrap();
 
     assert_eq!(
-        repo.load().await.unwrap().bind_host,
+        repo.load().await.unwrap().proxy_host,
         Some("0.0.0.0".to_owned())
     );
 
     let row: Option<(String,)> =
-        sqlx::query_as("SELECT value FROM settings_kv WHERE key = 'bind_host'")
+        sqlx::query_as("SELECT value FROM settings_kv WHERE key = 'proxy_host'")
             .fetch_optional(&pool)
             .await
             .unwrap();
     assert_eq!(
         row.map(|r| r.0),
         Some("\"0.0.0.0\"".to_owned()),
-        "bind_host is stored under its serde field name as compact JSON"
+        "proxy_host is stored under its serde field name as compact JSON"
     );
 }
 
 #[tokio::test]
-async fn test_save_and_load_share_lan() {
+async fn test_save_and_load_proxy_cache_on_disk() {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     let repo = SqliteSettingsRepository::new(pool);
     repo.ensure_table().await.unwrap();
 
     let mut settings = Settings {
-        share_lan: Some(true),
+        proxy_cache_on_disk: Some(true),
         ..Settings::default()
     };
     repo.save(&settings).await.unwrap();
-    assert_eq!(repo.load().await.unwrap().share_lan, Some(true));
+    assert_eq!(repo.load().await.unwrap().proxy_cache_on_disk, Some(true));
 
-    // `--share-lan false` must be persistable as a real value, not erased:
-    // it is the documented way to switch LAN sharing back off.
-    settings.share_lan = Some(false);
+    // `--proxy-cache-on-disk false` must be persistable as a real value,
+    // not erased: it is the documented way to switch the cache back off.
+    settings.proxy_cache_on_disk = Some(false);
     repo.save(&settings).await.unwrap();
-    assert_eq!(repo.load().await.unwrap().share_lan, Some(false));
+    assert_eq!(repo.load().await.unwrap().proxy_cache_on_disk, Some(false));
 }
 
 /// A database written before these fields existed has no rows for them.
@@ -106,8 +106,8 @@ async fn test_load_tolerates_rows_written_before_new_fields_existed() {
 
     let loaded = repo.load().await.expect("older row sets still load");
     assert_eq!(loaded.proxy_port, Some(9090));
-    assert_eq!(loaded.bind_host, None);
-    assert_eq!(loaded.share_lan, None);
+    assert_eq!(loaded.proxy_host, None);
+    assert_eq!(loaded.proxy_cache_on_disk, None);
 }
 
 /// Serve rows older builds wrote, with their `/mcp` switch on or their list
@@ -186,7 +186,7 @@ async fn a_change_to_one_field_writes_only_its_row() {
     repo.ensure_table().await.unwrap();
     repo.save(&Settings {
         proxy_port: Some(9090),
-        bind_host: Some("127.0.0.1".to_owned()),
+        proxy_host: Some("127.0.0.1".to_owned()),
         ..Settings::default()
     })
     .await
@@ -214,7 +214,7 @@ async fn a_change_to_one_field_writes_only_its_row() {
                 .0
         }
     };
-    assert_eq!(stamp("bind_host").await, "untouched");
+    assert_eq!(stamp("proxy_host").await, "untouched");
     assert_ne!(stamp("proxy_port").await, "untouched");
     assert_eq!(repo.load().await.unwrap().proxy_port, Some(9191));
 }

@@ -30,7 +30,7 @@ const UNREADABLE: &[(&str, &[(&str, &str)])] = &[
     ),
     (
         "another row that is not JSON",
-        &[(SWITCH, "false"), ("bind_host", "0.0.0.0")],
+        &[(SWITCH, "false"), ("proxy_host", "0.0.0.0")],
     ),
 ];
 

@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { pinStanding } from '../../../src/components/SettingsModal/pinStanding';
+import { pinStanding } from '../../../src/places/settings/pinStanding';
 import type { PinState } from '../../../src/types/setup';
 
 const COMMAND = 'gglib config llama update';

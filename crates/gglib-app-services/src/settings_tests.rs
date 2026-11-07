@@ -28,7 +28,7 @@ async fn get_returns_default_settings() {
     let ops = make_ops(core, MockSystemProbePort::default());
     let settings = ops.get().await.expect("get should succeed");
     // Fresh DB: no custom settings – all optional fields are None
-    assert!(settings.default_download_path.is_none());
+    assert!(settings.title_generation_prompt.is_none());
 }
 
 fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {
@@ -149,12 +149,10 @@ async fn installing_the_templates_adds_the_nine_and_keeps_a_profile_of_the_same_
 #[test]
 fn profiles_use_camel_case_on_the_wire() {
     let settings = AppSettings {
-        default_download_path: None,
         default_context_size: None,
         proxy_port: None,
         llama_base_port: None,
         max_download_queue_size: None,
-        show_memory_fit_indicators: None,
         max_tool_iterations: None,
         max_stagnation_steps: None,
         default_model_id: None,
@@ -163,8 +161,6 @@ fn profiles_use_camel_case_on_the_wire() {
         inference_profiles: Some(vec![profile("coding", 0.2)]),
         setup_completed: None,
         title_generation_prompt: None,
-        bind_host: None,
-        share_lan: None,
         proxy_host: None,
         proxy_allowed_hosts: None,
         proxy_cache_on_disk: None,
@@ -275,7 +271,10 @@ fn system_memory_refuses_a_suspiciously_small_reading() {
 fn update_settings_request_omitted_field_is_none() {
     let req: UpdateSettingsRequest = serde_json::from_str("{}").unwrap();
     assert_eq!(req.default_context_size, None, "omitted key must be None");
-    assert_eq!(req.default_download_path, None, "omitted key must be None");
+    assert_eq!(
+        req.title_generation_prompt, None,
+        "omitted key must be None"
+    );
 }
 
 #[test]
@@ -301,23 +300,20 @@ fn update_settings_request_populated_value_is_some_some() {
 /// actually clears the setting through the full service+DB round trip,
 /// not just at deserialization.
 #[tokio::test]
-async fn update_settings_json_null_clears_default_download_path() {
+async fn update_settings_json_null_clears_title_generation_prompt() {
     let core = test_core().await;
     let ops = make_ops(core, MockSystemProbePort::default());
 
     let set_req: UpdateSettingsRequest =
-        serde_json::from_str(r#"{"defaultDownloadPath": "/custom/path"}"#).unwrap();
+        serde_json::from_str(r#"{"titleGenerationPrompt": "a prompt"}"#).unwrap();
     let updated = ops.update(set_req).await.expect("update should succeed");
-    assert_eq!(
-        updated.default_download_path.as_deref(),
-        Some("/custom/path")
-    );
+    assert_eq!(updated.title_generation_prompt.as_deref(), Some("a prompt"));
 
     let clear_req: UpdateSettingsRequest =
-        serde_json::from_str(r#"{"defaultDownloadPath": null}"#).unwrap();
+        serde_json::from_str(r#"{"titleGenerationPrompt": null}"#).unwrap();
     let cleared = ops.update(clear_req).await.expect("update should succeed");
     assert!(
-        cleared.default_download_path.is_none(),
-        "explicit JSON null must clear default_download_path"
+        cleared.title_generation_prompt.is_none(),
+        "explicit JSON null must clear title_generation_prompt"
     );
 }

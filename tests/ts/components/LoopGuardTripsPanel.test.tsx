@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import { LoopGuardTripsPanel } from '../../../src/components/SettingsModal/LoopGuardTripsPanel';
+import { LoopGuardTripsPanel } from '../../../src/places/settings/LoopGuardTripsPanel';
 import { getLoopGuardTrips } from '../../../src/services/transport/api/proxy';
 import type { LoopGuardTripDay } from '../../../src/types/generated/LoopGuardTripDay';
 

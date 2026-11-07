@@ -60,9 +60,9 @@ export async function pickGgufFile(): Promise<FilePickerResult> {
  * when none was chosen. Always `null` on web, which has no dialog that can
  * name a folder's path: there the caller asks for the path typed.
  */
-export async function pickFolder(): Promise<string | null> {
+export async function pickFolder(title = 'Choose the folder this chat reads'): Promise<string | null> {
   if (!isDesktop()) return null;
   const { open } = await import('@tauri-apps/plugin-dialog');
-  const result = await open({ title: 'Choose the folder this chat reads', directory: true, multiple: false });
+  const result = await open({ title, directory: true, multiple: false });
   return typeof result === 'string' ? result : null;
 }

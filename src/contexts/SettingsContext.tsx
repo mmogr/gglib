@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { AppSettings, UpdateSettingsRequest } from "../types";
@@ -19,7 +20,12 @@ export interface SettingsContextValue {
   saving: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  save: (updates: UpdateSettingsRequest) => Promise<AppSettings>;
+  /**
+   * Write `updates`. `quiet` raises no toast either way, for a caller that
+   * says how the write went beside the field it came from (the settings
+   * place); a failure still rejects.
+   */
+  save: (updates: UpdateSettingsRequest, options?: { quiet?: boolean }) => Promise<AppSettings>;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -38,13 +44,18 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Counts every read and write begun. A read applies its answer only when
+  // nothing began after it, so a read overtaken by a save (or by a later
+  // read) cannot put back what was there before (TX-2).
+  const turn = useRef(0);
 
   const load = useCallback(async () => {
+    const mine = ++turn.current;
     try {
       setLoading(true);
       setError(null);
       const result = await getTransport().getSettings();
-      setSettings(result);
+      if (mine === turn.current) setSettings(result);
     } catch (err) {
       const message = formatError(err);
       setError(message);
@@ -54,18 +65,20 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
   }, []);
 
   const save = useCallback(
-    async (updates: UpdateSettingsRequest): Promise<AppSettings> => {
+    async (updates: UpdateSettingsRequest, options?: { quiet?: boolean }): Promise<AppSettings> => {
+      const toast = options?.quiet ? undefined : showToast;
       try {
         setSaving(true);
         setError(null);
+        ++turn.current;
         const result = await getTransport().updateSettings(updates);
         setSettings(result);
-        showToast?.("Settings applied", "success");
+        toast?.("Settings applied", "success");
         return result;
       } catch (err) {
         const message = formatError(err);
         setError(message);
-        showToast?.(message, "error");
+        toast?.(message, "error");
         throw err;
       } finally {
         setSaving(false);

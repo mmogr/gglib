@@ -1,8 +1,8 @@
 /**
  * The sidebar on every screen: its rows go through `app/paths`, the open
  * row is read from the address, Library counts the library, Settings opens
- * the dialog over the place, and Diagnostics opens the benchmarks. Under
- * 720 px the sidebar is a drawer. Its chats are `chatList.test.tsx`'s.
+ * the settings place, and Diagnostics opens the benchmarks. Under 720 px
+ * the sidebar is a drawer. Its chats are `chatList.test.tsx`'s.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -66,12 +66,15 @@ describe('the sidebar', () => {
     expect(app.at()).toBe('/library');
   });
 
-  it('Settings opens the dialog over the place, replacing the entry; Diagnostics opens the benchmarks', async () => {
+  it('Settings opens the settings place on General, marked current there; Diagnostics opens the benchmarks', async () => {
     const app = renderShell('/library');
     const user = userEvent.setup();
+    expect(row('Settings')).not.toHaveAttribute('aria-current');
     await user.click(row('Settings'));
-    expect(app.at()).toBe('/library?settings=general');
-    expect(app.router.state.historyAction).toBe('REPLACE');
+    expect(app.at()).toBe('/settings/general');
+    expect(app.router.state.historyAction).toBe('PUSH');
+    expect(row('Settings')).toHaveAttribute('aria-current', 'page');
+    expect(row('Library')).not.toHaveAttribute('aria-current');
 
     await user.click(row('Diagnostics'));
     await waitFor(() => expect(app.at()).toBe('/diagnostics/benchmarks'));
@@ -98,10 +101,10 @@ describe('the sidebar', () => {
       await gone();
     });
 
-    it('closes when a dialog is opened over the place from it', async () => {
+    it('closes on a move to the settings place from it', async () => {
       const { app, user } = await opened();
       await user.click(screen.getAllByRole('button', { name: 'Settings' })[1]);
-      await waitFor(() => expect(app.at()).toBe('/library?settings=general'));
+      await waitFor(() => expect(app.at()).toBe('/settings/general'));
       await gone();
     });
 

@@ -17,13 +17,11 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
-    pub default_download_path: Option<String>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub default_context_size: Option<u64>,
     pub proxy_port: Option<u16>,
     pub llama_base_port: Option<u16>,
     pub max_download_queue_size: Option<u32>,
-    pub show_memory_fit_indicators: Option<bool>,
     pub max_tool_iterations: Option<u32>,
     pub max_stagnation_steps: Option<u32>,
     /// Default model ID for quick commands (e.g., `gglib question`).
@@ -40,9 +38,7 @@ pub struct AppSettings {
     pub setup_completed: Option<bool>,
     // Title generation
     pub title_generation_prompt: Option<String>,
-    // Network binding (see `gglib_core::Settings`)
-    pub bind_host: Option<String>,
-    pub share_lan: Option<bool>,
+    // The endpoint (see `gglib_core::Settings`)
     pub proxy_host: Option<String>,
     pub proxy_allowed_hosts: Option<Vec<String>>,
     pub proxy_cache_on_disk: Option<bool>,
@@ -93,12 +89,10 @@ pub struct InstalledTemplates {
 impl From<gglib_core::Settings> for AppSettings {
     fn from(settings: gglib_core::Settings) -> Self {
         Self {
-            default_download_path: settings.default_download_path,
             default_context_size: settings.default_context_size,
             proxy_port: settings.proxy_port,
             llama_base_port: settings.llama_base_port,
             max_download_queue_size: settings.max_download_queue_size,
-            show_memory_fit_indicators: settings.show_memory_fit_indicators,
             max_tool_iterations: settings.max_tool_iterations,
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
@@ -107,8 +101,6 @@ impl From<gglib_core::Settings> for AppSettings {
             inference_profiles: settings.inference_profiles,
             setup_completed: settings.setup_completed,
             title_generation_prompt: settings.title_generation_prompt,
-            bind_host: settings.bind_host,
-            share_lan: settings.share_lan,
             proxy_host: settings.proxy_host,
             proxy_allowed_hosts: settings.proxy_allowed_hosts,
             proxy_cache_on_disk: settings.proxy_cache_on_disk,
@@ -140,9 +132,6 @@ pub struct UpdateSettingsRequest {
     // the nested `Option` needs an explicit type, spelled `T | null` with
     // `optional` so the emitted `field?: T | null` carries all three states —
     // absent leaves the setting alone, `null` clears it, a value sets it.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub default_download_path: Option<Option<String>>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub default_context_size: Option<Option<u64>>,
@@ -155,9 +144,6 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub max_download_queue_size: Option<Option<u32>>,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub show_memory_fit_indicators: Option<Option<bool>>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub max_tool_iterations: Option<Option<u32>>,
@@ -196,13 +182,7 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub title_generation_prompt: Option<Option<String>>,
-    // Network binding (see `gglib_core::Settings`)
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub bind_host: Option<Option<String>>,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub share_lan: Option<Option<bool>>,
+    // The endpoint (see `gglib_core::Settings`)
     #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_host: Option<Option<String>>,
@@ -265,12 +245,10 @@ pub struct UpdateSettingsRequest {
 impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
     fn from(request: UpdateSettingsRequest) -> Self {
         Self {
-            default_download_path: request.default_download_path,
             default_context_size: request.default_context_size,
             proxy_port: request.proxy_port,
             llama_base_port: request.llama_base_port,
             max_download_queue_size: request.max_download_queue_size,
-            show_memory_fit_indicators: request.show_memory_fit_indicators,
             max_tool_iterations: request.max_tool_iterations,
             max_stagnation_steps: request.max_stagnation_steps,
             default_model_id: request.default_model_id,
@@ -279,8 +257,6 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             inference_profiles: request.inference_profiles,
             setup_completed: request.setup_completed,
             title_generation_prompt: request.title_generation_prompt,
-            bind_host: request.bind_host,
-            share_lan: request.share_lan,
             proxy_host: request.proxy_host,
             proxy_allowed_hosts: request.proxy_allowed_hosts,
             proxy_cache_on_disk: request.proxy_cache_on_disk,

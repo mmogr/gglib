@@ -54,7 +54,7 @@ pub struct SettingsSetArgs {
     /// machine where gglib can read the device, and the built-in floor where it cannot.
     /// Setting it pins every launch to that number. This flag cannot clear the value
     /// again — `gglib config settings unset default-context-size` is what returns it to
-    /// unset, and the settings modal can clear the field alone.
+    /// unset, and the settings place can clear the field alone.
     #[arg(long)]
     pub default_context_size: Option<u64>,
     /// Port for the OpenAI-compatible proxy server (>= 1024)
@@ -66,26 +66,12 @@ pub struct SettingsSetArgs {
     /// Maximum number of downloads that can be queued (1-50)
     #[arg(long)]
     pub max_download_queue_size: Option<u32>,
-    /// Default download path for models
-    #[arg(long)]
-    pub default_download_path: Option<String>,
     /// Maximum agent iterations for tool-calling loop (clamped to 1-50 when a loop runs)
     #[arg(long)]
     pub max_tool_iterations: Option<u32>,
     /// Maximum stagnation steps before stopping agent loop
     #[arg(long)]
     pub max_stagnation_steps: Option<u32>,
-    /// Show memory fit indicators in `HuggingFace` browser
-    #[arg(long)]
-    pub show_memory_fit_indicators: Option<bool>,
-    /// Host address `gglib web` binds to (an IP, e.g. 127.0.0.1 or 0.0.0.0).
-    /// The `--host` flag overrides this for a single run.
-    #[arg(long)]
-    pub bind_host: Option<String>,
-    /// Expose `gglib web` on all LAN interfaces and broadcast over mDNS.
-    /// WARNING: makes `GGLib` visible to every device on your network.
-    #[arg(long)]
-    pub share_lan: Option<bool>,
     /// Address the endpoint binds (an IP, e.g. 127.0.0.1 or 0.0.0.0), for
     /// `proxy`, `serve` and the desktop app alike; `--host` on `proxy` and
     /// `serve` overrides it for one run, and `up` binds loopback by name.

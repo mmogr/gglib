@@ -30,8 +30,7 @@ const { confirm } = vi.hoisted(() => ({
 vi.mock('../../../src/contexts/ConfirmContext', () => ({
   useConfirmContext: () => ({ confirm }),
 }));
-vi.mock('../../../src/components/SettingsModal/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => null }));
-vi.mock('../../../src/components/SettingsModal/BuildInfo', () => ({ BuildInfo: () => null }));
+vi.mock('../../../src/places/settings/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => null }));
 
 import type { EngineStatus, LlamaProgressEvent, PinState, RuntimeKind } from '../../../src/types/setup';
 
@@ -126,7 +125,7 @@ let statuses: Record<RuntimeKind, EngineStatus[]>;
 let streams: Record<RuntimeKind, ReturnType<typeof installStream>>;
 let fetchMock: ReturnType<typeof vi.fn>;
 let EngineCard: FC<{ kind: RuntimeKind }>;
-let SystemSettings: FC;
+let EnginesSection: FC;
 
 beforeEach(async () => {
   vi.resetModules();
@@ -149,8 +148,8 @@ beforeEach(async () => {
   const client = await import('../../../src/services/transport/api/client');
   client.resetClientCache();
   client.setApiSession('', undefined);
-  ({ EngineCard } = await import('../../../src/components/SettingsModal/EngineCard'));
-  ({ SystemSettings } = await import('../../../src/components/SettingsModal/SystemSettings'));
+  ({ EngineCard } = await import('../../../src/places/settings/EngineCard'));
+  ({ EnginesSection } = await import('../../../src/places/settings/EnginesSection'));
 });
 
 afterEach(() => {
@@ -357,7 +356,7 @@ describe('the engine card', () => {
   it("shows one engine's install on that engine's card only", async () => {
     statuses.llama = [status('llama', 'older')];
     statuses.stable_diffusion = [status('stable_diffusion', 'older')];
-    render(<SystemSettings />);
+    render(<EnginesSection />);
 
     const llama = within(await screen.findByRole('region', { name: 'llama.cpp' }));
     const sd = within(await screen.findByRole('region', { name: 'stable-diffusion.cpp' }));
