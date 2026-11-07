@@ -140,6 +140,7 @@ describe('useGglibRuntime send', () => {
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
     const made = daemon.requests.find((r) => r.method === 'POST' && r.url === '/api/conversations');
     expect(made?.body).toMatchObject({ model: { machine: { kind: 'local' }, id: 7 }, model_id: null });
+    expect(daemon.settings.get(100)?.model).toEqual({ machine: { kind: 'local' }, id: 7 });
   });
 
   it('a chat whose model nothing serves still sends: the daemon loads it', async () => {
@@ -187,21 +188,33 @@ describe('useGglibRuntime send', () => {
     expect(last.status).toEqual({ type: 'incomplete', reason: 'cancelled' });
   });
 
-  it("a chat on the paired machine's model while it is away: the turn is taken, and its run ends failed with that reason", async () => {
+  it.each([
+    ["the paired machine is away", far, { code: 'conflict', message: 'not connected to the machine this chat ran on' }],
+    ['its model cannot load', here, { code: 'model_unavailable', message: "the chat's model could not be loaded on the hub" }],
+  ] as const)('a turn refused once its run exists (%s) gives the text back, and says why', async (_why, model, refusal) => {
     const onError = vi.fn();
-    const hook = await mount({ conversationId: 1, conversation: conversation(1), model: far, onError });
+    daemon.refuseLate = { ...refusal };
+    const hook = await mount({ conversationId: 1, conversation: conversation(1), model, onError });
+    send(hook, 'hello');
+
+    await waitFor(() => expect(hook.result.current.endedRun?.status).toBe('failed'));
+    // Nothing was saved: the question is not in the thread, and goes back to the composer.
+    expect(daemon.saved(1)).toEqual([]);
+    expect(shown(hook.result.current.messages)).toEqual([['system-1', 'system', 'You are a helpful assistant.']]);
+    await waitFor(() => expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello'));
+    expect(hook.result.current.endedRun?.error).toEqual(refusal);
+    expect(onError).toHaveBeenCalledWith(new Error(refusal.message));
+  });
+
+  it('a failed run whose question was saved gives nothing back: the question is in the thread', async () => {
+    const hook = await mount(local);
     send(hook, 'hello');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-    const { id } = daemon.only().info;
-    // Not refused at the door: the send is not handed back.
-    expect(onError).not.toHaveBeenCalled();
+    await daemon.finish(daemon.only().info.id, 'failed', [], { code: 'agent_error', message: 'The agent loop failed.' });
 
-    const away = { code: 'conflict', message: 'not connected to the machine this chat ran on' };
-    await daemon.finish(id, 'failed', [], away);
-
-    await waitFor(() => expect(hook.result.current.endedRun?.error).toEqual(away));
-    expect(hook.result.current.endedRun?.status).toBe('failed');
-    expect(hook.result.current.isRunning).toBe(false);
+    await waitFor(() => expect(hook.result.current.endedRun?.status).toBe('failed'));
+    expect(shown(hook.result.current.messages).map(([, role, text]) => [role, text])).toContainEqual(['user', 'hello']);
+    expect(hook.result.current.runtime.thread.composer.getState().text).toBe('');
   });
 
   it('keeps nothing of the run in browser storage, and logs nothing new', async () => {

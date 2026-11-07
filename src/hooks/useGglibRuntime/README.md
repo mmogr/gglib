@@ -51,7 +51,11 @@ paired machine's), and the composer's picker saves a new one as the
 conversation's (`app/useChatSwitch`).
 
 The daemon saves the user's message when a run starts and the reply when it
-ends; the page saves no turn. What `drawRun` draws is provisional: at the end
+ends; the page saves no turn. A turn refused once its run exists (its paired
+machine away, `conflict`; its model unable to load, `model_unavailable`)
+writes nothing, so when the run a send started ends `failed` with no new
+question among the saved rows, the text and images go back to the
+composer, beside the run's reason. What `drawRun` draws is provisional: at the end
 the thread becomes the saved rows, with their ids, tool rows folded, and an
 unfinished reply marked, and how long each turn thought. The live run is
 looked up before the rows load, so a run that ends during the opening is

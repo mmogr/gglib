@@ -33,8 +33,8 @@ interface ConversationActionsOptions {
   onOpened: (id: number) => void;
   /** The open conversation was deleted. */
   onDeleted?: () => void;
-  /** A chat with the paired machine's model: its fresh copy is made for that model too. */
-  pairedModel?: ModelRef;
+  /** The chat's model, this machine's or the paired machine's: its fresh copy is made for it too. */
+  model?: ModelRef;
 }
 
 /** Ask, then delete one of this machine's chats; whether it was deleted. */
@@ -66,7 +66,7 @@ export function useConversationActions({
   onError,
   onOpened,
   onDeleted,
-  pairedModel,
+  model,
 }: ConversationActionsOptions) {
   const remove = async () => {
     if (far || !activeConversation) return;
@@ -99,7 +99,7 @@ export function useConversationActions({
         title: activeConversation.title,
         modelId: null,
         systemPrompt: activeConversation.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
-        model: pairedModel ?? null,
+        model: model ?? null,
       });
       onOpened(newId);
     } catch (error) {

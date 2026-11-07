@@ -12,12 +12,14 @@
  *   branching rules say (`fakeBranches.ts`): in place, or on a new chat of
  *   the same family holding a copy of the rows it keeps, each copy keyed by
  *   the row it copies as first written. A refusal changes nothing.
- * - `PUT /api/conversations/{id}` saves the settings a patch names
- *   (`settings`), and answers with nothing.
+ * - `POST /api/conversations` keeps the `model` it is made for as the
+ *   conversation's settings' model, and `PUT /api/conversations/{id}` saves
+ *   the settings a patch names (`settings`), answering with nothing.
  * - `PUT /api/runs/{id}?kind=agent` takes this machine's turn (`LocalTurn`):
  *   a key it does not name is refused `invalid_request`, and so is a turn
  *   that says neither text nor an image, or answers the saved question and
- *   carries one. It answers `201` with the run `queued`, or `200` with the
+ *   carries one. It answers `201` with the run `queued` (and with
+ *   `refuseLate`, then ends it `failed` having written nothing), or `200` with the
  *   run that already has the id, saving nothing again. Once accepted it
  *   saves the turn's message as the user's row; with `answer_saved`, none,
  *   and it is refused unless the chat ends in a question. A refusal changes
@@ -65,8 +67,18 @@ type NewRow = Omit<ChatMessage, 'id' | 'conversation_id' | 'created_at'>;
 
 const encoder = new TextEncoder();
 
-/** Every key a turn may say: `LocalTurn`'s. */
-const TURN_KEYS = new Set(['conversation_id', 'content', 'images', 'thinking', 'answer_saved', 'draw', 'image_model', 'folder']);
+/** Every key a turn may say: `LocalTurn`'s, each named, so a key added in Rust fails to compile here. */
+const TURN_KEY_LIST = {
+  conversation_id: true,
+  content: true,
+  images: true,
+  thinking: true,
+  answer_saved: true,
+  draw: true,
+  image_model: true,
+  folder: true,
+} as const satisfies Record<keyof LocalTurn, true>;
+const TURN_KEYS = new Set(Object.keys(TURN_KEY_LIST));
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -89,6 +101,12 @@ export class FakeDaemon {
   runs = new Map<string, FakeRun>();
   requests: Recorded[] = [];
   images = new FakeImageStore();
+  /**
+   * The next turn is taken (`201`) and then refused, once, as the daemon
+   * refuses a turn whose paired machine is away or whose model cannot load:
+   * its run ends `failed` with this error, having written no row.
+   */
+  refuseLate: RunInfo['error'] | null = null;
   /** The answer the next run start gets instead of a run, once. */
   refuseNext: { status: number; type: string; error: string } | null = null;
   /** The next run start never reaches the daemon: `fetch` rejects, once. */
@@ -273,6 +291,9 @@ export class FakeDaemon {
     if (method === 'POST' && path === '/api/conversations') {
       const id = this.nextConversation++;
       this.conversations.add(id);
+      // A conversation made for a model keeps it as its settings' model.
+      const model = (body as { model?: ConversationSettingsPatch['model'] }).model;
+      if (model) this.settings.set(id, { model });
       return json(id);
     }
     if (method === 'GET' && (m = /^\/api\/conversations\/(\d+)\/thread$/.exec(path))) {
@@ -386,6 +407,12 @@ export class FakeDaemon {
     if (unreadable) return unreadable;
     const run = this.accept(id, cid);
     run.request = turn;
+    const late = this.refuseLate;
+    if (late) {
+      this.refuseLate = null;
+      void this.finish(id, 'failed', [], late);
+      return json(run.info, 201);
+    }
     if (!turn.answer_saved) {
       this.save(cid, { role: 'user', content: turn.content, ...(images.length > 0 && { images: this.images.infos(images) }) });
     }

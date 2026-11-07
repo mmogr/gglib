@@ -111,6 +111,9 @@ export interface UseGglibRuntimeReturn {
   branching: Branching;
 }
 
+/** How many of `messages` are the user's. */
+const userRows = (messages: readonly GglibMessage[]) => messages.filter((m) => m.role === 'user').length;
+
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
   const { conversationId, onError } = options;
   const source = options.source ?? 'this';
@@ -227,7 +230,12 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       folder?.accepted(cid);
       draw?.accepted(cid);
       if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
-      if (!signal.aborted) await reader.follow(cid, runId, signal);
+      const ended = signal.aborted ? null : await reader.follow(cid, runId, signal);
+      // A turn refused once its run existed (its paired machine away, its
+      // model unable to load) failed having written nothing: its question is
+      // not among the saved rows, so it goes back to the composer, beside the
+      // run's reason, rather than being lost.
+      if (ended?.info?.status === 'failed' && !signal.aborted && userRows(messagesRef.current) <= userRows(base)) handBack();
     } catch (error) {
       if (signal.aborted) return;
       reader.endReading(signal);

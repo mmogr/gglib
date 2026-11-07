@@ -127,7 +127,14 @@ async fn the_old_body_and_each_old_key_are_refused_without_quoting_them() {
         "port": 9000,
         "messages": [{ "role": "user", "content": "BODY-SECRET" }],
     });
-    let mut bodies = vec![old];
+    // A known key of the wrong type, and an unknown key: serde's own words
+    // would quote the value, or the key.
+    let mut bodies = vec![
+        old,
+        json!({ "conversation_id": "BODY-SECRET", "content": "PROMPT-SECRET" }),
+        json!({ "conversation_id": id, "content": ["BODY-SECRET"] }),
+        json!({ "conversation_id": id, "content": "PROMPT-SECRET", "BODY-SECRET": 1 }),
+    ];
     for key in [
         "messages",
         "port",

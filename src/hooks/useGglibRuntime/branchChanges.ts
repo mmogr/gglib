@@ -96,7 +96,7 @@ export interface ChangeDeps {
     beginSend: () => AbortSignal | null;
     endReading: (signal: AbortSignal) => void;
     showSaved: (cid: number, signal: AbortSignal) => Promise<void>;
-    follow: (cid: number, runId: string, signal: AbortSignal) => Promise<void>;
+    follow: (cid: number, runId: string, signal: AbortSignal) => Promise<unknown>;
   };
   /** Start a run that answers the question `cid` ends in; its id. */
   answer: (cid: number) => Promise<string>;

@@ -136,6 +136,10 @@ export default function ChatPlace(props: ChatPlaceProps) {
   };
 
   const conversations = useChats(source).list ?? NO_CHATS;
+
+  // The model a conversation made here keeps: a first send's, and Start over's.
+  const chatModel: ModelRef | undefined =
+    paired?.far ?? (modelId === undefined ? undefined : { machine: { kind: 'local' }, id: modelId });
   const syncConversations = () => refreshChats(source);
 
   // What a chat remembers can change on another device, and only its
@@ -182,7 +186,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
     onBranched: (_id, unanswered) => unanswered
       ? showToast(`Saved as a new branch, but it was not answered: ${unanswered.message}`, 'warning')
       : showToast('Saved as a new branch. The original is kept.', 'success'),
-    model: paired?.far ?? (modelId === undefined ? undefined : { machine: { kind: 'local' }, id: modelId }),
+    model: chatModel,
     onError: (error) => setChatError(error.message),
     // Non-fatal: the turn is still running, so this is a transient notice
     // rather than `chatError`, which renders as a failed turn.
@@ -228,7 +232,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
 
   // What changes a conversation: this machine's only, never a far chat.
   const actions = useConversationActions({
-    far, activeConversation, confirm, onError: setChatError, onOpened: open, onDeleted, pairedModel: paired?.far,
+    far, activeConversation, confirm, onError: setChatError, onOpened: open, onDeleted, model: chatModel,
   });
 
   return (

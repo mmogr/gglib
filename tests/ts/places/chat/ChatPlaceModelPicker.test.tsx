@@ -199,9 +199,10 @@ describe('ChatPlace, model picker', () => {
     expect(context().conversationId).toBe(1);
   });
 
-  it('says why a model would not start, and stays on the model it was on', async () => {
+  it('says why the daemon refused the pick, in its words alone, and stays on the model it was on', async () => {
     const user = userEvent.setup();
-    onSwitchModel.mockRejectedValueOnce(new Error('not enough memory'));
+    const refusal = 'this chat ran on another machine, and its model is that machine\'s, not this one\'s';
+    onSwitchModel.mockRejectedValueOnce(new Error(refusal));
     renderPage();
     // The composer is remounted as the conversation's messages load, so the
     // pick waits for one to be open, as the test above does.
@@ -211,8 +212,11 @@ describe('ChatPlace, model picker', () => {
 
     await pickModel(user, 'gemma-3-12b · Not loaded');
 
-    // The inspector's sentence, the daemon's reason as it came.
-    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't load: not enough memory"));
+    await waitFor(() =>
+      expect(screen.getByTestId('toasts')).toHaveTextContent(refusal),
+    );
+    // A pick starts nothing, so it never says a load failed.
+    expect(screen.getByTestId('toasts')).not.toHaveTextContent("Didn't load");
     expect(modelPicker()).toHaveTextContent('Qwen3.8-27B');
     expect(modelPicker()).toBeEnabled();
   });

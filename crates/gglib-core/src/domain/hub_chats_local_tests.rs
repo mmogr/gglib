@@ -6,6 +6,7 @@ use super::{HubTurn, LocalTurn};
 use crate::domain::Thinking;
 use crate::domain::attachment::AttachmentId;
 
+/// A turn that says every key, `draw` unpressed.
 fn every_key() -> LocalTurn {
     LocalTurn {
         conversation_id: 4,
@@ -13,7 +14,8 @@ fn every_key() -> LocalTurn {
         images: vec![AttachmentId::of(b"a photo")],
         thinking: Some(Thinking::Off),
         answer_saved: true,
-        draw: true,
+        // Unlike `answer_saved`, so a split that swaps the two is caught.
+        draw: false,
         image_model: Some(2),
         folder: Some("/tmp/work".to_owned()),
     }
@@ -29,7 +31,11 @@ fn keys(value: &Value) -> Vec<String> {
 /// the other fails here.
 #[test]
 fn its_keys_are_a_devices_turns_and_the_folder() {
-    let local = every_key();
+    // Every key said, `draw` among them, so none is left out of the body.
+    let local = LocalTurn {
+        draw: true,
+        ..every_key()
+    };
     let (turn, _) = local.clone().split();
     let mut want = keys(&serde_json::to_value(&turn).unwrap());
     want.push("folder".to_owned());
@@ -49,7 +55,7 @@ fn split_keeps_every_value() {
             images: vec![AttachmentId::of(b"a photo")],
             thinking: Some(Thinking::Off),
             answer_saved: true,
-            draw: true,
+            draw: false,
             image_model: Some(2),
         }
     );
