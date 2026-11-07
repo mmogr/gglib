@@ -68,10 +68,10 @@ export function progressLine(progress: RedrawProgress | null): string {
   }
 }
 
-/** The bar's fill, in percent: the steps done while sampling, all of it after, none before. */
+/** The bar's fill, in percent: the steps done while sampling (never past all of it), all of it after, none before. */
 export function progressShare(progress: RedrawProgress | null): number {
   if (progress?.stage === 'decoding' || progress?.stage === 'finishing') return 100;
-  if (progress?.stage === 'sampling' && progress.step && progress.total) return Math.round((progress.step / progress.total) * 100);
+  if (progress?.stage === 'sampling' && progress.step && progress.total) return Math.min(100, Math.round((progress.step / progress.total) * 100));
   return 0;
 }
 

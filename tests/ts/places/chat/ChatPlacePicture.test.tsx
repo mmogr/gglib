@@ -33,6 +33,7 @@ vi.mock('../../../../src/utils/pictureMask', async (original) => ({
 }));
 
 import { maskPng } from '../../../../src/utils/pictureMask';
+import { confirm } from '../../../../src/app/confirm';
 import { ingestServerEvent } from '../../../../src/services/serverRegistry';
 import { renderApp } from '../harness';
 import { progressLine, progressShare } from '../../../../src/components/ChatMessagesPanel/components/PictureWork';
@@ -214,6 +215,9 @@ describe('the picture sheet', () => {
     expect(screen.getByAltText('The picture drawn again')).toBeInTheDocument();
     fireEvent.pointerDown(hold);
     fireEvent.pointerCancel(hold);
+    expect(screen.getByAltText('The picture drawn again')).toBeInTheDocument();
+    fireEvent.pointerDown(hold);
+    fireEvent.pointerLeave(hold);
     expect(screen.getByAltText('The picture drawn again')).toBeInTheDocument();
 
     fireEvent.keyDown(hold, { key: ' ' });
@@ -412,6 +416,47 @@ describe('the picture sheet', () => {
     expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
   });
 
+  it('leaves another question open when the sheet goes after its own was answered', async () => {
+    const { user, app } = await open('1000 × 500');
+    await redrawn(user);
+    await user.keyboard('{Escape}');
+    await user.click(within(await screen.findByRole('dialog', { name: 'Discard the new picture?' })).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Discard the new picture?' })).not.toBeInTheDocument());
+    let answered: boolean | undefined;
+    act(() => {
+      void confirm({ title: 'Another question?', confirmLabel: 'Yes' }).then((yes) => {
+        answered = yes;
+      });
+    });
+    await screen.findByRole('dialog', { name: 'Another question?' });
+
+    await act(async () => {
+      await app.router.navigate('/library');
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    expect(screen.getByRole('dialog', { name: 'Another question?' })).toBeInTheDocument();
+    expect(answered).toBeUndefined();
+  });
+
+  it('stays open on Esc while the picture is being kept', async () => {
+    const { user } = await open('1000 × 500');
+    await redrawn(user);
+    (transport.current.uploadAttachment as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise(() => {}));
+    await user.click(screen.getByRole('button', { name: 'Keep' }));
+    await screen.findByRole('button', { name: 'Keeping…' });
+
+    await user.keyboard('{Escape}');
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    expect(screen.getByRole('dialog', { name: 'Keep this picture?' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Discard the new picture?' })).not.toBeInTheDocument();
+  });
+
   it('answers its open question no when the sheet goes from under it', async () => {
     const { user, app } = await open('1000 × 500');
     await redrawn(user);
@@ -443,6 +488,8 @@ describe('where a render is', () => {
     expect(progressShare({ stage: 'queued', position: 1 })).toBe(0);
     expect(progressShare({ stage: 'sampling' })).toBe(0);
     expect(progressShare({ stage: 'sampling', step: 1, total: 3 })).toBe(33);
+    // A step past the total, as sd-server's counts could say, fills the bar and no further.
+    expect(progressShare({ stage: 'sampling', step: 25, total: 20 })).toBe(100);
     expect(progressShare({ stage: 'decoding' })).toBe(100);
     expect(progressShare({ stage: 'finishing' })).toBe(100);
   });
