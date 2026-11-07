@@ -19,6 +19,7 @@ const transport = vi.hoisted(() => ({
   disconnectRemote: vi.fn(),
   killRemote: vi.fn(),
   disableRemote: vi.fn(),
+  inviteRemote: vi.fn(),
 }));
 const refresh = vi.hoisted(() => vi.fn(async () => true));
 
@@ -233,5 +234,29 @@ describe('Use another machine', () => {
     await screen.findByText('the pairing code was already used');
     await user.click(screen.getByRole('button', { name: 'Stop sharing' }));
     expect(screen.queryByText('the pairing code was already used')).not.toBeInTheDocument();
+  });
+  it("a refusal that lands before the page re-renders stays: Stop desk's gglib…", async () => {
+    applyRemoteStatus(DESK);
+    transport.killRemote.mockRejectedValue(new Error('desk refused the shutdown'));
+    renderApp('/devices');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'More for desk' }));
+    await user.click(screen.getByRole('menuitem', { name: "Stop desk's gglib…" }));
+    await user.click(await screen.findByRole('button', { name: 'Stop it' }));
+    expect(await screen.findByText('desk refused the shutdown')).toBeInTheDocument();
+  });
+
+  it("an invite's refusal goes when a join runs, and the join's own refusal stays", async () => {
+    applyRemoteStatus(SHARED);
+    transport.inviteRemote.mockRejectedValue(new Error('a code is already on offer'));
+    transport.joinRemote.mockRejectedValue(new Error('the pairing code was already used'));
+    renderApp('/devices');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Invite a device' }));
+    await screen.findByText('a code is already on offer');
+    await user.type(field(), `${TICKET}-483920`);
+    await user.click(join());
+    expect(await screen.findByText('the pairing code was already used')).toBeInTheDocument();
+    expect(screen.queryByText('a code is already on offer')).not.toBeInTheDocument();
   });
 });

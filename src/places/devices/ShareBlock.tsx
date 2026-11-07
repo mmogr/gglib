@@ -34,7 +34,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
   // Which action is in flight, not merely that one is: one boolean once
   // relabelled Stop while an Invite was out.
   const [busy, setBusy] = useState<'enable' | 'invite' | 'disable' | null>(null);
-  const [error, setError] = useBlockError(actions);
+  const [error, setError] = useBlockError(actions, 'share');
 
   const pairingActive = status.pairing_active;
   // The switch on with nothing bound: the daemon is putting the tunnel back
@@ -64,7 +64,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
       });
       if (!ok) return;
     }
-    actions.onAct();
+    actions.onAct('share');
     setBusy('enable');
     setError(null);
     try {
@@ -80,7 +80,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
   };
 
   const invite = async () => {
-    actions.onAct();
+    actions.onAct('share');
     setBusy('invite');
     setError(null);
     try {
@@ -96,7 +96,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
   };
 
   const stop = async () => {
-    actions.onAct();
+    actions.onAct('share');
     setBusy('disable');
     setError(null);
     // Before the request: its `remote_disabled` can arrive before the answer,

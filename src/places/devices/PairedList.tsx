@@ -63,7 +63,7 @@ export const PairedList: FC<{ status: RemoteStatus; actions: PageActions }> = ({
         variant: 'danger',
       });
       if (!ok) return;
-      onAct();
+      onAct('paired');
       try {
         const answer = await getTransport().forgetDevice(device.id);
         // Awaited and checked: nothing emits an event for a forget, so a

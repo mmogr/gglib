@@ -18,12 +18,13 @@ import { Note } from '../library/Group';
 import { JoinBlock } from './JoinBlock';
 import { PairedList } from './PairedList';
 import { ShareBlock } from './ShareBlock';
+import type { Actor, PageActions } from './pageActions';
 
 export default function DevicesPlace() {
   const { status } = useRemoteState();
-  const [acted, setActed] = useState(0);
-  const onAct = useCallback(() => setActed((n) => n + 1), []);
-  const actions = { acted, onAct };
+  const [last, setLast] = useState<PageActions['last']>({ n: 0, by: null });
+  const onAct = useCallback((by: Actor) => setLast((l) => ({ n: l.n + 1, by })), []);
+  const actions: PageActions = { last, onAct };
 
   // Opening asks the daemon again: the status is cheap, and it carries the
   // fields the tunnel's events do not.

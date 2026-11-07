@@ -42,7 +42,7 @@ export const JoinBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ 
   const [pairing, setPairing] = useState('');
   // Which action is out, so "Reaching it…" stands in for the button pressed.
   const [busy, setBusy] = useState<'join' | 'reconnect' | 'other' | null>(null);
-  const [error, setError] = useBlockError(actions);
+  const [error, setError] = useBlockError(actions, 'join');
 
   const connected = status.connected;
   const name = pairedName(status);
@@ -60,7 +60,7 @@ export const JoinBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ 
   }
 
   const act = async (kind: 'join' | 'reconnect' | 'other', run: () => Promise<unknown>) => {
-    actions.onAct();
+    actions.onAct('join');
     setBusy(kind);
     setError(null);
     try {
