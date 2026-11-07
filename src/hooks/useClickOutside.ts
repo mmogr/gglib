@@ -33,8 +33,8 @@ export function useClickOutside<T extends HTMLElement>(
       //
       // A caller that *wants* the dropdown closed when it opens a dialog
       // should close it in the same handler rather than rely on this, which
-      // is what `ProxyControl`'s View Dashboard now does: it used to close
-      // by accident, and an accident is not a behaviour to inherit.
+      // is what the old proxy panel's View Dashboard came to do: it used to
+      // close by accident, and an accident is not a behaviour to inherit.
       if (
         target instanceof Element &&
         target.closest('[role="dialog"], [data-modal-overlay]')

@@ -2,8 +2,9 @@
  * Every path the app navigates to, written here and nowhere else.
  *
  * A screen is a place with an address: the library, a model in it (or its
- * log), the paired machine's model, a Hugging Face repo, a chat on a model,
- * the settings, the diagnostics.
+ * log), the paired machine's model, a Hugging Face repo, the endpoint (with
+ * a model inspected beside it), a chat on a model, the settings, the
+ * diagnostics.
  * The sidebar, the native menu, a row's click and a test all go through
  * these, so a path's shape is changed in one file. Reading a path back is
  * `inspectorSubject`, the one reader of what the address names.
@@ -26,6 +27,12 @@ export const paths = {
   far: (id: number) => `/far/${id}`,
   /** The library with the Hugging Face repo `owner/name` in the inspector. */
   hf: (repo: string) => `/get/${repo.split('/').map(encodeURIComponent).join('/')}`,
+  /** The endpoint place. */
+  endpoint: () => '/endpoint',
+  /** The endpoint place with this machine's model `id` in the inspector beside it. */
+  endpointInspect: (id: number) => `/endpoint?inspect=model:${id}`,
+  /** The endpoint place with model `id` inspected and its Load with options sheet opened. */
+  endpointServe: (id: number) => `/endpoint?inspect=model:${id}&serve=1`,
   /** A chat on this machine's model `id`, served here. */
   chat: (modelId: number) => `/chat/${modelId}`,
   /** A chat on the paired machine's model `id` (its id there). */
@@ -64,12 +71,19 @@ function decoded(segment: string): string | null {
 }
 
 /**
- * The subject the address names, read from the path: `/models/:id` is this
- * machine's model and `/models/:id/log` its log, `/far/:id` the paired
- * machine's, `/get/:owner/:name` a Hugging Face repo, anything else nothing.
+ * The subject the address names. In the library it is the path:
+ * `/models/:id` is this machine's model and `/models/:id/log` its log,
+ * `/far/:id` the paired machine's, `/get/:owner/:name` a Hugging Face repo.
+ * Beside another place it is `?inspect=`: on `/endpoint`, `model:<id>` is
+ * this machine's model. Anything else is nothing.
  */
-export function inspectorSubject(location: Pick<Location, 'pathname'>): InspectorSubject | null {
+export function inspectorSubject(location: Pick<Location, 'pathname'> & Partial<Pick<Location, 'search'>>): InspectorSubject | null {
   const [, place, second, third, ...rest] = location.pathname.split('/');
+  if (location.pathname === paths.endpoint()) {
+    const inspect = new URLSearchParams(location.search ?? '').get('inspect');
+    const id = idOf(inspect?.startsWith('model:') ? inspect.slice('model:'.length) : undefined);
+    return id === null ? null : { kind: 'model', id, log: false };
+  }
   if (place === 'models') {
     const id = idOf(second);
     if (id === null || rest.length > 0 || (third !== undefined && third !== 'log')) return null;
@@ -98,12 +112,25 @@ export function settingsAt(location: Pick<Location, 'pathname' | 'search'>, sect
   return `${location.pathname}?${params.toString()}`;
 }
 
-/** The place at `location` with the settings dialog closed. */
-export function withoutSettings(location: Pick<Location, 'pathname' | 'search'>): string {
+/** The address at `location` without its search parameter `name`, the rest kept. */
+export function withoutParam(location: Pick<Location, 'pathname' | 'search'>, name: string): string {
   const params = new URLSearchParams(location.search);
-  params.delete('settings');
+  params.delete(name);
   const search = params.toString();
   return search ? `${location.pathname}?${search}` : location.pathname;
+}
+
+/** The place at `location` with the settings dialog closed. */
+export function withoutSettings(location: Pick<Location, 'pathname' | 'search'>): string {
+  return withoutParam(location, 'settings');
+}
+
+/**
+ * Where the inspector's × goes from `location`: the endpoint place without
+ * its `?inspect=`, else the library with nothing picked.
+ */
+export function inspectorClosed(location: Pick<Location, 'pathname' | 'search'>): string {
+  return location.pathname === paths.endpoint() ? withoutParam(location, 'inspect') : paths.library();
 }
 
 const SETTINGS_SECTIONS: readonly SettingsSection[] = ['general', 'profiles', 'mcp', 'system'];
@@ -134,10 +161,10 @@ export function libraryIntent(search: string): LibraryIntent {
 
 /**
  * The model of this machine's the native menu acts on: the one in the
- * inspector, or the one an open chat is on. `null` elsewhere, where Start,
- * Stop and Remove have nothing to act on.
+ * inspector (beside the library or the endpoint), or the one an open chat
+ * is on. `null` elsewhere, where Start, Stop and Remove have nothing to act on.
  */
-export function menuModelId(location: Pick<Location, 'pathname'>): number | null {
+export function menuModelId(location: Pick<Location, 'pathname'> & Partial<Pick<Location, 'search'>>): number | null {
   const subject = inspectorSubject(location);
   if (subject?.kind === 'model') return subject.id;
   const [, place, second, third] = location.pathname.split('/');

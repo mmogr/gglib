@@ -4,6 +4,9 @@
 //! (`GET /api/proxy/clients`), laid out in columns and printed. The daemon
 //! wrote every value; the one thing decided here is which lines are key
 //! lines, so a key the endpoint checks is shown as the stored secret.
+//!
+//! The Endpoint page says the same: `client_block_contracts.rs` records
+//! both renderings in `contracts/proxy/`, which the GUI is held to.
 
 use gglib_core::domain::KeyState;
 use gglib_core::secret::{SettingSecret, held_line};
@@ -113,6 +116,10 @@ pub(crate) fn render_client_config(recipes: &ClientRecipesDto, color: bool) -> V
     out.push(String::new());
     out
 }
+
+#[cfg(test)]
+#[path = "client_block_contracts.rs"]
+mod contracts;
 
 #[cfg(test)]
 mod tests {

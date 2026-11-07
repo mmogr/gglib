@@ -4,8 +4,8 @@
  * A figure the page does not have is left out, never drawn as zero, a dash
  * or a guess. How a turn was made (its model, token counts and times) comes
  * from its `turn_usage` event while drawn and from its saved row once
- * loaded: the same figures, so both say the same. The rate is computed
- * here, tokens written over the time writing; nothing saves it.
+ * loaded: the same figures, so both say the same. The rate is tokens
+ * written over the time writing (`readings/throughput`); nothing saves it.
  *
  * @module turnFigures
  */
@@ -14,6 +14,7 @@ import type { GglibMessageCustom, PromptReading, TurnWaiting } from '../types/me
 import type { TurnMade } from '../utils/messages/turnMade';
 import { formatCount } from '../utils/format';
 import { formatPerSecond } from '../utils/formatPerSecond';
+import { tokensPerSecond } from './throughput';
 
 /** A turn's seconds: "5.2s" or "1m 23s", as its reasoning block says them. */
 export function formatThinkingDuration(seconds: number): string {
@@ -49,10 +50,7 @@ export function replyName(facts: ReplyFacts): string {
 
 /** Tokens written per second of writing; null without both figures. */
 export function writingRate(made: TurnMade | undefined): number | null {
-  const tokens = made?.completionTokens;
-  const ms = made?.writingDurationMs;
-  if (tokens == null || ms == null || ms <= 0) return null;
-  return tokens / (ms / 1000);
+  return tokensPerSecond(made?.completionTokens, made?.writingDurationMs);
 }
 
 /** A reply's figures after it arrived, one line each, in the margin's order. */

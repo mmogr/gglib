@@ -169,12 +169,12 @@ describe('the sidebar', () => {
 
     it('Escape with a panel open in it closes the panel and keeps the drawer', async () => {
       const { user } = await opened();
-      // The drawer's own endpoint line is the second one on the page.
-      await user.click(screen.getAllByRole('button', { name: /^endpoint,/i })[1]);
-      expect(screen.getByRole('heading', { name: 'OpenAI Proxy' })).toBeInTheDocument();
+      // The drawer's own devices line is the second one on the page.
+      await user.click(screen.getAllByRole('button', { name: /^devices/i })[1]);
+      expect(screen.getByRole('heading', { name: 'Remote' })).toBeInTheDocument();
 
       await user.keyboard('{Escape}');
-      expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Remote' })).not.toBeInTheDocument();
       expect(screen.getByTestId('sidebar-drawer')).toBeInTheDocument();
 
       await user.keyboard('{Escape}');
@@ -188,6 +188,7 @@ describe('placeOf', () => {
     expect(placeOf('/library')).toBe('library');
     expect(placeOf('/models/7')).toBe('library');
     expect(placeOf('/far/3')).toBe('library');
+    expect(placeOf('/endpoint')).toBe('endpoint');
     expect(placeOf('/chat/7')).toBe('chats');
     expect(placeOf('/chat/far/3')).toBe('chats');
     expect(placeOf('/diagnostics/benchmarks')).toBe('diagnostics');

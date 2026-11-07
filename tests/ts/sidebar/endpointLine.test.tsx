@@ -2,10 +2,13 @@
  * The endpoint line says only what the daemon said: its state word, the
  * address a client reaches it at, whether a request needs the key, and how
  * many models are loaded. Between an event and the read that follows it,
- * the address is withheld rather than guessed. ⧉ copies the whole address.
+ * the address is withheld rather than guessed. ⧉ copies the whole address
+ * and goes nowhere; a click on the line opens the endpoint place.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
@@ -19,7 +22,14 @@ import { EndpointLine, secondLine, shownAddress } from '../../../src/sidebar/End
 import { applyProxyStatus, ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import type { ProxyStatus } from '../../../src/services/transport/types/proxy';
-import { PlaceProviders } from '../places/harness';
+import { PlaceProviders, renderShell } from '../places/harness';
+
+/** The line under the providers, in a router at the library. */
+const Wrapper = ({ children }: { children: ReactNode }) => (
+  <MemoryRouter initialEntries={['/library']}>
+    <PlaceProviders>{children}</PlaceProviders>
+  </MemoryRouter>
+);
 
 const UP: ProxyStatus = {
   running: true,
@@ -46,7 +56,7 @@ describe('the endpoint line', () => {
 
   it('off: says Off, shows no address, and says what a click does', () => {
     applyProxyStatus({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null });
-    render(<EndpointLine />, { wrapper: PlaceProviders });
+    render(<EndpointLine />, { wrapper: Wrapper });
     expect(line()).toHaveAccessibleName('Endpoint, Off');
     expect(screen.getByText('Off · click to turn on')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /copy the endpoint address/i })).not.toBeInTheDocument();
@@ -56,7 +66,7 @@ describe('the endpoint line', () => {
     applyProxyStatus(UP);
     serve(1);
     serve(2);
-    render(<EndpointLine />, { wrapper: PlaceProviders });
+    render(<EndpointLine />, { wrapper: Wrapper });
     expect(line()).toHaveAccessibleName('Endpoint, On');
     expect(screen.getByText('192.168.1.20:8080/v1')).toBeInTheDocument();
     expect(screen.getByText('2 loaded')).toBeInTheDocument();
@@ -69,14 +79,14 @@ describe('the endpoint line', () => {
 
   it('pinned: says Pinned and names the one model it serves', () => {
     applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'qwen3-8b' });
-    render(<EndpointLine />, { wrapper: PlaceProviders });
+    render(<EndpointLine />, { wrapper: Wrapper });
     expect(line()).toHaveAccessibleName('Endpoint, Pinned');
     expect(screen.getByText('only qwen3-8b')).toBeInTheDocument();
   });
 
   it('shows the key glyph only when a request must carry the key', () => {
     applyProxyStatus({ ...UP, key: 'required' });
-    const { rerender } = render(<EndpointLine />, { wrapper: PlaceProviders });
+    const { rerender } = render(<EndpointLine />, { wrapper: Wrapper });
     expect(screen.getByRole('img', { name: 'Key required' })).toBeInTheDocument();
 
     act(() => applyProxyStatus(UP));
@@ -86,7 +96,7 @@ describe('the endpoint line', () => {
 
   it('between a start event and the daemon\'s answer, says On and withholds the old address', () => {
     applyProxyStatus({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null });
-    render(<EndpointLine />, { wrapper: PlaceProviders });
+    render(<EndpointLine />, { wrapper: Wrapper });
     act(() => ingestProxyEvent({ type: 'proxy_started', port: 8080 }));
     expect(line()).toHaveAccessibleName('Endpoint, On');
     expect(screen.queryByRole('button', { name: /copy the endpoint address/i })).not.toBeInTheDocument();
@@ -98,41 +108,26 @@ describe('the endpoint line', () => {
   it('⧉ copies the whole address, scheme included, and says so', async () => {
     const user = userEvent.setup();
     applyProxyStatus(UP);
-    render(<EndpointLine />, { wrapper: PlaceProviders });
+    const app = renderShell('/library');
 
     await user.click(screen.getByRole('button', { name: /copy the endpoint address/i }));
 
     expect(await navigator.clipboard.readText()).toBe('http://192.168.1.20:8080/v1');
     await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('Endpoint address copied'));
-    // The copy did not open the panel.
-    expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
+    // The copy went nowhere.
+    expect(app.at()).toBe('/library');
   });
 
-  it('a click on the line opens today\'s proxy panel beside it, and a second closes it', async () => {
+  it('a click on the line opens the endpoint place, and marks the line as the place open', async () => {
     applyProxyStatus(UP);
-    render(<EndpointLine />, { wrapper: PlaceProviders });
+    const app = renderShell('/library');
     const user = userEvent.setup();
-    await user.click(line());
-    expect(screen.getByRole('heading', { name: 'OpenAI Proxy' })).toBeInTheDocument();
-    await user.click(line());
-    expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
-  });
+    expect(line()).not.toHaveAttribute('aria-current');
 
-  it('a click anywhere else closes the panel; a click inside it does not', async () => {
-    applyProxyStatus(UP);
-    render(
-      <>
-        <EndpointLine />
-        <p>elsewhere</p>
-      </>,
-      { wrapper: PlaceProviders },
-    );
-    const user = userEvent.setup();
     await user.click(line());
-    await user.click(screen.getByRole('heading', { name: 'OpenAI Proxy' }));
-    expect(screen.getByRole('heading', { name: 'OpenAI Proxy' })).toBeInTheDocument();
-    await user.click(screen.getByText('elsewhere'));
-    expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
+
+    expect(app.at()).toBe('/endpoint');
+    expect(line()).toHaveAttribute('aria-current', 'page');
   });
 });
 

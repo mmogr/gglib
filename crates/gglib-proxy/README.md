@@ -1327,7 +1327,7 @@ curl -N http://localhost:8080/v1/proxy/status/stream
 
 - **CLI**: `gglib proxy dashboard [--host HOST] [--port PORT]` — see
   [`gglib-cli`](../gglib-cli/README.md#proxy-dashboard).
-- **Web GUI**: click "View Dashboard" in the Proxy control's dropdown
-  (`src/components/ProxyControl.tsx`), which opens `ProxyDashboardModal` —
+- **Web GUI**: Live numbers on the endpoint place's ⋯ or its Activity
+  (`src/places/endpoint/`), which opens `ProxyDashboardModal` —
   a native browser `EventSource` connected directly to the proxy's own
   port, independent of the app's own backend.

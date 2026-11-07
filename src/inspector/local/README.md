@@ -7,7 +7,10 @@ copies the Model ID), ⋯ and ×; the library row's line of facts; the fit
 sentence; Load and Chat (Chat and Unload once loaded, with its state word);
 the Model ID to use it by; How it runs (How it ran once loaded); ▸ Log with
 the server's last line once loaded (it opens the Log subject); Details,
-closed and remembered. A failed load's line offers Show log. The name and the actions stay in view while the
+closed and remembered. A failed load's line offers Show log. × closes to
+the library, or beside the endpoint to the endpoint place. The loaded
+model's Context bar waits for a fact: the dashboard's `slots` are
+llama.cpp's `/slots` for the primary resident alone, not keyed by model. The name and the actions stay in view while the
 rest scrolls.
 
 Load is one click and sends only the model's id; an image model's waits for
@@ -43,7 +46,8 @@ first, then runs on the download queue. The status is the model's, kept
 across leaving it and never shown on another; a file check answered here
 is the "files checked" time, since the daemon stores none.
 
-Words with no Rust twin, composed from Rust's fields here: the fit sentence
+Words with no Rust twin, composed from Rust's fields here: "loaded 4m 10s"
+and the rate's "34 t/s" on a loaded model's status line, the fit sentence
 and its refusal, the Context row's note, the Sampling row's count, "set by
 you", "Auto", "On", "Off", "Applies at next load.", "Didn't load:",
 "Didn't unload:", "Drawing needs
@@ -77,6 +81,7 @@ dialog). The per-file health words are those `gglib model verify
 | `ComponentPickers.tsx` | The Parts row's control: one picker per role the image family needs, saved on pick |
 | `useExplain.ts` | The model's explanation, read per model and profile and again after a change |
 | `useLoad.ts` | Load, Chat (load first) and Unload, the llama.cpp install that a load waits on, a failed load's words, and the sheet's load (the pin first when asked) |
+| `useResident.ts` | A loaded model's status line from the dashboard: its residency word, its latest rate and how long it has been loaded ("Working · 34 t/s · loaded 4m 10s"); the launch state, else Loaded, without the dashboard |
 | `useLaunchFacts.ts` | A loaded model's `ServerInfo.launch`, read from the server list |
 | `useModelDetail.ts` | The model's detail (tags, revision, metadata) and its tag edits |
 | `useRetagModel.ts` | Re-detect or rebuild the detected tags: confirm on a rebuild, then toast and reload |

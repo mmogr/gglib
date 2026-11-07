@@ -12,6 +12,8 @@
  * Builders rather than constants, because the interesting part of a dashboard
  * test is always one or two fields and the rest is noise.
  */
+import type { ContextSnapshot } from '../../../src/types/generated/ContextSnapshot';
+import type { ResidentSlotSnapshot } from '../../../src/types/generated/ResidentSlotSnapshot';
 import type {
   ActiveConnectionSnapshot,
   DashboardSnapshot,
@@ -201,4 +203,49 @@ const SNAPSHOT: DashboardSnapshot = {
  */
 export function dashboardSnapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot {
   return { ...SNAPSHOT, ...overrides };
+}
+
+/**
+ * A resident model in an admission slot, loaded and idle, with the facts of
+ * its launch; `overrides` applied over the slot.
+ */
+export function residentSlot(id: number, name: string, overrides: Partial<ResidentSlotSnapshot> = {}): ResidentSlotSnapshot {
+  return {
+    slot: 0,
+    model_name: name,
+    model_id: id,
+    port: 9000 + id,
+    inflight: 0,
+    is_primary: true,
+    resident_for_secs: 60,
+    state: 'loaded',
+    runtime: 'llama',
+    launch: { state: 'loaded', context_size: 8192, weights_bytes: 1, quantization: null, narration: null, flag_line: '' },
+    ...overrides,
+  };
+}
+
+const REQUEST: ContextSnapshot = {
+  model_name: 'test-model',
+  payload_chars_before: 0,
+  payload_chars_after: 0,
+  messages_truncated: 0,
+  was_clamped: false,
+  grammar_enforced: false,
+  dialect_residue: false,
+  tool_repaired: false,
+  completion_tokens: null,
+  reasoning_chars: 0,
+  tool_calls: 0,
+  finish_reason: null,
+  generation_ms: null,
+  loop_guard_trip: null,
+  loop_guard_ended: false,
+  recorded_at_secs: 0,
+  interventions: [],
+};
+
+/** One recorded request that generated nothing and had nothing done to it, with `overrides` applied. */
+export function recentRequest(overrides: Partial<ContextSnapshot> = {}): ContextSnapshot {
+  return { ...REQUEST, ...overrides };
 }

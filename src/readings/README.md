@@ -11,6 +11,8 @@ apart from the components that show them.
 |------|---------|
 | `contextReading.ts` | The conversation's context reading, from the figures of the reply that decides it (the newest, passing over an unfinished one without counts), and the sentences its detail says; nothing when a figure is missing. The rule of `contracts/context/readings.json` |
 | `turnFigures.ts` | Which figures a turn's margin shows: only those the page has for that turn (model, quantisation, thought, tool calls, tokens read and cached, time and a computed rate), never a zero or a dash for one it lacks |
+| `connect.ts` | What the Endpoint page says of a proof (answered, or why not) and of a client's recipes (key lines said as the stored secret): the words `render_proof` and `render_client_config` print, held to `contracts/proxy/` |
+| `throughput.ts` | Tokens written per second of writing, for a request (Recent, the loaded inspector) and a reply (`turnFigures`): computed here, since no Rust does; nothing without both figures or with no time |
 | `capabilityFlags.ts` | `CAPABILITY_FLAGS`, the capability bitflags as `gglib_core::domain::ModelCapabilities` numbers them, and `CapabilityFlagName` |
 | `drawingValues.ts` | `drawingValuesFrom`, the drawing settings (default image model, MCP drawing) read from the stored `AppSettings` |
 

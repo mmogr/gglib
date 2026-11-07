@@ -5,7 +5,9 @@
 
 import { get, post } from './client';
 import type { ProxyConfig, ProxyStatus, StartPinnedRequest } from '../types/proxy';
+import type { ClientRecipes } from '../../../types/generated/ClientRecipes';
 import type { LoopGuardTripDay } from '../../../types/generated/LoopGuardTripDay';
+import type { ProofOutcome } from '../../../types/generated/ProofOutcome';
 
 /**
  * Get current proxy server status.
@@ -37,6 +39,24 @@ export async function startProxy(config?: Partial<ProxyConfig>): Promise<ProxySt
  */
 export async function startPinnedProxy(request: StartPinnedRequest): Promise<ProxyStatus> {
   return post<ProxyStatus>('/api/proxy/start-pinned', request);
+}
+
+/**
+ * How a client connects to the running endpoint for model `modelId` (the
+ * pin when `null`): the daemon's address, key rule, the id a client sends,
+ * and a recipe per client, the block `gglib up` prints.
+ */
+export async function getProxyClients(modelId: number | null): Promise<ClientRecipes> {
+  return get<ClientRecipes>(modelId === null ? '/api/proxy/clients' : `/api/proxy/clients?model=${modelId}`);
+}
+
+/**
+ * Send one real request through the running endpoint for model `modelId`
+ * (the pin when `null`), as `gglib proxy test` does: who answered and in how
+ * long, or the daemon's refusal as the error. Held open while the model loads.
+ */
+export async function proveProxy(modelId: number | null): Promise<ProofOutcome> {
+  return post<ProofOutcome>('/api/proxy/prove', { model_id: modelId });
 }
 
 /**
