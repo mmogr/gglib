@@ -33,6 +33,8 @@ export const paths = {
   endpoint: () => '/endpoint',
   /** The endpoint place with this machine's model `id` in the inspector beside it. */
   endpointInspect: (id: number) => `/endpoint?inspect=model:${id}`,
+  /** The endpoint place scrolled to its Connect a client block (the menu's Connect a Client…). */
+  endpointConnect: () => '/endpoint?connect=1',
   /** The endpoint place with model `id` inspected and its Load with options sheet opened. */
   endpointServe: (id: number) => `/endpoint?inspect=model:${id}&serve=1`,
   /** This machine's conversation `id`, on the model it names. */

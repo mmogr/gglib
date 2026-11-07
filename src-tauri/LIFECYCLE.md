@@ -22,7 +22,7 @@
    This blocks for up to 15 seconds on a cold start.
 
    A failure here is **not fatal**. The app comes up with a disconnected
-   `Daemon`, the tray reads "gglib — not running", and Start gglib Service is
+   `Daemon`, the tray reads "gglib · not running", and Start gglib is
    the way back. It used to `expect`, which killed the process before there was
    a tray or a window to explain it with.
 
@@ -89,7 +89,7 @@ on screen to say so.
 
 The exception exists because a daemon may not be this app's to end: a
 `gglib proxy` running in a terminal that the GUI merely connected to keeps
-serving. **Stop gglib Service** on the tray is the explicit way to end one
+serving. **Stop gglib…** on the tray is the explicit way to end one
 without quitting.
 
 > **Known staleness:** ownership is decided once, at connect. An app that

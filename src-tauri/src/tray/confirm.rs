@@ -1,7 +1,7 @@
 //! Asking before taking a running service away.
 //!
 //! Two menu entries can end an endpoint other programs are pointed at — Quit
-//! and Stop gglib Service — so the sentence describing what is about to be
+//! gglib and Stop gglib… — so the sentence describing what is about to be
 //! lost is derived once, here, from the same snapshot the icon is drawn from.
 //! Deriving it rather than hardcoding it is the point: a hardcoded warning
 //! can go false silently, and one derived from the snapshot cannot disagree
@@ -21,13 +21,13 @@ use crate::daemon::DaemonSnapshot;
 pub(super) fn at_stake(snap: &DaemonSnapshot) -> Option<String> {
     let proxy = snap
         .proxy_port
-        .map(|port| format!("the proxy on :{port}"))
-        .or_else(|| snap.proxy_running.then(|| "the proxy".to_owned()));
+        .map(|port| format!("the endpoint on :{port}"))
+        .or_else(|| snap.proxy_running.then(|| "the endpoint".to_owned()));
 
     let resident = match snap.resident.len() {
         0 => None,
-        1 => Some("1 resident model".to_owned()),
-        n => Some(format!("{n} resident models")),
+        1 => Some("1 loaded model".to_owned()),
+        n => Some(format!("{n} loaded models")),
     };
 
     match (proxy, resident) {
@@ -60,7 +60,7 @@ pub(super) fn quit(app: &AppHandle, snap: &DaemonSnapshot, ends_with_the_app: bo
     )
 }
 
-/// Ask before stopping the daemon from the tray.
+/// Ask before Stop gglib… ends the daemon from the tray.
 pub(super) fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
     let Some(at_stake) = at_stake(snap) else {
         return true;
@@ -68,7 +68,7 @@ pub(super) fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
 
     ask(
         app,
-        "Stop the gglib service?",
+        "Stop gglib?",
         &format!("This stops {at_stake}. Any client using the endpoint will lose it."),
         "Stop",
     )
@@ -136,7 +136,7 @@ mod tests {
     fn a_serving_proxy_names_its_port() {
         let snap = snapshot(&json!({"running": true, "port": 8080}), &json!([]));
 
-        assert_eq!(at_stake(&snap).as_deref(), Some("the proxy on :8080"));
+        assert_eq!(at_stake(&snap).as_deref(), Some("the endpoint on :8080"));
     }
 
     /// A model held in VRAM is worth naming even with nothing listening.
@@ -144,7 +144,7 @@ mod tests {
     fn resident_models_count_on_their_own() {
         let snap = snapshot(&json!({"running": false}), &json!([{"model_id": 1}]));
 
-        assert_eq!(at_stake(&snap).as_deref(), Some("1 resident model"));
+        assert_eq!(at_stake(&snap).as_deref(), Some("1 loaded model"));
     }
 
     #[test]
@@ -156,7 +156,7 @@ mod tests {
 
         assert_eq!(
             at_stake(&snap).as_deref(),
-            Some("the proxy on :9000 and 2 resident models")
+            Some("the endpoint on :9000 and 2 loaded models")
         );
     }
 
@@ -166,6 +166,6 @@ mod tests {
     fn a_proxy_without_a_known_port_is_still_at_stake() {
         let snap = snapshot(&json!({"running": true}), &json!([]));
 
-        assert_eq!(at_stake(&snap).as_deref(), Some("the proxy"));
+        assert_eq!(at_stake(&snap).as_deref(), Some("the endpoint"));
     }
 }

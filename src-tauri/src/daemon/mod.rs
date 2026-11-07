@@ -96,7 +96,7 @@ impl Daemon {
     /// A port 9887 held by another program, or a `gglib daemon run` that died
     /// on startup, leaves the app coming up disconnected rather than exiting
     /// before `setup_app` has built a tray or shown a window: the tray exists,
-    /// reads "not running", and offers Start gglib Service.
+    /// reads "not running", and offers Start gglib.
     ///
     /// Every call made through this fails until a daemon answers, which is
     /// exactly what the watcher reports as unreachable.
@@ -161,7 +161,7 @@ impl Daemon {
 
     /// Start a daemon again after one has been stopped.
     ///
-    /// The tray's Start gglib Service. Only ever launches an external daemon:
+    /// The tray's Start gglib. Only ever launches an external daemon:
     /// the in-process fallback is a one-shot at startup, and hosting a second
     /// one inside a process that may still be unwinding the first is not worth
     /// the failure modes.

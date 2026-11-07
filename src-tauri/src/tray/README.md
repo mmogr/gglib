@@ -8,34 +8,46 @@ tray is the whole interface.
 
 ## What the icon means
 
-**Consumption, not existence.** Not the application — an icon that lit up
-merely because a window was open would answer a question nobody asked — and not
-a live daemon either, which is the trap the obvious reading falls into: nearly
-every CLI command calls `ensure_daemon()` and leaves one running, so an icon lit
-by that would be lit permanently and mean nothing.
-
-What it reports is whether gglib is doing something to this machine right now:
+**Can a client connect, and is anything loaded behind it.** Not the
+application — an icon that lit up merely because a window was open would answer
+a question nobody asked — and not a live daemon either: nearly every CLI command
+calls `ensure_daemon()` and leaves one running, so an icon lit by that would be
+lit permanently and mean nothing.
 
 | | |
 |---|---|
-| **Offline** | No daemon answering. gglib is not running here. |
-| **Idle** | A daemon is up, serving nothing and holding nothing. |
-| **Active** | The proxy is listening, **or** a model is resident. |
+| **Outline** | gglib is not running, or its endpoint is off. No client can connect. |
+| **Solid** | The endpoint is on (or pinned), nothing loaded. |
+| **Solid with a dot** | The endpoint is on and at least one model is loaded. |
 
-The `or` is the point. The runtime holds up to `SLOT_COUNT` models in VRAM, and
-`gglib chat`, `gglib serve` and benchmarks all leave one there with the proxy
-stopped. An icon that tracked only the proxy showed idle while tens of
-gigabytes were spoken for — which is precisely the question a menu bar is good
-at answering.
+A model loaded with the endpoint off draws the outline — no client can reach
+it — and the status line says it is loaded. Nothing animates at rest.
 
-This was a proxy-only tray until the daemon consolidation moved runtime
-ownership out of the desktop app. The rule did not change; what counts as
-"exists" did.
+Two glyphs ship, the ring and the ring with a dot, and no solid one yet. So the
+ring faded (derived at runtime, see the end of this page) stands for the
+outline, the plain ring for the solid disc and the ring with a dot for the
+solid disc with a dot: three icons, told apart, until a solid asset replaces
+the middle one.
+
+The tooltip and the menu's status line are one sentence from the same snapshot:
+"gglib · endpoint on · Qwen3-4B loaded", "gglib · endpoint off", "gglib ·
+endpoint pinned · 2 models loaded", "gglib · not running". The state words are
+`gglib_core`'s (`EndpointState::word`, `ResidencyState::Loaded`), the ones every
+surface says. Linux shows no tooltip; the status line is where it is read.
+
+## The menu
+
+The status line (disabled) · Copy Endpoint URL · Turn Endpoint On / Off — Open
+gglib · Settings… — Start gglib / Stop gglib… · Quit gglib. Turn Endpoint On /
+Off and Start gglib / Stop gglib… are one item each whose verb follows the
+snapshot (`items::label`); clicking one reads the snapshot again and does the
+verb it showed. "Show panel" is listed only on Linux, whose tray hosts may
+never send a left click; elsewhere the click opens the panel.
 
 # Module Structure
 
 - `ids` — tray menu item ID constants
-- `items` — the menu itself: order, labels, and the one enabled rule
+- `items` — the menu itself: order, labels (the switches' from the snapshot), and the one enabled rule
 - `icon` — the tray id, the decoded icons, and pure state → appearance derivation
 - `confirm` — what a teardown would cost, and the dialogs that say so
 - `handlers` — `dispatch(app, id)`, the single router every backend calls
@@ -57,10 +69,11 @@ so the tray cannot fall out of step with the macOS application menu — and only
 when the snapshot actually changed, because a repaint re-decodes the icon on
 macOS and makes `ksni` rebuild the whole menu over D-Bus on Linux.
 
-Proxy actions go through [`crate::proxy_actions`] rather than emitting an event
-for the frontend to act on, the way the application menu does. The tray is
-reachable when no window is visible and during autostart before any webview
-exists, so it cannot assume something is loaded and listening. Those actions
+Turn Endpoint On / Off goes through [`crate::proxy_actions`] rather than
+emitting an event for the frontend to act on, and so does the macOS menu's.
+The tray is reachable when no window is visible and during autostart before
+any webview exists, so it cannot assume something is loaded and listening.
+Those actions
 ask the watcher for an immediate poll rather than publishing what they expect
 to be true, so there is exactly one writer and nothing to lose an update to.
 
@@ -72,12 +85,12 @@ the user asked to quit. What that shutdown *takes with it* is decided by
 [`crate::daemon::Ownership`]: a daemon this app launched or hosts is stopped,
 one that was already answering is left alone.
 
-**Stop gglib Service** is the separate verb for ending a daemon without
-quitting, and **Start gglib Service** the way back — reachable even when the
-app came up with no daemon at all, which used to be a panic before any tray
-existed. Stop, like Quit, warns first, from `confirm`, when something is at
-stake, and the warning is derived from the snapshot: it names the port and the
-resident models actually at stake rather than asserting a fixed sentence,
+**Stop gglib…** is the separate verb for ending a daemon without quitting, and
+**Start gglib** the way back — the same item, reachable even when the app came
+up with no daemon at all, which used to be a panic before any tray existed.
+Stop, like Quit, warns first, from `confirm`, when something is at stake, and
+the warning is derived from the snapshot: it names the endpoint's port and the
+loaded models actually at stake rather than asserting a fixed sentence,
 which is how the old one came to claim that quitting stopped a proxy it had
 long since stopped stopping.
 
@@ -150,15 +163,16 @@ carry no `#[cfg]` at all.
 
 What must not diverge is shared outright rather than by convention:
 
-- **`items::ITEMS`** is the menu — order and labels — and `items::is_enabled`
-  is the single rule for what is greyed out, including that the status header
-  is never clickable. Both are pure and both are tested.
+- **`items::ITEMS`** is the menu — order and labels, `items::label` the text
+  each entry shows for a snapshot — and `items::is_enabled` is the single rule
+  for what is greyed out, including that the status line is never clickable.
+  All are pure and all are tested.
 - **`handlers::dispatch(app, id)`** performs the action. `muda` adapts its
   `MenuEvent` to it in `build`; `ksni` calls it straight from an item callback.
   Either way the tray reaches `proxy_actions` and `lifecycle::request_shutdown`
   by the same path as the `WebUI` and the CLI.
-- **`icon::derive`** produces one status string for the tooltip and the menu
-  header, so they cannot disagree.
+- **`icon::derive`** produces one status string for the tooltip and the menu's
+  status line, so they cannot disagree.
 
 Both backends decode through `icon`, and both work in raw RGBA from there:
 `ksni` wants ARGB32 in network byte order and Tauri hands back RGBA, so the
@@ -180,8 +194,8 @@ Three different mechanisms, one per session type, all behind `placement`:
 
 `place` takes an `Anchor` describing *what the caller knows*, and the vocabulary
 itself differs per backend: `Rect` exists only where click events carry one,
-`Point` only where SNI reports activation coordinates. A menu entry reports
-`Unknown`, because no gesture located the icon, and the startup anchor stands.
+`Point` only where SNI reports activation coordinates. Show panel, a menu
+entry, reports `Unknown`, because no gesture located the icon, and the startup anchor stands.
 
 Guessing is deliberately avoided. `cursor_position` looks like a fallback but
 returns `(0, 0)` on Wayland rather than failing, so anchoring to it would fling
@@ -216,8 +230,8 @@ pure black with the glyph carried entirely by the alpha channel, which is what
 `icon_as_template` expects; a coloured icon would render as a dark smudge on a
 dark menu bar.
 
-That is also why there are two files for three states. The offline icon is the
-idle ring with its alpha scaled down, derived at runtime in `icon` rather than
+That is also why there are two files for three states. The outline icon is the
+ring with its alpha scaled down, derived at runtime in `icon` rather than
 shipped: it is the same glyph, so a third asset could only drift from it, and
 because the shape lives entirely in the alpha channel, fading that channel is
 exactly "draw the same thing fainter" on all three platforms — the same

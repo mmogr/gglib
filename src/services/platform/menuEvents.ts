@@ -7,37 +7,41 @@
 import { isDesktop } from './detect';
 
 /**
- * Menu event names - must match event names emitted by Rust backend.
- * Single source of truth for menu event types to prevent drift.
+ * Menu event names: the `names` block of `src-tauri/src/app/events.rs`,
+ * held to it by `tests/ts/contracts/menuEvents.test.ts`. A place is one
+ * NAVIGATE carrying a `MENU_PLACES` id; an action on the inspected model is
+ * an event of its own. The endpoint's Turn On / Off is done in Rust and sends
+ * nothing; its Copy sends the URL to put on the clipboard.
  */
 export const MENU_EVENTS = {
-  OPEN_SETTINGS: 'menu:open-settings',
-  ADD_MODEL_FILE: 'menu:add-model-file',
-  SHOW_DOWNLOADS: 'menu:show-downloads',
-  REFRESH_MODELS: 'menu:refresh-models',
-  START_SERVER: 'menu:start-server',
-  STOP_SERVER: 'menu:stop-server',
-  REMOVE_MODEL: 'menu:remove-model',
-  SHOW_CHAT: 'menu:show-chat',
+  NAVIGATE: 'menu:navigate',
   COPY_TO_CLIPBOARD: 'menu:copy-to-clipboard',
-  PROXY_STOPPED: 'menu:proxy-stopped',
-  START_PROXY: 'menu:start-proxy',
+  HIDE_INSPECTOR: 'menu:hide-inspector',
+  LOAD_MODEL: 'menu:load-model',
+  LOAD_WITH_OPTIONS: 'menu:load-with-options',
+  UNLOAD_MODEL: 'menu:unload-model',
+  REMOVE_MODEL: 'menu:remove-model',
 } as const;
 
+/** The places NAVIGATE names: the `places` block of `events.rs`, held to it by the same test. */
+export const MENU_PLACES = [
+  'library',
+  'endpoint',
+  'devices',
+  'chat',
+  'new-chat',
+  'settings',
+  'diagnostics',
+  'get-models',
+  'add-file',
+  'connect-client',
+] as const;
+export type MenuPlace = (typeof MENU_PLACES)[number];
 
-export interface MenuEventHandlers {
-  [MENU_EVENTS.OPEN_SETTINGS]?: () => void;
-  [MENU_EVENTS.ADD_MODEL_FILE]?: () => void;
-  [MENU_EVENTS.SHOW_DOWNLOADS]?: () => void;
-  [MENU_EVENTS.REFRESH_MODELS]?: () => void;
-  [MENU_EVENTS.START_SERVER]?: () => void;
-  [MENU_EVENTS.STOP_SERVER]?: () => void;
-  [MENU_EVENTS.REMOVE_MODEL]?: () => void;
-  [MENU_EVENTS.SHOW_CHAT]?: () => void;
-  [MENU_EVENTS.COPY_TO_CLIPBOARD]?: (payload: string) => void;
-  [MENU_EVENTS.PROXY_STOPPED]?: () => void;
-  [MENU_EVENTS.START_PROXY]?: () => void;
-}
+type MenuEvent = (typeof MENU_EVENTS)[keyof typeof MENU_EVENTS];
+
+/** One handler per event; NAVIGATE's and COPY_TO_CLIPBOARD's use their payload, a string. */
+export type MenuEventHandlers = Partial<Record<MenuEvent, (payload: string) => void>>;
 
 /**
  * Listen for native menu events (Tauri only).
@@ -56,14 +60,7 @@ export async function listenToMenuEvents(
 
   for (const [event, handler] of Object.entries(handlers)) {
     if (handler) {
-      const unlisten = await listen(event, (e: any) => {
-        // Events with string payloads
-        if (event === MENU_EVENTS.COPY_TO_CLIPBOARD) {
-          (handler as (payload: string) => void)(e.payload);
-        } else {
-          (handler as () => void)();
-        }
-      });
+      const unlisten = await listen<string>(event, (e) => handler(e.payload));
       unlisteners.push(unlisten);
     }
   }

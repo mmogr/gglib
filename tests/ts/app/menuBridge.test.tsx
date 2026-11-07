@@ -1,6 +1,7 @@
 /**
- * The native menu, acting from outside React: each event's effect on the
- * address and the registries, and the menu told what is selected.
+ * The native menus, acting from outside React: each place a `menu:navigate`
+ * names and each model action's effect on the address and the registries,
+ * New Chat's key off a Mac, and the menu told what is selected.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -13,6 +14,7 @@ import { guiModel } from '../fixtures/model';
 type Handlers = Record<string, (payload?: string) => void | Promise<void>>;
 const menu = vi.hoisted(() => ({
   handlers: null as Handlers | null,
+  desktop: true,
   setSelectedModel: vi.fn(async (_id: number | null) => {}),
   syncMenuStateSilent: vi.fn(),
 }));
@@ -21,14 +23,14 @@ const transport = vi.hoisted(() => ({
   listModels: vi.fn(async () => [guiModel({ id: 7, name: 'qwen3-8b' }), guiModel({ id: 9, name: 'gemma-3-12b' })]),
   removeModel: vi.fn(async (_id: number) => {}),
   stopServer: vi.fn(async (_id: number) => {}),
-  startProxy: vi.fn(async () => ({ running: true, port: 8080 })),
-  stopProxy: vi.fn(async () => {}),
+  serveModel: vi.fn(async (_config: { id: number }) => ({ port: 9007 })),
   getSettings: vi.fn(async () => ({})),
   listConversations: vi.fn(async (): Promise<unknown[]> => []),
 }));
 
 vi.mock('../../../src/services/platform', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/platform')>()),
+  isDesktop: () => menu.desktop,
   listenToMenuEvents: vi.fn(async (handlers: Handlers) => {
     menu.handlers = handlers;
     return () => {
@@ -44,6 +46,10 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
 }));
 // The places are not under test; each names itself.
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
+vi.mock('../../../src/places/endpoint/EndpointPlace', () => ({ default: () => <main aria-label="Endpoint" /> }));
+vi.mock('../../../src/places/devices/DevicesPlace', () => ({ default: () => <main aria-label="Devices" /> }));
+vi.mock('../../../src/places/settings/SettingsPlace', () => ({ default: () => <main aria-label="Settings" /> }));
+vi.mock('../../../src/app/BenchmarkRoute', () => ({ BenchmarkRoute: () => <main aria-label="Benchmarks" /> }));
 vi.mock('../../../src/app/ChatRoute', () => ({ ChatRoute: () => <main aria-label="Chat" /> }));
 
 import { startMenuBridge } from '../../../src/app/menuBridge';
@@ -64,22 +70,40 @@ async function bridged(path: string) {
   const fire = (event: string, payload?: string) => act(async () => {
     await menu.handlers?.[event]?.(payload);
   });
-  return { ...app, stop, fire };
+  const go = (place: string) => fire(MENU_EVENTS.NAVIGATE, place);
+  return { ...app, stop, fire, go };
 }
 
 function serve(modelId: number, type: 'running' | 'stopped' = 'running') {
   act(() => ingestServerEvent({ type, modelId: String(modelId), port: 9000 + modelId, updatedAt: Date.now(), modelName: `m${modelId}` }));
 }
 
+const press = (init: KeyboardEventInit) =>
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', init));
+  });
+
+const conversation = (id: number, updated: string) => ({
+  id,
+  title: `chat ${id}`,
+  model_id: 7,
+  system_prompt: null,
+  created_at: updated,
+  updated_at: updated,
+});
+
 describe('the menu bridge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     menu.handlers = null;
+    menu.desktop = true;
+    transport.listConversations.mockResolvedValue([]);
     resetChats();
   });
   afterEach(() => {
     cleanupModelEvents();
     for (const id of [7, 8, 9]) serve(id, 'stopped');
+    vi.restoreAllMocks();
   });
 
   it('tells the menu the selected model on every move, once per change', async () => {
@@ -100,49 +124,62 @@ describe('the menu bridge', () => {
     expect(menu.handlers).toBeNull();
   });
 
-  it('Settings opens the settings place on General; Add Model adds a file and Downloads finds on Hugging Face', async () => {
-    const { at, router, fire, stop } = await bridged('/models/7');
-    await fire(MENU_EVENTS.OPEN_SETTINGS);
+  it('⌘1–⌘3 go to the library, the endpoint and the devices', async () => {
+    const { at, go, stop } = await bridged('/models/7');
+    await go('library');
+    expect(at()).toBe('/library');
+    await go('endpoint');
+    expect(at()).toBe('/endpoint');
+    await go('devices');
+    expect(at()).toBe('/devices');
+    stop();
+  });
+
+  it('⌘4 goes to the latest chat, else an empty one', async () => {
+    const { at, router, go, stop } = await bridged('/library');
+    await go('chat');
+    await waitFor(() => expect(at()).toBe('/chat/new'));
+
+    transport.listConversations.mockResolvedValue([conversation(6, '2026-11-02 09:00:00'), conversation(4, '2026-11-01 09:00:00')]);
+    resetChats();
+    await act(() => router.navigate('/library'));
+    await go('chat');
+    await waitFor(() => expect(at()).toBe('/chat/6'));
+    stop();
+  });
+
+  it('Settings… opens Settings › General, as a place of its own; Diagnostics and New Chat go to theirs', async () => {
+    const { at, router, go, stop } = await bridged('/models/7');
+    await go('settings');
     expect(at()).toBe('/settings/general');
     // A place of its own: Back returns to the one it was opened from.
     expect(router.state.historyAction).toBe('PUSH');
-    await fire(MENU_EVENTS.ADD_MODEL_FILE);
-    expect(at()).toBe('/library?add=file');
-    await fire(MENU_EVENTS.SHOW_DOWNLOADS);
+    await go('diagnostics');
+    expect(at()).toBe('/diagnostics/benchmarks');
+    await go('new-chat');
+    expect(at()).toBe('/chat/new');
+    stop();
+  });
+
+  it('Get Models… finds on Hugging Face, Add a GGUF File… adds one, Connect a Client… opens the endpoint at its block', async () => {
+    const { at, go, stop } = await bridged('/library');
+    await go('get-models');
     expect(at()).toBe('/library?add=browse');
+    await go('add-file');
+    expect(at()).toBe('/library?add=file');
+    await go('connect-client');
+    expect(at()).toBe('/endpoint?connect=1');
     stop();
   });
 
-  it("Chat goes to the selected model's server, else the first running, else says there is none", async () => {
-    const { at, router, fire, stop } = await bridged('/models/7');
-    await fire(MENU_EVENTS.SHOW_CHAT);
+  it('a place the app does not know goes nowhere', async () => {
+    const { at, go, stop } = await bridged('/models/7');
+    await go('the-moon');
     expect(at()).toBe('/models/7');
-    expect(notify).toHaveBeenCalledWith(expect.stringMatching(/no servers/i), 'warning');
-
-    // No chat on it yet: an empty one on it.
-    serve(9);
-    await fire(MENU_EVENTS.SHOW_CHAT);
-    expect(at()).toBe('/chat/new?model=9');
-
-    // Its latest chat, where it has one.
-    transport.listConversations.mockResolvedValue([
-      { id: 4, title: 'older', model_id: 7, system_prompt: null, created_at: '2026-11-01 09:00:00', updated_at: '2026-11-01 09:00:00' },
-      { id: 6, title: 'newer', model_id: 7, system_prompt: null, created_at: '2026-11-02 09:00:00', updated_at: '2026-11-02 09:00:00' },
-    ]);
-    resetChats();
-    serve(7);
-    await act(() => router.navigate('/models/7'));
-    await fire(MENU_EVENTS.SHOW_CHAT);
-    expect(at()).toBe('/chat/6');
     stop();
   });
 
-  const press = (init: KeyboardEventInit) =>
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', init));
-    });
-
-  it('Ctrl+N starts a chat from anywhere off a Mac, ⌘N does not, until the bridge stops', async () => {
+  it('off a Mac, Ctrl+N starts a chat from anywhere and ⌘N does not, until the bridge stops', async () => {
     vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Linux x86_64');
     const { at, router, stop } = await bridged('/models/7');
     press({ key: 'n', metaKey: true });
@@ -156,64 +193,109 @@ describe('the menu bridge', () => {
     await act(() => router.navigate('/library'));
     press({ key: 'n', ctrlKey: true });
     expect(at()).toBe('/library');
-    vi.restoreAllMocks();
   });
 
-  it('⌘N starts a chat on a Mac, and Ctrl+N is left to the text field it is a key of', async () => {
+  it('in the desktop app on a Mac, ⌘N is the menu bar’s New Chat, not a window key', async () => {
     vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
-    const { at, stop } = await bridged('/models/7');
+    const { at, go, stop } = await bridged('/models/7');
+    press({ key: 'n', metaKey: true });
+    expect(at()).toBe('/models/7');
+    press({ key: 'n', ctrlKey: true });
+    expect(at()).toBe('/models/7');
+
+    await go('new-chat');
+    expect(at()).toBe('/chat/new');
+    stop();
+  });
+
+  it('in a browser on a Mac, with no menu bar, ⌘N is the window key', async () => {
+    menu.desktop = false;
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    const { at } = renderApp('/models/7');
+    const stop = startMenuBridge({ notify });
     press({ key: 'n', ctrlKey: true });
     expect(at()).toBe('/models/7');
     press({ key: 'n', metaKey: true });
     expect(at()).toBe('/chat/new');
     stop();
-    vi.restoreAllMocks();
   });
 
-  it('Start opens the picked model’s Load with options sheet, and does nothing with none picked', async () => {
+  it('Load loads the inspected model with nothing but its id, and does nothing with none inspected', async () => {
     const { at, router, fire, stop } = await bridged('/library');
-    await fire(MENU_EVENTS.START_SERVER);
-    expect(at()).toBe('/library');
+    await fire(MENU_EVENTS.LOAD_MODEL);
+    expect(transport.serveModel).not.toHaveBeenCalled();
+
     await act(() => router.navigate('/models/7'));
-    await fire(MENU_EVENTS.START_SERVER);
-    expect(at()).toBe('/models/7?serve=1');
+    await fire(MENU_EVENTS.LOAD_MODEL);
+    expect(transport.serveModel).toHaveBeenCalledWith({ id: 7 });
+    expect(at()).toBe('/models/7');
+    expect(menu.syncMenuStateSilent).toHaveBeenCalledTimes(1);
     stop();
   });
 
-  it('Stop stops the selected running model, and nothing with another model picked', async () => {
+  it('a refused Load is said in the daemon’s words, and a served model is not loaded again', async () => {
+    transport.serveModel.mockRejectedValueOnce(new Error('llama-server is not installed'));
+    const { fire, stop } = await bridged('/models/7');
+    await waitFor(() => expect(transport.listModels).toHaveBeenCalled());
+    await fire(MENU_EVENTS.LOAD_MODEL);
+    expect(notify).toHaveBeenCalledWith('Could not load qwen3-8b: llama-server is not installed', 'error');
+    expect(menu.syncMenuStateSilent).not.toHaveBeenCalled();
+
+    serve(7);
+    transport.serveModel.mockClear();
+    await fire(MENU_EVENTS.LOAD_MODEL);
+    expect(transport.serveModel).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('Load with Options… opens the sheet beside the place that shows the model', async () => {
+    const { at, router, fire, stop } = await bridged('/library');
+    await fire(MENU_EVENTS.LOAD_WITH_OPTIONS);
+    expect(at()).toBe('/library');
+    await act(() => router.navigate('/models/7'));
+    await fire(MENU_EVENTS.LOAD_WITH_OPTIONS);
+    expect(at()).toBe('/models/7?serve=1');
+    await act(() => router.navigate('/endpoint?inspect=model:9'));
+    await fire(MENU_EVENTS.LOAD_WITH_OPTIONS);
+    expect(at()).toBe('/endpoint?inspect=model:9&serve=1');
+    stop();
+  });
+
+  it('Unload unloads the inspected running model, and nothing with another model inspected', async () => {
     serve(7);
     const { at, router, fire, stop } = await bridged('/models/9');
-    await fire(MENU_EVENTS.STOP_SERVER);
+    await fire(MENU_EVENTS.UNLOAD_MODEL);
     expect(transport.stopServer).not.toHaveBeenCalled();
 
     await act(() => router.navigate('/models/7'));
-    await fire(MENU_EVENTS.STOP_SERVER);
+    await fire(MENU_EVENTS.UNLOAD_MODEL);
     expect(transport.stopServer).toHaveBeenCalledWith(7);
     expect(at()).toBe('/models/7');
     expect(menu.syncMenuStateSilent).toHaveBeenCalledTimes(1);
     stop();
   });
 
-  it("on a chat the menu has no model: a chat's address names its conversation, so Stop stops nothing", async () => {
+  it("on a chat the menu has no model: a chat's address names its conversation, so Unload unloads nothing", async () => {
     serve(7);
     const { at, fire, stop } = await bridged('/chat/7');
     expect(menu.setSelectedModel).toHaveBeenLastCalledWith(null);
 
-    await fire(MENU_EVENTS.STOP_SERVER);
+    await fire(MENU_EVENTS.UNLOAD_MODEL);
 
     expect(transport.stopServer).not.toHaveBeenCalled();
     expect(at()).toBe('/chat/7');
     stop();
   });
 
-  it('Remove asks first, removes on Remove, and takes the address back to the library', async () => {
+  it('Remove from Library… asks in the inspector’s words, removes on Remove, and closes the inspector', async () => {
     const { at, stop } = await bridged('/models/7');
     await waitFor(() => expect(transport.listModels).toHaveBeenCalled());
     const user = userEvent.setup();
-    const heading = () => screen.queryByRole('heading', { name: 'Remove "qwen3-8b"?' });
+    const heading = () => screen.queryByRole('heading', { name: 'Remove qwen3-8b from the library?' });
 
     const declined = menu.handlers?.[MENU_EVENTS.REMOVE_MODEL]?.();
     await waitFor(() => expect(heading()).toBeInTheDocument());
+    expect(screen.getByText('The file stays on disk.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /cancel/i }));
     await declined;
     await waitFor(() => expect(heading()).not.toBeInTheDocument());
@@ -237,23 +319,33 @@ describe('the menu bridge', () => {
     await user.click(await screen.findByRole('button', { name: 'Remove' }));
     await asked;
 
-    expect(notify).toHaveBeenCalledWith(expect.stringMatching(/could not remove qwen3-8b/i), 'error');
+    expect(notify).toHaveBeenCalledWith('Could not remove qwen3-8b: the model is being served', 'error');
     expect(at()).toBe('/models/7');
     expect(menu.syncMenuStateSilent).not.toHaveBeenCalled();
     stop();
   });
 
-  it('Refresh reads the library again; the proxy items act and say so', async () => {
-    const { fire, stop } = await bridged('/library');
-    await waitFor(() => expect(transport.listModels).toHaveBeenCalledTimes(1));
-    await fire(MENU_EVENTS.REFRESH_MODELS);
-    await waitFor(() => expect(transport.listModels).toHaveBeenCalledTimes(2));
+  it('Hide Inspector closes it as its × does, beside the library or the endpoint, and moves nothing else', async () => {
+    const { at, router, fire, stop } = await bridged('/models/7');
+    await fire(MENU_EVENTS.HIDE_INSPECTOR);
+    expect(at()).toBe('/library');
 
-    await fire(MENU_EVENTS.START_PROXY);
-    expect(notify).toHaveBeenCalledWith('Proxy started on port 8080', 'success');
-    await fire(MENU_EVENTS.PROXY_STOPPED);
-    expect(transport.stopProxy).toHaveBeenCalledTimes(1);
-    expect(notify).toHaveBeenCalledWith('Proxy stopped', 'success');
+    await act(() => router.navigate('/endpoint?inspect=model:7'));
+    await fire(MENU_EVENTS.HIDE_INSPECTOR);
+    expect(at()).toBe('/endpoint');
+
+    await act(() => router.navigate('/devices'));
+    await fire(MENU_EVENTS.HIDE_INSPECTOR);
+    expect(at()).toBe('/devices');
+    stop();
+  });
+
+  it('Copy puts the URL Rust sends on the clipboard', async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { fire, stop } = await bridged('/library');
+    await fire(MENU_EVENTS.COPY_TO_CLIPBOARD, 'http://127.0.0.1:8080/v1');
+    expect(writeText).toHaveBeenCalledWith('http://127.0.0.1:8080/v1');
     stop();
   });
 });

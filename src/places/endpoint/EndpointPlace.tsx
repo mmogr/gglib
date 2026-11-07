@@ -23,11 +23,11 @@
  * @module places/endpoint/EndpointPlace
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal } from 'lucide-react';
 import { openChatOn } from '../../app/openChat';
-import { inspectorClosed, inspectorSubject, paths } from '../../app/paths';
+import { inspectorClosed, inspectorSubject, paths, withoutParam } from '../../app/paths';
 import { ConnectClient } from '../../components/ConnectClient';
 import { ProxyDashboardModal } from '../../components/ProxyDashboardModal';
 import { Icon } from '../../components/ui/Icon';
@@ -68,6 +68,15 @@ export default function EndpointPlace() {
   const [live, setLive] = useState(false);
   const [clearing, setClearing] = useState(false);
   const connectRef = useRef<HTMLDivElement>(null);
+
+  // The menu's Connect a Client… (`?connect=1`): scrolled to once the block
+  // is drawn, and the ask dropped from the address.
+  const connectAsked = new URLSearchParams(location.search).get('connect') === '1';
+  useEffect(() => {
+    if (!connectAsked || !connectRef.current) return;
+    connectRef.current.scrollIntoView?.({ behavior: 'smooth' });
+    navigate(withoutParam(location, 'connect'), { replace: true });
+  });
 
   const subject = inspectorSubject(location);
   const inspected = subject?.kind === 'model' ? subject.id : null;

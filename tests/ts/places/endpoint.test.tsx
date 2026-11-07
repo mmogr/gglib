@@ -563,6 +563,22 @@ describe('the endpoint place', () => {
       expect(within(using).queryByText(/Phone/)).not.toBeInTheDocument();
     });
 
+    it("the menu's Connect a Client… opens the place at the block, and the ask leaves the address", async () => {
+      const scrolled: Element[] = [];
+      const before = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        const { at } = renderEndpoint(UP, '/endpoint?connect=1');
+        const connect = await screen.findByRole('region', { name: 'Connect a client' });
+        await waitFor(() => expect(at()).toBe('/endpoint'));
+        expect(scrolled.filter((el) => el.contains(connect))).toHaveLength(1);
+      } finally {
+        Element.prototype.scrollIntoView = before;
+      }
+    });
+
     it('before anything has used it, says so and offers Connect a client', async () => {
       renderEndpoint();
       await frame();

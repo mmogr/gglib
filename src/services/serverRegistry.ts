@@ -202,11 +202,6 @@ export function isServerRunning(modelId: string | number): boolean {
   return isRunningState(getServerState(String(modelId)));
 }
 
-/** The ids of the models served here now, for code outside React. */
-export function runningModelIds(): number[] {
-  return getAllRunningServerInfos().map((s) => Number(s.modelId));
-}
-
 // ============================================================================
 // React Hook
 // ============================================================================
