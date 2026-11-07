@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.31.0-rc.5](https://github.com/mmogr/gglib/compare/v0.31.0-rc.4...v0.31.0-rc.5) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gui:** tool servers are rows with one sheet to add them ([#1818](https://github.com/mmogr/gglib/issues/1818))
+* **tauri:** the app and tray menus speak the new vocabulary ([#1813](https://github.com/mmogr/gglib/issues/1813))
+* **gui:** engines are rows, and About can stop gglib ([#1814](https://github.com/mmogr/gglib/issues/1814))
+* **gui:** diagnostics holds the live numbers, logs, benchmarks and system checks ([#1812](https://github.com/mmogr/gglib/issues/1812))
+* **gui:** one sheet views, fixes and redraws a picture ([#1808](https://github.com/mmogr/gglib/issues/1808))
+* **gui:** a reply folds its thinking and tool calls, and shows its figures on hover ([#1807](https://github.com/mmogr/gglib/issues/1807))
+* **gui:** the composer has one + menu, chips only when set, and a labelled Thinking toggle ([#1806](https://github.com/mmogr/gglib/issues/1806))
+* **gui:** setup is five steps that end with a proven endpoint ([#1811](https://github.com/mmogr/gglib/issues/1811))
+* **gui:** settings is a place with six sections that save as you go ([#1805](https://github.com/mmogr/gglib/issues/1805))
+* **gui:** the tray shows the endpoint, what is loaded, and devices ([#1804](https://github.com/mmogr/gglib/issues/1804))
+* **gui:** chats live in the sidebar and a chat is a place ([#1802](https://github.com/mmogr/gglib/issues/1802))
+
+### What gglib now does
+
+* **gui:** a reply folds its thinking and tool calls, and shows its figures on hover ([#1807](https://github.com/mmogr/gglib/issues/1807)) ([e03faf0](https://github.com/mmogr/gglib/commit/e03faf0c0924c671b480a11866bf347c1ecac778))
+* **gui:** chats live in the sidebar and a chat is a place ([#1802](https://github.com/mmogr/gglib/issues/1802)) ([fffb8b0](https://github.com/mmogr/gglib/commit/fffb8b003cfa739e48d983f0f2cfad6efe7387c5))
+* **gui:** diagnostics holds the live numbers, logs, benchmarks and system checks ([#1812](https://github.com/mmogr/gglib/issues/1812)) ([b2ce3a5](https://github.com/mmogr/gglib/commit/b2ce3a5e3804467ca3a8742dbbe01d3ef7085d65))
+* **gui:** engines are rows, and About can stop gglib ([#1814](https://github.com/mmogr/gglib/issues/1814)) ([0fc71f2](https://github.com/mmogr/gglib/commit/0fc71f2c44f056e5e07328241d8e9c0b1c1f40e1))
+* **gui:** one sheet views, fixes and redraws a picture ([#1808](https://github.com/mmogr/gglib/issues/1808)) ([09db379](https://github.com/mmogr/gglib/commit/09db379f002c936e642ea4b29b09ffa42fd73311))
+* **gui:** settings is a place with six sections that save as you go ([#1805](https://github.com/mmogr/gglib/issues/1805)) ([c198781](https://github.com/mmogr/gglib/commit/c198781d3f387bb92c7fd4511f923ba04d675850))
+* **gui:** setup is five steps that end with a proven endpoint ([#1811](https://github.com/mmogr/gglib/issues/1811)) ([4014809](https://github.com/mmogr/gglib/commit/4014809ef5375b3e7acb0db738c2fbbc79c9a734))
+* **gui:** the composer has one + menu, chips only when set, and a labelled Thinking toggle ([#1806](https://github.com/mmogr/gglib/issues/1806)) ([54e812d](https://github.com/mmogr/gglib/commit/54e812de274ffcf48f1f6df100f689df58d7a109))
+* **gui:** the tray shows the endpoint, what is loaded, and devices ([#1804](https://github.com/mmogr/gglib/issues/1804)) ([5aaa243](https://github.com/mmogr/gglib/commit/5aaa243eee9e947bd9ad5cc5c51b086b059976f2))
+* **gui:** tool servers are rows with one sheet to add them ([#1818](https://github.com/mmogr/gglib/issues/1818)) ([2be2267](https://github.com/mmogr/gglib/commit/2be226786e5d5f5ff4b713a349ce7288ba0397ac))
+* **tauri:** the app and tray menus speak the new vocabulary ([#1813](https://github.com/mmogr/gglib/issues/1813)) ([43ed21e](https://github.com/mmogr/gglib/commit/43ed21e73667f44e75cf1996eff900e4dcf4575a))
+
+
+### What it stopped getting wrong
+
+* **cli:** gglib model explain says what a load would unload ([#1815](https://github.com/mmogr/gglib/issues/1815)) ([539d871](https://github.com/mmogr/gglib/commit/539d87114556b2c3754fd2dfa0bf25d0abbc2a61)), closes [#1809](https://github.com/mmogr/gglib/issues/1809)
+* **downloads:** the download queue size is read when the daemon starts, and a CLI write reaches it ([#1816](https://github.com/mmogr/gglib/issues/1816)) ([414f3dc](https://github.com/mmogr/gglib/commit/414f3dc83d5ae8dca5f4d3bf3b84ff280f0b3a9a)), closes [#1810](https://github.com/mmogr/gglib/issues/1810)
+
 ## [0.31.0-rc.4](https://github.com/mmogr/gglib/compare/v0.31.0-rc.3...v0.31.0-rc.4) (2026-11-07)
 
 
