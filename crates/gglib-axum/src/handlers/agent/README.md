@@ -297,13 +297,16 @@ differs from a device's in three things only:
   run is listed by the name the chat has for it, and nothing of it is
   looked up in this catalogue, so the image checks are that machine's
   proxy's to make. Draw on it is `400 drawing_unavailable`.
-- **Tools.** `Asked::of_local` reads no server: every tool here (a `null`
-  filter: every running server's and the builtins) when the chat names
+- **Tools.** `Asked::of_local` is planned without reading a server: every
+  tool here (a `null` filter: every enabled server's and the builtins) when the chat names
   none, the tools it names when it names some, and none (`[]`) when it
   turned its tools off or the catalogue says its model calls none
   (`hub_model::calls_tools`; a model not in the catalogue, or the paired
-  machine's, keeps its tools). The image tool and the file tools are added
-  as the loop is composed, as for the page's run.
+  machine's, keeps its tools). The run's late step first starts the
+  enabled servers it reads (`McpService::start_enabled`): every one, or
+  only those whose ids the chat's list names when it names each tool as
+  `{id}:{tool}`, and none when it calls no tool. The image tool and the
+  file tools are added as the loop is composed, as for the page's run.
 - **Folder.** The turn may say the chat's folder, settled by
   `run::settle_folder` as the page's run settles it: `folder_unusable` and
   `folder_missing` before anything runs, the canonical path remembered once

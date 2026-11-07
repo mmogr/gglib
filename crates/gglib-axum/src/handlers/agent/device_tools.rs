@@ -17,10 +17,12 @@
 //! server starts; [`offered`] trusts the list it is handed. The decisions
 //! are ADR 0024, ADR 0025 and ADR 0026.
 //!
-//! This machine's own turn on one of its chats reads no server when it
-//! starts ([`Asked::of_local`]): it is offered every tool here, of every
-//! server running and the builtins, narrowed by the chat's tool list, and
-//! none when the chat turned its tools off or its model cannot call any.
+//! This machine's own turn on one of its chats is planned without reading a
+//! server ([`Asked::of_local`]): it is offered every tool here, of every
+//! enabled server and the builtins, narrowed by the chat's tool list, and
+//! none when the chat turned its tools off or its model cannot call any. Its
+//! late step starts the enabled servers it reads before its tools are listed
+//! ([`settle`]).
 //! gglib's file tools join them when the turn has a folder, and the image
 //! tool with Draw, both as the loop is composed (`compose::with_folder`,
 //! `compose::with_drawing`).
@@ -30,6 +32,7 @@ use std::collections::BTreeSet;
 use gglib_core::DeviceServers;
 use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::ports::RemoteGatewayPort as _;
+use gglib_mcp::BUILTIN_PREFIX;
 
 use super::AgentChatRequest;
 use super::compose::DRAW_TOOL;
@@ -58,6 +61,14 @@ enum Reach {
     /// This machine's own run: every tool here when `calls`, and otherwise
     /// none.
     Here { calls: bool },
+}
+
+/// Which enabled servers this machine's own run starts before its tools are
+/// read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Starts {
+    Every,
+    Only(BTreeSet<i64>),
 }
 
 impl Default for Reach {
@@ -132,6 +143,32 @@ impl Asked {
         }
     }
 
+    /// The enabled servers this machine's own run reads tools from, which
+    /// its late step starts first ([`settle`]): none (`None`) for a device's
+    /// run, or one that calls no tool; every one when its chat names no
+    /// tool, or names one by its bare name, which any server may have; else
+    /// those whose ids its list names (`{id}:{tool}`).
+    fn here_servers(&self) -> Option<Starts> {
+        if !matches!(self.reach, Reach::Here { calls: true }) {
+            return None;
+        }
+        let mut ids = BTreeSet::new();
+        for entry in &self.narrow {
+            if entry.starts_with(BUILTIN_PREFIX) {
+                continue;
+            }
+            let id = entry.split_once(':').and_then(|(id, _)| id.parse().ok());
+            let Some(id) = id else {
+                return Some(Starts::Every);
+            };
+            ids.insert(id);
+        }
+        if self.narrow.is_empty() {
+            return Some(Starts::Every);
+        }
+        Some(Starts::Only(ids))
+    }
+
     /// The servers open to devices that a device's run may use; none for
     /// this machine's own run, which is offered no server that way.
     fn opened(&self) -> Option<&DeviceServers> {
@@ -188,13 +225,19 @@ pub(super) async fn resolve(state: &AppState, asked: &Asked) -> Vec<String> {
 /// `chat` with its tool filter set to what a run that `asked` is offered on
 /// this machine now: a device's run settles its tools this way once its
 /// model is ready ([`resolve`]). This machine's own run keeps the filter it
-/// was planned with ([`Asked::planned`]).
+/// was planned with ([`Asked::planned`]), once the enabled servers it reads
+/// are started (`McpService::start_enabled`).
 pub(super) async fn settle(
     state: &AppState,
     mut chat: AgentChatRequest,
     asked: &Asked,
 ) -> AgentChatRequest {
     if matches!(asked.reach, Reach::Here { .. }) {
+        match asked.here_servers() {
+            Some(Starts::Every) => state.mcp.start_enabled(None).await,
+            Some(Starts::Only(ids)) => state.mcp.start_enabled(Some(&ids)).await,
+            None => {}
+        }
         return chat;
     }
     chat.tool_filter = Some(resolve(state, asked).await);

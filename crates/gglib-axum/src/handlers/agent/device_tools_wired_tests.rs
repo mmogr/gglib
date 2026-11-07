@@ -26,9 +26,9 @@ use serde_json::json;
 use tokio::sync::Notify;
 
 use super::tests::STAND_IN_SERVER;
-use super::{Asked, resolve, settle};
+use super::{Asked, Starts, resolve, settle};
 use crate::handlers::agent::chat_turn::ChatQuery;
-use crate::handlers::agent::run_fixture::{device, drawing_state, settled};
+use crate::handlers::agent::run_fixture::{LOCAL, device, drawing_state, settled};
 use crate::handlers::agent::turn_fixture::hi;
 use crate::handlers::agent::{chat_turn, hub_turn, turn_fixture};
 use crate::state::AppState;
@@ -151,10 +151,15 @@ impl Opened {
     /// Let the run's model load, and wait for the run to end where a test's
     /// must: at the port check, past its late step's tools.
     async fn loaded_and_ended(&self, device: &str, id: &str) {
+        self.loaded_and_ended_in(&RunScope::Device(device.to_owned()), id)
+            .await;
+    }
+
+    /// [`Self::loaded_and_ended`], for the run `id` in `scope`.
+    async fn loaded_and_ended_in(&self, scope: &RunScope, id: &str) {
         self.loads.loaded.notify_one();
         settled(&self.state).await;
-        let scope = RunScope::Device(device.to_owned());
-        let run = self.state.runs.existing(&scope, id).unwrap().unwrap();
+        let run = self.state.runs.existing(scope, id).unwrap().unwrap();
         assert_eq!(run.status, RunStatus::Failed);
         let message = run.error.unwrap().message;
         assert!(message.contains("No running server found"), "{message}");
@@ -381,4 +386,80 @@ async fn a_re_put_under_a_started_id_with_other_servers_starts_nothing_new() {
     settled(&o.state).await;
     assert!(!o.running().await, "nothing new started");
     o.state.mcp.shutdown().await;
+}
+
+/// This machine's own turn starts the enabled servers it reads tools from in
+/// its run's late step, as a device's turn starts the open ones: every one
+/// when its chat names no tool, closed to devices or not, and never in its
+/// `PUT`.
+#[tokio::test]
+async fn this_machines_turn_starts_every_enabled_server_in_its_late_step() {
+    let o = opened().await;
+    o.state.mcp.set_allow_remote(o.server, false).await.unwrap();
+    let id = o.chat(ConversationSettings::default()).await;
+
+    let created = hub_turn::start(&o.state, LOCAL, "m1", hi(id), None).await;
+    assert!(created.unwrap().created);
+    assert!(!o.running().await, "the PUT started nothing");
+
+    o.loaded_and_ended_in(&LOCAL, "m1").await;
+    assert!(o.running().await, "the late step started it");
+    o.state.mcp.shutdown().await;
+}
+
+/// A chat that names its tools by server starts only those servers; one
+/// with its tools off starts none.
+#[tokio::test]
+async fn this_machines_turn_starts_only_the_servers_its_chat_names() {
+    let o = opened().await;
+    let other = o.open_another("other").await;
+    let named = ConversationSettings {
+        tools: vec![o.echo(), "builtin:get_current_time".to_owned()],
+        ..ConversationSettings::default()
+    };
+    let id = o.chat(named).await;
+    hub_turn::start(&o.state, LOCAL, "m1", hi(id), None)
+        .await
+        .unwrap();
+    o.loaded_and_ended_in(&LOCAL, "m1").await;
+    assert!(o.running().await, "named");
+    assert!(!o.is_running(other).await, "not named");
+
+    let off = ConversationSettings {
+        no_tools: Some(true),
+        ..ConversationSettings::default()
+    };
+    let id = o.chat(off).await;
+    hub_turn::start(&o.state, LOCAL, "m2", hi(id), None)
+        .await
+        .unwrap();
+    o.loaded_and_ended_in(&LOCAL, "m2").await;
+    assert!(!o.is_running(other).await, "tools off starts none");
+    o.state.mcp.shutdown().await;
+}
+
+/// A tool named by its bare name may be any server's, so every enabled
+/// server is started for it; a builtin names none.
+#[test]
+fn a_bare_tool_name_starts_every_enabled_server() {
+    let local = |tools: &[&str]| {
+        let settings = ConversationSettings {
+            tools: tools.iter().map(|t| (*t).to_owned()).collect(),
+            ..ConversationSettings::default()
+        };
+        Asked::of_local(&settings, false, true).here_servers()
+    };
+    assert_eq!(local(&["7:search", "search"]), Some(Starts::Every));
+    assert_eq!(local(&["fs:read_file"]), Some(Starts::Every));
+    let only = BTreeSet::from([7]);
+    assert_eq!(
+        local(&["7:search", "builtin:get_current_time"]),
+        Some(Starts::Only(only))
+    );
+    assert_eq!(
+        local(&["builtin:get_current_time"]),
+        Some(Starts::Only(BTreeSet::new()))
+    );
+    let off = Asked::of_local(&ConversationSettings::default(), false, false);
+    assert_eq!(off.here_servers(), None);
 }

@@ -106,6 +106,43 @@ async fn a_turn_on_the_paired_machines_model_never_loads_one_here() {
     assert_eq!(saved(&state, id).await.len(), 2, "no row was written");
 }
 
+/// The paired machine's model is never read as this machine's of the same
+/// id: a chat whose name for it is blank is listed under its id there, `3`,
+/// not under the name of this machine's model 3, and is offered every tool
+/// though this machine's model 3 calls none.
+#[tokio::test]
+async fn the_paired_machines_model_is_never_read_as_this_machines_of_its_id() {
+    let (_dir, state) = state().await;
+    let mut ids = Vec::new();
+    for n in 0..3 {
+        let silent = model(&state, |m| {
+            m.file_path = format!("/models/here-{n}.gguf").into();
+            m.name = "here-three".to_owned();
+            m.capabilities = ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
+        });
+        ids.push(silent.await);
+    }
+    assert_eq!(ids.last(), Some(&3), "this machine has a model 3");
+    let blank = ConversationSettings {
+        model_name: Some("  ".to_owned()),
+        ..ConversationSettings::default()
+    };
+    let id = chat_on(&state, on_desk(), blank).await;
+
+    let planned = plan(&state, &LOCAL, turn(id, "second"), None)
+        .await
+        .unwrap();
+    assert_eq!(planned.model, "3", "its id there, not a blank name");
+    assert_eq!(planned.chat.tool_filter, None, "every tool");
+
+    start(&state, LOCAL, "m1", turn(id, "second"), None)
+        .await
+        .unwrap();
+    settled(&state).await;
+    let run = state.runs.existing(&LOCAL, "m1").unwrap().unwrap();
+    assert_eq!(run.model.as_deref(), Some("3"), "not `here-three`");
+}
+
 /// A turn sent with Draw on the paired machine's model is refused before
 /// anything runs: this machine cannot draw for another's model.
 #[tokio::test]
