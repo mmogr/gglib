@@ -47,10 +47,14 @@ export const UNTOUCHED: Typed = {
 };
 
 /** The sheet's fields, by the plan decision each holds. */
-export type SheetField = 'ctx' | 'templates' | 'mtp' | 'sampling' | 'reasoning' | 'port';
+export type SheetField = 'ctx' | 'templates' | 'mtp' | 'reasoning' | 'port';
 
-/** The decisions a launch-line token can open the sheet on. */
-export const SHEET_FIELDS: ReadonlySet<string> = new Set<SheetField>(['ctx', 'templates', 'mtp', 'sampling', 'reasoning', 'port']);
+/**
+ * The decisions a launch-line token can open the sheet on. Sampling is no
+ * launch argument (no plan argument has a `sampling` decision,
+ * `explain_args.rs`), so the sampling form has no token of its own.
+ */
+export const SHEET_FIELDS: ReadonlySet<string> = new Set<SheetField>(['ctx', 'templates', 'mtp', 'reasoning', 'port']);
 
 const whole = (text: string): number | null => {
   const n = Number(text.trim());

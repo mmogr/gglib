@@ -12,18 +12,22 @@
  * Load sends only what was typed (`loadOptions`); with This load only
  * unchecked, the typed values with a per-model home are saved first, each
  * over the stored rest. A failed save or load stays here in the daemon's
- * words; a load opens no chat.
+ * words; a load opens no chat. With llama.cpp missing, Load is Install
+ * llama.cpp (the library banner's install, as the inspector's Load is),
+ * then this load once the install completes.
  *
  * @module inspector/LoadOptionsSheet
  */
 
 import { useCallback, useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { SamplingForm } from '../components/SamplingForm';
+import { InstallProgress } from '../components/SetupWizard/InstallProgress';
 import { StatusMark } from '../components/status/StatusMark';
 import { Button } from '../components/ui/Button';
 import { Checkbox } from '../components/ui/Checkbox';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { installLlama, useEngineInstall } from '../places/library/engineInstall';
 import type { GgufModel, LaunchExplanation, ModelDetail } from '../types';
 import { formatError } from '../utils/errors';
 import { ImageParts } from './ImageParts';
@@ -46,11 +50,17 @@ interface LoadOptionsSheetProps extends SheetOpen {
   model: GgufModel;
   detail: ModelDetail | null;
   explanation: LaunchExplanation | null;
-  /** The model has MTP heads (its `mtp` tag): Speculative is offered. */
-  mtpHeads: boolean;
+  /** The explanation could not be read: the sampling captions say so. */
+  failed: boolean;
+  /**
+   * Speculative is offered: the model has MTP heads (its `mtp` tag), its plan
+   * drafts, or it has an MTP default of its own (so drafting can always be
+   * turned off from here when something turns it on).
+   */
+  speculative: boolean;
   /** The settings' base port, which an automatic port counts up from. */
   basePort: number | null;
-  load: Pick<LoadState, 'busy' | 'loadWith'>;
+  load: Pick<LoadState, 'busy' | 'loadWith' | 'needsLlama'>;
   onUpdateModel: Update;
   /** Defaults were saved: read the explanation again. */
   onSaved: () => void;
@@ -72,7 +82,7 @@ const JINJA = [
 ] as const;
 
 export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
-  const { model, detail, explanation, mtpHeads, basePort, load, onUpdateModel, onSaved, onClose, focus, origin } = props;
+  const { model, detail, explanation, failed, speculative, basePort, load, onUpdateModel, onSaved, onClose, focus, origin } = props;
   const [typed, setTyped] = useState<Typed>({ ...UNTOUCHED, pin: props.pin });
   const [portOpen, setPortOpen] = useState(focus === 'port');
   const [imageReady, setImageReady] = useState(false);
@@ -97,12 +107,13 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
   const blocked = draws ? (imageReady ? null : '') : problem(typed, mtpArgs.length > 0);
   const change = (next: Partial<Typed>) => setTyped((t) => ({ ...t, ...next }));
   const ready = useCallback((r: boolean) => setImageReady(r), []);
+  const llama = useEngineInstall();
+  const installing = load.needsLlama && llama.installing;
 
   // Opened on a field: that field takes the focus.
   useEffect(() => {
-    if (focus === 'sampling' || focus === 'reasoning') {
-      const id = focus === 'reasoning' ? '#inference-param-reasoningBudgetTokens' : 'input';
-      refs.sampling.current?.querySelector<HTMLElement>(id)?.focus();
+    if (focus === 'reasoning') {
+      refs.sampling.current?.querySelector<HTMLElement>('#inference-param-reasoningBudgetTokens')?.focus();
     } else if (focus) {
       refs[focus].current?.focus();
     }
@@ -129,6 +140,26 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
     if (failed === null) onClose();
     else setError(`Didn't load: ${failed}`);
   };
+
+  // An install asked for here completed: load as it was asked to.
+  const asked = useRef(false);
+  const seen = useRef(llama.completed);
+  useEffect(() => {
+    if (llama.completed === seen.current) return;
+    seen.current = llama.completed;
+    if (!asked.current) return;
+    asked.current = false;
+    void submit();
+    // `submit` is this render's, with what was typed; the effect runs on a completion only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [llama.completed]);
+
+  const go = () => {
+    if (!load.needsLlama) return void submit();
+    asked.current = true;
+    installLlama();
+  };
+  const failure = error ?? (load.needsLlama && llama.refusal ? `Didn't load: ${llama.refusal}` : null);
 
   return (
     <div
@@ -163,29 +194,31 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
               />
             </Field>
             <Field label="Jinja" caption={templatesArgs.length ? `Auto: ${argsValue(templatesArgs)} · ${argsWhy(templatesArgs)}` : undefined}>
-              <Select
-                ref={refs.templates}
-                size="sm"
-                aria-label="Jinja"
-                className="max-w-[10rem]"
-                value={typed.jinja === null ? '' : typed.jinja ? 'on' : 'off'}
-                disabled={busy}
-                onChange={(e) => change({ jinja: e.target.value === '' ? null : e.target.value === 'on' })}
-              >
-                {JINJA.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
+              {/* The width is the wrapper's, so the select and its chevron are one box. */}
+              <span className="block max-w-[10rem]">
+                <Select
+                  ref={refs.templates}
+                  size="sm"
+                  aria-label="Jinja"
+                  value={typed.jinja === null ? '' : typed.jinja ? 'on' : 'off'}
+                  disabled={busy}
+                  onChange={(e) => change({ jinja: e.target.value === '' ? null : e.target.value === 'on' })}
+                >
+                  {JINJA.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+              </span>
             </Field>
-            {mtpHeads && <Speculative typed={typed} args={mtpArgs} disabled={busy} onChange={change} focusRef={refs.mtp} />}
+            {speculative && <Speculative typed={typed} args={mtpArgs} disabled={busy} onChange={change} focusRef={refs.mtp} />}
             <div ref={refs.sampling}>
               <SamplingForm
                 value={typed.sampling}
                 onChange={(next) => change({ sampling: next })}
                 disabled={busy}
-                fallback={{ kind: 'resolved', ownLayer: 'request', resolution: { explanation: sampling, isLoading: false, hasError: sampling === null } }}
+                fallback={{ kind: 'resolved', ownLayer: 'request', resolution: { explanation: sampling, isLoading: explanation === null && !failed, hasError: failed } }}
                 capabilities={{ reasoningEffort: detail?.reasoningEffortSupport ?? 'unknown' }}
               />
             </div>
@@ -231,18 +264,19 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
 
       <div className="flex flex-col gap-sm border-t border-border px-md py-sm">
         {blocked && <p className="m-0 text-xs text-text-secondary">{blocked}</p>}
-        {error && (
+        {installing && <InstallProgress progress={llama.progress} />}
+        {failure && (
           <p role="alert" className="m-0 flex items-baseline gap-xs text-xs text-text">
             <StatusMark kind="failed" label="Failed" />
-            {error}
+            {failure}
           </p>
         )}
         <div className="flex justify-end gap-sm">
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} isLoading={busy} disabled={blocked !== null}>
-            Load
+          <Button onClick={go} isLoading={busy || installing} disabled={blocked !== null}>
+            {load.needsLlama ? 'Install llama.cpp' : 'Load'}
           </Button>
         </div>
       </div>

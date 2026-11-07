@@ -39,6 +39,7 @@ import { getTransport } from '../../services/transport';
 import type { GgufModel } from '../../types';
 import { formatError } from '../../utils/errors';
 import { getHuggingFaceUrl } from '../../utils/format';
+import { componentRoleLabel } from '../../utils/imageFamily';
 import { LoadOptionsSheet, type SheetOpen } from '../LoadOptionsSheet';
 import type { Update } from './Change';
 import { Details } from './Details';
@@ -93,6 +94,8 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
   const install = useEngineInstall();
   const sd = useSdStatus(draws);
   const sdMissing = draws && sd.status?.installed === false;
+  // An image model's parts the library says are missing: Load waits for them, as the sheet's does.
+  const partsMissing = draws ? model.missingComponents.map(componentRoleLabel) : [];
   // Tags decide flags (`agent` templates, `mtp` drafting), so a retag reads the launch again too.
   const { reload: reloadDetail } = detail;
   const { reload: reloadExplain } = explain;
@@ -164,7 +167,8 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
         model={model}
         detail={detail.modelDetail?.id === model.id ? detail.modelDetail : null}
         explanation={explain.explanation}
-        mtpHeads={tagged('mtp')}
+        failed={explain.failed}
+        speculative={tagged('mtp') || model.serverDefaults?.mtp != null || !!explain.explanation?.plan.args.some((a) => a.decision === 'mtp')}
         basePort={settings?.llamaBasePort ?? null}
         load={load}
         onUpdateModel={onUpdateModel}
@@ -205,7 +209,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
               </>
             ) : (
               <>
-                <Button onClick={load.load} isLoading={load.busy === 'load' || installing} disabled={sdMissing || load.busy !== null}>
+                <Button onClick={load.load} isLoading={load.busy === 'load' || installing} disabled={sdMissing || partsMissing.length > 0 || load.busy !== null}>
                   {load.needsLlama ? 'Install llama.cpp' : 'Load'}
                 </Button>
                 {!draws && (
@@ -217,6 +221,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
             )}
           </div>
           {installing && <InstallProgress progress={install.progress} />}
+          {partsMissing.length > 0 && <p className="m-0 text-xs text-text-secondary">{`▲ ${partsMissing.join(', ')} missing.`}</p>}
           {sdMissing && (
             <p className="m-0 flex items-center gap-sm text-xs text-text-secondary">
               Drawing needs stable-diffusion.cpp.

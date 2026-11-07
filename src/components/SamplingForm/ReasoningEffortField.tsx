@@ -107,29 +107,30 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
       <label htmlFor={id} className="text-sm font-semibold text-text">
         Reasoning Effort
       </label>
-      <Select
-        id={id}
-        size="sm"
-        className="max-w-[220px]"
-        disabled={disabled}
-        value={value ?? ''}
-        aria-describedby={captionId}
-        onChange={(e) => onChange((e.target.value || undefined) as ReasoningEffortLevel | undefined)}
-      >
-        {/*
-          Blank is not a seventh rung. Choosing it sends no key at all, which
-          leaves the template's own default in place — measured as `medium` on
-          gpt-oss. gglib offers no `none` level anywhere for exactly this
-          reason: it would promise no thinking and deliver the template's
-          preference.
-        */}
-        <option value="">Template&apos;s own default (send nothing)</option>
-        {REASONING_EFFORT_LEVELS.map((level) => (
-          <option key={level} value={level}>
-            {level}
-          </option>
-        ))}
-      </Select>
+      <span className="block max-w-[220px]">
+        <Select
+          id={id}
+          size="sm"
+          disabled={disabled}
+          value={value ?? ''}
+          aria-describedby={captionId}
+          onChange={(e) => onChange((e.target.value || undefined) as ReasoningEffortLevel | undefined)}
+        >
+          {/*
+            Blank is not a seventh rung. Choosing it sends no key at all, which
+            leaves the template's own default in place — measured as `medium` on
+            gpt-oss. gglib offers no `none` level anywhere for exactly this
+            reason: it would promise no thinking and deliver the template's
+            preference.
+          */}
+          <option value="">Template&apos;s own default (send nothing)</option>
+          {REASONING_EFFORT_LEVELS.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </Select>
+      </span>
       <span id={captionId} className="text-xs text-text-muted italic">
         {caption(support)}
       </span>

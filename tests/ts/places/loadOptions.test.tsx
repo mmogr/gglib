@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
@@ -22,7 +22,8 @@ const explain = vi.hoisted(() => ({ answer: null as unknown }));
 const settings = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 const sd = vi.hoisted(() => ({ installed: true }));
 const post = vi.hoisted(() => vi.fn(async (_path: string, _body?: unknown): Promise<unknown> => ({ port: 9456 })));
-const install = vi.hoisted(() => ({ kinds: [] as string[] }));
+const install = vi.hoisted(() => ({ kinds: [] as string[], onEvent: {} as Record<string, (e: unknown) => void> }));
+const setup = vi.hoisted(() => ({ llamaInstalled: true }));
 const transport = vi.hoisted(() => ({
   listModels: vi.fn(async () => library.models),
   listServers: vi.fn(async () => []),
@@ -58,10 +59,11 @@ vi.mock('../../../src/services/transport/api/client', () => ({
   post: (path: string, body?: unknown) => post(path, body),
 }));
 vi.mock('../../../src/services/transport/api/setup', () => ({
-  getSetupStatus: vi.fn(async () => ({ llamaInstalled: true, llamaCanDownload: true })),
+  getSetupStatus: vi.fn(async () => ({ llamaInstalled: setup.llamaInstalled, llamaCanDownload: true })),
   getEngineStatus: vi.fn(async () => ({ installed: sd.installed, installCommand: 'gglib config sd install', install: null })),
-  streamEngineInstall: vi.fn((kind: string) => {
+  streamEngineInstall: vi.fn((kind: string, onEvent: (e: unknown) => void) => {
     install.kinds.push(kind);
+    install.onEvent[kind] = onEvent;
     return () => {};
   }),
   getRecommendedModel: vi.fn(async () => null),
@@ -73,6 +75,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
 
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { resetEngineInstall } from '../../../src/places/library/engineInstall';
+import { INFERENCE_CONFIG_KEYS, INFERENCE_PARAMS } from '../../../src/constants/inferenceDefaults';
 import type { GgufModel } from '../../../src/types';
 import { renderApp } from './harness';
 import { guiModel } from '../fixtures/model';
@@ -112,7 +115,9 @@ describe('the Load with options sheet', () => {
     explain.answer = launchExplanation(samplingExplanation(), chatPlan());
     settings.value = { llamaBasePort: 9100 };
     sd.installed = true;
+    setup.llamaInstalled = true;
     install.kinds = [];
+    install.onEvent = {};
     post.mockClear();
     post.mockImplementation(async () => ({ port: 9456 }));
     for (const mock of Object.values(transport)) mock.mockClear();
@@ -319,27 +324,142 @@ describe('the Load with options sheet', () => {
     expect(within(dialog).getByRole('spinbutton', { name: 'Context' })).toHaveFocus();
   });
 
-  it("gives an image model its Parts line in place of the chat fields, and installs a missing runtime in place", async () => {
-    sd.installed = false;
-    transport.getModelDetail.mockResolvedValue({
-      id: 4,
-      tags: [],
-      components: [{ role: 'vae', path: '/models/ae.safetensors', present: true }],
-    });
+  /** An image model, its detail linking `vae`; `missing` names parts the library says are missing. */
+  async function openImageSheet(missing: ('clip_l' | 't5xxl')[]) {
+    transport.getModelDetail.mockResolvedValue({ id: 4, tags: [], components: [{ role: 'vae', path: '/models/ae.safetensors', present: true }] });
     explain.answer = launchExplanation(samplingExplanation(), { program: 'sd-server', args: [], narration: { model_name: 'flux', quantization: null, weights_bytes: 1, decisions: [] }, fit: null });
-    const flux = guiModel({ id: 4, name: 'flux-schnell', imageFamily: 'flux1', missingComponents: ['clip_l'] });
-    renderInspector(flux);
+    renderInspector(guiModel({ id: 4, name: 'flux-schnell', imageFamily: 'flux1', missingComponents: missing }));
     await waitFor(() => expect(transport.getModelDetail).toHaveBeenCalled());
-    const { u, dialog } = await openSheet();
-
-    const parts = await within(dialog).findByRole('group', { name: 'Parts' });
+    const opened = await openSheet();
+    const parts = await within(opened.dialog).findByRole('group', { name: 'Parts' });
     await waitFor(() => expect(parts).toHaveTextContent(/VAE ae\.safetensors/));
+    return { ...opened, parts };
+  }
+
+  it('gives an image model its Parts line in place of the chat fields, a missing part named, and Load off', async () => {
+    const { dialog, parts } = await openImageSheet(['clip_l']);
+
     expect(parts).toHaveTextContent(/▲ CLIP-L missing/i);
     expect(within(dialog).queryByRole('spinbutton', { name: 'Context' })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('checkbox', { name: /This load only/ })).not.toBeInTheDocument();
+    // The runtime is there; the missing part alone keeps Load off.
+    await within(parts).findByText(/Drawing with it is not available yet/);
+    expect(within(dialog).getByRole('button', { name: 'Load' })).toBeDisabled();
+  });
+
+  it('keeps Load off while the image runtime alone is missing, installs it in place, and the inspector follows', async () => {
+    sd.installed = false;
+    const { u, dialog, parts } = await openImageSheet([]);
     expect(within(dialog).getByRole('button', { name: 'Load' })).toBeDisabled();
 
     await u.click(await within(parts).findByRole('button', { name: 'Install' }));
     expect(install.kinds).toEqual(['stable_diffusion']);
+    sd.installed = true;
+    act(() => install.onEvent.stable_diffusion({ type: 'completed', version: 'master-1' }));
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Load' })).toBeEnabled());
+
+    // The inspector under the sheet read the runtime again too.
+    await u.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText('Drawing needs stable-diffusion.cpp.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Load' })).toBeEnabled();
+  });
+
+  it('loads an image model with every part and the runtime there, sending only its id', async () => {
+    const { u, dialog } = await openImageSheet([]);
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Load' })).toBeEnabled());
+    await u.click(within(dialog).getByRole('button', { name: 'Load' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(bodies()).toEqual([['/api/servers/start', { id: 4, mlock: false }]]);
+  });
+
+  it('sends every sampling value the form offers (IN-6)', async () => {
+    renderInspector();
+    const { u, dialog } = await openSheet();
+    const controls = [...dialog.querySelectorAll<HTMLInputElement>('input[id^="inference-param-"]')];
+    const set: Record<string, unknown> = {};
+    for (const input of controls) {
+      const key = input.id.replace('inference-param-', '') as keyof typeof INFERENCE_PARAMS;
+      fireEvent.change(input, { target: { value: String(INFERENCE_PARAMS[key].max) } });
+      set[key] = INFERENCE_PARAMS[key].max;
+    }
+    await u.selectOptions(within(dialog).getByLabelText('Reasoning Effort'), 'high');
+    set.reasoningEffort = 'high';
+    await u.click(within(dialog).getByRole('checkbox', { name: /This load only/ }));
+    await u.click(within(dialog).getByRole('button', { name: 'Load' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    // Every `InferenceConfig` key but `seed`, which has no control.
+    expect(Object.keys(set).sort()).toEqual(INFERENCE_CONFIG_KEYS.filter((k) => k !== 'seed').sort());
+    expect(bodies()[0][1]).toEqual({ id: 9, mlock: false, inferenceParams: set });
+  });
+
+  it('shows an unset slider without a number, its caption naming what it inherits, and no intro', async () => {
+    renderInspector();
+    const { dialog } = await openSheet();
+    const slider = within(dialog).getByLabelText('Frequency Penalty');
+
+    expect(slider.parentElement).toHaveTextContent('—');
+    expect(slider.parentElement).not.toHaveTextContent(/\d/);
+    expect(within(dialog).queryByText(/Leave blank to inherit/)).not.toBeInTheDocument();
+  });
+
+  it('says nothing of the sampling sources while the explanation is read, and says so when it cannot be', async () => {
+    explain.answer = new Promise(() => {});
+    renderInspector(GEMMA, '/models/9?serve=1');
+    const dialog = await screen.findByRole('dialog', { name: 'Load with options' });
+    expect(within(dialog).queryByText('Resolution unavailable')).not.toBeInTheDocument();
+    cleanup();
+    cleanupModelEvents();
+
+    explain.answer = null;
+    renderInspector(GEMMA, '/models/9?serve=1');
+    const failed = await screen.findByRole('dialog', { name: 'Load with options' });
+    expect((await within(failed).findAllByText('Resolution unavailable')).length).toBeGreaterThan(0);
+  });
+
+  it('installs llama.cpp in place of Load when it is missing, then loads what was typed', async () => {
+    setup.llamaInstalled = false;
+    renderInspector();
+    const { u, dialog } = await openSheet();
+    await u.type(within(dialog).getByRole('spinbutton', { name: 'Context' }), '16384');
+    await u.click(within(dialog).getByRole('checkbox', { name: /This load only/ }));
+    await u.click(await within(dialog).findByRole('button', { name: 'Install llama.cpp' }));
+    expect(install.kinds).toEqual(['llama']);
+    expect(post).not.toHaveBeenCalled();
+
+    setup.llamaInstalled = true;
+    act(() => install.onEvent.llama({ type: 'completed', version: 'b1' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(bodies()[0][1]).toEqual({ id: 9, mlock: false, contextLength: 16384 });
+  });
+
+  it('offers Speculative when the plan drafts or the model has its own MTP default, without the tag', async () => {
+    explain.answer = launchExplanation(samplingExplanation(), chatPlan({ args: [...chatPlan().args, ...MTP_ARGS] }));
+    renderInspector();
+    let { dialog } = await openSheet();
+    expect(within(dialog).getByRole('group', { name: 'Speculative' })).toBeInTheDocument();
+    cleanup();
+    cleanupModelEvents();
+
+    explain.answer = launchExplanation(samplingExplanation(), chatPlan());
+    renderInspector(guiModel({ ...GEMMA, serverDefaults: { contextLength: null, mtp: false } }));
+    ({ dialog } = await openSheet());
+    expect(within(dialog).getByRole('group', { name: 'Speculative' })).toBeInTheDocument();
+  });
+
+  it('asks for a count when MTP is turned on for this load only and nothing else drafts', async () => {
+    transport.getModelDetail.mockResolvedValue({ id: 9, tags: ['mtp'] });
+    renderInspector(guiModel({ ...GEMMA, serverDefaults: { contextLength: null, mtp: false } }));
+    await waitFor(() => expect(transport.getModelDetail).toHaveBeenCalled());
+    const { u, dialog } = await openSheet();
+    const spec = await within(dialog).findByRole('group', { name: 'Speculative' });
+    await u.click(within(spec).getByRole('checkbox', { name: 'MTP' }));
+    await u.click(within(dialog).getByRole('checkbox', { name: /This load only/ }));
+
+    expect(within(dialog).getByText('Say how many draft tokens for this load.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Load' })).toBeDisabled();
+    await u.type(within(spec).getByRole('spinbutton', { name: 'Draft tokens' }), '3');
+    expect(within(dialog).getByRole('button', { name: 'Load' })).toBeEnabled();
   });
 });

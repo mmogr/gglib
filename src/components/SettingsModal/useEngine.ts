@@ -51,6 +51,15 @@ function subscribeInstall(listener: () => void) {
   };
 }
 
+/**
+ * The release `kind`'s last finished install put there (`null` before one),
+ * for a reader of the engine's status elsewhere to read it again when an
+ * install anywhere completes.
+ */
+export function useInstalledVersion(kind: RuntimeKind): string | null {
+  return useSyncExternalStore(subscribeInstall, () => installs[kind].installedVersion);
+}
+
 export interface EngineState {
   status: EngineStatus | null;
   statusError: string | null;

@@ -9,10 +9,11 @@ the Model ID to use it by; How it runs (How it ran once loaded); Details,
 closed and remembered. The name and the actions stay in view while the
 rest scrolls.
 
-Load is one click and sends only the model's id. Chat on a model that is
-not loaded loads it, then opens the chat on its port. Unload always asks the
-daemon. With llama.cpp missing, Load is Install llama.cpp (the library
-banner's install), then the load.
+Load is one click and sends only the model's id; an image model's waits for
+its missing parts, named under it. Chat on a model that is not loaded loads
+it, then opens the chat on its port. Unload always asks the daemon. With
+llama.cpp missing, Load is Install llama.cpp (the library banner's install),
+then the load.
 
 How it runs is the plan's arguments grouped by `LaunchArg.decision`, one
 row per labelled decision (`rows.ts` holds the one label table), each
@@ -54,6 +55,6 @@ stable-diffusion.cpp.".
 | `useLaunchFacts.ts` | A loaded model's `ServerInfo.launch`, read from the server list |
 | `useModelDetail.ts` | The model's detail (tags, revision, metadata) and its tag edits |
 | `useRetagModel.ts` | Re-detect or rebuild the detected tags: confirm on a rebuild, then toast and reload |
-| `useSdStatus.ts` | The image runtime's status, read once for an image model (its Load is off until stable-diffusion.cpp is there) |
+| `useSdStatus.ts` | The image runtime's status, read for an image model and again when an install completes (its Load is off until stable-diffusion.cpp is there) |
 
 <!-- module-docs:end -->

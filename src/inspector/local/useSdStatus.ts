@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useInstalledVersion } from '../../components/SettingsModal/useEngine';
 import { getEngineStatus } from '../../services/transport/api/setup';
 import type { EngineStatus } from '../../types/setup';
 import { formatError } from '../../utils/errors';
@@ -10,11 +11,14 @@ export interface SdStatusState {
 }
 
 /**
- * The image runtime's status, read once when `enabled`: the inspector asks
- * it for an image model only, to say whether `sd-server` is there to load it.
+ * The image runtime's status, read when `enabled` and again when an install
+ * completes (the Load with options sheet's, or System settings'): the
+ * inspector asks it for an image model only, to say whether `sd-server` is
+ * there to load it.
  */
 export function useSdStatus(enabled: boolean): SdStatusState {
   const [state, setState] = useState<SdStatusState>({ status: null, error: null });
+  const installed = useInstalledVersion('stable_diffusion');
 
   useEffect(() => {
     if (!enabled) return;
@@ -25,7 +29,7 @@ export function useSdStatus(enabled: boolean): SdStatusState {
     return () => {
       live = false;
     };
-  }, [enabled]);
+  }, [enabled, installed]);
 
   return state;
 }

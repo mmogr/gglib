@@ -195,10 +195,9 @@ export const SamplingForm: FC<SamplingFormProps> = ({
             className={`inference-param-slider ${!isSet ? 'is-default' : ''}`}
             aria-describedby={!isSet && caption ? paramCaptionId(field) : undefined}
           />
-          <span
-            className={`min-w-[100px] text-sm tabular-nums ${isSet ? 'text-text' : 'text-text-muted'}`}
-          >
-            {displayValue.toFixed(2)}
+          {/* Only a set value has a number: an unset one's caption names what it inherits. */}
+          <span className={`min-w-[100px] text-sm tabular-nums ${isSet ? 'text-text' : 'text-text-muted'}`}>
+            {isSet ? currentValue.toFixed(2) : '—'}
           </span>
           {isSet && !disabled && (
             <IconButton
@@ -263,10 +262,8 @@ export const SamplingForm: FC<SamplingFormProps> = ({
 
   return (
     <div className="my-[1.5rem] p-[1rem] border border-border rounded-base bg-background-secondary">
-      <h4 className="m-0 mb-[0.5rem] text-sm font-semibold text-text">Inference Parameters</h4>
-      <p className="m-0 mb-[1rem] text-sm text-text-muted leading-[1.4]">
-        Configure default sampling parameters. Leave blank to inherit from global defaults.
-      </p>
+      {/* No intro: what a blank field inherits differs by surface, and each caption says it. */}
+      <h4 className="m-0 mb-[1rem] text-sm font-semibold text-text">Inference Parameters</h4>
 
       <div className="flex flex-col gap-[1rem]">
         {renderSlider('temperature')}

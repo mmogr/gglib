@@ -529,6 +529,13 @@ describe('the inspector, a model on this machine', () => {
     expect(screen.queryByRole('region', { name: 'How it runs' })).not.toBeInTheDocument();
   });
 
+  it('keeps Load off for an image model with a part missing, and says which', async () => {
+    renderInspector(guiModel({ id: 9, name: 'flux-schnell', imageFamily: 'flux1', missingComponents: ['clip_l'] }));
+
+    expect(await screen.findByRole('button', { name: 'Load' })).toBeDisabled();
+    expect(within(inspector()).getByText('▲ CLIP-L missing.')).toBeInTheDocument();
+  });
+
   it('keeps the name and the main actions in view, and draws Remove as a danger', async () => {
     renderInspector();
     const user = userEvent.setup();
