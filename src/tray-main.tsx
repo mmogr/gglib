@@ -10,7 +10,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { TrayPanel } from './pages/TrayPanel';
+import { TrayPanel } from './tray/TrayPanel';
 import './styles/tailwind.css';
 import { initAppLogger } from './services/platform/logging/appLogger';
 

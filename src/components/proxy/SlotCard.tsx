@@ -8,8 +8,6 @@ import type { SlotSnapshot } from '../../services/transport/types/dashboard';
 
 interface SlotCardProps {
   slot: SlotSnapshot;
-  /** Donut diameter in px. The tray popover renders these smaller. */
-  size?: number;
   /**
    * Snapshot identity — one change per dashboard event. Omitting it means an
    * unchanged counter never records, so the rate readout freezes at its last
@@ -23,13 +21,15 @@ interface SlotCardProps {
   resetKey?: unknown;
 }
 
+/** Donut diameter in px. */
+const SIZE = 80;
+
 /**
  * One llama.cpp inference slot: context-usage donut plus a live generation
  * readout. Owns its own metric history — per-slot series belong with per-slot
- * component identity, which keeps the parent sections presentational and the
- * tray and modal rendering identical.
+ * component identity, which keeps the parent sections presentational.
  */
-export const SlotCard: FC<SlotCardProps> = ({ slot, size = 80, tick, resetKey }) => {
+export const SlotCard: FC<SlotCardProps> = ({ slot, tick, resetKey }) => {
   const nextToken = Array.isArray(slot.next_token) ? slot.next_token[0] : slot.next_token;
   const genRate = useMetricHistory(nextToken?.n_decoded, { mode: 'rate', tick, resetKey });
 
@@ -38,8 +38,8 @@ export const SlotCard: FC<SlotCardProps> = ({ slot, size = 80, tick, resetKey })
       <ContextUsageDonut
         used={tokensInUse(slot)}
         total={slot.n_ctx ?? null}
-        size={size}
-        strokeWidth={size / 10}
+        size={SIZE}
+        strokeWidth={SIZE / 10}
       />
       <Readout
         size="sm"

@@ -8,7 +8,8 @@
  * every read never settles, and a map changed in place never shows.
  *
  * The registry is one module-wide store with no reset, so each test keeps to
- * model ids of its own.
+ * model ids of its own; a snapshot stops every running server it leaves
+ * out, so a test that writes one does not rely on another's running.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -106,6 +107,18 @@ describe('serverRegistry', () => {
     expect(getServerState('501')?.status).toBe('stopped');
     expect(getServerState('502')).toMatchObject({ status: 'running', port: 9502 });
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  // A snapshot is the whole list of running servers (TX-6): a daemon that
+  // came back without one is not still serving it.
+  it('stops a running server a snapshot leaves out, keeping its port and name', () => {
+    ingestServerEvent({ type: 'running', modelId: '551', port: 9551, updatedAt: 1, modelName: 'Phi-4' });
+    ingestServerEvent({ type: 'running', modelId: '552', port: 9552, updatedAt: 1 });
+
+    ingestServerEvent({ type: 'snapshot', servers: [{ modelId: '552', status: 'running', port: 9552, updatedAt: 1 }] });
+
+    expect(getServerState('551')).toMatchObject({ status: 'stopped', port: 9551, modelName: 'Phi-4' });
+    expect(getServerState('552')?.status).toBe('running');
   });
 
   it('holds a health change only for a server it knows', () => {

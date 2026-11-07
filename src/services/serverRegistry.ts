@@ -120,10 +120,15 @@ export function ingestServerEvent(evt: ServerEvent): void {
 
   switch (evt.type) {
     case 'snapshot': {
-      // Snapshot contains only running servers
-      // Clear existing state and replace with snapshot
-      // Note: We don't clear stopped/crashed servers as snapshot only shows running
+      // A snapshot is the whole list of running servers (TX-6), so a server
+      // it leaves out is not running: one that died with a daemon that has
+      // since come back must not stay drawn. It is stopped, not forgotten,
+      // keeping its port and name as a stop event would.
+      const listed = new Set(evt.servers.map((s) => s.modelId));
       const next = new Map(store.getState());
+      for (const [modelId, existing] of next) {
+        if (existing.status === 'running' && !listed.has(modelId)) next.set(modelId, { ...existing, status: 'stopped', health: undefined });
+      }
       for (const server of evt.servers) {
         if (!isValidModelId(server.modelId)) continue;
         const existing = next.get(server.modelId);

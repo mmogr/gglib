@@ -71,3 +71,15 @@ pub(crate) async fn sync_menu_state(state: tauri::State<'_, AppState>) -> Result
     state.refresh.now();
     Ok(())
 }
+
+/// Show and focus the main window: the tray panel's "Open gglib".
+///
+/// The same `show_main` the tray menu's Open gglib, the icon's double-click
+/// and the dock's reopen use, so the Dock icon comes back and a minimised
+/// window is restored whichever way it was asked for. The panel's one window
+/// action; everything else it does is HTTP. Async, so it runs off the
+/// event thread, as the tray menu's Open gglib does.
+#[tauri::command]
+pub(crate) async fn show_main_window(app: AppHandle) -> Result<(), String> {
+    crate::tray::window::show_main(&app).map_err(|e| format!("Could not show the main window: {e}"))
+}

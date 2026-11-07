@@ -66,8 +66,8 @@ not because it belongs here.
 
 | File | Description |
 |------|-------------|
-| `serverRegistry.ts` | External store for server lifecycle state. Uses `useSyncExternalStore` for reactive React integration. |
-| `serverEvents.ts` | Subscribes to the daemon's SSE stream and ingests server lifecycle events into the registry |
+| `serverRegistry.ts` | External store for server lifecycle state. Uses `useSyncExternalStore` for reactive React integration. A snapshot (the list read) replaces the running set: a server it leaves out is stopped |
+| `serverEvents.ts` | Subscribes to the daemon's SSE stream and ingests server lifecycle events into the registry; says whether the list's read has landed (`useServerListHeard`), and reads it again on request (`refreshServers`) |
 | `serverEvents.normalize.ts` | Two named readers, one per producer: `normalizeServerEventFromAppEvent` for the camelCase `AppEvent` frames on `/api/events`, `normalizeServerSnapshotFromList` for the snake_case `GET /api/servers` list. Neither accepts the other's spelling |
 | `proxyRegistry.ts` | External store for proxy state, the `serverRegistry.ts` analogue |
 | `proxyEvents.ts` | Subscribes to proxy lifecycle events and ingests them into `proxyRegistry` |
@@ -145,6 +145,6 @@ The `transport/` directory provides a unified interface for backend communicatio
 
 - **Every mode**: HTTP fetch against the Axum API, plus SSE for events
 
-Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no second transport to keep in step — though `transport/api/client.ts` does still branch on platform to resolve that base URL and to choose its retry path. Beyond that, `invoke()` is confined to OS integration: five commands, allowlisted by name in `scripts/check-frontend-ipc.sh`.
+Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no second transport to keep in step — though `transport/api/client.ts` does still branch on platform to resolve that base URL and to choose its retry path. Beyond that, `invoke()` is confined to OS integration: six commands, allowlisted by name in `scripts/check-frontend-ipc.sh`.
 
 <!-- module-docs:end -->
