@@ -134,6 +134,13 @@
           "decision": "model",
           "source": "gglib",
           "reason": "why"
+        },
+        {
+          "flag": "--override-kv",
+          "value": "k=v,a+b%c:d@e",
+          "decision": "model",
+          "source": "gglib",
+          "reason": "why"
         }
       ],
       "narration": {
@@ -144,7 +151,7 @@
       },
       "fit": null
     },
-    "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU'"
+    "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e"
   },
   {
     "plan": {

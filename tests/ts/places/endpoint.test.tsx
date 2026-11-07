@@ -842,7 +842,7 @@ describe('the endpoint place', () => {
     });
 
     it('the rows are one Tab stop, ↑ ↓ inspect the next row as they move, and a key on a row\'s button moves nothing', async () => {
-      const { user, at } = renderEndpoint();
+      const { user, at, router } = renderEndpoint();
       await frame(admitted([residentSlot(1, 'Qwen3-4B'), residentSlot(2, 'Gemma-3-4B-It')]));
       const qwen = loadedRow('Qwen3-4B');
       const gemma = loadedRow('Gemma-3-4B-It');
@@ -864,6 +864,19 @@ describe('the endpoint place', () => {
       await user.keyboard('{ArrowUp}');
       expect(document.activeElement).toBe(qwen);
       expect(at()).toBe('/endpoint?inspect=model:1');
+      // The first key pick added an entry, the second replaced it.
+      await act(() => router.navigate(-1));
+      expect(at()).toBe('/endpoint');
+    });
+
+    it('a focused row keeps its picked fill and draws a ring that moves nothing', async () => {
+      renderEndpoint(UP, '/endpoint?inspect=model:1');
+      await frame(admitted([residentSlot(1, 'Qwen3-4B'), residentSlot(2, 'Gemma-3-4B-It')]));
+      const qwen = loadedRow('Qwen3-4B');
+      expect(qwen).toHaveClass('bg-surface-hover', 'focus-visible:bg-surface-hover');
+      expect(qwen).not.toHaveClass('focus-visible:bg-background-hover');
+      expect(loadedRow('Gemma-3-4B-It')).toHaveClass('focus-visible:bg-background-hover');
+      for (const row of [qwen, loadedRow('Gemma-3-4B-It')]) expect(row).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-inset', 'focus-visible:ring-primary');
     });
 
     it("a loaded model's status line says its latest rate and how long it has been loaded", async () => {

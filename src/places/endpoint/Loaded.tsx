@@ -74,8 +74,8 @@ const Row: FC<RowProps> = ({ row, selected, tabIndex, onUnload, onPin, pinning }
       onKeyDown={onKeyDown}
       className={cn(
         'group relative mx-sm flex min-h-[52px] cursor-pointer items-center gap-md rounded-base px-sm py-sm outline-none',
-        'hover:bg-background-hover focus-visible:bg-background-hover',
-        selected && 'bg-surface-hover hover:bg-surface-hover',
+        'hover:bg-background-hover focus-visible:bg-background-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
+        selected && 'bg-surface-hover hover:bg-surface-hover focus-visible:bg-surface-hover',
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-xs">
@@ -126,7 +126,7 @@ export const Loaded: FC<LoadedProps> = ({ snapshot, rows, inspected, paired, onU
       {rows.length === 0 ? (
         <Note>Nothing loaded. An app loads a model by asking for it by name, or load one now.</Note>
       ) : (
-        <Listbox label="Loaded models" onPick={(i) => navigate(paths.endpointInspect(rows[i].modelId))}>
+        <Listbox label="Loaded models" onPick={(i, replace) => navigate(paths.endpointInspect(rows[i].modelId), { replace })}>
           {rows.map((row, i) => (
             <Row
               key={row.modelId}

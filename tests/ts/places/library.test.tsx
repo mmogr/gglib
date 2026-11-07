@@ -42,6 +42,8 @@ vi.mock('../../../src/services/transport', async () => {
     getTransport: () => ({
       ...transport,
       getModelDetail: vi.fn(async () => null),
+      // A far row picked opens the far inspector, whose read never answers here.
+      getPairedModel: vi.fn(() => new Promise(() => {})),
       getSettings: vi.fn(async () => ({})),
       subscribe: vi.fn((category: string, handler: (evt: unknown) => void) => {
         handlers.set(category, handler);
@@ -406,6 +408,59 @@ describe('the library place', () => {
     await user.keyboard('{Home}');
     expect(document.activeElement).toBe(a);
     expect(at()).toBe('/models/1');
+  });
+
+  it('answers the arrow keys in the Loaded and paired groups too, each its own Tab stop', async () => {
+    // Two rows on this Mac too, so a Loaded pick read from the wrong group names another model.
+    library.models = ['la', 'lb', 'ha', 'hb'].map((name, i) => guiModel({ id: i + 1, name }));
+    servers.list = [listed(1, 'la'), listed(2, 'lb')];
+    transport.listPairedModels.mockResolvedValue(pairedModels([farEntry('fa', 7), farEntry('fb', 8)]));
+    applyRemoteStatus(DESK);
+    const { at } = renderLibrary();
+    const user = userEvent.setup();
+    await screen.findByRole('listbox', { name: 'On desk' });
+    const [la, lb] = within(await screen.findByRole('listbox', { name: 'Loaded' })).getAllByRole('option');
+    const [fa, fb] = within(screen.getByRole('listbox', { name: 'On desk' })).getAllByRole('option');
+    expect(rowsOf('Loaded')).toEqual(['la', 'lb']);
+    expect(rowsOf('On desk')).toEqual(['fa', 'fb']);
+    expect([la.tabIndex, lb.tabIndex, fa.tabIndex, fb.tabIndex]).toEqual([0, -1, 0, -1]);
+
+    la.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(lb);
+    expect(at()).toBe('/models/2');
+    expect([la.tabIndex, lb.tabIndex]).toEqual([-1, 0]);
+
+    fa.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(fb);
+    expect(at()).toBe('/far/8');
+    expect([fa.tabIndex, fb.tabIndex]).toEqual([-1, 0]);
+  });
+
+  it('walking the rows with the keys leaves one history entry; Back leaves the library', async () => {
+    library.models = ['a', 'b', 'c', 'd'].map((name, i) => guiModel({ id: i + 1, name }));
+    const { at, router } = renderLibrary();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('option', { name: /^a/ }));
+    expect(at()).toBe('/models/1');
+
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    expect(at()).toBe('/models/4');
+    await act(() => router.navigate(-1));
+    expect(at()).toBe('/library');
+  });
+
+  it("a focused row keeps its picked fill and draws a ring that moves nothing", async () => {
+    library.models = [guiModel({ id: 1, name: 'a' }), guiModel({ id: 2, name: 'b' })];
+    renderLibrary('/models/1');
+    const a = await screen.findByRole('option', { name: /^a/ });
+    const b = screen.getByRole('option', { name: /^b/ });
+    // Tailwind writes focus-visible after the plain fill, so the picked row names its own focus fill.
+    expect(a).toHaveClass('bg-surface-hover', 'focus-visible:bg-surface-hover');
+    expect(a).not.toHaveClass('focus-visible:bg-background-hover');
+    expect(b).toHaveClass('focus-visible:bg-background-hover');
+    for (const row of [a, b]) expect(row).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-inset', 'focus-visible:ring-primary');
   });
 
   it('makes the row the address picks the Tab stop', async () => {

@@ -264,10 +264,11 @@ mod tests {
             arg("--alias", Some("$HOME")),
             arg("-ot", Some(r"blk\.\d+\.ffn_.*=CPU")),
             arg("--host", Some("127.0.0.1")),
+            arg("--override-kv", Some("k=v,a+b%c:d@e")),
         ]);
         assert_eq!(
             plan.command_line(),
-            r"llama-server --alias '$HOME' -ot 'blk\.\d+\.ffn_.*=CPU' --host 127.0.0.1"
+            r"llama-server --alias '$HOME' -ot 'blk\.\d+\.ffn_.*=CPU' --host 127.0.0.1 --override-kv k=v,a+b%c:d@e"
         );
     }
 

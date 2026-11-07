@@ -211,7 +211,7 @@ describe('the inspector, a model on this machine', () => {
 
       expect(await navigator.clipboard.readText()).toBe(
         "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf'" +
-          " --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU'",
+          " --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e",
       );
       expect(await screen.findByText('Copied')).toBeInTheDocument();
       act(() => vi.advanceTimersByTime(1300));

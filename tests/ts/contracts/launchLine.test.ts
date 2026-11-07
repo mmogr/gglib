@@ -24,6 +24,8 @@ describe('the launch line is the command line the CLI records', () => {
     expect(RECORDED.some((r) => r.line.includes("'"))).toBe(true);
     // A `$` a shell would expand is among them, quoted.
     expect(RECORDED.some((r) => r.line.includes(" '$HOME'"))).toBe(true);
+    // And a value of `=,+%:@` a shell reads as itself, left as it is.
+    expect(RECORDED.some((r) => r.line.includes(' k=v,a+b%c:d@e'))).toBe(true);
   });
 
   it.each(RECORDED.map((r) => [r.line, r] as const))('%s', (_line, recorded) => {

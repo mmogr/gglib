@@ -4,7 +4,8 @@
  *
  * A row is an option of its group's listbox. Picking one changes its fill
  * and nothing else (LB-1): the row's box is the same picked or not, so no
- * text moves. It is a `div`, not a button, because its actions are buttons
+ * text moves. Focus draws an inset ring, a shadow that moves nothing, and
+ * leaves a picked row's fill as it is. It is a `div`, not a button, because its actions are buttons
  * and a button may not hold another; Enter and Space pick it as a click does.
  * The list is one Tab stop: the picked row's, else the first (`tabStop`),
  * and ↑ ↓ move between rows (`Listbox`).
@@ -50,8 +51,8 @@ export const ModelRow: FC<ModelRowProps> = ({ name, facts, accessory, actions, s
       onKeyDown={onKeyDown}
       className={cn(
         'group relative flex min-h-[52px] cursor-pointer items-center gap-md rounded-base px-md py-sm outline-none',
-        'hover:bg-background-hover focus-visible:bg-background-hover focus-within:bg-background-hover',
-        selected && 'bg-surface-hover hover:bg-surface-hover focus-within:bg-surface-hover',
+        'hover:bg-background-hover focus-visible:bg-background-hover focus-within:bg-background-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
+        selected && 'bg-surface-hover hover:bg-surface-hover focus-visible:bg-surface-hover focus-within:bg-surface-hover',
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col">

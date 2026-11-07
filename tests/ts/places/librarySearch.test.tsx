@@ -250,8 +250,28 @@ describe('the one search', () => {
     a.focus();
     await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(b);
-    expect(at()).toBe('/get/owner/b');
+    await waitFor(() => expect(at()).toBe('/get/owner/b'));
     expect([a.tabIndex, b.tabIndex]).toEqual([-1, 0]);
+  });
+
+  it('a run of keys opens the repo it ends on, read once, as one history entry', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b', 'owner/c']));
+    const { at, router } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    await user.click(await screen.findByRole('option', { name: /owner\/a/ }));
+    expect(at()).toBe('/get/owner/a');
+    transport.getHfQuantizations.mockClear();
+
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(document.activeElement).toBe(screen.getByRole('option', { name: /owner\/c/ }));
+    // The address waits for the run to end.
+    expect(at()).toBe('/get/owner/a');
+    await waitFor(() => expect(at()).toBe('/get/owner/c'));
+    expect(transport.getHfQuantizations.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['owner/c']);
+
+    await act(() => router.navigate(-1));
+    expect(at()).toBe('/library');
   });
 
   it("offers user/repo:QUANT's download as the first row, and queues it", async () => {

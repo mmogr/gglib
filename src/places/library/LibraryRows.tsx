@@ -43,8 +43,9 @@ interface LibraryRowsProps {
   subject: InspectorSubject | null;
   servers: ServerViewModel[];
   paired: PairedModelsState;
-  onPickLocal: (id: number) => void;
-  onPickFar: (id: number) => void;
+  /** `replace`: picked with the arrow keys from the row picked before. */
+  onPickLocal: (id: number, replace?: boolean) => void;
+  onPickFar: (id: number, replace?: boolean) => void;
   onUnload: (id: number) => void;
 }
 
@@ -122,14 +123,14 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
 
       {loaded.length > 0 && (
         <Group label="Loaded">
-          <Listbox label="Loaded" onPick={(i) => onPickLocal(loaded[i].id)}>
+          <Listbox label="Loaded" onPick={(i, replace) => onPickLocal(loaded[i].id, replace)}>
             {loaded.map(row)}
           </Listbox>
         </Group>
       )}
       {here.length > 0 && (
         <Group label="On this Mac">
-          <Listbox label="On this Mac" onPick={(i) => onPickLocal(here[i].id)}>
+          <Listbox label="On this Mac" onPick={(i, replace) => onPickLocal(here[i].id, replace)}>
             {here.map(row)}
           </Listbox>
         </Group>
@@ -143,7 +144,7 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
           {farShown.length === 0 ? (
             <Note>{far.models.length === 0 ? `${paired.name} has no models.` : `None of ${paired.name}'s models match.`}</Note>
           ) : (
-            <Listbox label={`On ${paired.name}`} onPick={(i) => onPickFar(farShown[i].gglib_id)}>
+            <Listbox label={`On ${paired.name}`} onPick={(i, replace) => onPickFar(farShown[i].gglib_id, replace)}>
               {farShown.map((m, i) => (
                 <ModelRow
                   key={`${far.machine.kind === 'paired' ? far.machine.fingerprint : ''}:${m.gglib_id}`}
