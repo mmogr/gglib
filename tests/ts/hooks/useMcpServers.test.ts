@@ -16,6 +16,7 @@ const transport = vi.hoisted(() => ({
   removeMcpServer: vi.fn(),
   startMcpServer: vi.fn(),
   stopMcpServer: vi.fn(),
+  setMcpServerRemote: vi.fn(),
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
@@ -238,6 +239,9 @@ describe('useMcpServers', () => {
           await result.current.updateServer(1, { name: 'Updated' });
         })
       ).rejects.toThrow('Update failed');
+      // A refusal is its caller's to say, never the list's error.
+      await act(async () => {});
+      expect(result.current.error).toBeNull();
     });
   });
 
@@ -273,6 +277,9 @@ describe('useMcpServers', () => {
           await result.current.removeServer(1);
         })
       ).rejects.toThrow('Cannot remove');
+      // A refusal is its caller's to say, never the list's error.
+      await act(async () => {});
+      expect(result.current.error).toBeNull();
     });
   });
 
@@ -365,6 +372,29 @@ describe('useMcpServers', () => {
           await result.current.stopServer(1);
         })
       ).rejects.toThrow('Stop failed');
+      // A refusal is its caller's to say, never the list's error.
+      await act(async () => {});
+      expect(result.current.error).toBeNull();
+    });
+  });
+
+  describe('setAllowRemote', () => {
+    it('throws on failure, and the refusal is not the list\'s error', async () => {
+      transport.setMcpServerRemote.mockRejectedValue(new Error('Not allowed'));
+
+      const { result } = renderHook(() => useMcpServers());
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      await expect(
+        act(async () => {
+          await result.current.setAllowRemote(1, true);
+        })
+      ).rejects.toThrow('Not allowed');
+      await act(async () => {});
+      expect(result.current.error).toBeNull();
     });
   });
 

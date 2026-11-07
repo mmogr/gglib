@@ -49,7 +49,8 @@ export interface UseMcpServersResult {
  *   const { servers, loading, error, addServer, startServer, stopServer } = useMcpServers();
  *
  *   if (loading) return <div>Loading...</div>;
- *   if (error) return <div>Error: {error}</div>;
+ *   // `error` is only the list read's failure; an action's refusal is thrown to its caller.
+ *   if (error) return <div>Couldn't read the tool servers: {error}</div>;
  *
  *   return (
  *     <div>
