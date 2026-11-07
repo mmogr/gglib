@@ -6,7 +6,8 @@
  * a turn's frames as the loop logs them, and the metadata the daemon saves
  * from them. The page draws the frames (`dispatchAgentEvent`) and loads the
  * metadata (`buildLoadedMessage`); both must give the same figures, the
- * margin the same lines and the composer's ring the same context reading.
+ * figure line and its tooltip the same words and the composer's ring the
+ * same context reading.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -21,9 +22,9 @@ vi.mock('../../../src/services/platform', () => ({
 import { dispatchAgentEvent } from '../../../src/hooks/useGglibRuntime/agentEventDispatch';
 import { buildLoadedMessage } from '../../../src/hooks/useChatPersistence/buildLoadedMessage';
 import {
-  madeLines,
+  figureDetail,
+  figureParts,
   replyFacts,
-  replyName,
 } from '../../../src/readings/turnFigures';
 import {
   contextLines,
@@ -66,12 +67,14 @@ describe('turn_made contract', () => {
     expect(Object.keys(custom(loaded()) as object).sort()).toEqual(Object.keys(CONTRACT.metadata).sort());
   });
 
-  it('says the same in the margin either way, the rate computed from what was saved', () => {
-    const lines = ['3,180 tok read', '2,100 from cache', '41.0s · 13 tok/s'];
-    expect(madeLines(facts(drawn()))).toEqual(lines);
-    expect(madeLines(facts(loaded()))).toEqual(lines);
-    expect(replyName(facts(drawn()))).toBe('Qwen3.8-27B');
-    expect(replyName(facts(loaded()))).toBe('Qwen3.8-27B');
+  it('says the same figures either way, the rate computed from what was saved', () => {
+    const line = '41 s · 13 tok/s · 2,100 tokens reused';
+    expect(figureParts(facts(drawn())).join(' · ')).toBe(line);
+    expect(figureParts(facts(loaded())).join(' · ')).toBe(line);
+    const detail = figureDetail(facts(loaded()));
+    expect(detail[0]).toMatch(/^Qwen3\.8-27B\b/);
+    expect(detail).toContain('3,180 tokens read');
+    expect(figureDetail(facts(drawn()))).toEqual(detail);
   });
 
   it('gives the same context reading either way, from the counts and the size the turn carried', () => {

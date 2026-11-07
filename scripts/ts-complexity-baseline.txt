@@ -1,6 +1,5 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
-src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 357
-src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
+src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 363
 src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/McpServersPanel.tsx 482
 src/components/ProxySamplingPanel.tsx 403

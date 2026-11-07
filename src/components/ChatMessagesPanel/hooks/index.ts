@@ -1,9 +1,6 @@
 // Re-export all hooks for ChatMessagesPanel
 export { useMessageDeletion } from './useMessageDeletion';
-export type {
-  UseMessageDeletionOptions,
-  UseMessageDeletionResult,
-} from './useMessageDeletion';
+export type { UseMessageDeletionOptions } from './useMessageDeletion';
 
 export { usePictureKeeping } from './usePictureKeeping';
 

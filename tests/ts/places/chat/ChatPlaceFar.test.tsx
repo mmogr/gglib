@@ -1,9 +1,9 @@
 /**
  * A chat on a computer joined to another machine: one of that machine's own
  * chats (`/chat/far/:id`, from the sidebar's "On desk" group) is read and
- * carried on but not changed, its model is that machine's pick, and the
- * margin names the device behind each turn, "You" only for this machine's
- * own.
+ * carried on but not changed (its turns offer Copy alone), its model is
+ * that machine's pick, and a question names the device behind it where it
+ * was not sent from here.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -115,24 +115,33 @@ afterEach(() => {
   resetModelLibrary();
 });
 
-/** The row an element is in: the turn's grid. */
-function rowOf(element: HTMLElement): HTMLElement {
-  return element.closest('.grid') as HTMLElement;
+/** The turn an element is in. */
+function turnOf(element: HTMLElement): HTMLElement {
+  return element.closest('[data-turn]') as HTMLElement;
 }
 
 describe('ChatPlace, the far machine’s chats', () => {
-  it('a far chat names the device behind each turn, and no one there is "You"', async () => {
+  it('a far chat names the device behind each question, and the other machine for one typed there', async () => {
     joined();
     renderDesk();
 
-    const asked = rowOf(await screen.findByText('Why did the build break?'));
+    const asked = turnOf(await screen.findByText('Why did the build break?'));
     expect(within(asked).getByText('phone-7c2e')).toBeInTheDocument();
-    const reply = rowOf(screen.getByText('A dependency moved.'));
-    expect(within(reply).getByText('qwen3-8b')).toBeInTheDocument();
-    expect(within(reply).getByText('for phone-7c2e')).toBeInTheDocument();
-    const hub = rowOf(screen.getByText('Typed at the hub.'));
+    const hub = turnOf(screen.getByText('Typed at the hub.'));
     expect(within(hub).getByText('Other machine')).toBeInTheDocument();
     expect(screen.queryByText('You')).not.toBeInTheDocument();
+  });
+
+  it('a far chat\'s turns offer Copy alone', async () => {
+    joined();
+    renderDesk();
+    await screen.findByText('Why did the build break?');
+
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Copy reply' })).toHaveLength(1);
+    for (const name of ['Edit message', 'Edit reply', 'Retry this reply', 'More for this message', 'More for this reply']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
   });
 
   it('a far chat is read and carried on, not changed: no title ▾, no system prompt line, its machine picks the model', async () => {
@@ -140,9 +149,6 @@ describe('ChatPlace, the far machine’s chats', () => {
     renderDesk();
     await screen.findByText('Why did the build break?');
 
-    for (const name of ['Edit message', 'Edit reply', 'Delete message', 'Regenerate reply', 'Branch from here']) {
-      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
-    }
     // Its title is plain text, not the menu of what changes a chat; it has a
     // prompt of its own, and still no line says so.
     const title = screen.getByRole('heading', { name: 'Why the build broke' });
@@ -194,7 +200,6 @@ describe('ChatPlace, the far machine’s chats', () => {
 
   it('a far chat whose rows carry counts and no size shows no ring', async () => {
     await openFarWith({ promptTokens: 8000, completionTokens: 200 });
-    expect(screen.getByText('8,000 tok read')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Context: / })).not.toBeInTheDocument();
   });
 
@@ -219,11 +224,12 @@ describe('ChatPlace, the far machine’s chats', () => {
     expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
   });
 
-  it('this machine’s own chat still says "You"', async () => {
+  it('this machine’s own question names no one, and can be edited', async () => {
     joined();
     renderPage();
-    const asked = rowOf(await screen.findByText('Asked here.'));
-    expect(within(asked).getByText('You')).toBeInTheDocument();
+    const asked = turnOf(await screen.findByText('Asked here.'));
+    expect(within(asked).queryByText('You')).not.toBeInTheDocument();
+    expect(within(asked).queryByText('Other machine')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit message' })).toBeInTheDocument();
   });
 
@@ -233,12 +239,11 @@ describe('ChatPlace, the far machine’s chats', () => {
     ];
     render(<ChatPlace modelName="qwen3" modelId={7} serverPort={4321} conversationId={2} />, { wrapper });
 
-    const asked = rowOf(await screen.findByText('Sent from the phone.'));
+    const asked = turnOf(await screen.findByText('Sent from the phone.'));
     expect(within(asked).getByText('phone-7c2e')).toBeInTheDocument();
-    expect(within(asked).queryByText('You')).not.toBeInTheDocument();
   });
 
-  it('a turn just sent on a far chat is "You" while its reply is written', async () => {
+  it('a turn just sent on a far chat names no one while its reply is written, and sends its text alone', async () => {
     const user = userEvent.setup();
     joined();
     renderDesk();
@@ -246,8 +251,8 @@ describe('ChatPlace, the far machine’s chats', () => {
 
     await user.type(screen.getByRole('textbox'), 'And how do I fix it?{Enter}');
 
-    const sent = rowOf(await screen.findByText('And how do I fix it?'));
-    expect(within(sent).getByText('You')).toBeInTheDocument();
+    const sent = turnOf(await screen.findByText('And how do I fix it?'));
+    expect(within(sent).queryByText('Other machine')).not.toBeInTheDocument();
     const far = transport.current as { addFarTurn: ReturnType<typeof vi.fn> };
     // Its text and no image, nothing said of thinking, and no drawing: neither button was touched.
     expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', [], undefined, false, undefined);

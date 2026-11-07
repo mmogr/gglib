@@ -182,7 +182,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
             )
         : undefined;
     return (
-      <div className="mx-auto w-full max-w-[1000px] shrink-0 px-lg pb-lg">
+      <div className="mx-auto w-full max-w-[728px] shrink-0 px-lg pb-lg">
         <ModelGoneLine gone={modelGone} modelName={modelName} starting={startingModel} onLoadAgain={loadAgain} onShowLog={onShowLog} />
       </div>
     );
@@ -220,7 +220,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   const placeholder = empty && !far ? `Ask ${modelName} anything` : 'Reply…';
 
   return (
-    <div className="mx-auto w-full max-w-[1000px] shrink-0 px-lg pb-lg pt-md">
+    <div className="mx-auto w-full max-w-[728px] shrink-0 px-lg pb-lg pt-md">
       <ComposerPrimitive.AttachmentDropzone asChild disabled={!imageInput.offered || !isServerConnected}>
         <ComposerPrimitive.Root className="flex flex-col gap-sm rounded-lg bg-background-input p-sm data-[dragging=true]:bg-surface-elevated">
           <ComposerImages />

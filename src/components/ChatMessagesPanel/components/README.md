@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-Every child of the `ChatMessagesPanel` composition root: the panel chrome around the thread (header, system prompt line, the error banner, the composer and its `[+]` menu, delete modal) and the per-message rendering (the notebook's rows of margin and body, Markdown with syntax highlighting, collapsible reasoning, and the context wiring message-level actions to their handlers).
+Every child of the `ChatMessagesPanel` composition root: the panel chrome around the thread (header, system prompt line, the error banner, the composer and its `[+]` menu) and the per-message rendering (a question's filled block and a reply's plain text, the fold of reasoning and tool calls, the figure and action lines under a turn, Markdown with syntax highlighting, and the context wiring message-level actions to their handlers).
 
 ## Panel chrome
 
@@ -21,23 +21,24 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 | `ComposerImages.tsx` | `ImageInputContext`, which the panel gives the thread so the page's composer and every edit's read one answer (whether the model reads images, why not, its context; nothing offered without it); a composer's images as tiles above its text (thumbnail, "uploading…" or "not uploaded", "~N tokens · P% of context" on hover, × to remove), the cost against the context the ring reads and, before the conversation has a reading, against the one `ImageInputContext` gives; and `useAddImage`, the file picker Add image… opens |
 | `imageCost.ts` | An image's cost as its tile says it: "~N tokens", and "P% of context" when a context size is known |
 | `ModelPicker.tsx` | The composer's model ▾ on this machine's chat: Loaded (the chat's own ticked), On this Mac, and the paired machine's models while one is connected (in a new chat, each opens a new chat on that model; in a saved chat each is listed greyed, its reason "A chat stays on its machine…" said under it), then Unload <model> (every endpoint client loses it; the chat stays open) and Show <model> (its inspector, where the Log is); the choice is handed to the page, and while a model starts the picker is "Loading <model>…"; plain text for a chat with another machine |
-| `ConfirmDeleteModal.tsx` | Warns about cascade deletion when removing a mid-thread message |
 
 ## Message rendering
 
 | File | Role |
 |------|------|
-| `MessageBubbles.tsx` | User/assistant/system turns as notebook rows; the reply's reasoning and tool calls behind "How this was made" (a tool still running with how far it has got and the picture it is making, from `RunPreviewsContext`), and the images its tools made under its text, outside that fold and always shown; action buttons, Edit on a question and on a reply with text, and Branch from here on each; the edit composer, Send for a question and Save for a reply, with a question's images, each removable, and a paste into it taking images only where the model reads them |
-| `Unanswered.tsx` | The row under a chat that ends in a question nothing answers, with Retry, which answers it; not while a reply is being read |
+| `MessageBubbles.tsx` | A question as a filled block at full contrast, its sender above it where that was not you; a reply as plain 16 px text, its model named above it only where the reply before was another model's, the arrival line until its first token, the fold (and, while the reply arrives, a polite live line saying each tool call as it settles), then the images its tools made, outside the fold and always shown; each turn's foot; the edit composer in the turn's place, Send for a question and Save for a reply, with a question's images, each removable, and a paste into it taking images only where the model reads them |
+| `ThinkingBlock.tsx` | A reply's fold: one 12 px line, `▸ Thought for 3 s · 2 tool calls`, live while it thinks (from the timing tracker), open while the reply arrives and closed after unless chosen, onto the reasoning (inline code inline, CH-8) and the tool rows |
+| `ToolCallRow.tsx` | One tool call in the fold: name, MCP server and state (running, its time, why it failed), opening in place onto its arguments with their Copy (while it runs too), the raw name, the result (`ToolUI`, the tool's registered renderer or the generic one) and its Copy; a running tool's progress and preview frame under the line, from `RunPreviewsContext` |
+| `ReplyArrival.tsx` | A reply with no token yet: its phase as a status line, the prompt reading and its bar, a render's step it waits behind |
+| `TurnFoot.tsx` | The line under a turn: its time on hover, a reply's figure line (`FigureLine`, the full set in its tooltip, "unfinished" in the warning colour), the action line (always in the page, faded until the turn is hovered or holds focus, always shown on the newest reply) and the branch switcher; `useTurnReveal`, hover or focus held in React |
+| `TurnActions.tsx` | The 12 px text actions: a reply's Copy · Retry · Edit · ⋯ (Branch from here), a question's Copy · Edit · ⋯ (Branch from here · Delete…); Copy alone on a far chat |
+| `Unanswered.tsx` | The 12 px line under a chat whose last reply did not come: "The reply failed: <reason>." from the run read here, or "Nothing answers this yet." under a question, with Retry where the chat ends in a question; not while a reply is being read |
 | `BranchingContext.tsx` | What the open chat offers of its branches (its branch points, whether it ends in a question, Retry, Branch from here, and opening another chat), for the turns and rows that show it; the same object until the chat's thread is read again, so no turn draws again for a render of the page; none on a far chat |
-| `BranchSwitcher.tsx` | A branch point's options: previous and next, and the count that lists each option by its line ("Nothing here yet" for a branch with nothing there), the open chat's marked; in the margin of the turn that starts the point (`TurnBranches`), and in a row after the last message where other branches go on (`BranchEnd`) |
+| `BranchSwitcher.tsx` | A branch point's options: previous and next, and the count that lists each option by its line ("Nothing here yet" for a branch with nothing there), the open chat's marked; in the foot of the turn that starts the point (`TurnBranches`), and in a 12 px line after the last message where other branches go on (`BranchEnd`) |
 | `MessageImages.tsx` | A user turn's images, and the strip of the images a reply's tools made: each read from the chat's store by id with the page's credential as a `blob:` URL, shown small and enlarged in a dialog on a click. A picture the drawing tool made has Fix or redo… in that dialog, where the chat can keep the result (`MessageActionsContext.pictures`) |
 | `PictureEditor.tsx` | Fixing or redoing a drawn picture: Fix brushes a mask over the part to draw again, Redo draws the whole picture again from itself; the draw's prompt to edit, a strength slider, an image model where more than one can draw, the render's stage and frame with Stop, then the result with hold-to-compare, Try again, Discard and Keep, which alone adds it to the chat |
-| `TurnRow.tsx` | One notebook row: margin (who, then how it was made) and body; the margin moves above the body in a narrow notebook |
-| `TurnMargin.tsx` | The margin's content: who and when, a reply's figures, a reply arriving and how far its prompt was read, or what it waits for and the step a render in its way is on |
 | `MarkdownMessageContent.tsx` | Parses and renders message text as Markdown (remark-gfm + rehype-highlight) |
-| `ThinkingBlock.tsx` | Collapsible reasoning section with live duration during streaming |
-| `MessageActionsContext.tsx` | React context providing edit/copy/delete callbacks to nested message components |
+| `MessageActionsContext.tsx` | React context providing the delete callback, whose chat it is, and fixing and redoing a picture to nested message components |
 
 ## Words
 
