@@ -9,12 +9,13 @@
 # Run this in CI to prevent architectural regression.
 # Policy: Only OS integration commands should be invoked from frontend.
 #
-# Allowlist (5 commands):
+# Allowlist (6 commands):
 #   - get_embedded_api_info (API discovery)
 #   - open_url (shell integration)
 #   - set_selected_model (menu sync)
 #   - sync_menu_state (menu sync)
 #   - log_from_frontend (frontend log ingestion)
+#   - show_main_window (the tray panel's Open gglib)
 #
 # `set_proxy_state` was here until the tray began reading proxy state from the
 # daemon rather than being told it. Allowlisting a command that no longer
@@ -45,6 +46,7 @@ ALLOWED_COMMANDS=(
     "set_selected_model"
     "sync_menu_state"
     "log_from_frontend"
+    "show_main_window"
 )
 
 # =============================================================================

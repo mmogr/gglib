@@ -47,13 +47,14 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `/api/version` - The daemon's build
    - `/api/events` - Server-Sent Events for real-time updates
 
-4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and uses **no Tauri IPC at all** — it reaches the daemon through the same HTTP transport as every other surface. Window-level actions (open, preferences, quit, and starting or stopping the service) are on the native tray menu, handled in Rust, which is what keeps the command list below unchanged. The icon tracks whether gglib is consuming anything on this machine — a listening proxy *or* a resident model — from a snapshot polled by `src/daemon/watch.rs`. See [src/tray/README.md](src/tray/README.md).
+4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and reaches the daemon through the same HTTP transport as every other surface. Its one Tauri command is `show_main_window`, for its Open gglib; the other window-level actions (preferences, quit, and starting or stopping the service) are on the native tray menu, handled in Rust. The icon tracks whether gglib is consuming anything on this machine — a listening proxy *or* a resident model — from a snapshot polled by `src/daemon/watch.rs`. See [src/tray/README.md](src/tray/README.md).
 
 5. **Tauri Commands (OS Integration Only)**: Tauri IPC commands are **limited to OS integration**:
    - `get_embedded_api_info` - Discover the daemon's port (the name predates the daemon)
    - `open_url` - Open URLs in system browser
    - `set_selected_model`, `sync_menu_state` - Native menu synchronization
    - `log_from_frontend` - Forward frontend logs to the Rust logger
+   - `show_main_window` - Bring the main window forward (the tray panel's Open gglib)
 
 6. **Real-Time Events**: The daemon's `/api/events` endpoint streams Server-Sent Events to each webview:
    - `server_*` events - Server lifecycle and health updates

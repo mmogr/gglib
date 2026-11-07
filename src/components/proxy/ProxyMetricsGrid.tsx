@@ -113,19 +113,3 @@ export const ModelSignalsSection: FC<SectionProps> = ({ snapshot }) => {
     </section>
   );
 };
-
-/**
- * Both live-metric sections back to back.
- *
- * The dashboard modal renders the two sections individually because its cache
- * panels sit between them; the tray popover has no such interleaving and uses
- * this. Presentational on purpose — the snapshot arrives as a prop, from the
- * one stream `dashboardRegistry` keeps open for the endpoint, so every
- * surface renders identical output.
- */
-export const ProxyMetricsGrid: FC<SectionProps> = ({ snapshot, compact = false }) => (
-  <>
-    <ActiveConnectionsSection snapshot={snapshot} />
-    <InferenceSlotsSection snapshot={snapshot} compact={compact} />
-  </>
-);

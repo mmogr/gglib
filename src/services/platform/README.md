@@ -32,6 +32,7 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 |------|------|
 | `detect.ts` | `isDesktop()` — platform detection |
 | `openUrl.ts` | Opens URLs in system browser (Tauri: native; Web: `window.open`) |
+| `mainWindow.ts` | `showMainWindow()`: brings the main window forward (`show_main_window`), for the tray panel's Open gglib; a no-op on web |
 | `fileDialogs.ts` | Native GGUF file picker, and the native folder picker for a chat's folder (`pickFolder`, `null` on web) (Tauri only) |
 | `menuSync.ts` | Synchronises native menu bar item state with application state |
 | `menuEvents.ts` | Listens for native menu click events |

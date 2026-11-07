@@ -145,6 +145,6 @@ The `transport/` directory provides a unified interface for backend communicatio
 
 - **Every mode**: HTTP fetch against the Axum API, plus SSE for events
 
-Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no second transport to keep in step — though `transport/api/client.ts` does still branch on platform to resolve that base URL and to choose its retry path. Beyond that, `invoke()` is confined to OS integration: five commands, allowlisted by name in `scripts/check-frontend-ipc.sh`.
+Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no second transport to keep in step — though `transport/api/client.ts` does still branch on platform to resolve that base URL and to choose its retry path. Beyond that, `invoke()` is confined to OS integration: six commands, allowlisted by name in `scripts/check-frontend-ipc.sh`.
 
 <!-- module-docs:end -->

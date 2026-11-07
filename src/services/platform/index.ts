@@ -7,6 +7,7 @@ export { isDesktop } from './detect';
 
 // Shell integration
 export { openUrl } from './openUrl';
+export { showMainWindow } from './mainWindow';
 export { setSelectedModel, syncMenuState, syncMenuStateSilent } from './menuSync';
 
 // Desktop menu events

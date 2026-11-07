@@ -1,268 +1,332 @@
 /**
- * Tests for the tray popover panel.
+ * The tray popover, over a fake transport and its real registries: the
+ * Endpoint block in each state (On with the address, ⧉ and a one-second
+ * Copied; Off with its dimmed line and Turn on; Turn off; Pinned; Key
+ * required with Copy key), the Loaded rows with their words and × (which
+ * asks the daemon whatever the server list believes, TX-12), Nothing
+ * loaded only once known, the Devices lines each only with its fact, no
+ * daemon as its own state with Start gglib disabled and recovery by the
+ * poll (TM-8), a failure under its block, and Open gglib, the panel's one
+ * window action, mocked at the platform's Tauri boundary (TM-9).
  *
- * No Tauri mocking anywhere below: the panel deliberately uses no IPC, so it
- * renders under jsdom exactly as it does in the popover window.
+ * The daemon's answers are the transport's; the dashboard stream is played
+ * by the test.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import { TrayPanel } from '../../../src/pages/TrayPanel';
-import type { DashboardSnapshot } from '../../../src/services/transport/types/dashboard';
-import { dashboardSnapshot } from '../fixtures/dashboard';
 
 const transport = vi.hoisted(() => ({
-  startProxy: vi.fn().mockResolvedValue(undefined),
-  stopProxy: vi.fn().mockResolvedValue(undefined),
-  getProxyStatus: vi.fn().mockResolvedValue({ running: false, port: null }),
-  // The panel reveals the proxy's API key while the proxy runs, so its
-  // dashboard stream can authenticate. None stored is the loopback default.
-  revealSecret: vi.fn().mockResolvedValue(null),
+  getProxyStatus: vi.fn(async (): Promise<unknown> => ({})),
+  listServers: vi.fn(async (): Promise<unknown[]> => []),
+  getRemoteStatus: vi.fn(async (): Promise<unknown> => ({})),
+  startProxy: vi.fn(async (_c?: unknown) => ({})),
+  stopProxy: vi.fn(async () => {}),
+  stopServer: vi.fn(async (_id: number) => {}),
+  revealSecret: vi.fn(async (): Promise<string | null> => null),
 }));
+const dashboard = vi.hoisted(() => ({ send: null as ((s: unknown) => void) | null }));
+const tauri = vi.hoisted(() => ({ invoke: vi.fn(async (_cmd: string) => undefined) }));
 
-const proxyState = vi.hoisted(() => ({
-  current: { running: false, port: null as number | null },
-}));
-
-const dashboard = vi.hoisted(() => ({
-  current: { snapshot: null as DashboardSnapshot | null, connected: false },
-  /** What the panel last asked the stream for. */
-  asked: null as { port: number; apiKey: string | null } | null,
-}));
-
-vi.mock('../../../src/services/transport', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
-  getTransport: () => transport,
-}));
-
-vi.mock('../../../src/services/proxyRegistry', () => ({
-  useProxyState: () => proxyState.current,
-}));
-
-vi.mock('../../../src/services/proxyEvents', () => ({
-  initProxyEvents: vi.fn(),
-  cleanupProxyEvents: vi.fn(),
-}));
-
-vi.mock('../../../src/services/dashboardRegistry', () => ({
-  useDashboard: (target: { port: number; apiKey: string | null } | null) => {
-    dashboard.asked = target;
-    return dashboard.current;
+vi.mock('../../../src/services/transport', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('../../../src/services/transport');
+  return {
+    ...actual,
+    getTransport: () => ({ ...transport, subscribe: vi.fn(() => () => {}), onEventStreamOpen: vi.fn(() => () => {}) }),
+  };
+});
+vi.mock('../../../src/services/clients/proxyDashboard', () => ({
+  subscribeProxyDashboard: (_h: string, _p: number, _k: unknown, onSnapshot: (s: unknown) => void) => {
+    dashboard.send = onSnapshot;
+    return () => {
+      dashboard.send = null;
+    };
   },
 }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: tauri.invoke }));
 
-const snapshot = (overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot =>
-  dashboardSnapshot(overrides);
+import { TrayPanel } from '../../../src/tray/TrayPanel';
+import { ENDPOINT_WORDS, REACH_WORDS, RESIDENCY_WORDS } from '../../../src/components/status/words';
+import { IDLE_STATUS } from '../../../src/services/remoteRegistry';
+import type { ProxyStatus } from '../../../src/services/transport/types/proxy';
+import type { DashboardSnapshot } from '../../../src/services/transport/types/dashboard';
+import type { RemoteStatus } from '../../../src/services/transport/types/remote';
+import { dashboardSnapshot, residentSlot } from '../fixtures/dashboard';
+import { device } from '../places/devicesFixtures';
 
-describe('TrayPanel', () => {
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
+const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+
+const endpoint = () => screen.getByRole('region', { name: 'Endpoint' });
+const loaded = () => screen.getByRole('region', { name: 'Loaded' });
+
+/** Render with the daemon answering `status`, and wait until the panel has heard it. */
+async function renderTray(status: ProxyStatus = UP) {
+  transport.getProxyStatus.mockImplementation(async () => status);
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  // After the setup, which puts its own clipboard on the navigator.
+  vi.spyOn(navigator.clipboard, 'writeText');
+  const view = render(<TrayPanel />);
+  await screen.findByRole('region', { name: 'Endpoint' });
+  if (status.running) await screen.findByText(status.base_url ?? '');
+  return { ...view, user };
+}
+
+/** Play one dashboard frame with these residents, once the panel has opened the stream. */
+async function frame(slots: ReturnType<typeof residentSlot>[] = []) {
+  await waitFor(() => expect(dashboard.send).not.toBeNull());
+  const base = dashboardSnapshot();
+  act(() => dashboard.send?.({ ...base, admission: { ...base.admission, slots } } satisfies DashboardSnapshot));
+}
+
+describe('the tray panel', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    transport.getProxyStatus.mockResolvedValue({ running: false, port: null });
-    transport.revealSecret.mockResolvedValue(null);
-    proxyState.current = { running: false, port: null };
-    dashboard.current = { snapshot: null, connected: false };
-    dashboard.asked = null;
-    Object.assign(navigator, {
-      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    for (const mock of Object.values(transport)) mock.mockReset();
+    transport.listServers.mockImplementation(async () => []);
+    transport.getRemoteStatus.mockImplementation(async () => IDLE_STATUS);
+    transport.startProxy.mockImplementation(async () => ({}));
+    transport.stopProxy.mockImplementation(async () => {});
+    transport.stopServer.mockImplementation(async () => {});
+    transport.revealSecret.mockImplementation(async () => null);
+    tauri.invoke.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    delete window.__TAURI_INTERNALS__;
+  });
+
+  describe('the endpoint', () => {
+    it('on: says gglib, Endpoint On and the address the daemon gives', async () => {
+      await renderTray();
+      expect(screen.getByText('gglib')).toBeInTheDocument();
+      expect(within(endpoint()).getByText(ENDPOINT_WORDS.on)).toBeInTheDocument();
+      expect(within(endpoint()).getByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
+      expect(screen.queryByText("Off. Clients can't connect.")).not.toBeInTheDocument();
+    });
+
+    it('⧉ copies the address and says Copied for one second', async () => {
+      const { user } = await renderTray();
+      await user.click(screen.getByRole('button', { name: 'Copy the endpoint address' }));
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://127.0.0.1:8080/v1');
+      expect(await within(endpoint()).findByText('Copied')).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(900));
+      expect(within(endpoint()).getByText('Copied')).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(150));
+      expect(within(endpoint()).queryByText('Copied')).not.toBeInTheDocument();
+    });
+
+    it('off: the bar dims to its sentence, and Turn on starts it naming nothing', async () => {
+      const { user } = await renderTray(DOWN);
+      expect(within(endpoint()).getByText(ENDPOINT_WORDS.off)).toBeInTheDocument();
+      expect(within(endpoint()).getByText("Off. Clients can't connect.")).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Copy the endpoint address' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Turn on' }));
+      expect(transport.startProxy).toHaveBeenCalledWith({});
+      expect(screen.queryByRole('button', { name: 'Turn off' })).not.toBeInTheDocument();
+    });
+
+    it('on: Turn off stops it', async () => {
+      const { user } = await renderTray();
+      expect(screen.queryByRole('button', { name: 'Turn on' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Turn off' }));
+      expect(transport.stopProxy).toHaveBeenCalledTimes(1);
+    });
+
+    it('pinned: On · only the model', async () => {
+      await renderTray({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
+      expect(within(endpoint()).getByText(`${ENDPOINT_WORDS.on} · only Qwen3-4B`)).toBeInTheDocument();
+    });
+
+    it('key required: says so under the address, and Copy key copies the key revealed for the stream', async () => {
+      transport.revealSecret.mockImplementation(async () => 'k3y-5f3a');
+      const { user } = await renderTray({ ...UP, key: 'required' });
+      expect(within(endpoint()).getByText('Key required')).toBeInTheDocument();
+      const copyKey = within(endpoint()).getByRole('button', { name: 'Copy key' });
+      await waitFor(() => expect(copyKey).toBeEnabled());
+      await user.click(copyKey);
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('k3y-5f3a');
+      expect(await within(endpoint()).findByText('Copied')).toBeInTheDocument();
+    });
+
+    it('no key needed: no key line', async () => {
+      await renderTray();
+      expect(screen.queryByText('Key required')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Copy key' })).not.toBeInTheDocument();
+    });
+
+    it('a failed turn on is said under the endpoint, in the daemon’s words', async () => {
+      transport.startProxy.mockRejectedValueOnce(new Error('port 8080 is in use'));
+      const { user } = await renderTray(DOWN);
+      await user.click(screen.getByRole('button', { name: 'Turn on' }));
+      expect(await within(endpoint()).findByRole('alert')).toHaveTextContent('port 8080 is in use');
+    });
+
+    it('a long failure is cut to fit, and an empty one still says something', async () => {
+      transport.startProxy.mockRejectedValueOnce(new Error('x'.repeat(500))).mockRejectedValueOnce(new Error(''));
+      const { user } = await renderTray(DOWN);
+      await user.click(screen.getByRole('button', { name: 'Turn on' }));
+      const cut = await within(endpoint()).findByRole('alert');
+      expect(cut.textContent?.length ?? 0).toBeLessThan(200);
+      expect(cut).toHaveTextContent(/…$/);
+      await user.click(screen.getByRole('button', { name: 'Turn on' }));
+      await waitFor(() => expect(within(endpoint()).getByRole('alert')).toHaveTextContent('No further detail was reported.'));
     });
   });
 
-  it('explains what the proxy is for while it is stopped', () => {
-    render(<TrayPanel />);
+  describe('loaded', () => {
+    it('one row per resident, each with its word and ×', async () => {
+      await renderTray();
+      await frame([residentSlot(1, 'Qwen3-4B', { launch: { ...residentSlot(1, 'Qwen3-4B').launch!, state: 'working' } }), residentSlot(2, 'Gemma-3-4B-It')]);
+      const rows = within(loaded()).getAllByRole('listitem');
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toHaveTextContent('Qwen3-4B');
+      expect(rows[0]).toHaveTextContent(RESIDENCY_WORDS.working);
+      expect(rows[1]).toHaveTextContent('Gemma-3-4B-It');
+      expect(rows[1]).toHaveTextContent(RESIDENCY_WORDS.loaded);
+    });
 
-    expect(screen.getByText('Stopped')).toBeInTheDocument();
-    expect(screen.getByText(/openai-compatible endpoint/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /start proxy/i })).toBeInTheDocument();
+    it('× asks the daemon even when the server list has not heard of the model', async () => {
+      const { user } = await renderTray();
+      await frame([residentSlot(7, 'Qwen3-4B')]);
+      await user.click(within(loaded()).getByRole('button', { name: 'Unload Qwen3-4B' }));
+      expect(transport.stopServer).toHaveBeenCalledWith(7);
+    });
+
+    it('a failed unload is said under Loaded', async () => {
+      transport.stopServer.mockRejectedValueOnce(new Error('the daemon refused'));
+      const { user } = await renderTray();
+      await frame([residentSlot(7, 'Qwen3-4B')]);
+      await user.click(within(loaded()).getByRole('button', { name: 'Unload Qwen3-4B' }));
+      expect(await within(loaded()).findByRole('alert')).toHaveTextContent('the daemon refused');
+      expect(within(endpoint()).queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('nothing loaded: one sentence, once the dashboard has said so', async () => {
+      await renderTray();
+      await waitFor(() => expect(dashboard.send).not.toBeNull());
+      expect(screen.queryByText('Nothing loaded. A model loads on its first request.')).not.toBeInTheDocument();
+      await frame([]);
+      expect(within(loaded()).getByText('Nothing loaded. A model loads on its first request.')).toBeInTheDocument();
+    });
+
+    it('with the endpoint off, the running servers are the rows, each Loaded', async () => {
+      transport.listServers.mockImplementation(async () => [{ model_id: 3, model_name: 'Phi-4', port: 9003 }]);
+      const { user } = await renderTray(DOWN);
+      const row = await within(await screen.findByRole('region', { name: 'Loaded' })).findByRole('listitem');
+      expect(row).toHaveTextContent('Phi-4');
+      expect(row).toHaveTextContent(RESIDENCY_WORDS.loaded);
+      await user.click(within(row).getByRole('button', { name: 'Unload Phi-4' }));
+      expect(transport.stopServer).toHaveBeenCalledWith(3);
+    });
   });
 
-  it('starts the proxy through the shared transport', async () => {
-    render(<TrayPanel />);
+  describe('devices', () => {
+    const DESK: RemoteStatus = {
+      ...IDLE_STATUS,
+      connected: { port: 9100, base_url: 'http://127.0.0.1:9100', ticket_fingerprint: '3ca82708b995', path: 'direct', away_for_s: null },
+      reach: 'connected',
+      paired_name: 'desk',
+    };
 
-    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
+    it('the joined machine with its reach, and sharing with how many are paired', async () => {
+      transport.getRemoteStatus.mockImplementation(async () => ({ ...DESK, enabled: true, devices: [device(), device({ id: 'dev-2' })] }));
+      await renderTray();
+      const devices = await screen.findByRole('region', { name: 'Devices' });
+      const [joined, sharing] = within(devices).getAllByRole('listitem');
+      expect(joined).toHaveTextContent('desk');
+      expect(joined).toHaveTextContent(REACH_WORDS.connected);
+      expect(sharing).toHaveTextContent('Sharing');
+      expect(sharing).toHaveTextContent('On · 2 paired');
+    });
 
-    expect(transport.startProxy).toHaveBeenCalledOnce();
+    it('away: the reach word the daemon gives', async () => {
+      transport.getRemoteStatus.mockImplementation(async () => ({ ...DESK, reach: 'away' }));
+      await renderTray();
+      const devices = await screen.findByRole('region', { name: 'Devices' });
+      expect(within(devices).getByRole('listitem')).toHaveTextContent(`desk${REACH_WORDS.away}`);
+      expect(within(devices).queryByText('Sharing')).not.toBeInTheDocument();
+    });
+
+    it('sharing alone, without a joined machine', async () => {
+      transport.getRemoteStatus.mockImplementation(async () => ({ ...IDLE_STATUS, enabled: true, devices: [device()] }));
+      await renderTray();
+      const devices = await screen.findByRole('region', { name: 'Devices' });
+      expect(within(devices).getByRole('listitem')).toHaveTextContent('On · 1 paired');
+    });
+
+    it('omitted when no line has a fact', async () => {
+      await renderTray();
+      await waitFor(() => expect(transport.getRemoteStatus).toHaveBeenCalled());
+      await act(async () => {});
+      expect(screen.queryByRole('region', { name: 'Devices' })).not.toBeInTheDocument();
+    });
   });
 
-  it('shows the endpoint and live metrics once running', () => {
-    proxyState.current = { running: true, port: 8080 };
-    dashboard.current = { snapshot: snapshot(), connected: true };
-
-    render(<TrayPanel />);
-
-    expect(screen.getByText('Running')).toBeInTheDocument();
-    expect(screen.getByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
-    expect(screen.getByText('Live')).toBeInTheDocument();
-    expect(screen.getByText(/no active connections/i)).toBeInTheDocument();
-  });
-
-  /** Settings carry no key, so the stream's Bearer is the revealed one. */
-  it('streams the dashboard with the key revealed for it', async () => {
-    transport.revealSecret.mockResolvedValue('k3y-5f3a');
-    proxyState.current = { running: true, port: 8080 };
-
-    render(<TrayPanel />);
-
-    await waitFor(() => expect(dashboard.asked).toEqual(expect.objectContaining({ port: 8080, apiKey: 'k3y-5f3a' })));
-    expect(transport.revealSecret).toHaveBeenCalledWith({ kind: 'setting', secret: 'proxy_api_key' });
-  });
-
-  it('waits for the reveal before it opens the stream', () => {
-    transport.revealSecret.mockReturnValue(new Promise(() => {}));
-    proxyState.current = { running: true, port: 8080 };
-
-    render(<TrayPanel />);
-
-    expect(dashboard.asked).toBeNull();
-  });
-
-  it('stops the proxy when running', async () => {
-    proxyState.current = { running: true, port: 8080 };
-    render(<TrayPanel />);
-
-    await userEvent.click(screen.getByRole('button', { name: /stop proxy/i }));
-
-    expect(transport.stopProxy).toHaveBeenCalledOnce();
-  });
-
-  /**
-   * The popover has no toast host, so a failure that only logged would leave
-   * the button silently doing nothing.
-   */
-  it('reports a failed start in place', async () => {
-    transport.startProxy.mockRejectedValueOnce(new Error('port in use'));
-    render(<TrayPanel />);
-
-    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/could not start the proxy/i);
-  });
-
-  /**
-   * The cause has to survive to the screen. Collapsing every failure into one
-   * sentence is what made a refused connection — the app having torn down its
-   * own API server — indistinguishable from a port conflict.
-   */
-  it('shows why the start failed, not just that it did', async () => {
-    transport.startProxy.mockRejectedValueOnce(new Error('Failed to fetch'));
-    render(<TrayPanel />);
-
-    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/failed to fetch/i);
-  });
-
-  /** A thrown non-Error must not render as "[object Object]". */
-  it('still says something useful when the failure has no message', async () => {
-    transport.startProxy.mockRejectedValueOnce(new Error(''));
-    render(<TrayPanel />);
-
-    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/no further detail/i);
-  });
-
-  /** A long backend error must not blow the 360px popover open. */
-  it('trims a very long failure message', async () => {
-    transport.startProxy.mockRejectedValueOnce(new Error('x'.repeat(500)));
-    render(<TrayPanel />);
-
-    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
-
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent?.length ?? 0).toBeLessThan(240);
-    expect(alert).toHaveTextContent(/…$/);
-  });
-
-  it('confirms a copied endpoint inline', async () => {
-    proxyState.current = { running: true, port: 9000 };
-    dashboard.current = { snapshot: snapshot(), connected: true };
-
-    render(<TrayPanel />);
-    await userEvent.click(screen.getByTitle('Copy URL'));
-
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://127.0.0.1:9000/v1');
-    await waitFor(() => expect(screen.getByText('Copied to clipboard')).toBeInTheDocument());
-  });
-
-  /**
-   * Opening the main window and quitting are tray-menu actions handled in
-   * Rust. Buttons here would need Tauri IPC, which this panel does not use.
-   */
-  it('offers no window-level actions', () => {
-    proxyState.current = { running: true, port: 8080 };
-    render(<TrayPanel />);
-
-    expect(screen.queryByRole('button', { name: /open gglib/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /quit/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/right-click the tray icon/i)).toBeInTheDocument();
-  });
-
-  /**
-   * A daemon that is not answering and a proxy that is switched off both
-   * arrive as `{running: false}` from `useProxyState`. They are not the same
-   * situation: one needs the Start button, the other needs a service that
-   * does not exist yet, and only the tray menu can start that.
-   *
-   * Before this, a machine with no daemon read "The proxy is stopped" and its
-   * Start button fell into a connection error.
-   */
-  describe('with no daemon answering', () => {
+  describe('with no daemon answering (TM-8)', () => {
     beforeEach(() => {
-      transport.getProxyStatus.mockRejectedValue(new Error('fetch failed'));
-    });
-
-    it('says the service is missing, not that the proxy is stopped', async () => {
-      render(<TrayPanel />);
-
-      await waitFor(() => {
-        expect(screen.getByText(/gglib service is not running/i)).toBeInTheDocument();
-      });
-      expect(screen.queryByText(/openai-compatible endpoint/i)).not.toBeInTheDocument();
-    });
-
-    it('points at the surface that can actually start it', async () => {
-      render(<TrayPanel />);
-
-      await waitFor(() => {
-        expect(screen.getByText(/start gglib service/i)).toBeInTheDocument();
+      transport.getProxyStatus.mockImplementation(async () => {
+        throw new Error('fetch failed');
       });
     });
 
-    it('distinguishes no service from a stopped proxy in the pill', async () => {
+    it('says gglib is not running, not that the endpoint is off', async () => {
       render(<TrayPanel />);
-
-      await waitFor(() => expect(screen.getByText('No service')).toBeInTheDocument());
-      expect(screen.queryByText('Stopped')).not.toBeInTheDocument();
+      expect(await screen.findByText("gglib isn't running, so nothing can be served. Start it from the tray menu.")).toBeInTheDocument();
+      expect(screen.queryByText("Off. Clients can't connect.")).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Endpoint' })).not.toBeInTheDocument();
     });
 
-    /**
-     * Disabled rather than "Starting…": the action is unavailable, not in
-     * progress, and a Start that can only fail teaches nothing.
-     */
-    it('disables Start without pretending it is starting', async () => {
+    it('draws Start gglib disabled, and no Turn on', async () => {
       render(<TrayPanel />);
-
-      const button = await screen.findByRole('button', { name: /start proxy/i });
-      await waitFor(() => expect(button).toBeDisabled());
-      expect(screen.queryByText(/starting…/i)).not.toBeInTheDocument();
+      const start = await screen.findByRole('button', { name: 'Start gglib' });
+      expect(start).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'Turn on' })).not.toBeInTheDocument();
     });
 
-    /**
-     * The probe polls, so a daemon that comes up is picked up without the
-     * popover being reopened.
-     */
-    it('recovers when the daemon starts answering', async () => {
+    it('recovers when the poll hears the daemon, and reads it afresh', async () => {
       render(<TrayPanel />);
-      await waitFor(() => expect(screen.getByText('No service')).toBeInTheDocument());
+      await screen.findByRole('button', { name: 'Start gglib' });
+      transport.getProxyStatus.mockImplementation(async () => UP);
+      act(() => vi.advanceTimersByTime(2000));
+      expect(await screen.findByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Turn off' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: 'Start gglib' })).not.toBeInTheDocument();
+    });
 
-      transport.getProxyStatus.mockResolvedValue({ running: false, port: null });
+    it('claims nothing between the poll hearing the daemon and the registries hearing it', async () => {
+      // The probe answers; the bridge's own read does not.
+      transport.getProxyStatus.mockImplementationOnce(async () => UP).mockImplementation(() => new Promise(() => {}));
+      render(<TrayPanel />);
+      await waitFor(() => expect(transport.getProxyStatus).toHaveBeenCalledTimes(2));
+      await act(async () => {});
+      expect(screen.queryByText("Off. Clients can't connect.")).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Endpoint' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Turn on' })).toBeDisabled();
+    });
 
-      await waitFor(() => expect(screen.getByText('Stopped')).toBeInTheDocument(), {
-        timeout: 4000,
-      });
-      expect(screen.getByRole('button', { name: /start proxy/i })).toBeEnabled();
+    it('before the first answer, claims neither', () => {
+      transport.getProxyStatus.mockImplementation(() => new Promise(() => {}));
+      render(<TrayPanel />);
+      expect(screen.queryByText(/isn't running/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Endpoint' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Turn on' })).toBeDisabled();
+    });
+  });
+
+  describe('Open gglib', () => {
+    it('in the desktop app, asks for the main window through show_main_window', async () => {
+      window.__TAURI_INTERNALS__ = { invoke: vi.fn(async () => undefined) as never };
+      const { user } = await renderTray();
+      await user.click(screen.getByRole('button', { name: 'Open gglib' }));
+      await waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith('show_main_window'));
+    });
+
+    it('on the web, where there is no tray, is not drawn', async () => {
+      await renderTray();
+      expect(screen.queryByRole('button', { name: 'Open gglib' })).not.toBeInTheDocument();
     });
   });
 });
