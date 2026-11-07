@@ -107,6 +107,9 @@ export class FakeDaemon {
    * its run ends `failed` with this error, having written no row.
    */
   refuseLate: RunInfo['error'] | null = null;
+  /** The next turn is accepted and then waits, its question unsaved, as a run whose model is still loading does; cancelled, it ends with nothing written. */
+  loadsSlowly = false;
+  private loading = new Set<string>();
   /** The answer the next run start gets instead of a run, once. */
   refuseNext: { status: number; type: string; error: string } | null = null;
   /** The next run start never reaches the daemon: `fetch` rejects, once. */
@@ -347,7 +350,9 @@ export class FakeDaemon {
         .filter((e) => e.type === 'text_delta')
         .map((e) => e.content)
         .join('');
-      if (this.cancelEndsAs === 'failed') {
+      if (this.loading.delete(run.info.id)) {
+        void this.finish(run.info.id, 'cancelled', []);
+      } else if (this.cancelEndsAs === 'failed') {
         this.unsaved.add(run.info.id);
         void this.finish(run.info.id, 'failed');
       } else {
@@ -411,6 +416,11 @@ export class FakeDaemon {
     if (late) {
       this.refuseLate = null;
       void this.finish(id, 'failed', [], late);
+      return json(run.info, 201);
+    }
+    if (this.loadsSlowly) {
+      this.loadsSlowly = false;
+      this.loading.add(id);
       return json(run.info, 201);
     }
     if (!turn.answer_saved) {

@@ -231,11 +231,14 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       draw?.accepted(cid);
       if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
       const ended = signal.aborted ? null : await reader.follow(cid, runId, signal);
-      // A turn refused once its run existed (its paired machine away, its
-      // model unable to load) failed having written nothing: its question is
-      // not among the saved rows, so it goes back to the composer, beside the
+      // A turn that ended before its question was saved (refused once its
+      // run existed: its paired machine away, its model unable to load; or
+      // stopped while its model loaded) wrote nothing: its question is not
+      // among the saved rows, so it goes back to the composer, beside the
       // run's reason, rather than being lost.
-      if (ended?.info?.status === 'failed' && !signal.aborted && userRows(messagesRef.current) <= userRows(base)) handBack();
+      const status = ended?.info?.status;
+      const endedEarly = status !== undefined && status !== 'completed';
+      if (endedEarly && !signal.aborted && userRows(messagesRef.current) <= userRows(base)) handBack();
     } catch (error) {
       if (signal.aborted) return;
       reader.endReading(signal);

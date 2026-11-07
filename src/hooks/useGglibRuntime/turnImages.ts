@@ -38,7 +38,9 @@ export function giveDraftBack(
 ): void {
   if (!composer) return;
   const [only, ...more] = typeof content === 'string' ? [{ type: 'text', text: content } as const] : content;
-  if (more.length === 0 && only?.type === 'text') composer.setText(only.text);
+  // A draft typed while the turn ran stays, after the question handed back.
+  const typed = composer.getState().text;
+  if (more.length === 0 && only?.type === 'text') composer.setText(typed.trim() === '' ? only.text : `${only.text}\n\n${typed}`);
   for (const image of images) {
     const file = image.file
       ? Promise.resolve(image.file)

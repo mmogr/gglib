@@ -206,6 +206,31 @@ describe('useGglibRuntime send', () => {
     expect(onError).toHaveBeenCalledWith(new Error(refusal.message));
   });
 
+  it('a turn stopped while its model loads gives the text back: nothing was saved', async () => {
+    daemon.loadsSlowly = true;
+    const hook = await mount(local);
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+
+    act(() => hook.result.current.runtime.thread.cancelRun());
+
+    await waitFor(() => expect(hook.result.current.endedRun?.status).toBe('cancelled'));
+    expect(daemon.saved(1)).toEqual([]);
+    await waitFor(() => expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello'));
+  });
+
+  it('a draft typed while the turn waited stays, after the question handed back', async () => {
+    daemon.loadsSlowly = true;
+    const hook = await mount(local);
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    act(() => hook.result.current.runtime.thread.composer.setText('a new draft'));
+
+    act(() => hook.result.current.runtime.thread.cancelRun());
+
+    await waitFor(() => expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello\n\na new draft'));
+  });
+
   it('a failed run whose question was saved gives nothing back: the question is in the thread', async () => {
     const hook = await mount(local);
     send(hook, 'hello');
