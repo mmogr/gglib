@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.31.0-rc.6](https://github.com/mmogr/gglib/compare/v0.31.0-rc.5...v0.31.0-rc.6) (2026-11-07)
+
+
+### What gglib now does
+
+* **gui:** the tray's Start gglib starts gglib ([#1819](https://github.com/mmogr/gglib/issues/1819)) ([a3449ac](https://github.com/mmogr/gglib/commit/a3449ac03d78fb5ecf1592093e1bf19778269261))
+
+
+### Documentation
+
+* the screenshots and prose name the new screens ([#1822](https://github.com/mmogr/gglib/issues/1822)) ([651ff25](https://github.com/mmogr/gglib/commit/651ff2574a47af91416ec9d40074fb7f6fb2eeb7))
+
+
+### Internal
+
+* **gui:** setup's build poll is counted after its cleanup has run ([#1820](https://github.com/mmogr/gglib/issues/1820)) ([50640c9](https://github.com/mmogr/gglib/commit/50640c90e2c12050581479875d9ba4780754045b))
+* **release:** the release PR's numbers open their pages ([#1823](https://github.com/mmogr/gglib/issues/1823)) ([ee45671](https://github.com/mmogr/gglib/commit/ee4567121adc3435e6224176c818f06af616c05e))
+
 ## [0.31.0-rc.5](https://github.com/mmogr/gglib/compare/v0.31.0-rc.4...v0.31.0-rc.5) (2026-11-07)
 
 
