@@ -134,9 +134,10 @@ outside it. The session says so once, on stderr: `Files: <dir> (read-only)`.
 
 - A new chat's turns say that folder, as the chat page's do, and the chat
   remembers it.
-- `--continue` keeps the folder the chat remembers, the one the chat page
-  chose included, wherever it is run: the line names it, or says `Files:
-  off; this chat keeps no folder (the chat page chooses one)`.
+- `--continue` keeps the folder the chat remembers while it is still there,
+  the one the chat page chose included, wherever it is run, and the line
+  names it. A chat that remembers none, or one since deleted, takes the
+  directory it is continued in, as a new chat does.
 - A new chat launched in your home folder or in `/` reads no files, and says
   `Files: off in your home folder or /; cd into a project to read it, or
   --no-tools`; launched in a directory deleted since, it reads none and says

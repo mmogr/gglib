@@ -2,11 +2,12 @@
 //! and the one stderr line the session starts with about it ([ADR 0023],
 //! decision 2).
 //!
-//! A new chat's folder is the directory the session was launched in, never
-//! home or `/`: its turns say it, as the chat page's do, and the daemon
-//! remembers it on the chat. A resumed chat keeps the folder it remembers,
-//! the one the chat page chose included: its turns say none, and the line
-//! names that folder.
+//! A chat's folder is the directory the session was launched in, never home
+//! or `/`: its turns say it, as the chat page's do, and the daemon remembers
+//! it on the chat. A resumed chat that remembers a folder still there keeps
+//! it, the one the chat page chose included: its turns say none, and the
+//! line names that folder. One that remembers none, or one since gone, takes
+//! the launch directory as a new chat does.
 //!
 //! [ADR 0023]: https://github.com/mmogr/gglib/blob/main/docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md
 
@@ -31,10 +32,11 @@ pub(super) enum Chat<'a> {
 /// `sent_to` names the paired machine a `--remote` session's turns are
 /// answered on.
 ///
-/// A new chat's turns say where this process runs, by [`folder::launched`]'s
-/// rule: never home or `/`, where they say none. A resumed chat's say none,
-/// and it reads the folder it keeps. A session with `--no-tools`, or whose
-/// `--tools` list admits no file tool, says none and nothing of files.
+/// The turns say where this process runs, by [`folder::launched`]'s rule:
+/// never home or `/`, where they say none. A resumed chat that remembers a
+/// folder that is still one keeps it: its turns say none. A session with
+/// `--no-tools`, or whose `--tools` list admits no file tool, says none and
+/// nothing of files.
 pub(super) fn of_session(
     args: &ChatArgs,
     sent_to: Option<&str>,
@@ -43,19 +45,13 @@ pub(super) fn of_session(
     if args.no_tools || !admits_a_file_tool(&args.tools) {
         return (None, None);
     }
-    if let Chat::Resumed(kept) = chat {
-        return (None, Some(kept_line(kept, sent_to)));
+    if let Chat::Resumed(Some(kept)) = chat
+        && folder::chosen(Path::new(kept)).is_ok()
+    {
+        return (None, Some(files_line(Some(Path::new(kept)), sent_to)));
     }
     let (root, line) = in_dir(std::env::current_dir(), sent_to);
     (root.map(|dir| dir.display().to_string()), Some(line))
-}
-
-/// What a resumed chat says of the folder it keeps.
-fn kept_line(kept: Option<&str>, sent_to: Option<&str>) -> String {
-    kept.map_or_else(
-        || "Files: off; this chat keeps no folder (the chat page chooses one)".to_owned(),
-        |dir| files_line(Some(Path::new(dir)), sent_to),
-    )
 }
 
 /// [`of_session`] for a session whose list admits a file tool, launched in

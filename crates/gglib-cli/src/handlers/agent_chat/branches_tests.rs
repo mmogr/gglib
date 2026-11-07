@@ -183,6 +183,23 @@ async fn a_change_that_cannot_be_made_leaves_the_session_where_it_was() {
     assert_eq!(session.id, id);
 }
 
+/// A change the daemon refuses is an error in the daemon's own words.
+#[tokio::test]
+async fn a_refused_change_is_the_daemons_sentence() {
+    let refused = Err((
+        409,
+        json!({"error": "nothing to answer", "code": "conflict"}),
+    ));
+    let (port, _) = stand_in(Answer::Changes(refused));
+    let change = ChatChange::Branch { message_id: 3 };
+
+    let said = STAND_IN_PORT
+        .scope(port, handle().change_chat(7, &change))
+        .await;
+
+    assert_eq!(said.expect_err("refused").to_string(), "nothing to answer");
+}
+
 #[test]
 fn an_edit_keeps_the_images_of_the_question_it_edits() {
     let id = AttachmentId::parse(&"ab".repeat(32)).expect("an id");

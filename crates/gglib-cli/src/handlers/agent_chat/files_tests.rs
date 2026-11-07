@@ -90,25 +90,28 @@ fn a_session_reads_where_it_runs_unless_its_list_admits_no_file_tool() {
     assert_eq!(session(&[], true), (None, None));
 }
 
-/// A resumed chat keeps the folder it remembers, one the chat page chose
-/// included, wherever the session runs: its turns say none, and its line
-/// names that folder, or says it keeps none.
+/// A resumed chat that remembers a folder still there keeps it, one the
+/// chat page chose included: its turns say none, and its line names that
+/// folder. One that remembers none, or one since gone, takes the directory
+/// the session runs in, as a new chat does.
 #[test]
-fn a_resumed_chat_keeps_its_folder_and_its_turns_say_none() {
+fn a_resumed_chat_keeps_a_folder_still_there_and_else_takes_the_launch_directory() {
     let args = chat_args();
+    let chosen = tempfile::tempdir().expect("a folder");
+    let chosen = chosen.path().display().to_string();
+    let here = std::env::current_dir().unwrap().canonicalize().unwrap();
+    let here = here.display().to_string();
+    let launched = (
+        Some(here.clone()),
+        Some(format!("Files: {here} (read-only)")),
+    );
 
-    let chosen = of_session(&args, None, Chat::Resumed(Some("/work/site")));
+    let kept = of_session(&args, None, Chat::Resumed(Some(&chosen)));
+    let gone = of_session(&args, None, Chat::Resumed(Some("/no/such/folder/here")));
     let none = of_session(&args, None, Chat::Resumed(None));
 
-    assert_eq!(
-        chosen,
-        (None, Some("Files: /work/site (read-only)".to_owned()))
-    );
-    assert_eq!(
-        none,
-        (
-            None,
-            Some("Files: off; this chat keeps no folder (the chat page chooses one)".to_owned())
-        )
-    );
+    assert_eq!(kept, (None, Some(format!("Files: {chosen} (read-only)"))));
+    assert_eq!(gone, launched);
+    assert_eq!(none, launched);
+    assert_eq!(of_session(&args, None, Chat::New), launched);
 }

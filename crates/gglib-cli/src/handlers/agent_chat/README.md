@@ -55,7 +55,8 @@ independently readable:
   directory the session was launched in, never home or `/`
   (`gglib_core::domain::folder::launched`), said on each turn, and only for
   a `--tools` list that admits a file tool; for a resumed chat the folder it
-  remembers, its turns saying none; and the one `Files:` line on stderr that
+  remembers while that is still there, its turns saying none, and else the
+  launch directory; and the one `Files:` line on stderr that
   names it, says it is read on this machine for `--remote`, or says why
   there is none
 - [`tool_format`] — tool-result summary formatters
