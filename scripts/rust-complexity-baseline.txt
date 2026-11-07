@@ -50,7 +50,7 @@ crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 357
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 319
 crates/gglib-axum/src/handlers/proxy/wire_tests.rs 435
 crates/gglib-axum/src/routes.rs 467
-crates/gglib-axum/tests/conversation_settings_route.rs 319
+crates/gglib-axum/tests/conversation_settings_route.rs 412
 crates/gglib-axum/tests/integration_routes.rs 1066
 crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320

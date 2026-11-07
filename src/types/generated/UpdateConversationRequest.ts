@@ -10,6 +10,7 @@ import type { ConversationSettingsPatch } from "./ConversationSettingsPatch";
  * `{"system_prompt": null}` silently no-ops instead of clearing the prompt.
  *
  * `settings` changes the settings its runs read, each one sent and no
- * other: its model, its tools and its tool limits.
+ * other: its model, its tools and its tool limits. Left out, or `null`, it
+ * changes none.
  */
-export type UpdateConversationRequest = { title: string | null, system_prompt?: string | null, settings: ConversationSettingsPatch | null, };
+export type UpdateConversationRequest = { title: string | null, system_prompt?: string | null, settings?: ConversationSettingsPatch, };

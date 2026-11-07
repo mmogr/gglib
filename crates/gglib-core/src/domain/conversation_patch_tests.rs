@@ -26,14 +26,14 @@ fn held() -> ConversationSettings {
 #[test]
 fn limits_inside_a_runs_bounds_are_not_refused() {
     let patch = ConversationSettingsPatch {
-        max_parallel: Some(50),
-        tool_timeout_ms: Some(100),
+        max_parallel: Some(Some(50)),
+        tool_timeout_ms: Some(Some(100)),
         ..ConversationSettingsPatch::default()
     };
     assert_eq!(patch.refusal(), None);
     let patch = ConversationSettingsPatch {
-        max_parallel: Some(1),
-        tool_timeout_ms: Some(60_000),
+        max_parallel: Some(Some(1)),
+        tool_timeout_ms: Some(Some(60_000)),
         ..ConversationSettingsPatch::default()
     };
     assert_eq!(patch.refusal(), None);
@@ -42,11 +42,11 @@ fn limits_inside_a_runs_bounds_are_not_refused() {
 #[test]
 fn a_limit_outside_a_runs_bounds_is_refused_with_them() {
     let parallel = |n| ConversationSettingsPatch {
-        max_parallel: Some(n),
+        max_parallel: Some(Some(n)),
         ..ConversationSettingsPatch::default()
     };
     let timeout = |ms| ConversationSettingsPatch {
-        tool_timeout_ms: Some(ms),
+        tool_timeout_ms: Some(Some(ms)),
         ..ConversationSettingsPatch::default()
     };
     assert_eq!(
@@ -80,7 +80,7 @@ fn an_empty_patch_changes_nothing() {
 fn a_new_model_brings_its_name_and_keeps_the_rest() {
     let mut settings = held();
     let patch = ConversationSettingsPatch {
-        model: Some(local(7)),
+        model: Some(Some(local(7))),
         ..ConversationSettingsPatch::default()
     };
     assert!(!patch.is_empty());
@@ -111,7 +111,7 @@ fn each_field_changes_only_itself() {
 
     let mut settings = held();
     ConversationSettingsPatch {
-        max_parallel: Some(9),
+        max_parallel: Some(Some(9)),
         ..ConversationSettingsPatch::default()
     }
     .apply(&mut settings, None);
@@ -125,7 +125,7 @@ fn each_field_changes_only_itself() {
 
     let mut settings = held();
     ConversationSettingsPatch {
-        tool_timeout_ms: Some(700),
+        tool_timeout_ms: Some(Some(700)),
         ..ConversationSettingsPatch::default()
     }
     .apply(&mut settings, None);
@@ -163,9 +163,49 @@ fn a_key_it_does_not_name_is_refused() {
     assert_eq!(
         read,
         ConversationSettingsPatch {
-            max_parallel: Some(3),
+            max_parallel: Some(Some(3)),
             no_tools: Some(true),
             ..ConversationSettingsPatch::default()
         }
     );
+}
+
+/// A `null` is read as a clear, and a key left out as no change.
+#[test]
+fn a_null_clears_and_a_key_left_out_keeps() {
+    let read: ConversationSettingsPatch =
+        serde_json::from_str(r#"{"model": null, "max_parallel": null, "tool_timeout_ms": null}"#)
+            .unwrap();
+    assert_eq!(
+        read,
+        ConversationSettingsPatch {
+            model: Some(None),
+            max_parallel: Some(None),
+            tool_timeout_ms: Some(None),
+            ..ConversationSettingsPatch::default()
+        }
+    );
+    let read: ConversationSettingsPatch = serde_json::from_str("{}").unwrap();
+    assert!(read.is_empty());
+}
+
+#[test]
+fn a_cleared_model_takes_its_name_and_cleared_limits_their_defaults() {
+    let mut settings = held();
+    let patch = ConversationSettingsPatch {
+        model: Some(None),
+        max_parallel: Some(None),
+        tool_timeout_ms: Some(None),
+        ..ConversationSettingsPatch::default()
+    };
+    assert_eq!(patch.refusal(), None);
+    patch.apply(&mut settings, None);
+    let expected = ConversationSettings {
+        model: None,
+        model_name: None,
+        max_parallel: None,
+        tool_timeout_ms: None,
+        ..held()
+    };
+    assert_eq!(settings, expected);
 }

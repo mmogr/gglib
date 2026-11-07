@@ -1,8 +1,12 @@
-//! A conversation's machine is fixed: a run on another machine than the one
-//! it ran on is refused before anything is written, in both directions.
+//! A conversation's machine is fixed once it has a saved message: a run on
+//! another machine than the one it ran on is refused before anything is
+//! written, in both directions. Before that, the model it names was only
+//! chosen, and a run on any machine is not refused.
 
 use axum::http::StatusCode;
-use gglib_core::domain::chat::{Conversation, ConversationSettings, NewConversation};
+use gglib_core::domain::chat::{
+    Conversation, ConversationSettings, MessageRole, NewConversation, NewMessage,
+};
 use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::RunsPort as _;
 
@@ -88,9 +92,28 @@ async fn read(state: &AppState, id: i64) -> Conversation {
     history.get_conversation(id).await.unwrap().unwrap()
 }
 
-/// Refused with a `409` that names `words`, with no message saved, no run
-/// left behind and the stored model as it was.
+/// Save a message to conversation `id`, so it has run.
+async fn said(state: &AppState, id: i64) {
+    let message = NewMessage {
+        conversation_id: id,
+        role: MessageRole::User,
+        content: "Q".to_owned(),
+        metadata: None,
+        images: Vec::new(),
+    };
+    state
+        .core
+        .chat_history()
+        .save_message(message)
+        .await
+        .unwrap();
+}
+
+/// Conversation `id`, once it has a saved message, refuses the run with a
+/// `409` that names `words`, with no message saved, no run left behind and
+/// the stored model as it was.
 async fn refused(state: &AppState, id: i64, p: Prepared, words: &str) {
+    said(state, id).await;
     let before = read(state, id).await.settings.and_then(|s| s.model);
     let error = launched(state, id, p).await.expect_err("refused");
     let HttpError::Coded {
@@ -101,7 +124,7 @@ async fn refused(state: &AppState, id: i64, p: Prepared, words: &str) {
     };
     assert_eq!(*status, StatusCode::CONFLICT);
     assert!(message.contains(words), "{message}");
-    assert!(saved(state, id).await.is_empty(), "nothing was saved");
+    assert_eq!(saved(state, id).await.len(), 1, "nothing was saved");
     assert!(state.runs.get(&LOCAL, "m1").is_err(), "no run is left");
     let after = read(state, id).await.settings.and_then(|s| s.model);
     assert_eq!(after, before, "the chat keeps its machine");
@@ -169,6 +192,16 @@ async fn a_chat_with_no_model_takes_the_runs_machine() {
     launched(&state, id, on("0a1b2c3d4e5f")).await.expect("run");
     let stored = read(&state, id).await.settings.and_then(|s| s.model);
     assert_eq!(stored.map(|m| m.machine), Some(paired("0a1b2c3d4e5f")));
+}
+
+/// A model chosen for a chat with no saved message fixes nothing: a run on
+/// another machine's model is not refused.
+#[tokio::test]
+async fn a_chat_with_no_message_takes_a_run_on_another_machine() {
+    let (_dir, state) = state().await;
+    let id = made_for(&state, there("0a1b2c3d4e5f")).await;
+    launched(&state, id, here()).await.expect("a local run");
+    assert!(!saved(&state, id).await.is_empty());
 }
 
 #[tokio::test]

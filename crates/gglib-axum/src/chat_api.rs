@@ -7,7 +7,9 @@
 //! Chat handlers use the unified `AppState` from `routes.rs` and access
 //! `core` and `gui` services through it.
 
+use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -46,7 +48,8 @@ pub(crate) struct CreateConversationRequest {
 /// `{"system_prompt": null}` silently no-ops instead of clearing the prompt.
 ///
 /// `settings` changes the settings its runs read, each one sent and no
-/// other: its model, its tools and its tool limits.
+/// other: its model, its tools and its tool limits. Left out, or `null`, it
+/// changes none.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct UpdateConversationRequest {
@@ -59,7 +62,8 @@ pub(crate) struct UpdateConversationRequest {
                   a string sets it, and double_option deserializes exactly that"
     )]
     pub system_prompt: Option<Option<String>>,
-    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings: Option<ConversationSettingsPatch>,
 }
 
@@ -172,22 +176,30 @@ pub(crate) async fn get_conversation(
 /// its runs read, in one write of what was sent. A limit outside a run's
 /// bounds, and a model of this machine its catalogue does not hold, are a
 /// 400; a model of another machine than the one the conversation ran on is
-/// refused as a run on it is. A refused update changes nothing.
+/// refused as a run on it is. A body that cannot be read, a setting the
+/// patch does not name among them, is a 400 coded `invalid_request`. A
+/// refused update changes nothing.
 /// PUT /api/conversations/:id
 pub(crate) async fn update_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
-    Json(req): Json<UpdateConversationRequest>,
+    req: Result<Json<UpdateConversationRequest>, JsonRejection>,
 ) -> Result<(), HttpError> {
+    let Json(req) = req.map_err(|e| HttpError::Coded {
+        status: StatusCode::BAD_REQUEST,
+        code: "invalid_request",
+        message: e.body_text(),
+    })?;
     let patch = req.settings.unwrap_or_default();
     if let Some(reason) = patch.refusal() {
         return Err(HttpError::BadRequest(reason));
     }
-    let model_name = match &patch.model {
+    let model = patch.model.clone().flatten();
+    let model_name = match &model {
         Some(model) => model_name(&state, model).await?,
         None => None,
     };
-    if let Some(model) = &patch.model {
+    if let Some(model) = &model {
         keep_machine(&state.core, id, &model.machine).await?;
     }
     state

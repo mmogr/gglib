@@ -1,14 +1,15 @@
 //! `PUT /api/conversations/{id}` with `settings`: a conversation's model,
 //! tools and tool limits, each one sent and no other, read back through
 //! `GET /api/conversations/{id}`. A refused patch changes nothing, the title
-//! sent beside it included.
+//! sent beside it included. A chat's machine is fixed once it has a saved
+//! message; before that, a model chosen for it can be chosen again anywhere.
 
 mod common;
 
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
-use gglib_core::domain::chat::{ConversationSettings, NewConversation};
+use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use gglib_core::domain::{Machine, ModelRef, NewModel};
 use serde_json::{Value, json};
 
@@ -37,8 +38,8 @@ fn local(id: i64) -> ModelRef {
     }
 }
 
-/// A conversation that ran on `qwen3`, holding tools, limits and a
-/// temperature; its id.
+/// A conversation that ran on `qwen3`, a saved message and its settings:
+/// tools, limits and a temperature; its id.
 async fn ran_on(state: &gglib_axum::AppState, qwen: i64) -> i64 {
     let settings = ConversationSettings {
         model_name: Some("qwen3".to_owned()),
@@ -49,7 +50,7 @@ async fn ran_on(state: &gglib_axum::AppState, qwen: i64) -> i64 {
         temperature: Some(0.25),
         ..ConversationSettings::default()
     };
-    made(
+    let id = made(
         state,
         NewConversation {
             title: "t".into(),
@@ -57,7 +58,30 @@ async fn ran_on(state: &gglib_axum::AppState, qwen: i64) -> i64 {
             ..NewConversation::default()
         },
     )
-    .await
+    .await;
+    let message = NewMessage {
+        conversation_id: id,
+        role: MessageRole::User,
+        content: "Q".to_owned(),
+        metadata: None,
+        images: Vec::new(),
+    };
+    state
+        .core
+        .chat_history()
+        .save_message(message)
+        .await
+        .unwrap();
+    id
+}
+
+/// A conversation with no saved message and no settings; its id.
+async fn fresh(state: &gglib_axum::AppState) -> i64 {
+    let conv = NewConversation {
+        title: "t".into(),
+        ..NewConversation::default()
+    };
+    made(state, conv).await
 }
 
 async fn made(state: &gglib_axum::AppState, conv: NewConversation) -> i64 {
@@ -129,6 +153,18 @@ async fn each_setting_sent_alone_changes_only_itself() {
                 "model_name": "gemma",
             }),
         ),
+        (
+            json!({ "max_parallel": null }),
+            json!({ "max_parallel": null }),
+        ),
+        (
+            json!({ "tool_timeout_ms": null }),
+            json!({ "tool_timeout_ms": null }),
+        ),
+        (
+            json!({ "model": null }),
+            json!({ "model": null, "model_name": null }),
+        ),
     ];
     for (patch, changed) in cases {
         let id = ran_on(&state, qwen).await;
@@ -153,6 +189,42 @@ async fn a_new_model_of_this_machine_is_its_model_id_too() {
 
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(read(&app, id).await["model_id"], gemma);
+}
+
+/// A cleared model leaves the conversation naming none, by `model_id`
+/// either.
+#[tokio::test]
+async fn a_cleared_model_clears_the_model_id() {
+    let (state, app, qwen, _) = daemon().await;
+    let id = ran_on(&state, qwen).await;
+
+    let (status, body) = put(&app, id, json!({ "settings": { "model": null } })).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(read(&app, id).await["model_id"], Value::Null);
+}
+
+/// A patch of the values already stored writes nothing: not even the time
+/// the chat was last changed, which the chat lists sort by.
+#[tokio::test]
+async fn a_patch_of_what_is_stored_writes_nothing() {
+    let (state, app, qwen, _) = daemon().await;
+    let id = ran_on(&state, qwen).await;
+    let before = read(&app, id).await;
+    // `updated_at` is to the second: a write a second later would show.
+    tokio::time::sleep(std::time::Duration::from_millis(1_100)).await;
+    let same = json!({
+        "model": { "machine": { "kind": "local" }, "id": qwen },
+        "tools": ["files"],
+        "no_tools": false,
+        "max_parallel": 4,
+        "tool_timeout_ms": 5000,
+    });
+
+    let (status, body) = put(&app, id, json!({ "settings": same })).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(read(&app, id).await, before);
 }
 
 #[tokio::test]
@@ -227,14 +299,7 @@ async fn a_model_this_machine_does_not_hold_is_refused_and_nothing_changes() {
 #[tokio::test]
 async fn a_paired_model_is_stored_as_the_paired_machines() {
     let (state, app, qwen, _) = daemon().await;
-    let id = made(
-        &state,
-        NewConversation {
-            title: "t".into(),
-            ..NewConversation::default()
-        },
-    )
-    .await;
+    let id = fresh(&state).await;
     let far = json!({ "machine": { "kind": "paired", "fingerprint": FAR }, "id": qwen });
 
     let (status, body) = put(&app, id, json!({ "settings": { "model": far } })).await;
@@ -245,8 +310,8 @@ async fn a_paired_model_is_stored_as_the_paired_machines() {
     assert_eq!(stored["model_id"], Value::Null, "{stored}");
 }
 
-/// A conversation's machine is fixed: one that ran here is not moved to the
-/// paired machine, as a run there is refused.
+/// A conversation's machine is fixed once it has a saved message: one that
+/// ran here is not moved to the paired machine, as a run there is refused.
 #[tokio::test]
 async fn a_model_of_another_machine_is_refused_as_a_run_on_it_is() {
     let (state, app, qwen, _) = daemon().await;
@@ -296,16 +361,44 @@ async fn a_limit_outside_a_runs_bounds_is_refused_with_them() {
     assert_eq!(read(&app, id).await, before);
 }
 
-/// A setting the patch does not name is refused, not dropped without a word.
+/// A model chosen for a chat with no saved message has not fixed its
+/// machine: another machine's can be chosen in its place, either way.
+#[tokio::test]
+async fn a_chat_with_no_message_takes_a_model_of_either_machine_in_turn() {
+    let (state, app, qwen, gemma) = daemon().await;
+    let far = json!({ "machine": { "kind": "paired", "fingerprint": FAR }, "id": 3 });
+    let here = json!({ "machine": { "kind": "local" }, "id": qwen });
+    let other = json!({ "machine": { "kind": "local" }, "id": gemma });
+
+    for turns in [[&far, &here, &far], [&here, &far, &other]] {
+        let id = fresh(&state).await;
+        for model in turns {
+            let (status, body) = put(&app, id, json!({ "settings": { "model": model } })).await;
+            assert_eq!(status, StatusCode::OK, "{model}: {body}");
+            assert_eq!(read(&app, id).await["settings"]["model"], *model);
+        }
+    }
+}
+
+/// A setting the patch does not name is refused, not dropped without a word,
+/// and the refusal is coded as every unreadable body is.
 #[tokio::test]
 async fn a_setting_the_patch_does_not_name_is_refused() {
     let (state, app, qwen, _) = daemon().await;
     let id = ran_on(&state, qwen).await;
     let before = read(&app, id).await;
 
-    let (status, _) = put(&app, id, json!({ "settings": { "temperature": 0.9 } })).await;
+    let (status, body) = put(&app, id, json!({ "settings": { "temperature": 0.9 } })).await;
 
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["type"], "invalid_request", "{body}");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("unknown field `temperature`"),
+        "{body}"
+    );
     assert_eq!(read(&app, id).await, before);
 }
 

@@ -57,8 +57,7 @@ export async function updateConversationTitle(
   id: ConversationId,
   title: string
 ): Promise<void> {
-  // No `system_prompt` or `settings` key: the daemon leaves them as they are.
-  const body: Partial<UpdateConversationRequest> = { title };
+  const body: UpdateConversationRequest = { title };
   await put<void>(`/api/conversations/${id}`, body);
 }
 
@@ -76,15 +75,16 @@ export async function updateConversationSystemPrompt(
 
 /**
  * Change a conversation's model, tools or tool limits: only the settings in
- * `settings` change, each to what it says; the daemon refuses a limit outside
- * a run's bounds and a model on another machine than the chat's.
+ * `settings` change, each to what it says, and a `null` model or limit is
+ * cleared; the daemon refuses a limit outside a run's bounds, and a model on
+ * another machine than the one a chat with saved messages ran on.
  */
 export async function updateConversationSettings(
   id: ConversationId,
   settings: ConversationSettingsPatch
 ): Promise<void> {
-  // No `title` key: the daemon leaves a field it is not sent as it is.
-  const body: Partial<UpdateConversationRequest> = { settings };
+  // A null title, and no `system_prompt` key: the daemon leaves both as they are.
+  const body: UpdateConversationRequest = { title: null, settings };
   await put<void>(`/api/conversations/${id}`, body);
 }
 
