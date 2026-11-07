@@ -320,6 +320,37 @@ async fn update_settings_json_null_clears_title_generation_prompt() {
     );
 }
 
+/// The two tool limits Settings › Tools writes are stored and read back
+/// under their own names, through the service and the database, and a
+/// `null` clears each back to the run's default.
+#[tokio::test]
+async fn the_tool_limits_round_trip_through_the_settings_api() {
+    let core = test_core().await;
+    let ops = make_ops(core, MockSystemProbePort::default());
+
+    let set: UpdateSettingsRequest =
+        serde_json::from_str(r#"{"maxParallelTools": 4, "toolTimeoutMs": 5000}"#).unwrap();
+    let updated = ops.update(set).await.expect("update should succeed");
+    assert_eq!(
+        (updated.max_parallel_tools, updated.tool_timeout_ms),
+        (Some(4), Some(5_000))
+    );
+    let read = ops.get().await.expect("get should succeed");
+    let wire = serde_json::to_value(&read).unwrap();
+    assert_eq!(
+        (&wire["maxParallelTools"], &wire["toolTimeoutMs"]),
+        (&serde_json::json!(4), &serde_json::json!(5000))
+    );
+
+    let clear: UpdateSettingsRequest =
+        serde_json::from_str(r#"{"maxParallelTools": null, "toolTimeoutMs": null}"#).unwrap();
+    let cleared = ops.update(clear).await.expect("update should succeed");
+    assert_eq!(
+        (cleared.max_parallel_tools, cleared.tool_timeout_ms),
+        (None, None)
+    );
+}
+
 /// A write that names the queue size hands the running download manager the
 /// size now stored: the one set, or the default once it is cleared. A write
 /// that leaves the field alone tells the manager nothing.

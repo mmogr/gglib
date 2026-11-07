@@ -116,21 +116,63 @@ export function toolLabel(name: string): string {
     .join(' ');
 }
 
-/** A tool the checklist lists: the registry's definition, and the name the daemon knows it by. */
+/** A row of the checklist: what it says, and the name the daemon knows it by. */
 export interface ListedTool {
+  label: string;
+  title?: string;
+  name: string;
+}
+
+/** A tool the page's registry holds: its definition, its daemon name, and its server's id (none for a builtin). */
+export interface RegisteredTool {
   definition: ToolDefinition;
   name: string;
+  server: number | null;
+}
+
+/** An enabled tool server, as Settings › Tools lists it. */
+export interface EnabledServer {
+  id: number;
+  name: string;
+}
+
+/** Tools ▸'s line while the tool servers are being read. */
+export const ASKING = 'Asking gglib';
+
+/** A server whose tools the page has not read, as one row. */
+export const wholeServerLabel = (name: string) => `${name} · all its tools`;
+
+/**
+ * The checklist's rows: the builtins, then each enabled server, as its
+ * tools where the page's registry holds them (a running server whose tools
+ * were read) and otherwise as one row for all of them (`<id>:*`), so every
+ * enabled server is in the list and unticking from every tool drops none.
+ * A server that is not enabled is not offered, even with its tools read.
+ */
+export function toolRows(registered: readonly RegisteredTool[], servers: readonly EnabledServer[]): ListedTool[] {
+  const row = (tool: RegisteredTool): ListedTool => ({
+    label: toolLabel(tool.definition.function.name),
+    title: tool.definition.function.description || undefined,
+    name: tool.name,
+  });
+  const rows = registered.filter((tool) => tool.server === null).map(row);
+  for (const server of servers) {
+    const own = registered.filter((tool) => tool.server === server.id);
+    rows.push(...(own.length > 0 ? own.map(row) : [{ label: wholeServerLabel(server.name), name: `${server.id}:*` }]));
+  }
+  return rows;
 }
 
 /**
  * Tools ▸, the chat's saved tools as a checklist: none on a far chat, whose
  * tools are its machine's; for a model that cannot call tools, the line
- * that says so; otherwise Enable all, Disable all and one box per tool the
- * registry lists, built-in and MCP alike, each ticked as the chat saved it
- * (`useChatTools`), and each change saved with the chat.
+ * that says so; while the tool servers are not read, the line that says
+ * why (`listed` a sentence); otherwise Enable all, Disable all and one box
+ * per row (`toolRows`), each ticked as the chat saved it (`useChatTools`),
+ * and each change saved with the chat.
  */
 export function toolsItem(
-  listed: readonly ListedTool[],
+  listed: readonly ListedTool[] | string,
   chat: ChatTools | undefined,
   supportsToolCalls: boolean | null | undefined,
   toolFormat: string | null | undefined,
@@ -138,16 +180,17 @@ export function toolsItem(
   if (!chat) return null;
   const title = supportsToolCalls && toolFormat ? `This model calls tools (${toolFormat} format).` : undefined;
   if (supportsToolCalls === false) return { label: 'Tools', submenu: [{ label: CANT_CALL_TOOLS, note: true }] };
+  if (typeof listed === 'string') return { label: 'Tools', title, submenu: [{ label: listed, note: true }] };
   if (listed.length === 0) return { label: 'Tools', title, submenu: [{ label: 'No tools registered', note: true }] };
   const names = listed.map((tool) => tool.name);
   const submenu: MenuItem[] = [
     { label: 'Enable all', toggles: true, disabled: chat.every, onPick: () => chat.all(true) },
     { label: 'Disable all', toggles: true, disabled: chat.none, onPick: () => chat.all(false) },
-    ...listed.map(({ definition, name }, index) => {
+    ...listed.map(({ label, title: about, name }, index) => {
       const ticked = chat.ticked(name);
       return {
-        label: toolLabel(definition.function.name),
-        title: definition.function.description || undefined,
+        label,
+        title: about,
         checked: ticked,
         toggles: true,
         gapBefore: index === 0,

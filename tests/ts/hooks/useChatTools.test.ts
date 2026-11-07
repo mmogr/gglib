@@ -86,6 +86,24 @@ describe('the rules', () => {
     });
   });
 
+  it('ticks every tool of a server where the list names the server whole, and unticks one as the rest of it', () => {
+    const whole = { tools: ['3:*', 'builtin:read_file'], off: false };
+    const listedHere = ['builtin:read_file', '3:search', '3:extract', '4:*'];
+    expect(listedHere.map((name) => isTicked(whole, name))).toEqual([true, true, true, false]);
+    expect(isTicked(whole, '33:search')).toBe(false);
+    expect(afterToggle(whole, '3:search', false, listedHere)).toEqual({ tools: ['3:extract', 'builtin:read_file'], off: false });
+    expect(afterToggle(whole, '3:*', false, ['builtin:read_file', '3:*'])).toEqual({ tools: ['builtin:read_file'], off: false });
+    // builtin:* is no server's: it names nothing.
+    expect(isTicked({ tools: ['builtin:*'], off: false }, 'builtin:read_file')).toBe(false);
+  });
+
+  it('unticks one of every tool as every other row, each server not read named whole', () => {
+    expect(afterToggle(EVERY_TOOL, 'builtin:read_file', false, ['builtin:read_file', 'builtin:get_current_time', '4:*'])).toEqual({
+      tools: ['builtin:get_current_time', '4:*'],
+      off: false,
+    });
+  });
+
   it('Enable all is every tool, and Disable all is off with the list kept', () => {
     expect(afterAll({ tools: ['3:search'], off: true }, true)).toEqual(EVERY_TOOL);
     expect(afterAll({ tools: ['3:search'], off: false }, false)).toEqual({ tools: ['3:search'], off: true });
@@ -143,8 +161,8 @@ describe('useChatTools', () => {
     await waitFor(() => expect(result.current!.ticked('3:search')).toBe(true));
   });
 
-  it('holds a new chat\'s choice and writes nothing, until its first send asks for it', () => {
-    const { result } = mount({ conversationId: null, conversations: [] });
+  it('holds a new chat\'s choice and writes nothing, until its first send saves it to the chat it made', async () => {
+    const { result, rerender } = mount({ conversationId: null, conversations: [] });
     expect(result.current!.forCreate()).toBeUndefined();
     act(() => result.current!.toggle('3:search', false, LISTED));
     expect(result.current!.ticked('3:search')).toBe(false);
@@ -152,8 +170,81 @@ describe('useChatTools', () => {
 
     const said = result.current!.forCreate()!;
     expect(said.patch).toStrictEqual({ tools: ['builtin:get_current_time', 'builtin:read_file'] });
-    act(() => said.accepted());
+    await act(() => said.save(7));
+    expect(transport.updateConversationSettings.mock.calls).toEqual([[7, { tools: ['builtin:get_current_time', 'builtin:read_file'] }]]);
+    expect(registry.refreshChats).toHaveBeenCalledWith('this');
     expect(result.current!.forCreate()).toBeUndefined();
+    // A new chat after it starts from every tool again.
+    rerender({ conversationId: null, conversations: [], far: false, onError: vi.fn() });
+    expect(result.current!.every).toBe(true);
+  });
+
+  it('shows the first send\'s choice as the made chat\'s until it is read again, though a reading before the write says every tool', async () => {
+    let land!: () => void;
+    transport.updateConversationSettings.mockImplementationOnce(() => new Promise<void>((resolve) => (land = resolve)));
+    const { result, rerender } = mount({ conversationId: null, conversations: [] });
+    act(() => result.current!.toggle('3:search', false, LISTED));
+    const said = result.current!.forCreate()!;
+    let saved!: Promise<void>;
+    act(() => {
+      saved = said.save(7);
+    });
+    // The page opens the made chat, read before the write landed: it says every tool.
+    rerender({ conversationId: 7, conversations: [{ id: 7 }] as ConversationSummary[], far: false, onError: vi.fn() });
+    expect(result.current!.ticked('3:search')).toBe(false);
+    expect(result.current!.every).toBe(false);
+    // An untick now goes after the first write, from the choice, never from every tool.
+    act(() => result.current!.toggle('builtin:read_file', false, LISTED));
+    await waitFor(() => expect(transport.updateConversationSettings).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(transport.updateConversationSettings).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      land();
+      await saved;
+    });
+    await waitFor(() => expect(transport.updateConversationSettings).toHaveBeenCalledTimes(2));
+    expect(transport.updateConversationSettings.mock.calls[1]).toEqual([7, { tools: ['builtin:get_current_time'] }]);
+  });
+
+  it('drops a new chat\'s choice where its first save was refused, and rejects the save', async () => {
+    transport.updateConversationSettings.mockRejectedValueOnce(new Error('Conversation not found: 7'));
+    const onError = vi.fn();
+    const { result, rerender } = mount({ conversationId: null, conversations: [], onError });
+    act(() => result.current!.toggle('3:search', false, LISTED));
+    const said = result.current!.forCreate()!;
+    await act(async () => {
+      await expect(said.save(7)).rejects.toThrow('Conversation not found: 7');
+    });
+    // The send says why; the hook does not say it twice.
+    expect(onError).not.toHaveBeenCalled();
+    rerender({ conversationId: null, conversations: [], far: false, onError });
+    expect(result.current!.every).toBe(true);
+    expect(result.current!.forCreate()).toBeUndefined();
+  });
+
+  it('writes one change after another, the last one made last, and shows it while the first lands', async () => {
+    let land!: () => void;
+    let landSecond!: () => void;
+    transport.updateConversationSettings
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (land = resolve)))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (landSecond = resolve)));
+    const { result } = mount();
+    act(() => result.current!.toggle('3:search', false, LISTED));
+    act(() => result.current!.toggle('builtin:read_file', false, LISTED));
+    // The second waits for the first.
+    await waitFor(() => expect(transport.updateConversationSettings).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(transport.updateConversationSettings).toHaveBeenCalledTimes(1);
+    expect(LISTED.map(result.current!.ticked)).toEqual([true, false, false]);
+    await act(async () => land());
+    await waitFor(() => expect(transport.updateConversationSettings).toHaveBeenCalledTimes(2));
+    expect(transport.updateConversationSettings.mock.calls).toEqual([
+      [1, { tools: ['builtin:get_current_time', 'builtin:read_file'] }],
+      [1, { tools: ['builtin:get_current_time'] }],
+    ]);
+    // The first write landing does not drop the second choice, still on its way.
+    expect(LISTED.map(result.current!.ticked)).toEqual([true, false, false]);
+    await act(async () => landSecond());
   });
 
   it('asks nothing of an open chat at a send, even one a choice was made for before it was: its changes are written as they are made', () => {

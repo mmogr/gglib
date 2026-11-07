@@ -25,6 +25,7 @@ vi.mock('../../../../src/services/platform', () => ({
 import { FakeDaemon } from '../../fixtures/fakeDaemon';
 import { conversation, mount, send, shown } from './runtimeHarness';
 import { resetRemoteState } from '../../../../src/services/remoteRegistry';
+import { getTransport } from '../../../../src/services/transport';
 import type { ModelRef } from '../../../../src/types/generated/ModelRef';
 import type { Thinking } from '../../../../src/types/generated/Thinking';
 
@@ -83,8 +84,8 @@ describe('useGglibRuntime send', () => {
   });
 
   it('saves the tools chosen before the chat was made with the chat the send makes, only tools, before its turn starts', async () => {
-    const accepted = vi.fn();
-    const hook = await mount({ model: here, tools: () => ({ patch: { tools: ['builtin:read_file'] }, accepted }) });
+    const save = vi.fn((cid: number) => getTransport().updateConversationSettings(cid, { tools: ['builtin:read_file'] }));
+    const hook = await mount({ model: here, tools: () => ({ patch: { tools: ['builtin:read_file'] }, save }) });
     send(hook, 'hello');
 
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
@@ -94,11 +95,22 @@ describe('useGglibRuntime send', () => {
       title: null,
       settings: { tools: ['builtin:read_file'] },
     });
-    expect(accepted).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(100);
+  });
+
+  it('starts no turn where the tools chosen before the chat was made could not be saved, and says why', async () => {
+    const onError = vi.fn();
+    const save = vi.fn(async () => {
+      throw new Error('Conversation not found: 100');
+    });
+    const hook = await mount({ model: here, onError, tools: () => ({ patch: { no_tools: true }, save }) });
+    send(hook, 'hello');
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(new Error('Conversation not found: 100')));
+    expect(daemon.count('PUT', '/api/runs/')).toBe(0);
   });
 
   it('asks nothing of the tools in an open chat: its tools are saved as they change', async () => {
-    const tools = vi.fn(() => ({ patch: { no_tools: true }, accepted: vi.fn() }));
+    const tools = vi.fn(() => ({ patch: { no_tools: true }, save: vi.fn(async () => {}) }));
     const hook = await mount({ ...local, tools });
     send(hook, 'hello');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));

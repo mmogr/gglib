@@ -56,7 +56,10 @@ pub use agent_guard_sink::{AgentGuardReporter, AgentGuardSink};
 pub use llm_completion::LlmCompletionPort;
 pub use loop_guard_trips::LoopGuardTripSink;
 // Re-export tool-executor filter decorators
-pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
+pub use tool_executor_filter::{
+    EVERY_TOOL_OF_SERVER, EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG,
+    names_whole_server,
+};
 
 // Re-export repository traits for convenience
 pub use attachment_store::{AttachmentError, AttachmentStore};

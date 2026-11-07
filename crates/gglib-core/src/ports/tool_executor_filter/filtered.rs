@@ -30,7 +30,30 @@ pub(super) fn bare_name(qualified: &str) -> &str {
         .map_or(qualified, |pos| &qualified[pos + 1..])
 }
 
-/// Return `true` if `allowed` contains `qualified_name` **or** its bare form.
+/// The suffix of an allowlist entry that names every tool of one MCP
+/// server: `{id}:*`.
+pub const EVERY_TOOL_OF_SERVER: &str = ":*";
+
+/// Whether `entry` is `{id}:*`, every tool of the MCP server whose id is
+/// `id`, and `qualified` is one of that server's tools (`{id}:{tool}`).
+///
+/// Only a number is a server's id: `builtin:*` names nothing, so no entry
+/// reaches the image tool (`builtin:generate_image`), which only Draw
+/// offers, and `fs:*` is no server's either.
+#[must_use]
+pub fn names_whole_server(entry: &str, qualified: &str) -> bool {
+    let Some(id) = entry.strip_suffix(EVERY_TOOL_OF_SERVER) else {
+        return false;
+    };
+    !id.is_empty()
+        && id.bytes().all(|b| b.is_ascii_digit())
+        && qualified
+            .split_once(':')
+            .is_some_and(|(server, _)| server == id)
+}
+
+/// Return `true` if `allowed` contains `qualified_name` **or** its bare form,
+/// or names every tool of its server (`{id}:*`, [`names_whole_server`]).
 ///
 /// This enables the Director to emit bare names (e.g. `"browser_navigate"`) in
 /// `tool_allowlist` entries while the inner executor stores qualified names
@@ -47,7 +70,10 @@ fn is_allowed(qualified_name: &str, allowed: &HashSet<String>) -> bool {
         return true;
     }
     let bare = bare_name(qualified_name);
-    !bare.contains(':') && allowed.contains(bare)
+    (!bare.contains(':') && allowed.contains(bare))
+        || allowed
+            .iter()
+            .any(|entry| names_whole_server(entry, qualified_name))
 }
 
 // =============================================================================

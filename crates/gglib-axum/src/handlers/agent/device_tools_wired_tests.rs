@@ -460,6 +460,11 @@ fn a_bare_tool_name_starts_every_enabled_server() {
         local(&["builtin:get_current_time"]),
         Some(Starts::Only(BTreeSet::new()))
     );
+    // Every tool of one server starts that server, and only it.
+    assert_eq!(
+        local(&["7:*", "builtin:get_current_time"]),
+        Some(Starts::Only(BTreeSet::from([7])))
+    );
     let off = Asked::of_local(&ConversationSettings::default(), false, false);
     assert_eq!(off.here_servers(), None);
 }

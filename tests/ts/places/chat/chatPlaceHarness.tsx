@@ -128,6 +128,8 @@ export function chatTransport(fixture: ChatFixture) {
     // Asked for the composer's Draw button; nothing to draw with unless a test says so.
     drawingAvailability: vi.fn(async () => NO_DRAWING),
     subscribe: vi.fn(() => () => {}),
+    // Read by the composer's Tools ▸: no tool server unless a test says so.
+    listMcpServers: vi.fn(async (): Promise<unknown[]> => []),
   };
 }
 

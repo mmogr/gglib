@@ -1,14 +1,16 @@
-import { FC, useContext, useState } from 'react';
+import { FC, useCallback, useContext, useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Menu, type MenuItem } from '../../ui/Menu';
 import { getToolRegistry } from '../../../services/tools';
+import { getTransport } from '../../../services/transport';
+import { formatError } from '../../../utils/errors';
 import type { ChatFolder } from '../../../hooks/useChatFolder';
 import type { DrawSwitch } from '../../../hooks/useDrawSwitch';
 import type { ChatTools } from '../../../hooks/useChatTools';
 import { ImageInputContext, useAddImage } from './ComposerImages';
 import { changeFolder } from './FolderChip';
-import { drawItem, folderItem, imageItem, toolsItem, type ListedTool } from './composerMenus';
+import { ASKING, drawItem, folderItem, imageItem, toolRows, toolsItem, type EnabledServer, type ListedTool } from './composerMenus';
 
 interface PlusMenuProps {
   /** Whether a server answers the chat: no image is offered while none does. */
@@ -25,23 +27,35 @@ interface PlusMenuProps {
   tools?: ChatTools;
 }
 
-/** The registry's tools, read fresh: the list is read again each time the menu opens. */
-function useListedTools(): { listed: ListedTool[]; reread: () => void } {
-  const [, setVersion] = useState(0);
+/** The checklist's rows, or why there are none yet: the registry's tools and the enabled servers, read again each time the menu opens. */
+function useListedTools(): { listed: ListedTool[] | string; reread: () => void } {
+  const [servers, setServers] = useState<EnabledServer[] | string>(ASKING);
+  const reread = useCallback(() => {
+    Promise.resolve()
+      .then(() => getTransport().listMcpServers())
+      .then((infos) => setServers(infos.filter((info) => info.server.enabled).map(({ server }) => ({ id: server.id, name: server.name }))))
+      .catch((error: unknown) => setServers(`Couldn't read the tool servers: ${formatError(error)}`));
+  }, []);
+  useEffect(reread, [reread]);
+  if (typeof servers === 'string') return { listed: servers, reread };
   const registry = getToolRegistry();
-  return {
-    listed: registry.getDefinitions().map((definition) => ({ definition, name: registry.getBackendName(definition.function.name) })),
-    reread: () => setVersion((v) => v + 1),
-  };
+  const registered = registry.getDefinitions().map((definition) => {
+    const key = definition.function.name;
+    const source = registry.getSource(key);
+    const server = source?.startsWith('mcp:') ? Number(source.slice(4)) : null;
+    return { definition, name: registry.getBackendName(key), server };
+  });
+  return { listed: toolRows(registered, servers), reread };
 }
 
 /**
  * The composer's `[+]`: Add image…, Use a folder…, Draw a picture and
  * Tools ▸, each disabled with its reason where it cannot be used now
- * (`composerMenus`). The tools are the registry's, read again each time the
- * menu opens, so a tool registered since (built-in or MCP) is listed
- * without opening anything else; which of them are ticked is the chat's
- * saved choice (`tools`).
+ * (`composerMenus`). The tools are the registry's and each enabled tool
+ * server, read again each time the menu opens, so a tool registered since
+ * (built-in or MCP) is listed without opening anything else, and a server
+ * not started is one row for all its tools; which of them are ticked is the
+ * chat's saved choice (`tools`). Nothing here starts a server.
  */
 export const PlusMenu: FC<PlusMenuProps> = ({
   connected,

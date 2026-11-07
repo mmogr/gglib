@@ -36,6 +36,7 @@ import { ChatPlaceWithList as ChatPlace } from './chatPlaceHarness';
 import { resetToolRegistry, syncBuiltinTools } from '../../../../src/services/tools';
 import { refreshChats } from '../../../../src/services/chatRegistry';
 import { useToastContext } from '../../../../src/contexts/ToastContext';
+import type { ConversationSettingsPatch } from '../../../../src/types/generated/ConversationSettingsPatch';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../../src/services/remoteRegistry';
 
 function savedExchange(): ChatMessage[] {
@@ -245,6 +246,80 @@ describe('ChatPlace, the composer', () => {
     await user.click(within(toolsMenu()).getByRole('menuitemcheckbox', { name: 'Read File' }));
     expect(within(toolsMenu()).getByRole('menuitemcheckbox', { name: 'Read File' })).toHaveAttribute('aria-checked', 'false');
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('shows a new chat\'s choice from its first send on, and saves a later untick after it, from the choice', async () => {
+    const user = userEvent.setup();
+    const save = stub().updateConversationSettings;
+    let land!: () => void;
+    save.mockImplementationOnce(async (id: number, patch: ConversationSettingsPatch) => {
+      await new Promise<void>((resolve) => (land = resolve));
+      fixture.conversations = fixture.conversations.map((c) => (c.id === id ? { ...c, settings: { tools: patch.tools } } : c));
+    });
+    (transport.current as Record<string, unknown>).startAgentRun = vi.fn(async () => {});
+    await syncWith([tool('get_current_time'), tool('read_file')]);
+    renderLocal(null);
+    await screen.findByRole('textbox', { name: 'Message' });
+    await plusSubmenu(user, 'Tools');
+    await user.click(within(toolsMenu()).getByRole('menuitemcheckbox', { name: 'Read File' }));
+    await user.keyboard('{Escape}{Escape}');
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'hello{Enter}');
+    await waitFor(() => expect(save.mock.calls).toEqual([[2, { tools: ['builtin:get_current_time'] }]]));
+    // The chat is open, its list read before the write landed: the choice is still shown.
+    await plusSubmenu(user, 'Tools');
+    expect(within(toolsMenu()).getAllByRole('menuitemcheckbox').map((item) => item.getAttribute('aria-checked'))).toEqual(['true', 'false']);
+    await user.click(within(toolsMenu()).getByRole('menuitemcheckbox', { name: 'Read File' }));
+    expect(save).toHaveBeenCalledTimes(1);
+
+    await act(async () => land());
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]).toEqual([2, { tools: ['builtin:get_current_time', 'builtin:read_file'] }]);
+  });
+
+  it('offers Enable all on a chat that saved a list of every tool, which saves every tool to come', async () => {
+    const user = userEvent.setup();
+    fixture.conversations[0] = { ...fixture.conversations[0], settings: { tools: ['builtin:get_current_time', 'builtin:read_file'] } };
+    await syncWith([tool('get_current_time'), tool('read_file')]);
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+    await plusSubmenu(user, 'Tools');
+    expect(within(toolsMenu()).getAllByRole('menuitemcheckbox').map((item) => item.getAttribute('aria-checked'))).toEqual(['true', 'true']);
+    expect(within(toolsMenu()).getByRole('menuitem', { name: 'Enable all' })).toBeEnabled();
+    await user.click(within(toolsMenu()).getByRole('menuitem', { name: 'Enable all' }));
+    await waitFor(() => expect(stub().updateConversationSettings.mock.calls).toEqual([[1, { tools: [] }]]));
+  });
+
+  it('lists each enabled tool server, one not started as one row for all its tools, and keeps it when a builtin is unticked', async () => {
+    const user = userEvent.setup();
+    stub().listMcpServers.mockResolvedValue([
+      { server: { id: 4, name: 'github', enabled: true }, status: 'stopped', tools: [] },
+      { server: { id: 5, name: 'old', enabled: false }, status: 'stopped', tools: [] },
+    ]);
+    await syncWith([tool('get_current_time'), tool('read_file')]);
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+    await plusSubmenu(user, 'Tools');
+    await waitFor(() =>
+      expect(within(toolsMenu()).getAllByRole('menuitemcheckbox').map((item) => item.textContent)).toEqual([
+        'Get Current Time',
+        'Read File',
+        'github · all its tools',
+      ]),
+    );
+    await user.click(within(toolsMenu()).getByRole('menuitemcheckbox', { name: 'Read File' }));
+    await waitFor(() => expect(stub().updateConversationSettings.mock.calls).toEqual([[1, { tools: ['builtin:get_current_time', '4:*'] }]]));
+  });
+
+  it('offers no checklist until the tool servers are read, and says why where they cannot be', async () => {
+    const user = userEvent.setup();
+    stub().listMcpServers.mockRejectedValue(new Error('the daemon did not answer'));
+    await syncWith([tool('get_current_time')]);
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+    const tools = await plusSubmenu(user, 'Tools');
+    await waitFor(() => expect(within(tools).getByText("Couldn't read the tool servers: the daemon did not answer")).toBeInTheDocument());
+    expect(within(tools).queryByRole('menuitemcheckbox')).not.toBeInTheDocument();
   });
 
   it('offers no Agent limits… : they are Settings › Tools\' now, for every chat', async () => {

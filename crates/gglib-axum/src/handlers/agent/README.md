@@ -262,8 +262,8 @@ on each), read only while the tunnel's gateway says a session is live,
 each by its qualified
 `{id}:{tool}`: for a phone's chat, those of the servers its query names by
 id, never every one, and none for `tools=none`; for a Mac's chat, every one
-when it names no tool, only those its own list names exactly or by bare
-name otherwise, and none when it turned its tools off; and never a tool the
+when it names no tool, only those its own list names exactly, by bare
+name or as every tool of their server (`{id}:*`) otherwise, and none when it turned its tools off; and never a tool the
 list names that no opened server has. An id a phone names that is not open
 is dropped where the servers start, with one warning naming the ids, and
 starts nothing. A turn is planned with the floor

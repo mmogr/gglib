@@ -119,13 +119,6 @@ export interface UseGglibRuntimeReturn {
 /** How many of `messages` are the user's. */
 const userRows = (messages: readonly GglibMessage[]) => messages.filter((m) => m.role === 'user').length;
 
-/** Save the tools chosen before the chat was made with the chat a send made, before its turn starts. */
-async function saveChosenTools(conversationId: number, chosen: ToolsSaid | undefined): Promise<void> {
-  if (!chosen) return;
-  await getTransport().updateConversationSettings(conversationId, chosen.patch);
-  chosen.accepted();
-}
-
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
   const { conversationId, onError } = options;
   const source = options.source ?? 'this';
@@ -226,7 +219,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         const created = { id: cid, system_prompt: DEFAULT_SYSTEM_PROMPT, created_at: new Date().toISOString() };
         base = buildThreadMessages([], created, cid) as GglibMessage[];
         options.onConversationChanged?.(cid);
-        await saveChosenTools(cid, options.tools?.());
+        await options.tools?.()?.save(cid);
       }
       const asked = mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() });
       const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];

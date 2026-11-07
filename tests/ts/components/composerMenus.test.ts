@@ -14,8 +14,10 @@ import {
   folderItem,
   imageItem,
   toolLabel,
+  toolRows,
   toolsItem,
   type ListedTool,
+  type RegisteredTool,
 } from '../../../src/components/ChatMessagesPanel/components/composerMenus';
 import type { ChatFolder } from '../../../src/hooks/useChatFolder';
 import type { DrawSwitch } from '../../../src/hooks/useDrawSwitch';
@@ -52,15 +54,18 @@ const draw = (over: Partial<DrawSwitch> = {}): DrawSwitch => ({
   ...over,
 });
 
-/** The registry's tools, each named to the daemon as a built-in. */
-const listed = (names: string[]): ListedTool[] =>
-  names.map((name) => ({
-    definition: {
-      type: 'function' as const,
-      function: { name, description: `does ${name}`, parameters: { type: 'object' as const, properties: {} } },
-    },
-    name: `builtin:${name}`,
-  }));
+/** The registry's tool `name` of server `server` (a builtin with none). */
+const registered = (name: string, server: number | null = null): RegisteredTool => ({
+  definition: {
+    type: 'function' as const,
+    function: { name, description: `does ${name}`, parameters: { type: 'object' as const, properties: {} } },
+  },
+  name: server === null ? `builtin:${name}` : `${server}:${name}`,
+  server,
+});
+
+/** The rows of the builtins named. */
+const listed = (names: string[]): ListedTool[] => toolRows(names.map((name) => registered(name)), []);
 
 /** The chat's saved tools: `ticked` by daemon name, every one or none. */
 const chat = (ticked: string[], over: Partial<ChatTools> = {}): ChatTools => ({
@@ -193,9 +198,29 @@ describe('toolsItem', () => {
     expect([none[0].disabled, none[1].disabled]).toEqual([false, true]);
   });
 
+  it('says why there is no checklist while the tool servers are not read', () => {
+    expect(toolsItem('Asking gglib', chat([]), true, null)!.submenu).toEqual([{ label: 'Asking gglib', note: true }]);
+  });
+
   it('says so where no tool is registered', () => {
     const sub = toolsItem([], chat([]), true, null)!.submenu!;
     expect(sub).toEqual([{ label: 'No tools registered', note: true }]);
+  });
+
+  it('lists the builtins, then each enabled server: its tools where they were read, else one row for all of them', () => {
+    const rows = toolRows(
+      [registered('read_file'), registered('search', 3), registered('extract', 3), registered('crawl', 9)],
+      [{ id: 3, name: 'web' }, { id: 4, name: 'github' }],
+    );
+    expect(rows.map((row) => [row.label, row.name])).toEqual([
+      ['Read File', 'builtin:read_file'],
+      ['Search', '3:search'],
+      ['Extract', '3:extract'],
+      ['github · all its tools', '4:*'],
+    ]);
+    expect(rows[1].title).toBe('does search');
+    // Server 9 is not enabled: its tools are not offered, though they were read.
+    expect(rows.some((row) => row.name.startsWith('9:'))).toBe(false);
   });
 
   it('names a tool as words: get_current_time is "Get Current Time"', () => {
