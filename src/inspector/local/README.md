@@ -6,7 +6,8 @@ The inspector for a model on this machine. From the top: its name (⧉
 copies the Model ID), ⋯ and ×; the library row's line of facts; the fit
 sentence; Load and Chat (Chat and Unload once loaded, with its state word);
 the Model ID to use it by; How it runs (How it ran once loaded); Details,
-closed and remembered.
+closed and remembered. The name and the actions stay in view while the
+rest scrolls.
 
 Load is one click and sends only the model's id. Chat on a model that is
 not loaded loads it, then opens the chat on its port. Unload always asks the
@@ -15,7 +16,10 @@ banner's install), then the load.
 
 How it runs is the plan's arguments grouped by `LaunchArg.decision`, one
 row per labelled decision (`rows.ts` holds the one label table), each
-saying whose choice it was and why on hover, under the launch line
+saying the plan's narration for that decision where it has one (the words
+How it ran says), else its arguments, and whose choice it was and why on
+hover; Templates is always drawn (Auto with no flag), Speculative too once
+the person has set it, under the launch line
 (`LaunchPlan::command_line` drawn token by token). Sampling and Reasoning
 rows count the explanation's sources. Change turns a row into its control
 and saves the one field of the update it changes; a row the person set
@@ -24,7 +28,8 @@ per-launch options, are the Load with options sheet's (I2).
 
 Words with no Rust twin, composed from Rust's fields here: the fit sentence
 and its refusal, the Context row's note, the Sampling row's count, "set by
-you", "Applies at next load.", "Didn't load:", "Drawing needs
+you", "Auto", "On", "Off", "Applies at next load.", "Didn't load:",
+"Didn't unload:", "Drawing needs
 stable-diffusion.cpp.".
 
 | File | Role |

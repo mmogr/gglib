@@ -11,8 +11,8 @@
  * llama.cpp missing (the setup status says so, or a load is refused for
  * it) turns Load into Install llama.cpp: the library banner's install
  * (`places/library/engineInstall`), then the load (or the chat) that asked
- * for it once the install completes. A failed load is one line, in the
- * daemon's words.
+ * for it once the install completes. A failed load or unload is one line,
+ * in the daemon's words, saying which it was.
  *
  * @module inspector/local/useLoad
  */
@@ -31,8 +31,8 @@ type Then = 'load' | 'chat';
 export interface LoadState {
   /** What is in flight: a load, a load for a chat, or an unload. */
   busy: Then | 'unload' | null;
-  /** Why the last load or unload failed, in the daemon's words. */
-  error: string | null;
+  /** Which action last failed, and why, in the daemon's words. */
+  error: { action: 'load' | 'unload'; message: string } | null;
   /** llama.cpp must be installed before this model can load. */
   needsLlama: boolean;
   load: () => void;
@@ -50,7 +50,7 @@ export function useLoad(
   onStopServer: (modelId: number) => Promise<void>,
 ): LoadState {
   const [busy, setBusy] = useState<LoadState['busy']>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadState['error']>(null);
   const [refused, setRefused] = useState(false);
   const { status: llama, checkStatus } = useLlamaStatus();
   const install = useEngineInstall();
@@ -65,7 +65,7 @@ export function useLoad(
       if (then === 'chat') onServerStarted({ modelId: model.id, modelName: model.name, port, status: 'running' });
     } catch (err) {
       if (TransportError.hasCode(err, 'LLAMA_SERVER_NOT_INSTALLED')) setRefused(true);
-      else setError(formatError(err));
+      else setError({ action: 'load', message: formatError(err) });
     } finally {
       setBusy(null);
     }
@@ -97,7 +97,7 @@ export function useLoad(
     try {
       await onStopServer(model.id);
     } catch (err) {
-      setError(formatError(err));
+      setError({ action: 'unload', message: formatError(err) });
     } finally {
       setBusy(null);
     }
@@ -105,7 +105,7 @@ export function useLoad(
 
   return {
     busy,
-    error: error ?? (needsLlama ? install.refusal : null),
+    error: error ?? (needsLlama && install.refusal ? { action: 'load', message: install.refusal } : null),
     needsLlama,
     load: () => go('load'),
     loadForChat: () => go('chat'),

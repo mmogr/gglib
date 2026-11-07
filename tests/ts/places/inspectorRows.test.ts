@@ -12,6 +12,7 @@ import {
   chosenBy,
   contextNote,
   fitSentence,
+  narrated,
   runRows,
   samplingValue,
   setByYou,
@@ -73,6 +74,27 @@ describe('the rows', () => {
     const rows = runRows(chatPlan(), false);
     expect(rows.map((r) => r.label)).toEqual(['Context', 'Images', 'Templates', 'Sampling', 'Reasoning', 'KV cache']);
     expect(rows.find((r) => r.key === 'kv')?.args).toHaveLength(2);
+  });
+
+  it('always have Templates for a chat model, and the rows asked for that have no argument', () => {
+    const plan = { args: chatPlan().args.filter((a) => a.decision !== 'templates'), fit: null };
+    const rows = runRows(plan, false, ['mtp']);
+    expect(rows.find((r) => r.key === 'templates')?.args).toEqual([]);
+    expect(rows.map((r) => r.label)).toContain('Speculative');
+  });
+
+  it("say the narration's value for their decision, a whole number grouped", () => {
+    const narration = {
+      model_name: 'm', quantization: null, weights_bytes: 0,
+      decisions: [
+        { label: 'ctx', value: '131072', source: null },
+        { label: 'flags', value: '--jinja (agent tag)', source: null },
+      ],
+    };
+    expect(narrated(narration, 'ctx')).toBe('131,072');
+    expect(narrated(narration, 'templates')).toBe('--jinja (agent tag)');
+    expect(narrated(narration, 'kv')).toBeNull();
+    expect(argsValue([arg('-c', 'ctx', '131072')])).toBe('131,072');
   });
 
   it('are Parts alone for an image model, and keep a decision the table does not know under its own name', () => {

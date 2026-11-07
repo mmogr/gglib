@@ -1,7 +1,8 @@
 /**
  * How it runs: the launch gglib would make, as the launch line and then
- * one row per decision (`runRows`), each with whose choice it was and why
- * on hover. On a loaded model it is How it ran: the decisions its launch
+ * one row per decision (`runRows`), each saying the plan's narration for
+ * that decision where it has one (the words How it ran says), else its
+ * arguments, with whose choice it was and why on hover. On a loaded model it is How it ran: the decisions its launch
  * recorded (`LaunchFacts.narration`), as launched, where a change applies
  * at the next load. Change turns a row into its control (`Change`); a row
  * the person set reads `set by you · Reset`. One footnote ends it: a value
@@ -26,7 +27,9 @@ import {
   argsWhy,
   chosenBy,
   contextNote,
+  grouped,
   labelOf,
+  narrated,
   runRows,
   samplingValue,
   setByYou,
@@ -99,7 +102,7 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
               <Row
                 key={d.label}
                 label={labelOf(d.label)}
-                value={d.value}
+                value={grouped(d.value)}
                 why={d.source ?? undefined}
                 onChange={changeable(kind)}
                 control={control(kind)}
@@ -112,34 +115,41 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
   }
 
   if (!plan || !sampling) {
+    // Before the first answer nothing is drawn; once it fails, one line says so.
+    if (!failed) return null;
     return (
       <section aria-label="How it runs" className="flex flex-col gap-xs">
         <Caption title="How it runs" aside="" />
-        {failed && <p className="m-0 text-xs text-text-secondary">How this model would load is unavailable.</p>}
+        <p className="m-0 text-xs text-text-secondary">How this model would load is unavailable.</p>
       </section>
     );
   }
 
-  const rows = runRows(plan, model.imageFamily !== undefined);
+  const storedMtp = model.serverDefaults?.mtp;
+  const rows = runRows(plan, model.imageFamily !== undefined, storedMtp != null ? ['mtp'] : []);
   const value = (row: RunRow) => {
-    if (row.key === 'ctx') return [argsValue(row.args), contextNote(plan.fit)].filter(Boolean).join(' · ');
-    if (row.key === 'images') return row.args.length ? argsValue(row.args) : 'None';
+    const said = narrated(plan.narration, row.key);
+    const own = row.args.length ? argsValue(row.args) : null;
+    if (row.key === 'ctx') return [said ?? own, contextNote(plan.fit)].filter(Boolean).join(' · ');
     if (row.key === 'sampling') return samplingValue(sampling);
     if (row.key === 'reasoning') {
-      const own = settingsLine(sampling, REASONING_KEYS).set;
-      return [row.args.length ? argsValue(row.args) : null, own].filter(Boolean).join(' · ') || "the template's own";
+      const set = settingsLine(sampling, REASONING_KEYS).set;
+      return [said ?? own, set].filter(Boolean).join(' · ') || "the template's own";
     }
     if (row.key === 'parts') {
       const missing = model.missingComponents.map((role) => `${role} missing`);
-      return [row.args.length ? argsValue(row.args) : null, ...missing].filter(Boolean).join(' · ') || 'None';
+      return [said ?? own, ...missing].filter(Boolean).join(' · ') || 'None';
     }
-    return argsValue(row.args);
+    // No argument either way: the select's own words for what is stored.
+    const none = row.key === 'templates' ? 'Auto' : row.key === 'mtp' ? (storedMtp ? 'On' : 'Off') : 'None';
+    return said ?? own ?? none;
   };
   const isSet = (row: RunRow) => {
     if (row.key === 'ctx') return plan.fit?.source === 'model_server_defaults';
     if (row.key === 'sampling') return setByYou(sampling, SAMPLING_KEYS);
     if (row.key === 'reasoning') return setByYou(sampling, REASONING_KEYS);
-    return row.args.some((a) => a.source === 'you') && (row.key === 'templates' || row.key === 'mtp');
+    if (row.key === 'mtp') return storedMtp != null || row.args.some((a) => a.source === 'you');
+    return row.key === 'templates' && row.args.some((a) => a.source === 'you');
   };
 
   return (

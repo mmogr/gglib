@@ -2,7 +2,8 @@
  * How a model runs, read from its explanation: pure, so every sentence is
  * pinned without a screen. The rows are the plan's arguments grouped by
  * `LaunchArg.decision` (the wire's own grouping key), labelled by the one
- * table here; the fit sentence and the Context row's note are composed from
+ * table here; a row says the plan's narration where it has a decision of
+ * that label (the words How it ran uses), else its arguments; the fit sentence and the Context row's note are composed from
  * `ContextFit`'s figures; the Sampling and Reasoning rows count the
  * explanation's sources. Nothing is worked out that the daemon did not say.
  *
@@ -14,6 +15,7 @@ import type { ProvenanceParamKey, SamplingExplanation, SamplingParamKey } from '
 import type { ChoiceSource } from '../../types/generated/ChoiceSource';
 import type { ContextFit } from '../../types/generated/ContextFit';
 import type { LaunchArg } from '../../types/generated/LaunchArg';
+import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import type { LaunchPlan } from '../../types/generated/LaunchPlan';
 import { formatSize } from '../../utils/format';
 import { PARAM_LABELS, describeSource, formatProvenanceValue, publishedByParam } from '../../utils/samplingProvenance';
@@ -66,16 +68,18 @@ const rank = (key: string) => (ORDER.includes(key) ? ORDER.indexOf(key) : ORDER.
 /**
  * The rows for `plan`: one per decision with a label, in the table's
  * order. A chat model always has Images (None when no projector is linked),
- * Sampling and Reasoning; an image model has its Parts and nothing of a
- * chat's.
+ * Templates (Auto when gglib sends no flag either way), Sampling and
+ * Reasoning; an image model has its Parts and nothing of a chat's. `also`
+ * adds rows the plan has no argument for (Speculative turned off by the
+ * person, so it can be seen and reset).
  */
-export function runRows(plan: Pick<LaunchPlan, 'args' | 'fit'>, draws: boolean): RunRow[] {
+export function runRows(plan: Pick<LaunchPlan, 'args' | 'fit'>, draws: boolean, also: readonly string[] = []): RunRow[] {
   const byKey = new Map<string, LaunchArg[]>();
   for (const arg of plan.args) {
     if (DECISION_LABELS[arg.decision] === null) continue;
     byKey.set(arg.decision, [...(byKey.get(arg.decision) ?? []), arg]);
   }
-  const wanted = draws ? ['parts'] : ['images', 'sampling', 'reasoning'];
+  const wanted = draws ? ['parts', ...also] : ['images', 'templates', 'sampling', 'reasoning', ...also];
   for (const key of wanted) if (!byKey.has(key)) byKey.set(key, []);
   return [...byKey]
     .map(([key, args]) => ({ key, label: labelOf(key), args }))
@@ -85,10 +89,25 @@ export function runRows(plan: Pick<LaunchPlan, 'args' | 'fit'>, draws: boolean):
 /** The last part of a path, for a value that names a file. */
 export const fileName = (value: string): string => (value.includes('/') ? (value.split('/').pop() ?? value) : value);
 
+/** A whole number grouped (`131,072`); any other value as sent. */
+export const grouped = (value: string): string => (/^\d+$/.test(value) ? Number(value).toLocaleString() : value);
+
+/** An argument's value for a person: a whole number grouped, a path as its file's name. */
+const readable = (value: string): string => fileName(grouped(value));
+
 /** A row's arguments as its value: one argument's value (or its flag), several as `flag value` pairs. */
 export function argsValue(args: LaunchArg[]): string {
-  if (args.length === 1) return args[0].value == null ? args[0].flag : fileName(args[0].value);
-  return args.map((a) => (a.value == null ? a.flag : `${a.flag} ${fileName(a.value)}`)).join(' · ');
+  if (args.length === 1) return args[0].value == null ? args[0].flag : readable(args[0].value);
+  return args.map((a) => (a.value == null ? a.flag : `${a.flag} ${readable(a.value)}`)).join(' · ');
+}
+
+/** The narration's label for a row: the same key, but templates are narrated as `flags`. */
+const narratedAs = (key: string) => (key === 'templates' ? 'flags' : key);
+
+/** What the narration says of a row's decision, in Rust's words; `null` when it says nothing. */
+export function narrated(narration: LaunchNarration | null | undefined, key: string): string | null {
+  const said = narration?.decisions.find((d) => d.label === narratedAs(key));
+  return said ? grouped(said.value) : null;
 }
 
 /** What a hover says of a row: whose each choice was, and why. */

@@ -20,6 +20,7 @@ import { Input } from '../../components/ui/Input';
 import { useToastContext } from '../../contexts/ToastContext';
 import { openUrl } from '../../services/platform';
 import type { GgufModel, ModelDetail } from '../../types';
+import { cn } from '../../utils/cn';
 import { parseDbTimestamp } from '../../utils/dbTimestamp';
 import { formatError } from '../../utils/errors';
 import { UNKNOWN, formatSize, getHuggingFaceUrl } from '../../utils/format';
@@ -57,13 +58,22 @@ const When: FC<{ at: string; before?: string }> = ({ at, before }) => {
   return <span title={date.toLocaleString()}>{`${before ?? ''}${days.format(ago, 'day')}`}</span>;
 };
 
-/** A value that turns into a field on click and saves on Enter. */
-const Editable: FC<{ label: string; value: string; onSave: (value: string) => Promise<void>; mono?: boolean }> = ({ label, value, onSave, mono }) => {
+/**
+ * A value that turns into a field on click and saves on Enter. With
+ * `action`, the value stays as text and a separate link opens the field.
+ */
+const Editable: FC<{ label: string; value: string; onSave: (value: string) => Promise<void>; action?: string }> = ({ label, value, onSave, action }) => {
   const [draft, setDraft] = useState<string | null>(null);
   if (draft === null)
     return (
-      <Button variant="link" size="sm" className={mono ? 'font-mono text-xs font-normal text-text' : 'text-xs font-normal text-text'} onClick={() => setDraft(value)} aria-label={`Change ${label}`}>
-        {value || UNKNOWN}
+      <Button
+        variant="link"
+        size="sm"
+        className={cn('h-auto justify-start p-0 text-left text-xs font-normal', action ? 'text-text-secondary' : 'text-text')}
+        onClick={() => setDraft(value)}
+        aria-label={`Change ${label}`}
+      >
+        {action ?? (value || UNKNOWN)}
       </Button>
     );
   return (
@@ -94,14 +104,18 @@ interface DetailsProps {
   detail: ModelDetailState;
   loaded: boolean;
   onUpdateModel: Update;
+  /** A saved field or tag may change the launch: read it again. */
+  onChanged: () => void;
 }
 
-export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel }) => {
+export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel, onChanged }) => {
   const { showToast } = useToastContext();
   const [open, setOpen] = useState(remembered);
   const d: ModelDetail | null = detail.modelDetail?.id === model.id ? detail.modelDetail : null;
   const save = (updates: Parameters<Update>[1]) =>
-    onUpdateModel(model.id, updates).catch((err: unknown) => showToast(formatError(err), 'error'));
+    onUpdateModel(model.id, updates)
+      .then(onChanged)
+      .catch((err: unknown) => showToast(formatError(err), 'error'));
   const repo = getHuggingFaceUrl(model.hfRepoId);
   const metadata = Object.entries(d?.metadata ?? {}).sort(([a], [b]) => a.localeCompare(b));
   const speed = model.benchmarkSummary?.best_tg_tps;
@@ -123,10 +137,13 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
       <dl className="mt-sm grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-md gap-y-sm">
         <Item label="File">
           <span className="flex items-start gap-xs">
-            <Editable label="path" mono value={model.filePath} onSave={(filePath) => save({ filePath })} />
+            <span className="min-w-0 flex-1 break-all text-left font-mono">{model.filePath}</span>
             <CopyValue value={model.filePath} label="Copy the path" onCopied={() => showToast('Copied the path', 'success')} />
           </span>
-          {model.sizeBytes > 0 && <span className="block text-text-secondary">{formatSize(model.sizeBytes)}</span>}
+          <span className="flex items-baseline gap-sm text-text-secondary">
+            {model.sizeBytes > 0 && formatSize(model.sizeBytes)}
+            <Editable label="path" action="Change path…" value={model.filePath} onSave={(filePath) => save({ filePath })} />
+          </span>
         </Item>
         {(model.hfRepoId || d?.revision || d?.downloadDate) && (
           <Item label="Source">
@@ -158,7 +175,13 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
         {model.architecture && <Item label="Architecture">{model.architecture}</Item>}
         {model.contextLength != null && <Item label="Trained context">{tokens(model.contextLength)}</Item>}
         <Item label="Tags">
-          <Tags tags={detail.tags} draft={detail.newTagInput} onDraft={detail.setNewTagInput} onAdd={() => void detail.addTag()} onRemove={(tag) => void detail.removeTag(tag)} />
+          <Tags
+            tags={detail.tags}
+            draft={detail.newTagInput}
+            onDraft={detail.setNewTagInput}
+            onAdd={() => void detail.addTag().then(onChanged)}
+            onRemove={(tag) => void detail.removeTag(tag).then(onChanged)}
+          />
         </Item>
         <Item label="Abilities">
           <Abilities modelId={model.id} capabilities={d?.capabilities} onChanged={() => void detail.reload()} onError={(m) => showToast(m, 'error')} />

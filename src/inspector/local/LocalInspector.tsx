@@ -13,7 +13,7 @@
  * @module inspector/local/LocalInspector
  */
 
-import { useEffect, useState, type FC } from 'react';
+import { useCallback, useEffect, useState, type FC } from 'react';
 import { useNavigate } from 'react-router';
 import { MoreHorizontal, X } from 'lucide-react';
 import { paths } from '../../app/paths';
@@ -94,7 +94,14 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
   const install = useEngineInstall();
   const sd = useSdStatus(draws);
   const sdMissing = draws && sd.status?.installed === false;
-  const retag = useRetagModel({ modelId: model.id, reload: detail.reload, showToast, confirm });
+  // Tags decide flags (`agent` templates, `mtp` drafting), so a retag reads the launch again too.
+  const { reload: reloadDetail } = detail;
+  const { reload: reloadExplain } = explain;
+  const afterRetag = useCallback(async () => {
+    await reloadDetail();
+    void reloadExplain();
+  }, [reloadDetail, reloadExplain]);
+  const retag = useRetagModel({ modelId: model.id, reload: afterRetag, showToast, confirm });
 
   const serve = useServeModal(model.id);
   const tagged = (tag: string) => detail.tags.some((t) => t.toLowerCase() === tag);
@@ -165,68 +172,71 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
 
   return (
     <div className="flex flex-col gap-lg p-md">
-      <div className="flex flex-col gap-xs">
-        <div className="flex items-center gap-xs">
-          <h2 className="m-0 min-w-0 truncate text-base font-semibold text-text">{model.name}</h2>
-          {model.openaiId !== null && (
-            <CopyValue value={model.openaiId} label={`Copy the Model ID ${model.openaiId}`} onCopied={copied(model.openaiId)} />
-          )}
-          <span className="flex-1" />
-          <Menu iconOnly name="More" label={<Icon icon={MoreHorizontal} size={14} />} items={items} />
-          <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={() => navigate(paths.library())}>
-            <Icon icon={X} size={14} />
-          </Button>
+      {/* The name and the main actions stay in view while the rest scrolls (IN-1). */}
+      <div className="sticky top-0 z-10 -mx-md -mt-md flex flex-col gap-sm bg-surface px-md pb-sm pt-md">
+        <div className="flex flex-col gap-xs">
+          <div className="flex items-center gap-xs">
+            <h2 className="m-0 min-w-0 truncate text-base font-semibold text-text">{model.name}</h2>
+            {model.openaiId !== null && (
+              <CopyValue value={model.openaiId} label={`Copy the Model ID ${model.openaiId}`} onCopied={copied(model.openaiId)} />
+            )}
+            <span className="flex-1" />
+            <Menu iconOnly name="More" label={<Icon icon={MoreHorizontal} size={14} />} items={items} />
+            <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={() => navigate(paths.library())}>
+              <Icon icon={X} size={14} />
+            </Button>
+          </div>
+          <p className="m-0 text-xs text-text-secondary tabular-nums">{modelFacts(model).filter(Boolean).join(' · ')}</p>
+          {loaded && <StatusMark kind={RESIDENCY_MARK[state]} word={RESIDENCY_WORDS[state]} className="text-xs" />}
+          {fit && <p className="m-0 text-sm text-text">{fit}</p>}
         </div>
-        <p className="m-0 text-xs text-text-secondary tabular-nums">{modelFacts(model).filter(Boolean).join(' · ')}</p>
-        {loaded && <StatusMark kind={RESIDENCY_MARK[state]} word={RESIDENCY_WORDS[state]} className="text-xs" />}
-        {fit && <p className="m-0 text-sm text-text">{fit}</p>}
-      </div>
 
-      <div className="flex flex-col gap-sm">
-        <div className="flex items-center gap-sm">
-          {loaded ? (
-            <>
-              <Button onClick={() => navigate(paths.chat(model.id))}>Chat</Button>
-              <Button variant="secondary" onClick={load.unload} isLoading={load.busy === 'unload'}>
-                Unload
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button onClick={load.load} isLoading={load.busy === 'load' || installing} disabled={sdMissing || load.busy !== null}>
-                {load.needsLlama ? 'Install llama.cpp' : 'Load'}
-              </Button>
-              {!draws && (
-                <Button variant="secondary" onClick={load.loadForChat} isLoading={load.busy === 'chat'} disabled={load.busy !== null || installing}>
-                  Chat
+        <div className="flex flex-col gap-sm">
+          <div className="flex items-center gap-sm">
+            {loaded ? (
+              <>
+                <Button onClick={() => navigate(paths.chat(model.id))}>Chat</Button>
+                <Button variant="secondary" onClick={load.unload} isLoading={load.busy === 'unload'}>
+                  Unload
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={load.load} isLoading={load.busy === 'load' || installing} disabled={sdMissing || load.busy !== null}>
+                  {load.needsLlama ? 'Install llama.cpp' : 'Load'}
+                </Button>
+                {!draws && (
+                  <Button variant="secondary" onClick={load.loadForChat} isLoading={load.busy === 'chat'} disabled={load.busy !== null || installing}>
+                    Chat
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+          {installing && <InstallProgress progress={install.progress} />}
+          {sdMissing && (
+            <p className="m-0 flex items-center gap-sm text-xs text-text-secondary">
+              Drawing needs stable-diffusion.cpp.
+              {onOpenSystemSettings && (
+                <Button variant="link" size="sm" className="text-xs font-normal" onClick={onOpenSystemSettings}>
+                  Install
                 </Button>
               )}
-            </>
+            </p>
+          )}
+          {load.error && (
+            <p role="alert" className="m-0 flex items-baseline gap-xs text-xs text-text">
+              <StatusMark kind="failed" label="Failed" />
+              {`${load.error.action === 'unload' ? "Didn't unload" : "Didn't load"}: ${load.error.message}`}
+            </p>
+          )}
+          {model.openaiId !== null && (
+            <p className="m-0 flex items-center gap-xs text-xs text-text-secondary">
+              Model ID <code className="font-mono text-text">{model.openaiId}</code>
+              <CopyValue value={model.openaiId} label="Copy the Model ID" onCopied={copied(model.openaiId)} />
+            </p>
           )}
         </div>
-        {installing && <InstallProgress progress={install.progress} />}
-        {sdMissing && (
-          <p className="m-0 flex items-center gap-sm text-xs text-text-secondary">
-            Drawing needs stable-diffusion.cpp.
-            {onOpenSystemSettings && (
-              <Button variant="link" size="sm" className="text-xs font-normal" onClick={onOpenSystemSettings}>
-                Install
-              </Button>
-            )}
-          </p>
-        )}
-        {load.error && (
-          <p role="alert" className="m-0 flex items-baseline gap-xs text-xs text-text">
-            <StatusMark kind="failed" label="Failed" />
-            {`Didn't load: ${load.error}`}
-          </p>
-        )}
-        {model.openaiId !== null && (
-          <p className="m-0 flex items-center gap-xs text-xs text-text-secondary">
-            Model ID <code className="font-mono text-text">{model.openaiId}</code>
-            <CopyValue value={model.openaiId} label="Copy the Model ID" onCopied={copied(model.openaiId)} />
-          </p>
-        )}
       </div>
 
       <HowItRuns
@@ -242,7 +252,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
         onChanged={changed}
       />
 
-      <Details model={model} detail={detail} loaded={loaded} onUpdateModel={onUpdateModel} />
+      <Details model={model} detail={detail} loaded={loaded} onUpdateModel={onUpdateModel} onChanged={() => void explain.reload()} />
 
       {serve.showServeModal && (
         <ServeModal

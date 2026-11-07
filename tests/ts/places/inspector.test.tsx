@@ -32,6 +32,8 @@ const transport = vi.hoisted(() => ({
   getDownloadQueue: vi.fn(async () => null),
   listPairedModels: vi.fn(async () => null),
   getModelDetail: vi.fn(async () => null),
+  addModelTag: vi.fn(async (_id: number, _tag: string) => {}),
+  removeModelTag: vi.fn(async (_id: number, _tag: string) => {}),
 }));
 
 vi.mock('../../../src/services/transport', async () => {
@@ -88,6 +90,7 @@ import type { LaunchPlan } from '../../../src/types/generated/LaunchPlan';
 import { renderApp } from './harness';
 import { guiModel } from '../fixtures/model';
 import { chatPlan, launchExplanation, samplingExplanation } from '../fixtures/explain';
+import { resolvedConfig } from '../fixtures/inference';
 import { rust } from '../contracts/rustSource';
 
 const GEMMA = guiModel({ id: 9, name: 'Gemma-3-4B-It', openaiId: 'Gemma-3-4B-It', quantization: 'Q4_K_M', imageInput: true });
@@ -99,6 +102,15 @@ function renderInspector(model = GEMMA, path = `/models/${model.id}`) {
 }
 
 const inspector = () => screen.getByRole('complementary', { name: 'Inspector' });
+
+/** The one update sent, its absent keys dropped. */
+const sentUpdate = () => {
+  expect(transport.updateModel).toHaveBeenCalledTimes(1);
+  return Object.fromEntries(Object.entries(transport.updateModel.mock.calls[0][0]).filter(([, v]) => v !== undefined));
+};
+
+/** `chatPlan` without its templates flag: a model gglib takes no Jinja position on. */
+const noJinja = () => chatPlan({ args: chatPlan().args.filter((a) => a.decision !== 'templates') });
 const row = (label: string) => within(inspector()).getByRole('group', { name: label });
 
 /** A clock past every write an earlier test left in the server registry, which orders writes by time. */
@@ -152,7 +164,7 @@ describe('the inspector, a model on this machine', () => {
     renderInspector();
     await screen.findByRole('group', { name: 'Context' });
 
-    expect(within(row('Context')).getByText(/^32768/)).toHaveAttribute(
+    expect(within(row('Context')).getByText(/^32,768/)).toHaveAttribute(
       'title',
       'gglib: the largest rung that fits beside the weights on this machine',
     );
@@ -243,7 +255,7 @@ describe('the inspector, a model on this machine', () => {
     expect(await within(await screen.findByRole('complementary', { name: 'Inspector' })).findByText(RESIDENCY_WORDS.working)).toBeInTheDocument();
     const ran = await screen.findByRole('region', { name: 'How it ran' });
     expect(within(ran).getByText('as launched')).toBeInTheDocument();
-    expect(within(within(ran).getByRole('group', { name: 'Context' })).getByText('32768')).toHaveAttribute('title', 'fitted to hardware');
+    expect(within(within(ran).getByRole('group', { name: 'Context' })).getByText('32,768')).toHaveAttribute('title', 'fitted to hardware');
     expect(within(within(ran).getByRole('group', { name: 'KV cache' })).getByText('q8_0')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Launch line')).not.toBeInTheDocument();
@@ -341,5 +353,163 @@ describe('the inspector, a model on this machine', () => {
     act(() => install.onEvent?.({ type: 'completed' }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(JSON.stringify(post.mock.calls[0][1])).toBe('{"id":9,"mlock":false}');
+  });
+
+  it("says each row in the narration's words where it has them, keeping the arguments' why", async () => {
+    const plan = chatPlan({
+      narration: {
+        model_name: 'Gemma-3-4B-It', quantization: 'Q4_K_M', weights_bytes: 1,
+        decisions: [
+          { label: 'ctx', value: '32768', source: 'fitted to hardware' },
+          { label: 'kv', value: 'q8_0 -> 9.6 GiB, f16 would be 18.0 GiB', source: 'default' },
+          { label: 'flags', value: '--jinja (agent tag)', source: null },
+        ],
+      },
+    });
+    explain.answer = launchExplanation(samplingExplanation(), plan);
+    renderInspector();
+    await screen.findByRole('group', { name: 'Context' });
+
+    expect(within(row('KV cache')).getByText('q8_0 -> 9.6 GiB, f16 would be 18.0 GiB')).toHaveAttribute(
+      'title',
+      'gglib: q8_0 halves the KV cache at no measured cost',
+    );
+    expect(within(row('Templates')).getByText('--jinja (agent tag)')).toBeInTheDocument();
+    expect(within(row('Context')).getByText(/^32,768 · fits/)).toBeInTheDocument();
+    // A row the narration says nothing of reads its arguments.
+    expect(within(row('Images')).getByText('mmproj-F16.gguf')).toBeInTheDocument();
+  });
+
+  it('draws Templates as Auto when gglib sends no flag, and Change saves On with the stored rest', async () => {
+    explain.answer = launchExplanation(samplingExplanation(), noJinja());
+    renderInspector(guiModel({ ...GEMMA, serverDefaults: { contextLength: 16384 } }));
+    const user = userEvent.setup();
+    await screen.findByRole('group', { name: 'Templates' });
+
+    expect(within(row('Templates')).getByText('Auto')).toBeInTheDocument();
+    expect(row('Templates')).not.toHaveTextContent('set by you');
+    await user.click(within(row('Templates')).getByRole('button', { name: 'Change Templates' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Templates' }), 'On');
+
+    await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, serverDefaults: { contextLength: 16384, jinja: true } }));
+  });
+
+  it('keeps Speculative turned off in view, set by you, and Reset and Change keep the stored rest', async () => {
+    explain.answer = launchExplanation(samplingExplanation(), noJinja());
+    renderInspector(guiModel({ ...GEMMA, serverDefaults: { contextLength: 16384, mtp: false } }));
+    const user = userEvent.setup();
+    await screen.findByRole('group', { name: 'Speculative' });
+
+    expect(within(row('Speculative')).getByText('Off')).toBeInTheDocument();
+    await user.click(within(row('Speculative')).getByRole('button', { name: 'Reset' }));
+    await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, serverDefaults: { contextLength: 16384, mtp: null } }));
+
+    transport.updateModel.mockClear();
+    await user.click(within(row('Speculative')).getByRole('button', { name: 'Change Speculative' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Speculative' }), 'On');
+    await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, serverDefaults: { contextLength: 16384, mtp: true } }));
+  });
+
+  it('saves a sampling value added in place, with the stored values kept', async () => {
+    const stored = resolvedConfig({ temperature: 0.7, reasoningEffort: 'high' });
+    renderInspector(guiModel({ ...GEMMA, inferenceDefaults: stored }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Change Sampling' }));
+    // Only the set field is drawn until one is added.
+    expect(screen.getByLabelText('Temperature')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Top K')).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Add a value' }), 'Top K');
+    await user.type(screen.getByLabelText('Top K'), '40');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, inferenceDefaults: { ...stored, topK: 40 } }));
+  });
+
+  it('saves a reasoning value added in place, with the stored values kept', async () => {
+    const stored = resolvedConfig({ temperature: 0.7 });
+    renderInspector(guiModel({ ...GEMMA, inferenceDefaults: stored }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Change Reasoning' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Add a value' }), 'Reasoning Budget');
+    await user.type(screen.getByLabelText('Reasoning Budget'), '512');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, inferenceDefaults: { ...stored, reasoningBudgetTokens: 512 } }));
+  });
+
+  it("resets the sampling values you set and leaves the reasoning ones", async () => {
+    explain.answer = launchExplanation(samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'modelUserSet' }] }), chatPlan());
+    renderInspector(guiModel({ ...GEMMA, inferenceDefaults: resolvedConfig({ topP: 0.9, reasoningEffort: 'high' }) }));
+    await screen.findByRole('group', { name: 'Sampling' });
+    await userEvent.setup().click(within(row('Sampling')).getByRole('button', { name: 'Reset' }));
+
+    await waitFor(() => expect(transport.updateModel).toHaveBeenCalledTimes(1));
+    const sent = transport.updateModel.mock.calls[0][0].inferenceDefaults as Record<string, unknown>;
+    expect(sent).not.toHaveProperty('topP');
+    expect(sent.reasoningEffort).toBe('high');
+  });
+
+  it('says a failed unload as an unload', async () => {
+    transport.stopServer.mockRejectedValueOnce(new Error('the daemon went away'));
+    serve();
+    renderInspector();
+    const aside = await screen.findByRole('complementary', { name: 'Inspector' });
+    await userEvent.setup().click(await within(aside).findByRole('button', { name: 'Unload' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Didn't unload: the daemon went away");
+  });
+
+  it('reads the launch again after a tag is added or the path changed in Details', async () => {
+    localStorage.setItem('gglib.inspector.details', 'open');
+    renderInspector();
+    const user = userEvent.setup();
+    await screen.findByRole('group', { name: 'Context' });
+    let reads = explain.reads;
+    await user.type(screen.getByRole('textbox', { name: 'Add a tag' }), 'agent{Enter}');
+    await waitFor(() => expect(transport.addModelTag).toHaveBeenCalledWith(9, 'agent'));
+    await waitFor(() => expect(explain.reads).toBeGreaterThan(reads));
+
+    reads = explain.reads;
+    await user.click(screen.getByRole('button', { name: 'Change path' }));
+    const field = screen.getByRole('textbox', { name: 'path' });
+    await user.clear(field);
+    await user.type(field, '/models/other.gguf{Enter}');
+    await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, filePath: '/models/other.gguf' }));
+    await waitFor(() => expect(explain.reads).toBeGreaterThan(reads));
+  });
+
+  it('reads the launch again after the tags are re-detected', async () => {
+    renderInspector();
+    const user = userEvent.setup();
+    await screen.findByRole('group', { name: 'Context' });
+    const reads = explain.reads;
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Re-detect tags' }));
+
+    await waitFor(() => expect(post.mock.calls.map(([path]) => path)).toContain('/api/models/9/retag'));
+    await waitFor(() => expect(explain.reads).toBeGreaterThan(reads));
+  });
+
+  it('draws nothing of How it runs before the answer, and says it is unavailable when there is none', async () => {
+    explain.answer = null;
+    renderInspector();
+    expect(await screen.findByText('How this model would load is unavailable.')).toBeInTheDocument();
+    cleanup();
+
+    explain.answer = new Promise(() => {});
+    renderInspector();
+    await screen.findByRole('button', { name: 'Load' });
+    expect(screen.queryByRole('region', { name: 'How it runs' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the name and the main actions in view, and draws Remove as a danger', async () => {
+    renderInspector();
+    const user = userEvent.setup();
+    expect((await screen.findByRole('button', { name: 'Load' })).closest('.sticky')).toContainElement(
+      screen.getByRole('heading', { name: 'Gemma-3-4B-It' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: 'Remove from library…' })).toHaveClass('text-danger');
+    expect(screen.getByRole('menuitem', { name: 'Verify files' })).not.toHaveClass('text-danger');
   });
 });
