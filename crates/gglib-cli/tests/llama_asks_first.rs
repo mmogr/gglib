@@ -14,6 +14,7 @@ mod stub_tools;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant};
 
 /// `gglib <args>` over `root` with nothing on its `PATH`, and with `typed` on
 /// its standard input, or the end of input when there is none.
@@ -22,12 +23,13 @@ fn gglib(root: &Path, args: &[&str], typed: Option<&str>) -> Output {
     gglib_on(nothing.path(), root, args, typed)
 }
 
-/// [`gglib`] with `path` as its whole `PATH`.
-fn gglib_on(path: &Path, root: &Path, args: &[&str], typed: Option<&str>) -> Output {
-    let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_gglib"))
+/// `gglib <args>` over `root`, run in `dir`, with `path` as its whole `PATH`
+/// and its output captured.
+fn gglib_command(path: &Path, root: &Path, dir: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_gglib"));
+    command
         .args(args)
-        .current_dir(elsewhere.path())
+        .current_dir(dir)
         .env_clear()
         .env("PATH", path)
         .env("HOME", root)
@@ -37,9 +39,16 @@ fn gglib_on(path: &Path, root: &Path, args: &[&str], typed: Option<&str>) -> Out
         .env("HTTPS_PROXY", "http://127.0.0.1:9")
         .env("HTTP_PROXY", "http://127.0.0.1:9")
         .env("ALL_PROXY", "http://127.0.0.1:9")
-        .stdin(typed.map_or_else(Stdio::null, |_| Stdio::piped()))
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    command
+}
+
+/// [`gglib`] with `path` as its whole `PATH`.
+fn gglib_on(path: &Path, root: &Path, args: &[&str], typed: Option<&str>) -> Output {
+    let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
+    let mut child = gglib_command(path, root, elsewhere.path(), args)
+        .stdin(typed.map_or_else(Stdio::null, |_| Stdio::piped()))
         .spawn()
         .expect("starting gglib");
     if let Some(typed) = typed {
@@ -68,7 +77,7 @@ fn install(root: &Path) {
 }
 
 /// `gglib serve` once took the end of input for a yes and started a build
-/// nobody had agreed to.
+/// nobody had agreed to. With no terminal it now asks nothing at all.
 #[test]
 fn serve_with_no_llama_and_nobody_to_ask_installs_nothing() {
     let root = tempfile::tempdir().unwrap();
@@ -82,16 +91,65 @@ fn serve_with_no_llama_and_nobody_to_ask_installs_nothing() {
         "{}",
         text(&out)
     );
-    assert!(stdout.contains(" it now? (Y/n): "), "{}", text(&out));
+    assert!(
+        !stdout.contains("(Y/n)"),
+        "nobody was asked: {}",
+        text(&out)
+    );
     assert!(
         !stdout.contains("Checking build dependencies"),
         "no build was started: {}",
         text(&out)
     );
     assert!(
-        String::from_utf8_lossy(&out.stderr).contains(
-            "llama.cpp is required to run this command. Run 'gglib config llama install' manually."
-        ),
+        String::from_utf8_lossy(&out.stderr).contains(NO_TERMINAL_REFUSAL),
+        "{}",
+        text(&out)
+    );
+    assert!(!root.path().join(".llama").exists(), "{}", text(&out));
+}
+
+/// What a command that needs llama.cpp says when it is missing and there is
+/// no terminal to ask.
+const NO_TERMINAL_REFUSAL: &str = "Not running in a terminal, so there is nobody to ask whether \
+     to install llama.cpp. llama.cpp is required to run this command. Run 'gglib config llama \
+     install' manually.";
+
+/// A stdin that is a pipe nobody writes to and nobody closes, as a
+/// backgrounded shell gives, is not read: the offer once waited on it
+/// forever, and `gglib model load` hung before asking the daemon anything.
+#[test]
+fn serve_with_a_silent_open_stdin_refuses_at_once() {
+    let root = tempfile::tempdir().unwrap();
+    let nothing = tempfile::tempdir().unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let mut child = gglib_command(
+        nothing.path(),
+        root.path(),
+        elsewhere.path(),
+        &["serve", "any-model"],
+    )
+    .stdin(Stdio::piped())
+    .spawn()
+    .expect("starting gglib");
+    // Held open, and never written to, until gglib is done.
+    let stdin = child.stdin.take().expect("its standard input");
+
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while child.try_wait().expect("polling gglib").is_none() {
+        if Instant::now() >= deadline {
+            child.kill().expect("stopping gglib");
+            let out = child.wait_with_output().expect("reaping gglib");
+            panic!("gglib waited on a stdin nobody writes to: {}", text(&out));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    drop(stdin);
+    let out = child.wait_with_output().expect("running gglib");
+
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains(NO_TERMINAL_REFUSAL),
         "{}",
         text(&out)
     );
