@@ -184,7 +184,10 @@ mod tests {
     #[test]
     fn hide_inspector_is_always_offered() {
         for inspected in [Inspected::Nothing, Inspected::Idle, Inspected::Served] {
-            assert!(is_enabled(ids::HIDE_INSPECTOR, state(Endpoint::Off, inspected)));
+            assert!(is_enabled(
+                ids::HIDE_INSPECTOR,
+                state(Endpoint::Off, inspected)
+            ));
         }
     }
 

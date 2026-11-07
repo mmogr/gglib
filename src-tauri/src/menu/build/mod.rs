@@ -1,5 +1,4 @@
-//! Menu construction: one file per submenu, assembled here in the order
-//! macOS shows them — gglib, File, Edit, View, Model, Endpoint, Window, Help.
+#![doc = include_str!("README.md")]
 
 mod app;
 mod endpoint;
