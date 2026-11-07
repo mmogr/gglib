@@ -155,6 +155,8 @@ fn profiles_use_camel_case_on_the_wire() {
         max_download_queue_size: None,
         max_tool_iterations: None,
         max_stagnation_steps: None,
+        max_parallel_tools: None,
+        tool_timeout_ms: None,
         default_model_id: None,
         default_image_model_id: None,
         inference_defaults: None,

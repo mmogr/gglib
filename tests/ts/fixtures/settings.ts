@@ -20,6 +20,8 @@ const UNSET: AppSettings = {
   maxDownloadQueueSize: null,
   maxToolIterations: null,
   maxStagnationSteps: null,
+  maxParallelTools: null,
+  toolTimeoutMs: null,
   defaultModelId: null,
   defaultImageModelId: null,
   inferenceDefaults: null,

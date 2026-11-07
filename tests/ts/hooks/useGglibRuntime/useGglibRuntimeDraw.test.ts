@@ -20,9 +20,6 @@ import { waitFor } from '@testing-library/react';
 vi.mock('../../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
-vi.mock('../../../../src/services/tools', () => ({
-  getToolRegistry: () => ({ getEnabledDefinitions: () => [], getBackendName: (n: string) => n }),
-}));
 
 import { FakeDaemon } from '../../fixtures/fakeDaemon';
 import { FakeFarDaemon } from '../../fixtures/fakeFarDaemon';

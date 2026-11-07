@@ -12,6 +12,15 @@ import type { LoopGuardMode } from "./LoopGuardMode";
  */
 export type AppSettings = { defaultContextSize: number | null, proxyPort: number | null, llamaBasePort: number | null, maxDownloadQueueSize: number | null, maxToolIterations: number | null, maxStagnationSteps: number | null, 
 /**
+ * Tool calls an agent run makes at once where its chat names none.
+ */
+maxParallelTools: number | null, 
+/**
+ * How long one tool call may take, in milliseconds, where its chat
+ * names none.
+ */
+toolTimeoutMs: number | null, 
+/**
  * Default model ID for quick commands (e.g., `gglib question`).
  */
 defaultModelId: number | null, 

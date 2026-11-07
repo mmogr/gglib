@@ -59,7 +59,7 @@ crates/gglib-axum/tests/integration_routes.rs 1066
 crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320
 crates/gglib-cli/src/commands.rs 379
-crates/gglib-cli/src/config_commands/settings_args.rs 307
+crates/gglib-cli/src/config_commands/settings_args.rs 313
 crates/gglib-cli/src/daemon_client/calls.rs 384
 crates/gglib-cli/src/daemon_client/images.rs 321
 crates/gglib-cli/src/daemon_client/images_tests.rs 466
@@ -173,7 +173,7 @@ crates/gglib-core/src/services/model_verification_remote.rs 482
 crates/gglib-core/src/settings.rs 686
 crates/gglib-core/src/settings_remote.rs 303
 crates/gglib-core/src/settings_remote_tests.rs 325
-crates/gglib-core/src/settings_tests.rs 540
+crates/gglib-core/src/settings_tests.rs 558
 crates/gglib-core/src/sse/parser.rs 781
 crates/gglib-core/src/utils/system/packages.rs 586
 crates/gglib-db/src/loop_guard_trip_writer_tests.rs 302

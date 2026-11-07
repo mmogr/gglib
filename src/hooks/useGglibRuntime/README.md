@@ -175,8 +175,10 @@ A turn names no limit, no tool filter and no reasoning control: the daemon
 takes the conversation's saved settings (`PUT /api/conversations/{id}`),
 then this machine's stored ones, then its defaults, as it does for a paired
 device's turn, so a turn runs the same whichever client sent it. The
-composer's Tools ▸ › Agent limits… sheet and its tool checklist are not
-read by any turn until D6 (`feat(gui)/chat-settings-saved`) saves them as the
-conversation's or this machine's settings.
+composer's Tools ▸ saves the chat's tools as they change
+(`useChatTools`); a chat not yet made has its choice saved by the send that
+makes it, before its turn starts (`tools`). The agent limits are Settings ›
+Tools', and the reasoning effort and budget Settings › Models › Sampling
+defaults'.
 
 <!-- module-docs:end -->

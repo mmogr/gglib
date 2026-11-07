@@ -23,7 +23,7 @@ import type { HubChat } from '../../../../src/types/generated/HubChat';
 import type { ModelInfo } from '../../../../src/types/generated/ModelInfo';
 import type { ModelRef } from '../../../../src/types/generated/ModelRef';
 import type { Thinking } from '../../../../src/types/generated/Thinking';
-import { agentRun, chatTransport, conversation, plusButton, plusItem, plusSubmenu, wrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, plusButton, plusItem, wrapper, type ChatFixture } from './chatPlaceHarness';
 import { FAR_FINGERPRINT, farEntry, pairedModels } from '../../fixtures/fakeFarDaemon';
 import { guiModel } from '../../fixtures/model';
 import type { GgufModel } from '../../../../src/types';
@@ -38,7 +38,6 @@ vi.mock('../../../../src/services/transport', async () => {
 
 import { ChatPlaceWithList as ChatPlace } from './chatPlaceHarness';
 
-const OVERRIDES_KEY = 'gglib.chat.agentOverrides';
 const ON_TITLE = 'Thinking is on for this chat. Click to switch it off from the next message.';
 const OFF_TITLE = 'Thinking is off for this chat. Click to switch it back on from the next message.';
 
@@ -159,12 +158,6 @@ async function answered(fn: { mock: { results: Array<{ value: unknown }> } }) {
 
 const composer = () => screen.getByRole('textbox', { name: 'Message' });
 
-/** Open the agent limits: `[+]` › Tools ▸ › Agent limits…. */
-async function openLimits(user: ReturnType<typeof userEvent.setup>) {
-  const tools = await plusSubmenu(user, 'Tools');
-  await user.click(within(tools).getByRole('menuitem', { name: 'Agent limits…' }));
-  await screen.findByRole('dialog', { name: 'Agent limits' });
-}
 /** The composer an element is in: its form. */
 const rowOf = (element: HTMLElement) => element.closest('form') as HTMLElement;
 /** The switch, in the composer; null when the page draws none. */
@@ -306,13 +299,11 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     expect(chip()).toHaveAttribute('aria-checked', 'false');
   });
 
-  it('says off on the send after a click and never again, then default once after a click back, and no device-wide effort or budget on any send', async () => {
+  it('says off on the send after a click and never again, then default once after a click back, and is the only reasoning control a send carries', async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(OVERRIDES_KEY, JSON.stringify({ reasoningEffort: 'high', reasoningBudgetTokens: 2048 }));
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
     await waitFor(() => expect(chip()).toBeInTheDocument());
-    // The device-wide budget says nothing of this chat: the switch shows on.
     expect(chip()).toHaveAttribute('aria-checked', 'true');
 
     expect(Object.keys(await exchange(user, 'one'))).not.toContain('thinking');
@@ -331,7 +322,7 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     expect(chip()).toHaveAttribute('aria-checked', 'true');
 
     expect(started).toHaveLength(5);
-    // The Agent limits sheet's effort and budget no longer travel: D6 saves them as settings.
+    // No effort or budget travels: they are Settings › Models › Sampling defaults'.
     for (const request of started) {
       expect(request.conversation_id).toBe(1);
       expect(Object.keys(request)).not.toContain('reasoning_effort');
@@ -534,30 +525,6 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     expect(Object.keys(await exchange(user, 'two'))).not.toContain('thinking');
     expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(fixture.conversations.find((c) => c.id === 1)?.settings?.thinking).toBe('off');
-  });
-
-  it("asks for the model's template support when the agent limits first open, and shows a note in place of the effort dropdown where the template reads none", async () => {
-    const user = userEvent.setup();
-    const page = pageTransport();
-    page.getModelDetail = vi.fn(async () => ({ reasoningEffortSupport: 'no' }));
-    transport.current = page;
-    renderLocal();
-    await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toBeInTheDocument());
-    expect(page.getModelDetail).not.toHaveBeenCalled();
-
-    await openLimits(user);
-    expect(page.getModelDetail).toHaveBeenCalledTimes(1);
-    expect(page.getModelDetail).toHaveBeenCalledWith(7);
-    expect(await screen.findByText(/template does not declare reasoning effort/)).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Reasoning Effort' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Reasoning budget')).toBeInTheDocument();
-
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    await openLimits(user);
-    expect(screen.getByText(/template does not declare reasoning effort/)).toBeInTheDocument();
-    expect(page.getModelDetail).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -769,14 +736,5 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
     await openFar();
     expect(chip()).not.toBeInTheDocument();
     expect((await farExchange(user, 'one'))[4]).toBeUndefined();
-  });
-
-  it('asks this machine nothing about a template for the agent limits, which say where the effort level applies', async () => {
-    const user = userEvent.setup();
-    await openFar();
-    await openLimits(user);
-    expect(screen.getByRole('combobox', { name: 'Reasoning Effort' })).toBeInTheDocument();
-    expect(screen.getByText('Applies to models whose template declares reasoning effort; others ignore it.')).toBeInTheDocument();
-    expect(stub().getModelDetail).not.toHaveBeenCalled();
   });
 });

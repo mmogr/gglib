@@ -20,6 +20,7 @@ Current application settings:
   llama-base-port          9300
   loop-guard-mode          None
   max-download-queue-size  None
+  max-parallel-tools       None
   max-stagnation-steps     None
   max-tool-iterations      None
   mcp-drawing              None (off)
@@ -37,6 +38,7 @@ Current application settings:
   start-at-login           None
   title-generation-prompt  None
   tool-call-repair         None
+  tool-timeout-ms          None
   trust-client-sampling    None
 
   Inference Defaults
@@ -75,6 +77,10 @@ gglib config settings reveal proxy-api-key  # a stored secret, alone on stdout
   `--cache-disk-gb` override them for one run; the desktop app and the
   tray follow them, and `up` binds loopback by name. A stored budget
   outranks `GGLIB_CACHE_DISK_GB`, as the flag does.
+- `max-parallel-tools` and `tool-timeout-ms` are how many tool calls an
+  agent run makes at once and how long one may take, for every daemon turn
+  whose chat saved none of its own; the desktop app sets them under
+  Settings › Tools › Agent limits.
 
 ## `default`
 

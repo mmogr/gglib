@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use gglib_core::Settings;
 use gglib_core::domain::ModelRef;
-use gglib_core::domain::agent::{AgentConfig, AgentMessage, TurnLimits};
+use gglib_core::domain::agent::{AgentConfig, AgentMessage, ToolLimits, TurnLimits};
 
 /// User-facing configuration for a single agent chat request.
 ///
@@ -38,11 +38,15 @@ pub(crate) struct AgentRequestConfig {
     /// Maximum number of tool calls dispatched in parallel per iteration.
     /// Clamped to [`MAX_PARALLEL_TOOLS_CEILING`](gglib_core::domain::agent::config::MAX_PARALLEL_TOOLS_CEILING)
     /// server-side.
+    /// `None` (field absent) is the stored `max_parallel_tools` setting, and
+    /// the built-in default when none is stored.
     pub max_parallel_tools: Option<usize>,
 
     /// Per-tool execution timeout in milliseconds.
     /// Clamped to [`MAX_TOOL_TIMEOUT_MS_CEILING`](gglib_core::domain::agent::config::MAX_TOOL_TIMEOUT_MS_CEILING)
     /// server-side.
+    /// `None` (field absent) is the stored `tool_timeout_ms` setting, and
+    /// the built-in default when none is stored.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub tool_timeout_ms: Option<u64>,
 
@@ -83,16 +87,19 @@ impl AgentRequestConfig {
     ///
     /// An omitted `max_iterations` is the stored `max_tool_iterations`: a
     /// conversation's saved limit is put in its place before this is called.
+    /// An omitted `max_parallel_tools` or `tool_timeout_ms` is the stored
+    /// setting of that name, by the same rule ([`ToolLimits::resolve`]).
     /// `max_stagnation_steps` comes from the settings alone, not the
     /// request: it stays a server-side knob, consistent with this DTO's
     /// "safe subset" policy of not exposing internal strike limits to
     /// untrusted callers.
     pub(crate) fn into_agent_config(self, settings: Option<&Settings>) -> AgentConfig {
         let limits = TurnLimits::resolve(self.max_iterations, settings);
+        let tools = ToolLimits::resolve(self.max_parallel_tools, self.tool_timeout_ms, settings);
         AgentConfig::from_user_params(
             Some(limits.max_iterations),
-            self.max_parallel_tools,
-            self.tool_timeout_ms,
+            tools.max_parallel_tools,
+            tools.tool_timeout_ms,
             self.observation_tools,
             self.max_observation_steps,
             limits.max_stagnation_steps,

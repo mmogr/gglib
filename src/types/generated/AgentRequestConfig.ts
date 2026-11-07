@@ -33,12 +33,16 @@ max_iterations: number | null,
  * Maximum number of tool calls dispatched in parallel per iteration.
  * Clamped to [`MAX_PARALLEL_TOOLS_CEILING`](gglib_core::domain::agent::config::MAX_PARALLEL_TOOLS_CEILING)
  * server-side.
+ * `None` (field absent) is the stored `max_parallel_tools` setting, and
+ * the built-in default when none is stored.
  */
 max_parallel_tools: number | null, 
 /**
  * Per-tool execution timeout in milliseconds.
  * Clamped to [`MAX_TOOL_TIMEOUT_MS_CEILING`](gglib_core::domain::agent::config::MAX_TOOL_TIMEOUT_MS_CEILING)
  * server-side.
+ * `None` (field absent) is the stored `tool_timeout_ms` setting, and
+ * the built-in default when none is stored.
  */
 tool_timeout_ms: number | null, 
 /**

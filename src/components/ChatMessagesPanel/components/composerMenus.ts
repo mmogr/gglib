@@ -12,6 +12,7 @@ import type { DrawSwitch } from '../../../hooks/useDrawSwitch';
 import type { ImageInput } from '../../../hooks/useImageInput';
 import type { ImageModelRow } from '../../../types/generated/ImageModelRow';
 import type { ToolDefinition } from '../../../services/tools';
+import type { ChatTools } from '../../../hooks/useChatTools';
 import { componentRoleLabel, imageFamilyLabel } from '../../../utils/imageFamily';
 import { folderOffer } from './FolderChip';
 
@@ -115,47 +116,44 @@ export function toolLabel(name: string): string {
     .join(' ');
 }
 
-/** What the tools registry is asked and told, for the checklist. */
-export interface ToolsChecklist {
-  tools: ToolDefinition[];
-  isEnabled: (name: string) => boolean;
-  /** Switch the named tools on or off. */
-  set: (names: string[], on: boolean) => void;
+/** A tool the checklist lists: the registry's definition, and the name the daemon knows it by. */
+export interface ListedTool {
+  definition: ToolDefinition;
+  name: string;
 }
 
 /**
- * Tools ▸: for a model that cannot call tools, the line that says so;
- * otherwise Enable all, Disable all and one box per tool the registry
- * holds, built-in and MCP alike. "Agent limits…" ends it either way.
+ * Tools ▸, the chat's saved tools as a checklist: none on a far chat, whose
+ * tools are its machine's; for a model that cannot call tools, the line
+ * that says so; otherwise Enable all, Disable all and one box per tool the
+ * registry lists, built-in and MCP alike, each ticked as the chat saved it
+ * (`useChatTools`), and each change saved with the chat.
  */
 export function toolsItem(
-  list: ToolsChecklist,
+  listed: readonly ListedTool[],
+  chat: ChatTools | undefined,
   supportsToolCalls: boolean | null | undefined,
   toolFormat: string | null | undefined,
-  openLimits: () => void,
-): MenuItem {
-  const limits: MenuItem = { label: 'Agent limits…', onPick: openLimits, gapBefore: true };
+): MenuItem | null {
+  if (!chat) return null;
   const title = supportsToolCalls && toolFormat ? `This model calls tools (${toolFormat} format).` : undefined;
-  if (supportsToolCalls === false) return { label: 'Tools', submenu: [{ label: CANT_CALL_TOOLS, note: true }, limits] };
-  const names = list.tools.map((tool) => tool.function.name);
-  if (names.length === 0) return { label: 'Tools', title, submenu: [{ label: 'No tools registered', note: true }, limits] };
-  const on = names.filter(list.isEnabled);
+  if (supportsToolCalls === false) return { label: 'Tools', submenu: [{ label: CANT_CALL_TOOLS, note: true }] };
+  if (listed.length === 0) return { label: 'Tools', title, submenu: [{ label: 'No tools registered', note: true }] };
+  const names = listed.map((tool) => tool.name);
   const submenu: MenuItem[] = [
-    { label: 'Enable all', toggles: true, disabled: on.length === names.length, onPick: () => list.set(names, true) },
-    { label: 'Disable all', toggles: true, disabled: on.length === 0, onPick: () => list.set(names, false) },
-    ...list.tools.map((tool, index) => {
-      const name = tool.function.name;
-      const enabled = list.isEnabled(name);
+    { label: 'Enable all', toggles: true, disabled: chat.every, onPick: () => chat.all(true) },
+    { label: 'Disable all', toggles: true, disabled: chat.none, onPick: () => chat.all(false) },
+    ...listed.map(({ definition, name }, index) => {
+      const ticked = chat.ticked(name);
       return {
-        label: toolLabel(name),
-        title: tool.function.description || undefined,
-        checked: enabled,
+        label: toolLabel(definition.function.name),
+        title: definition.function.description || undefined,
+        checked: ticked,
         toggles: true,
         gapBefore: index === 0,
-        onPick: () => list.set([name], !enabled),
+        onPick: () => chat.toggle(name, !ticked, names),
       };
     }),
-    limits,
   ];
   return { label: 'Tools', title, submenu };
 }

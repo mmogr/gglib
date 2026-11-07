@@ -24,7 +24,7 @@ pub use config::{
     MIN_TOOL_TIMEOUT_MS,
 };
 pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent, WaitingFor};
-pub use limits::TurnLimits;
+pub use limits::{ToolLimits, TurnLimits};
 pub use loop_detection::results::{batch_results_hash, hash_result_content, hash_result_text};
 pub use loop_detection::{
     BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,

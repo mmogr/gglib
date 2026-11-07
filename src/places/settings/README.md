@@ -35,8 +35,11 @@ is the terminal's and shows as on with a line saying so. The image model
 choice lists only models that draw, keeping a stored id that is not one.
 
 Tools' tool servers are `tools/` (its own README): a row each and one
-sheet to add and edit, over one list (ST-8). "This device" under Agent
-limits is the chat's per-device `AgentLimitsSection`.
+sheet to add and edit, over one list (ST-8). Agent limits are this
+machine's, for every agent run on it: Max tool rounds, Max stuck steps,
+Parallel tool calls and Tool timeout, the last two outranked by a chat's
+own where it saved one. There are no per-device limits. A reasoning effort
+and budget are Models › Sampling defaults'.
 
 
 | File | Role |
@@ -45,7 +48,7 @@ limits is the chat's per-device `AgentLimitsSection`.
 | `GeneralSection.tsx` | Start the endpoint when gglib launches; in the desktop app only, Start gglib at login and Keep running in the menu bar when the window closes |
 | `EndpointSection.tsx` | Port, the API key, Bind address (the endpoint's), Allowed hosts (`hostsText`/`hostsFrom`), the prompt cache on disk and its budget, Model servers start at; What gglib does to requests: Repair broken tool calls, Stop runaway loops (with its trips), Cap sampling on agent runs, Let clients set sampling |
 | `ModelsSection.tsx` | The models folder, Download queue size, Context for models without their own, Model for gglib q, Image model for drawing (`imageChoices`), Sampling defaults, Profiles |
-| `ToolsSection.tsx` | The tool servers (`tools/`, over the one `useMcpServers`), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, This device), Title prompt with Reset, the "Learn more about MCP" footnote |
+| `ToolsSection.tsx` | The tool servers (`tools/`, over the one `useMcpServers`), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, Parallel tool calls, Tool timeout (ms)), Title prompt with Reset, the "Learn more about MCP" footnote |
 | `tools/` | The tool server rows and their add and edit sheet: its own README |
 | `EnginesSection.tsx` | A row for llama.cpp and for stable-diffusion.cpp, then Faster downloads |
 | `AboutSection.tsx` | The build, Documentation (the native Help menu's address), and Stop gglib… asked first, then held as Stopping gglib… until the window's service-not-running screen takes over (`app/ServiceDown`); a refusal in the daemon's words |
@@ -75,7 +78,9 @@ on.", "Takes effect when gglib next starts.", "Takes effect when the desktop
 app next starts.", "A new key takes effect within a few seconds. A cleared
 key stops being required when the endpoint next turns on."; "Saved." / "Undo"; "Asking gglib" and "Couldn't read the
 settings: <the daemon's words>"; "What gglib does to requests", "Agent
-limits", "This device", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
+limits", "Parallel tool calls", "Tool timeout (ms)", "How many tool calls an
+agent run makes at once.", "How long one tool call may take before it is
+stopped.", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
 request is answered with a 400."; the API key's "Set", "Replace", "Clear",
 "Cancel", "The new key", "none", the Show/Hide/Copy labels, "Copied" beside
 Copy (`components/CopyValue`) and the copy's failures, "Replace the API key?" with "Clients that send the

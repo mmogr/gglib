@@ -15,10 +15,11 @@ import {
   imageItem,
   toolLabel,
   toolsItem,
-  type ToolsChecklist,
+  type ListedTool,
 } from '../../../src/components/ChatMessagesPanel/components/composerMenus';
 import type { ChatFolder } from '../../../src/hooks/useChatFolder';
 import type { DrawSwitch } from '../../../src/hooks/useDrawSwitch';
+import type { ChatTools } from '../../../src/hooks/useChatTools';
 import type { ImageModelRow } from '../../../src/types/generated/ImageModelRow';
 import { loadingReplyOf } from '../../../src/components/ChatMessagesPanel/hooks/useModelLoadWait';
 
@@ -51,14 +52,26 @@ const draw = (over: Partial<DrawSwitch> = {}): DrawSwitch => ({
   ...over,
 });
 
-const checklist = (names: string[], enabled: string[] = []) => ({
-  tools: names.map((name) => ({
-    type: 'function' as const,
-    function: { name, description: `does ${name}`, parameters: { type: 'object' as const, properties: {} } },
-  })),
-  isEnabled: (name: string) => enabled.includes(name),
-  set: vi.fn((_names: string[], _on: boolean) => {}),
-}) satisfies ToolsChecklist;
+/** The registry's tools, each named to the daemon as a built-in. */
+const listed = (names: string[]): ListedTool[] =>
+  names.map((name) => ({
+    definition: {
+      type: 'function' as const,
+      function: { name, description: `does ${name}`, parameters: { type: 'object' as const, properties: {} } },
+    },
+    name: `builtin:${name}`,
+  }));
+
+/** The chat's saved tools: `ticked` by daemon name, every one or none. */
+const chat = (ticked: string[], over: Partial<ChatTools> = {}): ChatTools => ({
+  ticked: (name) => ticked.includes(name),
+  every: false,
+  none: false,
+  toggle: vi.fn(),
+  all: vi.fn(),
+  forCreate: () => undefined,
+  ...over,
+});
 
 describe('imageItem', () => {
   it('is offered for a model that reads images while it is loaded, and adds one when picked', () => {
@@ -138,47 +151,51 @@ describe('drawItem', () => {
 });
 
 describe('toolsItem', () => {
+  it('is not offered on a far chat, whose tools are its machine\'s', () => {
+    expect(toolsItem(listed(['read_file']), undefined, true, null)).toBeNull();
+  });
+
   it("says the model can't call tools, and offers no checklist, for a model that cannot", () => {
-    const sub = toolsItem(checklist(['read_file']), false, null, vi.fn()).submenu!;
-    expect(sub.map((item) => item.label)).toEqual([CANT_CALL_TOOLS, 'Agent limits…']);
-    expect(sub[0].note).toBe(true);
+    const sub = toolsItem(listed(['read_file']), chat([]), false, null)!.submenu!;
+    expect(sub).toEqual([{ label: "This model can't call tools", note: true }]);
+    expect(CANT_CALL_TOOLS).toBe("This model can't call tools");
   });
 
   it('is the checklist where whether it can is not yet known, and names the format where it can', () => {
-    expect(toolsItem(checklist(['read_file']), null, null, vi.fn()).submenu!.map((item) => item.label)).toEqual([
+    expect(toolsItem(listed(['read_file']), chat([]), null, null)!.submenu!.map((item) => item.label)).toEqual([
       'Enable all',
       'Disable all',
       'Read File',
-      'Agent limits…',
     ]);
-    expect(toolsItem(checklist(['read_file']), true, 'hermes', vi.fn()).title).toBe('This model calls tools (hermes format).');
-    expect(toolsItem(checklist(['read_file']), null, 'hermes', vi.fn()).title).toBeUndefined();
+    expect(toolsItem(listed(['read_file']), chat([]), true, 'hermes')!.title).toBe('This model calls tools (hermes format).');
+    expect(toolsItem(listed(['read_file']), chat([]), null, 'hermes')!.title).toBeUndefined();
   });
 
-  it('ticks each tool on and off, leaving the menu open, and greys Enable all or Disable all where it would do nothing', () => {
-    const list = checklist(['get_current_time', 'read_file'], ['read_file']);
-    const [enable, disable, time, read] = toolsItem(list, true, null, vi.fn()).submenu!;
+  it('ticks each tool as the chat saved it, and a pick toggles it by its daemon name among every listed tool', () => {
+    const saved = chat(['builtin:read_file']);
+    const [enable, disable, time, read] = toolsItem(listed(['get_current_time', 'read_file']), saved, true, null)!.submenu!;
     expect([enable.disabled, disable.disabled]).toEqual([false, false]);
     expect([time.checked, read.checked, time.toggles, read.toggles]).toEqual([false, true, true, true]);
     time.onPick!();
-    expect(list.set).toHaveBeenLastCalledWith(['get_current_time'], true);
+    expect(saved.toggle).toHaveBeenLastCalledWith('builtin:get_current_time', true, ['builtin:get_current_time', 'builtin:read_file']);
     read.onPick!();
-    expect(list.set).toHaveBeenLastCalledWith(['read_file'], false);
+    expect(saved.toggle).toHaveBeenLastCalledWith('builtin:read_file', false, ['builtin:get_current_time', 'builtin:read_file']);
     enable.onPick!();
-    expect(list.set).toHaveBeenLastCalledWith(['get_current_time', 'read_file'], true);
+    expect(saved.all).toHaveBeenLastCalledWith(true);
+    disable.onPick!();
+    expect(saved.all).toHaveBeenLastCalledWith(false);
+  });
 
-    const all = toolsItem(checklist(['a', 'b'], ['a', 'b']), true, null, vi.fn()).submenu!;
-    expect([all[0].disabled, all[1].disabled]).toEqual([true, false]);
-    const none = toolsItem(checklist(['a', 'b']), true, null, vi.fn()).submenu!;
+  it('greys Enable all where every tool is, and Disable all where none is', () => {
+    const every = toolsItem(listed(['a', 'b']), chat(['builtin:a', 'builtin:b'], { every: true }), true, null)!.submenu!;
+    expect([every[0].disabled, every[1].disabled]).toEqual([true, false]);
+    const none = toolsItem(listed(['a', 'b']), chat([], { none: true }), true, null)!.submenu!;
     expect([none[0].disabled, none[1].disabled]).toEqual([false, true]);
   });
 
-  it('says so where no tool is registered, and always ends with Agent limits…', () => {
-    const open = vi.fn();
-    const sub = toolsItem(checklist([]), true, null, open).submenu!;
-    expect(sub.map((item) => item.label)).toEqual(['No tools registered', 'Agent limits…']);
-    sub[1].onPick!();
-    expect(open).toHaveBeenCalledTimes(1);
+  it('says so where no tool is registered', () => {
+    const sub = toolsItem([], chat([]), true, null)!.submenu!;
+    expect(sub).toEqual([{ label: 'No tools registered', note: true }]);
   });
 
   it('names a tool as words: get_current_time is "Get Current Time"', () => {

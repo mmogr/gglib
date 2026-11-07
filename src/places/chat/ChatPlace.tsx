@@ -23,6 +23,7 @@ import { useImageInput } from '../../hooks/useImageInput';
 import { useThinkingSwitch } from '../../hooks/useThinkingSwitch';
 import { useDrawSwitch } from '../../hooks/useDrawSwitch';
 import { useChatFolder } from '../../hooks/useChatFolder';
+import { useChatTools } from '../../hooks/useChatTools';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { refreshChats, useChats } from '../../services/chatRegistry';
@@ -176,6 +177,10 @@ export default function ChatPlace(props: ChatPlaceProps) {
   // pressed, the next send says so, and that send alone.
   const draw = useDrawSwitch({ conversationId: activeConversationId, far, paired: paired?.far, supportsToolCalls, refresh: settings?.defaultImageModelId });
 
+  // The tools its runs may call, saved with the chat as Tools ▸ ticks them;
+  // a chat not yet made saves its choice as its first send makes it.
+  const tools = useChatTools({ conversationId: activeConversationId, conversations, far, onError: (sentence) => showToast(sentence, 'error') });
+
   // Runtime: sends start runs the daemon owns and saves; opening a
   // conversation shows what is saved, then the run still going in it.
   const { runtime, isLoading: messageLoading, endedRun, previews, timingTracker, currentStreamingAssistantMessageId, branching } = useGglibRuntime({
@@ -197,6 +202,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
     thinking: thinking.forSend,
     folder: folder.forSend,
     draw: draw.forSend,
+    tools: tools?.forCreate,
     onFarOpened: setFarOpen,
   });
 
@@ -278,6 +284,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
           folder={folder}
           branching={far ? undefined : branching}
           draw={draw}
+          tools={tools}
           previews={previews}
           deskName={paired?.machineName ?? desk?.machineName}
           modelGone={modelGone}
