@@ -29,11 +29,17 @@ that holds state built from events reads that state again on
 `onEventStreamOpen`. `services/downloadsEvents` does, and forgets the last
 queue `revision` it took, since a restarted daemon numbers its snapshots from 1.
 
+While the daemon is gone the reconnect wait doubles up to 30 s. A reader that
+knows the daemon is back (the tray's poll) calls `reconnectEventStreamNow()`
+to connect at once rather than sleep out that wait. Each start of the loop
+owns its abort controller, so a loop stopped while it slept ends when it
+wakes, beside whatever a later start set going: one stream.
+
 ## Key Files
 
 | File | Role |
 |------|------|
-| `sse.ts` | Single SSE connection with reconnect and subscriber demultiplexing; its `subscribeSseEvent` and `onEventStreamOpen` are the event bus `getTransport()` hands out |
+| `sse.ts` | Single SSE connection with reconnect and subscriber demultiplexing; its `subscribeSseEvent`, `onEventStreamOpen` and `reconnectEventStreamNow` are the event bus `getTransport()` hands out |
 | `backoff.ts` | The wait before a reconnection: doubling, capped, with jitter |
 | `open.ts` | The signal that the stream opened, for listeners that re-read state |
 | `category.ts` | Wire-tag → category routing; a tag with no arm here is dropped silently |

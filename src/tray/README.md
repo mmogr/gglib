@@ -30,7 +30,10 @@ answer (`hooks/useDaemonReachable`, polled), the panel says so in one
 sentence and Start gglib is drawn disabled, since only the tray menu can
 start the service. The registries let go of what the daemon said when it
 goes, and each is read again when the poll hears it (a list read replaces
-the running set, so a model that died with the old daemon is not drawn).
+the running set, so a model that died with the old daemon is not drawn),
+and the event stream connects at once instead of sleeping out a reconnect
+wait that grew while the daemon was gone. A list read that failed, or that an
+event overtook, is tried again each poll until one lands.
 Before the first answer, and until the proxy's read has landed, the panel
 claims neither, and the footer has no Turn on or Turn off.
 Everything here is HTTP except Open gglib, the panel's one window action:

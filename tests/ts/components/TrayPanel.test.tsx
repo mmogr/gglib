@@ -34,7 +34,12 @@ vi.mock('../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('../../../src/services/transport');
   return {
     ...actual,
-    getTransport: () => ({ ...transport, subscribe: vi.fn(() => () => {}), onEventStreamOpen: vi.fn(() => () => {}) }),
+    getTransport: () => ({
+      ...transport,
+      subscribe: vi.fn(() => () => {}),
+      onEventStreamOpen: vi.fn(() => () => {}),
+      reconnectEventStreamNow: vi.fn(),
+    }),
   };
 });
 vi.mock('../../../src/services/clients/proxyDashboard', () => ({
@@ -162,6 +167,19 @@ describe('the tray panel', () => {
       await user.click(copyKey);
       expect(await within(endpoint()).findByRole('alert')).toHaveTextContent('clipboard refused');
       expect(within(endpoint()).queryByText('Copied')).not.toBeInTheDocument();
+    });
+
+    it('a key copy that works clears the failure before it', async () => {
+      transport.revealSecret.mockImplementation(async () => 'k3y-5f3a');
+      const { user } = await renderTray({ ...UP, key: 'required' });
+      vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error('clipboard refused'));
+      const copyKey = within(endpoint()).getByRole('button', { name: 'Copy key' });
+      await waitFor(() => expect(copyKey).toBeEnabled());
+      await user.click(copyKey);
+      await within(endpoint()).findByRole('alert');
+      await user.click(copyKey);
+      expect(await within(endpoint()).findByText('Copied')).toBeInTheDocument();
+      expect(within(endpoint()).queryByRole('alert')).not.toBeInTheDocument();
     });
 
     it('up before the status has said where (Connecting): the mark turns, and no address is drawn', async () => {

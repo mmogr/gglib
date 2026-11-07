@@ -38,6 +38,7 @@ vi.mock('../../../src/services/transport', async () => {
       ...transport,
       subscribe: events.real ? sse.subscribeSseEvent : vi.fn(() => () => {}),
       onEventStreamOpen: vi.fn(() => () => {}),
+      reconnectEventStreamNow: events.real ? sse.reconnectEventStreamNow : vi.fn(),
     }),
   };
 });
@@ -229,5 +230,66 @@ describe('the tray panel while the daemon comes and goes', () => {
     for (let i = 0; i < 6; i++) await poll();
 
     expect(open()).toBe(1);
+  });
+
+  it('after a long outage, connects the stream as soon as the daemon answers, not after its reconnect wait', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    Object.assign(events, { real: true, up: false });
+    transport.getProxyStatus.mockImplementation(async () => DOWN);
+    const open = () => events.streams.filter((signal) => !signal.aborted).length;
+
+    // Ten polls of a stream that cannot connect: its waits have grown to
+    // 16 s (0.5 + 1 + 2 + 4 + 8 = 15.5 s, then 16 s more), so it sleeps on.
+    render(<TrayPanel />);
+    await screen.findByRole('region', { name: 'Endpoint' });
+    for (let i = 0; i < 10; i++) await poll();
+    expect(open()).toBe(0);
+
+    transport.getProxyStatus.mockImplementation(gone);
+    await poll();
+    await screen.findByText(NOT_RUNNING);
+
+    // Back, eleven seconds before that wait would end.
+    events.up = true;
+    transport.getProxyStatus.mockImplementation(async () => DOWN);
+    await poll();
+    await screen.findByRole('region', { name: 'Endpoint' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(open()).toBe(1);
+  });
+
+  it('reads the list again each poll until one read lands, and only then says what is loaded', async () => {
+    transport.getProxyStatus.mockImplementation(async () => DOWN);
+    transport.listServers.mockRejectedValueOnce(new Error('list refused')).mockImplementation(async () => []);
+    render(<TrayPanel />);
+    await screen.findByRole('region', { name: 'Endpoint' });
+    await waitFor(() => expect(transport.listServers).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Nothing loaded/)).not.toBeInTheDocument();
+
+    await poll();
+    expect(await screen.findByText('Nothing loaded.')).toBeInTheDocument();
+    expect(transport.listServers).toHaveBeenCalledTimes(2);
+    // Heard: no more reads for the list's sake.
+    await poll();
+    await poll();
+    expect(transport.listServers).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the remote status again on a recovery, so Devices comes back with the daemon', async () => {
+    transport.getProxyStatus.mockImplementation(async () => DOWN);
+    render(<TrayPanel />);
+    await screen.findByRole('region', { name: 'Devices' });
+
+    transport.getProxyStatus.mockImplementation(gone);
+    await poll();
+    await screen.findByText(NOT_RUNNING);
+    expect(screen.queryByRole('region', { name: 'Devices' })).not.toBeInTheDocument();
+
+    transport.getProxyStatus.mockImplementation(async () => DOWN);
+    await poll();
+    expect(await screen.findByRole('region', { name: 'Devices' })).toBeInTheDocument();
+    expect(transport.getRemoteStatus).toHaveBeenCalledTimes(2);
   });
 });

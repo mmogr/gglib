@@ -11,15 +11,15 @@
  */
 
 import { createApiTransport } from './api';
-import { onEventStreamOpen, subscribeSseEvent } from './events/sse';
+import { onEventStreamOpen, reconnectEventStreamNow, subscribeSseEvent } from './events/sse';
 
 /**
  * The event bus: the one SSE stream, subscribed to by category. There is one
  * stream and nothing to construct, so this is the two functions themselves;
- * callers reach them as `getTransport().subscribe` and
- * `getTransport().onEventStreamOpen`.
+ * callers reach them as `getTransport().subscribe`,
+ * `getTransport().onEventStreamOpen` and `getTransport().reconnectEventStreamNow`.
  */
-const events = { subscribe: subscribeSseEvent, onEventStreamOpen };
+const events = { subscribe: subscribeSseEvent, onEventStreamOpen, reconnectEventStreamNow };
 
 /**
  * What `getTransport()` hands back: the HTTP client and the event bus, spread

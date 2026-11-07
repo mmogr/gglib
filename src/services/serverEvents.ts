@@ -27,15 +27,15 @@ import {
   normalizeServerSnapshotFromList,
 } from './serverEvents.normalize';
 
-// The ordering is `bridgeEvents`'s: subscribe first, then fetch the list, and
-// drop a list that a live event or a cleanup overtook. No `reset`: this
-// registry keeps what it holds across a cleanup.
 /**
  * Whether the list has been read since the registry was last told to forget
  * it: the difference between no servers running and not knowing yet.
  */
 const listHeard = createEventStore(false);
 
+// The ordering is `bridgeEvents`'s: subscribe first, then fetch the list, and
+// drop a list that a live event or a cleanup overtook. No `reset`: this
+// registry keeps what it holds across a cleanup.
 const bridge = bridgeEvents({
   category: 'server',
   onEvent: (payload) => {
