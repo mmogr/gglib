@@ -64,7 +64,7 @@ fn main() {
             setup_app(app);
 
             // After the tray exists, so the report arrives alongside the
-            // Start gglib Service entry that acts on it.
+            // Start gglib entry that acts on it.
             if let Some(e) = startup_failure {
                 tray::report_failure(app.handle(), "gglib is not running", &e);
             }

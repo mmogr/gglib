@@ -3,6 +3,8 @@
 //! Pure: parsing and derivation only, no `AppHandle` and no I/O, so every rule
 //! below is testable without a running daemon or a running app.
 
+use gglib_core::domain::EndpointState;
+use serde::Deserialize;
 use serde_json::Value;
 
 /// A point-in-time reading of the daemon.
@@ -26,12 +28,23 @@ pub(crate) struct DaemonSnapshot {
     /// left over from an earlier run cannot make a stopped proxy look
     /// reachable.
     pub proxy_port: Option<u16>,
-    /// Model ids with a live llama-server, ascending.
+    /// What the endpoint is doing, as the daemon says it (`state` on
+    /// `/api/proxy/status`): on, off or pinned. Off whenever `proxy_running`
+    /// is false, so the two cannot disagree.
+    pub endpoint: EndpointState,
+    /// The models with a live llama-server, by ascending id.
     ///
     /// Sorted on construction, and that is not tidiness: `GET /api/servers`
     /// makes no ordering promise, and an order that varied between polls would
     /// compare unequal every time and repaint the tray forever.
-    pub resident: Vec<i64>,
+    pub resident: Vec<Resident>,
+}
+
+/// One model with a live server: its id, and the name the tray says.
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Resident {
+    pub id: i64,
+    pub name: String,
 }
 
 impl DaemonSnapshot {
@@ -47,33 +60,32 @@ impl DaemonSnapshot {
             .and_then(Value::as_bool)
             .unwrap_or(false);
 
-        let mut resident: Vec<i64> = servers
+        let mut resident: Vec<Resident> = servers
             .as_array()
             .map(|entries| {
                 entries
                     .iter()
-                    .filter_map(|entry| entry.get("model_id").and_then(Value::as_i64))
+                    .filter_map(|entry| {
+                        let id = entry.get("model_id").and_then(Value::as_i64)?;
+                        let name = entry.get("model_name").and_then(Value::as_str);
+                        Some(Resident {
+                            id,
+                            name: name.unwrap_or_default().to_owned(),
+                        })
+                    })
                     .collect()
             })
             .unwrap_or_default();
         resident.sort_unstable();
-        resident.dedup();
+        resident.dedup_by_key(|r| r.id);
 
         Self {
             reachable: true,
             proxy_running,
             proxy_port: if proxy_running { port_of(proxy) } else { None },
+            endpoint: endpoint_of(proxy, proxy_running),
             resident,
         }
-    }
-
-    /// Whether gglib is consuming anything on this machine right now.
-    ///
-    /// The question a menu bar icon is actually asked. A resident model holds
-    /// VRAM whether or not the proxy is listening, so both count.
-    #[must_use]
-    pub(crate) fn is_active(&self) -> bool {
-        self.proxy_running || !self.resident.is_empty()
     }
 
     /// The OpenAI-compatible endpoint to hand to another client.
@@ -100,8 +112,23 @@ impl DaemonSnapshot {
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     #[must_use]
     pub(crate) fn serves(&self, model_id: i64) -> bool {
-        self.resident.binary_search(&model_id).is_ok()
+        self.resident
+            .binary_search_by_key(&model_id, |r| r.id)
+            .is_ok()
     }
+}
+
+/// The endpoint's state word, from the daemon's `state`; a daemon too old to
+/// send one is read from `running`, and a stopped proxy is always off.
+fn endpoint_of(proxy: &Value, running: bool) -> EndpointState {
+    if !running {
+        return EndpointState::Off;
+    }
+    proxy
+        .get("state")
+        .and_then(|state| EndpointState::deserialize(state).ok())
+        .filter(|state| *state != EndpointState::Off)
+        .unwrap_or(EndpointState::On)
 }
 
 /// The proxy's port, if it reported one that fits.
@@ -153,7 +180,57 @@ mod tests {
         );
 
         assert_eq!(first, second);
-        assert_eq!(first.resident, vec![2, 7]);
+        let ids: Vec<i64> = first.resident.iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec![2, 7]);
+    }
+
+    /// The tray says what is loaded by name, so the name rides along with
+    /// the id; an entry without one still counts as loaded.
+    #[test]
+    fn residents_keep_their_names() {
+        let snap = DaemonSnapshot::from_responses(
+            &json!({"running": false}),
+            &json!([{"model_id": 7, "model_name": "Qwen3-4B"}, {"model_id": 2}]),
+        );
+
+        let names: Vec<&str> = snap.resident.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, vec!["", "Qwen3-4B"]);
+    }
+
+    /// A model the server list names twice is one loaded model, or the tray
+    /// would say "2 models loaded" for one.
+    #[test]
+    fn a_model_listed_twice_is_loaded_once() {
+        let snap = DaemonSnapshot::from_responses(
+            &json!({"running": false}),
+            &json!([{"model_id": 7, "model_name": "Qwen3-4B"}, {"model_id": 7, "model_name": "Qwen3-4B"}]),
+        );
+
+        assert_eq!(snap.resident.len(), 1);
+    }
+
+    /// The endpoint's word is the daemon's own `state`, so a pinned run reads
+    /// as pinned; a stopped proxy is off whatever `state` says, and a daemon
+    /// that sends no `state` is read from `running`.
+    #[test]
+    fn the_endpoint_state_is_the_daemons_word() {
+        let state =
+            |proxy: serde_json::Value| DaemonSnapshot::from_responses(&proxy, &json!([])).endpoint;
+
+        assert_eq!(
+            state(json!({"running": true, "state": "pinned"})),
+            EndpointState::Pinned
+        );
+        assert_eq!(
+            state(json!({"running": true, "state": "on"})),
+            EndpointState::On
+        );
+        assert_eq!(state(json!({"running": true})), EndpointState::On);
+        assert_eq!(
+            state(json!({"running": false, "state": "on"})),
+            EndpointState::Off
+        );
+        assert_eq!(DaemonSnapshot::default().endpoint, EndpointState::Off);
     }
 
     /// A model resident with the proxy off is exactly the case the old

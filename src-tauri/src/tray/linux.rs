@@ -21,7 +21,7 @@ use tracing::{error, info};
 
 use crate::daemon::DaemonSnapshot;
 use crate::tray::icon::{self, TrayState};
-use crate::tray::items::{ITEMS, Item, is_enabled};
+use crate::tray::items::{ITEMS, Item, is_enabled, label};
 use crate::tray::placement::Anchor;
 use crate::tray::{handlers, ids, window};
 
@@ -42,18 +42,17 @@ impl Tray for GglibTray {
     }
 
     fn title(&self) -> String {
-        icon::derive(&self.snapshot).status
+        "gglib".to_owned()
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
         pixmap(icon::derive(&self.snapshot).state)
     }
 
+    /// No tooltip on Linux (XP-1): hosts differ on whether they show one at
+    /// all, so the status line on the menu is where the sentence is read.
     fn tool_tip(&self) -> ToolTip {
-        ToolTip {
-            title: icon::derive(&self.snapshot).status,
-            ..ToolTip::default()
-        }
+        ToolTip::default()
     }
 
     /// Left click: open the panel where the icon is.
@@ -78,27 +77,33 @@ impl Tray for GglibTray {
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
+        let status = icon::derive(&self.snapshot).status;
         ITEMS
             .iter()
-            .map(|item| match *item {
-                // Disabled: a label, not a command. It is the only place the
-                // endpoint is visible on Linux, where tooltips are unreliable.
-                Item::Status => StandardItem {
-                    label: icon::derive(&self.snapshot).status,
-                    enabled: is_enabled(ids::STATUS, &self.snapshot),
-                    ..StandardItem::default()
+            .map(|item| {
+                let text = label(item, &status, &self.snapshot).unwrap_or_default();
+                match *item {
+                    // Disabled: a label, not a command. With no tooltip here,
+                    // it is the only place the status is read on Linux.
+                    Item::Status => StandardItem {
+                        label: text,
+                        enabled: is_enabled(ids::STATUS, &self.snapshot),
+                        ..StandardItem::default()
+                    }
+                    .into(),
+                    Item::Action { id, .. } | Item::Switch { id, .. } => StandardItem {
+                        label: text,
+                        enabled: is_enabled(id, &self.snapshot),
+                        // Hands straight off; `dispatch` spawns anything slow,
+                        // as ksni requires of a menu callback.
+                        activate: Box::new(move |tray: &mut Self| {
+                            handlers::dispatch(&tray.app, id);
+                        }),
+                        ..StandardItem::default()
+                    }
+                    .into(),
+                    Item::Separator => MenuItem::Separator,
                 }
-                .into(),
-                Item::Action { id, label } => StandardItem {
-                    label: label.to_owned(),
-                    enabled: is_enabled(id, &self.snapshot),
-                    // Hands straight off; `dispatch` spawns anything slow, as
-                    // ksni requires of a menu callback.
-                    activate: Box::new(move |tray: &mut Self| handlers::dispatch(&tray.app, id)),
-                    ..StandardItem::default()
-                }
-                .into(),
-                Item::Separator => MenuItem::Separator,
             })
             .collect()
     }

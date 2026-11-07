@@ -1,32 +1,47 @@
 /**
- * The native menu, wired to the app from outside React.
+ * The native menus, wired to the app from outside React.
  *
- * The menu's items name places and actions: Settings, Add Model, Downloads,
- * Chat, Refresh, Start, Stop and Remove for the selected model. Navigation
- * goes through the router; a model action reads the model the address names
- * (`menuModelId`: the inspector's) and calls the
- * registries, the transport and the confirm store. The menu is told what is selected from the address too,
- * on every move, so its Start, Stop and Remove act on the model the page
- * shows. Nothing here needs a component to be mounted, which is what
- * retires the callback bridge the library page used to fill.
+ * A place is one `menu:navigate` event carrying a place id (`MENU_PLACES`):
+ * ⌘1–⌘4 the library, the endpoint, the devices and the latest chat (else an
+ * empty one), Settings… (the app menu's and the tray's), Diagnostics, New
+ * Chat, Get Models…, Add a GGUF File… and Connect a Client…, each turned
+ * into its address here and gone to through the router. The Model menu's
+ * Load, Load with Options…, Unload and Remove from Library… act on the model
+ * the inspector shows (`menuModelId`), with the inspector's own words; Hide
+ * Inspector closes it the way its × does. The menu is told what is selected
+ * from the address on every move, so it greys out what has nothing to act
+ * on. The endpoint's Turn On / Off is the menu's own, in Rust; its Copy
+ * arrives here only for the clipboard.
  *
- * The event names are pinned to the Rust that sends them by
+ * Off a Mac there is no menu bar, so Ctrl+N is a window key that starts a
+ * chat; on the desktop app on a Mac, File › New Chat ⌘N is the native item.
+ *
+ * The event names and place ids are pinned to the Rust that sends them by
  * `tests/ts/contracts/menuEvents.test.ts`.
  *
  * @module app/menuBridge
  */
 
 import type { ToastType } from '../components/Toast';
-import { refreshModels, removeModel } from '../services/modelEvents';
+import { removeModel } from '../services/modelEvents';
 import { getModelLibrary } from '../services/modelRegistry';
-import { appLogger, listenToMenuEvents, MENU_EVENTS, setSelectedModel, syncMenuStateSilent } from '../services/platform';
+import { chatsHere } from '../services/chatRegistry';
+import {
+  appLogger,
+  isDesktop,
+  listenToMenuEvents,
+  MENU_EVENTS,
+  MENU_PLACES,
+  setSelectedModel,
+  syncMenuStateSilent,
+  type MenuPlace,
+} from '../services/platform';
 import { safeStopServer } from '../services/server/safeActions';
-import { isServerRunning, runningModelIds } from '../services/serverRegistry';
+import { isServerRunning } from '../services/serverRegistry';
 import { getTransport } from '../services/transport';
 import { formatError } from '../utils/errors';
 import { confirm } from './confirm';
-import { chatPathOn } from './openChat';
-import { menuModelId, paths } from './paths';
+import { inspectorClosed, inspectorSubject, menuModelId, paths } from './paths';
 import { appRouter } from './router';
 
 export type Notify = (message: string, type?: ToastType) => void;
@@ -36,22 +51,73 @@ function selectedModelId(): number | null {
   return menuModelId(appRouter().state.location);
 }
 
+function nameOf(id: number): string {
+  return getModelLibrary().models.find((m) => m.id === id)?.name ?? 'this model';
+}
+
 function navigate(to: string): void {
   void appRouter().navigate(to);
 }
 
-/** Chat: on the selected model's server, else the first running, else nothing. */
-async function showChat(notify: Notify): Promise<void> {
-  const selected = selectedModelId();
-  const target = selected !== null && isServerRunning(selected) ? selected : runningModelIds()[0];
-  if (target === undefined) {
-    notify('No servers are currently running. Start a server first to use chat.', 'warning');
-    return;
+/** The latest chat kept here, else an empty one (which picks its model). */
+async function latestChat(): Promise<string> {
+  try {
+    const [latest] = await chatsHere();
+    return latest ? paths.chat(latest.id) : paths.newChat();
+  } catch {
+    return paths.newChat();
   }
-  navigate(await chatPathOn(target));
 }
 
-async function stopSelected(): Promise<void> {
+/** Where each place the menu names is. */
+const PLACES: Readonly<Record<MenuPlace, () => string | Promise<string>>> = {
+  library: () => paths.library(),
+  endpoint: () => paths.endpoint(),
+  devices: () => paths.devices(),
+  chat: latestChat,
+  'new-chat': () => paths.newChat(),
+  settings: () => paths.settings(),
+  // The sidebar's Diagnostics row goes here too.
+  diagnostics: () => paths.benchmarks(),
+  'get-models': () => paths.libraryAdd('browse'),
+  'add-file': () => paths.libraryAdd('add'),
+  'connect-client': () => paths.endpointConnect(),
+};
+
+function isPlace(place: string): place is MenuPlace {
+  return (MENU_PLACES as readonly string[]).includes(place);
+}
+
+async function goTo(place: string): Promise<void> {
+  if (!isPlace(place)) {
+    appLogger.warn('component.app', 'The menu named a place the app does not know', { place });
+    return;
+  }
+  navigate(await PLACES[place]());
+}
+
+/** Load: one click, the model's id and nothing else, as the inspector's Load. */
+async function loadSelected(notify: Notify): Promise<void> {
+  const selected = selectedModelId();
+  if (selected === null || isServerRunning(selected)) return;
+  try {
+    await getTransport().serveModel({ id: selected });
+  } catch (error) {
+    notify(`Could not load ${nameOf(selected)}: ${formatError(error)}`, 'error');
+    return;
+  }
+  syncMenuStateSilent();
+}
+
+/** Load with Options…: the inspector's sheet, beside whichever place shows it. */
+function loadWithOptions(): void {
+  const selected = selectedModelId();
+  if (selected === null) return;
+  const onEndpoint = appRouter().state.location.pathname === paths.endpoint();
+  navigate(onEndpoint ? paths.endpointServe(selected) : paths.serve(selected));
+}
+
+async function unloadSelected(): Promise<void> {
   const selected = selectedModelId();
   if (selected === null || !isServerRunning(selected)) return;
   await safeStopServer(selected);
@@ -61,10 +127,10 @@ async function stopSelected(): Promise<void> {
 async function removeSelected(notify: Notify): Promise<void> {
   const selected = selectedModelId();
   if (selected === null) return;
-  const name = getModelLibrary().models.find((m) => m.id === selected)?.name ?? 'this model';
+  const name = nameOf(selected);
   const confirmed = await confirm({
-    title: `Remove "${name}"?`,
-    description: 'This will not delete the model file from disk.',
+    title: `Remove ${name} from the library?`,
+    description: 'The file stays on disk.',
     confirmLabel: 'Remove',
     variant: 'danger',
   });
@@ -76,23 +142,23 @@ async function removeSelected(notify: Notify): Promise<void> {
     notify(`Could not remove ${name}: ${formatError(error)}`, 'error');
     return;
   }
-  if (selectedModelId() === selected) navigate(paths.library());
+  if (selectedModelId() === selected) navigate(inspectorClosed(appRouter().state.location));
   syncMenuStateSilent();
 }
 
-/** The handlers, one per event the menu sends. */
+function hideInspector(): void {
+  const location = appRouter().state.location;
+  if (inspectorSubject(location) !== null) navigate(inspectorClosed(location));
+}
+
+/** The handlers, one per event the menus send. */
 export function menuHandlers(notify: Notify) {
   return {
-    [MENU_EVENTS.OPEN_SETTINGS]: () => navigate(paths.settings()),
-    [MENU_EVENTS.ADD_MODEL_FILE]: () => navigate(paths.libraryAdd('add')),
-    [MENU_EVENTS.SHOW_DOWNLOADS]: () => navigate(paths.libraryAdd('browse')),
-    [MENU_EVENTS.SHOW_CHAT]: () => void showChat(notify),
-    [MENU_EVENTS.REFRESH_MODELS]: () => void refreshModels(),
-    [MENU_EVENTS.START_SERVER]: () => {
-      const selected = selectedModelId();
-      if (selected !== null) navigate(paths.serve(selected));
-    },
-    [MENU_EVENTS.STOP_SERVER]: () => void stopSelected(),
+    [MENU_EVENTS.NAVIGATE]: (place: string) => void goTo(place),
+    [MENU_EVENTS.HIDE_INSPECTOR]: hideInspector,
+    [MENU_EVENTS.LOAD_MODEL]: () => void loadSelected(notify),
+    [MENU_EVENTS.LOAD_WITH_OPTIONS]: loadWithOptions,
+    [MENU_EVENTS.UNLOAD_MODEL]: () => void unloadSelected(),
     [MENU_EVENTS.REMOVE_MODEL]: () => void removeSelected(notify),
     [MENU_EVENTS.COPY_TO_CLIPBOARD]: (payload: string) => {
       if (payload) {
@@ -101,30 +167,17 @@ export function menuHandlers(notify: Notify) {
         );
       }
     },
-    [MENU_EVENTS.PROXY_STOPPED]: async () => {
-      try {
-        await getTransport().stopProxy();
-        notify('Proxy stopped', 'success');
-      } catch (error) {
-        notify('Failed to stop proxy', 'error');
-        appLogger.error('component.app', 'Failed to stop proxy', { error });
-      }
-    },
-    [MENU_EVENTS.START_PROXY]: async () => {
-      try {
-        const status = await getTransport().startProxy();
-        notify(`Proxy started on port ${status.port}`, 'success');
-      } catch (error) {
-        notify('Failed to start proxy', 'error');
-        appLogger.error('component.app', 'Failed to start proxy', { error });
-      }
-    },
   };
+}
+
+/** Whether a native menu bar holds New Chat: the desktop app on a Mac. */
+function menuBarHasNewChat(): boolean {
+  return isDesktop() && /Mac|iPhone|iPad/.test(navigator.platform);
 }
 
 /**
  * Listen to the menu, and keep it told what is selected, until the returned
- * function is called. `notify` is where its proxy messages go.
+ * function is called. `notify` is where its failures are said.
  */
 export function startMenuBridge({ notify }: { notify: Notify }): () => void {
   let stopped = false;
@@ -147,21 +200,22 @@ export function startMenuBridge({ notify }: { notify: Notify }): () => void {
   tell();
   const unsubscribe = appRouter().subscribe(tell);
 
-  // ⌘N on a Mac, Ctrl+N elsewhere, starts a chat from anywhere (Ctrl+N is a
-  // Mac text field's next line). A window key, not a menu item: the native
-  // menu has no New Chat to send.
+  // Where no menu bar has New Chat, its key is the window's: ⌘N in a browser
+  // on a Mac, Ctrl+N elsewhere (Ctrl+N is a Mac text field's next line).
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   const onKey = (event: KeyboardEvent) => {
-    const command = /Mac|iPhone|iPad/.test(navigator.platform) ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+    const command = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
     if (!command || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'n') return;
     event.preventDefault();
     navigate(paths.newChat());
   };
-  window.addEventListener('keydown', onKey);
+  const keyed = !menuBarHasNewChat();
+  if (keyed) window.addEventListener('keydown', onKey);
 
   return () => {
     stopped = true;
     stopListening?.();
     unsubscribe();
-    window.removeEventListener('keydown', onKey);
+    if (keyed) window.removeEventListener('keydown', onKey);
   };
 }

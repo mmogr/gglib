@@ -4,6 +4,7 @@
 //! gglib is doing" to "what the icon looks like" is directly testable without
 //! a running Tauri application.
 
+use gglib_core::domain::ResidencyState;
 use tauri::image::Image;
 
 use crate::daemon::DaemonSnapshot;
@@ -11,39 +12,46 @@ use crate::daemon::DaemonSnapshot;
 /// Identifier the tray registers under.
 pub(super) const TRAY_ID: &str = "gglib";
 
-/// How much of the idle icon's opacity the offline icon keeps.
-const OFFLINE_OPACITY_PERCENT: u16 = 35;
+/// How much of the ring's opacity the outline icon keeps.
+const OUTLINE_OPACITY_PERCENT: u16 = 35;
 
-/// What the tray icon is saying.
+/// What the tray icon is saying: the endpoint, and whether anything is
+/// loaded behind it.
+///
+/// The spec draws an outline, a solid disc and a solid disc with a dot. Only
+/// two glyphs ship — the ring (`tray-idle.png`) and the ring with a dot
+/// (`tray-active.png`) — so until a solid asset exists, the ring faded stands
+/// for the outline and the plain ring for the solid disc. Three icons, told
+/// apart, none animated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TrayState {
-    /// No daemon answering: gglib is not running on this machine.
-    Offline,
-    /// A daemon is up but consuming nothing — no proxy, no resident models.
-    Idle,
-    /// Something is being served or held in memory.
-    Active,
+    /// gglib is not running, or its endpoint is off: clients cannot connect.
+    Outline,
+    /// The endpoint is on (or pinned) and nothing is loaded.
+    Solid,
+    /// The endpoint is on (or pinned) and at least one model is loaded.
+    SolidDot,
 }
 
-/// Decoded idle icon: a daemon that is up and doing nothing.
+/// The ring: the endpoint on, nothing loaded.
 pub(super) fn idle_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-idle.png"))
 }
 
-/// Decoded active icon: something is being served or resident.
+/// The ring with a dot: the endpoint on, something loaded.
 pub(super) fn active_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
 }
 
-/// The idle ring, faded, for when there is no daemon at all.
+/// The ring, faded: no endpoint to connect to.
 ///
-/// Derived from the idle icon rather than shipped as a third asset. It is the
+/// Derived from the ring rather than shipped as a third asset. It is the
 /// same glyph, so a separate file could only drift from it, and fading needs
 /// no image dependency — the same reasoning as the ARGB byte swap in
 /// [`super::linux`]. Both icons carry their glyph entirely in the alpha
 /// channel, which is what macOS template mode requires, so scaling alpha is
 /// exactly "draw the same thing fainter" on every backend.
-pub(super) fn offline_icon() -> tauri::Result<Image<'static>> {
+pub(super) fn outline_icon() -> tauri::Result<Image<'static>> {
     let idle = idle_icon()?;
     let (width, height) = (idle.width(), idle.height());
 
@@ -62,19 +70,19 @@ const fn fade(alpha: u8) -> u8 {
     // lands well inside u8.
     #[allow(
         clippy::cast_possible_truncation,
-        reason = "255 * OFFLINE_OPACITY_PERCENT / 100 is at most 89"
+        reason = "255 * OUTLINE_OPACITY_PERCENT / 100 is at most 89"
     )]
     {
-        (alpha as u16 * OFFLINE_OPACITY_PERCENT / 100) as u8
+        (alpha as u16 * OUTLINE_OPACITY_PERCENT / 100) as u8
     }
 }
 
 /// The icon for a state, already decoded.
 pub(super) fn for_state(state: TrayState) -> tauri::Result<Image<'static>> {
     match state {
-        TrayState::Offline => offline_icon(),
-        TrayState::Idle => idle_icon(),
-        TrayState::Active => active_icon(),
+        TrayState::Outline => outline_icon(),
+        TrayState::Solid => idle_icon(),
+        TrayState::SolidDot => active_icon(),
     }
 }
 
@@ -83,23 +91,20 @@ pub(super) fn for_state(state: TrayState) -> tauri::Result<Image<'static>> {
 pub(super) struct TrayVisual {
     /// Which icon to show.
     pub state: TrayState,
-    /// Hover text, and the label of the menu's status item.
+    /// Hover text, and the label of the menu's status line.
     ///
-    /// One string for both on purpose. It is the same sentence, and the menu
-    /// is the only place Linux can show it: `set_tooltip` is a documented
-    /// no-op there, so on a machine with no hover text the status item is
-    /// what tells you where the endpoint is.
+    /// One string for both on purpose: one sentence from one snapshot (TM-5).
+    /// Linux shows no hover text, so there the status line is the only place
+    /// it is read.
     pub status: String,
 }
 
 /// Derive the tray's appearance.
 ///
-/// The icon tracks **consumption, not existence**. Not the app — an icon that
-/// lit up merely because a window was open would answer a question nobody
-/// asked — but not a live daemon either: nearly every CLI command leaves one
-/// running, so an icon lit by that would be lit permanently and mean nothing.
-/// What it reports is whether gglib is doing something to this machine right
-/// now, which is true of a resident model whether or not the proxy is up.
+/// The icon answers the question a menu bar item is asked: can a client
+/// connect, and is anything loaded behind it. A model loaded with the endpoint
+/// off draws the outline — no client can reach it — and the status says it is
+/// loaded.
 #[must_use]
 pub(super) fn derive(snap: &DaemonSnapshot) -> TrayVisual {
     TrayVisual {
@@ -110,49 +115,40 @@ pub(super) fn derive(snap: &DaemonSnapshot) -> TrayVisual {
 
 /// Which icon a snapshot calls for.
 fn state_of(snap: &DaemonSnapshot) -> TrayState {
-    match (snap.reachable, snap.is_active()) {
-        (false, _) => TrayState::Offline,
-        (true, false) => TrayState::Idle,
-        (true, true) => TrayState::Active,
+    if !snap.reachable || !snap.proxy_running {
+        TrayState::Outline
+    } else if snap.resident.is_empty() {
+        TrayState::Solid
+    } else {
+        TrayState::SolidDot
     }
 }
 
-/// The one sentence the tooltip and the menu header share.
+/// The one sentence the tooltip and the menu's status line share:
+/// "gglib · endpoint on · Qwen3-4B loaded" and its siblings.
+///
+/// The state words are `gglib_core`'s, the ones every surface says, in lower
+/// case mid-sentence.
 fn status_of(snap: &DaemonSnapshot) -> String {
     if !snap.reachable {
-        return "gglib — not running".to_owned();
+        return "gglib · not running".to_owned();
     }
 
-    match (proxy_phrase(snap), residency_phrase(snap)) {
-        (Some(proxy), Some(residency)) => format!("gglib — {proxy} · {residency}"),
-        (Some(proxy), None) => format!("gglib — {proxy}"),
-        (None, Some(residency)) => format!("gglib — {residency}, proxy off"),
-        (None, None) => "gglib — idle".to_owned(),
+    let endpoint = format!("gglib · endpoint {}", snap.endpoint.word().to_lowercase());
+    match loaded_phrase(snap) {
+        Some(loaded) => format!("{endpoint} · {loaded}"),
+        None => endpoint,
     }
 }
 
-/// Where the endpoint is, if there is one.
-///
-/// The port is the thing a user came to the tray to find out, but the proxy
-/// can be up before its bound port has been recorded — say it is running
-/// rather than inventing a number.
-fn proxy_phrase(snap: &DaemonSnapshot) -> Option<String> {
-    if !snap.proxy_running {
-        return None;
-    }
-
-    Some(snap.proxy_port.map_or_else(
-        || "proxy running".to_owned(),
-        |port| format!("proxy on :{port}"),
-    ))
-}
-
-/// How much is being held in memory, if anything.
-fn residency_phrase(snap: &DaemonSnapshot) -> Option<String> {
-    match snap.resident.len() {
-        0 => None,
-        1 => Some("1 model resident".to_owned()),
-        n => Some(format!("{n} models resident")),
+/// What is loaded, if anything: one model by name, more by count.
+fn loaded_phrase(snap: &DaemonSnapshot) -> Option<String> {
+    let loaded = ResidencyState::Loaded.word().to_lowercase();
+    match snap.resident.as_slice() {
+        [] => None,
+        [one] if !one.name.is_empty() => Some(format!("{} {loaded}", one.name)),
+        [_] => Some(format!("1 model {loaded}")),
+        many => Some(format!("{} models {loaded}", many.len())),
     }
 }
 
@@ -167,102 +163,131 @@ mod tests {
         DaemonSnapshot::from_responses(proxy, servers)
     }
 
+    fn on() -> serde_json::Value {
+        json!({"running": true, "port": 8080, "state": "on"})
+    }
+
     #[test]
     fn no_daemon_reads_as_not_running() {
         let visual = derive(&DaemonSnapshot::default());
 
-        assert_eq!(visual.state, TrayState::Offline);
-        assert_eq!(visual.status, "gglib — not running");
+        assert_eq!(visual.state, TrayState::Outline);
+        assert_eq!(visual.status, "gglib · not running");
     }
 
-    /// A daemon that is up but consuming nothing is a real state, and a
-    /// distinct one: "idle" is not "not running".
+    /// A daemon with its endpoint off is not "not running": it says off.
     #[test]
-    fn a_daemon_doing_nothing_is_idle() {
+    fn an_endpoint_off_is_an_outline_that_says_off() {
         let visual = derive(&snapshot(&json!({"running": false}), &json!([])));
 
-        assert_eq!(visual.state, TrayState::Idle);
-        assert_eq!(visual.status, "gglib — idle");
+        assert_eq!(visual.state, TrayState::Outline);
+        assert_eq!(visual.status, "gglib · endpoint off");
     }
 
     #[test]
-    fn a_running_proxy_reports_its_port() {
+    fn an_endpoint_on_with_nothing_loaded_is_solid() {
+        let visual = derive(&snapshot(&on(), &json!([])));
+
+        assert_eq!(visual.state, TrayState::Solid);
+        assert_eq!(visual.status, "gglib · endpoint on");
+    }
+
+    #[test]
+    fn an_endpoint_on_with_a_model_loaded_has_the_dot_and_names_it() {
         let visual = derive(&snapshot(
-            &json!({"running": true, "port": 8080}),
-            &json!([]),
+            &on(),
+            &json!([{"model_id": 1, "model_name": "Qwen3-4B"}]),
         ));
 
-        assert_eq!(visual.state, TrayState::Active);
-        assert_eq!(visual.status, "gglib — proxy on :8080");
+        assert_eq!(visual.state, TrayState::SolidDot);
+        assert_eq!(visual.status, "gglib · endpoint on · Qwen3-4B loaded");
     }
 
-    /// VRAM held with nothing listening. The icon has to be lit, because the
-    /// machine is in use.
     #[test]
-    fn a_resident_model_lights_the_icon_with_the_proxy_off() {
+    fn two_loaded_models_are_counted() {
+        let visual = derive(&snapshot(
+            &on(),
+            &json!([{"model_id": 1, "model_name": "Qwen3-4B"}, {"model_id": 2, "model_name": "Gemma-3-4B-It"}]),
+        ));
+
+        assert_eq!(visual.status, "gglib · endpoint on · 2 models loaded");
+    }
+
+    /// No client can reach a model loaded behind an endpoint that is off, so
+    /// the icon is the outline; the status still says what is loaded.
+    #[test]
+    fn a_model_loaded_with_the_endpoint_off_draws_the_outline() {
         let visual = derive(&snapshot(
             &json!({"running": false}),
-            &json!([{"model_id": 1}]),
+            &json!([{"model_id": 1, "model_name": "Qwen3-4B"}]),
         ));
 
-        assert_eq!(visual.state, TrayState::Active);
-        assert_eq!(visual.status, "gglib — 1 model resident, proxy off");
+        assert_eq!(visual.state, TrayState::Outline);
+        assert_eq!(visual.status, "gglib · endpoint off · Qwen3-4B loaded");
     }
 
+    /// A pinned run says the daemon's own word for it.
     #[test]
-    fn serving_and_resident_are_reported_together() {
+    fn a_pinned_endpoint_says_pinned() {
         let visual = derive(&snapshot(
-            &json!({"running": true, "port": 8080}),
-            &json!([{"model_id": 1}, {"model_id": 2}]),
+            &json!({"running": true, "port": 8080, "state": "pinned"}),
+            &json!([{"model_id": 1, "model_name": "Qwen3-4B"}]),
         ));
 
-        assert_eq!(visual.status, "gglib — proxy on :8080 · 2 models resident");
+        assert_eq!(visual.state, TrayState::SolidDot);
+        assert_eq!(visual.status, "gglib · endpoint pinned · Qwen3-4B loaded");
     }
 
-    /// The proxy can be up before its bound port has been recorded; say it is
-    /// running rather than inventing a port number.
+    /// A server entry without a name still counts, by number.
     #[test]
-    fn running_without_a_known_port_still_reads_as_running() {
-        let visual = derive(&snapshot(&json!({"running": true}), &json!([])));
+    fn a_loaded_model_without_a_name_is_counted() {
+        let visual = derive(&snapshot(&on(), &json!([{"model_id": 1}])));
 
-        assert_eq!(visual.state, TrayState::Active);
-        assert_eq!(visual.status, "gglib — proxy running");
+        assert_eq!(visual.status, "gglib · endpoint on · 1 model loaded");
     }
 
     /// An unreachable daemon says so and nothing else — no leftover endpoint
-    /// from before it went away.
+    /// or model from before it went away.
     #[test]
-    fn an_unreachable_daemon_reports_no_endpoint() {
+    fn an_unreachable_daemon_reports_nothing_left_over() {
         let stale = DaemonSnapshot {
             reachable: false,
-            proxy_running: true,
-            proxy_port: Some(8080),
-            resident: vec![1],
+            ..snapshot(&on(), &json!([{"model_id": 1, "model_name": "Qwen3-4B"}]))
         };
 
-        assert_eq!(derive(&stale).state, TrayState::Offline);
-        assert!(!derive(&stale).status.contains("8080"));
+        assert_eq!(derive(&stale).state, TrayState::Outline);
+        assert_eq!(derive(&stale).status, "gglib · not running");
     }
 
-    /// The offline icon is derived at runtime, so it has to actually come out
-    /// the same shape as the one it is derived from.
+    /// The outline icon is derived at runtime, so it has to actually come out
+    /// the same shape as the ring it is derived from.
     #[test]
-    fn the_offline_icon_matches_the_idle_icon_dimmed() {
-        let idle = idle_icon().expect("idle icon decodes");
-        let offline = offline_icon().expect("offline icon derives");
+    fn the_outline_icon_is_the_ring_dimmed() {
+        let ring = idle_icon().expect("ring icon decodes");
+        let outline = outline_icon().expect("outline icon derives");
 
-        assert_eq!(offline.width(), idle.width());
-        assert_eq!(offline.height(), idle.height());
+        assert_eq!(outline.width(), ring.width());
+        assert_eq!(outline.height(), ring.height());
 
-        let brightest_idle = idle.rgba().chunks_exact(4).map(|px| px[3]).max();
-        let brightest_offline = offline.rgba().chunks_exact(4).map(|px| px[3]).max();
+        let brightest_ring = ring.rgba().chunks_exact(4).map(|px| px[3]).max();
+        let brightest_outline = outline.rgba().chunks_exact(4).map(|px| px[3]).max();
         assert!(
-            brightest_offline < brightest_idle,
-            "the offline icon must be fainter than the idle one"
+            brightest_outline < brightest_ring,
+            "the outline icon must be fainter than the ring"
         );
         assert!(
-            brightest_offline > Some(0),
+            brightest_outline > Some(0),
             "but still visible, or there is no icon to click"
         );
+    }
+
+    /// Three states, three different images.
+    #[test]
+    fn each_state_draws_its_own_icon() {
+        let rgba = |state| for_state(state).expect("icon").rgba().to_vec();
+
+        assert_ne!(rgba(TrayState::Outline), rgba(TrayState::Solid));
+        assert_ne!(rgba(TrayState::Solid), rgba(TrayState::SolidDot));
+        assert_ne!(rgba(TrayState::Outline), rgba(TrayState::SolidDot));
     }
 }

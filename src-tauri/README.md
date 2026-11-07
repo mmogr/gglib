@@ -47,7 +47,7 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `/api/version` - The daemon's build
    - `/api/events` - Server-Sent Events for real-time updates
 
-4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and reaches the daemon through the same HTTP transport as every other surface. Its one Tauri command is `show_main_window`, for its Open gglib; the other window-level actions (preferences, quit, and starting or stopping the service) are on the native tray menu, handled in Rust. The icon tracks whether gglib is consuming anything on this machine — a listening proxy *or* a resident model — from a snapshot polled by `src/daemon/watch.rs`. See [src/tray/README.md](src/tray/README.md).
+4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and reaches the daemon through the same HTTP transport as every other surface. Its one Tauri command is `show_main_window`, for its Open gglib; the other window-level actions (Settings…, Quit gglib, and Start gglib / Stop gglib…) are on the native tray menu, handled in Rust. The icon says whether a client can connect and whether anything is loaded — an outline while gglib is not running or its endpoint is off, solid while it is on, a dot while a model is loaded — from a snapshot polled by `src/daemon/watch.rs`. See [src/tray/README.md](src/tray/README.md).
 
 5. **Tauri Commands (OS Integration Only)**: Tauri IPC commands are **limited to OS integration**:
    - `get_embedded_api_info` - Discover the daemon's port (the name predates the daemon)
@@ -139,7 +139,7 @@ For more details on the architecture and how all interfaces work together, see:
   - `src/lifecycle.rs`: Hardened shutdown orchestration with watchdog
   - `src/menu/`: Native menu bar with stateful items (macOS only)
   - `src/tray/`: System tray icon, menu and popover panel (all platforms)
-  - `src/proxy_actions.rs`: Proxy start/stop and the endpoint URL, for the tray and the menu
+  - `src/proxy_actions.rs`: Turning the endpoint on and off, and its URL, for the tray and the menu
   - `src/autostart.rs`: Always-on proxy startup and OS login-item registration
   - `src/dock.rs`: macOS Dock icon visibility (activation policy)
   - `src/commands/`: Tauri command handlers (organized by domain)
@@ -213,9 +213,9 @@ the three ways it comes by one and what quitting is allowed to take with it.
 | **app/** | Central state & event infrastructure | `AppState` (daemon, menu, tray, selected model, snapshot, refresh), `emit_or_log()` (event helper), event constants |
 | **daemon/** | The connection, and the picture of it | `connect_or_launch()` / `Ownership` (adopted, launched, hosted, unresolved), `DaemonSnapshot` (pure derivation), `watch` (the only writer of that snapshot) |
 | **lifecycle.rs** | Application startup & hardened shutdown | `request_shutdown()` (single guarded entry point), `is_shutting_down()` / `should_prevent_exit()` (exit re-entrancy), `perform_shutdown()` (daemon teardown, bounded, and only when the daemon is ours) |
-| **menu/** | macOS menu bar with state sync | `AppMenu` (item refs), `MenuState`, menu builder, event handlers, `sync_all_state` (drives both the menu and the tray) |
+| **menu/** | macOS menu bar with state sync | `AppMenu` (item refs), `MenuState` and its `is_enabled`/`label` rules, the builder (one file per submenu), event handlers (`menu:navigate` with a place id, the model actions, native Turn On / Off), `sync_all_state` (drives both the menu and the tray) |
 | **tray/** | System tray icon, menu and panel | `build` (icon/menu), `icon` (pure state → icon/tooltip), `handlers` (thin dispatch), `confirm` (what a teardown would take away), `window` (panel show/hide/position) |
-| **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray (start, stop, copy the endpoint URL) and the menu (copy the endpoint URL); calls the daemon's `/api/proxy/*` directly and asks for a fresh poll — it deliberately does **not** publish what it expects to be true |
+| **proxy_actions.rs** | Turning the endpoint on and off outside a request | Used by the tray and the macOS menu alike (Turn On / Off, Copy Endpoint URL); calls the daemon's `/api/proxy/*` directly and asks for a fresh poll — it deliberately does **not** publish what it expects to be true |
 | **autostart.rs** | Launch visibility & login item | `start_at_login` login item, `should_start_hidden()` (pure launch decision, fails visible). Proxy autostart is the daemon's job |
 | **dock.rs** | macOS Dock icon visibility | `hide()` / `show()` via activation policy; no-ops off macOS so callers need no `cfg` |
 | **commands/** | 5 OS integration commands in 2 modules | `util.rs` (API discovery, shell, menu), `app_logs.rs` (frontend log ingestion) |
@@ -225,7 +225,7 @@ the three ways it comes by one and what quitting is allowed to take with it.
 ```text
 ┌─────────────────┐      webview event            ┌─────────────────┐
 │   React UI      │◄──────────────────────────────┤  Native Menu    │
-│   (Frontend)    │    (menu:start-server)        │  (macOS only)   │
+│   (Frontend)    │    (menu:navigate)            │  (macOS only)   │
 └────────┬────────┘                               └─────────────────┘
          │
          ├─────────────────────────────────────────────────┐

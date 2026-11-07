@@ -81,7 +81,7 @@ only while it can act (the endpoint up and its key revealed), and a row's
 
 | File | Role |
 |------|------|
-| `EndpointPlace.tsx` | The route: the title and ⋯ (Live numbers, Clear prompt cache, Endpoint settings…), the sections in order once the dashboard has spoken, the Model ID Connect a client and Test it share, and the inspector beside it |
+| `EndpointPlace.tsx` | The route: the title and ⋯ (Live numbers, Clear prompt cache, Endpoint settings…), the sections in order once the dashboard has spoken, the Model ID Connect a client and Test it share, the inspector beside it `?connect=1` (the menu's Connect a Client…) scrolling to Connect a client once it is drawn, then leaving the address (at once while the endpoint is off) |
 | `Header.tsx` | The address line: On with the address, Copy, the meaning, Test it, Turn off; Pinned with its model and Unpin; Key required with Show; Off with Turn on, its sentence and Start when gglib launches; Starting; the daemon's failure and the proof's sentence |
 | `Loaded.tsx` | The resident rows (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯; Chat opens the model's latest chat, else an empty one, handed the slot's port through `app/openChat`), the queue's lines, the room line, the empty sentence and Load a model… (the palette) |
 | `LoadPalette.tsx` | Load a model…: the filter, this machine's models not loaded with quant, size and fit, On <machine>, ↑ ↓ Home End, ⏎ loads with nothing typed, ⌥⏎ opens Load with options, Esc gives focus back |

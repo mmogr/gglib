@@ -5,8 +5,6 @@
 //! two cannot drift. Not compiled on Linux, which talks `StatusNotifierItem`
 //! directly — see [`super::linux`].
 
-use std::collections::HashMap;
-
 use tauri::menu::MenuEvent;
 use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
@@ -15,33 +13,35 @@ use tracing::error;
 
 use crate::daemon::DaemonSnapshot;
 use crate::tray::icon;
-use crate::tray::items::{ITEMS, Item, is_enabled};
+use crate::tray::items::{ITEMS, Item, is_enabled, label};
 use crate::tray::placement::Anchor;
 use crate::tray::{handlers, ids, window};
 
-/// The built menu items, keyed by id so `sync` can find them again.
+/// The built menu items, each beside the entry it draws, so `sync` can
+/// redraw them.
 ///
-/// A map rather than named fields because the item list lives in `items`;
-/// naming them here would be a second copy of the same structure.
+/// Kept beside their [`Item`] rather than in named fields because the item
+/// list lives in `items`; naming them here would be a second copy of it.
 pub(super) struct TrayMenu {
-    items: HashMap<&'static str, MenuItem<Wry>>,
+    items: Vec<(Item, MenuItem<Wry>)>,
 }
 
 impl TrayMenu {
-    /// Apply the daemon's state to every item that tracks it.
+    /// Apply the daemon's state to every item: its text (the status line and
+    /// the switches change theirs) and whether it is enabled.
     fn apply(&self, status: &str, snapshot: &DaemonSnapshot) -> tauri::Result<()> {
-        for (id, item) in &self.items {
-            if *id == ids::STATUS {
-                item.set_text(status)?;
-            } else {
-                item.set_enabled(is_enabled(id, snapshot))?;
+        for (item, built) in &self.items {
+            if let Some(text) = label(item, status, snapshot) {
+                built.set_text(text)?;
+            }
+            if let Item::Action { id, .. } | Item::Switch { id, .. } = item {
+                built.set_enabled(is_enabled(id, snapshot))?;
             }
         }
         Ok(())
     }
 }
 
-/// Build the tray icon, its menu, and its click behaviour.
 /// A built tray, kept alive for as long as the icon should exist.
 pub(super) struct Handle {
     tray: TrayIcon,
@@ -79,51 +79,45 @@ pub(super) fn build(app: &AppHandle) -> Result<Handle, String> {
 }
 
 fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
-    let mut items: HashMap<&'static str, MenuItem<Wry>> = HashMap::new();
+    let mut items: Vec<(Item, MenuItem<Wry>)> = Vec::new();
     // Separators are positional and never looked up again, so they are kept
     // only to be borrowed into the menu below.
     let mut separators = Vec::new();
-    let mut order: Vec<(Option<&'static str>, usize)> = Vec::new();
+    let mut order: Vec<(bool, usize)> = Vec::new();
 
     // Nothing has been polled yet, and the default says so: the tray starts
     // out reading "not running" rather than asserting a state it cannot know.
     let initial = DaemonSnapshot::default();
+    let status = icon::derive(&initial).status;
 
     for item in ITEMS {
-        match item {
-            // Disabled: a label, not a command. It carries the endpoint into
-            // the one surface every platform renders.
-            Item::Status => {
-                let status = MenuItem::with_id(
-                    app,
-                    ids::STATUS,
-                    icon::derive(&initial).status,
-                    is_enabled(ids::STATUS, &initial),
-                    None::<&str>,
-                )?;
-                items.insert(ids::STATUS, status);
-                order.push((Some(ids::STATUS), 0));
-            }
-            Item::Action { id, label } => {
-                let built =
-                    MenuItem::with_id(app, *id, label, is_enabled(id, &initial), None::<&str>)?;
-                items.insert(id, built);
-                order.push((Some(id), 0));
-            }
+        let (id, enabled) = match *item {
             Item::Separator => {
                 separators.push(PredefinedMenuItem::separator(app)?);
-                order.push((None, separators.len() - 1));
+                order.push((false, separators.len() - 1));
+                continue;
             }
-        }
+            // Disabled: a label, not a command. It carries the status into
+            // the one surface every platform renders.
+            Item::Status => (ids::STATUS, is_enabled(ids::STATUS, &initial)),
+            Item::Action { id, .. } | Item::Switch { id, .. } => (id, is_enabled(id, &initial)),
+        };
+        let text = label(item, &status, &initial).unwrap_or_default();
+        items.push((
+            *item,
+            MenuItem::with_id(app, id, text, enabled, None::<&str>)?,
+        ));
+        order.push((true, items.len() - 1));
     }
 
     let refs: Vec<&dyn IsMenuItem<Wry>> = order
         .iter()
-        .map(|(id, index)| {
-            id.as_ref().map_or_else(
-                || &separators[*index] as &dyn IsMenuItem<Wry>,
-                |id| &items[id] as &dyn IsMenuItem<Wry>,
-            )
+        .map(|&(is_item, index)| {
+            if is_item {
+                &items[index].1 as &dyn IsMenuItem<Wry>
+            } else {
+                &separators[index] as &dyn IsMenuItem<Wry>
+            }
         })
         .collect();
 

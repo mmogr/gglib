@@ -12,8 +12,8 @@ export { startGglib } from './startGglib';
 export { setSelectedModel, syncMenuState, syncMenuStateSilent } from './menuSync';
 
 // Desktop menu events
-export { listenToMenuEvents, MENU_EVENTS } from './menuEvents';
-export type { MenuEventHandlers } from './menuEvents';
+export { listenToMenuEvents, MENU_EVENTS, MENU_PLACES } from './menuEvents';
+export type { MenuEventHandlers, MenuPlace } from './menuEvents';
 
 // File dialogs
 export { pickFolder, pickGgufFile } from './fileDialogs';

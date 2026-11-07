@@ -561,6 +561,77 @@ describe('the endpoint place', () => {
       expect(within(using).queryByText(/Phone/)).not.toBeInTheDocument();
     });
 
+    it("the menu's Connect a Client… opens the place at the block, and the ask leaves the address", async () => {
+      const scrolled: Element[] = [];
+      const before = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        const { at } = renderEndpoint(UP, '/endpoint?connect=1');
+        const connect = await screen.findByRole('region', { name: 'Connect a client' });
+        await waitFor(() => expect(at()).toBe('/endpoint'));
+        expect(scrolled.filter((el) => el.contains(connect))).toHaveLength(1);
+      } finally {
+        Element.prototype.scrollIntoView = before;
+      }
+    });
+
+    it('with the endpoint off, the ask to connect leaves the address at once and scrolls nothing later', async () => {
+      const scrolled: Element[] = [];
+      const before = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        const { at } = renderEndpoint(DOWN, '/endpoint?connect=1');
+        await waitFor(() => expect(at()).toBe('/endpoint'));
+        act(() => applyProxyStatus(UP));
+        expect(await screen.findByRole('region', { name: 'Connect a client' })).toBeInTheDocument();
+        expect(scrolled).toHaveLength(0);
+      } finally {
+        Element.prototype.scrollIntoView = before;
+      }
+    });
+
+    it('an ask to connect that comes before the first status read waits for it, then scrolls', async () => {
+      const scrolled: Element[] = [];
+      const before = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        library.models = [QWEN, GEMMA];
+        act(() => resetProxyState());
+        initModelEvents();
+        const { at } = renderApp('/endpoint?connect=1');
+        await act(async () => {});
+        expect(at()).toBe('/endpoint?connect=1');
+        act(() => applyProxyStatus(UP));
+        const connect = await screen.findByRole('region', { name: 'Connect a client' });
+        await waitFor(() => expect(at()).toBe('/endpoint'));
+        expect(scrolled.filter((el) => el.contains(connect))).toHaveLength(1);
+      } finally {
+        Element.prototype.scrollIntoView = before;
+      }
+    });
+
+    it('a pinned endpoint takes the ask to connect as an endpoint that is on', async () => {
+      const scrolled: Element[] = [];
+      const before = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        const { at } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' }, '/endpoint?connect=1');
+        const connect = await screen.findByRole('region', { name: 'Connect a client' });
+        await waitFor(() => expect(at()).toBe('/endpoint'));
+        expect(scrolled.filter((el) => el.contains(connect))).toHaveLength(1);
+      } finally {
+        Element.prototype.scrollIntoView = before;
+      }
+    });
+
     it('before anything has used it, says so and offers Connect a client', async () => {
       renderEndpoint();
       await frame();

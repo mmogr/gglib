@@ -11,7 +11,7 @@ use super::{Daemon, base_url};
 /// The daemon's token, or `None` when there is none this account can read.
 ///
 /// Read at every call rather than once: the daemon mints a new one each time
-/// it starts, from the tray's Start gglib Service among others.
+/// it starts, from the tray's Start gglib among others.
 pub(crate) fn daemon_token() -> Option<String> {
     let token = read_daemon_token(&daemon_token_path().ok()?).ok()??;
     Some(token.as_str().to_owned())

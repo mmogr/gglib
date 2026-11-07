@@ -21,6 +21,7 @@ vi.mock('../../../src/services/platform', () => ({
   setSelectedModel: vi.fn(async () => {}),
   listenToMenuEvents: vi.fn(async () => () => {}),
   MENU_EVENTS: {},
+  MENU_PLACES: [],
 }));
 vi.mock('../../../src/services/serverEvents', () => ({ initServerEvents: vi.fn(), cleanupServerEvents: vi.fn() }));
 vi.mock('../../../src/services/proxyEvents', () => ({ initProxyEvents: vi.fn(), cleanupProxyEvents: vi.fn() }));

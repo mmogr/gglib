@@ -18,6 +18,7 @@ pub(crate) mod placement;
 pub(crate) mod window;
 
 pub(crate) use confirm::report_failure;
+pub(crate) use items::endpoint_switch_turns_off;
 
 use tauri::{AppHandle, Manager};
 

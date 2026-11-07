@@ -1,10 +1,10 @@
-//! Starting and stopping the proxy from outside a request.
+//! Turning the endpoint (the proxy) on and off from outside a request.
 //!
-//! The application menu drives the proxy by emitting an event the frontend
-//! turns into an HTTP call. That works while a webview is loaded and
-//! listening, which is exactly what the tray cannot assume: it is reachable
-//! when the window is hidden, and during autostart it runs before any webview
-//! exists at all.
+//! Both native menus do it here, not through the webview: the tray is
+//! reachable when the window is hidden, and during autostart it runs before
+//! any webview exists at all, so an event the frontend turns into an HTTP call
+//! could go unheard. The macOS menu's Turn On / Off takes the same path so the
+//! two cannot behave differently.
 //!
 //! So these call the daemon's `/api/proxy/*` routes directly — the same routes
 //! the frontend uses — and then ask `daemon::watch` for an immediate poll.
@@ -13,7 +13,7 @@
 //! cannot overwrite an optimistic guess with a reading taken before the call.
 
 use tauri::{AppHandle, Manager};
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::app::AppState;
 use crate::app::events::{emit_or_log, names};
@@ -53,6 +53,32 @@ pub(crate) async fn stop(app: &AppHandle) -> Result<(), String> {
     state.refresh.now();
 
     Ok(())
+}
+
+/// Turn the endpoint off if the last poll saw it on, else on; off the event
+/// thread.
+///
+/// The menus' one Turn On / Off item, labelled from the same snapshot this
+/// reads. A failed turn-on is put on screen in the daemon's words ("Port 8080
+/// is already in use …" names the fix); a failed turn-off is only logged,
+/// since the stop route is idempotent and a failure there means the endpoint
+/// is already gone.
+pub(crate) fn spawn_switch(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let on =
+            crate::tray::endpoint_switch_turns_off(&*app.state::<AppState>().snapshot.read().await);
+        let result = if on {
+            stop(&app).await
+        } else {
+            start(&app).await.map(|_| ())
+        };
+        let Err(e) = result else { return };
+        error!(error = %e, on, "Turning the endpoint on or off failed");
+        if !on {
+            crate::tray::report_failure(&app, "Could not turn the endpoint on", &e);
+        }
+    });
 }
 
 /// Put the endpoint URL on the clipboard.

@@ -21,11 +21,11 @@
  * @module places/endpoint/EndpointPlace
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal } from 'lucide-react';
 import { openChatOn } from '../../app/openChat';
-import { inspectorClosed, inspectorSubject, paths } from '../../app/paths';
+import { inspectorClosed, inspectorSubject, paths, withoutParam } from '../../app/paths';
 import { ConnectClient } from '../../components/ConnectClient';
 import { Icon } from '../../components/ui/Icon';
 import { useToastContext } from '../../contexts/ToastContext';
@@ -35,7 +35,7 @@ import { useServers, type ServerViewModel } from '../../hooks/useServers';
 import { Inspector } from '../../inspector/Inspector';
 import { removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
 import { useModelLibrary } from '../../services/modelRegistry';
-import { useEndpointFacts } from '../../services/proxyRegistry';
+import { useEndpointFacts, useProxyState } from '../../services/proxyRegistry';
 import { useRemoteState } from '../../services/remoteRegistry';
 import { formatError } from '../../utils/errors';
 import { Menu } from '../../components/ui/Menu';
@@ -54,6 +54,7 @@ export default function EndpointPlace() {
   const navigate = useNavigate();
   const { showToast } = useToastContext();
   const facts = useEndpointFacts();
+  const { status: proxyStatus } = useProxyState();
   const dash = useEndpointDashboard();
   const actions = useEndpointActions();
   const { models } = useModelLibrary();
@@ -76,6 +77,17 @@ export default function EndpointPlace() {
   const smallest = [...chatModels].sort((a, b) => a.sizeBytes - b.sizeBytes)[0]?.id ?? null;
   const modelId = picked ?? inspected ?? pinnedId ?? lastLoaded ?? settled ?? smallest;
   const up = facts.state === 'on' || facts.state === 'pinned';
+  // The menu's Connect a Client… (`?connect=1`): scrolled to once the block
+  // is drawn, and the ask dropped from the address. With the endpoint off
+  // there is no block to scroll to, and the ask is dropped at once, so it
+  // cannot scroll the page later when the endpoint comes on. Before the
+  // first status read there is no telling, so the ask waits for it.
+  const connectAsked = new URLSearchParams(location.search).get('connect') === '1';
+  useEffect(() => {
+    if (!connectAsked || ((up || proxyStatus === null) && !connectRef.current)) return;
+    connectRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+    navigate(withoutParam(location, 'connect'), { replace: true });
+  });
   const toLive = () => navigate(paths.diagnostics('live'));
 
   const unload = (id: number) => void stopServer(id).catch((err) => showToast(formatError(err), 'error'));

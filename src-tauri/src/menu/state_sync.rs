@@ -44,7 +44,7 @@ async fn sync_app_menu(
     state: &tauri::State<'_, AppState>,
     snapshot: &DaemonSnapshot,
 ) -> Result<(), String> {
-    use crate::menu::MenuState;
+    use crate::menu::{Endpoint, Inspected, MenuState};
 
     let menu_guard = state.menu.read().await;
     let Some(menu) = menu_guard.as_ref() else {
@@ -54,13 +54,22 @@ async fn sync_app_menu(
 
     let selected_id = *state.selected_model_id.read().await;
 
-    let synced = menu.sync_state(&MenuState {
-        proxy_running: snapshot.proxy_running,
-        model_selected: selected_id.is_some(),
-        // A selected model with a running server enables Stop rather than
-        // Start. The snapshot already carries every resident model id, so this
-        // costs no `/api/servers` round trip of its own.
-        selected_model_server_active: selected_id.is_some_and(|id| snapshot.serves(id)),
+    let endpoint = match (snapshot.reachable, snapshot.proxy_running) {
+        (false, _) => Endpoint::NoDaemon,
+        (true, false) => Endpoint::Off,
+        (true, true) => Endpoint::On,
+    };
+    // A selected model with a running server offers Unload rather than Load.
+    // The snapshot already carries every resident model id, so this costs no
+    // `/api/servers` round trip of its own.
+    let inspected = match selected_id {
+        None => Inspected::Nothing,
+        Some(id) if snapshot.serves(id) => Inspected::Served,
+        Some(_) => Inspected::Idle,
+    };
+    let synced = menu.sync_state(MenuState {
+        endpoint,
+        inspected,
     });
     drop(menu_guard);
     synced.map_err(|e| format!("Failed to sync menu state: {e}"))
