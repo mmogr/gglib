@@ -22,7 +22,7 @@ import { Icon } from '../../../components/ui/Icon';
 import type { UseMcpServersResult } from '../../../hooks/useMcpServers';
 import type { McpServerInfo, McpTool } from '../../../services/transport';
 import { canOpenToDevices, isServerRunning, isServerUnsupported } from '../../../utils/mcp';
-import { Menu } from '../../library/Menu';
+import { Menu } from '../../../components/ui/Menu';
 import { AllowRemoteCheckbox } from './AllowRemoteCheckbox';
 import { serverState } from './serverState';
 import type { RowOutcome, ServerActions } from './useServerActions';
