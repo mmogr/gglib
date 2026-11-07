@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
@@ -120,8 +120,9 @@ describe('ChatPlace edits and Retry', () => {
     await renderPage();
 
     await user.click(screen.getByRole('button', { name: 'Edit message' }));
-    expect(await screen.findByRole('textbox', { name: 'Edit message' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+    const edit = (await screen.findByRole('textbox', { name: 'Edit message' })).closest('form') as HTMLElement;
+    // The page's composer below has its own Send.
+    expect(within(edit).getByRole('button', { name: 'Send' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 

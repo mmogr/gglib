@@ -3,9 +3,12 @@
  *
  * The proxy serves the chat's model to every client, Copilot included, so
  * leaving the chat (the sidebar navigates; there is no Close) stops nothing,
- * and Unload, beside the model picker, is the one control that stops the
- * model (the model's inspector has its own). The place hands it up to the
- * chat route, which `tests/ts/places/libraryChat.test.tsx` pins (CH-10).
+ * and Unload <model>, in the model picker ▾, is the one control here that
+ * stops the model (the model's inspector has its own). The place hands it
+ * up to the chat route, which `tests/ts/places/libraryChat.test.tsx` pins
+ * (CH-10). A model gone mid-chat replaces the composer with one line that
+ * says so, with no banner and no toast: "was unloaded. [Load it again]", or
+ * "stopped unexpectedly · Show log".
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -13,7 +16,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
-import { chatTransport, conversation, wrapper as pageWrapper } from './chatPlaceHarness';
+import { chatTransport, conversation, modelPicker, wrapper as pageWrapper } from './chatPlaceHarness';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../../src/services/transport', async () => {
@@ -34,6 +37,9 @@ const wrapper = ({ children }: { children: ReactNode }) =>
   pageWrapper({ children: <><ToastProbe />{children}</> });
 
 const onUnloadModel = vi.fn(async () => {});
+const onSwitchModel = vi.fn(async (_choice: { modelId: number; modelName: string }) => {});
+const onShowModel = vi.fn();
+const onShowLog = vi.fn();
 
 function renderLocal(modelId = 7, startingModel: string | null = null) {
   return render(
@@ -42,12 +48,20 @@ function renderLocal(modelId = 7, startingModel: string | null = null) {
       modelId={modelId}
       serverPort={4321}
       startingModel={startingModel}
-      onSwitchModel={async () => {}}
+      onSwitchModel={onSwitchModel}
       onUnloadModel={onUnloadModel}
+      onShowModel={onShowModel}
+      onShowLog={onShowLog}
       conversationId={1}
     />,
     { wrapper },
   );
+}
+
+/** Open the picker ▾ and return its item `name`. */
+async function fromPicker(user: ReturnType<typeof userEvent.setup>, name: string): Promise<HTMLElement> {
+  await user.click(modelPicker());
+  return screen.getByRole('menuitem', { name });
 }
 
 /** The notebook head, once the saved turn is drawn and the thread has stopped remounting. */
@@ -60,6 +74,9 @@ beforeEach(() => {
   window.localStorage.clear();
   onUnloadModel.mockReset();
   onUnloadModel.mockImplementation(async () => {});
+  onSwitchModel.mockClear();
+  onShowModel.mockClear();
+  onShowLog.mockClear();
   transport.current = chatTransport({
     conversations: [conversation(1, 'launchd KeepAlive')],
     rows: { 1: [{ id: 11, conversation_id: 1, role: 'user', content: 'What does KeepAlive do?', created_at: '2026-09-01T09:12:00Z' }] },
@@ -78,45 +95,81 @@ describe('ChatPlace, leaving and Unload', () => {
     expect(onUnloadModel).not.toHaveBeenCalled();
   });
 
-  it('the read-only banner offers no Close and unloads nothing, and Unload goes', async () => {
+  it('a model unloaded mid-chat replaces the composer with "was unloaded. [Load it again]": no banner, no toast, no Close', async () => {
+    const user = userEvent.setup();
     // An id of its own: the registry outlives the test.
     renderLocal(17);
     await head();
-    expect(await screen.findByRole('button', { name: 'Unload' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
 
     act(() => ingestServerEvent({ type: 'stopped', modelId: '17', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
-    const banner = (await screen.findByText(/Server not running/)).closest('[role="status"]') as HTMLElement;
-    expect(within(banner).queryByRole('button')).not.toBeInTheDocument();
-
+    const line = await screen.findByText('qwen3 was unloaded.');
+    expect(line).toHaveAttribute('role', 'status');
+    expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Server not running|read-only/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
+    expect(within(line).getAllByRole('button').map((b) => b.textContent)).toEqual(['Load it again']);
     expect(onUnloadModel).not.toHaveBeenCalled();
-    // Nothing is left to unload.
-    expect(screen.queryByRole('button', { name: 'Unload' })).not.toBeInTheDocument();
+
+    // Load it again is the picker's switch, back onto the same model.
+    await user.click(within(line).getByRole('button', { name: 'Load it again' }));
+    expect(onSwitchModel).toHaveBeenCalledTimes(1);
+    expect(onSwitchModel.mock.calls[0][0]).toEqual({ modelId: 17, modelName: 'qwen3' });
   });
 
-  it('Unload beside the picker hands up the unload and leaves the chat', async () => {
+  it('a model that crashed mid-chat says "stopped unexpectedly · Show log", and Show log is handed up', async () => {
+    const user = userEvent.setup();
+    renderLocal(18);
+    await head();
+
+    act(() => ingestServerEvent({ type: 'crashed', modelId: '18', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
+    const line = (await screen.findByText(/^qwen3 stopped unexpectedly/)).closest('[role="status"]') as HTMLElement;
+    expect(line).toHaveTextContent('qwen3 stopped unexpectedly·Show log');
+    expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
+    expect(within(line).queryByRole('button', { name: 'Load it again' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
+
+    await user.click(within(line).getByRole('button', { name: 'Show log' }));
+    expect(onShowLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('while Load it again starts the model, the line says it is loading', async () => {
+    renderLocal(19, 'qwen3');
+    await head();
+    act(() => ingestServerEvent({ type: 'stopped', modelId: '19', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
+    expect(await screen.findByText('Loading qwen3…')).toHaveAttribute('role', 'status');
+    expect(screen.queryByRole('button', { name: 'Load it again' })).not.toBeInTheDocument();
+  });
+
+  it('Unload <model>, in the picker ▾ after a gap, hands up the unload and leaves the chat; Show <model> opens its inspector', async () => {
     const user = userEvent.setup();
     renderLocal();
     await head();
 
-    const unload = await screen.findByRole('button', { name: 'Unload' });
+    const unload = await fromPicker(user, 'Unload qwen3');
     expect(unload).toHaveAttribute('title', expect.stringMatching(/Copilot included/));
+    expect(unload).toHaveClass('mt-sm');
     await user.click(unload);
-
     expect(onUnloadModel).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('combobox', { name: 'Model' })).toBeInTheDocument();
+    expect(modelPicker()).toBeInTheDocument();
+
+    await user.click(await fromPicker(user, 'Show qwen3'));
+    expect(onShowModel).toHaveBeenCalledTimes(1);
   });
 
-  it('Unload is locked while a model starts, and says why an unload failed', async () => {
+  it('Unload is out of reach while a model starts, and says why an unload failed', async () => {
     const user = userEvent.setup();
     const page = renderLocal(7, 'gemma-3-12b');
     await head();
-    expect(await screen.findByRole('button', { name: 'Unload' })).toBeDisabled();
+    expect(await screen.findByText('Loading gemma-3-12b…')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
     page.unmount();
 
     onUnloadModel.mockRejectedValueOnce(new Error('daemon unreachable'));
     renderLocal();
     await head();
-    await user.click(await screen.findByRole('button', { name: 'Unload' }));
+    await user.click(await fromPicker(user, 'Unload qwen3'));
 
     await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('Could not unload qwen3: daemon unreachable'));
   });

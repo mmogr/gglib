@@ -42,7 +42,7 @@ import { useModelLibrary } from '../../services/modelRegistry';
 import { useEndpointFacts } from '../../services/proxyRegistry';
 import { useRemoteState } from '../../services/remoteRegistry';
 import { formatError } from '../../utils/errors';
-import { Menu } from '../library/Menu';
+import { Menu } from '../../components/ui/Menu';
 import { useEndpointDashboard } from '../library/useResidency';
 import { Activity } from './Activity';
 import { Header } from './Header';

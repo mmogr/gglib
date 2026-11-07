@@ -22,6 +22,7 @@ vi.mock('../../../../src/places/library/LibraryPlace', () => ({ default: () => <
 
 import { resetChats } from '../../../../src/services/chatRegistry';
 import { ingestServerEvent } from '../../../../src/services/serverRegistry';
+import { cleanupServerEvents, forgetServerList, initServerEvents } from '../../../../src/services/serverEvents';
 import { renderShell } from '../harness';
 
 let fixture: ChatFixture;
@@ -48,10 +49,17 @@ beforeEach(() => {
     getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null })),
     getRemoteStatus: vi.fn(async () => null),
     revealSecret: vi.fn(async () => null),
+    // The list the app's server bridge reads before a chat decides what serves it.
+    listServers: vi.fn(async () => [
+      { model_id: 41, model_name: 'qwen3-8b', pid: 1, port: 5041, started_at: Math.floor(Date.now() / 1000), runtime: 'llama' },
+    ]),
   };
   act(() => ingestServerEvent({ type: 'running', modelId: '41', port: 5041, updatedAt: Date.now(), modelName: 'qwen3-8b' }));
+  forgetServerList();
+  initServerEvents();
 });
 afterEach(() => {
+  cleanupServerEvents();
   act(() => ingestServerEvent({ type: 'stopped', modelId: '41', port: 5041, updatedAt: Date.now() + 1 }));
 });
 

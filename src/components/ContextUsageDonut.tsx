@@ -1,7 +1,10 @@
 /**
  * ContextUsageDonut.
  *
- * Pure-SVG donut graph showing "tokens in use" vs. a slot's context size.
+ * Pure-SVG donut graph showing "tokens in use" vs. a slot's context size,
+ * for `proxy/SlotCard` (the tray and the live dashboard) until those go
+ * (T3, G1). The composer's ring is its own (`ChatMessagesPanel`'s
+ * `ContextRing`).
  * Built with `<circle stroke-dasharray stroke-dashoffset>` and styled with
  * Tailwind — no charting dependency.
  *
@@ -22,12 +25,6 @@ export interface ContextUsageDonutProps {
   strokeWidth?: number;
   /** Small caption rendered under the percentage, e.g. "Slot 0". */
   label?: string;
-  /**
-   * The ring alone, for a place too small to hold a figure: no percentage,
-   * no dash and no caption, and hidden from assistive tech. Whatever it sits
-   * in says the reading.
-   */
-  compact?: boolean;
   className?: string;
 }
 
@@ -45,7 +42,6 @@ export const ContextUsageDonut: FC<ContextUsageDonutProps> = ({
   size = 96,
   strokeWidth = 10,
   label,
-  compact = false,
   className,
 }) => {
   const radius = (size - strokeWidth) / 2;
@@ -65,7 +61,6 @@ export const ContextUsageDonut: FC<ContextUsageDonutProps> = ({
         height={size}
         viewBox={`0 0 ${size} ${size}`}
         className="-rotate-90"
-        aria-hidden={compact || undefined}
       >
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth={strokeWidth} className="stroke-border" />
         <circle
@@ -80,12 +75,10 @@ export const ContextUsageDonut: FC<ContextUsageDonutProps> = ({
           className={cn('transition-[stroke-dashoffset] duration-500 ease-out', STROKE[usageSeverity(pct)])}
         />
       </svg>
-      {!compact && (
-        <span className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-sm font-semibold text-text">{used != null && total ? `${pct}%` : '—'}</span>
-          {label && <span className="text-xs text-text-muted">{label}</span>}
-        </span>
-      )}
+      <span className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-sm font-semibold text-text">{used != null && total ? `${pct}%` : '—'}</span>
+        {label && <span className="text-xs text-text-muted">{label}</span>}
+      </span>
     </span>
   );
 };
