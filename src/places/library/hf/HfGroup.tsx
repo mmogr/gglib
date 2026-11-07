@@ -28,7 +28,7 @@ import { getRecommendedModel } from '../../../services/transport/api/setup';
 import type { HfModelKind, HfModelSummary } from '../../../types';
 import type { RecommendationDto } from '../../../types/setup';
 import { formatError } from '../../../utils/errors';
-import { formatMemorySize, formatNumber, formatParamCount } from '../../../utils/format';
+import { formatNumber, formatParamCount, formatRecommendation } from '../../../utils/format';
 import { Group, Note } from '../Group';
 import { Menu } from '../../../components/ui/Menu';
 import { ModelListSkeleton } from '../ModelListSkeleton';
@@ -95,14 +95,12 @@ const Suggestion: FC<{ queueFull: boolean }> = ({ queueFull }) => {
 
   if (answer === undefined || answer === 'failed') return null;
   if (answer === null) return <Note>Nothing gglib would suggest fits. Search for a smaller model below.</Note>;
-  const why = answer.rationale.charAt(0).toUpperCase() + answer.rationale.slice(1);
-  const needs = `Needs ${formatMemorySize(answer.requiredBytes)} of ${formatMemorySize(answer.budgetBytes)} ${answer.budgetLabel}.`;
   return (
     <section aria-label="Suggested for this Mac">
       <Note>Suggested for this Mac</Note>
       <ActionRow
         name={answer.repo}
-        line={`${why}. ${needs}`}
+        line={formatRecommendation(answer)}
         action={
           <Button
             size="sm"

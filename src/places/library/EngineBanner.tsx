@@ -6,7 +6,7 @@
  * dialog: the library stays usable under it, and "Not now" puts it away for
  * as long as the window is open (`engineInstall`).
  *
- * Install and Update run what the setup wizard runs, the daemon's install
+ * Install and Update run what setup's Engines step runs, the daemon's install
  * stream, with its progress drawn in the banner; the install outlives the
  * banner. A refusal is the daemon's sentence, shown as it came: it will not
  * replace llama-server under a model running on it, and says which model to
@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, type FC } from 'react';
 import { StatusMark } from '../../components/status/StatusMark';
-import { InstallProgress } from '../../components/SetupWizard/InstallProgress';
+import { InstallProgress } from '../../components/InstallProgress';
 import { Button } from '../../components/ui/Button';
 import { useLlamaStatus } from '../../hooks/useLlamaStatus';
 import { dismissEngineBanner, installLlama, useEngineInstall } from './engineInstall';
