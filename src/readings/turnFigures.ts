@@ -1,11 +1,16 @@
 /**
- * What a turn's margin says about it: only what the page has for that turn.
+ * What a turn says about itself: only what the page has for that turn.
  *
  * A figure the page does not have is left out, never drawn as zero, a dash
  * or a guess. How a turn was made (its model, token counts and times) comes
  * from its `turn_usage` event while drawn and from its saved row once
  * loaded: the same figures, so both say the same. The rate is tokens
  * written over the time writing (`readings/throughput`); nothing saves it.
+ *
+ * A reply says its figures in three places, each read here: the fold's
+ * summary (how long it thought, how many tools it called), the figure line
+ * under it (how long it took, how fast it wrote, what the cache saved) and
+ * the figure line's tooltip, which has the full set.
  *
  * @module turnFigures
  */
@@ -16,17 +21,22 @@ import { formatCount } from '../utils/format';
 import { formatPerSecond } from '../utils/formatPerSecond';
 import { tokensPerSecond } from './throughput';
 
-/** A turn's seconds: "5.2s" or "1m 23s", as its reasoning block says them. */
-export function formatThinkingDuration(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
+/**
+ * Seconds as a turn says them: "0.4 s", "4.7 s" and "3 s" under ten, "19 s",
+ * "1 min 23 s", "2 min". Rounded to the precision shown before the unit is
+ * chosen, so 9.96 is "10 s" and 59.6 is "1 min", never "10.0 s" or "60 s";
+ * a whole number drops its ".0", and a whole minute its "0 s".
+ */
+export function secondsWords(seconds: number): string {
+  const tenths = Math.round(seconds * 10) / 10;
+  if (tenths < 10) return `${Number.isInteger(tenths) ? tenths : tenths.toFixed(1)} s`;
+  const whole = Math.round(seconds);
+  if (whole < 60) return `${whole} s`;
+  const rest = whole % 60;
+  return rest === 0 ? `${whole / 60} min` : `${Math.floor(whole / 60)} min ${rest} s`;
 }
 
-/** The facts about one reply the margin is drawn from. */
+/** The facts about one reply its figures are drawn from. */
 export interface ReplyFacts {
   /** When the row was saved; absent for a turn still being drawn. */
   savedAt?: Date;
@@ -43,64 +53,106 @@ export interface ReplyFacts {
   made?: TurnMade;
 }
 
-/** Who wrote the reply: its model, when known. */
-export function replyName(facts: ReplyFacts): string {
-  return facts.made?.modelName ?? 'Assistant';
-}
-
-/** Tokens written per second of writing; null without both figures. */
+/**
+ * Tokens written per second of writing; null without both figures, and for
+ * a turn of one token or one not streamed, which have no time writing.
+ */
 export function writingRate(made: TurnMade | undefined): number | null {
+  if (made?.completionTokens != null && made.completionTokens < 2) return null;
   return tokensPerSecond(made?.completionTokens, made?.writingDurationMs);
 }
 
-/** A reply's figures after it arrived, one line each, in the margin's order. */
-export function madeLines(facts: ReplyFacts): string[] {
-  const lines: string[] = [];
-  if (facts.unfinished) lines.push('unfinished');
-  if (facts.thinkingSeconds != null) {
-    lines.push(`thought ${formatThinkingDuration(facts.thinkingSeconds)}`);
+function toolCallWords(count: number): string {
+  return `${count} tool call${count === 1 ? '' : 's'}`;
+}
+
+/**
+ * The fold's summary: how long the reply thought, then how many tools it
+ * called. While it thinks, "Thinking…" and the seconds so far; `seconds` is
+ * the saved or the live figure, whichever the reply has.
+ */
+export function foldSummary(parts: { thinking: boolean; live: boolean; seconds: number | null; toolCalls: number }): string {
+  const words: string[] = [];
+  if (parts.live) {
+    words.push(parts.seconds != null ? `Thinking… ${secondsWords(parts.seconds)}` : 'Thinking…');
+  } else if (parts.thinking) {
+    words.push(parts.seconds != null ? `Thought for ${secondsWords(parts.seconds)}` : 'Thought');
   }
-  if (facts.toolCalls > 0) {
-    lines.push(`${facts.toolCalls} tool call${facts.toolCalls === 1 ? '' : 's'}`);
-  }
+  if (parts.toolCalls > 0) words.push(toolCallWords(parts.toolCalls));
+  return words.join(' · ');
+}
+
+/** The word the figure line starts with for a reply the daemon saved unfinished. */
+export const UNFINISHED = 'unfinished';
+
+/**
+ * The figure line's parts: whether it finished, how long it took, how fast
+ * it wrote, and how much of the prompt the cache saved; none when the reply
+ * has none of them.
+ */
+export function figureParts(facts: ReplyFacts): string[] {
   const made = facts.made;
-  if (made?.promptTokens != null) lines.push(`${formatCount(made.promptTokens)} tok read`);
-  if (made?.cachedTokens != null) lines.push(`${formatCount(made.cachedTokens)} from cache`);
+  const rate = writingRate(made);
+  return [
+    facts.unfinished ? UNFINISHED : null,
+    made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
+    rate != null ? `${formatPerSecond(rate)} tok/s` : null,
+    made?.cachedTokens != null ? `${formatCount(made.cachedTokens)} tokens reused` : null,
+  ].filter((part): part is string => part !== null);
+}
+
+/** The figure line's tooltip: every figure the reply has, one line each. */
+export function figureDetail(facts: ReplyFacts): string[] {
+  const made = facts.made;
+  const lines: string[] = [];
+  if (made?.modelName) lines.push(made.modelQuantization ? `${made.modelName} · ${made.modelQuantization}` : made.modelName);
+  if (made?.device) lines.push(`for ${made.device}`);
+  if (facts.unfinished) lines.push('unfinished');
+  if (made?.finishReason === 'length') lines.push('cut off before it finished');
+  if (facts.thinkingSeconds != null) lines.push(`thought for ${secondsWords(facts.thinkingSeconds)}`);
+  if (facts.toolCalls > 0) lines.push(toolCallWords(facts.toolCalls));
+  if (made?.promptTokens != null) lines.push(`${formatCount(made.promptTokens)} tokens read`);
+  if (made?.cachedTokens != null) lines.push(`${formatCount(made.cachedTokens)} tokens reused`);
+  if (made?.completionTokens != null) lines.push(`${formatCount(made.completionTokens)} tokens written`);
   const rate = writingRate(made);
   const timing = [
-    made?.turnDurationMs != null ? formatThinkingDuration(made.turnDurationMs / 1000) : null,
+    made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
     rate != null ? `${formatPerSecond(rate)} tok/s` : null,
   ].filter((part): part is string => part !== null);
   if (timing.length > 0) lines.push(timing.join(' · '));
   return lines;
 }
 
-/** What a reply still arriving is doing, as its events so far say. */
+/**
+ * The model a reply names above itself: its own, only where the reply
+ * before it was another's (`previous` is that reply's model, `null` when it
+ * is not known, `undefined` when there is no reply before). The first reply
+ * names none, since the composer names the model, nor does one whose model
+ * is not known.
+ */
+export function modelShown(facts: ReplyFacts, previous: string | null | undefined): string | null {
+  const name = facts.made?.modelName;
+  if (!name || previous === undefined) return null;
+  return previous === name ? null : name;
+}
+
+/**
+ * What a reply with no token yet is waiting for, as its events so far say.
+ * Once a token comes the fold and the text say what it is doing.
+ */
 export type ArrivingPhase =
   | 'Waiting for the model'
   | 'Queued behind an image render'
   | 'Waiting for the model to load'
   | 'Reading the prompt'
-  | 'Starting the reply'
-  | 'Thinking'
-  | 'Writing'
-  | 'Calling tools';
+  | 'Starting the reply';
 
 /**
  * A wait is said only until the model reads the prompt: a prompt reading
  * that comes after it takes it off the turn, so one still there is the
  * newer of the two.
  */
-export function arrivingPhase(parts: {
-  prompt?: PromptReading;
-  waiting?: TurnWaiting;
-  hasReasoning: boolean;
-  hasText: boolean;
-  toolCallsRunning: boolean;
-}): ArrivingPhase {
-  if (parts.toolCallsRunning) return 'Calling tools';
-  if (parts.hasText) return 'Writing';
-  if (parts.hasReasoning) return 'Thinking';
+export function arrivingPhase(parts: { prompt?: PromptReading; waiting?: TurnWaiting }): ArrivingPhase {
   if (parts.waiting) {
     return parts.waiting.reason === 'image_render' ? 'Queued behind an image render' : 'Waiting for the model to load';
   }
@@ -119,6 +171,19 @@ export function waitingLines(waiting: TurnWaiting): string[] {
   if (waiting.total > 0) lines.push(`step ${waiting.step} of ${waiting.total}`);
   if (waiting.position > 1) lines.push(`${waiting.position} in line`);
   return lines;
+}
+
+/**
+ * The arrival line's figures after its phase: how far the prompt is read
+ * while it is read, how much was read once it is, and what the cache gave.
+ */
+export function promptLines(prompt: PromptReading, phase: ArrivingPhase): string[] {
+  return [
+    phase === 'Reading the prompt'
+      ? `${formatCount(prompt.processed)} of ${formatCount(prompt.total)} tokens read`
+      : `${formatCount(prompt.total)} tokens read`,
+    `${formatCount(prompt.cached)} from cache`,
+  ];
 }
 
 /** The message shape the facts are read from: assistant-ui's, loosely. */
@@ -148,7 +213,7 @@ export function replyFacts(message: MessageLike): ReplyFacts {
   };
 }
 
-/** Hours and minutes, as the turn's margin shows a time. */
+/** Hours and minutes, as a turn shows its time on hover. */
 export function turnTime(at: Date): string {
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(at);
 }

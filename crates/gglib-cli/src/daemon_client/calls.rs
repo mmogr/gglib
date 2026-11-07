@@ -67,13 +67,17 @@ impl DaemonHandle {
                 auth::unauthorized(&body)
             ));
         }
-        // The daemon's error envelope is {"error": "..."} — surface just the
-        // message when it parses, the raw body otherwise.
-        let message = serde_json::from_str::<serde_json::Value>(&body)
+        let message = Self::error_message(body);
+        Err(anyhow!("daemon answered {status}: {message}"))
+    }
+
+    /// The message of the daemon's error envelope, `{"error": "..."}`, when
+    /// `body` is one, and `body` as it is otherwise.
+    pub(super) fn error_message(body: String) -> String {
+        serde_json::from_str::<serde_json::Value>(&body)
             .ok()
             .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
-            .unwrap_or(body);
-        Err(anyhow!("daemon answered {status}: {message}"))
+            .unwrap_or(body)
     }
 
     /// Start the proxy (idempotent on the daemon side).

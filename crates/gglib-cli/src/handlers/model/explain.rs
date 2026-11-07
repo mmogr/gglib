@@ -9,12 +9,18 @@
 //! are told the same thing. Nothing here re-implements the launch, the fit
 //! or the ladder, so this command cannot describe a launch that differs
 //! from the one that runs.
+//!
+//! While the daemon that serves this library runs, the explanation is that
+//! route's answer: the daemon plans over the models it has loaded, and so
+//! says which one a Load would unload first. Without it nothing is loaded,
+//! and the command's own `ModelOps` plans over nothing.
 
 use anyhow::{Result, anyhow};
 use gglib_app_services::{GuiError, LaunchExplanationDto, ModelOps};
 
 use super::resolver;
 use crate::bootstrap::CliContext;
+use crate::daemon_client::{auth, running};
 use crate::presentation::{explain_display, launch_display};
 
 /// Execute `gglib model explain <id> [--profile NAME]`.
@@ -25,7 +31,7 @@ pub(crate) async fn execute(
     profile: Option<&str>,
 ) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
-    let explanation = explain(ops, model.id, profile).await?;
+    let explanation = explanation(ctx, ops, model.id, profile).await?;
 
     print!(
         "{}",
@@ -34,6 +40,30 @@ pub(crate) async fn execute(
     explain_display::print_explanation(&model.name, model.id, &explanation.sampling);
 
     Ok(())
+}
+
+/// The explanation of model `id`, from the daemon that serves this library
+/// when it is running and from `ops` when it is not.
+///
+/// That daemon is found as `LibraryChanges::tell_daemon` finds it: by the
+/// token it left under this data root, which is the credential presented.
+/// A token left by a daemon that has stopped, or refused by one on the port
+/// that serves another library, finds none. Once it is there, its answer or
+/// its refusal is the answer; a plan made here would not know what it has
+/// loaded.
+async fn explanation(
+    ctx: &CliContext,
+    ops: &ModelOps,
+    id: i64,
+    profile: Option<&str>,
+) -> Result<LaunchExplanationDto> {
+    if auth::daemon_token().is_some()
+        && let Ok(daemon) = running(ctx).await
+        && let Some(explained) = daemon.explain_model(id, profile).await?
+    {
+        return Ok(explained);
+    }
+    explain(ops, id, profile).await
 }
 
 /// The explanation of model `id`: the launch it would make, and its stored
@@ -53,3 +83,7 @@ async fn explain(ops: &ModelOps, id: i64, profile: Option<&str>) -> Result<Launc
 #[cfg(test)]
 #[path = "explain_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "explain_daemon_tests.rs"]
+mod daemon_tests;

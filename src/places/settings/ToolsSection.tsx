@@ -14,7 +14,7 @@
 import { useState, type FC } from 'react';
 import { AddMcpServerModal } from '../../components/AddMcpServerModal';
 import { McpServersPanel } from '../../components/McpServersPanel';
-import { AgentLimitsSection } from '../../components/ToolsPopover/AgentLimitsSection';
+import { AgentLimitsSection } from '../../components/AgentLimitsSection';
 import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../constants/settingsDefaults';
 import { useMcpServers } from '../../hooks/useMcpServers';
 import { DEFAULT_TITLE_GENERATION_PROMPT, type McpServerInfo } from '../../services/transport';

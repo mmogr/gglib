@@ -1,13 +1,13 @@
 /**
- * Drawing on the chat page: the composer's Draw button, and a render as its
- * reply shows it.
+ * Drawing on the chat page: the composer's `[+]` › Draw a picture, its
+ * `Draw ×` chip, and a render as its reply shows it.
  *
- * The button is greyed, its title the reason, where the machine that would
+ * The item is greyed, its title the reason, where the machine that would
  * draw answers that it cannot, and a send from there says nothing of
- * drawing. Where it can, a press arms it for one message: the run that
- * message starts says `draw`, the button is not pressed once that run is
+ * drawing. Where it can, a pick sets it for one message, the chip saying so:
+ * the run that message starts says `draw`, the chip is gone once that run is
  * accepted, and the next message's run has no such key. A run that was
- * refused leaves it pressed.
+ * refused leaves it set; × on the chip unsets it.
  *
  * While the image is made, the tool's row says how far it has got in words
  * and a bar, and shows the picture so far, larger than it came; the frame is
@@ -22,7 +22,7 @@ import '@testing-library/jest-dom';
 import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
 import type { DrawingAvailability } from '../../../../src/types/generated/DrawingAvailability';
 import type { RunInfo } from '../../../../src/types/generated/RunInfo';
-import { NO_DRAWING, agentRun, chatTransport, conversation, wrapper, type ChatFixture } from './chatPlaceHarness';
+import { NO_DRAWING, agentRun, chatTransport, conversation, plusItem, wrapper, type ChatFixture } from './chatPlaceHarness';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../../src/services/transport', async () => {
@@ -87,7 +87,10 @@ function pageTransport() {
 }
 
 const stub = () => transport.current as ReturnType<typeof pageTransport>;
-const drawButton = () => screen.getByRole('button', { name: 'Draw' });
+/** `[+]` › Draw a picture, the menu opened for it. */
+const drawItem = () => plusItem('Draw a picture');
+/** The `Draw ×` chip's ×, there only while the next message draws. */
+const unDraw = () => screen.queryByRole('button', { name: "Don't draw" });
 
 /** One logged event of the run going. */
 function emit(event: object) {
@@ -112,7 +115,9 @@ function end(reply: string) {
 async function renderPage() {
   render(<ChatPlace modelName="Qwen3.8-27B" modelId={7} serverPort={4321} conversationId={fixture.conversations[0]?.id ?? null} />, { wrapper });
   await waitFor(() => expect(screen.queryByText('Loading messages…')).not.toBeInTheDocument());
-  await waitFor(() => expect(drawButton()).not.toHaveAttribute('title', 'Checking whether a message here can draw.'));
+  await waitFor(() => expect(drawItem()).not.toHaveAttribute('title', 'Checking whether a message here can draw.'));
+  // Closed again, as a person leaves it.
+  await userEvent.setup().keyboard('{Escape}');
 }
 
 /** Send `text` and wait for its run to be started, or refused. */
@@ -148,58 +153,61 @@ beforeEach(() => {
   transport.current = pageTransport();
 });
 
-describe('ChatPlace, the Draw button', () => {
+describe('ChatPlace, Draw a picture', () => {
   it('is greyed, its title the machine\'s reason, where a message cannot draw, and its send says nothing of drawing', async () => {
     const user = userEvent.setup();
     availability = NO_DRAWING;
     await renderPage();
 
-    expect(drawButton()).toBeDisabled();
-    expect(drawButton()).toHaveAttribute('title', NO_DRAWING.reason);
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'false');
-    await user.click(drawButton());
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'false');
+    expect(drawItem()).toBeDisabled();
+    // The machine's words, its first letter capitalised.
+    expect(drawItem()).toHaveAttribute('title', 'No image model is installed; download one first');
+    expect(unDraw()).not.toBeInTheDocument();
 
     await ask(user, 'draw a lighthouse');
     expect(Object.keys(started[0])).not.toContain('draw');
   });
 
-  it('is not pressed until clicked, and says which model would draw', async () => {
+  it('draws no chip until picked, and says which model would draw', async () => {
     await renderPage();
 
-    expect(drawButton()).toBeEnabled();
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'false');
-    expect(drawButton()).toHaveTextContent(/^Draw$/);
-    expect(drawButton()).toHaveAttribute(
+    expect(unDraw()).not.toBeInTheDocument();
+    expect(screen.queryByText('Draw', { exact: true })).not.toBeInTheDocument();
+    expect(drawItem()).toBeEnabled();
+    expect(drawItem()).toHaveAttribute(
       'title',
-      'Let the next message draw an image with flux-schnell. It applies to that message only.',
+      'Let the next message draw a picture with flux-schnell. It applies to that message only.',
     );
   });
 
-  it('pressed, it reads so without its colour, and a second press takes it back', async () => {
+  it('picked, the chip `Draw ×` says so in words, and × takes it back', async () => {
     const user = userEvent.setup();
     await renderPage();
 
-    await user.click(drawButton());
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'true');
-    expect(drawButton()).toHaveTextContent('Draw on');
-    expect(drawButton()).toHaveAttribute('title', 'The next message draws an image. Click to send it without drawing.');
+    await user.click(drawItem());
+    const chip = unDraw()!.parentElement as HTMLElement;
+    expect(chip).toHaveTextContent(/^Draw$/);
+    expect(chip).toHaveAttribute('title', 'The next message draws a picture. × on the chip sends it without drawing.');
+    expect(unDraw()).toHaveAttribute('type', 'button');
+    // Picked again, it stays set.
+    await user.click(drawItem());
+    expect(unDraw()).toBeInTheDocument();
 
-    await user.click(drawButton());
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'false');
+    await user.click(unDraw()!);
+    expect(unDraw()).not.toBeInTheDocument();
     await ask(user, 'no picture, thanks');
     expect(Object.keys(started[0])).not.toContain('draw');
   });
 
-  it('the message sent while pressed says draw; the button resets once its run is accepted, and the next says nothing', async () => {
+  it('the message sent while set says draw; the chip goes once its run is accepted, and the next says nothing', async () => {
     const user = userEvent.setup();
     await renderPage();
-    await user.click(drawButton());
+    await user.click(drawItem());
 
     await ask(user, 'draw a lighthouse');
     expect(started[0].draw).toBe(true);
     // Reset while the reply is still being written: it was for that message alone.
-    await waitFor(() => expect(drawButton()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(unDraw()).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
 
     end('A lighthouse at dusk.');
@@ -208,23 +216,23 @@ describe('ChatPlace, the Draw button', () => {
 
     await ask(user, 'thanks');
     expect(Object.keys(started[1])).not.toContain('draw');
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'false');
+    expect(unDraw()).not.toBeInTheDocument();
   });
 
-  it('stays pressed when the run that said draw is refused, and the message sent again says it again', async () => {
+  it('stays set when the run that said draw is refused, and the message sent again says it again', async () => {
     const user = userEvent.setup();
     await renderPage();
-    await user.click(drawButton());
+    await user.click(drawItem());
 
     refuseNext = new Error('no image model is installed; download one first');
     await ask(user, 'draw a lighthouse');
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument());
     expect(started).toEqual([]);
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'true');
+    expect(unDraw()).toBeInTheDocument();
 
     await ask(user, '{Enter}');
     expect(started[0].draw).toBe(true);
-    await waitFor(() => expect(drawButton()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(unDraw()).not.toBeInTheDocument());
   });
 });
 
@@ -233,10 +241,10 @@ describe('ChatPlace, a render in its reply', () => {
   async function drawing() {
     const user = userEvent.setup();
     await renderPage();
-    await user.click(drawButton());
+    await user.click(drawItem());
     await ask(user, 'draw a lighthouse');
     emit(toolStart);
-    return screen.findByRole('list', { name: 'Tool execution status' });
+    return screen.findByRole('list', { name: 'Tool calls' });
   }
 
   it('says how far the tool has got, in words and a bar', async () => {
@@ -264,7 +272,8 @@ describe('ChatPlace, a render in its reply', () => {
 
   it('shows the picture so far, the newest frame only, scaled up, and takes it away with the tool\'s result', async () => {
     const rows = await drawing();
-    expect(within(rows).queryByRole('img')).not.toBeInTheDocument();
+    const frame = { name: /^Preview of the image/ };
+    expect(within(rows).queryByRole('img', frame)).not.toBeInTheDocument();
 
     preview('call_1', 3);
     const shown = await within(rows).findByRole('img', { name: 'Preview of the image being made, step 3 of 20' });
@@ -274,10 +283,10 @@ describe('ChatPlace, a render in its reply', () => {
 
     preview('call_1', 4);
     await within(rows).findByRole('img', { name: 'Preview of the image being made, step 4 of 20' });
-    expect(within(rows).getAllByRole('img')).toHaveLength(1);
+    expect(within(rows).getAllByRole('img', frame)).toHaveLength(1);
 
     emit(toolDone);
-    await waitFor(() => expect(within(rows).queryByRole('img')).not.toBeInTheDocument());
+    await waitFor(() => expect(within(rows).queryByRole('img', frame)).not.toBeInTheDocument());
     expect(within(rows).queryByRole('progressbar')).not.toBeInTheDocument();
     // A frame that comes after its tool's result is not drawn.
     preview('call_1', 20);
@@ -293,7 +302,7 @@ describe('ChatPlace, a render in its reply', () => {
 
     emit({ type: 'waiting', reason: 'image_render', step: 3, total: 20, position: 1 });
     const status = (await screen.findByText('Queued behind an image render')).closest('[role="status"]') as HTMLElement;
-    const row = status.closest('.grid') as HTMLElement;
+    const row = status.closest('[data-turn]') as HTMLElement;
     expect(within(row).getByText('step 3 of 20')).toBeInTheDocument();
 
     emit({ type: 'waiting', reason: 'image_render', step: 9, total: 20, position: 1 });
@@ -314,6 +323,6 @@ describe('ChatPlace, a render in its reply', () => {
 
     emit({ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0 });
     const status = (await screen.findByText('Waiting for the model to load')).closest('[role="status"]') as HTMLElement;
-    expect(status.closest('.grid')).not.toHaveTextContent(/step \d+ of/);
+    expect(status.closest('[data-turn]')).not.toHaveTextContent(/step \d+ of/);
   });
 });

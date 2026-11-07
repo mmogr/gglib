@@ -12,7 +12,7 @@
 
 import { useEffect, type FC } from 'react';
 import { useEngine } from '../hooks/useEngine';
-import { InstallProgress } from '../components/SetupWizard/InstallProgress';
+import { InstallProgress } from '../components/InstallProgress';
 import { StatusMark } from '../components/status/StatusMark';
 import { Button } from '../components/ui/Button';
 import type { ComponentLinkDto, GgufModel } from '../types';

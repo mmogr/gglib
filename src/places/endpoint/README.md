@@ -74,13 +74,14 @@ prints it ("4s", "1m 5s"); the inspector's "loaded 4m 10s" is
 Connect a client's Model ID starts at the inspected model, else the pinned
 one, else the last loaded, else the default model setting, else the
 library's smallest chat model, so Test it never asks the endpoint to load
-the biggest. ⋯ Live numbers and Clear prompt cache are offered only while
-they can act (the endpoint up; Clear also its key revealed), and a row's
+the biggest. ⋯ Live numbers, Activity's Live numbers › and Recent's All ›
+open Diagnostics › Live (`/diagnostics/live`). Clear prompt cache is offered
+only while it can act (the endpoint up and its key revealed), and a row's
 ⋯ Pin waits while a pin change is on its way.
 
 | File | Role |
 |------|------|
-| `EndpointPlace.tsx` | The route: the title and ⋯ (Live numbers, Clear prompt cache, Endpoint settings…), the sections in order once the dashboard has spoken, the Model ID Connect a client and Test it share, the dashboard dialog, the inspector beside it, and `?connect=1` (the menu's Connect a Client…) scrolling to Connect a client once it is drawn, then leaving the address (at once while the endpoint is off) |
+| `EndpointPlace.tsx` | The route: the title and ⋯ (Live numbers, Clear prompt cache, Endpoint settings…), the sections in order once the dashboard has spoken, the Model ID Connect a client and Test it share, the inspector beside it `?connect=1` (the menu's Connect a Client…) scrolling to Connect a client once it is drawn, then leaving the address (at once while the endpoint is off) |
 | `Header.tsx` | The address line: On with the address, Copy, the meaning, Test it, Turn off; Pinned with its model and Unpin; Key required with Show; Off with Turn on, its sentence and Start when gglib launches; Starting; the daemon's failure and the proof's sentence |
 | `Loaded.tsx` | The resident rows (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯; Chat opens the model's latest chat, else an empty one, handed the slot's port through `app/openChat`), the queue's lines, the room line, the empty sentence and Load a model… (the palette) |
 | `LoadPalette.tsx` | Load a model…: the filter, this machine's models not loaded with quant, size and fit, On <machine>, ↑ ↓ Home End, ⏎ loads with nothing typed, ⌥⏎ opens Load with options, Esc gives focus back |
@@ -91,6 +92,7 @@ they can act (the endpoint up; Clear also its key revealed), and a row's
 | `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what gglib did; All ›; not drawn when empty |
 | `Activity.tsx` | ▸ Activity: the dashboard's other sections as sentences, Clear prompt cache, Live numbers › |
 | `lines.ts` | Pure: the loaded rows, the queue's lines, the room line, the recent rows, the cache's reuse and the activity sentences, from one dashboard frame |
+| `useClearCache.ts` | Clear prompt cache with the revealed key, its toast either way; also Diagnostics › Live's Clear |
 | `useEndpointActions.ts` | Turn on (no port), Turn off, serve one model or every model (stop, then start), and Test it, with the daemon's message for a failure |
 
 <!-- module-docs:end -->

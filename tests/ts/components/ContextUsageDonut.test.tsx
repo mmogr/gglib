@@ -1,6 +1,6 @@
 /**
- * The usage donut: the slot card's, with its figure in the middle, and the
- * compact ring the chat composer draws, which is the ring alone.
+ * The usage donut: the slot card's, with its figure in the middle. The chat
+ * composer's ring is its own (`ChatPlaceComposer.test.tsx`).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -24,16 +24,6 @@ describe('ContextUsageDonut', () => {
     expect(screen.getByText('—')).toBeInTheDocument();
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
     expect(arc(container)).toHaveClass('stroke-primary');
-  });
-
-  it('compact, draws the ring alone: no figure, no dash, no caption, and hidden from assistive tech', () => {
-    const { container } = render(<ContextUsageDonut compact used={420} total={1000} label="Slot 0" size={18} strokeWidth={3} />);
-    expect(container.textContent).toBe('');
-    expect(container.querySelectorAll('circle')).toHaveLength(2);
-    expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
-
-    const unknown = render(<ContextUsageDonut compact used={null} total={null} />);
-    expect(unknown.container.textContent).toBe('');
   });
 
   it('wears the accent under 70, the warning from 70 and danger from 90', () => {

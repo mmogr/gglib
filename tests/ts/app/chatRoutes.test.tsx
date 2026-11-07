@@ -5,7 +5,9 @@
  * `?model=` or `?far=`, else on the last model used, the default, or the
  * first loaded, and the first send's conversation replaces the address
  * without remounting the place; a local chat on a model nothing serves goes
- * to its inspector; `/chat/far/:id` is the paired machine's own chat.
+ * to its inspector, and one whose model stops while it is open stays; the
+ * composer's Show <model>, Show log and a paired model's new chat navigate;
+ * `/chat/far/:id` is the paired machine's own chat.
  *
  * Each test serves its own model ids: the server registry outlives a test.
  */
@@ -36,6 +38,8 @@ const transport = vi.hoisted(() => ({
   listPairedModels: vi.fn(async () => pairedModels([farEntry('qwen3-8b', 7)])),
   getSettings: vi.fn(async () => daemon.settings),
   listConversations: vi.fn(async () => daemon.chats.map((c) => ({ ...c }))),
+  // Read only by a test that bridges the server list, as the app does at start.
+  listServers: vi.fn(async (): Promise<unknown[]> => []),
 }));
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/transport')>()),
@@ -51,10 +55,13 @@ interface Placard {
   desk?: { machineName: string };
   onOpened?: (id: number) => void;
   onDeleted?: () => void;
+  onShowModel?: () => void;
+  onShowLog?: () => void;
+  onOpenFar?: (id: number) => void;
 }
 // The place is a placard naming what it was given, with the two calls it makes up.
 vi.mock('../../../src/places/chat/ChatPlace', () => ({
-  default: function Place({ modelName, conversationId, serverPort, paired, desk, onOpened, onDeleted }: Placard) {
+  default: function Place({ modelName, conversationId, serverPort, paired, desk, onOpened, onDeleted, onShowModel, onShowLog, onOpenFar }: Placard) {
     useEffect(() => {
       mounts.count += 1;
     }, []);
@@ -71,6 +78,9 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
         {/* A run's end opens the chat it ended in, the one already open. */}
         <button onClick={() => conversationId !== null && onOpened?.(conversationId)}>run ends</button>
         <button onClick={() => onDeleted?.()}>delete it</button>
+        {onShowModel && <button onClick={onShowModel}>show the model</button>}
+        {onShowLog && <button onClick={onShowLog}>show its log</button>}
+        {onOpenFar && <button onClick={() => onOpenFar(7)}>a desk model</button>}
       </div>
     );
   },
@@ -80,7 +90,11 @@ import { HANDED, peekChatHandoff, setChatHandoff } from '../../../src/app/chatHa
 import { refreshChats, resetChats } from '../../../src/services/chatRegistry';
 import { IDLE_STATUS, applyRemoteStatus, ingestRemoteEvent, resetRemoteState } from '../../../src/services/remoteRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
-import { renderApp } from '../places/harness';
+import { cleanupServerEvents, forgetServerList, initServerEvents } from '../../../src/services/serverEvents';
+import { createAppRouter } from '../../../src/app/router';
+import { PlaceProviders, renderApp } from '../places/harness';
+import { Outlet, RouterProvider } from 'react-router';
+import { render } from '@testing-library/react';
 
 const DESK = '3ca82708b995';
 
@@ -114,8 +128,13 @@ describe('the chat routes', () => {
     daemon.chats = [];
     daemon.settings = {};
     mounts.count = 0;
+    // The app's server bridge, as `AppContent` starts it: the list it reads
+    // is what lets a chat say nothing serves its model.
+    forgetServerList();
+    initServerEvents();
   });
   afterEach(() => {
+    cleanupServerEvents();
     resetRemoteState();
     // Nothing a test served stays running for the next.
     served.splice(0).forEach(stop);
@@ -148,6 +167,143 @@ describe('the chat routes', () => {
     const { at } = renderApp('/chat/3');
     await waitFor(() => expect(at()).toBe('/models/23'));
     expect(screen.getByRole('main', { name: 'Library' })).toBeInTheDocument();
+  });
+
+  describe('on a cold load, before the server list is heard', () => {
+    let answer: (list: unknown[]) => void = () => {};
+    beforeEach(() => {
+      // A fresh start, with the list still out.
+      cleanupServerEvents();
+      forgetServerList();
+      transport.listServers.mockImplementation(() => new Promise<unknown[]>((resolve) => (answer = resolve)));
+      initServerEvents();
+    });
+    afterEach(() => {
+      transport.listServers.mockImplementation(async () => []);
+    });
+
+    it('waits in the order the app starts: the bridge from the layout\'s effect, after the routes have rendered', async () => {
+      cleanupServerEvents();
+      forgetServerList();
+      // As `AppContent`: the place renders first, and the bridge starts in the layout's effect.
+      function AppOrder() {
+        useEffect(() => {
+          initServerEvents();
+        }, []);
+        return (
+          <PlaceProviders>
+            <Outlet />
+          </PlaceProviders>
+        );
+      }
+      const router = createAppRouter(<AppOrder />, ['/chat/new?model=31']);
+      render(<RouterProvider router={router} />);
+      await act(async () => {});
+      expect(`${router.state.location.pathname}${router.state.location.search}`).toBe('/chat/new?model=31');
+      served.push(31);
+      await act(async () => answer([listed(31, 5031)]));
+      expect(await page()).toHaveAttribute('data-port', '5031');
+    });
+
+    it('reads the list again after reads that failed, waiting longer each time, rather than wait for ever', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      cleanupServerEvents();
+      forgetServerList();
+      const busy = async () => {
+        throw new Error('daemon busy');
+      };
+      // The first read and the first retry fail; the second retry lands.
+      transport.listServers.mockClear();
+      transport.listServers.mockImplementationOnce(busy).mockImplementationOnce(busy).mockImplementation(async () => [listed(32, 5032)]);
+      initServerEvents();
+      served.push(32);
+      const { at } = renderApp('/chat/new?model=32');
+      await act(async () => {});
+      expect(at()).toBe('/chat/new?model=32');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1100);
+      });
+      expect(transport.listServers).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(await page()).toHaveAttribute('data-port', '5032');
+      expect(at()).toBe('/chat/new?model=32');
+      vi.useRealTimers();
+    });
+    const listed = (modelId: number, port: number) => ({
+      model_id: modelId, model_name: 'qwen3', pid: 1, port, started_at: Math.floor(++clock / 1000), runtime: 'llama',
+    });
+
+    it('waits for it, then opens the chat on the model it lists as served', async () => {
+      const { at } = renderApp('/chat/new?model=27');
+      await act(async () => {});
+      expect(at()).toBe('/chat/new?model=27');
+      expect(screen.getByRole('status')).toHaveTextContent('Loading chat…');
+      expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+
+      served.push(27);
+      await act(async () => answer([listed(27, 5027)]));
+      expect(await page()).toHaveAttribute('data-port', '5027');
+      expect(at()).toBe('/chat/new?model=27');
+    });
+
+    it('goes to the inspector once the list it waited for serves nothing', async () => {
+      const { at } = renderApp('/chat/new?model=28');
+      await act(async () => {});
+      expect(at()).toBe('/chat/new?model=28');
+      await act(async () => answer([]));
+      await waitFor(() => expect(at()).toBe('/models/28'));
+    });
+
+    it('a new chat with no model named waits for the list before picking the first loaded', async () => {
+      const { at } = renderApp('/chat/new');
+      await act(async () => {});
+      expect(at()).toBe('/chat/new');
+      served.push(29);
+      await act(async () => answer([listed(29, 5029)]));
+      expect(await page()).toHaveAttribute('data-port', '5029');
+    });
+  });
+
+  it('a chat whose model stops while it is open stays open on the port it had', async () => {
+    serving(25, 5025, 'qwen3-8b');
+    daemon.chats = [chat(3, 25)];
+    const { at } = renderApp('/chat/3');
+    expect(await page()).toHaveAttribute('data-port', '5025');
+    const mounted = mounts.count;
+
+    stop(25);
+    served.splice(served.indexOf(25), 1);
+
+    expect(at()).toBe('/chat/3');
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5025');
+    expect(mounts.count).toBe(mounted);
+  });
+
+  it("a local chat's Show <model> opens its inspector, Show log its log, and a paired model a new chat on it", async () => {
+    const user = userEvent.setup();
+    serving(26, 5026);
+    daemon.chats = [chat(3, 26)];
+    const view = renderApp('/chat/3');
+    await page();
+    await user.click(screen.getByRole('button', { name: 'show the model' }));
+    await waitFor(() => expect(view.at()).toBe('/models/26'));
+    view.unmount();
+
+    const again = renderApp('/chat/3');
+    await page();
+    await user.click(screen.getByRole('button', { name: 'show its log' }));
+    await waitFor(() => expect(again.at()).toBe('/models/26/log'));
+    again.unmount();
+
+    act(() => applyRemoteStatus(connectedTo(DESK, 'desk')));
+    const third = renderApp('/chat/3');
+    await page();
+    await user.click(screen.getByRole('button', { name: 'a desk model' }));
+    await waitFor(() => expect(third.at()).toBe('/chat/new?far=7'));
+    expect(await page()).toHaveAttribute('data-paired', 'desk:7');
   });
 
   it('a conversation the daemon does not list, read again, opens an empty chat', async () => {

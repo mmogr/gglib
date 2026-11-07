@@ -30,7 +30,6 @@ const { confirm } = vi.hoisted(() => ({
 vi.mock('../../../src/contexts/ConfirmContext', () => ({
   useConfirmContext: () => ({ confirm }),
 }));
-vi.mock('../../../src/places/settings/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => null }));
 
 import type { EngineStatus, LlamaProgressEvent, PinState, RuntimeKind } from '../../../src/types/setup';
 

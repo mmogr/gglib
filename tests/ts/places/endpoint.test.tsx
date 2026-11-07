@@ -75,9 +75,7 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
   },
   clearProxyCache: (h: string, p: number, k?: string | null) => dashboard.clear(h, p, k),
 }));
-vi.mock('../../../src/components/ProxyDashboardModal', () => ({
-  ProxyDashboardModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div role="dialog" aria-label="Live numbers" /> : null),
-}));
+vi.mock('../../../src/places/diagnostics/DiagnosticsPlace', () => ({ default: () => <main aria-label="Diagnostics" /> }));
 vi.mock('../../../src/places/chat/ChatPlace', () => ({
   default: ({ serverPort, conversationId }: { serverPort?: number; conversationId: number | null }) => (
     <div data-testid="chat-page" data-port={serverPort} data-conversation={conversationId ?? 'none'} />
@@ -642,17 +640,17 @@ describe('the endpoint place', () => {
       expect(within(using).getByRole('button', { name: 'Connect a client' })).toBeInTheDocument();
     });
 
-    it('Recent is the last five, newest first, with tokens, rate and what gglib did; All › opens the live numbers', async () => {
-      const { user } = renderEndpoint();
-      const at = (n: number) => 1_800_000_000 + n * 60;
+    it('Recent is the last five, newest first, with tokens, rate and what gglib did; All › opens Diagnostics › Live', async () => {
+      const { user, at } = renderEndpoint();
+      const when = (n: number) => 1_800_000_000 + n * 60;
       await frame({
         recent_requests: [
-          ...[0, 1, 2, 3].map((n) => recentRequest({ model_name: `m${n}`, recorded_at_secs: at(n) })),
-          recentRequest({ model_name: 'm4', recorded_at_secs: at(4), completion_tokens: 1, generation_ms: 0 }),
-          recentRequest({ model_name: 'm5', recorded_at_secs: at(5) }),
+          ...[0, 1, 2, 3].map((n) => recentRequest({ model_name: `m${n}`, recorded_at_secs: when(n) })),
+          recentRequest({ model_name: 'm4', recorded_at_secs: when(4), completion_tokens: 1, generation_ms: 0 }),
+          recentRequest({ model_name: 'm5', recorded_at_secs: when(5) }),
           recentRequest({
             model_name: 'Qwen3-4B',
-            recorded_at_secs: at(6),
+            recorded_at_secs: when(6),
             completion_tokens: 812,
             generation_ms: 24_000,
             interventions: [
@@ -672,7 +670,8 @@ describe('the endpoint place', () => {
       expect(rows[2].textContent).not.toMatch(/t\/s/);
 
       await user.click(screen.getByRole('button', { name: 'All ›' }));
-      expect(screen.getByRole('dialog', { name: 'Live numbers' })).toBeInTheDocument();
+      expect(at()).toBe('/diagnostics/live');
+      expect(screen.getByRole('main', { name: 'Diagnostics' })).toBeInTheDocument();
     });
 
     it('Recent is not drawn before the first request', async () => {
@@ -718,22 +717,14 @@ describe('the endpoint place', () => {
       expect(dashboard.clear).not.toHaveBeenCalled();
     });
 
-    it('while off, ⋯ offers neither Live numbers nor Clear, and a dialog never opens by itself later', async () => {
-      const { user } = renderEndpoint();
+    it('while off, ⋯ offers no Clear, and Live numbers still opens Diagnostics › Live, which says the endpoint is off', async () => {
+      const { user, at } = renderEndpoint();
       await frame();
-      await user.click(screen.getByRole('button', { name: 'More' }));
-      await user.click(screen.getByRole('menuitem', { name: 'Live numbers' }));
-      expect(screen.getByRole('dialog', { name: 'Live numbers' })).toBeInTheDocument();
-
       act(() => applyProxyStatus(DOWN));
-      expect(screen.queryByRole('dialog', { name: 'Live numbers' })).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'More' }));
-      expect(screen.getByRole('menuitem', { name: 'Live numbers' })).toBeDisabled();
       expect(screen.getByRole('menuitem', { name: 'Clear prompt cache' })).toBeDisabled();
-
-      act(() => applyProxyStatus(UP));
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Turn off' })).toBeInTheDocument());
-      expect(screen.queryByRole('dialog', { name: 'Live numbers' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('menuitem', { name: 'Live numbers' }));
+      expect(at()).toBe('/diagnostics/live');
     });
 
     it.each([
@@ -749,13 +740,19 @@ describe('the endpoint place', () => {
       expect(dashboard.clear).toHaveBeenCalledWith('127.0.0.1', 8080, null);
     });
 
-    it('⋯ opens the live numbers and the endpoint settings', async () => {
-      const { user, at } = renderEndpoint();
-      await frame();
+    it('⋯ Live numbers and Activity\'s Live numbers › open Diagnostics › Live; ⋯ Endpoint settings… the settings', async () => {
+      const { user, at, router } = renderEndpoint();
+      await frame({ tool_repairs_succeeded: 3 });
       await user.click(screen.getByRole('button', { name: 'More' }));
       await user.click(screen.getByRole('menuitem', { name: 'Live numbers' }));
-      expect(screen.getByRole('dialog', { name: 'Live numbers' })).toBeInTheDocument();
+      expect(at()).toBe('/diagnostics/live');
 
+      await act(() => router.navigate('/endpoint'));
+      await frame({ tool_repairs_succeeded: 3 });
+      await user.click(within(screen.getByRole('group', { name: 'Activity' })).getByRole('button', { name: 'Live numbers ›' }));
+      expect(at()).toBe('/diagnostics/live');
+
+      await act(() => router.navigate('/endpoint'));
       await user.click(screen.getByRole('button', { name: 'More' }));
       await user.click(screen.getByRole('menuitem', { name: 'Endpoint settings…' }));
       expect(at()).toBe('/settings/endpoint');

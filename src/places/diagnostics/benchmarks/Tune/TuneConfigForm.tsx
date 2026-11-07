@@ -1,0 +1,289 @@
+/**
+ * Tune-mode configuration form: model select, sampling-parameter sweep
+ * inputs, task-suite selector (built-in default vs. custom file upload),
+ * seeding toggles, pruning, and Apply-best checkbox.
+ *
+ * Emits a fully-built `TuneConfig` via `onSubmit` — this component owns no
+ * SSE/run state, only the form values.
+ *
+ * @module places/diagnostics/benchmarks/Tune/TuneConfigForm
+ */
+
+import { FC, useRef, useState } from 'react';
+import { Checkbox } from '../../../../components/ui/Checkbox';
+import { Button } from '../../../../components/ui/Button';
+import { Input } from '../../../../components/ui/Input';
+import { Select } from '../../../../components/ui/Select';
+import { Chip } from '../../../../components/ui/Chip';
+import type { GgufModel } from '../../../../types';
+import type { TuneConfig, TuneTask } from '../../../../types/benchmark';
+
+interface TuneConfigFormProps {
+  models: GgufModel[];
+  disabled: boolean;
+  onSubmit: (config: TuneConfig, applyBest: boolean) => void;
+}
+
+/** Parse a comma-separated numeric list, ignoring blank/invalid entries. */
+function parseNumberList(value: string): number[] {
+  return value
+    .split(',')
+    .map(v => v.trim())
+    .filter(v => v.length > 0)
+    .map(Number)
+    .filter(n => !Number.isNaN(n));
+}
+
+export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSubmit }) => {
+  const [modelId, setModelId] = useState<number | ''>(
+    models.length > 0 && models[0].id != null ? models[0].id : '',
+  );
+  const [temperature, setTemperature] = useState('0.2,0.5,0.8');
+  const [topP, setTopP] = useState('');
+  const [topK, setTopK] = useState('');
+  const [minP, setMinP] = useState('');
+  const [repeatPenalty, setRepeatPenalty] = useState('');
+  const [dryMultiplier, setDryMultiplier] = useState('');
+  const [dynatempRange, setDynatempRange] = useState('');
+  const [dynatempExponent, setDynatempExponent] = useState('');
+  const [topNSigma, setTopNSigma] = useState('');
+
+  const [suiteMode, setSuiteMode] = useState<'default' | 'custom'>('default');
+  const [customTasks, setCustomTasks] = useState<TuneTask[] | null>(null);
+  const [customSuiteError, setCustomSuiteError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [seedFromFamilyPresets, setSeedFromFamilyPresets] = useState(true);
+  const [pruneFraction, setPruneFraction] = useState('0.5');
+  const [ctxSize, setCtxSize] = useState('');
+  const [applyBest, setApplyBest] = useState(false);
+
+  // Client-side file parsing: the uploaded file must be a plain JSON array
+  // of TuneTask values — the identical shape `--task-suite path.json` reads
+  // from disk on the CLI. Parsed here, not sent as a raw file upload.
+  const handleFileChange = (file: File | null) => {
+    setCustomSuiteError(null);
+    setCustomTasks(null);
+    if (!file) return;
+    file
+      .text()
+      .then(text => {
+        const parsed = JSON.parse(text) as unknown;
+        if (!Array.isArray(parsed)) {
+          throw new Error('expected a JSON array of task definitions');
+        }
+        setCustomTasks(parsed as TuneTask[]);
+      })
+      .catch(err => {
+        setCustomSuiteError(
+          `Failed to parse task suite file: ${(err as Error).message}`,
+        );
+      });
+  };
+
+  const canSubmit =
+    modelId !== '' && (suiteMode === 'default' || (customTasks?.length ?? 0) > 0);
+
+  const handleSubmit = () => {
+    if (modelId === '') return;
+
+    const config: TuneConfig = {
+      model_id: modelId,
+      task_suite:
+        suiteMode === 'default'
+          ? { source: 'default' }
+          : { source: 'custom', tasks: customTasks ?? [] },
+      sweep: {
+        temperature: parseNumberList(temperature),
+        top_p: parseNumberList(topP),
+        top_k: parseNumberList(topK),
+        min_p: parseNumberList(minP),
+        repeat_penalty: parseNumberList(repeatPenalty),
+        dry_multiplier: parseNumberList(dryMultiplier),
+        dynatemp_range: parseNumberList(dynatempRange),
+        dynatemp_exponent: parseNumberList(dynatempExponent),
+        top_n_sigma: parseNumberList(topNSigma),
+      },
+      seed_from_family_presets: seedFromFamilyPresets,
+      // No weights: the form has no UI for them, so sending a copy of the
+      // server's defaults would only let the two drift apart. `weights` is
+      // `#[serde(default)]` server-side, and AgenticConfigForm omits it too.
+      prune_fraction: parseFloat(pruneFraction) || 0.5,
+      ctx_size: ctxSize.trim() ? parseInt(ctxSize, 10) : null,
+    };
+    onSubmit(config, applyBest);
+  };
+
+  return (
+    <div className="flex flex-col gap-base">
+      <div className="flex flex-col gap-xs">
+        <label className="text-xs font-semibold text-text">
+          Model
+        </label>
+        <Select
+          size="sm"
+          value={modelId}
+          disabled={disabled}
+          onChange={e => setModelId(e.target.value ? Number(e.target.value) : '')}
+        >
+          <option value="">Select a model…</option>
+          {models.map(m => (
+            <option key={m.id} value={m.id ?? ''}>
+              {m.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-xs">
+        <label className="text-xs font-semibold text-text">
+          Sweep — temperature
+        </label>
+        <Input
+          value={temperature}
+          onChange={e => setTemperature(e.target.value)}
+          disabled={disabled}
+          size="sm"
+          placeholder="0.2,0.5,0.8"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-sm">
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            top_p
+          </label>
+          <Input value={topP} onChange={e => setTopP(e.target.value)} disabled={disabled} size="sm" placeholder="0.9,0.95" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            top_k
+          </label>
+          <Input value={topK} onChange={e => setTopK(e.target.value)} disabled={disabled} size="sm" placeholder="20,40" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            min_p
+          </label>
+          <Input value={minP} onChange={e => setMinP(e.target.value)} disabled={disabled} size="sm" placeholder="0,0.05" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            repeat_penalty
+          </label>
+          <Input value={repeatPenalty} onChange={e => setRepeatPenalty(e.target.value)} disabled={disabled} size="sm" placeholder="1.0,1.1" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            dry_multiplier
+          </label>
+          <Input value={dryMultiplier} onChange={e => setDryMultiplier(e.target.value)} disabled={disabled} size="sm" placeholder="0,0.4,0.8" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            dynatemp_range
+          </label>
+          <Input value={dynatempRange} onChange={e => setDynatempRange(e.target.value)} disabled={disabled} size="sm" placeholder="0,0.4" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            dynatemp_exponent
+          </label>
+          <Input value={dynatempExponent} onChange={e => setDynatempExponent(e.target.value)} disabled={disabled} size="sm" placeholder="1.0" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            top_n_sigma
+          </label>
+          <Input value={topNSigma} onChange={e => setTopNSigma(e.target.value)} disabled={disabled} size="sm" placeholder="-1,1" />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-xs">
+        <label className="text-xs font-semibold text-text">
+          Task Suite
+        </label>
+        <div className="flex gap-sm">
+          <Chip selected={suiteMode === 'default'} disabled={disabled} onClick={() => setSuiteMode('default')}>
+            Default
+          </Chip>
+          <Chip selected={suiteMode === 'custom'} disabled={disabled} onClick={() => setSuiteMode('custom')}>
+            Custom
+          </Chip>
+        </div>
+        {suiteMode === 'custom' && (
+          <div className="flex flex-col gap-xs">
+            <input
+              ref={fileInputRef}
+              type="file"
+              tabIndex={-1}
+              aria-hidden="true"
+              accept=".json,application/json"
+              disabled={disabled}
+              onChange={e => {
+                const file = e.target.files?.[0] ?? null;
+                setFileName(file?.name ?? null);
+                handleFileChange(file);
+              }}
+              className="sr-only"
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={disabled}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Choose task file…
+            </Button>
+            {fileName && <span className="text-xs text-text-muted">{fileName}</span>}
+            {customTasks && (
+              <p className="text-xs text-success">{customTasks.length} task(s) loaded</p>
+            )}
+            {customSuiteError && <p className="text-xs text-danger">{customSuiteError}</p>}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-xs">
+        <Checkbox
+          checked={seedFromFamilyPresets}
+          disabled={disabled}
+          onChange={e => setSeedFromFamilyPresets(e.target.checked)}
+          label="Seed from family presets"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-sm">
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            Prune fraction
+          </label>
+          <Input value={pruneFraction} onChange={e => setPruneFraction(e.target.value)} disabled={disabled} size="sm" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            Context size
+          </label>
+          <Input value={ctxSize} onChange={e => setCtxSize(e.target.value)} disabled={disabled} size="sm" placeholder="Default" />
+        </div>
+      </div>
+
+      <Checkbox
+          checked={applyBest}
+          disabled={disabled}
+          onChange={e => setApplyBest(e.target.checked)}
+          label="Apply the winner as measured defaults when complete (gated: must beat the incumbent beyond the run's own drift)"
+        />
+
+      <Button
+        variant="primary"
+        size="lg"
+        fullWidth
+        disabled={disabled || !canSubmit}
+        onClick={handleSubmit}
+      >
+        Run Tune
+      </Button>
+    </div>
+  );
+};

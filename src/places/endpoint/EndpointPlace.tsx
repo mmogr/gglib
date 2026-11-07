@@ -8,17 +8,15 @@
  * re-read after each event), the rest from the one dashboard stream
  * (`useEndpointDashboard`), the devices from `remoteRegistry`. The
  * sections that need the dashboard are drawn once it has spoken, so
- * nothing says "nothing loaded" before it knows. ⋯ holds Live numbers (the
- * dashboard dialog, until Diagnostics › Live), Clear prompt cache, and
- * Endpoint settings… (General, where the endpoint's fields are today).
+ * nothing says "nothing loaded" before it knows. ⋯ holds Live numbers
+ * (Diagnostics › Live), Clear prompt cache, and Endpoint settings….
  *
  * Connect a client's Model ID starts at the inspected model, else the
  * pinned one, else the last loaded, else the default model (the setting
  * `gglib q` uses), else the library's smallest chat model, so Test it
  * never asks the endpoint to load the biggest one; Test it asks for that
- * model, or for the pin when the endpoint is pinned. Live numbers and
- * Clear prompt cache are offered only while they can act: the endpoint
- * up, and for Clear its key revealed.
+ * model, or for the pin when the endpoint is pinned. Clear prompt cache
+ * is offered only while it can act: the endpoint up and its key revealed.
  *
  * @module places/endpoint/EndpointPlace
  */
@@ -29,26 +27,25 @@ import { MoreHorizontal } from 'lucide-react';
 import { openChatOn } from '../../app/openChat';
 import { inspectorClosed, inspectorSubject, paths, withoutParam } from '../../app/paths';
 import { ConnectClient } from '../../components/ConnectClient';
-import { ProxyDashboardModal } from '../../components/ProxyDashboardModal';
 import { Icon } from '../../components/ui/Icon';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useSettings } from '../../hooks/useSettings';
 import { usePairedModels } from '../../hooks/usePairedModels';
 import { useServers, type ServerViewModel } from '../../hooks/useServers';
 import { Inspector } from '../../inspector/Inspector';
-import { clearProxyCache } from '../../services/clients/proxyDashboard';
 import { removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
 import { useModelLibrary } from '../../services/modelRegistry';
 import { useEndpointFacts, useProxyState } from '../../services/proxyRegistry';
 import { useRemoteState } from '../../services/remoteRegistry';
 import { formatError } from '../../utils/errors';
-import { Menu } from '../library/Menu';
+import { Menu } from '../../components/ui/Menu';
 import { useEndpointDashboard } from '../library/useResidency';
 import { Activity } from './Activity';
 import { Header } from './Header';
 import { Loaded } from './Loaded';
 import { Recent } from './Recent';
 import { Serves } from './Serves';
+import { useClearCache } from './useClearCache';
 import { useEndpointActions } from './useEndpointActions';
 import { UsingIt } from './UsingIt';
 
@@ -66,8 +63,6 @@ export default function EndpointPlace() {
   const { status: remote } = useRemoteState();
   const { settings } = useSettings();
   const [picked, setPicked] = useState<number | null>(null);
-  const [live, setLive] = useState(false);
-  const [clearing, setClearing] = useState(false);
   const connectRef = useRef<HTMLDivElement>(null);
 
   const subject = inspectorSubject(location);
@@ -93,25 +88,13 @@ export default function EndpointPlace() {
     connectRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     navigate(withoutParam(location, 'connect'), { replace: true });
   });
-  const canLive = up && dash.port !== null;
-  // A dialog asked for while it could not open does not open later by itself.
-  if (live && !canLive) setLive(false);
+  const toLive = () => navigate(paths.diagnostics('live'));
 
   const unload = (id: number) => void stopServer(id).catch((err) => showToast(formatError(err), 'error'));
-  // Clear presents the proxy's key, so it waits for the reveal.
-  const canClear = up && dash.port !== null && dash.apiKey !== undefined;
-  const clear = async () => {
-    if (!canClear || dash.port === null) return;
-    setClearing(true);
-    try {
-      const result = await clearProxyCache(dash.host, dash.port, dash.apiKey ?? null);
-      showToast(result.message || 'Prompt cache cleared', 'success');
-    } catch (err) {
-      showToast(formatError(err), 'error');
-    } finally {
-      setClearing(false);
-    }
-  };
+  // Clear presents the proxy's key, so it waits for the reveal; and only while the endpoint is up.
+  const cache = useClearCache(dash);
+  const canClear = up && cache.canClear;
+  const clear = () => (canClear ? cache.clear() : Promise.resolve());
 
   // A model started for a chat opens its chat, with the port it was served on.
   const handleServerStarted = (server: ServerViewModel) => {
@@ -132,7 +115,7 @@ export default function EndpointPlace() {
             name="More"
             label={<Icon icon={MoreHorizontal} size={14} />}
             items={[
-              { label: 'Live numbers', onPick: () => setLive(true), disabled: !canLive },
+              { label: 'Live numbers', onPick: toLive },
               { label: 'Clear prompt cache', onPick: () => void clear(), disabled: !canClear },
               { label: 'Endpoint settings…', onPick: () => navigate(paths.settings('endpoint')), gapBefore: true },
             ]}
@@ -154,9 +137,9 @@ export default function EndpointPlace() {
           {up && snapshot && (
             <UsingIt snapshot={snapshot} devices={remote?.devices ?? []} onConnect={() => connectRef.current?.scrollIntoView?.({ behavior: 'smooth' })} />
           )}
-          {up && snapshot && <Recent snapshot={snapshot} onAll={() => setLive(true)} />}
+          {up && snapshot && <Recent snapshot={snapshot} onAll={toLive} />}
           {up && snapshot && (
-            <Activity snapshot={snapshot} clearing={clearing} canClear={canClear} onClear={() => void clear()} onLive={() => setLive(true)} />
+            <Activity snapshot={snapshot} clearing={cache.clearing} canClear={canClear} onClear={() => void clear()} onLive={toLive} />
           )}
         </div>
       </section>
@@ -170,8 +153,6 @@ export default function EndpointPlace() {
         onUpdateModel={updateModel}
         onOpenSystemSettings={() => navigate(paths.settings('engines'))}
       />
-
-      {dash.port !== null && <ProxyDashboardModal isOpen={live} onClose={() => setLive(false)} host={dash.host} port={dash.port} />}
     </div>
   );
 }

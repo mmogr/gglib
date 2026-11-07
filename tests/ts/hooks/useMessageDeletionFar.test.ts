@@ -21,6 +21,8 @@ import { useMessageDeletion } from '../../../src/components/ChatMessagesPanel/ho
 
 const threadRuntime = { getState: () => ({ messages: [] }), reset: vi.fn() } as unknown as ThreadRuntime;
 
+const confirm = vi.fn(async () => true);
+
 function mount(readOnly: boolean) {
   return renderHook(
     ({ readOnly: shown }: { readOnly: boolean }) =>
@@ -30,6 +32,7 @@ function mount(readOnly: boolean) {
         activeConversation: null,
         syncConversations: vi.fn(async () => {}),
         showToast: vi.fn(),
+        confirm,
         readOnly: shown,
       }),
     { initialProps: { readOnly } },
@@ -39,37 +42,42 @@ function mount(readOnly: boolean) {
 beforeEach(() => {
   transport.deleteMessage.mockClear();
   transport.getThread.mockClear();
+  confirm.mockReset();
+  confirm.mockImplementation(async () => true);
 });
 
 describe('useMessageDeletion on a far chat', () => {
-  it('opens no confirmation and deletes nothing', async () => {
+  it('asks nothing and deletes nothing', async () => {
     const { result } = mount(true);
 
-    act(() => result.current.initiateDelete('db-40'));
-    await act(async () => result.current.confirmDelete());
+    await act(async () => result.current('db-40'));
 
-    expect(result.current.isDeleteModalOpen).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
     expect(transport.deleteMessage).not.toHaveBeenCalled();
     expect(transport.getThread).not.toHaveBeenCalled();
   });
 
-  it('on this machine’s chat, the same two steps delete the row', async () => {
+  it('on this machine’s chat, asked and answered, deletes the row', async () => {
     const { result } = mount(false);
 
-    act(() => result.current.initiateDelete('db-40'));
-    expect(result.current.isDeleteModalOpen).toBe(true);
-    await act(async () => result.current.confirmDelete());
+    await act(async () => result.current('db-40'));
 
+    expect(confirm).toHaveBeenCalledTimes(1);
     expect(transport.deleteMessage).toHaveBeenCalledWith(40);
   });
 
-  it('a confirmation left open when the page turns to a far chat deletes nothing', async () => {
+  it('a question answered after the page turns to a far chat deletes nothing', async () => {
+    let answer: (yes: boolean) => void = () => {};
+    confirm.mockImplementation(() => new Promise<boolean>((resolve) => { answer = resolve; }));
     const { result, rerender } = mount(false);
-    act(() => result.current.initiateDelete('db-40'));
-    expect(result.current.isDeleteModalOpen).toBe(true);
+    let deleting: Promise<void> = Promise.resolve();
+    act(() => { deleting = result.current('db-40'); });
 
     rerender({ readOnly: true });
-    await act(async () => result.current.confirmDelete());
+    await act(async () => {
+      answer(true);
+      await deleting;
+    });
 
     expect(transport.deleteMessage).not.toHaveBeenCalled();
     expect(transport.getThread).not.toHaveBeenCalled();

@@ -18,6 +18,10 @@ import type { Location } from 'react-router';
 export const SETTINGS_SECTIONS = ['general', 'endpoint', 'models', 'tools', 'engines', 'about'] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
+/** The diagnostics place's tabs, in the order its tablist shows them. */
+export const DIAGNOSTICS_TABS = ['live', 'logs', 'benchmarks', 'system'] as const;
+export type DiagnosticsTab = (typeof DIAGNOSTICS_TABS)[number];
+
 export const paths = {
   /** The library with nothing picked. */
   library: () => '/library',
@@ -56,6 +60,8 @@ export const paths = {
   devices: () => '/devices',
   /** The settings place, open on `section`. */
   settings: (section: SettingsSection = 'general') => `/settings/${section}`,
+  /** The diagnostics place, open on `tab`. */
+  diagnostics: (tab: DiagnosticsTab = 'live') => `/diagnostics/${tab}`,
   /** The benchmarks, with `modelIds` picked to run. */
   benchmarks: (modelIds: number[] = []) =>
     modelIds.length > 0 ? `/diagnostics/benchmarks?models=${modelIds.join(',')}` : '/diagnostics/benchmarks',
@@ -135,6 +141,11 @@ export function inspectorClosed(location: Pick<Location, 'pathname' | 'search'>)
 /** The settings section a `/settings/:section` segment names, or `null` for one that names none. */
 export function settingsSection(segment: string | undefined): SettingsSection | null {
   return SETTINGS_SECTIONS.find((s) => s === segment) ?? null;
+}
+
+/** The diagnostics tab a `/diagnostics/:tab` segment names, or `null` for one that names none. */
+export function diagnosticsTab(segment: string | undefined): DiagnosticsTab | null {
+  return DIAGNOSTICS_TABS.find((t) => t === segment) ?? null;
 }
 
 /**

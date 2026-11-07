@@ -7,7 +7,6 @@
  * The loop guard is on or off here: on writes `note`, off writes `off`.
  * `refuse` stays the terminal's (`gglib config settings set
  * --loop-guard-mode refuse`), and is shown as on with a line saying so.
- * The guard's trips sit under it until Diagnostics has its Live tab (G1).
  *
  * @module places/settings/EndpointSection
  */
@@ -17,7 +16,6 @@ import { LLAMA_BASE_PORT, PROXY_CACHE_DISK_GB, PROXY_PORT } from '../../constant
 import type { LoopGuardMode } from '../../types/generated/LoopGuardMode';
 import { Disclosure } from './Disclosure';
 import { NumberSetting, TextSetting, ToggleSetting } from './fields';
-import { LoopGuardTripsPanel } from './LoopGuardTripsPanel';
 import { ON_ENDPOINT_START, ON_GGLIB_START, ON_KEY_CHANGE } from './notes';
 import { SecretSetting } from './SecretSetting';
 
@@ -120,7 +118,6 @@ export const EndpointSection: FC = () => (
         A conversation that repeats the same tool calls and gets the same answers back, or repeats one
         reply, is forwarded with a note saying what repeated, and its run ends if it repeats again.
       </ToggleSetting>
-      <LoopGuardTripsPanel />
 
       <ToggleSetting k="agenticSampling" id="agentic-sampling-input" label="Cap sampling on agent runs" on={onUnlessOff}>
         A turn that may call a tool has its temperature capped to 0.3, over a value nobody chose and
