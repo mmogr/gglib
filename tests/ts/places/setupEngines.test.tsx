@@ -22,7 +22,7 @@ const transport = vi.hoisted(() => ({
   getSettings: vi.fn(async () => ({})),
   updateSettings: vi.fn(async (u: Record<string, unknown>) => u),
 }));
-type Handlers = { onEvent: (e: unknown) => void; onError: (m: string) => void; onClose?: () => void };
+type Handlers = { onEvent: (e: unknown) => void; onError: (m: string) => void; onClose?: () => void; stop: () => void };
 const api = vi.hoisted(() => ({
   streams: [] as { kind: string; on: Handlers }[],
   getSetupStatus: vi.fn(async (): Promise<unknown> => ({})),
@@ -56,11 +56,11 @@ function answer(kind: RuntimeKind, ...statuses: EngineStatus[]) {
 
 async function reachEngines(status = setupStatus()) {
   api.getSetupStatus.mockImplementation(async () => status);
-  renderGated('/library');
+  const view = renderGated('/library');
   const user = userEvent.setup();
   await screen.findByRole('region', { name: 'This Mac' });
   await user.click(screen.getByRole('button', { name: 'Continue' }));
-  return { user, region: await screen.findByRole('region', { name: 'Engines' }) };
+  return { user, view, region: await screen.findByRole('region', { name: 'Engines' }) };
 }
 
 /** The install stream for `kind`, once the step has opened it. */
@@ -81,8 +81,9 @@ describe("setup's engines", () => {
       return list.length > 1 ? list.shift() : list[0];
     });
     api.streamEngineInstall.mockImplementation((kind: string, onEvent: Handlers['onEvent'], onError: Handlers['onError'], onClose?: () => void) => {
-      api.streams.push({ kind, on: { onEvent, onError, onClose } });
-      return () => {};
+      const stop = vi.fn();
+      api.streams.push({ kind, on: { onEvent, onError, onClose, stop } });
+      return stop;
     });
     api.enableFastDownloads.mockImplementation(async () => {});
   });
@@ -171,12 +172,19 @@ describe("setup's engines", () => {
     act(() => vi.advanceTimersByTime(BUILD_POLL_MS));
     await waitFor(() => expect(llama).toHaveTextContent('ready'));
     expect(api.streams).toHaveLength(0);
+
+    // Found: the poll stops.
+    const found = api.getEngineStatus.mock.calls.length;
+    act(() => vi.advanceTimersByTime(BUILD_POLL_MS * 3));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.getEngineStatus.mock.calls.length).toBe(found);
   });
 
-  it('sets faster downloads up on arrival where Python 3 is there, and says so', async () => {
+  it('sets nothing up for faster downloads on arrival, and says it is set up with a model', async () => {
     const { region } = await reachEngines(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
-    await waitFor(() => expect(api.enableFastDownloads).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(line(region, 'Faster downloads')).toHaveTextContent('set up'));
+    expect(line(region, 'Faster downloads')).toHaveTextContent('set up when you get a model');
+    await stream('llama');
+    expect(api.enableFastDownloads).not.toHaveBeenCalled();
   });
 
   it('says faster downloads need Python 3 where it is not there, and sets nothing up', async () => {
@@ -186,16 +194,10 @@ describe("setup's engines", () => {
     expect(api.enableFastDownloads).not.toHaveBeenCalled();
   });
 
-  it("warns of a failed accelerator in the daemon's words, and Retry sets it up again", async () => {
-    api.enableFastDownloads.mockRejectedValueOnce(new Error('pip failed'));
-    const { user, region } = await reachEngines(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
-    const fast = line(region, 'Faster downloads');
-
-    expect(await within(fast).findByRole('status')).toHaveTextContent('pip failed');
-    expect(fast).toHaveTextContent('downloads still work');
-    await user.click(within(fast).getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(fast).toHaveTextContent('set up'));
-    expect(api.enableFastDownloads).toHaveBeenCalledTimes(2);
+  it('says faster downloads are set up when they are', async () => {
+    const { region } = await reachEngines(setupStatus({ fastDownloadReady: true }));
+    expect(line(region, 'Faster downloads')).toHaveTextContent('set up');
+    expect(line(region, 'Faster downloads')).not.toHaveTextContent('when you get a model');
   });
 
   it('says an engine it cannot read, and Retry reads and installs', async () => {
@@ -217,6 +219,49 @@ describe("setup's engines", () => {
     expect(line(region, 'llama.cpp')).toHaveTextContent('ready');
   });
 
+  it('shows what it reads under StrictMode, as a development build renders it', async () => {
+    // `renderGated` renders under StrictMode: its practice unmount must not leave the step deaf.
+    answer('llama', engine('llama', true));
+    answer('stable_diffusion', engine('stable_diffusion', true));
+    const { region } = await reachEngines();
+    await waitFor(() => expect(line(region, 'llama.cpp')).toHaveTextContent('ready'));
+    expect(line(region, 'stable-diffusion.cpp (for drawing)')).toHaveTextContent('ready');
+  });
+
+  it('still installs stable-diffusion.cpp after llama.cpp fails', async () => {
+    const { region } = await reachEngines();
+    const llama = await stream('llama');
+    act(() => llama.onEvent({ type: 'failed', message: 'no asset' }));
+    await stream('stable_diffusion');
+    expect(await within(line(region, 'llama.cpp')).findByRole('alert')).toHaveTextContent('no asset');
+  });
+
+  it("names the daemon's update command where llama.cpp was built here before", async () => {
+    answer('llama', engine('llama', false, {}, { built: true, rebuilds: true, updateDownloads: false }));
+    const { region } = await reachEngines();
+    const llama = line(region, 'llama.cpp');
+    expect(await within(llama).findByText('gglib config llama update', { selector: 'code' })).toBeInTheDocument();
+    expect(within(llama).queryByText('gglib config llama install', { selector: 'code' })).not.toBeInTheDocument();
+  });
+
+  it("says the CPU build's warning while the install it is about runs", async () => {
+    answer('llama', engine('llama', false, { download: 'Linux x64 (CPU)', warning: 'Chat will be slow on the CPU build.' }));
+    const { region } = await reachEngines();
+    await stream('llama');
+    expect(within(line(region, 'llama.cpp')).getByText('Chat will be slow on the CPU build.')).toBeInTheDocument();
+  });
+
+  it('stops reading its streams when setup goes, and starts no install after', async () => {
+    const { view } = await reachEngines();
+    const llama = await stream('llama');
+    view.unmount();
+
+    expect(llama.stop).toHaveBeenCalled();
+    act(() => llama.onEvent({ type: 'completed', version: 'b11429' }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(api.streams.map((s) => s.kind)).toEqual(['llama']);
+  });
+
   it('goes on without llama.cpp by Skip', async () => {
     const { user, region } = await reachEngines();
     await stream('llama');
@@ -227,13 +272,12 @@ describe("setup's engines", () => {
   it('starts nothing twice after Back and Continue', async () => {
     answer('llama', engine('llama', true));
     answer('stable_diffusion', engine('stable_diffusion', true));
-    const { user, region } = await reachEngines(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    const { user, region } = await reachEngines();
     await waitFor(() => expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled());
     await user.click(within(region).getByRole('button', { name: 'Back' }));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
     await screen.findByRole('region', { name: 'Engines' });
 
-    expect(api.enableFastDownloads).toHaveBeenCalledTimes(1);
     expect(api.getEngineStatus).toHaveBeenCalledTimes(2);
     expect(api.streams).toHaveLength(0);
   });

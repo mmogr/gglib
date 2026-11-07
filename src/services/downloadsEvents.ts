@@ -116,6 +116,11 @@ export async function queueDownload(modelId: string, quantization?: string): Pro
   return id;
 }
 
+/** Read the queue again now. */
+export async function refreshDownloads(): Promise<void> {
+  await bridge.refresh();
+}
+
 /**
  * Cancel a download, once: a second cancel of the same one while the first
  * is out does nothing. It settles when the download ends or another runs;

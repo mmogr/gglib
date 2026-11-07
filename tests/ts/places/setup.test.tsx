@@ -59,7 +59,6 @@ import { cleanupModelEvents, initModelEvents, refreshModels } from '../../../src
 import { applyProxyStatus, resetProxyState } from '../../../src/services/proxyRegistry';
 import { ADVANCE_MS } from '../../../src/places/setup/Step';
 import { proofAnswered } from '../../../src/readings/connect';
-import { formatBudget, formatRecommendation } from '../../../src/utils/format';
 import { queueSnapshot, runningRow } from '../fixtures/downloads';
 import { guiModel } from '../fixtures/model';
 import { renderGated } from './harness';
@@ -138,29 +137,40 @@ describe('setup', () => {
   });
 
   it("says it can't reach gglib when setup's own read fails, and Try again reads again", async () => {
-    const status = setupStatus();
-    api.getSetupStatus.mockResolvedValueOnce(status).mockRejectedValueOnce(new Error('connection refused'));
-    initModelEvents();
-    renderGated('/library');
-    const user = userEvent.setup();
+    api.getRecommendedModel.mockRejectedValue(new Error('connection refused'));
+    const { user } = start();
 
     expect(await screen.findByRole('alert')).toHaveTextContent("Can't reach gglib.");
-    api.getSetupStatus.mockResolvedValue(status);
+    api.getRecommendedModel.mockResolvedValue(REC);
     await press(user, 'Try again');
     expect(await step('This Mac')).toBeInTheDocument();
   });
 
+  it('reads the setup status once, at the gate, and setup uses that read', async () => {
+    const { user } = start();
+    await reach(user, 'First model');
+    // StrictMode runs the gate's effect twice; the place adds no read of its own.
+    expect(api.getSetupStatus.mock.calls.length).toBeLessThanOrEqual(2);
+    const before = api.getSetupStatus.mock.calls.length;
+    await press(user, 'Back');
+    await press(user, 'Back');
+    expect(api.getSetupStatus).toHaveBeenCalledTimes(before);
+  });
+
   it("says This Mac in the daemon's words, and Change saves the folder typed and shows the one read back", async () => {
-    transport.getModelsDirectory.mockResolvedValue({ path: '/Volumes/big/models', source: 'explicit', default_path: '/x', exists: true, writable: true });
+    // The route names a stored folder `environment`, as it names GGLIB_MODELS_DIR (`paths/models.rs`).
+    transport.getModelsDirectory.mockResolvedValue({ path: '/Volumes/big/models', source: 'environment', default_path: '/x', exists: true, writable: true });
     const { user } = start();
     const region = await step('This Mac');
 
-    expect(region).toHaveTextContent(`macOS ARM64 (Metal) · ${formatBudget(REC)}`);
+    expect(region).toHaveTextContent('macOS ARM64 (Metal) · 43.2 GiB unified memory');
     const folder = within(region).getByRole('group', { name: 'Models folder' });
     expect(folder).toHaveTextContent('/Users/me/.local/share/llama_models(will be created)');
 
     await user.click(within(folder).getByRole('button', { name: 'Change' }));
     const field = screen.getByRole('textbox', { name: 'Models folder' });
+    // No way on while a folder is being typed.
+    expect(within(region).getByRole('button', { name: 'Continue' })).toBeDisabled();
     await user.clear(field);
     await user.type(field, ' /Volumes/big/models ');
     await press(user, 'Save');
@@ -169,13 +179,27 @@ describe('setup', () => {
     const shown = await within(region).findByRole('group', { name: 'Models folder' });
     expect(shown).toHaveTextContent('/Volumes/big/models');
     expect(shown).not.toHaveTextContent('will be created');
+    // Where it was set is not said: the route cannot tell a chosen folder from the variable.
+    expect(region).not.toHaveTextContent('GGLIB_MODELS_DIR');
   });
 
-  it('leaves the memory out when nothing fits, and says so on First model', async () => {
+  it("keeps the field and says a folder the daemon refused in its words", async () => {
+    transport.setModelsDirectory.mockRejectedValueOnce(new Error('the folder is not writable'));
+    const { user } = start();
+    const region = await step('This Mac');
+    await user.click(within(region).getByRole('button', { name: 'Change' }));
+    await user.type(screen.getByRole('textbox', { name: 'Models folder' }), 'x');
+    await press(user, 'Save');
+
+    expect(await within(region).findByRole('alert')).toHaveTextContent('the folder is not writable');
+    expect(screen.getByRole('textbox', { name: 'Models folder' })).toBeInTheDocument();
+  });
+
+  it("says the machine's RAM when nothing fits, and says so on First model", async () => {
     api.getRecommendedModel.mockResolvedValue(null);
     const { user } = start();
     const region = await step('This Mac');
-    expect(region).toHaveTextContent('macOS ARM64 (Metal)');
+    expect(region).toHaveTextContent('macOS ARM64 (Metal) · 48.0 GiB system RAM');
     expect(region).not.toHaveTextContent('unified memory');
 
     await reach(user, 'First model');
@@ -190,7 +214,7 @@ describe('setup', () => {
     const region = await step('First model');
 
     expect(region).toHaveTextContent(REC.repo);
-    expect(region).toHaveTextContent(formatRecommendation(REC));
+    expect(region).toHaveTextContent('Strong tool calling at 8B. Needs 6.5 GiB of 43.2 GiB unified memory.');
     await user.click(within(region).getByRole('button', { name: 'Get it' }));
 
     expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: REC.repo, quantization: undefined });
@@ -216,6 +240,72 @@ describe('setup', () => {
     expect(transport.queueDownload).toHaveBeenCalledTimes(2);
   });
 
+  it('follows the download the queue already has for the repo, in place of a refusal', async () => {
+    transport.queueDownload.mockRejectedValueOnce(new Error("Download 'unsloth/Qwen3-8B-GGUF:Q4_K_M' is already in the queue."));
+    queue.snapshot = queueSnapshot({ revision: 9, active: { ...ROW, id: `${REC.repo}:Q4_K_M` } });
+    const { user } = start();
+    await reach(user, 'First model');
+    const region = await step('First model');
+    await user.click(within(region).getByRole('button', { name: 'Get it' }));
+
+    expect(await within(region).findByText('1.25 GiB / 5.00 GiB · 52.0 MB/s · ETA 1m 12s')).toBeInTheDocument();
+    expect(within(region).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it("says a refusal with no row of the repo's in the queue as it came, with Retry", async () => {
+    transport.queueDownload.mockRejectedValueOnce(new Error('queue full: max 10 downloads'));
+    const { user } = start();
+    await reach(user, 'First model');
+    const region = await step('First model');
+    await user.click(within(region).getByRole('button', { name: 'Get it' }));
+
+    expect(await within(region).findByRole('alert')).toHaveTextContent('queue full: max 10 downloads');
+    await user.click(within(region).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(2));
+  });
+
+  it('sets faster downloads up on Get it, before the download, and not before', async () => {
+    const order: string[] = [];
+    api.enableFastDownloads.mockImplementation(async () => void order.push('fast'));
+    transport.queueDownload.mockImplementation(async () => {
+      order.push('queue');
+      return { id: REC.repo };
+    });
+    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    await reach(user, 'First model');
+    expect(api.enableFastDownloads).not.toHaveBeenCalled();
+
+    await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
+    await waitFor(() => expect(order).toEqual(['fast', 'queue']));
+    await press(user, 'Back');
+    expect(within(await step('Engines')).getByRole('group', { name: 'Faster downloads' })).toHaveTextContent('set up');
+  });
+
+  it("warns of a failed accelerator in the daemon's words and downloads anyway, and Retry sets it up", async () => {
+    api.enableFastDownloads.mockRejectedValueOnce(new Error('pip failed'));
+    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    await reach(user, 'First model');
+    await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
+    await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(1));
+
+    await press(user, 'Back');
+    const fast = within(await step('Engines')).getByRole('group', { name: 'Faster downloads' });
+    expect(within(fast).getByRole('status')).toHaveTextContent('pip failed');
+    expect(fast).toHaveTextContent('downloads still work');
+    await user.click(within(fast).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(fast).toHaveTextContent('set up'));
+    expect(api.enableFastDownloads).toHaveBeenCalledTimes(2);
+  });
+
+  it('sets nothing up on Get it where Python 3 is not there', async () => {
+    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: false }));
+    await reach(user, 'First model');
+    await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
+    await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(1));
+    expect(api.enableFastDownloads).not.toHaveBeenCalled();
+  });
+
   it('skips the model: Skip goes on, queueing nothing and proving nothing', async () => {
     const { user } = start();
     await reach(user, 'Endpoint');
@@ -237,6 +327,20 @@ describe('setup', () => {
     expect(transport.joinRemote).toHaveBeenCalledWith({ pairing: 'abc-123' });
     expect(await within(region).findByText('Joined. Its models are in your Library.')).toBeInTheDocument();
     expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it("says a pairing the daemon refused in its words, and joins nothing", async () => {
+    transport.joinRemote.mockRejectedValueOnce(new Error('the pairing code has expired'));
+    const { user } = start();
+    await reach(user, 'First model');
+    const region = await step('First model');
+    await user.click(within(region).getByRole('button', { name: "Use another machine's models ›" }));
+    await user.type(within(region).getByRole('textbox', { name: 'Paste a pairing string' }), 'abc-123');
+    await user.click(within(region).getByRole('button', { name: 'Join' }));
+
+    expect(await within(region).findByRole('alert')).toHaveTextContent('the pairing code has expired');
+    expect(within(region).queryByText('Joined. Its models are in your Library.')).not.toBeInTheDocument();
+    expect(within(region).queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
   });
 
   it('turns the endpoint on, waits on the download for the proof without holding anyone, then proves the new model', async () => {
@@ -308,6 +412,17 @@ describe('setup', () => {
     expect(screen.queryByRole('main', { name: 'Setup' })).not.toBeInTheDocument();
   });
 
+  it('lets Open gglib in when setup done cannot be written', async () => {
+    transport.updateSettings.mockRejectedValueOnce(new Error('settings are read-only'));
+    const { user, at } = start();
+    await reach(user, 'Endpoint');
+    await press(user, 'Continue');
+    await press(user, 'Open gglib');
+
+    expect(await screen.findByRole('main', { name: 'Library' })).toBeInTheDocument();
+    expect(at()).toBe('/library');
+  });
+
   it("lands on the Library's Hugging Face search after Choose another", async () => {
     const { user, at } = start();
     await reach(user, 'First model');
@@ -339,5 +454,20 @@ describe('setup', () => {
     expect(await step('Endpoint')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, ADVANCE_MS + 200));
     expect(screen.getByRole('region', { name: 'Endpoint' })).toBeInTheDocument();
+  });
+
+  it('moves an Already done step on once, ever: Continue before it does, then Back, and it stays', async () => {
+    library.models = [QWEN];
+    act(() => applyProxyStatus(UP));
+    const { user } = start(setupStatus({ llamaInstalled: true }));
+    await reach(user, 'First model');
+    expect(await step('First model')).toHaveTextContent('Already done');
+
+    await press(user, 'Continue');
+    expect(await step('Endpoint')).toBeInTheDocument();
+    await press(user, 'Back');
+    expect(await step('First model')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, ADVANCE_MS + 300));
+    expect(screen.getByRole('region', { name: 'First model' })).toBeInTheDocument();
   });
 });

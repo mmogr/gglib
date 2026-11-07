@@ -2,7 +2,8 @@
  * Setup's step 2, Engines: llama.cpp, which every chat model runs on,
  * installing on arrival with its progress, then ready; stable-diffusion.cpp,
  * for drawing, ready or skipped, since chat works without it; and faster
- * downloads, set up where Python 3 is there.
+ * downloads, which First model's Get it sets up where Python 3 is there
+ * (`useFastDownloads`).
  *
  * llama.cpp's failure is an error under its line, with Retry;
  * stable-diffusion.cpp's and the accelerator's are warnings (SU-2). Where
@@ -23,7 +24,8 @@ import { useToastContext } from '../../contexts/ToastContext';
 import { ENGINE_PRODUCT } from '../../types/setup';
 import type { EngineStatus } from '../../types/setup';
 import { Item, Problem, Step } from './Step';
-import { buildCommand, installable, needsBuild, type EngineView, type FastState, type SetupEngines } from './useEngines';
+import { buildCommand, installable, needsBuild, type EngineView, type SetupEngines } from './useEngines';
+import type { FastDownloads } from './useFastDownloads';
 
 const SKIPPED = 'skipped — chat works without it';
 
@@ -107,7 +109,8 @@ const Drawing: FC<{ view: EngineView; onRetry: () => void }> = ({ view, onRetry 
   );
 };
 
-const Fast: FC<{ fast: FastState; onRetry: () => void }> = ({ fast, onRetry }) => {
+const Fast: FC<{ fast: FastDownloads['fast']; onRetry: () => void }> = ({ fast, onRetry }) => {
+  if (fast === 'later') return <Item name="Faster downloads" state={<StatusMark kind="off" word="set up when you get a model" />} />;
   if (fast === 'ready') return <Item name="Faster downloads" state={<StatusMark kind="on" word="set up" />} />;
   if (fast === 'no-python') {
     return <Item name="Faster downloads" state={<StatusMark kind="off" word="needs Python 3; downloads still work" />} />;
@@ -122,8 +125,9 @@ const Fast: FC<{ fast: FastState; onRetry: () => void }> = ({ fast, onRetry }) =
   );
 };
 
-export const EnginesStep: FC<{ engines: SetupEngines; onNext: () => void; onBack: () => void }> = ({
+export const EnginesStep: FC<{ engines: SetupEngines; fast: FastDownloads; onNext: () => void; onBack: () => void }> = ({
   engines,
+  fast,
   onNext,
   onBack,
 }) => {
@@ -153,7 +157,7 @@ export const EnginesStep: FC<{ engines: SetupEngines; onNext: () => void; onBack
         onRecheck={engines.recheck}
       />
       <Drawing view={engines.sd} onRetry={() => engines.retry('stable_diffusion')} />
-      <Fast fast={engines.fast} onRetry={engines.retryFast} />
+      <Fast fast={fast.fast} onRetry={fast.retry} />
     </Step>
   );
 };

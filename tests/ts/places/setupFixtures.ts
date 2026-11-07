@@ -27,7 +27,7 @@ export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
       vulkanGlslcInstalled: false,
       vulkanSpirvHeadersInstalled: false,
     },
-    modelsDirectory: { path: '/Users/me/.local/share/llama_models', source: 'default', default_path: '/Users/me/.local/share/llama_models', exists: false, writable: true },
+    modelsDirectory: { path: '/Users/me/.local/share/llama_models', source: 'default', default_path: '/Users/me/.local/share/llama_models', exists: false, writable: false },
     pythonAvailable: true,
     fastDownloadReady: true,
     systemMemory: { totalRamBytes: 48 * GIB, gpuMemoryBytes: 36 * GIB, isUnifiedMemory: true, hasNvidiaGpu: false },

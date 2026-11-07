@@ -1,26 +1,26 @@
 /**
  * Setup's step 2, as state the place holds across its steps: both engines'
- * status and installs, and the download accelerator.
+ * status and installs.
  *
  * Started once, on the step's first arrival (`start`): the engines are read,
  * then llama.cpp installs if it is missing and its install is a download,
- * then stable-diffusion.cpp the same way, then each is read again. The
- * installs are the daemon's stream in both builds (SU-1), the one the
- * Settings engine card and the Library banner read, and a stream that
- * closes without a result ends with a reason. Where the install is a source
- * build, llama.cpp is read again every few seconds until a terminal has
- * built it (`recheck` reads it at once). The accelerator is set up at the
- * same time where Python 3 is there; downloads work without it, so its
- * failure, like stable-diffusion.cpp's, is only a warning (SU-2).
+ * then stable-diffusion.cpp the same way, whether llama.cpp's worked or
+ * not, then each is read again. The installs are the daemon's stream in
+ * both builds (SU-1), the one the Settings engine card and the Library
+ * banner read, and a stream that closes without a result ends with a
+ * reason. stable-diffusion.cpp's failure is only a warning (SU-2). Where
+ * the install is a source build, llama.cpp is read again every few seconds
+ * until a terminal has built it (`recheck` reads it at once).
  *
  * Held by the place, not by the step, so going Back and forward again
- * starts nothing twice.
+ * starts nothing twice. Leaving setup stops reading the streams and starts
+ * no further install; the daemon finishes the one it has.
  *
  * @module places/setup/useEngines
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { enableFastDownloads, getEngineStatus, streamEngineInstall } from '../../services/transport/api/setup';
+import { getEngineStatus, streamEngineInstall } from '../../services/transport/api/setup';
 import type { EngineStatus, LlamaProgressEvent, RuntimeKind } from '../../types/setup';
 import { formatError } from '../../utils/errors';
 
@@ -37,8 +37,6 @@ export interface EngineView {
   /** Why the last install did not finish, in the daemon's words or the stream's end. */
   error: string | null;
 }
-
-export type FastState = 'ready' | 'no-python' | 'setting-up' | { failed: string };
 
 /**
  * Whether `status`'s engine is missing and the daemon's install is a
@@ -60,27 +58,34 @@ const IDLE: EngineView = { status: null, installing: null, error: null };
 export interface SetupEngines {
   llama: EngineView;
   sd: EngineView;
-  fast: FastState;
   /** Why the engines could not be read. */
   readError: string | null;
   /** Begin step 2: read, then install what is missing. Once only. */
   start: () => void;
   retry: (kind: RuntimeKind) => void;
-  retryFast: () => void;
   /** Read the engines again now. */
   recheck: () => void;
 }
 
-/** `fastReady` and `python` are the setup status's: whether it is set up, and whether it can be. */
-export function useEngines(fastReady: boolean, python: boolean): SetupEngines {
+export function useEngines(): SetupEngines {
   const [views, setViews] = useState<Record<RuntimeKind, EngineView>>({ llama: IDLE, stable_diffusion: IDLE });
   const [readError, setReadError] = useState<string | null>(null);
-  const [fast, setFast] = useState<FastState>(fastReady ? 'ready' : python ? 'setting-up' : 'no-python');
   const [started, setStarted] = useState(false);
   // A ref as well as the state: StrictMode runs the arrival's effect twice before either sees the state.
   const once = useRef(false);
   const live = useRef(true);
-  useEffect(() => () => void (live.current = false), []);
+  /** How to stop reading each open install stream. */
+  const stops = useRef(new Set<() => void>());
+  useEffect(() => {
+    // Set again on each mount: StrictMode's practice unmount must not leave it false.
+    live.current = true;
+    const open = stops.current;
+    return () => {
+      live.current = false;
+      open.forEach((stop) => stop());
+      open.clear();
+    };
+  }, []);
 
   const patch = useCallback((kind: RuntimeKind, change: Partial<EngineView>) => {
     if (live.current) setViews((prev) => ({ ...prev, [kind]: { ...prev[kind], ...change } }));
@@ -93,7 +98,7 @@ export function useEngines(fastReady: boolean, python: boolean): SetupEngines {
         const found = await Promise.all(kinds.map((kind) => getEngineStatus(kind)));
         const byKind = Object.fromEntries(kinds.map((kind, i) => [kind, found[i]]));
         for (const kind of kinds) patch(kind, { status: byKind[kind] });
-        setReadError(null);
+        if (live.current) setReadError(null);
         return byKind;
       } catch (err) {
         if (live.current) setReadError(formatError(err));
@@ -107,15 +112,25 @@ export function useEngines(fastReady: boolean, python: boolean): SetupEngines {
   const install = useCallback(
     (kind: RuntimeKind) =>
       new Promise<void>((resolve) => {
+        if (!live.current) {
+          resolve();
+          return;
+        }
         let settled = false;
+        let stop: (() => void) | null = null;
         const settle = (error: string | null) => {
           if (settled) return;
           settled = true;
+          if (stop) stops.current.delete(stop);
           patch(kind, { installing: null, error });
+          if (!live.current) {
+            resolve();
+            return;
+          }
           void read([kind]).then(() => resolve());
         };
         patch(kind, { installing: 'starting', error: null });
-        streamEngineInstall(
+        stop = streamEngineInstall(
           kind,
           (event) => {
             if (settled) return;
@@ -126,16 +141,10 @@ export function useEngines(fastReady: boolean, python: boolean): SetupEngines {
           settle,
           () => settle(CLOSED_WITHOUT_RESULT),
         );
+        if (!settled) stops.current.add(stop);
       }),
     [patch, read],
   );
-
-  const setUpFast = useCallback(() => {
-    setFast('setting-up');
-    enableFastDownloads()
-      .then(() => live.current && setFast('ready'))
-      .catch((err: unknown) => live.current && setFast({ failed: formatError(err) }));
-  }, []);
 
   const begin = useCallback(async () => {
     const found = await read(['llama', 'stable_diffusion']);
@@ -148,16 +157,11 @@ export function useEngines(fastReady: boolean, python: boolean): SetupEngines {
     if (once.current) return;
     once.current = true;
     setStarted(true);
-    if (!fastReady && python) setUpFast();
     void begin();
-  }, [begin, fastReady, python, setUpFast]);
+  }, [begin]);
 
-  const retry = useCallback(
-    (kind: RuntimeKind) => {
-      if (views[kind].installing === null) void install(kind);
-    },
-    [install, views],
-  );
+  // Retry is drawn only while nothing installs, so it needs no guard of its own.
+  const retry = useCallback((kind: RuntimeKind) => void install(kind), [install]);
 
   const recheck = useCallback(() => {
     // A read that failed before anything was read is the start's to repeat.
@@ -173,5 +177,5 @@ export function useEngines(fastReady: boolean, python: boolean): SetupEngines {
     return () => clearInterval(timer);
   }, [waiting, read]);
 
-  return { llama: views.llama, sd: views.stable_diffusion, fast, readError, start, retry, retryFast: setUpFast, recheck };
+  return { llama: views.llama, sd: views.stable_diffusion, readError, start, retry, recheck };
 }

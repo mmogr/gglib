@@ -4,7 +4,10 @@
  * The machine is said in the daemon's words: the download its llama.cpp
  * install would take (`macOS ARM64 (Metal)`), and the memory models are
  * sized against, as the recommendation names it (`43.2 GiB unified
- * memory`); either is left out when the daemon has none. The models folder
+ * memory`), or with no recommendation the machine's RAM (`48.0 GiB system
+ * RAM`); either is left out when the daemon has none. Where the folder was
+ * set is not said: the route names a stored folder and `GGLIB_MODELS_DIR`
+ * alike as `environment`. The models folder
  * is the resolved one, "(will be created)" while it is not there, with
  * Change: the folder typed, saved through the models-directory route, then
  * read back, so what is shown is what the daemon resolved.
@@ -19,7 +22,7 @@ import { getTransport } from '../../services/transport';
 import type { ModelsDirectoryInfo } from '../../types';
 import type { RecommendationDto, SetupStatus } from '../../types/setup';
 import { formatError } from '../../utils/errors';
-import { formatBudget } from '../../utils/format';
+import { formatBudget, formatMemorySize } from '../../utils/format';
 import { Item, Problem, Step } from './Step';
 
 interface ThisMacStepProps {
@@ -41,7 +44,9 @@ export const ThisMacStep: FC<ThisMacStepProps> = ({ status, rec, folder, onFolde
   const [typed, setTyped] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const facts = [status.llamaPlatformDescription, rec && formatBudget(rec)].filter(Boolean).join(' · ');
+  // With no recommendation there is no budget to name: the machine's RAM, in the label Rust gives it.
+  const total = status.systemMemory ? `${formatMemorySize(status.systemMemory.totalRamBytes)} system RAM` : null;
+  const facts = [status.llamaPlatformDescription, rec ? formatBudget(rec) : total].filter(Boolean).join(' · ');
   const note = folderNote(folder);
 
   const saveFolder = async (path: string) => {
@@ -85,7 +90,6 @@ export const ThisMacStep: FC<ThisMacStepProps> = ({ status, rec, folder, onFolde
             </Button>
           }
         >
-          {folder.source === 'environment' && <p className="m-0">Set by GGLIB_MODELS_DIR.</p>}
           {error !== null && <Problem>{error}</Problem>}
         </Item>
       ) : (

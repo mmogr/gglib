@@ -72,6 +72,11 @@ export function resetDownloads(): void {
   store.setState(EMPTY);
 }
 
+/** The queue as last taken, without React, for a reader in a callback. */
+export function getDownloads(): Downloads {
+  return store.getState();
+}
+
 /** React hook: the queue and the cancel that is out, re-rendering on every write. */
 export function useDownloads(): Downloads {
   return store.useStore();

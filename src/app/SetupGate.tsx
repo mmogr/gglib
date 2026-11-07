@@ -4,7 +4,8 @@
  * has, or once Open gglib writes it, the window is `children` (the shell).
  * Setup is not a route, and nothing opens it again.
  *
- * The gate reads `setupCompleted` once, from the setup status. A read that
+ * The gate reads the setup status once, and hands it to the place, which
+ * does not read it again (each read runs the daemon's Python check). A read that
  * fails opens the shell, as before: a daemon that cannot be reached is not
  * a reason to run setup, and the shell's places each say what they could
  * not read. Nothing is drawn while the read is out.
@@ -15,14 +16,16 @@
 import { useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
 import SetupPlace from '../places/setup/SetupPlace';
 import { getSetupStatus } from '../services/transport/api/setup';
+import type { SetupStatus } from '../types/setup';
 
 export const SetupGate: FC<{ children: ReactNode }> = ({ children }) => {
-  const [needed, setNeeded] = useState<boolean | null>(null);
+  // The status while setup is needed; `false` once it is not; `null` while asked.
+  const [needed, setNeeded] = useState<SetupStatus | false | null>(null);
 
   useEffect(() => {
     let live = true;
     getSetupStatus()
-      .then((status) => live && setNeeded(!status.setupCompleted))
+      .then((status) => live && setNeeded(status.setupCompleted ? false : status))
       .catch(() => live && setNeeded(false));
     return () => {
       live = false;
@@ -32,6 +35,6 @@ export const SetupGate: FC<{ children: ReactNode }> = ({ children }) => {
   const done = useCallback(() => setNeeded(false), []);
 
   if (needed === null) return <div className="fixed inset-0 bg-background" />;
-  if (needed) return <SetupPlace onDone={done} />;
+  if (needed) return <SetupPlace status={needed} onDone={done} />;
   return <>{children}</>;
 };
