@@ -1,11 +1,12 @@
 //! How an agent run starts: the id reserved in the caller's scope, the
 //! user's message saved, the loop started, and the reply saved when it ends.
 //!
-//! This machine's door prepares its loop first and reserves after
-//! ([`launch`]). A paired device's turn on a hub chat is reserved first
-//! ([`launch_turn`]): its model may have to load, or wait behind an image
-//! render, for longer than the device waits for its `PUT`, so the load
-//! happens inside the run, which says it is waiting. What such a run is
+//! The page's run prepares its loop first and reserves after
+//! ([`launch`]). A turn on one of the hub's chats, a paired device's or
+//! this machine's own, is reserved first ([`launch_turn`]): its model may
+//! have to load, or wait behind an image render, for longer than the
+//! client waits for its `PUT`, so the load happens inside the run, which
+//! says it is waiting. What such a run is
 //! refused for after that ends it `failed` with the code the `PUT` would
 //! have answered, and it has written nothing. Both write a turn's rows
 //! through [`begin_writes`].
@@ -199,7 +200,7 @@ impl Loading {
     }
 }
 
-/// What a device's turn does once its run exists: find or load its model,
+/// What a turn does once its run exists: find or load its model,
 /// hold it and compose its loop, telling `Loading` when the model has to
 /// load.
 pub(super) type LatePrepare =
@@ -211,12 +212,12 @@ pub(super) fn ready(prepared: Prepared) -> LatePrepare {
     Box::new(move |_| Box::pin(async move { Ok(prepared) }))
 }
 
-/// Start a device's turn: reserve `id` in `scope` for a run of `kind` (an
-/// agent run for a turn on a hub chat, a chat run for a chat the device
-/// keeps itself; either logs the agent loop's events) on `model`, and
-/// only then, as the run's own work, hold its model and prepare its loop
-/// (`late`), write its rows ([`begin_writes`]) and run it. The caller's `PUT`
-/// is answered as soon as the run is reserved.
+/// Start a turn: reserve `id` in `scope` for a run of `kind` (an agent run
+/// for a turn on a hub chat, a chat run for a chat a device keeps itself;
+/// either logs the agent loop's events) on `model`, and only then, as the
+/// run's own work, hold its model and prepare its loop (`late`), write its
+/// rows ([`begin_writes`]) and run it. The caller's `PUT` is answered as
+/// soon as the run is reserved.
 ///
 /// A refusal after the reservation ends the run `failed` with the
 /// refusal's code and message, having written no row; its end then saves no
@@ -278,14 +279,14 @@ pub(super) fn launch_turn(
         written,
     };
     let info = reserved.start(|log| Box::pin(turn.run(log)), ended);
-    tracing::debug!(run = %id, "a device's turn was reserved before its model");
+    tracing::debug!(run = %id, "a turn was reserved before its model");
     Ok(Created {
         info,
         created: true,
     })
 }
 
-/// A device's turn, as its run's work.
+/// A turn, as its run's work.
 struct Turn {
     state: AppState,
     transcript: Transcript,

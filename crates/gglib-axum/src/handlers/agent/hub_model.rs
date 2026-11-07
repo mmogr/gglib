@@ -1,11 +1,15 @@
-//! Which model a device's turn on a hub chat runs on, and the port it is
-//! served on: found running, or loaded as `/v1/models/{name}/load` loads it.
+//! Which model a turn on one of this machine's chats runs on, and the port
+//! it is served on: found running, or loaded as `/v1/models/{name}/load`
+//! loads it.
 //!
 //! A chat that stored its model ([`ConversationSettings::model`]) names it
 //! by its machine and its id there. One that ran here is run by that id, so
-//! a second model of the same name cannot answer it. One that ran on the
-//! machine this one is paired with is refused: the hub never resolves the
-//! other machine's model as a name in its own catalogue.
+//! a second model of the same name cannot answer it. One stored as the
+//! paired machine's runs there on this machine's own turn ([`paired`]); a
+//! paired device's turn on it is refused once the chat has a saved message,
+//! and before that the model was only chosen, so the turn runs on this
+//! machine's as a chat that names none does. Either way the hub never
+//! resolves the other machine's model as a name in its own catalogue.
 //!
 //! [`ConversationSettings::model`]: gglib_core::domain::chat::ConversationSettings::model
 
@@ -16,8 +20,8 @@ use axum::http::StatusCode;
 use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::agent::MADE_KEYS;
 use gglib_core::domain::chat::{Conversation, Message};
-use gglib_core::domain::{Machine, RuntimeKind};
-use gglib_core::ports::{Admission, LaunchOverrides};
+use gglib_core::domain::{Machine, ModelCapabilities, ModelRef, RuntimeKind};
+use gglib_core::ports::{Admission, LaunchOverrides, RunScope};
 
 use super::AgentChatRequest;
 use super::launch::Loading;
@@ -25,11 +29,65 @@ use super::run::coded;
 use crate::error::HttpError;
 use crate::state::AppState;
 
+/// The paired machine's model a turn in `scope` runs on: the one the chat
+/// stored, on this machine's own turn. None on a paired device's turn, which
+/// never reaches the paired machine, and for a chat that stored none of its.
+pub(super) fn paired(scope: &RunScope, conversation: &Conversation) -> Option<ModelRef> {
+    if scope.device().is_some() {
+        return None;
+    }
+    let model = conversation.settings.as_ref()?.model.as_ref()?;
+    matches!(model.machine, Machine::Paired { .. }).then(|| model.clone())
+}
+
+/// Whether the catalogue's `model` calls tools, as its capability says; a
+/// model the catalogue does not hold is given the benefit of the doubt, as
+/// the page gives one whose capability it does not know.
+pub(super) async fn calls_tools(state: &AppState, model: &str) -> bool {
+    let found = state.core.models().get(model).await.ok().flatten();
+    found.is_none_or(|m| {
+        m.capabilities
+            .contains(ModelCapabilities::SUPPORTS_TOOL_CALLS)
+    })
+}
+
+/// The model a turn on `conversation` runs on: the paired machine's `far`
+/// ([`paired`]), by the name the chat has for it, else its id there; else
+/// this machine's ([`model_for`]), which must be one that chats.
+///
+/// # Errors
+///
+/// What [`model_for`] refuses, and `image_model_cannot_chat` (400).
+pub(super) async fn turn_model(
+    state: &AppState,
+    far: Option<&ModelRef>,
+    conversation: &Conversation,
+    rows: &[Message],
+) -> Result<String, HttpError> {
+    if let Some(far) = far {
+        // Nothing of the paired machine's model is looked up here: its id
+        // and name are that machine's. Its proxy refuses what it cannot do.
+        let settings = conversation.settings.as_ref();
+        let named = settings.and_then(|s| s.model_name.clone());
+        let named = named.filter(|n| !n.trim().is_empty());
+        return Ok(named.unwrap_or_else(|| far.id.to_string()));
+    }
+    let model = model_for(state, conversation, rows).await?;
+    // Once the chat's model is known, before `on_model` would load it: a
+    // model that draws is served by sd-server, which cannot chat.
+    super::image_gate::chats_named(state, &model).await?;
+    Ok(model)
+}
+
 /// The chat's model, as an identifier the hub's catalogue resolves: the one
 /// its settings store by id, the one it was made with, the one its settings
 /// name, the one that made its last reply, the one running on the hub, or
 /// the hub's default, in that order. A model known by its id is given by
 /// its id.
+///
+/// A chat with no saved message that stored the paired machine's model has
+/// run nowhere yet: it takes the one running here, or the hub's default,
+/// and never the name it stored, which is that machine's.
 ///
 /// # Errors
 ///
@@ -51,15 +109,19 @@ pub(super) async fn choose(
     rows: &[Message],
     running: &[ServerInfo],
 ) -> Result<String, HttpError> {
+    // Chosen on the paired machine before the chat had run: nothing of it
+    // names a model here.
+    let mut chosen_there = false;
     if let Some(model) = conversation
         .settings
         .as_ref()
         .and_then(|s| s.model.as_ref())
     {
-        return match &model.machine {
-            Machine::Local => Ok(model.id.to_string()),
-            Machine::Paired { .. } => Err(ran_elsewhere()),
-        };
+        match &model.machine {
+            Machine::Local => return Ok(model.id.to_string()),
+            Machine::Paired { .. } if rows.is_empty() => chosen_there = true,
+            Machine::Paired { .. } => return Err(ran_elsewhere()),
+        }
     }
     let catalogued = |id: Option<i64>| async move {
         let model = state.core.models().get_by_id(id?).await.ok().flatten()?;
@@ -78,7 +140,7 @@ pub(super) async fn choose(
                 Some(name.to_owned())
             })
         })
-        .filter(|name| !name.trim().is_empty());
+        .filter(|name| !name.trim().is_empty() && !chosen_there);
     if let Some(name) = named {
         return Ok(name);
     }
@@ -161,7 +223,7 @@ pub(super) async fn on_model(
         .admit(&model, None, default_ctx, LaunchOverrides::default())
         .await
         .map_err(|e| {
-            tracing::warn!(error = %e, "a device's turn could not load its chat's model");
+            tracing::warn!(error = %e, "a turn could not load its chat's model");
             coded(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "model_unavailable",

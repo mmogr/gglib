@@ -4,7 +4,7 @@
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewMessage};
 
-use super::hub_turn_tests::{chat, turn};
+use super::hub_turn_tests::{chat, device, turn};
 use super::plan;
 use crate::handlers::agent::device_tools::Asked;
 use crate::handlers::agent::hub_model::model_for;
@@ -14,7 +14,9 @@ use crate::handlers::agent::run_fixture::state;
 async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
+    let plan = plan(&state, &device("phone"), turn(id, "second"), None)
+        .await
+        .unwrap();
     let user = |c: &str| AgentMessage::User {
         content: c.to_owned(),
         images: Vec::new(),
@@ -63,7 +65,9 @@ async fn a_device_turn_is_planned_with_no_mcp_tool_whatever_its_chat_names() {
         ..ConversationSettings::default()
     };
     let named = chat(&state, Some(named)).await;
-    let plan = plan(&state, turn(named, "second")).await.unwrap();
+    let plan = plan(&state, &device("phone"), turn(named, "second"), None)
+        .await
+        .unwrap();
     assert_eq!(plan.chat.tool_filter, Some(Vec::new()));
     assert_eq!(plan.chat.config.and_then(|c| c.max_iterations), Some(4));
 }
@@ -171,7 +175,7 @@ async fn a_draw_turn_offers_its_model_the_image_tool_and_no_other() {
         ..turn(id, "a fox in the snow")
     };
 
-    let planned = plan(&state, pressed).await.unwrap();
+    let planned = plan(&state, &device("phone"), pressed, None).await.unwrap();
 
     assert!(planned.chat.draw);
     assert_eq!(
@@ -191,7 +195,9 @@ async fn a_draw_turn_offers_its_model_the_image_tool_and_no_other() {
     assert_eq!(first["tool_choice"], "required");
     assert!(offers_nothing(&later), "{later}");
 
-    let plain = plan(&state, turn(id, "hello")).await.unwrap();
+    let plain = plan(&state, &device("phone"), turn(id, "hello"), None)
+        .await
+        .unwrap();
     assert!(!plain.chat.draw);
     assert_eq!(plain.chat.tool_filter, Some(Vec::new()));
     let body = sent(&state, served, plain.chat).await;
@@ -205,7 +211,7 @@ async fn a_draw_turn_the_hub_cannot_draw_for_is_refused_and_writes_nothing() {
     use gglib_core::domain::hub_chats::HubTurn;
     use gglib_core::ports::RunsPort as _;
 
-    use super::hub_turn_tests::{device, refused};
+    use super::hub_turn_tests::refused;
     use crate::handlers::agent::run_fixture::saved;
 
     let (_dir, state) = state().await;
@@ -216,7 +222,7 @@ async fn a_draw_turn_the_hub_cannot_draw_for_is_refused_and_writes_nothing() {
         ..turn(id, "a fox in the snow")
     };
 
-    let refusal = refused(super::start(&state, "phone", "d1", pressed).await);
+    let refusal = refused(super::start(&state, device("phone"), "d1", pressed, None).await);
 
     assert_eq!(refusal, (400, "drawing_unavailable"));
     assert_eq!(saved(&state, id).await.len(), 2);
@@ -241,7 +247,9 @@ async fn a_saved_system_row_is_left_out_of_the_history() {
         })
         .await
         .unwrap();
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
+    let plan = plan(&state, &device("phone"), turn(id, "second"), None)
+        .await
+        .unwrap();
     let systems: Vec<&AgentMessage> = plan
         .chat
         .messages

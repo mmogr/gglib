@@ -48,7 +48,7 @@ async fn a_load_that_fails_ends_the_run_failed_and_writes_nothing() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
 
-    let created = start(&state, "phone", "d1", turn(id, "second"))
+    let created = start(&state, device("phone"), "d1", turn(id, "second"), None)
         .await
         .unwrap();
 
@@ -100,13 +100,15 @@ fn slow(
 async fn the_put_answers_during_a_cold_load_and_the_run_waits_then_replies() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
+    let plan = plan(&state, &device("phone"), turn(id, "second"), None)
+        .await
+        .unwrap();
     let loaded = Arc::new(Notify::new());
     let late = slow(&loaded, plan.chat.messages);
 
     let created = begin(
         &state,
-        "phone",
+        device("phone"),
         "d1",
         "qwen".to_owned(),
         plan.transcript,
@@ -124,7 +126,7 @@ async fn the_put_answers_during_a_cold_load_and_the_run_waits_then_replies() {
         "nothing written while it loads"
     );
     assert_eq!(state.runs.live_on(id).as_deref(), Some("d1"));
-    let again = start(&state, "phone", "d1", turn(id, "second"))
+    let again = start(&state, device("phone"), "d1", turn(id, "second"), None)
         .await
         .unwrap();
     assert!(!again.created, "a retry finds the run");
@@ -158,7 +160,9 @@ async fn the_put_answers_during_a_cold_load_and_the_run_waits_then_replies() {
 async fn a_refusal_after_the_run_exists_is_its_error_and_writes_no_row() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
+    let plan = plan(&state, &device("phone"), turn(id, "second"), None)
+        .await
+        .unwrap();
     let late: LatePrepare = Box::new(|_| {
         Box::pin(async {
             Err(coded(
@@ -171,7 +175,7 @@ async fn a_refusal_after_the_run_exists_is_its_error_and_writes_no_row() {
 
     begin(
         &state,
-        "phone",
+        device("phone"),
         "d1",
         "qwen".to_owned(),
         plan.transcript,
@@ -226,7 +230,7 @@ async fn a_refused_first_write_saves_no_reply() {
 
     begin(
         &state,
-        "phone",
+        device("phone"),
         "d1",
         "qwen".to_owned(),
         saving(id),
@@ -251,7 +255,9 @@ async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
 
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
+    let plan = plan(&state, &device("phone"), turn(id, "second"), None)
+        .await
+        .unwrap();
     let mut chat = plan.chat;
     chat.port = 19_555;
     // A local model on a port where nothing runs: the runtime holds none.
@@ -276,7 +282,7 @@ async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
 
     begin(
         &state,
-        "phone",
+        device("phone"),
         "d1",
         "qwen".to_owned(),
         plan.transcript,

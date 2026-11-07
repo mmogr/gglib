@@ -183,13 +183,9 @@ async fn a_chat_that_stored_its_model_here_runs_on_that_id_whatever_its_name() {
     assert_eq!(serving(&running, 404), None);
 }
 
-/// A chat that ran on the paired machine is refused, 409, and its model is
-/// never looked up here as a name, even when a model of that name is here.
-/// The device asking is told neither that machine's name nor its
-/// fingerprint.
-#[tokio::test]
-async fn a_chat_that_ran_on_the_paired_machine_is_refused() {
-    let (_dir, state) = state().await;
+/// A chat that stored the paired machine's model `qwen3`, its id there 3,
+/// on a hub that pairs with `desk` and has a model of that name itself.
+async fn chosen_on_desk(state: &AppState) -> Conversation {
     let mut settings = state.core.settings().get().await.unwrap();
     settings.remote_pairing = Some(gglib_core::RemotePairing {
         ticket: "not-a-ticket".to_owned(),
@@ -199,8 +195,8 @@ async fn a_chat_that_ran_on_the_paired_machine_is_refused() {
         name: Some("desk".to_owned()),
     });
     state.core.settings().save(&settings).await.unwrap();
-    registered(&state, "qwen3").await;
-    let (mut conversation, rows) = bare(&state).await;
+    registered(state, "qwen3").await;
+    let (mut conversation, _) = bare(state).await;
     conversation.settings = Some(ConversationSettings {
         model_name: Some("qwen3".to_owned()),
         model: Some(ModelRef {
@@ -211,6 +207,32 @@ async fn a_chat_that_ran_on_the_paired_machine_is_refused() {
         }),
         ..ConversationSettings::default()
     });
+    conversation
+}
+
+/// The user's first message on chat `conversation_id`, saved.
+fn first_message(conversation_id: i64) -> Message {
+    Message {
+        id: 1,
+        conversation_id,
+        origin_id: None,
+        role: MessageRole::User,
+        content: "hi".to_owned(),
+        created_at: String::new(),
+        metadata: None,
+        images: Vec::new(),
+    }
+}
+
+/// A chat that ran on the paired machine is refused, 409, and its model is
+/// never looked up here as a name, even when a model of that name is here.
+/// The device asking is told neither that machine's name nor its
+/// fingerprint.
+#[tokio::test]
+async fn a_chat_that_ran_on_the_paired_machine_is_refused() {
+    let (_dir, state) = state().await;
+    let conversation = chosen_on_desk(&state).await;
+    let rows = [first_message(conversation.id)];
     let running = [server(1, "qwen3", 9000, 10)];
 
     match choose(&state, &conversation, &rows, &running).await {
@@ -244,4 +266,39 @@ async fn a_chat_naming_no_model_passes_over_an_image_server() {
         "7",
         "the chat server, not the later sd-server"
     );
+}
+
+/// A chat that chose the paired machine's model and has no saved message has
+/// run nowhere yet: a device's turn on it runs on the model running here,
+/// and else on the hub's default, as a chat that names none does. Never on
+/// the model here that has the name it stored, which is that machine's.
+#[tokio::test]
+async fn a_chat_that_only_chose_the_paired_machines_model_runs_here() {
+    let (_dir, state) = state().await;
+    let conversation = chosen_on_desk(&state).await;
+    let running = [server(9, "running-7b", 9000, 10)];
+
+    let model = choose(&state, &conversation, &[], &running).await;
+    assert_eq!(model.unwrap(), "9", "the one running, not `qwen3`");
+
+    let mut settings = state.core.settings().get().await.unwrap();
+    let default = registered(&state, "default-model").await;
+    settings.default_model_id = Some(default);
+    state.core.settings().save(&settings).await.unwrap();
+    let model = choose(&state, &conversation, &[], &[]).await;
+    assert_eq!(model.unwrap(), default.to_string(), "the hub's default");
+}
+
+/// With nothing running and no default, it is refused as a chat that names
+/// no model is, and not as one that ran on the paired machine.
+#[tokio::test]
+async fn a_chat_that_only_chose_the_paired_machines_model_and_nothing_runs_has_no_model() {
+    let (_dir, state) = state().await;
+    let conversation = chosen_on_desk(&state).await;
+    match choose(&state, &conversation, &[], &[]).await {
+        Err(HttpError::Coded { status, code, .. }) => {
+            assert_eq!((status.as_u16(), code), (422, "no_model"));
+        }
+        other => panic!("not refused as no_model: {:?}", other.map(|_| ())),
+    }
 }

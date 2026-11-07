@@ -9,7 +9,7 @@ configured limits and calls [`compose_agent_loop`](gglib_runtime::compose_agent_
 so every caller of the loop does those alike. The limits are resolved by
 core's `TurnLimits::resolve`, which the CLI's `chat` and `q` call too: the
 iteration limit the request names, then the one its chat's settings saved
-(put in the request's place by `hub_turn::plan` for a device's turn and by
+(put in the request's place by `hub_turn::plan` for a turn on a hub chat and by
 `run::plan` for the page's run, as the CLI's resume puts it in its flag's),
 then this machine's stored `max_tool_iterations`, then the default; and the
 stored `max_stagnation_steps`, which no request names. So a client that
@@ -221,7 +221,8 @@ is what is read. Without a `conversation_id` a path is that run's alone and
 `compose::prepare_over` passes the folder to `compose_agent_loop` as the
 file tools' root, whose descriptions name it, and `compose::with_folder`
 adds the three qualified names to a tool filter that lists names; `[]`, a
-model that calls no tool, stays `[]`, and `null` admits them already. The
+model that calls no tool, stays `[]`, and `null` admits them already. This
+machine's own turn through `hub_turn` settles its folder the same way. The
 chat route (`POST /api/agent/chat`) and every turn a paired device sends
 pass no folder, whatever the conversation remembers: a device's turn calls
 no tool of this machine's but the image tool its Draw asks for and the
@@ -275,6 +276,40 @@ A `PUT` that is refused starts nothing. The decisions are
 [ADR 0024](../../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md),
 [ADR 0025](../../../../../docs/adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md)
 and [ADR 0026](../../../../../docs/adr/0026-a-paired-devices-chat-run-names-the-open-servers-it-may-use-by-id.md).
+
+A device's turn on a chat that stored the paired machine's model is
+`409 conflict` once the chat has a saved message. Before that the model was
+only chosen and the chat has run nowhere, as `transcript::keep_machine` reads it:
+the turn runs on the one running here, or the hub's default, and never on
+the name the chat stored, which is that machine's; with neither, it is
+`422 no_model` like a chat that names none.
+
+# This machine's own turn
+
+`hub_turn::start` takes the turn's scope, and `RunScope::Local` is this
+machine's own turn on one of its chats, the same `HubTurn` read the same
+way, reserved before its model and saved alike. No route sends one yet. It
+differs from a device's in three things only:
+
+- **Model.** A chat that stored the paired machine's model runs there
+  (`hub_model::paired`): the chat request names it as `far`, the late step
+  loads nothing here and `remote_upstream::resolve` takes the tunnel. The
+  run is listed by the name the chat has for it, and nothing of it is
+  looked up in this catalogue, so the image checks are that machine's
+  proxy's to make. Draw on it is `400 drawing_unavailable`.
+- **Tools.** `Asked::of_local` reads no server: every tool here (a `null`
+  filter: every running server's and the builtins) when the chat names
+  none, the tools it names when it names some, and none (`[]`) when it
+  turned its tools off or the catalogue says its model calls none
+  (`hub_model::calls_tools`; a model not in the catalogue, or the paired
+  machine's, keeps its tools). The image tool and the file tools are added
+  as the loop is composed, as for the page's run.
+- **Folder.** The turn may say the chat's folder, settled by
+  `run::settle_folder` as the page's run settles it: `folder_unusable` and
+  `folder_missing` before anything runs, the canonical path remembered once
+  the run starts, and the file tools reading there. A device's turn has no
+  folder: `HubTurn` names none, and `plan` refuses one said in its scope
+  with `400 invalid_request`.
 
 `chat_turn` is the starter's other door, the proxy's
 `PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired

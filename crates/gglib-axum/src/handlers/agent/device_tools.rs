@@ -1,4 +1,5 @@
-//! The tools a paired device's run is offered.
+//! The tools a turn's run is offered: a paired device's, and this
+//! machine's own on one of its chats.
 //!
 //! Both of a device's doors come here: a turn on one of this machine's
 //! chats (`hub_turn`) and a chat the phone keeps itself (`chat_turn`). A
@@ -15,6 +16,14 @@
 //! open to devices in `McpService::opened_tools`, and only there, before any
 //! server starts; [`offered`] trusts the list it is handed. The decisions
 //! are ADR 0024, ADR 0025 and ADR 0026.
+//!
+//! This machine's own turn on one of its chats reads no server when it
+//! starts ([`Asked::of_local`]): it is offered every tool here, of every
+//! server running and the builtins, narrowed by the chat's tool list, and
+//! none when the chat turned its tools off or its model cannot call any.
+//! gglib's file tools join them when the turn has a folder, and the image
+//! tool with Draw, both as the loop is composed (`compose::with_folder`,
+//! `compose::with_drawing`).
 
 use std::collections::BTreeSet;
 
@@ -26,18 +35,35 @@ use super::AgentChatRequest;
 use super::compose::DRAW_TOOL;
 use crate::state::AppState;
 
-/// What a device's run asks of this machine's tools, before the servers
-/// open to devices are read.
+/// What a turn's run asks of this machine's tools, before any server is
+/// read.
 #[derive(Debug, Clone, Default)]
 pub(super) struct Asked {
-    /// The chat's own tool list: empty for all, else the opened tools it
-    /// names exactly or by their bare name.
+    /// The chat's own tool list: empty for all, else the tools it names
+    /// exactly or by their bare name.
     narrow: Vec<String>,
-    /// Which of the servers open to devices the run may use: none when the
-    /// chat turned its tools off, and none unless something says otherwise.
-    servers: DeviceServers,
+    /// Whose run it is, and what that lets it reach.
+    reach: Reach,
     /// The message was sent with Draw pressed: the image tool.
     draw: bool,
+}
+
+/// What a run may reach of this machine's tools.
+#[derive(Debug, Clone)]
+enum Reach {
+    /// A paired device's run: which of the servers open to devices it may
+    /// use, none when the chat turned its tools off, and none unless
+    /// something says otherwise.
+    Opened(DeviceServers),
+    /// This machine's own run: every tool here when `calls`, and otherwise
+    /// none.
+    Here { calls: bool },
+}
+
+impl Default for Reach {
+    fn default() -> Self {
+        Self::Opened(DeviceServers::default())
+    }
 }
 
 impl Asked {
@@ -45,10 +71,23 @@ impl Asked {
     pub(super) fn of_chat(settings: &ConversationSettings, draw: bool) -> Self {
         Self {
             narrow: settings.tools.clone(),
-            servers: if settings.no_tools == Some(true) {
+            reach: Reach::Opened(if settings.no_tools == Some(true) {
                 DeviceServers::none()
             } else {
                 DeviceServers::All
+            }),
+            draw,
+        }
+    }
+
+    /// This machine's own turn on one of its chats, under that chat's
+    /// settings, on a model that `calls_tools` or does not, as the
+    /// catalogue says (`hub_model::calls_tools`).
+    pub(super) fn of_local(settings: &ConversationSettings, draw: bool, calls_tools: bool) -> Self {
+        Self {
+            narrow: settings.tools.clone(),
+            reach: Reach::Here {
+                calls: calls_tools && settings.no_tools != Some(true),
             },
             draw,
         }
@@ -59,7 +98,7 @@ impl Asked {
     /// `tools`): never every open server, which only a Mac-kept chat is.
     pub(super) fn of_phone(draw: bool, servers: BTreeSet<i64>) -> Self {
         Self {
-            servers: DeviceServers::Only(servers),
+            reach: Reach::Opened(DeviceServers::Only(servers)),
             draw,
             ..Self::default()
         }
@@ -75,6 +114,31 @@ impl Asked {
             .then(|| DRAW_TOOL.to_owned())
             .into_iter()
             .collect()
+    }
+
+    /// The tool filter the run is planned with. A device's run: the
+    /// [`floor`](Self::floor), until the servers open to devices are read
+    /// once it starts ([`settle`]). This machine's own: final already, with
+    /// no server read: every tool (`None`) when the chat names none, the
+    /// tools it names, or none at all (`[]`) when its tools are off or its
+    /// model calls none. Never the image tool, which the loop adds with
+    /// Draw after the folder's file tools, so a `[]` that Draw names it in
+    /// gains no file tool (`compose::prepare_over`).
+    pub(super) fn planned(&self) -> Option<Vec<String>> {
+        match self.reach {
+            Reach::Opened(_) => Some(self.floor()),
+            Reach::Here { calls: false } => Some(Vec::new()),
+            Reach::Here { calls: true } => (!self.narrow.is_empty()).then(|| self.narrow.clone()),
+        }
+    }
+
+    /// The servers open to devices that a device's run may use; none for
+    /// this machine's own run, which is offered no server that way.
+    fn opened(&self) -> Option<&DeviceServers> {
+        match &self.reach {
+            Reach::Opened(servers) if !servers.is_none() => Some(servers),
+            _ => None,
+        }
     }
 
     /// Whether the chat's own list names `tool`, an opened tool's qualified
@@ -95,7 +159,7 @@ impl Asked {
 /// whatever the chat names.
 pub(super) fn offered(opened: &[String], asked: &Asked) -> Vec<String> {
     let mut tools = asked.floor();
-    if !asked.servers.is_none() {
+    if asked.opened().is_some() {
         tools.extend(
             opened
                 .iter()
@@ -106,25 +170,33 @@ pub(super) fn offered(opened: &[String], asked: &Asked) -> Vec<String> {
     tools
 }
 
-/// The tools a run that `asked` is offered on this machine now: the
-/// floor, unless a tunnel session is live and the run may use some server,
-/// when the servers open to devices that it may use are started as needed
-/// and their tools read.
+/// The tools a device's run that `asked` is offered on this machine now:
+/// the floor, unless a tunnel session is live and the run may use some
+/// server, when the servers open to devices that it may use are started as
+/// needed and their tools read. This machine's own run reads no server
+/// here: its filter is [`Asked::planned`].
 pub(super) async fn resolve(state: &AppState, asked: &Asked) -> Vec<String> {
-    if !state.remote.gateway().serving() || asked.servers.is_none() {
+    let Some(servers) = asked.opened() else {
+        return asked.floor();
+    };
+    if !state.remote.gateway().serving() {
         return asked.floor();
     }
-    offered(&state.mcp.opened_tools(&asked.servers).await, asked)
+    offered(&state.mcp.opened_tools(servers).await, asked)
 }
 
 /// `chat` with its tool filter set to what a run that `asked` is offered on
-/// this machine now ([`resolve`]): a device's run settles its tools this way
-/// once its model is ready.
+/// this machine now: a device's run settles its tools this way once its
+/// model is ready ([`resolve`]). This machine's own run keeps the filter it
+/// was planned with ([`Asked::planned`]).
 pub(super) async fn settle(
     state: &AppState,
     mut chat: AgentChatRequest,
     asked: &Asked,
 ) -> AgentChatRequest {
+    if matches!(asked.reach, Reach::Here { .. }) {
+        return chat;
+    }
     chat.tool_filter = Some(resolve(state, asked).await);
     chat
 }
