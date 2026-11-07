@@ -6,8 +6,9 @@
  * stop`). Unlike the tray menu's Stop gglib…, it reaches the daemon from a
  * browser tab too. The window then shows the service-not-running screen
  * (`app/ServiceDown`) once the daemon no longer answers; until then the
- * button says it is stopping. A daemon that refuses (one not running as the
- * gglib daemon) says why here instead.
+ * button says it is stopping. A stop the daemon answers with a failure (one
+ * not running as the gglib daemon, a key it wants, an error) says why here
+ * in its words, and the button comes back.
  *
  * @module places/settings/AboutSection
  */
@@ -46,9 +47,10 @@ export const AboutSection: FC = () => {
     try {
       await getTransport().shutdownDaemon();
     } catch (err) {
-      // The connection usually dies with the daemon as it answers, which is
-      // the stop working. A refusal is the daemon answering that it will not.
-      if (TransportError.hasCode(err, 'CONFLICT')) {
+      // A failure with no HTTP answer is the connection dying with the
+      // daemon as it stops, which is the stop working. Any answer that is a
+      // failure (refused, not allowed, broken) is the daemon still there.
+      if (TransportError.isTransportError(err)) {
         setRefusal(formatError(err));
         setStopping(false);
       }

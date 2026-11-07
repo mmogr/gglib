@@ -38,29 +38,41 @@ const fake = vi.hoisted(() => ({
   enabled: 0,
   disabled: 0,
   refuseEnable: null as string | null,
+  refuseUninstall: null as string | null,
+  refuseSetupStatus: null as string | null,
+  /** While set, a set up or a turn off waits for it. */
+  hold: null as Promise<void> | null,
 }));
 
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getEngineStatus: vi.fn(async (kind: string) => {
     const queue = fake.statuses[kind];
-    return queue.length > 1 ? queue.shift() : queue[0];
+    const next = queue.length > 1 ? queue.shift() : queue[0];
+    if (next instanceof Error) throw next;
+    return next;
   }),
   streamEngineInstall: vi.fn((kind: string, onEvent, onError, onClose) => {
     fake.streams[kind].push({ onEvent, onError, onClose });
     return () => {};
   }),
   uninstallEngine: vi.fn(async (kind: string) => {
+    if (fake.refuseUninstall) throw new Error(fake.refuseUninstall);
     fake.uninstalled.push(kind);
     return { wasInstalled: true, removedPaths: [`/data/.${kind === 'llama' ? 'llama' : 'sd'}`] };
   }),
-  getSetupStatus: vi.fn(async () => ({ ...fake.setup })),
+  getSetupStatus: vi.fn(async () => {
+    if (fake.refuseSetupStatus) throw new Error(fake.refuseSetupStatus);
+    return { ...fake.setup };
+  }),
   enableFastDownloads: vi.fn(async () => {
     fake.enabled += 1;
+    if (fake.hold) await fake.hold;
     if (fake.refuseEnable) throw new Error(fake.refuseEnable);
     fake.setup.fastDownloadReady = true;
   }),
   disableFastDownloads: vi.fn(async () => {
     fake.disabled += 1;
+    if (fake.hold) await fake.hold;
     fake.setup.fastDownloadReady = false;
     return { removed: true };
   }),
@@ -158,6 +170,9 @@ beforeEach(async () => {
   fake.enabled = 0;
   fake.disabled = 0;
   fake.refuseEnable = null;
+  fake.refuseUninstall = null;
+  fake.refuseSetupStatus = null;
+  fake.hold = null;
   // A fresh load of the whole app, which a busy machine can take a while over.
   ({ renderApp } = await import('./harness'));
 }, 30_000);
@@ -240,7 +255,11 @@ describe.each(KINDS)('the %s row', (kind) => {
     expect(r.getByText(`Stop ${e.model} first.`)).toBeInTheDocument();
     await openMore(e.product);
     expect(r.getByRole('menuitem', { name: 'Reinstall' })).toBeDisabled();
+    expect(r.getByRole('menuitem', { name: 'Reinstall' })).toHaveAttribute('title', `Stop ${e.model} first.`);
     expect(r.getByRole('menuitem', { name: 'Remove…' })).toBeDisabled();
+    expect(r.getByRole('menuitem', { name: 'Remove…' })).toHaveAttribute('title', `Stop ${e.model} first.`);
+    await userEvent.click(r.getByRole('button', { name: 'Details' }));
+    expect(r.getByText('Serving').nextSibling).toHaveTextContent(new RegExp(`^${e.model}$`));
   });
 
   it('reinstalls a download at once, and removes it after a confirm', async () => {
@@ -283,7 +302,7 @@ describe.each(KINDS)('the %s row', (kind) => {
 
     expect(r.getByText('Release').nextSibling).toHaveTextContent(e.pin);
     expect(r.getByText('Download').nextSibling).toHaveTextContent(e.download);
-    expect(r.getByText('Downloaded').nextSibling).toHaveTextContent('2026-10-01');
+    expect(r.getByText('Downloaded').nextSibling).toHaveTextContent(/^2026-10-01$/);
     expect(r.getByText('Binary').nextSibling).toHaveTextContent(`/data/.${e.word}/bin/${e.server}`);
     expect(r.getByText('Binary reports').nextSibling).toHaveTextContent(`${e.server} reports ${e.pin}`);
     expect(r.getByText(`Pinned to ${e.pin}, which is the one installed.`)).toBeInTheDocument();
@@ -379,7 +398,7 @@ describe('the engine rows', () => {
 
     expect(r.getByText('Built from').nextSibling).toHaveTextContent('b11429');
     expect(r.getByText('Acceleration').nextSibling).toHaveTextContent('Metal');
-    expect(r.getByText('Built').nextSibling).toHaveTextContent('2026-10-25');
+    expect(r.getByText('Built').nextSibling).toHaveTextContent(/^2026-10-25$/);
   });
 
   it("keeps one engine's install on its own row", async () => {
@@ -433,6 +452,63 @@ describe('the engine rows', () => {
     expect(screen.queryByText(CPU_WARNING)).not.toBeInTheDocument();
   });
 
+  it('offers no Remove… while an install is running', async () => {
+    renderApp('/settings/engines');
+    let r = await openMore('llama.cpp');
+    await userEvent.click(await r.findByRole('menuitem', { name: 'Reinstall' }));
+    r = await openMore('llama.cpp');
+
+    expect(r.getByRole('menuitem', { name: 'Remove…' })).toBeDisabled();
+    expect(r.getByRole('menuitem', { name: 'Reinstall' })).toBeDisabled();
+  });
+
+  it('offers no Reinstall where no download fits, or where the install would build again', async () => {
+    fake.statuses.llama = [status('llama', 'atPin', { download: null, downloadUnavailable: 'No download fits linux aarch64.' })];
+    fake.statuses.stable_diffusion = [status('stable_diffusion', 'atPin', {}, { rebuilds: true })];
+    renderApp('/settings/engines');
+
+    let r = await openMore('llama.cpp');
+    expect(r.queryByRole('menuitem', { name: 'Reinstall' })).not.toBeInTheDocument();
+    expect(r.getByRole('menuitem', { name: 'Remove…' })).toBeInTheDocument();
+    r = await openMore('stable-diffusion.cpp');
+    expect(r.queryByRole('menuitem', { name: 'Reinstall' })).not.toBeInTheDocument();
+    expect(r.getByRole('menuitem', { name: 'Remove…' })).toBeInTheDocument();
+  });
+
+  it('says why there is no install record: none, or the reason it could not be read', async () => {
+    fake.statuses.llama = [status('llama', 'atPin', { install: null })];
+    fake.statuses.stable_diffusion = [
+      status('stable_diffusion', 'atPin', { install: null, recordError: 'sd-config.json: expected value at line 1' }),
+    ];
+    renderApp('/settings/engines');
+    const llama = await row('llama.cpp');
+    await userEvent.click(await llama.findByRole('button', { name: 'Details' }));
+    expect(llama.getByText('Install record').nextSibling).toHaveTextContent(/^none, installed outside gglib$/);
+    // With no record, the line has the release the pin compared and nothing it cannot know.
+    expect(llama.getByText('b11429')).toBeInTheDocument();
+
+    const sd = await row('stable-diffusion.cpp');
+    await userEvent.click(await sd.findByRole('button', { name: 'Details' }));
+    expect(sd.getByText('Install record').nextSibling).toHaveTextContent(/^sd-config\.json: expected value at line 1$/);
+  });
+
+  it("says a status that could not be read in the daemon's words", async () => {
+    fake.statuses.llama = [new Error('the engine status could not be read: permission denied') as never];
+    renderApp('/settings/engines');
+    expect(await (await row('llama.cpp')).findByText('the engine status could not be read: permission denied')).toBeInTheDocument();
+  });
+
+  it("says a refused removal in the daemon's words", async () => {
+    fake.refuseUninstall = 'llama.cpp is serving qwen; stop it first';
+    renderApp('/settings/engines');
+    const r = await openMore('llama.cpp');
+    await userEvent.click(r.getByRole('menuitem', { name: 'Remove…' }));
+    await userEvent.click((await dialog()).getByRole('button', { name: 'Remove' }));
+
+    expect(await r.findByText('llama.cpp is serving qwen; stop it first')).toBeInTheDocument();
+    expect(fake.uninstalled).toEqual([]);
+  });
+
   it('keeps the system checks at the foot', async () => {
     renderApp('/settings/engines');
     expect(await screen.findByText('system checks')).toBeInTheDocument();
@@ -475,6 +551,35 @@ describe('Faster downloads', () => {
 
     expect(await r.findByRole('alert')).toHaveTextContent('No Python 3.10+ interpreter was found');
     expect(r.getByText('Off')).toBeInTheDocument();
+  });
+
+  it('says it is setting up while it does, and offers no Turn off while one is on its way', async () => {
+    let release = () => {};
+    fake.hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderApp('/settings/engines');
+    const r = await row('Faster downloads');
+    await userEvent.click(await r.findByRole('button', { name: 'Set up' }));
+
+    expect(await r.findByText('Setting up. This can take a minute.')).toBeInTheDocument();
+    expect(r.getByRole('button', { name: 'Set up' })).toBeDisabled();
+    release();
+    expect(await r.findByText('On')).toBeInTheDocument();
+    expect(r.queryByText('Setting up. This can take a minute.')).not.toBeInTheDocument();
+
+    fake.hold = new Promise<void>(() => {});
+    await userEvent.click(r.getByRole('button', { name: 'More for Faster downloads' }));
+    await userEvent.click(r.getByRole('menuitem', { name: 'Turn off' }));
+    await userEvent.click(r.getByRole('button', { name: 'More for Faster downloads' }));
+    expect(r.getByRole('menuitem', { name: 'Turn off' })).toBeDisabled();
+    expect(fake.disabled).toBe(1);
+  });
+
+  it("says a status that could not be read in the daemon's words", async () => {
+    fake.refuseSetupStatus = 'the setup status could not be read';
+    renderApp('/settings/engines');
+    expect(await (await row('Faster downloads')).findByRole('alert')).toHaveTextContent(/^the setup status could not be read$/);
   });
 
   it('names the command, with a copy, where there is no Python, and offers no Set up', async () => {

@@ -13,7 +13,7 @@ import { TransportError } from '../errors';
 const STORAGE_KEY = 'gglib_daemon_token';
 
 /** The `type` of the daemon's 401 when it wanted its token. */
-const TOKEN_REQUIRED = 'DAEMON_TOKEN_REQUIRED';
+export const TOKEN_REQUIRED = 'DAEMON_TOKEN_REQUIRED';
 
 /**
  * The token this page load took from its link. Held here as well as in

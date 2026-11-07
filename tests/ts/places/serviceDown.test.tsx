@@ -28,6 +28,9 @@ const fake = vi.hoisted(() => ({
   starts: 0,
   startRefusal: null as string | null,
   opened: [] as string[],
+  /** The endpoint the daemon reports while it answers. */
+  proxy: { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null } as Record<string, unknown>,
+  wakes: 0,
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
@@ -35,10 +38,22 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
   getTransport: () => ({
     getSettings: async () => appSettings(),
     getVersion: async () => fake.version,
-    getProxyStatus: () => {
-      if (fake.up === null) return new Promise(() => {});
-      return fake.up ? Promise.resolve({ running: false }) : Promise.reject(new TypeError('Failed to fetch'));
+    // The health probe: held, answered, or no answer at all.
+    probeDaemon: () => (fake.up === null ? new Promise(() => {}) : Promise.resolve(fake.up)),
+    tokenRefusal: async () => null,
+    getProxyStatus: async () => {
+      if (!fake.up) throw new TypeError('Failed to fetch');
+      return { ...fake.proxy };
     },
+    listServers: async () => {
+      if (!fake.up) throw new TypeError('Failed to fetch');
+      return [];
+    },
+    getRemoteStatus: async () => {
+      if (!fake.up) throw new TypeError('Failed to fetch');
+      return (await import('../../../src/services/remoteRegistry')).IDLE_STATUS;
+    },
+    reconnectEventStreamNow: () => void (fake.wakes += 1),
     shutdownDaemon: vi.fn(async () => {
       if (fake.shutdown) return fake.shutdown();
       fake.up = false;
@@ -70,12 +85,28 @@ import { createAppRouter } from '../../../src/app/router';
 import { ServiceGate } from '../../../src/app/ServiceDown';
 import { TransportError } from '../../../src/services/transport/errors';
 import { PlaceProviders } from './harness';
+import { cleanupProxyEvents, initProxyEvents } from '../../../src/services/proxyEvents';
+import { cleanupServerEvents, initServerEvents, useServerListHeard } from '../../../src/services/serverEvents';
+import { useEndpointFacts } from '../../../src/services/proxyRegistry';
+import { ENDPOINT_WORDS } from '../../../src/components/status/words';
+
+/** What the window says of the endpoint, from the proxy registry, as the sidebar's endpoint line reads it. */
+function EndpointWord() {
+  const heard = useServerListHeard();
+  return (
+    <>
+      <p data-testid="endpoint">{ENDPOINT_WORDS[useEndpointFacts().state]}</p>
+      <p data-testid="servers">{heard ? 'servers read' : 'servers not read'}</p>
+    </>
+  );
+}
 
 /** The place at `path` behind the window's gate. */
 function renderGated(path: string) {
   const router = createAppRouter(
     <PlaceProviders>
       <ServiceGate>
+        <EndpointWord />
         <Outlet />
       </ServiceGate>
     </PlaceProviders>,
@@ -104,9 +135,18 @@ beforeEach(() => {
     starts: 0,
     startRefusal: null,
     opened: [],
+    proxy: { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null },
+    wakes: 0,
   });
+  // The window's bridges, as `AppContent` starts them.
+  initProxyEvents();
+  initServerEvents();
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  cleanupProxyEvents();
+  cleanupServerEvents();
+  vi.useRealTimers();
+});
 
 describe('About', () => {
   it('names the build, and says nothing of the working tree when it is clean', async () => {
@@ -145,18 +185,41 @@ describe('About', () => {
     expect(screen.queryByRole('heading', { name: 'About' })).not.toBeInTheDocument();
   });
 
-  it("says a refused stop in the daemon's words, and offers it again", async () => {
+  it.each([
+    ['CONFLICT', 'this server is not running as the gglib daemon'],
+    ['INTERNAL', 'the daemon could not stop its servers'],
+    ['UNAUTHORIZED', 'Missing or invalid API key. Send it as \'Authorization: Bearer <key>\'.'],
+  ] as const)("says a stop answered %s in the daemon's words, and offers it again", async (code, words) => {
     fake.shutdown = async () => {
-      throw new TransportError('CONFLICT', 'this server is not running as the gglib daemon');
+      throw new TransportError(code, words, { status: 500 });
     };
     renderGated('/settings/about');
     await user.click(await screen.findByRole('button', { name: 'Stop gglib…' }));
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stop' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('this server is not running as the gglib daemon');
+    expect(await screen.findByRole('alert')).toHaveTextContent(words);
     expect(screen.getByRole('button', { name: 'Stop gglib…' })).toBeEnabled();
     await nextProbe();
     expect(screen.queryByText(LOST)).not.toBeInTheDocument();
+  });
+
+  it('clears an earlier refusal when Stop gglib… is asked again', async () => {
+    let refusals = 0;
+    fake.shutdown = async () => {
+      refusals += 1;
+      if (refusals === 1) throw new TransportError('INTERNAL', 'the daemon could not stop its servers');
+      return new Promise(() => {});
+    };
+    renderGated('/settings/about');
+    await user.click(await screen.findByRole('button', { name: 'Stop gglib…' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stop' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Stop gglib…' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stop' }));
+
+    expect(await screen.findByRole('button', { name: 'Stopping gglib…' })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 
@@ -176,6 +239,41 @@ describe('the service-not-running screen', () => {
     expect(await screen.findByRole('button', { name: 'Stop gglib…' })).toBeInTheDocument();
     expect(screen.queryByText(DOWN)).not.toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/settings/about');
+  });
+
+  it('after Stop gglib… and Start gglib, shows what the new daemon says, not the old one', async () => {
+    fake.desktop = true;
+    renderGated('/settings/about');
+    expect(await screen.findByTestId('endpoint')).toHaveTextContent('Off');
+
+    await user.click(await screen.findByRole('button', { name: 'Stop gglib…' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stop' }));
+    await nextProbe();
+    expect(await screen.findByText(DOWN)).toBeInTheDocument();
+
+    // The new daemon turns its endpoint on as it starts.
+    fake.proxy = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
+    await user.click(screen.getByRole('button', { name: 'Start gglib' }));
+    await nextProbe();
+
+    expect(await screen.findByTestId('endpoint')).toHaveTextContent('On');
+    expect(screen.getByTestId('servers')).toHaveTextContent('servers read');
+    expect(fake.wakes).toBe(1);
+    expect(screen.getByRole('button', { name: 'Stop gglib…' })).toBeEnabled();
+  });
+
+  it('clears an earlier refused start when Start gglib is pressed again', async () => {
+    fake.desktop = true;
+    fake.up = false;
+    fake.startRefusal = 'port 9887 is held by another program (not a gglib daemon)';
+    renderGated('/settings/about');
+    await user.click(await screen.findByRole('button', { name: 'Start gglib' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    fake.startRefusal = null;
+    await user.click(screen.getByRole('button', { name: 'Start gglib' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it("says a refused start in the app's words, and offers it again", async () => {
