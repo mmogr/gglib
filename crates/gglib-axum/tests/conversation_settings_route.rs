@@ -41,24 +41,7 @@ fn local(id: i64) -> ModelRef {
 /// A conversation that ran on `qwen3`, a saved message and its settings:
 /// tools, limits and a temperature; its id.
 async fn ran_on(state: &gglib_axum::AppState, qwen: i64) -> i64 {
-    let settings = ConversationSettings {
-        model_name: Some("qwen3".to_owned()),
-        model: Some(local(qwen)),
-        tools: vec!["files".to_owned()],
-        max_parallel: Some(4),
-        tool_timeout_ms: Some(5_000),
-        temperature: Some(0.25),
-        ..ConversationSettings::default()
-    };
-    let id = made(
-        state,
-        NewConversation {
-            title: "t".into(),
-            settings: Some(settings),
-            ..NewConversation::default()
-        },
-    )
-    .await;
+    let id = chosen(state, qwen).await;
     let message = NewMessage {
         conversation_id: id,
         role: MessageRole::User,
@@ -71,8 +54,31 @@ async fn ran_on(state: &gglib_axum::AppState, qwen: i64) -> i64 {
         .chat_history()
         .save_message(message)
         .await
-        .unwrap();
+        .expect("message");
     id
+}
+
+/// A conversation whose model is chosen (qwen3, here) but which has no saved
+/// message yet; its id.
+async fn chosen(state: &gglib_axum::AppState, qwen: i64) -> i64 {
+    let settings = ConversationSettings {
+        model_name: Some("qwen3".to_owned()),
+        model: Some(local(qwen)),
+        tools: vec!["files".to_owned()],
+        max_parallel: Some(4),
+        tool_timeout_ms: Some(5_000),
+        temperature: Some(0.25),
+        ..ConversationSettings::default()
+    };
+    made(
+        state,
+        NewConversation {
+            title: "t".into(),
+            settings: Some(settings),
+            ..NewConversation::default()
+        },
+    )
+    .await
 }
 
 /// A conversation with no saved message and no settings; its id.
@@ -161,10 +167,6 @@ async fn each_setting_sent_alone_changes_only_itself() {
             json!({ "tool_timeout_ms": null }),
             json!({ "tool_timeout_ms": null }),
         ),
-        (
-            json!({ "model": null }),
-            json!({ "model": null, "model_name": null }),
-        ),
     ];
     for (patch, changed) in cases {
         let id = ran_on(&state, qwen).await;
@@ -191,17 +193,48 @@ async fn a_new_model_of_this_machine_is_its_model_id_too() {
     assert_eq!(read(&app, id).await["model_id"], gemma);
 }
 
-/// A cleared model leaves the conversation naming none, by `model_id`
-/// either.
+/// A cleared model, on a chat that has not run, leaves it naming none, by
+/// `model_id` either, and changes nothing else.
 #[tokio::test]
 async fn a_cleared_model_clears_the_model_id() {
     let (state, app, qwen, _) = daemon().await;
-    let id = ran_on(&state, qwen).await;
+    let id = chosen(&state, qwen).await;
 
     let (status, body) = put(&app, id, json!({ "settings": { "model": null } })).await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(read(&app, id).await["model_id"], Value::Null);
+    let stored = read(&app, id).await;
+    assert_eq!(stored["model_id"], Value::Null);
+    assert_eq!(
+        stored["settings"],
+        held(qwen, json!({ "model": null, "model_name": null }))
+    );
+}
+
+/// A chat that has run keeps a model on its machine: clearing it would
+/// forget the machine and let it continue on another. Refused, and nothing
+/// is written; choosing another model there is still taken.
+#[tokio::test]
+async fn a_chat_that_has_run_cannot_clear_its_model() {
+    let (state, app, qwen, gemma) = daemon().await;
+    let id = ran_on(&state, qwen).await;
+    let before = read(&app, id).await;
+
+    let (status, body) = put(&app, id, json!({ "settings": { "model": null } })).await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["error"],
+        "this chat has run, so it keeps a model on the machine it ran on: choose another \
+         model there rather than none"
+    );
+    assert_eq!(read(&app, id).await, before);
+    let far = json!({ "machine": { "kind": "paired", "fingerprint": FAR }, "id": 3 });
+    let (status, _) = put(&app, id, json!({ "settings": { "model": far } })).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let here = json!({ "machine": { "kind": "local" }, "id": gemma });
+    let (status, body) = put(&app, id, json!({ "settings": { "model": here } })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
 }
 
 /// A patch of the values already stored writes nothing: not even the time

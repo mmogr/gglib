@@ -15,7 +15,7 @@ mod transcript;
 
 pub(crate) use dto::AgentChatRequest;
 pub(crate) use run::create_run;
-pub(crate) use transcript::keep_machine;
+pub(crate) use transcript::{keep_a_model, keep_machine};
 
 use std::convert::Infallible;
 

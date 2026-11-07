@@ -108,6 +108,46 @@ pub(crate) async fn keep_machine(
     Err(coded(StatusCode::CONFLICT, "conflict", refusal))
 }
 
+/// Refuse to clear the model of a chat that has run: clearing would forget
+/// the machine it ran on, and [`keep_machine`] would then let it continue on
+/// another. A chat with no saved message, or none stored, clears freely.
+///
+/// # Errors
+///
+/// `conflict` for a chat that has run, and `internal_error` for a read that
+/// failed.
+pub(crate) async fn keep_a_model(core: &AppCore, conversation_id: i64) -> Result<(), HttpError> {
+    let unread = || {
+        coded(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "the conversation could not be read",
+        )
+    };
+    let history = core.chat_history();
+    let conversation = history
+        .get_conversation(conversation_id)
+        .await
+        .map_err(|_| unread())?;
+    if conversation.is_none_or(|c| c.machine().is_none()) {
+        return Ok(());
+    }
+    if history
+        .get_message_count(conversation_id)
+        .await
+        .map_err(|_| unread())?
+        == 0
+    {
+        return Ok(());
+    }
+    Err(coded(
+        StatusCode::CONFLICT,
+        "conflict",
+        "this chat has run, so it keeps a model on the machine it ran on: choose another \
+         model there rather than none",
+    ))
+}
+
 /// Save the request's last message, when it is the user's, to
 /// `conversation_id`, as [`transcript::save_user`] writes it. A paired
 /// `device`'s message says which.

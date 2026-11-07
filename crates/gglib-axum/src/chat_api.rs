@@ -16,7 +16,7 @@ use serde::Deserialize;
 
 use crate::chat_changes;
 use crate::error::HttpError;
-use crate::handlers::agent::keep_machine;
+use crate::handlers::agent::{keep_a_model, keep_machine};
 use crate::handlers::chat_title;
 use crate::state::AppState;
 use gglib_core::domain::chat::{Conversation, ConversationSettings, NewConversation};
@@ -199,8 +199,10 @@ pub(crate) async fn update_conversation(
         Some(model) => model_name(&state, model).await?,
         None => None,
     };
-    if let Some(model) = &model {
-        keep_machine(&state.core, id, &model.machine).await?;
+    match &patch.model {
+        Some(Some(model)) => keep_machine(&state.core, id, &model.machine).await?,
+        Some(None) => keep_a_model(&state.core, id).await?,
+        None => {}
     }
     state
         .core
