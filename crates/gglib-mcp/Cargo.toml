@@ -21,6 +21,10 @@ tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "s
 # Async trait
 async-trait = { workspace = true }
 
+# `join_all`: this machine's run starts the servers it reads at once, not one
+# after another, so one that hangs does not add its wait to every other's.
+futures-util = { workspace = true }
+
 # Serialization
 serde = { workspace = true }
 # A tool's image items carry their bytes as base64

@@ -185,10 +185,13 @@ impl McpService {
     }
 
     /// Start each enabled server this machine's own run may use that is not
-    /// running: every one, or with `only` those whose ids it names. A server
-    /// that cannot be started is skipped with one warning that names it and
-    /// says why, as [`Self::opened_tools`] skips one; nothing here fails the
-    /// run, which is then offered fewer tools.
+    /// running: every one, or with `only` those whose ids it names. They
+    /// start at once, so a server that hangs costs the run its own wait, not
+    /// one added to every other's. An SSE server, which gglib cannot run, is
+    /// left alone without a word. A server that cannot be started is skipped
+    /// with one warning that names it and says why, as
+    /// [`Self::opened_tools`] skips one; nothing here fails the run, which is
+    /// then offered fewer tools.
     pub async fn start_enabled(&self, only: Option<&BTreeSet<i64>>) {
         let servers = match self.list_servers().await {
             Ok(servers) => servers,
@@ -197,14 +200,17 @@ impl McpService {
                 return;
             }
         };
-        let chosen = servers
-            .iter()
-            .filter(|server| server.enabled && only.is_none_or(|ids| ids.contains(&server.id)));
-        for server in chosen {
+        let chosen = servers.iter().filter(|server| {
+            server.enabled
+                && server.server_type != McpServerType::Sse
+                && only.is_none_or(|ids| ids.contains(&server.id))
+        });
+        let starts = chosen.map(|server| async move {
             if let Err(why) = self.started(server).await {
                 warn!(server = %server.name, reason = %why, "an enabled MCP server is not running; it offers no tool");
             }
-        }
+        });
+        futures_util::future::join_all(starts).await;
     }
 
     /// `server` running, started as a tool call would start it when it is
