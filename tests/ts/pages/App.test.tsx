@@ -20,7 +20,6 @@ vi.mock('../../../src/services/platform', () => ({
   syncMenuStateSilent: vi.fn(),
   setSelectedModel: vi.fn(async () => {}),
   listenToMenuEvents: vi.fn(async () => () => {}),
-  isDesktop: () => false,
   MENU_EVENTS: {},
   MENU_PLACES: [],
 }));
