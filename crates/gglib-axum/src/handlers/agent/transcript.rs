@@ -40,7 +40,8 @@ fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
     }
 }
 
-/// Refuse a run on `ran_on` in `conversation_id` when the conversation ran
+/// Refuse a run on `ran_on` in `conversation_id`, or a model of `ran_on`
+/// set on it (`PUT /api/conversations/{id}`), when the conversation ran
 /// on another machine, as [`Conversation::machine`] reads it: the one its
 /// stored model names, or this one when it stores only a `model_id`. One
 /// that names no model takes the run's. Paired machines are told apart by
@@ -53,7 +54,7 @@ fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
 ///
 /// `conflict` (409) for a run on another machine; `internal_error` when the
 /// conversation cannot be read.
-pub(super) async fn keep_machine(
+pub(crate) async fn keep_machine(
     core: &AppCore,
     conversation_id: i64,
     ran_on: &Machine,

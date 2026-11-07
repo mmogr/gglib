@@ -9,6 +9,7 @@ pub mod capabilities;
 pub mod capability_tags;
 pub mod chat;
 mod context_fit;
+pub mod conversation_patch;
 pub mod defect_counts;
 pub mod defects;
 mod defects_agent;
@@ -162,6 +163,7 @@ pub use attachment::{
 pub use chat::{
     Conversation, ConversationUpdate, Message, MessageRole, NewConversation, NewMessage,
 };
+pub use conversation_patch::ConversationSettingsPatch;
 pub use thinking::Thinking;
 
 // Re-export GGUF types at the domain level for convenience

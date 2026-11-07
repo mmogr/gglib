@@ -19,6 +19,7 @@ import type { AttachmentInfo } from '../../../types/generated/AttachmentInfo';
 import type { ChatChange } from '../../../types/generated/ChatChange';
 import type { ChatChanged } from '../../../types/generated/ChatChanged';
 import type { ChatTitleRequest } from '../../../types/generated/ChatTitleRequest';
+import type { ConversationSettingsPatch } from '../../../types/generated/ConversationSettingsPatch';
 import type { CreateConversationRequest } from '../../../types/generated/CreateConversationRequest';
 import type { KeepPicture } from '../../../types/generated/KeepPicture';
 import type { UpdateConversationRequest } from '../../../types/generated/UpdateConversationRequest';
@@ -56,7 +57,8 @@ export async function updateConversationTitle(
   id: ConversationId,
   title: string
 ): Promise<void> {
-  const body: UpdateConversationRequest = { title };
+  // No `system_prompt` or `settings` key: the daemon leaves them as they are.
+  const body: Partial<UpdateConversationRequest> = { title };
   await put<void>(`/api/conversations/${id}`, body);
 }
 
@@ -69,6 +71,20 @@ export async function updateConversationSystemPrompt(
 ): Promise<void> {
   // No `title` key: the daemon leaves a field it is not sent as it is.
   const body: Partial<UpdateConversationRequest> = { system_prompt: systemPrompt };
+  await put<void>(`/api/conversations/${id}`, body);
+}
+
+/**
+ * Change a conversation's model, tools or tool limits: only the settings in
+ * `settings` change, each to what it says; the daemon refuses a limit outside
+ * a run's bounds and a model on another machine than the chat's.
+ */
+export async function updateConversationSettings(
+  id: ConversationId,
+  settings: ConversationSettingsPatch
+): Promise<void> {
+  // No `title` key: the daemon leaves a field it is not sent as it is.
+  const body: Partial<UpdateConversationRequest> = { settings };
   await put<void>(`/api/conversations/${id}`, body);
 }
 

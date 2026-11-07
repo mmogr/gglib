@@ -39,6 +39,9 @@ infrastructure concerns (database, filesystem, etc.).
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 - `chat` - Chat conversation and message types. A message carries its images
   by reference: `NewMessage.images` are ids, `Message.images` are facts
+- `conversation_patch` - A change to some of a conversation's settings
+  (`ConversationSettingsPatch`): its model, tools and tool limits, each
+  field sent replacing its setting, a limit outside a run's bounds refused
 - `branching` - When a change to a saved chat branches it into a new chat
   (`plan`), and the options its family holds at each turn (`points`): a
   saved reply is never discarded or altered (ADR 0017)

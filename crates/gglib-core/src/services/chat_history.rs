@@ -13,6 +13,7 @@ use crate::domain::chat::{
     Conversation, ConversationSettings, ConversationUpdate, Message, MessageRole, NewConversation,
     NewMessage,
 };
+use crate::domain::conversation_patch::ConversationSettingsPatch;
 use crate::domain::{Machine, ModelRef, Thinking};
 use crate::ports::chat_history::{ChatHistoryError, ChatHistoryRepository};
 
@@ -71,23 +72,45 @@ impl ChatHistoryService {
         self.repo.get_conversation(id).await
     }
 
-    /// Update conversation metadata.
+    /// Update a conversation's title, system prompt and settings in one
+    /// write, of only what changes: nothing at all when nothing does. The
+    /// settings are made as [`ConversationSettingsPatch::apply`] makes them,
+    /// `model_name` being the name of the patch's model. A patch that names
+    /// a model decides the `model_id` by it, as
+    /// [`record_settings`](Self::record_settings) does; one that names none
+    /// keeps the `model_id`, as a row that stores only that keeps its model.
     pub async fn update_conversation(
         &self,
         id: i64,
         new_title: Option<String>,
         system_prompt: Option<Option<String>>,
+        patch: ConversationSettingsPatch,
+        model_name: Option<String>,
     ) -> Result<(), ChatHistoryError> {
-        self.repo
-            .update_conversation(
-                id,
-                ConversationUpdate {
-                    title: new_title,
-                    system_prompt,
-                    ..ConversationUpdate::default()
-                },
-            )
-            .await
+        let mut update = ConversationUpdate {
+            title: new_title,
+            system_prompt,
+            ..ConversationUpdate::default()
+        };
+        if !patch.is_empty() {
+            let conversation = self
+                .repo
+                .get_conversation(id)
+                .await?
+                .ok_or(ChatHistoryError::ConversationNotFound(id))?;
+            let held = conversation.settings.unwrap_or_default();
+            let mut settings = held.clone();
+            let names_model = patch.model.is_some();
+            patch.apply(&mut settings, model_name);
+            let model_id = settings.model.as_ref().and_then(local_id);
+            if names_model && model_id != conversation.model_id {
+                update.model_id = Some(model_id);
+            }
+            if settings != held {
+                update.settings = Some(Some(settings));
+            }
+        }
+        self.repo.update_conversation(id, update).await
     }
 
     /// Name the model a run used on its conversation: `model`, by its
