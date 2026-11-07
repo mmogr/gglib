@@ -1,12 +1,12 @@
 //! The View menu: the places, in the sidebar's order, then the inspector and
-//! full screen. Hide Inspector is offered only with a model inspected.
+//! full screen.
 
 use tauri::{
     AppHandle, Wry,
-    menu::{MenuItem, PredefinedMenuItem, Submenu},
+    menu::{PredefinedMenuItem, Submenu},
 };
 
-use super::{Entry, item, stateful_items};
+use super::{Entry, item};
 use crate::menu::ids;
 
 pub(super) const ENTRIES: &[Entry] = &[
@@ -43,14 +43,18 @@ pub(super) const ENTRIES: &[Entry] = &[
     },
 ];
 
-pub(super) fn submenu(
-    app: &AppHandle,
-    stateful: &mut Vec<(&'static str, MenuItem<Wry>)>,
-) -> tauri::Result<Submenu<Wry>> {
-    let [library, endpoint, devices, chat, diagnostics, hide] = ENTRIES else {
+pub(super) fn submenu(app: &AppHandle) -> tauri::Result<Submenu<Wry>> {
+    let [
+        library,
+        endpoint,
+        devices,
+        chat,
+        diagnostics,
+        hide_inspector,
+    ] = ENTRIES
+    else {
         unreachable!()
     };
-    let hide = stateful_items(app, std::slice::from_ref(hide), stateful)?;
 
     Submenu::with_items(
         app,
@@ -64,7 +68,7 @@ pub(super) fn submenu(
             &PredefinedMenuItem::separator(app)?,
             &item(app, diagnostics)?,
             &PredefinedMenuItem::separator(app)?,
-            &hide[0],
+            &item(app, hide_inspector)?,
             &PredefinedMenuItem::fullscreen(app, Some("Enter Full Screen"))?,
         ],
     )

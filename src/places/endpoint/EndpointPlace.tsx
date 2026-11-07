@@ -39,7 +39,7 @@ import { Inspector } from '../../inspector/Inspector';
 import { clearProxyCache } from '../../services/clients/proxyDashboard';
 import { removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
 import { useModelLibrary } from '../../services/modelRegistry';
-import { useEndpointFacts } from '../../services/proxyRegistry';
+import { useEndpointFacts, useProxyState } from '../../services/proxyRegistry';
 import { useRemoteState } from '../../services/remoteRegistry';
 import { formatError } from '../../utils/errors';
 import { Menu } from '../library/Menu';
@@ -57,6 +57,7 @@ export default function EndpointPlace() {
   const navigate = useNavigate();
   const { showToast } = useToastContext();
   const facts = useEndpointFacts();
+  const { status: proxyStatus } = useProxyState();
   const dash = useEndpointDashboard();
   const actions = useEndpointActions();
   const { models } = useModelLibrary();
@@ -84,10 +85,11 @@ export default function EndpointPlace() {
   // The menu's Connect a Client… (`?connect=1`): scrolled to once the block
   // is drawn, and the ask dropped from the address. With the endpoint off
   // there is no block to scroll to, and the ask is dropped at once, so it
-  // cannot scroll the page later when the endpoint comes on.
+  // cannot scroll the page later when the endpoint comes on. Before the
+  // first status read there is no telling, so the ask waits for it.
   const connectAsked = new URLSearchParams(location.search).get('connect') === '1';
   useEffect(() => {
-    if (!connectAsked || (up && !connectRef.current)) return;
+    if (!connectAsked || ((up || proxyStatus === null) && !connectRef.current)) return;
     connectRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     navigate(withoutParam(location, 'connect'), { replace: true });
   });

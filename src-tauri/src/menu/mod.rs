@@ -72,8 +72,7 @@ pub(crate) fn is_enabled(id: &str, state: MenuState) -> bool {
     match id {
         ids::LOAD | ids::LOAD_WITH_OPTIONS => state.inspected == Inspected::Idle,
         ids::UNLOAD => state.inspected == Inspected::Served,
-        // Hide Inspector too: the Model menu's rule, a model in the inspector.
-        ids::REMOVE | ids::HIDE_INSPECTOR => state.inspected != Inspected::Nothing,
+        ids::REMOVE => state.inspected != Inspected::Nothing,
         ids::ENDPOINT_SWITCH => state.endpoint != Endpoint::NoDaemon,
         // A dead URL is worse than no URL, and there is no client to connect
         // to an endpoint that is off.
@@ -179,21 +178,14 @@ mod tests {
         }
     }
 
-    /// Hide Inspector has the Model menu's rule: something to hide.
+    /// Hide Inspector is always offered: the inspector can hold a far model
+    /// or a Hugging Face repo, which the menu's selection does not name, and
+    /// with nothing inspected it does nothing.
     #[test]
-    fn hide_inspector_needs_a_model_inspected() {
-        assert!(!is_enabled(
-            ids::HIDE_INSPECTOR,
-            state(Endpoint::On, Inspected::Nothing)
-        ));
-        assert!(is_enabled(
-            ids::HIDE_INSPECTOR,
-            state(Endpoint::On, Inspected::Idle)
-        ));
-        assert!(is_enabled(
-            ids::HIDE_INSPECTOR,
-            state(Endpoint::Off, Inspected::Served)
-        ));
+    fn hide_inspector_is_always_offered() {
+        for inspected in [Inspected::Nothing, Inspected::Idle, Inspected::Served] {
+            assert!(is_enabled(ids::HIDE_INSPECTOR, state(Endpoint::Off, inspected)));
+        }
     }
 
     /// Before the first poll nothing that needs a daemon or a model is
@@ -210,7 +202,6 @@ mod tests {
                 ids::ENDPOINT_SWITCH,
                 ids::COPY_ENDPOINT_URL,
                 ids::CONNECT_CLIENT,
-                ids::HIDE_INSPECTOR,
             ]
             .contains(&id);
             assert_eq!(is_enabled(id, initial), !needs_something, "{id}");
