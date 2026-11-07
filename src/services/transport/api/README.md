@@ -45,5 +45,6 @@ Axum backend (HTTP response) → typed result
 | `attachments.ts` | The image stores (`/api/attachments`, and the far machine's at `/api/remote/attachments` for a far chat): upload an image as its raw bytes, and read one's bytes back with the page's credential |
 | `farModels.ts` | The paired machine's models (`/api/remote/models`), read by this machine's daemon: the list with that machine and what may be done there, one model by its id there, and a load |
 | `version.ts` | Which build of gglib the daemon is running |
+| `health.ts` | `probeDaemon`: whether a daemon answers `/health` at all (a plain `no-cors` fetch, outside the token and key guards and the client's 401 handling); `tokenRefusal`: the daemon's sentence when it refuses this tab's token, read once through `apiFetch` |
 
 <!-- module-docs:end -->

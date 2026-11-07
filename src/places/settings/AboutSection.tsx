@@ -1,84 +1,90 @@
 /**
- * Settings › About: the build gglib is running, and stopping gglib.
+ * Settings › About: the build gglib is running, its documentation, and
+ * Stop gglib….
  *
- * Interim until S3 (`feat(gui)/settings-engines-about`): the stop is today's
- * "Stop the daemon" with its confirm and its "Shutdown requested" line; S3
- * makes it Stop gglib… and the service-not-running screen.
+ * Stop gglib… asks first, then asks the daemon to stop (`gglib daemon
+ * stop`). Unlike the tray menu's Stop gglib…, it reaches the daemon from a
+ * browser tab too. The window then shows the service-not-running screen
+ * (`app/ServiceDown`) once the daemon no longer answers; until then the
+ * button says it is stopping. A stop the daemon answers with a failure (one
+ * not running as the gglib daemon, a key it wants, an error) says why here
+ * in its words, and the button comes back.
  *
  * @module places/settings/AboutSection
  */
 
 import { FC, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { Banner } from '../../components/ui/Banner';
-import { Stack } from '../../components/primitives';
+import { Icon } from '../../components/ui/Icon';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
+import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
+import { TransportError } from '../../services/transport/errors';
+import { formatError } from '../../utils/errors';
 import { BuildInfo } from './BuildInfo';
+
+/** Where the documentation is: the native Help menu's gglib Documentation opens the same. */
+const DOCUMENTATION = 'https://github.com/mmogr/gglib';
 
 export const AboutSection: FC = () => {
   const { confirm } = useConfirmContext();
-  const [shuttingDown, setShuttingDown] = useState(false);
-  const [shutdownRequested, setShutdownRequested] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
-  /**
-   * `gglib daemon stop`. Lives here rather than in the tray panel, which
-   * deliberately keeps window-level actions on the native menu — and unlike
-   * that menu's Quit, this reaches the daemon from the web UI too, where
-   * there is otherwise no way to stop it.
-   *
-   * A failed request is not an error: the daemon is shutting down as it
-   * replies, so losing the response is the expected outcome.
-   */
-  const handleShutdown = async () => {
-    const confirmed = await confirm({
-      title: 'Stop the daemon?',
+  const stop = async () => {
+    const yes = await confirm({
+      title: 'Stop gglib?',
       description:
-        'Stops every running model and shuts down the backend this interface talks to. ' +
-        'Nothing on disk is affected, but you will need to start gglib again to use it.',
+        'This stops every running model and the endpoint. Any client using the endpoint will lose it. ' +
+        'Nothing on disk is affected.',
       confirmLabel: 'Stop',
       variant: 'danger',
     });
-    if (!confirmed) return;
-
-    setShuttingDown(true);
+    if (!yes) return;
+    setStopping(true);
+    setRefusal(null);
     try {
       await getTransport().shutdownDaemon();
-    } catch {
-      // Expected — the connection dies with the daemon.
-    } finally {
-      setShuttingDown(false);
-      setShutdownRequested(true);
+    } catch (err) {
+      // A failure with no HTTP answer is the connection dying with the
+      // daemon as it stops, which is the stop working. Any answer that is a
+      // failure (refused, not allowed, broken) is the daemon still there.
+      if (TransportError.isTransportError(err)) {
+        setRefusal(formatError(err));
+        setStopping(false);
+      }
     }
   };
 
   return (
-    <Stack gap="xl">
+    <div className="flex flex-col gap-lg">
       <BuildInfo />
-
-      <section>
-        <h3 className="m-0 mb-xs text-sm font-semibold text-text">Daemon</h3>
-        <p className="m-0 mb-base text-xs text-text-muted">
-          Everything here runs against the gglib daemon. Stopping it stops every running model
-          with it, and this interface loses its backend until the daemon is started again — from
-          a terminal with <code className="font-mono">gglib web</code>, which starts it and opens
-          this interface in your browser, or by reopening the desktop app.
-        </p>
-        {shutdownRequested && (
-          <Banner variant="info" className="mb-base">
-            Shutdown requested. This interface will stop responding.
-          </Banner>
-        )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="self-start px-0 hover:bg-transparent"
+        rightIcon={<Icon icon={ExternalLink} size={14} />}
+        onClick={() => void openUrl(DOCUMENTATION)}
+      >
+        Documentation
+      </Button>
+      <div className="flex flex-col gap-sm">
         <Button
           variant="dangerGhost"
           size="sm"
-          isLoading={shuttingDown}
-          disabled={shuttingDown || shutdownRequested}
-          onClick={() => void handleShutdown()}
+          className="self-start"
+          disabled={stopping}
+          onClick={() => void stop()}
         >
-          Stop the daemon
+          {stopping ? 'Stopping gglib…' : 'Stop gglib…'}
         </Button>
-      </section>
-    </Stack>
+        {refusal && (
+          <p role="alert" className="m-0 text-sm text-danger">
+            {refusal}
+          </p>
+        )}
+      </div>
+    </div>
   );
 };

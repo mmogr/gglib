@@ -30,19 +30,18 @@
  * @module tray/TrayPanel
  */
 
-import { useEffect, useRef, useState, type FC } from 'react';
+import { useEffect, useState, type FC } from 'react';
 import { Button } from '../components/ui/Button';
-import { useDaemonReachable } from '../hooks/useDaemonReachable';
+import { useDaemonRecovery } from '../hooks/useDaemonRecovery';
 import { useServers } from '../hooks/useServers';
 import { useEndpointActions } from '../places/endpoint/useEndpointActions';
 import { useEndpointDashboard } from '../places/library/useResidency';
 import { appLogger, isDesktop, showMainWindow } from '../services/platform';
-import { cleanupProxyEvents, initProxyEvents, refreshProxyStatus } from '../services/proxyEvents';
-import { resetProxyState, useEndpointFacts, useProxyState } from '../services/proxyRegistry';
-import { cleanupRemoteEvents, initRemoteEvents, refreshRemoteStatus } from '../services/remoteEvents';
-import { resetRemoteState, useRemoteState } from '../services/remoteRegistry';
-import { cleanupServerEvents, forgetServerList, initServerEvents, refreshServers, useServerListHeard } from '../services/serverEvents';
-import { getTransport } from '../services/transport';
+import { cleanupProxyEvents, initProxyEvents } from '../services/proxyEvents';
+import { useEndpointFacts, useProxyState } from '../services/proxyRegistry';
+import { cleanupRemoteEvents, initRemoteEvents } from '../services/remoteEvents';
+import { useRemoteState } from '../services/remoteRegistry';
+import { cleanupServerEvents, initServerEvents, refreshServers, useServerListHeard } from '../services/serverEvents';
 import { Devices } from './Devices';
 import { Endpoint } from './Endpoint';
 import { Loaded, trayLoadedRows } from './Loaded';
@@ -51,7 +50,9 @@ import { Loaded, trayLoadedRows } from './Loaded';
 const LIST_RETRY_MS = 2000;
 
 export const TrayPanel: FC = () => {
-  const reachable = useDaemonReachable();
+  // The daemon going lets go of what the registries held; its coming back
+  // reads them again and wakes the stream (`useDaemonRecovery`).
+  const reachable = useDaemonRecovery();
   const facts = useEndpointFacts();
   const dash = useEndpointDashboard();
   const actions = useEndpointActions();
@@ -72,24 +73,7 @@ export const TrayPanel: FC = () => {
     };
   }, []);
 
-  // The daemon going lets go of what it said; its coming back reads it
-  // again, since the event stream has no backlog, and wakes the stream. A
-  // first answer needs no re-read: the bridges' own reads are on their way.
   const live = reachable === true;
-  const wasDown = useRef(false);
-  useEffect(() => {
-    if (reachable === false) {
-      wasDown.current = true;
-      resetProxyState();
-      resetRemoteState();
-      forgetServerList();
-    } else if (reachable === true && wasDown.current) {
-      getTransport().reconnectEventStreamNow();
-      refreshProxyStatus();
-      refreshServers();
-      void refreshRemoteStatus();
-    }
-  }, [reachable]);
 
   // Until a list read lands, ask again each poll: a read that failed or that
   // a server event overtook is dropped, and would leave Loaded unknown.

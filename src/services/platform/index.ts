@@ -8,6 +8,7 @@ export { isDesktop } from './detect';
 // Shell integration
 export { openUrl } from './openUrl';
 export { showMainWindow } from './mainWindow';
+export { startGglib } from './startGglib';
 export { setSelectedModel, syncMenuState, syncMenuStateSilent } from './menuSync';
 
 // Desktop menu events

@@ -11,6 +11,7 @@ import { startMenuBridge } from "./app/menuBridge";
 import { createAppRouter } from "./app/router";
 import { SetupGate } from "./app/SetupGate";
 import { Shell } from "./app/Shell";
+import { ServiceGate } from "./app/ServiceDown";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
@@ -65,9 +66,13 @@ export function AppContent() {
   return (
     <SettingsProvider showToast={showToast}>
       <>
-        <SetupGate>
-          <Shell />
-        </SetupGate>
+        {/* The service-not-running screen while the daemon does not answer;
+            then setup, until it is done; then the shell. */}
+        <ServiceGate>
+          <SetupGate>
+            <Shell />
+          </SetupGate>
+        </ServiceGate>
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </>
     </SettingsProvider>

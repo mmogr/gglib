@@ -12,11 +12,11 @@ mod common;
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, Request};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use common::origin::{bearer_token, shipped, shipped_cors};
+use common::origin::{bearer_token, send, shipped, shipped_cors};
 use gglib_axum::{CorsConfig, DaemonAccess};
 use gglib_core::contracts::http::daemon;
 
@@ -177,4 +177,33 @@ async fn each_kind_of_request_gets_them_under_a_config_that_lets_every_page_read
         row("a preflight from another site", Method::OPTIONS, WRITE, &[HOST, ELSEWHERE, ASKS_POST], 200, &[ANY_HEADER, ANY_METHOD, READS_ANY, VARY], ""),
     ];
     ask(&app, &rows).await;
+}
+
+/// A page this daemon lets read `/api` can read `/health` too, so the window's
+/// probe can see the answer is gglib's and not another program's on the port.
+/// Another site cannot read it.
+#[tokio::test]
+async fn a_local_page_reads_the_health_answer_and_another_site_does_not() {
+    let access = DaemonAccess::new(None, "127.0.0.1", vec![NAMED.to_owned()]);
+    let app = shipped(&shipped_cors(), access).await;
+
+    let local = send(
+        &app,
+        Method::GET,
+        daemon::HEALTH_PATH,
+        HOST.1,
+        &[LOCAL_PAGE],
+    )
+    .await;
+    assert_eq!(local.status, StatusCode::OK);
+    assert_eq!(local.allow_origin.as_deref(), Some(READS_LOCAL.1));
+    assert!(
+        local.body.contains("\"service\":\"gglib-daemon\""),
+        "{}",
+        local.body
+    );
+
+    let elsewhere = send(&app, Method::GET, daemon::HEALTH_PATH, HOST.1, &[ELSEWHERE]).await;
+    assert_eq!(elsewhere.status, StatusCode::OK);
+    assert_eq!(elsewhere.allow_origin, None);
 }

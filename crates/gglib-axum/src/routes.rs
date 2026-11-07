@@ -347,15 +347,16 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
             Arc::new(cfg.clone()),
             origin_guard::<DaemonAccess>,
         ))
-        .layer(cors);
+        .layer(cors.clone());
 
     Router::new()
-        // Intentionally placed outside the CORS layer — /health is a
-        // low-sensitivity health probe that should be accessible without
-        // origin restrictions (e.g. for container orchestration liveness checks).
-        // The proxy server applies CORS globally (including /health) via a
-        // router-level .layer(), but this Axum router scopes CORS to /api/* only.
-        .route("/health", get(health_check))
+        // Outside the token, key and origin guards: a probe needs no
+        // credentials. CORS is layered on it alone, so a page this daemon lets
+        // read `/api` (the desktop window, a local dev page) can read the
+        // answer too and see it is gglib, not another program on the port.
+        // CORS restricts nothing for a client that is not a browser, so
+        // liveness checks and the CLI's probe are as before.
+        .route("/health", get(health_check).layer(cors))
         .nest("/api", api)
 }
 

@@ -7,7 +7,7 @@ src/hooks/useGglibRuntime/agentMessageState.ts 340
 src/hooks/useGglibRuntime/useGglibRuntime.ts 326
 src/hooks/useGglibRuntime/useRunReader.ts 317
 src/services/tools/registry.ts 358
-src/services/transport/api/client.ts 336
+src/services/transport/api/client.ts 346
 src/services/transport/events/sse.ts 346
 src/styles/tailwind.css 402
 src/types/index.ts 594

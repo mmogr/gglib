@@ -16,6 +16,7 @@ vi.mock('../../../src/places/diagnostics/DiagnosticsPlace', () => ({ default: ()
 vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
+  isDesktop: () => false,
   syncMenuStateSilent: vi.fn(),
   setSelectedModel: vi.fn(async () => {}),
   listenToMenuEvents: vi.fn(async () => () => {}),
@@ -30,7 +31,11 @@ vi.mock('../../../src/services/downloadsEvents', () => ({
   cleanupDownloadEvents: vi.fn(),
   onDownloadEndings: vi.fn(() => () => {}),
 }));
-vi.mock('../../../src/services/transport', () => ({ getTransport: () => ({ getSettings: async () => ({}) }) }));
+// The daemon answers the window's health probe and takes its token, so the
+// shell is drawn, not the service-not-running screen.
+vi.mock('../../../src/services/transport', () => ({
+  getTransport: () => ({ getSettings: async () => ({}), probeDaemon: async () => true, tokenRefusal: async () => null }),
+}));
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getSetupStatus: async () => ({ setupCompleted: true }),
 }));

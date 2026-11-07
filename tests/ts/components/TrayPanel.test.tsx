@@ -36,6 +36,9 @@ vi.mock('../../../src/services/transport', async () => {
     ...actual,
     getTransport: () => ({
       ...transport,
+      // This fake daemon takes no token and no key: its health probe answers
+      // exactly when its proxy status does.
+      probeDaemon: () => transport.getProxyStatus().then(() => true, () => false),
       subscribe: vi.fn(() => () => {}),
       onEventStreamOpen: vi.fn(() => () => {}),
       reconnectEventStreamNow: vi.fn(),
