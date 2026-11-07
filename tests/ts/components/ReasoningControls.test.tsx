@@ -14,9 +14,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
-import { InferenceParametersForm } from '../../../src/components/InferenceParametersForm';
-import type { InferenceFallback } from '../../../src/components/InferenceParametersForm/fallbackCaption';
-import { ReasoningSupport } from '../../../src/components/ModelInspectorPanel/components/ReasoningSupport';
+import { SamplingForm } from '../../../src/components/SamplingForm';
+import type { InferenceFallback } from '../../../src/components/SamplingForm/fallbackCaption';
+import { ReasoningSupport } from '../../../src/inspector/local/ReasoningSupport';
 import { JinjaModeField } from '../../../src/components/ModelInspectorPanel/components/JinjaModeField';
 import type { SparseInferenceConfig, TemplateSupport } from '../../../src/types';
 
@@ -28,7 +28,7 @@ function renderForm(
 ) {
   const onChange = vi.fn();
   render(
-    <InferenceParametersForm
+    <SamplingForm
       value={value}
       onChange={onChange}
       fallback={UPSTREAM}
@@ -149,17 +149,8 @@ describe('the budget control, which no template can veto', () => {
 describe('the model inspector fact line', () => {
   const renderSupport = (support: TemplateSupport | undefined, isRunning: boolean) => {
     const onRecheck = vi.fn();
-    const onStart = vi.fn();
-    render(
-      <ReasoningSupport
-        support={support}
-        isRunning={isRunning}
-        onRecheck={onRecheck}
-        onStart={onStart}
-        isRechecking={false}
-      />,
-    );
-    return { onRecheck, onStart };
+    render(<ReasoningSupport support={support} isRunning={isRunning} onRecheck={onRecheck} isRechecking={false} />);
+    return { onRecheck };
   };
 
   it.each<[TemplateSupport | undefined, RegExp]>([
@@ -184,12 +175,11 @@ describe('the model inspector fact line', () => {
     expect(onRecheck).toHaveBeenCalled();
   });
 
-  it('asks for a launch when there is nothing running to read', async () => {
-    const { onStart, onRecheck } = renderSupport('unknown', false);
+  it('says it is known after the first load when there is nothing running to read', () => {
+    renderSupport('unknown', false);
 
-    await userEvent.click(screen.getByRole('button', { name: /start the model/i }));
-    expect(onStart).toHaveBeenCalled();
-    expect(onRecheck).not.toHaveBeenCalled();
+    expect(screen.getByText(/known after its first load/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });
 

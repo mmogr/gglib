@@ -1,7 +1,8 @@
 /**
  * A button that opens a short menu under it: the library header's `Sort ▾`
- * and `+ ▾`. An item is an action, or a choice that is ticked when it is
- * the one in force. The menu closes on a pick, a click outside, or Escape.
+ * and `+ ▾`, and the inspector's ⋯. An item is an action, or a choice that
+ * is ticked when it is the one in force; a danger item is drawn as one. The
+ * menu closes on a pick, a click outside, or Escape.
  *
  * @module places/library/Menu
  */
@@ -20,6 +21,10 @@ export interface MenuItem {
   checked?: boolean;
   /** Draw a gap before this item, between two sets of choices. */
   gapBefore?: boolean;
+  /** An action that removes something: drawn in the danger colour. */
+  danger?: boolean;
+  /** Said on hover: what the action does, where its label cannot. */
+  title?: string;
 }
 
 interface MenuProps {
@@ -28,9 +33,11 @@ interface MenuProps {
   /** The button's accessible name, when its label is an icon. */
   name?: string;
   items: MenuItem[];
+  /** The button is its icon alone, with no ▾ (the inspector's ⋯). */
+  iconOnly?: boolean;
 }
 
-export const Menu: FC<MenuProps> = ({ label, name, items }) => {
+export const Menu: FC<MenuProps> = ({ label, name, items, iconOnly = false }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useClickOutside(ref, () => setOpen(false), open);
@@ -43,7 +50,8 @@ export const Menu: FC<MenuProps> = ({ label, name, items }) => {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={name}
-        rightIcon={<Icon icon={ChevronDown} size={12} />}
+        iconOnly={iconOnly}
+        rightIcon={iconOnly ? undefined : <Icon icon={ChevronDown} size={12} />}
         onClick={() => setOpen((o) => !o)}
       >
         {label}
@@ -65,7 +73,12 @@ export const Menu: FC<MenuProps> = ({ label, name, items }) => {
               size="sm"
               role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
               aria-checked={item.checked}
-              className={cn('justify-start text-sm font-normal text-text', item.gapBefore && 'mt-sm')}
+              title={item.title}
+              className={cn(
+                'justify-start text-sm font-normal text-text',
+                item.danger && 'text-danger hover:text-danger',
+                item.gapBefore && 'mt-sm',
+              )}
               leftIcon={
                 item.checked === undefined ? undefined : (
                   <Icon icon={Check} size={12} className={item.checked ? undefined : 'invisible'} />

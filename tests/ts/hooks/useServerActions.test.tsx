@@ -1,15 +1,8 @@
 /**
- * Tests for the `useServerActions` hook: `handleSave`'s null-clearing
- * regression for `serverDefaults`, and what `handleStartServer` puts on the
- * wire — the sampling half it used to drop, and the context it used to invent.
- *
- * Bug history: `handleSave` used to do `editedServerDefaults ?? undefined`,
- * which coerces `null` (the "clear override" sentinel) into `undefined`.
- * Since the request body is later serialized with plain `JSON.stringify`,
- * keys with an `undefined` value are dropped entirely — so "clear override"
- * silently became a no-op. These tests assert the update payload passed to
- * `onUpdateModel` contains a literal `serverDefaults: null` (not `undefined`,
- * not omitted) when the user clears an override.
+ * Tests for the `useServerActions` hook, the Serve dialog's start: what
+ * `handleStartServer` puts on the wire — the sampling half it used to drop,
+ * and the context it used to invent. (Clearing a stored context is the
+ * inspector's Context row's Reset now, pinned in `tests/ts/places/inspector.test.tsx`.)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -49,11 +42,6 @@ const baseModel = guiModel({ serverDefaults: { contextLength: 8192 } });
 function makeConfig(overrides: Partial<ServerActionsConfig>): ServerActionsConfig {
   return {
     model: baseModel,
-    servers: [],
-    editedName: baseModel.name,
-    editedQuantization: '',
-    editedFilePath: baseModel.filePath,
-    editedInferenceDefaults: undefined,
     customContext: '',
     customPort: '',
     jinjaOverride: null,
@@ -62,86 +50,15 @@ function makeConfig(overrides: Partial<ServerActionsConfig>): ServerActionsConfi
     mtpNMaxOverride: null,
     mtpPMinOverride: null,
     inferenceParams: undefined,
-    editedServerDefaults: undefined,
-    onStopServer: vi.fn(),
-    onRemoveModel: vi.fn(),
-    onUpdateModel: vi.fn().mockResolvedValue(undefined),
     setIsServing: vi.fn(),
-    setIsDeleting: vi.fn(),
     closeServeModal: vi.fn(),
-    closeDeleteModal: vi.fn(),
-    resetEditState: vi.fn(),
     ...overrides,
   };
 }
 
-describe('useServerActions handleSave — serverDefaults null-clearing', () => {
-  it('emits a literal serverDefaults: null when the override is cleared', async () => {
-    const onUpdateModel = vi.fn().mockResolvedValue(undefined);
-    const config = makeConfig({
-      // User cleared the override in the edit form.
-      editedServerDefaults: null,
-      onUpdateModel,
-    });
-
-    const { result } = renderHook(() => useServerActions(config), { wrapper });
-
-    await act(async () => {
-      await result.current.handleSave();
-    });
-
-    expect(onUpdateModel).toHaveBeenCalledTimes(1);
-    const [, updates] = onUpdateModel.mock.calls[0];
-
-    // Key must be present and literally null — not dropped, not undefined.
-    expect(updates).toHaveProperty('serverDefaults');
-    expect(updates.serverDefaults).toBeNull();
-    expect(updates.serverDefaults).not.toBeUndefined();
-
-    // Guard against the exact regression: JSON.stringify must retain the key.
-    expect(JSON.stringify(updates)).toContain('"serverDefaults":null');
-  });
-
-  it('omits serverDefaults when the override was not touched', async () => {
-    const onUpdateModel = vi.fn().mockResolvedValue(undefined);
-    const config = makeConfig({
-      // Untouched: matches the model's current value.
-      editedServerDefaults: baseModel.serverDefaults,
-      onUpdateModel,
-    });
-
-    const { result } = renderHook(() => useServerActions(config), { wrapper });
-
-    await act(async () => {
-      await result.current.handleSave();
-    });
-
-    // Nothing changed at all, so onUpdateModel should not be called.
-    expect(onUpdateModel).not.toHaveBeenCalled();
-  });
-
-  it('emits the new object when the override is set to a new value', async () => {
-    const onUpdateModel = vi.fn().mockResolvedValue(undefined);
-    const config = makeConfig({
-      editedServerDefaults: { contextLength: 32768 },
-      onUpdateModel,
-    });
-
-    const { result } = renderHook(() => useServerActions(config), { wrapper });
-
-    await act(async () => {
-      await result.current.handleSave();
-    });
-
-    expect(onUpdateModel).toHaveBeenCalledTimes(1);
-    const [, updates] = onUpdateModel.mock.calls[0];
-    expect(updates.serverDefaults).toEqual({ contextLength: 32768 });
-  });
-});
-
 describe('useServerActions handleStartServer — the sampling half of a serve', () => {
   /**
-   * The serve modal renders the whole `InferenceParametersForm`, which offers
+   * The serve modal renders the whole `SamplingForm`, which offers
    * seventeen of the eighteen sampling parameters — all but `seed`, which has
    * no control. `handleStartServer` used to copy nine of them into the
    * `ServeConfig` by name, so the other nine went missing: the eight the form

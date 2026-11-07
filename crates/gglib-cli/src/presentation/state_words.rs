@@ -1,16 +1,18 @@
 //! The state words, written to `contracts/vocabulary/words.json`.
 //!
-//! `gglib_core::domain::state_words` is the one place a state's word lives.
-//! The test here writes every state with its wire name and its word to the
-//! contract file, and fails when the file goes stale, so the GUI's word
-//! table (held to that file by `tests/ts/contracts/stateWords.test.ts`)
-//! cannot drift from what the CLI prints.
+//! `gglib_core::domain::state_words` is the one place a state's word lives,
+//! and `ChoiceSource::word` the one place a launch choice's source has its
+//! words. The test here writes every state and every source with its wire
+//! name and its word to the contract file, and fails when the file goes
+//! stale, so the GUI's word tables (held to that file by
+//! `tests/ts/contracts/stateWords.test.ts`) cannot drift from what the CLI
+//! prints.
 
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use gglib_core::domain::{EndpointState, KeyState, ReachState, ResidencyState};
+    use gglib_core::domain::{ChoiceSource, EndpointState, KeyState, ReachState, ResidencyState};
     use serde::Serialize;
 
     /// One state: its name on the wire and the word a person reads.
@@ -20,13 +22,15 @@ mod tests {
         word: &'static str,
     }
 
-    /// The four tables as the file holds them, each in display order.
+    /// The tables as the file holds them, each in display order: the four
+    /// state tables, and whose choice a launch argument is.
     #[derive(Serialize)]
     struct Words {
         endpoint: Vec<Recorded>,
         residency: Vec<Recorded>,
         reach: Vec<Recorded>,
         key: Vec<Recorded>,
+        choice: Vec<Recorded>,
     }
 
     fn row<S: Serialize>(state: S, word: &'static str) -> Recorded {
@@ -50,6 +54,7 @@ mod tests {
                 .collect(),
             reach: ReachState::ALL.iter().map(|s| row(s, s.word())).collect(),
             key: KeyState::ALL.iter().map(|s| row(s, s.word())).collect(),
+            choice: ChoiceSource::ALL.iter().map(|s| row(s, s.word())).collect(),
         }
     }
 

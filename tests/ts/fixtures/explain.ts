@@ -13,6 +13,7 @@
  * really does omit the key.
  */
 import type { LaunchExplanation, SamplingExplanation } from '../../../src/types';
+import type { LaunchPlan } from '../../../src/types/generated/LaunchPlan';
 import { resolvedConfig } from './inference';
 
 const BASE: SamplingExplanation = {
@@ -32,18 +33,51 @@ export function samplingExplanation(
 }
 
 /**
- * A whole explanation around `sampling`: the launch half is the smallest
- * plan the daemon can send, a program with no arguments and no fit, for a
- * test that reads only the sampling.
+ * A whole explanation around `sampling`: by default the launch half is the
+ * smallest plan the daemon can send, a program with no arguments and no
+ * fit, for a test that reads only the sampling.
  */
-export function launchExplanation(sampling: SamplingExplanation): LaunchExplanation {
+export function launchExplanation(
+  sampling: SamplingExplanation,
+  plan: LaunchPlan = {
+    program: 'llama-server',
+    args: [],
+    narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [] },
+    fit: null,
+  },
+): LaunchExplanation {
+  return { plan, sampling };
+}
+
+/**
+ * A chat model's plan as the runtime makes one (`explain_args.rs`'s
+ * decisions and reasons): its weights, the port, a context fitted to the
+ * machine, templates for a model tagged agent, a linked projector and a
+ * quantized KV cache, fitted at 32K of a 128K window.
+ */
+export function chatPlan(overrides: Partial<LaunchPlan> = {}): LaunchPlan {
   return {
-    plan: {
-      program: 'llama-server',
-      args: [],
-      narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [] },
-      fit: null,
+    program: 'llama-server',
+    args: [
+      { flag: '-m', value: '/models/gemma.gguf', decision: 'model', source: 'model_author', reason: 'the weights, as published' },
+      { flag: '--port', value: 'auto', decision: 'port', source: 'gglib', reason: 'the next free port above the base when it loads' },
+      { flag: '-c', value: '32768', decision: 'ctx', source: 'gglib', reason: 'the largest rung that fits beside the weights on this machine' },
+      { flag: '--jinja', decision: 'templates', source: 'gglib', reason: "tagged agent: tool calls need the model's own template" },
+      { flag: '--mmproj', value: '/models/mmproj-F16.gguf', decision: 'images', source: 'you', reason: 'the projector linked to this model' },
+      { flag: '--cache-type-k', value: 'q8_0', decision: 'kv', source: 'gglib', reason: 'q8_0 halves the KV cache at no measured cost' },
+      { flag: '--cache-type-v', value: 'q8_0', decision: 'kv', source: 'gglib', reason: 'q8_0 halves the KV cache at no measured cost' },
+    ],
+    narration: { model_name: 'gemma', quantization: 'Q4_K_M', weights_bytes: 2_500_000_000, decisions: [] },
+    fit: {
+      servesAt: 32768,
+      source: 'fitted_to_hardware',
+      fitted: 32768,
+      budgetBytes: 48 * 1024 ** 3,
+      weightsBytes: 2_500_000_000,
+      kvBytesPerToken: 200_000,
+      trainedCtx: 131072,
+      unsnapped: 40000,
     },
-    sampling,
+    ...overrides,
   };
 }

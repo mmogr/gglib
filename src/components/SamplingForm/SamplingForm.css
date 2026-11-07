@@ -1,0 +1,56 @@
+/* SamplingForm - Slider thumb pseudo-element styles (can't be expressed in Tailwind) */
+
+.inference-param-slider {
+  flex: 1;
+  height: 6px;
+  appearance: none;
+  background: var(--color-border);
+  border-radius: 3px;
+  outline: none;
+  transition: background 0.15s;
+}
+
+.inference-param-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.inference-param-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.inference-param-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+}
+
+.inference-param-slider:hover::-moz-range-thumb {
+  transform: scale(1.1);
+}
+
+.inference-param-slider.is-default {
+  opacity: 0.6;
+}
+
+.inference-param-slider.is-default::-webkit-slider-thumb {
+  background: var(--color-text-disabled);
+}
+
+.inference-param-slider.is-default::-moz-range-thumb {
+  background: var(--color-text-disabled);
+}
+
+.inference-param-slider:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

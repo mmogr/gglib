@@ -66,5 +66,19 @@
       "state": "none_needed",
       "word": "None needed"
     }
+  ],
+  "choice": [
+    {
+      "state": "model_author",
+      "word": "model author"
+    },
+    {
+      "state": "gglib",
+      "word": "gglib"
+    },
+    {
+      "state": "you",
+      "word": "you"
+    }
   ]
 }

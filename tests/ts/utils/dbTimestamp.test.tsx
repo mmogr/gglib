@@ -17,13 +17,14 @@ import { buildLoadedMessage } from '../../../src/hooks/useChatPersistence/buildL
 import { buildThreadMessages } from '../../../src/hooks/useChatPersistence/buildThreadMessages';
 import ConversationListPanel from '../../../src/components/ConversationListPanel/ConversationListPanel';
 import { ModelMetadataGrid } from '../../../src/components/ModelInspectorPanel/components/ModelMetadataGrid';
+import { Details } from '../../../src/inspector/local/Details';
+import type { ModelDetailState } from '../../../src/inspector/local/useModelDetail';
+import { ToastProvider } from '../../../src/contexts/ToastContext';
 import type { ChatMessage, ConversationSummary } from '../../../src/services/transport';
 import type { ModelDetail } from '../../../src/types';
 import { guiModel } from '../fixtures/model';
 
-vi.mock('../../../src/components/ModelInspectorPanel/components/SamplingProvenanceSection', () => ({
-  SamplingProvenanceSection: () => null,
-}));
+
 
 /** 08:00 UTC, as SQLite writes it. */
 const SAVED = '2026-10-01 08:00:00';
@@ -127,5 +128,30 @@ describe('every place a database time is shown', () => {
 
     const shown = new Date(INSTANT).toLocaleString();
     expect(screen.getAllByText(shown)).toHaveLength(2);
+  });
+
+  it("the inspector's Details: downloaded and files checked, exact on hover", () => {
+    localStorage.setItem('gglib.inspector.details', 'open');
+    const model = guiModel({ id: 3, hfRepoId: 'owner/repo' });
+    const detail = {
+      modelDetail: { id: 3, metadata: {}, tags: [], downloadDate: SAVED, lastUpdateCheck: SAVED } as unknown as ModelDetail,
+      tags: [],
+      newTagInput: '',
+      setNewTagInput: vi.fn(),
+      reload: vi.fn(async () => {}),
+      addTag: vi.fn(async () => {}),
+      removeTag: vi.fn(async () => {}),
+      isLoading: false,
+    } satisfies ModelDetailState;
+    render(
+      <ToastProvider>
+        <Details model={model} detail={detail} loaded={false} onUpdateModel={vi.fn(async () => {})} onChanged={vi.fn()} />
+      </ToastProvider>,
+    );
+
+    const shown = new Date(INSTANT).toLocaleString();
+    expect(screen.getByText(/^downloaded /)).toHaveAttribute('title', shown);
+    expect(screen.getByText(/^files checked /)).toHaveAttribute('title', shown);
+    localStorage.removeItem('gglib.inspector.details');
   });
 });

@@ -18,6 +18,7 @@ import type { GgufModel } from '../../types';
 import type { ModelInfo } from '../../types/generated/ModelInfo';
 import type { DownloadRow } from '../../services/transport/types/downloads';
 import { canSee } from '../../utils/canSee';
+import { formatParamCount, formatSize } from '../../utils/format';
 import { imageFamilyLabel } from '../../utils/imageFamily';
 
 export type SortKey = 'name' | 'added' | 'size' | 'speed';
@@ -32,6 +33,21 @@ export const DEFAULT_SORT: LibrarySort = { key: 'name', ascending: true };
 export interface LibraryGroups {
   loaded: GgufModel[];
   here: GgufModel[];
+}
+
+/**
+ * The facts under a model's name: params, quant, size on disk, and what it
+ * can do. A library row and the inspector's summary both say these, so the
+ * two never disagree; an absent fact is `null` or `false`.
+ */
+export function modelFacts(model: GgufModel): (string | null | false)[] {
+  return [
+    formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount),
+    model.quantization,
+    model.sizeBytes > 0 && formatSize(model.sizeBytes),
+    canSee(model) && 'sees images',
+    model.imageFamily !== undefined && `draws (${imageFamilyLabel(model.imageFamily)})`,
+  ];
 }
 
 /** The words of a search, lower case, empty words dropped. */

@@ -6,11 +6,12 @@
  * mounted. The main column is the library's rows, then what the one search
  * found on Hugging Face (`hf/`). The inspector holds one subject: a model
  * of this machine's or the paired one's (by address), or a Hugging Face
- * repo (picked here; any address with a subject drops it). It is today's
- * (`ModelInspectorPanel`, `FarModelInspector`, the Hugging Face preview)
- * until its redesign (B2), wired as before: the download queue for its
- * Download buttons, `?serve=1` opening its Serve dialog once it can, and a
- * server it started opening that server's chat. `?add=browse` focuses the
+ * repo (picked here; any address with a subject drops it). A model of this
+ * machine's is `inspector/Inspector`; the paired machine's model and the
+ * Hugging Face preview are the old ones until I4 (`FarModelInspector`,
+ * `HfInspector`, with the download queue for its Download buttons).
+ * `?serve=1` opens the inspector's Serve dialog once it can, and a server
+ * it started for a chat opens that chat. `?add=browse` focuses the
  * search; `?add=file` opens the native picker on the desktop and the typed
  * path on the web. With nothing picked the rows take the width.
  *
@@ -19,7 +20,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { FarModelInspector, ModelInspectorPanel } from '../../components/ModelInspectorPanel';
+import { FarModelInspector, HfInspector } from '../../components/ModelInspectorPanel';
+import { Inspector } from '../../inspector/Inspector';
 import { Button } from '../../components/ui/Button';
 import { useToastContext } from '../../contexts/ToastContext';
 import { usePairedModels } from '../../hooks/usePairedModels';
@@ -27,10 +29,9 @@ import { useServers, type ServerViewModel } from '../../hooks/useServers';
 import { HANDED, setChatHandoff } from '../../app/chatHandoff';
 import { inspectorSubject, libraryIntent, paths, settingsAt } from '../../app/paths';
 import { useDownloads } from '../../services/downloadsRegistry';
-import { refreshModels, removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
+import { removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
 import { useModel } from '../../services/modelRegistry';
 import { isDesktop, pickGgufFile } from '../../services/platform';
-import { getTransport } from '../../services/transport';
 import type { HfModelSummary } from '../../types';
 import type { ModelRef } from '../../types/generated/ModelRef';
 import { formatError } from '../../utils/errors';
@@ -120,13 +121,14 @@ export default function LibraryPlace() {
     },
     [selectedModelId, navigate],
   );
+  const registerServeOpener = useCallback((opener: () => void) => setOpenServeModal(() => opener), []);
   const unload = useCallback(
     (id: number) => void stopServer(id).catch((err) => showToast(formatError(err), 'error')),
     [stopServer, showToast],
   );
 
-  // A server started from the inspector opens its chat; the port is handed
-  // on, since the registry may not have heard of it yet.
+  // A server started from the inspector for a chat opens that chat; the
+  // port is handed on, since the registry may not have heard of it yet.
   const handleServerStarted = async (server: ServerViewModel) => {
     setChatHandoff({ modelId: server.modelId, port: server.port, modelName: server.modelName });
     navigate(paths.chat(server.modelId), { state: HANDED });
@@ -178,23 +180,17 @@ export default function LibraryPlace() {
         <aside aria-label="Inspector" className="flex w-[380px] shrink-0 flex-col overflow-y-auto bg-surface">
           {farPick ? (
             <FarModelInspector model={farPick} paired={paired} onChat={(far) => navigate(paths.farChat(far.id))} />
+          ) : selectedHfModel ? (
+            <HfInspector model={selectedHfModel} downloadQueue={downloadQueue} />
           ) : (
-            <ModelInspectorPanel
+            <Inspector
               model={selectedModel}
-              selectedHfModel={selectedHfModel}
-              onServerStarted={handleServerStarted}
-              onOpenChat={(modelId) => navigate(paths.chat(modelId))}
-              onStopServer={stopServer}
               servers={servers}
+              onServerStarted={handleServerStarted}
+              onStopServer={stopServer}
               onRemoveModel={removeModel}
               onUpdateModel={updateModel}
-              onAddTag={(id, tag) => getTransport().addModelTag(id, tag)}
-              onRemoveTag={(id, tag) => getTransport().removeModelTag(id, tag)}
-              getModelDetail={(id) => getTransport().getModelDetail(id)}
-              onRefresh={refreshModels}
-              downloadQueue={downloadQueue}
-              onRegisterServeModalOpener={(opener) => setOpenServeModal(() => opener)}
-              onBenchmark={(modelId) => navigate(paths.benchmarks([modelId]))}
+              onRegisterServeModalOpener={registerServeOpener}
               onOpenSystemSettings={() => navigate(settingsAt(location, 'system'), { replace: true })}
             />
           )}

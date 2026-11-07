@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { Settings } from 'lucide-react';
 import type { ComponentLinkDto, GgufModel } from '../../../types';
-import type { SdStatusState } from '../hooks/useSdStatus';
+import type { SdStatusState } from '../../../inspector/local/useSdStatus';
 import { componentRoleLabel, imageFamilyLabel } from '../../../utils/imageFamily';
 import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';

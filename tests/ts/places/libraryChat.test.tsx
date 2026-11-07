@@ -75,6 +75,7 @@ vi.mock('../../../src/services/transport', async () => {
       getPairedModel: vi.fn(async (id: number) => ({ detail: farDetail(id, 'qwen3-8b') })),
       loadPairedModel: vi.fn(async () => ({ model: 'qwen3-8b', started: true, context: 30000 })),
       serveModel,
+      listServers: vi.fn(async () => []),
       getDownloadQueue: vi.fn(async () => downloads.queue),
       queueDownload,
       browseHfModels: vi.fn(async () => ({ models: [], next_cursor: null })),
@@ -85,17 +86,21 @@ vi.mock('../../../src/services/transport', async () => {
   };
 });
 vi.mock('../../../src/services/transport/api/client', () => ({
-  // A model's sampling explanation is "none", which the inspector can draw,
-  // and so is the model suggested for this machine.
-  get: vi.fn(async (path: string) =>
-    path.endsWith('/projectors')
+  // A model's explanation is the smallest plan with nothing resolved, which
+  // the inspector can draw; the model suggested for this machine is none.
+  get: vi.fn(async (path: string) => {
+    if (path.includes('/explain')) {
+      const { launchExplanation, samplingExplanation } = await import('../fixtures/explain');
+      return launchExplanation(samplingExplanation());
+    }
+    return path.endsWith('/projectors')
       ? here.projectors
       : path.endsWith('/components')
         ? here.components
         : path.startsWith('/api/models/') || path.endsWith('/recommend-model')
-        ? null
-        : [],
-  ),
+          ? null
+          : [];
+  }),
 }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: shell.listen }));
 vi.mock('../../../src/services/remoteEvents', () => ({
@@ -314,7 +319,7 @@ describe('the library, into a chat', () => {
     expect(screen.queryByRole('listbox', { name: 'On desk' })).not.toBeInTheDocument();
   });
 
-  it("an already-running model's Open chat opens the chat page", async () => {
+  it("an already-running model's Chat opens the chat page", async () => {
     // Served before the page loaded — by the CLI, the tray, another window —
     // so no serve here ever fired the handler that opens chat by itself.
     library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true })];
@@ -323,7 +328,7 @@ describe('the library, into a chat', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('option', { name: /qwen3-8b/i }));
-    await user.click(await screen.findByRole('button', { name: /open chat/i }));
+    await user.click(await screen.findByRole('button', { name: 'Chat' }));
 
     const chat = await screen.findByTestId('chat-page');
     expect(chat).toHaveTextContent('Chatting with qwen3-8b');
@@ -338,7 +343,7 @@ describe('the library, into a chat', () => {
     renderPage();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('option', { name: /qwen3-8b/i }));
-    await user.click(await screen.findByRole('button', { name: /open chat/i }));
+    await user.click(await screen.findByRole('button', { name: 'Chat' }));
     await screen.findByTestId('chat-page');
     return user;
   }
@@ -350,14 +355,15 @@ describe('the library, into a chat', () => {
     return (port: number) => act(async () => answer({ port }));
   }
 
-  it('offers Open chat only for a model that is running', async () => {
+  it('offers Load and Chat for a model that is not loaded, and no Unload', async () => {
     library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
     renderPage();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
 
-    expect(await screen.findByRole('button', { name: /start endpoint/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /open chat/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Load' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Unload' })).not.toBeInTheDocument();
   });
 
   it('a cold load of ?serve=1 opens the Serve dialog once the inspector can, then strips it', async () => {
@@ -380,12 +386,11 @@ describe('the library, into a chat', () => {
     // The daemon's list once the removal has been answered.
     library.models = [guiModel({ id: 7, name: 'qwen3-8b' })];
 
-    // The inspector's Delete opens the confirmation; the page behind it is
-    // hidden from the accessibility tree while it is up, so its Delete is
-    // the only one left.
-    await user.click(await screen.findByRole('button', { name: /^delete$/i }));
-    const confirmation = await screen.findByRole('dialog', { name: /delete model/i });
-    await user.click(within(confirmation).getByRole('button', { name: /^delete$/i }));
+    // The inspector's ⋯ Remove from library… asks first.
+    await user.click(await screen.findByRole('button', { name: 'More' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Remove from library…' }));
+    const confirmation = await screen.findByRole('dialog', { name: /remove gemma-3-12b/i });
+    await user.click(within(confirmation).getByRole('button', { name: 'Remove' }));
 
     await waitFor(() => expect(removeModel).toHaveBeenCalledWith(9));
     await waitFor(() => expect(at()).toBe('/library'));
@@ -400,6 +405,7 @@ describe('the library, into a chat', () => {
     renderPage();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
+    await user.click(await screen.findByRole('button', { name: 'Change Images' }));
 
     const picker = await screen.findByRole('combobox', { name: 'Projector' });
     await waitFor(() => expect(picker).toBeEnabled());
@@ -417,8 +423,9 @@ describe('the library, into a chat', () => {
 
     await userEvent.setup().click(row);
 
-    const heading = await screen.findByRole('heading', { name: 'gemma-3-12b' });
-    expect(within(heading.parentElement!).getByText('Vision')).toBeInTheDocument();
+    const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
+    await within(inspector).findByRole('heading', { name: 'gemma-3-12b' });
+    expect(within(inspector).getByText(/sees images/)).toBeInTheDocument();
   });
 
   it("links this machine's image model's component picked in its inspector, by the library's update", async () => {
@@ -434,6 +441,7 @@ describe('the library, into a chat', () => {
     const row = await screen.findByRole('option', { name: /flux1-schnell/i });
     expect(row).toHaveTextContent('draws (Flux.1)');
     await user.click(row);
+    await user.click(await screen.findByRole('button', { name: 'Change Parts' }));
 
     const picker = await screen.findByRole('combobox', { name: 'VAE' });
     await waitFor(() => expect(picker).toBeEnabled());
@@ -443,16 +451,18 @@ describe('the library, into a chat', () => {
     expect(updateModel.mock.calls[0][0]).toMatchObject({ id: 9, components: { vae: '/models/u/ae.safetensors' } });
   });
 
-  it("shows no Components row for this machine's model that chats, and reads no component choices for it", async () => {
+  it("shows no Parts row for this machine's model that chats, and reads no component choices for it", async () => {
     library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
     here.detail = farDetail(9, 'gemma-3-12b', { filePath: '/models/g/gemma.gguf' });
     vi.mocked(get).mockClear();
     renderPage();
-    await userEvent.setup().click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
+    await user.click(await screen.findByRole('button', { name: 'Change Images' }));
 
     await screen.findByRole('combobox', { name: 'Projector' });
     await waitFor(() => expect(vi.mocked(get).mock.calls.map(([path]) => path)).toContain('/api/models/9/projectors'));
-    expect(screen.queryByText('Components')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Parts' })).not.toBeInTheDocument();
     expect(vi.mocked(get).mock.calls.map(([path]) => path)).not.toContain('/api/models/9/components');
   });
 
@@ -574,7 +584,7 @@ describe('the library, into a chat', () => {
 
     await user.click(screen.getByRole('button', { name: 'Switch model' }));
     await user.click(screen.getByRole('button', { name: 'Close chat' }));
-    await user.click(await screen.findByRole('button', { name: /open chat/i }));
+    await user.click(await screen.findByRole('button', { name: 'Chat' }));
     const reopened = await screen.findByTestId('chat-page');
     expect(reopened).not.toBe(first);
     expect(reopened).toHaveAttribute('data-starting', '');

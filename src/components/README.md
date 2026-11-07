@@ -18,8 +18,8 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
 │ places/library/LibraryPlace                         │
 │ (/library, /models/:id, /far/:id)                   │
 │  ┌─────────────┬─────────────┐                      │
-│  │   Library   │  Inspector  │                      │
-│  │    rows     │    Panel    │                      │
+│  │   Library   │  inspector/ │                      │
+│  │    rows     │             │                      │
 │  └─────────────┴─────────────┘                      │
 └─────────────────┬───────────────────────────────────┘
                   │  other addresses, lazy-loaded
@@ -40,8 +40,8 @@ The window is a sidebar (`src/sidebar/`) beside the place the address names
 (`app/Shell.tsx`); there is no header. The Library place (`src/places/library/`)
 is the library's rows, with the inspector beside them while it has a subject:
 
-1. **Model Library Panel** (left): Browse models, search/filter, add new models
-2. **Model Inspector Panel** (right): View details, serve models, manage servers
+1. **Library rows** (left): every model, one search, add new models
+2. **Inspector** (right, `src/inspector/`): how a model runs, Load, Chat, Details
 
 A chat is its own address, with tab switching:
 1. **Chat View**: Conversation List (left) + Messages Panel (right)
@@ -54,9 +54,9 @@ A chat is its own address, with tab switching:
 - **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and tells its caller, which says "copied" where it lives
 
 ### Model Management
-- **`ModelInspectorPanel/`**: Detailed model view with serve/stop controls
-- **`VisionChip.tsx`**: The neutral "Vision" chip on a model that reads images, in both inspectors' headers
-- **`DrawsChip.tsx`**: The neutral "Draws · <family>" chip on this machine's model that draws images, in its inspector's header; its title names the roles still missing a file
+- **`ModelInspectorPanel/`**: What is left of the old inspector: the Serve dialog (until I2), the paired machine's model and the Hugging Face preview (until I4)
+- **`VisionChip.tsx`**: The neutral "Vision" chip on a paired machine's model that reads images, in its inspector's header
+- **`SamplingForm/`**: The sampling form: Settings' global defaults, the Serve dialog's per-launch values, and (compact) the inspector's Sampling and Reasoning rows
 
 ### Chat Interface
 - **`ChatMessagesPanel/`**: Message display with markdown rendering and composer
@@ -74,7 +74,6 @@ When a model is served, users can switch between Chat and Console views:
 ### Server Management
 - **`ProxyControl.tsx`**: `ProxyPopover`, today's proxy panel (Turn on / off, the URL, the dashboard, Clear Cache), anchored by the sidebar's endpoint line until the Endpoint place replaces it
 - **`RemoteControl.tsx`**: `RemotePopover`, the remote tunnel panel (ADR 0012) — this machine's proxy on another machine, or another's here; its two halves live in `remote/`; anchored by the sidebar's devices line until the Devices place replaces it
-- **`LlamaInstallModal.tsx`**: Offers to install llama.cpp and runs the daemon's install stream, the one the setup wizard uses; opened by a refused server start in the inspector
 
 ### Support Components
 - **`Toast/`**: Reusable toast notification system for success/error/info messages

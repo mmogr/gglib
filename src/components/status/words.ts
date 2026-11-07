@@ -1,12 +1,15 @@
 /**
  * The words a state is shown as, one per state, the same words the CLI
- * prints. `gglib_core::domain::state_words` is where they are written;
+ * prints, and the words for whose choice a launch argument is.
+ * `gglib_core::domain::state_words` is where the state words are written,
+ * `ChoiceSource::word` the source words;
  * `contracts/vocabulary/words.json` is that table as the CLI's tests record
  * it, and `tests/ts/contracts/stateWords.test.ts` holds these maps to the
  * file. The `Record` types are the generated bindings, so a state the daemon
  * adds fails to compile here until it has a word.
  */
 
+import type { ChoiceSource } from '../../types/generated/ChoiceSource';
 import type { EndpointState } from '../../types/generated/EndpointState';
 import type { KeyState } from '../../types/generated/KeyState';
 import type { ReachState } from '../../types/generated/ReachState';
@@ -41,4 +44,11 @@ export const REACH_WORDS: Readonly<Record<ReachState, string>> = {
 export const KEY_WORDS: Readonly<Record<KeyState, string>> = {
   required: 'Required',
   none_needed: 'None needed',
+};
+
+/** Whose choice an argument of a launch is: the model's author, gglib, or you. */
+export const CHOICE_WORDS: Readonly<Record<ChoiceSource, string>> = {
+  model_author: 'model author',
+  gglib: 'gglib',
+  you: 'you',
 };

@@ -40,26 +40,14 @@ const model = guiModel({ id: 7, tags: ['mtp'] });
 function serve(mtp: Pick<ServerActionsConfig, 'mtpNMaxOverride' | 'mtpPMinOverride'>, pinProxy: boolean) {
   const config: ServerActionsConfig = {
     model,
-    servers: [],
-    editedName: model.name,
-    editedQuantization: '',
-    editedFilePath: model.filePath,
-    editedInferenceDefaults: undefined,
     customContext: '',
     customPort: '',
     jinjaOverride: null,
     hasAgentTag: false,
     pinProxy,
     inferenceParams: undefined,
-    editedServerDefaults: undefined,
-    onStopServer: vi.fn(),
-    onRemoveModel: vi.fn(),
-    onUpdateModel: vi.fn().mockResolvedValue(undefined),
     setIsServing: vi.fn(),
-    setIsDeleting: vi.fn(),
     closeServeModal: vi.fn(),
-    closeDeleteModal: vi.fn(),
-    resetEditState: vi.fn(),
     ...mtp,
   };
   return renderHook(() => useServerActions(config), { wrapper });

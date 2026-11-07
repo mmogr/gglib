@@ -68,7 +68,7 @@ A stylesheet is for styling that does not map to utilities, such as a complex
 `@keyframes` animation. It is not for layout, for a simple hover or focus
 state, or for a color, spacing or type value a token already holds. Three
 exist outside `styles/`, each beside the component that imports it:
-`ConsoleLogPanel.css` and `InferenceParametersForm.css`.
+`ConsoleLogPanel.css` and `SamplingForm.css`.
 The same rule decides when a CSS module is allowed; the tree has none
 (`find src -name '*.module.css'` prints nothing).
 

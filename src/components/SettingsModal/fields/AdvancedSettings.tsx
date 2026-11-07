@@ -4,7 +4,7 @@ import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { Textarea } from '../../ui/Textarea';
-import { InferenceParametersForm } from '../../InferenceParametersForm';
+import { SamplingForm } from '../../SamplingForm';
 import type { SparseInferenceConfig } from '../../../types';
 import type { AgentGuardSettingsValues } from '../useAgentGuardSettings';
 import type { LoopGuardMode } from '../../../types/generated/LoopGuardMode';
@@ -101,7 +101,7 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
 
         <div className="border-t border-border my-md" />
         <Label>Global Inference Parameter Defaults</Label>
-        <InferenceParametersForm
+        <SamplingForm
           value={inferenceDefaultsInput}
           onChange={setInferenceDefaultsInput}
           disabled={saving}
