@@ -200,6 +200,29 @@ describe('the inspector, a model on this machine', () => {
     expect(note).toHaveTextContent('chosen by you');
   });
 
+  it('⧉ beside the launch line copies the whole command as one shell line, then says Copied for 1.5 s', async () => {
+    const recorded = JSON.parse(rust('contracts/models/launch_line.json')) as { plan: LaunchPlan; line: string }[];
+    explain.answer = launchExplanation(samplingExplanation(), { ...recorded[1].plan, fit: chatPlan().fit });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderInspector();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(await screen.findByRole('button', { name: 'Copy as command' }));
+
+      expect(await navigator.clipboard.readText()).toBe(
+        "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf'" +
+          " --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU'",
+      );
+      expect(await screen.findByText('Copied')).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1300));
+      expect(screen.getByText('Copied')).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(300));
+      expect(screen.queryByText('Copied')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('loads on one click with nothing typed, and opens no chat', async () => {
     renderInspector();
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Load' }));

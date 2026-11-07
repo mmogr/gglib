@@ -1,7 +1,8 @@
 /**
  * The library's groups, in order: Downloading, Loaded, On this Mac, then the
  * paired machine's. A model is in one of them and moves when its state does
- * (`groups.ts`). Each group of models is a listbox; its rows are options.
+ * (`groups.ts`). Each group of models is a listbox (`Listbox`), one Tab
+ * stop whose rows ↑ ↓ move through, picking as they go; its rows are options.
  *
  * Every word on a row is the daemon's or arranged from its facts: the state
  * beside a Loaded row is `RESIDENCY_WORDS` for the state the proxy's live
@@ -19,6 +20,7 @@ import { CopyValue } from '../../components/CopyValue';
 import { RESIDENCY_MARK, REACH_MARK, StatusMark } from '../../components/status/StatusMark';
 import { REACH_WORDS, RESIDENCY_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
+import { Listbox, tabStop } from '../../components/ui/Listbox';
 import type { PairedModelsState } from '../../hooks/usePairedModels';
 import type { ServerViewModel } from '../../hooks/useServers';
 import { refreshModels } from '../../services/modelEvents';
@@ -63,7 +65,9 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
       <CopyValue value={model.openaiId} label={`Copy the Model ID ${model.openaiId}`} />
     );
 
-  const row = (model: GgufModel) => {
+  const isPicked = (model: GgufModel) => subject?.kind === 'model' && subject.id === model.id;
+  const farPicked = (id: number) => subject?.kind === 'far' && subject.id === id;
+  const row = (model: GgufModel, index: number, list: GgufModel[]) => {
     const server = serverOf.get(model.id);
     const state = residency.get(model.id) ?? 'loaded';
     const missing = model.missingComponents.length;
@@ -92,7 +96,8 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
             )}
           </>
         }
-        selected={subject?.kind === 'model' && subject.id === model.id}
+        selected={isPicked(model)}
+        tabIndex={tabStop(index, list.findIndex(isPicked))}
         onSelect={() => onPickLocal(model.id)}
       />
     );
@@ -117,12 +122,16 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
 
       {loaded.length > 0 && (
         <Group label="Loaded">
-          <div role="listbox" aria-label="Loaded">{loaded.map(row)}</div>
+          <Listbox label="Loaded" onPick={(i) => onPickLocal(loaded[i].id)}>
+            {loaded.map(row)}
+          </Listbox>
         </Group>
       )}
       {here.length > 0 && (
         <Group label="On this Mac">
-          <div role="listbox" aria-label="On this Mac">{here.map(row)}</div>
+          <Listbox label="On this Mac" onPick={(i) => onPickLocal(here[i].id)}>
+            {here.map(row)}
+          </Listbox>
         </Group>
       )}
 
@@ -134,17 +143,18 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
           {farShown.length === 0 ? (
             <Note>{far.models.length === 0 ? `${paired.name} has no models.` : `None of ${paired.name}'s models match.`}</Note>
           ) : (
-            <div role="listbox" aria-label={`On ${paired.name}`}>
-              {farShown.map((m) => (
+            <Listbox label={`On ${paired.name}`} onPick={(i) => onPickFar(farShown[i].gglib_id)}>
+              {farShown.map((m, i) => (
                 <ModelRow
                   key={`${far.machine.kind === 'paired' ? far.machine.fingerprint : ''}:${m.gglib_id}`}
                   name={m.id}
                   facts={[m.quantization, canSee(m) && 'sees images', m.description]}
-                  selected={subject?.kind === 'far' && subject.id === m.gglib_id}
+                  selected={farPicked(m.gglib_id)}
+                  tabIndex={tabStop(i, farShown.findIndex((f) => farPicked(f.gglib_id)))}
                   onSelect={() => onPickFar(m.gglib_id)}
                 />
               ))}
-            </div>
+            </Listbox>
           )}
         </Group>
       )}

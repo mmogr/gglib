@@ -268,8 +268,8 @@ mod tests {
     }
     /// The plans `contracts/models/launch_line.json` records: an ordinary
     /// llama launch, one whose values need quoting for a shell (a space, a
-    /// single quote, a double quote, a tab, an empty value), and an image
-    /// model's.
+    /// single quote, a double quote, a tab, an empty value, a `$`, a
+    /// pattern with `\` and `*`), and an image model's.
     fn recorded_plans() -> Vec<LaunchPlan> {
         use ChoiceSource::{Gglib, ModelAuthor, You};
         let plan = |program: &str, args: Vec<LaunchArg>| LaunchPlan {
@@ -317,6 +317,8 @@ mod tests {
                     a("--alias", Some("say \"hi\""), "model", Gglib),
                     a("--sep", Some("a\tb"), "model", Gglib),
                     a("--empty", Some(""), "model", Gglib),
+                    a("--alias", Some("$HOME"), "model", Gglib),
+                    a("-ot", Some(r"blk\.\d+\.ffn_.*=CPU"), "model", Gglib),
                 ],
             ),
             plan(

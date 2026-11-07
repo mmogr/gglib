@@ -193,13 +193,19 @@ impl LaunchPlan {
     }
 }
 
-/// `value` as a shell token: as it is unless it holds a space or a quote,
-/// then in single quotes.
+/// `value` as a shell token: as it is when every character is one a shell
+/// reads as itself (a letter, a digit, or one of `_./:@%+=,-`), otherwise
+/// (or when empty) in single quotes, so the line pastes into a shell as the
+/// command gglib runs: a space, a quote, `$`, `*` or `\` included.
 fn quote(value: &str) -> String {
-    if value.is_empty() || value.contains([' ', '\'', '"', '\t']) {
-        format!("'{}'", value.replace('\'', "'\\''"))
-    } else {
+    let plain = !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_./:@%+=,-".contains(c));
+    if plain {
         value.to_owned()
+    } else {
+        format!("'{}'", value.replace('\'', "'\\''"))
     }
 }
 
@@ -249,6 +255,19 @@ mod tests {
         assert_eq!(
             plan.command_line(),
             "llama-server -m '/Users/m/Library/Application Support/g/a.gguf' --mmproj '/it'\\''s/p.gguf'"
+        );
+    }
+
+    #[test]
+    fn a_value_a_shell_would_expand_is_quoted() {
+        let plan = plan(vec![
+            arg("--alias", Some("$HOME")),
+            arg("-ot", Some(r"blk\.\d+\.ffn_.*=CPU")),
+            arg("--host", Some("127.0.0.1")),
+        ]);
+        assert_eq!(
+            plan.command_line(),
+            r"llama-server --alias '$HOME' -ot 'blk\.\d+\.ffn_.*=CPU' --host 127.0.0.1"
         );
     }
 

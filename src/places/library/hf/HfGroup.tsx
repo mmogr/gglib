@@ -20,6 +20,7 @@
 import { useEffect, useState, type FC, type ReactNode } from 'react';
 import { Button } from '../../../components/ui/Button';
 import { Chip } from '../../../components/ui/Chip';
+import { Listbox, tabStop } from '../../../components/ui/Listbox';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { useToolSupportCache } from '../../../hooks/useToolSupportCache';
 import { queueDownload } from '../../../services/downloadsEvents';
@@ -117,7 +118,7 @@ const Suggestion: FC<{ queueFull: boolean }> = ({ queueFull }) => {
 };
 
 /** One repo: its id, then params, tool calling and downloads. */
-const HfRow: FC<{ model: HfModelSummary; picked: boolean; onPick: () => void }> = ({ model, picked, onPick }) => {
+const HfRow: FC<{ model: HfModelSummary; picked: boolean; tabIndex: 0 | -1; onPick: () => void }> = ({ model, picked, tabIndex, onPick }) => {
   const { supports } = useToolSupportCache(model.id);
   return (
     <ModelRow
@@ -128,6 +129,7 @@ const HfRow: FC<{ model: HfModelSummary; picked: boolean; onPick: () => void }> 
         `${formatNumber(model.downloads)} downloads`,
       ]}
       selected={picked}
+      tabIndex={tabIndex}
       onSelect={onPick}
     />
   );
@@ -199,11 +201,17 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
         <>
           {hf.models.length === 0 && !hf.hasMore && <Note>{`No GGUF repos match '${shown.query}'.`}</Note>}
           {hf.models.length > 0 && (
-            <div role="listbox" aria-label="Hugging Face">
-              {hf.models.map((m) => (
-                <HfRow key={m.id} model={m} picked={m.id === pickedId} onPick={() => onPick(m)} />
+            <Listbox label="Hugging Face" onPick={(i) => onPick(hf.models[i])}>
+              {hf.models.map((m, i) => (
+                <HfRow
+                  key={m.id}
+                  model={m}
+                  picked={m.id === pickedId}
+                  tabIndex={tabStop(i, hf.models.findIndex((h) => h.id === pickedId))}
+                  onPick={() => onPick(m)}
+                />
               ))}
-            </div>
+            </Listbox>
           )}
           {hf.hasMore && (
             <Button variant="ghost" size="sm" className="mx-md self-start" isLoading={hf.loadingMore} onClick={hf.loadMore}>

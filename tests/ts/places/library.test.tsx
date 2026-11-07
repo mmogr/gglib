@@ -376,6 +376,45 @@ describe('the library place', () => {
     expect(at()).toBe('/models/2');
   });
 
+  it('is one Tab stop per group, and ↑ ↓ Home End move the focus and the pick through it', async () => {
+    library.models = [guiModel({ id: 1, name: 'a' }), guiModel({ id: 2, name: 'b' }), guiModel({ id: 3, name: 'c' })];
+    const { at } = renderLibrary();
+    const user = userEvent.setup();
+    const a = await screen.findByRole('option', { name: /^a/ });
+    const b = screen.getByRole('option', { name: /^b/ });
+    const c = screen.getByRole('option', { name: /^c/ });
+    expect(rowsOf('On this Mac')).toEqual(['a', 'b', 'c']);
+    // None picked: the first row is the stop.
+    expect([a, b, c].map((r) => r.tabIndex)).toEqual([0, -1, -1]);
+
+    a.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(b);
+    expect(at()).toBe('/models/2');
+    expect(b).toHaveAttribute('aria-selected', 'true');
+    expect([a, b, c].map((r) => r.tabIndex)).toEqual([-1, 0, -1]);
+
+    await user.keyboard('{ArrowUp}{ArrowUp}');
+    expect(document.activeElement).toBe(a);
+    expect(at()).toBe('/models/1');
+
+    await user.keyboard('{End}');
+    expect(document.activeElement).toBe(c);
+    expect(at()).toBe('/models/3');
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(c);
+    await user.keyboard('{Home}');
+    expect(document.activeElement).toBe(a);
+    expect(at()).toBe('/models/1');
+  });
+
+  it('makes the row the address picks the Tab stop', async () => {
+    library.models = [guiModel({ id: 1, name: 'a' }), guiModel({ id: 2, name: 'b' })];
+    renderLibrary('/models/2');
+    const a = await screen.findByRole('option', { name: /^a/ });
+    expect([a, screen.getByRole('option', { name: /^b/ })].map((r) => r.tabIndex)).toEqual([-1, 0]);
+  });
+
   it('filters the downloads by the search too', async () => {
     downloads.queue = queueSnapshot({ revision: 3, active: runningRow(), waiting: [waitingRow('owner/b:Q4_K_M', 2)] });
     renderLibrary();

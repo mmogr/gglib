@@ -6,6 +6,8 @@
  * and nothing else (LB-1): the row's box is the same picked or not, so no
  * text moves. It is a `div`, not a button, because its actions are buttons
  * and a button may not hold another; Enter and Space pick it as a click does.
+ * The list is one Tab stop: the picked row's, else the first (`tabStop`),
+ * and ↑ ↓ move between rows (`Listbox`).
  *
  * `missingParts` is the accessory for a model that cannot run yet; the
  * triangle is `StatusMark`'s, the words this row's.
@@ -25,10 +27,12 @@ interface ModelRowProps {
   /** Shown on hover and focus, at the row's right, over the accessory. */
   actions?: ReactNode;
   selected: boolean;
+  /** `tabStop`'s: 0 for the list's one Tab stop, -1 for the rest. */
+  tabIndex: 0 | -1;
   onSelect: () => void;
 }
 
-export const ModelRow: FC<ModelRowProps> = ({ name, facts, accessory, actions, selected, onSelect }) => {
+export const ModelRow: FC<ModelRowProps> = ({ name, facts, accessory, actions, selected, tabIndex, onSelect }) => {
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key === 'Enter' || event.key === ' ') {
@@ -41,7 +45,7 @@ export const ModelRow: FC<ModelRowProps> = ({ name, facts, accessory, actions, s
     <div
       role="option"
       aria-selected={selected}
-      tabIndex={0}
+      tabIndex={tabIndex}
       onClick={onSelect}
       onKeyDown={onKeyDown}
       className={cn(

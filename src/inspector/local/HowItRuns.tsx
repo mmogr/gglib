@@ -19,6 +19,7 @@ import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import { caveats, describePublished } from '../../utils/samplingProvenance';
 import type { SheetField } from '../loadOptions';
 import { CHANGEABLE, Change, reset, type Update } from './Change';
+import { CopyCommand } from './CopyCommand';
 import { LaunchLine } from './LaunchLine';
 import { Row } from './Row';
 import {
@@ -158,7 +159,12 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
   return (
     <section aria-label="How it runs" className="flex flex-col gap-xs">
       <Caption title="How it runs" aside={chosenBy(plan.args)} />
-      <LaunchLine plan={plan} onChange={onChangeToken} />
+      <div className="flex items-start gap-xs">
+        <div className="min-w-0 flex-1">
+          <LaunchLine plan={plan} onChange={onChangeToken} />
+        </div>
+        <CopyCommand plan={plan} />
+      </div>
       <dl className="m-0">
         {rows.map((row) => (
           <Row

@@ -238,6 +238,22 @@ describe('the one search', () => {
     expect(within(screen.getByRole('complementary', { name: 'Inspector' })).getByRole('heading', { name: 'owner/a' })).toBeInTheDocument();
   });
 
+  it('the repos are one Tab stop, and ↓ opens the next in the inspector', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b']));
+    const { at } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    const a = await screen.findByRole('option', { name: /owner\/a/ });
+    const b = screen.getByRole('option', { name: /owner\/b/ });
+    expect([a.tabIndex, b.tabIndex]).toEqual([0, -1]);
+
+    a.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(b);
+    expect(at()).toBe('/get/owner/b');
+    expect([a.tabIndex, b.tabIndex]).toEqual([-1, 0]);
+  });
+
   it("offers user/repo:QUANT's download as the first row, and queues it", async () => {
     renderLibrary();
     const user = userEvent.setup();
