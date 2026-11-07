@@ -53,7 +53,7 @@ impl ProxyOps {
     /// The running endpoint as a door: its root where a client on this
     /// machine reaches it (`gglib_core::access::reachable_at`, no `/v1`),
     /// and the key its bearer policy demands now
-    /// ([`demanded`](crate::remote::key::demanded)).
+    /// (`remote::key::demanded`).
     ///
     /// The key is read fresh from settings and the endpoint reads it through
     /// a cache, so for up to `SETTINGS_CACHE_TTL` after the key is changed
