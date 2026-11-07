@@ -217,6 +217,20 @@ describe('the tray panel', () => {
       expect(transport.stopProxy).toHaveBeenCalledTimes(1);
     });
 
+    it('the ● blinks once, for 150 ms, when the endpoint serves a request; not for the first frame', async () => {
+      await renderTray();
+      await waitFor(() => expect(dashboard.send).not.toBeNull());
+      // The filled dot before the word: only it blinks.
+      const dot = () => within(endpoint()).getByText(ENDPOINT_WORDS.on).previousElementSibling;
+      act(() => dashboard.send?.(dashboardSnapshot({ total_requests: 3 })));
+      expect(dot()).not.toHaveClass('animate-request-blink');
+
+      act(() => dashboard.send?.(dashboardSnapshot({ total_requests: 4 })));
+      expect(dot()).toHaveClass('animate-request-blink');
+      act(() => vi.advanceTimersByTime(150));
+      expect(dot()).not.toHaveClass('animate-request-blink');
+    });
+
     it('no key needed: no key line', async () => {
       await renderTray();
       expect(screen.queryByText('Key required')).not.toBeInTheDocument();

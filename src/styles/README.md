@@ -299,7 +299,7 @@ Nothing moves at rest. A dot, a chip or an icon never pulses to say
 changing: a bar advances while a download or a prompt read is in progress,
 an arc rotates while a load is starting, a caret blinks while a reply is
 streaming. The one motion at rest is a real event: the sidebar endpoint
-line's dot blinks once (`animate-request-blink`, 150 ms, one run) when a
+line's dot (and the tray's) blinks once (`animate-request-blink`, 150 ms, one run) when a
 request is served, at most once a second and never under reduced motion.
 Skeleton placeholders are static grey blocks, not shimmers.
 

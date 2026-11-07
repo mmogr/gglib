@@ -42,8 +42,8 @@ export interface TrayLoadedRow {
 }
 
 /** The rows: the dashboard's while it has spoken, else the running servers, each Loaded. */
-export function trayLoadedRows(snapshot: DashboardSnapshot | null, servers: ServerViewModel[]): TrayLoadedRow[] {
-  return residentRows(snapshot, servers).map(({ modelId, name, state, word }) => ({ modelId, name, state, word }));
+export function trayLoadedRows(snapshot: DashboardSnapshot | null, servers: ServerViewModel[], heard: boolean): TrayLoadedRow[] {
+  return residentRows(snapshot, servers, heard).map(({ modelId, name, state, word }) => ({ modelId, name, state, word }));
 }
 
 interface LoadedProps {

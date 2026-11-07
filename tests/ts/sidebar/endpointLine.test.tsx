@@ -28,7 +28,7 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
   },
 }));
 
-import { EndpointLine, secondLine, shouldBlink, shownAddress } from '../../../src/sidebar/EndpointLine';
+import { EndpointLine, secondLine, shownAddress } from '../../../src/sidebar/EndpointLine';
 import { dashboardSnapshot } from '../fixtures/dashboard';
 import { applyProxyStatus, ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
@@ -143,7 +143,8 @@ describe('the endpoint line', () => {
 });
 
 describe("the endpoint dot's request blink", () => {
-  const dot = () => within(line()).getByRole('img', { name: 'On' });
+  // The filled dot inside the mark: only it blinks.
+  const dot = () => within(line()).getByRole('img', { name: 'On' }).firstElementChild;
 
   /** A frame of the dashboard stream saying `total` requests served, at `at` ms. */
   async function served(total: number, at: number) {
@@ -200,15 +201,6 @@ describe("the endpoint dot's request blink", () => {
     await served(0, 10_000);
     await served(1, 20_000);
     expect(dot()).not.toHaveClass('animate-request-blink');
-  });
-
-  it("an unchanged or a restarted proxy's lower count does not blink, and its next request does", () => {
-    expect(shouldBlink(null, 5, null, 0)).toBe(false);
-    expect(shouldBlink(5, 5, null, 0)).toBe(false);
-    expect(shouldBlink(40, 1, 1_000, 60_000)).toBe(false);
-    expect(shouldBlink(1, 2, 1_000, 60_000)).toBe(true);
-    expect(shouldBlink(1, 2, 1_000, 1_999)).toBe(false);
-    expect(shouldBlink(1, 2, 1_000, 2_000)).toBe(true);
   });
 });
 

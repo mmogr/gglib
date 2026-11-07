@@ -66,11 +66,14 @@ export function loadedRows(snapshot: DashboardSnapshot | null): LoadedRow[] {
 /**
  * What is in memory: the dashboard's rows while it has spoken, else the
  * running servers, each Loaded, since a model stays in memory with the
- * endpoint off (the dashboard is idle then). The endpoint place and the
- * tray both read it.
+ * endpoint off (the dashboard is idle then); those only once the server
+ * list's read has landed (`heard`, `useServerListHeard`), since after a
+ * daemon restart the registry still holds the old daemon's servers. The
+ * endpoint place and the tray both read it.
  */
-export function residentRows(snapshot: DashboardSnapshot | null, servers: ServerViewModel[]): LoadedRow[] {
+export function residentRows(snapshot: DashboardSnapshot | null, servers: ServerViewModel[], heard: boolean): LoadedRow[] {
   if (snapshot) return loadedRows(snapshot);
+  if (!heard) return [];
   return servers.map((s) => ({
     modelId: s.modelId,
     name: s.modelName,

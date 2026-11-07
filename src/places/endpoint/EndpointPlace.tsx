@@ -38,6 +38,7 @@ import { removeModel as removeLibraryModel, updateModel } from '../../services/m
 import { useModelLibrary } from '../../services/modelRegistry';
 import { useEndpointFacts, useProxyState } from '../../services/proxyRegistry';
 import { useRemoteState } from '../../services/remoteRegistry';
+import { useServerListHeard } from '../../services/serverEvents';
 import { formatError } from '../../utils/errors';
 import { Menu } from '../../components/ui/Menu';
 import { useEndpointDashboard } from '../library/useResidency';
@@ -64,6 +65,7 @@ export default function EndpointPlace() {
   const paired = usePairedModels();
   const { status: remote } = useRemoteState();
   const { settings } = useSettings();
+  const listHeard = useServerListHeard();
   const [picked, setPicked] = useState<number | null>(null);
   const connectRef = useRef<HTMLDivElement>(null);
 
@@ -80,8 +82,8 @@ export default function EndpointPlace() {
   const modelId = picked ?? inspected ?? pinnedId ?? lastLoaded ?? settled ?? smallest;
   const up = facts.state === 'on' || facts.state === 'pinned';
   // Up, the dashboard's rows once it has spoken; off, the running servers,
-  // drawn only when there are some.
-  const resident = residentRows(snapshot, servers);
+  // drawn only when there are some and the list's read has landed.
+  const resident = residentRows(snapshot, servers, listHeard);
   const showLoaded = up ? snapshot !== null : resident.length > 0;
   // The menu's Connect a Client… (`?connect=1`): scrolled to once the block
   // is drawn, and the ask dropped from the address. With the endpoint off

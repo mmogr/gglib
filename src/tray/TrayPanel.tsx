@@ -137,9 +137,9 @@ export const TrayPanel: FC = () => {
         )}
         {ready && (
           <>
-            <Endpoint facts={facts} busy={actions.busy} error={actions.error} apiKey={dash.apiKey} />
+            <Endpoint facts={facts} busy={actions.busy} error={actions.error} apiKey={dash.apiKey} served={dash.snapshot?.total_requests ?? null} />
             <Loaded
-              rows={trayLoadedRows(dash.snapshot, listHeard ? servers : [])}
+              rows={trayLoadedRows(dash.snapshot, servers, listHeard)}
               known={dash.snapshot !== null || (!up && listHeard)}
               off={!up}
             />

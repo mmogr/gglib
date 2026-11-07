@@ -12,10 +12,9 @@
  * opening anything.
  *
  * The dot blinks once (150 ms) each time the proxy has served another
- * request: its `total_requests` grew between two frames of the one
- * dashboard stream (`useEndpointDashboard`, the endpoint place's). At most
- * once a second, never for the first frame or a restarted proxy's count,
- * and not at all under reduced motion. It is the only motion at rest.
+ * request (`components/status/useRequestBlink`), read from the one
+ * dashboard stream (`useEndpointDashboard`, the endpoint place's). It is
+ * the only motion at rest.
  *
  * Clicking the line opens the endpoint place (`/endpoint`); it is drawn
  * raised while that place is open.
@@ -23,12 +22,12 @@
  * @module sidebar/EndpointLine
  */
 
-import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { KeyRound } from 'lucide-react';
 import { paths } from '../app/paths';
 import { CopyValue } from '../components/CopyValue';
 import { StatusMark, type MarkKind } from '../components/status/StatusMark';
+import { useRequestBlink } from '../components/status/useRequestBlink';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../components/status/words';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
@@ -61,45 +60,6 @@ export function secondLine(facts: EndpointFacts, loaded: number): string {
   return `${loaded} loaded`;
 }
 
-/** How long the dot's blink lasts. */
-export const BLINK_MS = 150;
-/** The least time between two blinks. */
-const BLINK_GAP_MS = 1000;
-
-/**
- * Whether a frame counting `served` requests blinks the dot: only when the
- * count grew since the frame before (`seen`, `null` for none), and not
- * within a second of the last blink (`blinkedAt`).
- */
-export function shouldBlink(seen: number | null, served: number, blinkedAt: number | null, now: number): boolean {
-  if (seen === null || served <= seen) return false;
-  return blinkedAt === null || now - blinkedAt >= BLINK_GAP_MS;
-}
-
-function reducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-/** Whether the dot is blinking now, for the proxy's request count (`null` while its stream is idle). */
-function useRequestBlink(served: number | null): boolean {
-  const [blinking, setBlinking] = useState(false);
-  const seen = useRef<number | null>(null);
-  const blinkedAt = useRef<number | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  useEffect(() => {
-    const before = seen.current;
-    seen.current = served;
-    const now = Date.now();
-    if (served === null || !shouldBlink(before, served, blinkedAt.current, now) || reducedMotion()) return;
-    blinkedAt.current = now;
-    setBlinking(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setBlinking(false), BLINK_MS);
-  }, [served]);
-  return blinking;
-}
-
 export function EndpointLine({ current = false }: { current?: boolean }) {
   const facts = useEndpointFacts();
   const blinking = useRequestBlink(useEndpointDashboard().snapshot?.total_requests ?? null);
@@ -123,7 +83,7 @@ export function EndpointLine({ current = false }: { current?: boolean }) {
           aria-label={`Endpoint, ${word}`}
         >
           <span className="flex items-center gap-sm text-sm text-text">
-            <StatusMark kind={MARK[facts.state]} label={word} className={blinking ? 'animate-request-blink' : undefined} />
+            <StatusMark kind={MARK[facts.state]} label={word} blink={blinking} />
             <span>Endpoint</span>
           </span>
           <span className="flex items-center gap-xs text-sm text-text-secondary">
