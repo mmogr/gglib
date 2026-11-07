@@ -5,7 +5,7 @@
  *
  * It answers three questions in the order a user asks them: what is
  * installed, where it stands against its pinned release, and what can be
- * done about it. It installs the pinned download with the setup wizard's
+ * done about it. It installs the pinned download with setup's
  * progress, also over an older one, warns when that download runs on the
  * CPU alone, and removes the engine, never from under a running model.
  * Where the install or the update would be a source build it names the
