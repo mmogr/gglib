@@ -55,12 +55,15 @@ pub struct ProofRefusal {
 /// minimal completion for `model` and say who answered.
 ///
 /// `key` is what the request carries as its bearer, when the endpoint
-/// demands one; it is read, sent and forgotten.
+/// demands one; it is read, sent and forgotten. `library` is each library
+/// model's file beside the Model ID a client sends for it
+/// ([`library_files`]): the answer is said by Model ID ([`named_as_listed`]).
 pub async fn prove(
     client: &reqwest::Client,
     base_url: &str,
     model: &str,
     key: Option<&str>,
+    library: &[(std::path::PathBuf, String)],
     bind_timeout: Duration,
     load_timeout: Duration,
 ) -> Result<ProofOutcome, ProofRefusal> {
@@ -106,7 +109,7 @@ pub async fn prove(
         .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_owned))
         .unwrap_or_else(|| model.to_owned());
     Ok(ProofOutcome {
-        answered_by,
+        answered_by: named_as_listed(&answered_by, model, library),
         asked_for: model.to_owned(),
         elapsed_ms: u64::try_from(begun.elapsed().as_millis()).unwrap_or(u64::MAX),
     })
@@ -117,29 +120,36 @@ pub async fn prove(
 /// llama-server names the model in its answer by the file it was started
 /// with, so a proof answered through the endpoint reads as a path. An answer
 /// that is one of `library`'s files (each given with the Model ID a client
-/// sends for it) is said as that Model ID; anything else is kept as it came.
+/// sends for it) is said as that Model ID, `asked` first when two library
+/// models share the file; anything else is kept as it came.
 #[must_use]
-pub fn named_as_listed<'a>(
+pub fn named_as_listed(
     answered_by: &str,
-    library: impl IntoIterator<Item = (&'a Path, &'a str)>,
+    asked: &str,
+    library: &[(std::path::PathBuf, String)],
 ) -> String {
-    library
+    let answered = Path::new(answered_by);
+    let mut matching = library
+        .iter()
+        .filter(|(file, _)| file.as_path() == answered);
+    let first = matching.next();
+    let asked_too = first
         .into_iter()
-        .find(|(file, _)| Path::new(answered_by) == *file)
-        .map_or_else(|| answered_by.to_owned(), |(_, id)| id.to_owned())
+        .chain(matching)
+        .find(|(_, id)| id == asked);
+    asked_too
+        .or(first)
+        .map_or_else(|| answered_by.to_owned(), |(_, id)| id.clone())
 }
 
-/// [`named_as_listed`] over the library: each model's file beside the
-/// Model ID a client sends for it.
-pub(crate) fn named_by_library(answered_by: &str, models: &[gglib_core::Model]) -> String {
+/// Each library model's file beside the Model ID a client sends for it, as
+/// [`prove`] reads them.
+pub(crate) fn library_files(models: &[gglib_core::Model]) -> Vec<(std::path::PathBuf, String)> {
     let ids = crate::models::openai_ids(models);
-    named_as_listed(
-        answered_by,
-        models.iter().filter_map(|m| {
-            ids.get(&m.id)
-                .map(|id| (m.file_path.as_path(), id.as_str()))
-        }),
-    )
+    models
+        .iter()
+        .filter_map(|m| ids.get(&m.id).map(|id| (m.file_path.clone(), id.clone())))
+        .collect()
 }
 
 /// Poll `/health` until the listener answers, or `bind_timeout` passes.
