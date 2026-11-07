@@ -162,4 +162,13 @@ describe('Paired devices', () => {
     const line = screen.getByText('Fingerprint aa11bb22cc33 · 2 peers');
     expect(line).toHaveClass('font-mono', 'text-xs');
   });
+
+  it('a forget the daemon refuses is said with its reason', async () => {
+    applyRemoteStatus({ ...SHARED, devices: [device()] });
+    transport.forgetDevice.mockRejectedValue(new Error('settings are read-only'));
+    renderApp('/devices');
+    const user = await forgetVia("Matt's phone");
+    await user.click(await screen.findByRole('button', { name: 'Forget' }));
+    expect(await within(toasts()).findByText("Could not forget Matt's phone: settings are read-only")).toBeInTheDocument();
+  });
 });

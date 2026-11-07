@@ -18,12 +18,13 @@ by its fingerprint.
 
 | File | Role |
 |------|------|
-| `DevicesPlace.tsx` | The route: "Devices" and "End-to-end encrypted. No account.", the three blocks under it in the one scrolling area, a turning mark before the first status |
+| `DevicesPlace.tsx` | The route: "Devices" and "End-to-end encrypted. No account." as wide as the column, the three blocks under it in the one scrolling area, a turning mark before the first status |
 | `ShareBlock.tsx` | This Mac: Share with my devices (the key confirm only while the endpoint does not require a key; a code only while no device has joined), "Finding a relay…", Shared with your devices, Invite a device (dead while a code is live), Stop sharing (the offer dropped first), the fifteen-second read while a terminal's code is live |
 | `PairingSheet.tsx` | The code on offer, under This Mac whenever the registry holds one: the QR for ggchat (the string uppercased, level M, quiet zone, black on white), the code in 3+3, the join string, the time left from the code's deadline; "<label> joined." then closed, "Expired." with New code |
 | `PairedList.tsx` | Paired devices: each row's name (the id beside a label two rows share) and the daemon's description, no reach dot (the wire has none per device); ⋯ Forget… asked first, the list read again before anything is said; the tool servers shared with them while shared, Change › to Settings › Tools; the fingerprint and peers on one mono line |
 | `JoinBlock.tsx` | Use another machine: Join with a string ("Reaching it…" in place, a refusal as it came), Reconnect only with a pairing and key remembered; joined, the machine's name, reach word and path (Away since when), its address ⧉, the command that prints its key ⧉, where its models are, Disconnect, ⋯ Stop <name>'s gglib… asked first; after a disconnect, the pairing remembered with Reconnect |
 | `devices.ts` | Pure: the countdown as m:ss, the code as 3+3, the seconds left, the away time as HH:MM, the QR payload |
+| `pageActions.ts` | The page's actions counted, so an error a block shows goes when its field changes or any other action on the page runs (`useBlockError`) |
 | `useSecondsLeft.ts` | The seconds a code has left, ticking once a second from its own deadline; the sidebar's line reads it too |
 
 ## Words this folder says that Rust does not

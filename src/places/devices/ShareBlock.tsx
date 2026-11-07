@@ -24,16 +24,17 @@ import { getTransport } from '../../services/transport';
 import type { RemoteStatus } from '../../services/transport/types/remote';
 import { formatError } from '../../utils/errors';
 import { Group } from '../library/Group';
+import { useBlockError, type PageActions } from './pageActions';
 import { PairingSheet } from './PairingSheet';
 
-export const ShareBlock: FC<{ status: RemoteStatus }> = ({ status }) => {
+export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ status, actions }) => {
   const { offer } = useRemoteState();
   const { key } = useEndpointFacts();
   const { confirm } = useConfirmContext();
   // Which action is in flight, not merely that one is: one boolean once
   // relabelled Stop while an Invite was out.
   const [busy, setBusy] = useState<'enable' | 'invite' | 'disable' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useBlockError(actions);
 
   const pairingActive = status.pairing_active;
   // The switch on with nothing bound: the daemon is putting the tunnel back
@@ -63,6 +64,7 @@ export const ShareBlock: FC<{ status: RemoteStatus }> = ({ status }) => {
       });
       if (!ok) return;
     }
+    actions.onAct();
     setBusy('enable');
     setError(null);
     try {
@@ -78,6 +80,7 @@ export const ShareBlock: FC<{ status: RemoteStatus }> = ({ status }) => {
   };
 
   const invite = async () => {
+    actions.onAct();
     setBusy('invite');
     setError(null);
     try {
@@ -93,6 +96,7 @@ export const ShareBlock: FC<{ status: RemoteStatus }> = ({ status }) => {
   };
 
   const stop = async () => {
+    actions.onAct();
     setBusy('disable');
     setError(null);
     // Before the request: its `remote_disabled` can arrive before the answer,

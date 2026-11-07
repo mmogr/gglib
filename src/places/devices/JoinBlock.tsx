@@ -32,16 +32,17 @@ import { formatError } from '../../utils/errors';
 import { Group } from '../library/Group';
 import { Menu } from '../library/Menu';
 import { awaySince } from './devices';
+import { useBlockError, type PageActions } from './pageActions';
 
 const LINE = 'm-0 flex flex-wrap items-center gap-sm text-sm text-text-secondary';
 
-export const JoinBlock: FC<{ status: RemoteStatus }> = ({ status }) => {
+export const JoinBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ status, actions }) => {
   const { confirm } = useConfirmContext();
   const { showToast } = useToastContext();
   const [pairing, setPairing] = useState('');
   // Which action is out, so "Reaching it…" stands in for the button pressed.
   const [busy, setBusy] = useState<'join' | 'reconnect' | 'other' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useBlockError(actions);
 
   const connected = status.connected;
   const name = pairedName(status);
@@ -59,6 +60,7 @@ export const JoinBlock: FC<{ status: RemoteStatus }> = ({ status }) => {
   }
 
   const act = async (kind: 'join' | 'reconnect' | 'other', run: () => Promise<unknown>) => {
+    actions.onAct();
     setBusy(kind);
     setError(null);
     try {
@@ -101,7 +103,7 @@ export const JoinBlock: FC<{ status: RemoteStatus }> = ({ status }) => {
           {/* The join event carries a port and nothing else: until the read
               names the peer, nobody is named. */}
           {connected.ticket_fingerprint === '' ? (
-            <p className={LINE}>Connected. Reading which machine…</p>
+            <p className={LINE}>{REACH_WORDS[status.reach]}. Reading which machine…</p>
           ) : (
             <StatusMark kind={REACH_MARK[status.reach]} word={`${name} · ${reach}`} className="text-text" />
           )}
@@ -172,7 +174,10 @@ export const JoinBlock: FC<{ status: RemoteStatus }> = ({ status }) => {
             placeholder="Paste a pairing string"
             className="min-w-0 flex-1 font-mono"
             value={pairing}
-            onChange={(event) => setPairing(event.target.value)}
+            onChange={(event) => {
+              setPairing(event.target.value);
+              setError(null);
+            }}
           />
           {busy === 'join' ? (
             <StatusMark kind="changing" word="Reaching it…" />

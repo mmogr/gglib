@@ -10,7 +10,7 @@
  * @module places/devices/DevicesPlace
  */
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StatusMark } from '../../components/status/StatusMark';
 import { refreshRemoteStatus } from '../../services/remoteEvents';
 import { useRemoteState } from '../../services/remoteRegistry';
@@ -21,6 +21,9 @@ import { ShareBlock } from './ShareBlock';
 
 export default function DevicesPlace() {
   const { status } = useRemoteState();
+  const [acted, setActed] = useState(0);
+  const onAct = useCallback(() => setActed((n) => n + 1), []);
+  const actions = { acted, onAct };
 
   // Opening asks the daemon again: the status is cheap, and it carries the
   // fields the tunnel's events do not.
@@ -30,7 +33,8 @@ export default function DevicesPlace() {
 
   return (
     <section aria-label="Devices" className="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <header className="flex shrink-0 flex-wrap items-baseline gap-sm px-md pb-sm pt-md">
+      {/* As wide as the column below, so the sentence ends where it does. */}
+      <header className="flex max-w-[720px] shrink-0 flex-wrap items-baseline gap-sm px-md pb-sm pt-md">
         <h2 className="m-0 flex-1 text-base font-semibold text-text">Devices</h2>
         <span className="text-xs text-text-secondary">End-to-end encrypted. No account.</span>
       </header>
@@ -42,9 +46,9 @@ export default function DevicesPlace() {
             </Note>
           ) : (
             <>
-              <ShareBlock status={status} />
-              <PairedList status={status} />
-              <JoinBlock status={status} />
+              <ShareBlock status={status} actions={actions} />
+              <PairedList status={status} actions={actions} />
+              <JoinBlock status={status} actions={actions} />
             </>
           )}
         </div>

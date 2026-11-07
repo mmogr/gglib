@@ -18,6 +18,7 @@ const transport = vi.hoisted(() => ({
   joinRemote: vi.fn(),
   disconnectRemote: vi.fn(),
   killRemote: vi.fn(),
+  disableRemote: vi.fn(),
 }));
 const refresh = vi.hoisted(() => vi.fn(async () => true));
 
@@ -35,9 +36,9 @@ vi.mock('../../../src/services/transport', async () => {
 });
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: () => refresh() }));
 
-import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
+import { IDLE_STATUS, applyRemoteStatus, ingestRemoteEvent, resetRemoteState } from '../../../src/services/remoteRegistry';
 import { renderApp } from './harness';
-import { DESK, FINGERPRINT, TICKET, fingerprintShown } from './devicesFixtures';
+import { DESK, FINGERPRINT, SHARED, TICKET, fingerprintShown } from './devicesFixtures';
 
 const field = () => screen.getByRole('textbox', { name: 'Paste a pairing string' });
 const join = () => screen.getByRole('button', { name: 'Join' });
@@ -173,5 +174,64 @@ describe('Use another machine', () => {
     await open();
     await user.click(await screen.findByRole('button', { name: 'Stop it' }));
     expect(transport.killRemote).toHaveBeenCalled();
+  });
+
+  it('the joined line follows away and back at once, with no read (DV-4)', () => {
+    applyRemoteStatus(DESK);
+    renderApp('/devices');
+    act(() => ingestRemoteEvent({ type: 'remote_away', port: 41234 }));
+    expect(screen.getByText(/^desk · Away since \d\d:\d\d · reconnects on its own$/)).toBeInTheDocument();
+    act(() => ingestRemoteEvent({ type: 'remote_back', port: 41234 }));
+    expect(screen.getByText('desk · Connected · direct')).toBeInTheDocument();
+  });
+
+  it('a refused Disconnect is said in the joined view', async () => {
+    applyRemoteStatus(DESK);
+    transport.disconnectRemote.mockRejectedValue(new Error('the tunnel is busy'));
+    renderApp('/devices');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Disconnect' }));
+    expect(await screen.findByText('the tunnel is busy')).toBeInTheDocument();
+  });
+
+  it('a connection that drops with no key stored offers no Reconnect', () => {
+    applyRemoteStatus({ ...DESK, has_remote_key: false });
+    renderApp('/devices');
+    act(() => applyRemoteStatus({ ...REMEMBERED, has_remote_key: false }));
+    expect(screen.queryByText(/The pairing is remembered/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument();
+  });
+
+  it('"Reaching it…" stands in for Reconnect while it dials', async () => {
+    applyRemoteStatus(REMEMBERED);
+    transport.joinRemote.mockImplementation(() => new Promise(() => {}));
+    renderApp('/devices');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Reconnect' }));
+    expect(screen.getByText('Reaching it…')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument();
+  });
+
+  it('a join refusal goes when the field changes', async () => {
+    applyRemoteStatus(IDLE_STATUS);
+    transport.joinRemote.mockRejectedValue(new Error('the pairing code was already used'));
+    renderApp('/devices');
+    const user = userEvent.setup();
+    await user.type(field(), `${TICKET}-483920`);
+    await user.click(join());
+    await screen.findByText('the pairing code was already used');
+    await user.type(field(), 'x');
+    expect(screen.queryByText('the pairing code was already used')).not.toBeInTheDocument();
+  });
+
+  it('a join refusal goes when another action on the page runs', async () => {
+    applyRemoteStatus(SHARED);
+    transport.joinRemote.mockRejectedValue(new Error('the pairing code was already used'));
+    transport.disableRemote.mockResolvedValue(IDLE_STATUS);
+    renderApp('/devices');
+    const user = userEvent.setup();
+    await user.type(field(), `${TICKET}-483920`);
+    await user.click(join());
+    await screen.findByText('the pairing code was already used');
+    await user.click(screen.getByRole('button', { name: 'Stop sharing' }));
+    expect(screen.queryByText('the pairing code was already used')).not.toBeInTheDocument();
   });
 });

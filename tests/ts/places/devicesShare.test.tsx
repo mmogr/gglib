@@ -299,4 +299,40 @@ describe('This Mac', () => {
     await act(() => vi.advanceTimersByTimeAsync(15_000));
     expect(invite()).toBeEnabled();
   });
+
+  it('an ending from while the page was closed is not said when it opens again', async () => {
+    applyRemoteStatus(SHARED);
+    transport.inviteRemote.mockResolvedValue(offerAnswer('119284', { device: 'dev-99887766' }));
+    const app = renderApp('/devices');
+    await userEvent.setup().click(invite());
+    await screen.findByText('119 284');
+    await act(() => app.router.navigate('/library'));
+    act(() => applyRemoteStatus({ ...SHARED, devices: [device({ id: 'dev-99887766', label: 'Laptop' })] }));
+    await act(() => app.router.navigate('/devices'));
+    expect(screen.getByRole('heading', { name: 'Devices' })).toBeInTheDocument();
+    expect(screen.queryByText('Laptop joined.')).not.toBeInTheDocument();
+  });
+
+  it('"Expired." is offered only while the tunnel is up', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    applyRemoteStatus(SHARED);
+    transport.inviteRemote.mockResolvedValue(offerAnswer('111111', { expires_in_s: 1 }));
+    renderApp('/devices');
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(invite());
+    await screen.findByText('111 111');
+    await act(() => vi.advanceTimersByTimeAsync(1_500));
+    expect(screen.getByText('Expired.')).toBeInTheDocument();
+    act(() => applyRemoteStatus(IDLE_STATUS));
+    expect(screen.queryByText('Expired.')).not.toBeInTheDocument();
+  });
+
+  it("the join line's ⧉ copies the pairing string, which the Join field takes", async () => {
+    applyRemoteStatus(SHARED);
+    transport.inviteRemote.mockResolvedValue(offerAnswer('119284'));
+    renderApp('/devices');
+    const user = userEvent.setup();
+    await user.click(invite());
+    await user.click(await screen.findByRole('button', { name: 'Copy the pairing string' }));
+    expect(await navigator.clipboard.readText()).toBe(`${TICKET}-119284`);
+  });
 });

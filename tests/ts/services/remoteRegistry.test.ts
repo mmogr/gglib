@@ -87,6 +87,8 @@ describe('remoteRegistry', () => {
       port: 41234,
       base_url: 'http://127.0.0.1:41234/v1',
     });
+    // The reach word moves with the connection, before any read (DV-4).
+    expect(getRemoteState().status?.reach).toBe('connected');
 
     applyRemoteStatus({ ...IDLE_STATUS, connected });
     expect(getRemoteState().status?.connected).toEqual(connected);
@@ -101,6 +103,7 @@ describe('remoteRegistry', () => {
     // disconnection: the panel says away, and what is held for that machine
     // waits for it rather than being cleared.
     expect(getRemoteState().status?.connected?.away_for_s).toBe(0);
+    expect(getRemoteState().status?.reach).toBe('away');
     expect(getRemoteState().status?.connected?.port).toBe(41234);
     expect(stillPaired(first, getRemoteState().status)).toBe(true);
   });
@@ -112,6 +115,14 @@ describe('remoteRegistry', () => {
     ingestRemoteEvent({ type: 'remote_back', port: 41234 });
 
     expect(getRemoteState().status?.connected?.away_for_s).toBeNull();
+    expect(getRemoteState().status?.reach).toBe('connected');
+  });
+
+  it('a disconnection says disconnected at once', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, connected, reach: 'connected' });
+    ingestRemoteEvent({ type: 'remote_disconnected' });
+    expect(getRemoteState().status?.connected).toBeNull();
+    expect(getRemoteState().status?.reach).toBe('disconnected');
   });
 
   it('an away event with nothing connected changes nothing', () => {

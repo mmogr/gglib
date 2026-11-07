@@ -30,6 +30,7 @@ import type { RemoteDevice, RemoteStatus } from '../../services/transport/types/
 import { formatError } from '../../utils/errors';
 import { Group, Note } from '../library/Group';
 import { Menu } from '../library/Menu';
+import type { PageActions } from './pageActions';
 
 /**
  * What a row is called: its label, else its id; with the id beside the label
@@ -42,7 +43,8 @@ export function deviceName(device: RemoteDevice, devices: RemoteDevice[]): strin
   return shared ? `${device.label} (${device.id})` : device.label;
 }
 
-export const PairedList: FC<{ status: RemoteStatus }> = ({ status }) => {
+export const PairedList: FC<{ status: RemoteStatus; actions: PageActions }> = ({ status, actions }) => {
+  const { onAct } = actions;
   const { confirm } = useConfirmContext();
   const { showToast } = useToastContext();
   const navigate = useNavigate();
@@ -61,6 +63,7 @@ export const PairedList: FC<{ status: RemoteStatus }> = ({ status }) => {
         variant: 'danger',
       });
       if (!ok) return;
+      onAct();
       try {
         const answer = await getTransport().forgetDevice(device.id);
         // Awaited and checked: nothing emits an event for a forget, so a
@@ -79,7 +82,7 @@ export const PairedList: FC<{ status: RemoteStatus }> = ({ status }) => {
         showToast(`Could not forget ${name}: ${formatError(err)}`, 'error');
       }
     },
-    [confirm, showToast],
+    [confirm, showToast, onAct],
   );
 
   return (

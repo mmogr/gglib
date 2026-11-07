@@ -37,7 +37,8 @@ export function devicesSaying(status: RemoteStatus | null, codeLeft: number | nu
     return { mark: REACH_MARK[status.reach], word: REACH_WORDS[status.reach], name: pairedName(status) };
   }
   if (status.enabled) {
-    const paired = status.devices.length;
+    // `?? []`: a daemon from before the roster answers status without one.
+    const paired = (status.devices ?? []).length;
     return { mark: 'on', word: `Sharing · ${paired} paired` };
   }
   return null;

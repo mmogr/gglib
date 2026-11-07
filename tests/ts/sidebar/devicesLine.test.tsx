@@ -80,6 +80,12 @@ describe('what the devices line says', () => {
     });
   });
 
+  it('sharing with a daemon that sends no roster counts none', () => {
+    const older: Record<string, unknown> = { ...IDLE_STATUS, enabled: true };
+    delete older.devices;
+    expect(devicesSaying(older as unknown as RemoteStatus, null)).toEqual({ mark: 'on', word: 'Sharing · 0 paired' });
+  });
+
   it('a code on offer as its time left, over everything else', () => {
     expect(devicesSaying(joined('connected'), 102)).toEqual({ mark: 'attention', word: 'code 1:42' });
     expect(devicesSaying(null, 9)).toEqual({ mark: 'attention', word: 'code 0:09' });
