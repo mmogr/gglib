@@ -122,8 +122,14 @@ const admitted = (slots: ReturnType<typeof residentSlot>[], extra: Partial<Dashb
 });
 
 /** The server list's read landing with Qwen3-4B running on 9001. */
+// One clock for every server stamp in this file: the registry keeps only a
+// newer stamp, so a stamp from Date.now() loses to any earlier test's later one
+// and the outcome would depend on test order.
+let stamp = Date.now() + 2e9;
+const nextStamp = () => (stamp += 1e6);
+
 async function heardRunning() {
-  transport.listServers.mockImplementation(async () => [{ model_id: 1, model_name: 'Qwen3-4B', port: 9001 }]);
+  transport.listServers.mockImplementation(async () => [{ model_id: 1, model_name: 'Qwen3-4B', port: 9001, started_at: nextStamp() }]);
   act(() => refreshServers());
   await waitFor(() => expect(transport.listServers).toHaveBeenCalled());
   await act(async () => {});
@@ -147,7 +153,7 @@ describe('the endpoint place', () => {
     act(() => resetProxyState());
     cleanupModelEvents();
     // What a test's server list held, gone, and its read forgotten.
-    act(() => ingestServerEvent({ type: 'stopped', modelId: '1', port: 9001, updatedAt: Date.now(), modelName: 'Qwen3-4B' }));
+    act(() => ingestServerEvent({ type: 'stopped', modelId: '1', port: 9001, updatedAt: nextStamp(), modelName: 'Qwen3-4B' }));
     act(() => forgetServerList());
     transport.listServers.mockImplementation(async () => []);
   });
@@ -300,7 +306,7 @@ describe('the endpoint place', () => {
       await user.click(within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'Unload' }));
       expect(transport.stopServer).toHaveBeenCalledWith(1);
 
-      act(() => ingestServerEvent({ type: 'stopped', modelId: '1', port: 9001, updatedAt: Date.now(), modelName: 'Qwen3-4B' }));
+      act(() => ingestServerEvent({ type: 'stopped', modelId: '1', port: 9001, updatedAt: nextStamp(), modelName: 'Qwen3-4B' }));
       expect(screen.queryByRole('region', { name: 'Loaded' })).not.toBeInTheDocument();
     });
 
@@ -817,8 +823,7 @@ describe('the endpoint place', () => {
   });
 
   describe('the inspector beside the place', () => {
-    let clock = Date.now() + 2e9;
-    afterEach(() => act(() => ingestServerEvent({ type: 'stopped', modelId: '1', updatedAt: (clock += 1e6) })));
+    afterEach(() => act(() => ingestServerEvent({ type: 'stopped', modelId: '1', updatedAt: nextStamp() })));
 
     it('a row opens its model beside the place, and × closes it to the place', async () => {
       const { user, at } = renderEndpoint();
@@ -835,7 +840,7 @@ describe('the endpoint place', () => {
     });
 
     it("a loaded model's status line says its latest rate and how long it has been loaded", async () => {
-      act(() => ingestServerEvent({ type: 'running', modelId: '1', port: 9001, updatedAt: (clock += 1e6), modelName: 'Qwen3-4B' }));
+      act(() => ingestServerEvent({ type: 'running', modelId: '1', port: 9001, updatedAt: nextStamp(), modelName: 'Qwen3-4B' }));
       renderEndpoint(UP, '/endpoint?inspect=model:1');
       await frame({
         ...admitted([residentSlot(1, 'Qwen3-4B', { resident_for_secs: 250, launch: { ...residentSlot(1, 'x').launch!, state: 'working' } })]),
