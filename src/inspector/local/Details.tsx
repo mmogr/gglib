@@ -119,9 +119,10 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
   const { showToast } = useToastContext();
   const [open, setOpen] = useState(remembered);
   const source = useRef<HTMLDivElement>(null);
-  const shown = useRef(0);
+  // Remounted (the options sheet hides Details), a reveal already shown is not shown again.
+  const shown = useRef(reveal);
   useEffect(() => {
-    if (reveal > 0) setOpen(true);
+    if (reveal !== shown.current) setOpen(true);
   }, [reveal]);
   useEffect(() => {
     if (!open || reveal === shown.current) return;

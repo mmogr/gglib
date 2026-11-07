@@ -488,6 +488,56 @@ describe('verify and update results, in Details › Source', () => {
     expect(screen.queryByText('Sent to the download queue.')).not.toBeInTheDocument();
   });
 
+  it("keeps a check started while a re-download was being queued, over the queue's refusal", async () => {
+    const run = pendingVerify();
+    let refuse: (e: unknown) => void = () => {};
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/verify')) return daemon.verify!();
+      if (path.endsWith('/repair')) return new Promise((_resolve, reject) => (refuse = reject));
+      return null;
+    });
+    renderInspector();
+    const user = await pick('Verify files');
+    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy'));
+    await user.click(await screen.findByRole('button', { name: 'Re-download it' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Re-download' }));
+    await waitFor(() => expect(posts('/repair')).toHaveLength(1));
+
+    pendingVerify();
+    await pick('Verify files');
+    expect(await screen.findByText('Checking files…')).toBeInTheDocument();
+    await act(async () => refuse(new TransportError('INTERNAL', 'offline')));
+    expect(screen.getByText('Checking files…')).toBeInTheDocument();
+    expect(screen.queryByText(/offline/)).not.toBeInTheDocument();
+  });
+
+  it('does not reopen Details or scroll again when the options sheet closes after a check', async () => {
+    const seen: string[] = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      seen.push(this.textContent ?? '');
+    };
+    try {
+      pendingVerify();
+      renderInspector();
+      const user = await pick('Verify files');
+      await waitFor(() => expect(seen).toHaveLength(1));
+      const fold = () => screen.getByText('Details').closest('details')!;
+      await user.click(screen.getByText('Details'));
+      await waitFor(() => expect(fold()).not.toHaveAttribute('open'));
+
+      await user.click(screen.getByRole('button', { name: 'More' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Load with options…' }));
+      await user.click(within(await screen.findByRole('dialog', { name: 'Load with options' })).getByRole('button', { name: 'Cancel' }));
+
+      await new Promise((r) => setTimeout(r, 50));
+      expect(fold()).not.toHaveAttribute('open');
+      expect(seen).toHaveLength(1);
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
+  });
+
   it('brings Details › Source into view once Details is open', async () => {
     // Whether the fold was open, and what was brought into view, at each scroll.
     const seen: { open: boolean; text: string }[] = [];
