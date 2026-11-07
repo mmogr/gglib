@@ -1,11 +1,13 @@
 import { FC } from 'react';
 import { Menu, type MenuItem } from '../../ui/Menu';
-import { RESIDENCY_WORDS } from '../../status/words';
+import { ENDPOINT_WORDS, RESIDENCY_WORDS } from '../../status/words';
 import { useServers } from '../../../hooks/useServers';
 import { usePairedModels } from '../../../hooks/usePairedModels';
+import { useResidency } from '../../../places/library/useResidency';
+import { useEndpointFacts } from '../../../services/proxyRegistry';
 import { useModelLibrary } from '../../../services/modelRegistry';
 import { useToastContext } from '../../../contexts/ToastContext';
-import { formatError } from '../../../utils/errors';
+import { loadFailed } from '../../../utils/errors';
 
 /** A model to move the chat to, as the picker names it. */
 export interface ModelChoice {
@@ -43,7 +45,13 @@ const STAYS = 'A chat stays on its machine. Start a new chat to use this model.'
  * On this Mac (the registered models that are not), and the paired
  * machine's models when one is connected; then Unload <model>, which stops
  * it for every client of the endpoint and leaves the chat open, and Show
- * <model>, which opens its inspector, where its log is. Choosing a model
+ * <model>, which opens its inspector, where its log is. Each of this
+ * machine's models says its state after its name, in `RESIDENCY_WORDS`
+ * ("Qwen3-4B · Not loaded"), so a pick that must load first says so: a
+ * running one's word is the proxy's live dashboard's (`useResidency`), else
+ * Loaded. While the endpoint is pinned (`ProxyStatus.pinned_model`, a name)
+ * the daemon refuses to start any other model, so the others are greyed
+ * and one line over the groups names the pin. Choosing a model
  * here hands it to the page, which moves the chat there, starting the model
  * first if it is not running; meanwhile the picker is locked and says so.
  * A chat's machine is fixed, so a paired machine's model opens a new chat
@@ -65,6 +73,8 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   const { models } = useModelLibrary();
   const canPick = onPick !== undefined && modelId !== undefined;
   const paired = usePairedModels(canPick);
+  const residency = useResidency();
+  const { pinnedModel } = useEndpointFacts();
 
   if (!canPick) {
     return <span className="truncate px-sm text-sm text-text-secondary">{modelName}</span>;
@@ -83,7 +93,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
       await onPick(choice);
     } catch (error) {
       // The chat stays on the model it was on.
-      showToast(`Could not start ${choice.modelName}: ${formatError(error)}`, 'error');
+      showToast(loadFailed(error), 'error');
     }
   };
 
@@ -91,27 +101,37 @@ export const ModelPicker: FC<ModelPickerProps> = ({
     try {
       await onUnload?.();
     } catch (error) {
-      showToast(`Could not unload ${modelName}: ${formatError(error)}`, 'error');
+      showToast(loadFailed(error, 'unload'), 'error');
     }
   };
 
   const runningIds = new Set(servers.map((s) => s.modelId));
+  /** "<name> · <state>": the state the dashboard gives a running model, else Loaded; Not loaded when nothing runs it. */
+  const stated = (id: number, name: string) =>
+    `${name} · ${RESIDENCY_WORDS[runningIds.has(id) ? (residency.get(id) ?? 'loaded') : 'not_loaded']}`;
+  /** A model the pinned endpoint will not start: any but the pinned one. */
+  const refused = (name: string) => pinnedModel !== null && name !== pinnedModel;
+  const choice = (id: number, name: string): MenuItem => ({
+    label: stated(id, name),
+    checked: false,
+    disabled: refused(name),
+    onPick: () => void pick({ modelId: id, modelName: name }),
+  });
   const loaded: MenuItem[] = [
-    ...(runningIds.has(modelId) ? [] : [{ label: modelName, checked: true, onPick: () => {} }]),
-    ...servers.map((s) => ({
-      label: s.modelName,
-      checked: s.modelId === modelId,
-      onPick: () => (s.modelId === modelId ? undefined : void pick({ modelId: s.modelId, modelName: s.modelName })),
-    })),
+    ...(runningIds.has(modelId) ? [] : [{ label: stated(modelId, modelName), checked: true, onPick: () => {} }]),
+    ...servers.map((s) =>
+      s.modelId === modelId ? { label: stated(s.modelId, s.modelName), checked: true, onPick: () => {} } : choice(s.modelId, s.modelName),
+    ),
   ];
   const idle = models.filter((m) => m.id !== modelId && !runningIds.has(m.id));
   const far = paired.group?.models ?? [];
 
   const items: MenuItem[] = [
+    ...(pinnedModel !== null ? [{ label: `${ENDPOINT_WORDS.pinned} · only ${pinnedModel}`, note: true }] : []),
     { label: RESIDENCY_WORDS.loaded, heading: true },
     ...loaded,
     ...(idle.length > 0 ? [{ label: 'On this Mac', heading: true }] : []),
-    ...idle.map((m) => ({ label: m.name, checked: false, onPick: () => void pick({ modelId: m.id, modelName: m.name }) })),
+    ...idle.map((m) => choice(m.id, m.name)),
     ...(far.length > 0 ? [{ label: `On ${paired.name}`, heading: true }] : []),
     ...far.map((m) => ({
       label: m.id,

@@ -148,10 +148,12 @@ describe('SecretField', () => {
       reader.readAsText(blob);
     });
     expect(text).toBe('t0k-81d0');
-    expect(onNotice).not.toHaveBeenCalled();
+    expect(screen.queryByText('Copied')).not.toBeInTheDocument();
 
     finish();
-    await waitFor(() => expect(onNotice).toHaveBeenCalledWith('Copied the TOKEN value.', 'success'));
+    // Said beside the button, not raised as a toast.
+    expect(await screen.findByRole('status')).toHaveTextContent('Copied');
+    expect(onNotice).not.toHaveBeenCalled();
   });
 
   it('Replace opens an empty input, and what is typed is the edit', async () => {

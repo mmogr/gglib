@@ -23,13 +23,12 @@ import { REACH_MARK, StatusMark } from '../../components/status/StatusMark';
 import { REACH_WORDS, RESIDENCY_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
-import { useToastContext } from '../../contexts/ToastContext';
 import type { PairedModelsState } from '../../hooks/usePairedModels';
 import { useRemoteState } from '../../services/remoteRegistry';
 import { getTransport } from '../../services/transport';
 import type { ModelLookup } from '../../types/generated/ModelLookup';
 import { canSee } from '../../utils/canSee';
-import { formatError } from '../../utils/errors';
+import { formatError, loadFailed } from '../../utils/errors';
 import { FarDetails } from './FarDetails';
 
 /** The model's detail as that machine has it, read again on `reload`. */
@@ -63,7 +62,6 @@ interface FarInspectorProps {
 
 export const FarInspector: FC<FarInspectorProps> = ({ id, paired }) => {
   const navigate = useNavigate();
-  const { showToast } = useToastContext();
   const { status } = useRemoteState();
   const { detail, failed, reload } = useFarDetail(id);
   const [load, setLoad] = useState<{ id: number; busy: boolean; error: string | null } | null>(null);
@@ -112,7 +110,7 @@ export const FarInspector: FC<FarInspectorProps> = ({ id, paired }) => {
         <div className="flex flex-col gap-xs">
           <div className="flex items-center gap-xs">
             <h2 className="m-0 min-w-0 truncate text-base font-semibold text-text">{name}</h2>
-            <CopyValue value={name} label={`Copy the name ${name}`} onCopied={() => showToast(`Copied ${name}`, 'success')} />
+            <CopyValue value={name} label={`Copy the name ${name}`} />
             <span className="flex-1" />
             <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={() => navigate(paths.library())}>
               <Icon icon={X} size={14} />
@@ -143,7 +141,7 @@ export const FarInspector: FC<FarInspectorProps> = ({ id, paired }) => {
         {loadError && (
           <p role="alert" className="m-0 flex items-baseline gap-xs text-xs text-text">
             <StatusMark kind="failed" label="Failed" />
-            {`Didn't load: ${loadError}`}
+            {loadFailed(loadError)}
           </p>
         )}
       </div>

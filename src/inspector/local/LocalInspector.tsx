@@ -23,7 +23,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal, X } from 'lucide-react';
 import { openChatOn } from '../../app/openChat';
 import { inspectorClosed, libraryIntent, paths, withoutParam } from '../../app/paths';
-import { CopyValue } from '../../components/CopyValue';
+import { Copied, CopyValue, useCopied } from '../../components/CopyValue';
 import { InstallProgress } from '../../components/InstallProgress';
 import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
@@ -39,7 +39,7 @@ import { refreshModels } from '../../services/modelEvents';
 import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
 import type { GgufModel } from '../../types';
-import { formatError } from '../../utils/errors';
+import { formatError, loadFailed } from '../../utils/errors';
 import { getHuggingFaceUrl } from '../../utils/format';
 import { componentRoleLabel } from '../../utils/imageFamily';
 import { LoadOptionsSheet, type SheetOpen } from '../LoadOptionsSheet';
@@ -135,7 +135,8 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
     void explain.reload();
     void detail.reload();
   };
-  const copied = (what: string) => () => showToast(`Copied ${what}`, 'success');
+  // ⋯ › Copy path closes its menu, so "Copied" is said beside ⋯.
+  const [pathCopied, showPathCopied] = useCopied();
   const repo = getHuggingFaceUrl(model.hfRepoId);
 
   const remove = async () => {
@@ -165,7 +166,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
       onPick: () => void retag.handleRetag(true),
       title: 'Derives the detected tags again from the GGUF, dropping those it no longer finds, hand-added ones included.',
     },
-    { label: 'Copy path', onPick: () => void navigator.clipboard.writeText(model.filePath).then(copied('the path')), gapBefore: true },
+    { label: 'Copy path', onPick: () => void navigator.clipboard.writeText(model.filePath).then(showPathCopied), gapBefore: true },
     ...(repo ? [{ label: 'Open on Hugging Face', onPick: () => void openUrl(repo) }] : []),
     { label: 'Benchmark…', onPick: () => navigate(paths.benchmarks([model.id])), gapBefore: true },
     { label: 'Remove from library…', onPick: () => void remove(), gapBefore: true, danger: true },
@@ -199,9 +200,10 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
           <div className="flex items-center gap-xs">
             <h2 className="m-0 min-w-0 truncate text-base font-semibold text-text">{model.name}</h2>
             {model.openaiId !== null && (
-              <CopyValue value={model.openaiId} label={`Copy the Model ID ${model.openaiId}`} onCopied={copied(model.openaiId)} />
+              <CopyValue value={model.openaiId} label={`Copy the Model ID ${model.openaiId}`} />
             )}
             <span className="flex-1" />
+            <Copied shown={pathCopied} />
             <Menu iconOnly name="More" label={<Icon icon={MoreHorizontal} size={14} />} items={items} />
             <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={() => navigate(inspectorClosed(location))}>
               <Icon icon={X} size={14} />
@@ -249,7 +251,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
           {load.error && (
             <p role="alert" className="m-0 flex items-baseline gap-xs text-xs text-text">
               <StatusMark kind="failed" label="Failed" />
-              {`${load.error.action === 'unload' ? "Didn't unload" : "Didn't load"}: ${load.error.message}`}
+              {loadFailed(load.error.message, load.error.action)}
               {load.error.action === 'load' && (
                 <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => navigate(paths.log(model.id), { state: { failedLoad: true } satisfies LogFrom })}>
                   Show log
@@ -260,7 +262,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
           {model.openaiId !== null && (
             <p className="m-0 flex items-center gap-xs text-xs text-text-secondary">
               Model ID <code className="font-mono text-text">{model.openaiId}</code>
-              <CopyValue value={model.openaiId} label="Copy the Model ID" onCopied={copied(model.openaiId)} />
+              <CopyValue value={model.openaiId} label="Copy the Model ID" />
             </p>
           )}
         </div>

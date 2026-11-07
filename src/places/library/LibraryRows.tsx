@@ -19,7 +19,6 @@ import { CopyValue } from '../../components/CopyValue';
 import { RESIDENCY_MARK, REACH_MARK, StatusMark } from '../../components/status/StatusMark';
 import { REACH_WORDS, RESIDENCY_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
-import { useToastContext } from '../../contexts/ToastContext';
 import type { PairedModelsState } from '../../hooks/usePairedModels';
 import type { ServerViewModel } from '../../hooks/useServers';
 import { refreshModels } from '../../services/modelEvents';
@@ -51,7 +50,6 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
   const { models, loading, error } = useModelLibrary();
   const residency = useResidency();
   const { status: remote } = useRemoteState();
-  const { showToast } = useToastContext();
 
   if (loading && models.length === 0) return <ModelListSkeleton />;
 
@@ -62,11 +60,7 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
 
   const copyId = (model: GgufModel) =>
     model.openaiId !== null && (
-      <CopyValue
-        value={model.openaiId}
-        label={`Copy the Model ID ${model.openaiId}`}
-        onCopied={(id) => showToast(`Copied ${id}`, 'success')}
-      />
+      <CopyValue value={model.openaiId} label={`Copy the Model ID ${model.openaiId}`} />
     );
 
   const row = (model: GgufModel) => {

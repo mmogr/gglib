@@ -22,7 +22,6 @@ import { Button } from '../../components/ui/Button';
 import { CopyValue } from '../../components/CopyValue';
 import { Icon } from '../../components/ui/Icon';
 import { StatusMark } from '../../components/status/StatusMark';
-import { useToastContext } from '../../contexts/ToastContext';
 import { disableFastDownloads, enableFastDownloads, getSetupStatus } from '../../services/transport/api/setup';
 import { formatError } from '../../utils/errors';
 import { Menu } from '../../components/ui/Menu';
@@ -36,7 +35,6 @@ interface Accelerator {
 }
 
 export const FasterDownloads: FC = () => {
-  const { showToast } = useToastContext();
   const [state, setState] = useState<Accelerator | null>(null);
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,11 +103,7 @@ export const FasterDownloads: FC = () => {
         <div className="flex flex-wrap items-center gap-xs text-xs text-text-secondary">
           <span>It needs Python 3.10 or newer. Once that is installed:</span>
           <code className="font-mono">{ENABLE_COMMAND}</code>
-          <CopyValue
-            value={ENABLE_COMMAND}
-            label="Copy the command"
-            onCopied={() => showToast('Copied the command.', 'success')}
-          />
+          <CopyValue value={ENABLE_COMMAND} label="Copy the command" />
         </div>
       )}
       {error && (

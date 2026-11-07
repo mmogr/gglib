@@ -29,7 +29,7 @@ so Back starts nothing twice.
 | `useFastDownloads.ts` | The download accelerator: set up, unasked, when Get it is pressed and before the download is queued, as `gglib up` does once a download is agreed; never where Python 3 is not there; a failure a warning with Retry, the download going ahead |
 | `FirstModelStep.tsx` | Step 3: the suggestion in the route's words, Get it (faster downloads set up first) with the download's row, Choose another, Skip, and the pairing field for another machine's models |
 | `useFirstModel.ts` | Step 3's state: the choice, the download by the id the queue answered with (or, when the queue refuses the repo as already queued, the repo's row it has), and the library's model from that repository |
-| `EndpointStep.tsx` | Step 4: the endpoint's line with Copy, the proof or what it waits for, a failed start or proof with Retry, Start the endpoint when gglib launches (`proxyAutostart`) |
+| `EndpointStep.tsx` | Step 4: the endpoint's line with Copy (and "Copied" beside it), the proof or what it waits for, a failed start or proof with Retry, Start the endpoint when gglib launches (`proxyAutostart`) |
 | `ConnectStep.tsx` | Step 5: Connect a client with the first model's Model ID, and Open gglib |
 
 ## Words said only here
@@ -52,6 +52,6 @@ after the machine's RAM is Rust's `BudgetSource::SystemRam` label; "Use another 
 once the endpoint is on: turn it on in Endpoint."; "Already done";
 "Can't reach gglib."; the buttons Continue, Back, Skip, Change, Save,
 Cancel, Retry, Check again, Get it, Choose another, Join, Copy, Try again,
-Open gglib.
+Open gglib; "Copied" beside Copy and beside a ⧉ (`components/CopyValue`).
 
 <!-- module-docs:end -->

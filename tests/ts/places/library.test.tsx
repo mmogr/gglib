@@ -358,6 +358,9 @@ describe('the library place', () => {
     expect(at()).toBe('/library');
     await user.click(within(row).getByRole('button', { name: 'Copy the Model ID Qwen3-4B' }));
     expect(await navigator.clipboard.readText()).toBe('Qwen3-4B');
+    // Said in the row, beside ⧉, not as a toast.
+    expect(await within(row).findByText('Copied')).toBeInTheDocument();
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
   });
 
   it('picks a row with Enter or Space as with a click', async () => {

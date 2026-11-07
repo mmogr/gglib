@@ -14,7 +14,6 @@ import { ChevronRight, ExternalLink } from 'lucide-react';
 import { CopyValue } from '../../components/CopyValue';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
-import { useToastContext } from '../../contexts/ToastContext';
 import { openUrl } from '../../services/platform';
 import type { ModelDetailDto } from '../../types/generated/ModelDetailDto';
 import { formatParamCount, getHuggingFaceUrl } from '../../utils/format';
@@ -22,7 +21,6 @@ import { Item, When, remember, remembered } from '../local/Details';
 import { tokens } from '../../readings/launchFit';
 
 export const FarDetails: FC<{ id: number; detail: ModelDetailDto }> = ({ id, detail: d }) => {
-  const { showToast } = useToastContext();
   const [open, setOpen] = useState(remembered);
   const repo = getHuggingFaceUrl(d.hfRepoId);
   const command = `gglib chat ${id} --remote`;
@@ -71,7 +69,7 @@ export const FarDetails: FC<{ id: number; detail: ModelDetailDto }> = ({ id, det
         <Item label="From a terminal">
           <span className="flex items-start gap-xs">
             <code className="min-w-0 flex-1 break-all font-mono">{command}</code>
-            <CopyValue value={command} label="Copy the command" onCopied={() => showToast('Copied the command', 'success')} />
+            <CopyValue value={command} label="Copy the command" />
           </span>
         </Item>
       </dl>

@@ -96,6 +96,8 @@ export function chatTransport(fixture: ChatFixture) {
     getModel: vi.fn(async () => ({ quantization: 'Q8_0' })),
     // Asked by the agent limits sheet the first time it opens, for the effort row.
     getModelDetail: vi.fn(async () => ({ reasoningEffortSupport: 'unknown' })),
+    // The picker reads the endpoint's live dashboard while it is up, for which the key is revealed.
+    revealSecret: vi.fn(async () => null),
     // A copy, as a fetch gives: the page must not see the fixture change under it.
     listConversations: vi.fn(async () => [...fixture.conversations]),
     createConversation: vi.fn(async (params: { title: string }) => {

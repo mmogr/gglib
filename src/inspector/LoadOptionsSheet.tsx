@@ -29,7 +29,7 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { installLlama, useEngineInstall } from '../places/library/engineInstall';
 import type { GgufModel, LaunchExplanation, ModelDetail } from '../types';
-import { formatError } from '../utils/errors';
+import { formatError, loadFailed } from '../utils/errors';
 import { ImageParts } from './ImageParts';
 import { UNTOUCHED, defaultsPatch, launchConfig, problem, type SheetField, type Typed } from './loadOptions';
 import type { Update } from './local/Change';
@@ -138,7 +138,7 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
     }
     const failed = await load.loadWith(launchConfig(model, typed), typed.pin);
     if (failed === null) onClose();
-    else setError(`Didn't load: ${failed}`);
+    else setError(loadFailed(failed));
   };
 
   // An install asked for here completed: load as it was asked to.
@@ -163,7 +163,7 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
     setError(null);
     installLlama();
   };
-  const failure = error ?? (load.needsLlama && llama.refusal ? `Didn't load: ${llama.refusal}` : null);
+  const failure = error ?? (load.needsLlama && llama.refusal ? loadFailed(llama.refusal) : null);
 
   return (
     <div

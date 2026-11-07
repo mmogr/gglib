@@ -118,6 +118,17 @@ describe('ChatPlace, leaving and Unload', () => {
     expect(onSwitchModel.mock.calls[0][0]).toEqual({ modelId: 17, modelName: 'qwen3' });
   });
 
+  it('Load it again that fails says why, in the sentence every load failure is said in', async () => {
+    const user = userEvent.setup();
+    onSwitchModel.mockRejectedValueOnce(new Error('out of memory'));
+    renderLocal(19);
+    await head();
+    act(() => ingestServerEvent({ type: 'stopped', modelId: '19', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
+    const line = await screen.findByText('qwen3 was unloaded.');
+    await user.click(within(line).getByRole('button', { name: 'Load it again' }));
+    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't load: out of memory"));
+  });
+
   it('a model that crashed mid-chat says "stopped unexpectedly · Show log", and Show log is handed up', async () => {
     const user = userEvent.setup();
     renderLocal(18);
@@ -171,7 +182,7 @@ describe('ChatPlace, leaving and Unload', () => {
     await head();
     await user.click(await fromPicker(user, 'Unload qwen3'));
 
-    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('Could not unload qwen3: daemon unreachable'));
+    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't unload: daemon unreachable"));
   });
 
   it('a chat with another machine offers no Unload: the model is not this one’s', async () => {

@@ -49,8 +49,9 @@ is the "files checked" time, since the daemon stores none.
 Words with no Rust twin, composed from Rust's fields here: "loaded 4m 10s"
 and the rate's "34 t/s" on a loaded model's status line, the fit sentence
 and its refusal, the Context row's note, the Sampling row's count, "set by
-you", "Auto", "On", "Off", "Applies at next load.", "Didn't load:",
-"Didn't unload:", "Drawing needs
+you", "Auto", "On", "Off", "Applies at next load.", "Didn't load:" and
+"Didn't unload:" (`utils/errors` `loadFailed`), "Copied" beside ⋯ after
+⋯ › Copy path, "Drawing needs
 stable-diffusion.cpp.", and the verification line's "Checking files…",
 "Checking … N%", "Files intact", "N files damaged", "Re-download it/them",
 "No file has a hash to check against", "Checking for

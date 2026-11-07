@@ -85,9 +85,9 @@ describe('what the devices line says', () => {
     expect(devicesSaying(older as unknown as RemoteStatus, null)).toEqual({ mark: 'on', word: 'Sharing · 0 paired' });
   });
 
-  it('a code on offer as its time left, over everything else', () => {
-    expect(devicesSaying(joined('connected'), 102)).toEqual({ mark: 'attention', word: 'code 1:42' });
-    expect(devicesSaying(null, 9)).toEqual({ mark: 'attention', word: 'code 0:09' });
+  it('a code on offer as its time left, over everything else, in plain text: ▲ is for warnings', () => {
+    expect(devicesSaying(joined('connected'), 102)).toEqual({ mark: null, word: 'code 1:42' });
+    expect(devicesSaying(null, 9)).toEqual({ mark: null, word: 'code 0:09' });
   });
 
   it('a turning mark before the daemon has answered', () => {
@@ -132,6 +132,8 @@ describe('the devices line', () => {
     await act(() => vi.advanceTimersByTimeAsync(10_000));
     expect(line()).toHaveAccessibleName(/^Devices, code 1:3[12]$/);
     expect(screen.getByText(/^code 1:3[12]$/)).toBeInTheDocument();
+    // No shape beside it: a code on offer is not a warning.
+    expect(line().querySelector('[data-kind]')).toBeNull();
   });
 
   it('a click opens the Devices place, and the line is then the open row', async () => {

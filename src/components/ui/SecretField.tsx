@@ -16,6 +16,7 @@ import { Copy, Eye, EyeOff } from 'lucide-react';
 import { getTransport } from '../../services/transport';
 import type { SecretRef } from '../../types/generated/SecretRef';
 import { formatError } from '../../utils/errors';
+import { Copied, useCopied } from '../CopyValue';
 import { Button } from './Button';
 import { Icon } from './Icon';
 import { IconButton } from './IconButton';
@@ -64,7 +65,7 @@ export interface SecretFieldProps {
   /** What the input says while nothing is stored. */
   placeholder?: string;
   disabled?: boolean;
-  /** How a Show or Copy went, for the caller to raise as a toast. */
+  /** Why a Show or Copy failed, for the caller to raise as a toast; a copy that worked says "Copied" beside its button. */
   onNotice?: (message: string, kind: 'success' | 'error') => void;
 }
 
@@ -107,6 +108,7 @@ export const SecretField: FC<SecretFieldProps> = ({
   const which = JSON.stringify(secret);
   const [shown, setShown] = useState<{ of: string; value: string } | null>(null);
   const showing = shown?.of === which ? shown.value : null;
+  const [copied, showCopied] = useCopied();
 
   if (edit.kind === 'clear') {
     return (
@@ -156,7 +158,7 @@ export const SecretField: FC<SecretFieldProps> = ({
   };
   const copy = () => {
     copySecret(secret)
-      .then(() => onNotice?.(`Copied the ${label}.`, 'success'))
+      .then(showCopied)
       .catch((err) => onNotice?.(`Could not copy the ${label}: ${formatError(err)}`, 'error'));
   };
 
@@ -179,6 +181,7 @@ export const SecretField: FC<SecretFieldProps> = ({
       >
         <Icon icon={showing === null ? Eye : EyeOff} size={14} />
       </IconButton>
+      <Copied shown={copied} />
       <IconButton type="button" label={`Copy the ${label}`} size="sm" onClick={copy} disabled={disabled}>
         <Icon icon={Copy} size={14} />
       </IconButton>

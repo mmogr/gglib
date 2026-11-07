@@ -12,13 +12,14 @@
  * copies the key the panel already revealed for its dashboard stream, so it
  * waits for that reveal. Off dims the bar to "Off. Clients can't connect.";
  * Turn on is the footer's. A copy says "Copied" for one second beside its
- * button, since the popover has no toast host; a copy that fails says why.
+ * button (`components/CopyValue`, as every copy in the app does); a copy
+ * that fails says why.
  *
  * @module tray/Endpoint
  */
 
-import { useEffect, useState, type FC } from 'react';
-import { CopyValue } from '../components/CopyValue';
+import { useState, type FC } from 'react';
+import { Copied, CopyValue, useCopied } from '../components/CopyValue';
 import { StatusMark, type MarkKind } from '../components/status/StatusMark';
 import { useRequestBlink } from '../components/status/useRequestBlink';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../components/status/words';
@@ -27,27 +28,6 @@ import type { EndpointFacts } from '../services/proxyRegistry';
 import type { EndpointBusy } from '../places/endpoint/useEndpointActions';
 import { formatError } from '../utils/errors';
 import { Failure } from './Failure';
-
-/** How long "Copied" stays up, in ms. */
-export const COPIED_MS = 1000;
-
-/** `[shown, show]`: `shown` turns true on `show()` and back after `COPIED_MS`. */
-function useBriefly(): [boolean, () => void] {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    if (!shown) return undefined;
-    const timer = setTimeout(() => setShown(false), COPIED_MS);
-    return () => clearTimeout(timer);
-  }, [shown]);
-  return [shown, () => setShown(true)];
-}
-
-const Copied: FC<{ shown: boolean }> = ({ shown }) =>
-  shown ? (
-    <span role="status" className="shrink-0 text-xs text-text-secondary">
-      Copied
-    </span>
-  ) : null;
 
 /** What the endpoint line says, as a mark and a word. */
 export function endpointSaying(facts: EndpointFacts, busy: EndpointBusy): { mark: MarkKind; word: string } {
@@ -72,8 +52,7 @@ interface EndpointProps {
 
 export const Endpoint: FC<EndpointProps> = ({ facts, busy, error, apiKey, served }) => {
   const blinking = useRequestBlink(served);
-  const [urlCopied, showUrlCopied] = useBriefly();
-  const [keyCopied, showKeyCopied] = useBriefly();
+  const [keyCopied, showKeyCopied] = useCopied();
   const saying = endpointSaying(facts, busy);
   const up = facts.state !== 'off';
 
@@ -100,8 +79,7 @@ export const Endpoint: FC<EndpointProps> = ({ facts, busy, error, apiKey, served
             <span className="min-w-0 flex-1 truncate font-mono text-xs text-text" title={facts.baseUrl}>
               {facts.baseUrl}
             </span>
-            <Copied shown={urlCopied} />
-            <CopyValue value={facts.baseUrl} label="Copy the endpoint address" onCopied={showUrlCopied} />
+            <CopyValue value={facts.baseUrl} label="Copy the endpoint address" />
           </>
         ) : (
           <span className="flex-1 text-xs text-text-muted">

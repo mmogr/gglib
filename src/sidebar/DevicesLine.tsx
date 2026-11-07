@@ -6,8 +6,9 @@
  * Connected, Away, Disconnected), else "Sharing · N paired" while this
  * machine lets devices in, else nothing. A pairing code still on offer is
  * said as "code 1:42", counting down to the code's own deadline, since it
- * outlives the page that revealed it (DV-1). Before the first status the
- * mark turns, as "asking the daemon" does.
+ * outlives the page that revealed it (DV-1); it is plain text with no mark,
+ * as the pairing sheet's "Expires in 1:42" is, since ▲ is for warnings
+ * only. Before the first status the mark turns, as "asking the daemon" does.
  *
  * Clicking the line opens the Devices place.
  *
@@ -26,12 +27,12 @@ import type { RemoteStatus } from '../services/transport/types/remote';
 import { cn } from '../utils/cn';
 import { SPREAD } from './placement';
 
-/** What the line says at its right, from the last status and any offer. */
-export type DevicesSaying = { mark: MarkKind; word: string; name?: string } | null;
+/** What the line says at its right, from the last status and any offer; `mark` is `null` for plain text. */
+export type DevicesSaying = { mark: MarkKind | null; word: string; name?: string } | null;
 
 /** `codeLeft`: the seconds the code on offer has left, or `null` with none. */
 export function devicesSaying(status: RemoteStatus | null, codeLeft: number | null): DevicesSaying {
-  if (codeLeft !== null) return { mark: 'attention', word: `code ${clock(codeLeft)}` };
+  if (codeLeft !== null) return { mark: null, word: `code ${clock(codeLeft)}` };
   if (status === null) return { mark: 'changing', word: '' };
   if (status.connected !== null) {
     return { mark: REACH_MARK[status.reach], word: REACH_WORDS[status.reach], name: pairedName(status) };
@@ -66,7 +67,11 @@ export function DevicesLine({ current = false }: { current?: boolean }) {
         {saying !== null && (
           <span className="flex items-center gap-xs text-sm text-text-secondary truncate">
             {saying.name !== undefined && <span className="truncate">{saying.name}</span>}
-            <StatusMark kind={saying.mark} word={saying.word || undefined} label={saying.word || 'Asking the daemon'} />
+            {saying.mark === null ? (
+              <span className="tabular-nums">{saying.word}</span>
+            ) : (
+              <StatusMark kind={saying.mark} word={saying.word || undefined} label={saying.word || 'Asking the daemon'} />
+            )}
           </span>
         )}
       </Button>

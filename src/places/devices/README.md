@@ -46,7 +46,7 @@ pairing is remembered.", "Connected. Reading which machine…", "since",
 are in your Library.", "Disconnect", "Stop <name>'s gglib…" and its confirm,
 "More for <name>", the ⧉ labels ("Copy the code", "Copy the pairing
 string", "Copy the address", "Copy the command that prints the key"),
-"Copied.", "Asking gglib" (the mark before the first status). The reach
+"Copied" beside a ⧉ (`components/CopyValue`), "Asking gglib" (the mark before the first status). The reach
 words themselves are `REACH_WORDS`.
 
 <!-- module-docs:end -->

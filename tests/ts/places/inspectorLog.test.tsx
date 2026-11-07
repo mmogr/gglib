@@ -145,6 +145,7 @@ describe('the log, in the inspector', () => {
 
     await user.click(within(inspector()).getByRole('button', { name: 'Copy the log' }));
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(logs.snapshot.map((e) => (e as { line: string }).line).join('\n')));
+    expect(await within(inspector()).findByText('Copied')).toBeInTheDocument();
 
     await user.click(within(inspector()).getByRole('button', { name: 'More' }));
     await user.click(screen.getByRole('menuitem', { name: 'Clear view' }));

@@ -22,7 +22,7 @@ when it was downloaded; no path on its disk) and `gglib chat <id>
 
 Words with no Rust twin: "on <machine>", "Load on <machine>", "<machine> is
 away; Load and Chat wait until it is back.", "could not be read just now.",
-"Retry", "Didn't load:", "From a terminal".
+"Retry", "Didn't load:" (`utils/errors` `loadFailed`), "From a terminal".
 
 | File | Role |
 |------|------|

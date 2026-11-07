@@ -19,7 +19,8 @@ Words of the Load with options sheet with no Rust twin: its title and
 field labels ("Context", "Jinja", "Speculative", "MTP", "Draft tokens",
 "Min probability", "Port", "Auto (from N)"), "Pin the endpoint to this
 model" and its line, "This load only" and its line, the sentences that stop
-a load, "Didn't save:", "Didn't load:", "Didn't install:", "Change for this
+a load, "Didn't save:", "Didn't load:" (`utils/errors` `loadFailed`, the one
+sentence every surface says a failed load in), "Didn't install:", "Change for this
 model…", and the image runtime's two sentences. The inspector's own: "▲
 <parts> missing." under an image model's Load, "Show log" on a failed
 load's line, "Log" before the server's last line, "Inspector width". Each

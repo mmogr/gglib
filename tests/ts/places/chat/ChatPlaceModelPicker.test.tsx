@@ -7,6 +7,8 @@
  * conversation up, and the chat route remounts it on the new
  * session with that conversation. So the two halves are pinned here — what
  * the page hands up, and that a page given a conversation opens on it.
+ * Each of this machine's models says its state after its name, and a
+ * pinned endpoint greys the models it will not start.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -25,9 +27,20 @@ vi.mock('../../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('../../../../src/services/transport');
   return { ...actual, getTransport: () => transport.current };
 });
+// The proxy's live dashboard: the test sends its frames.
+const dashboard = vi.hoisted(() => ({ send: null as ((snapshot: unknown) => void) | null }));
+vi.mock('../../../../src/services/clients/proxyDashboard', () => ({
+  subscribeProxyDashboard: (_h: string, _p: number, _k: unknown, onSnapshot: (s: unknown) => void) => {
+    dashboard.send = onSnapshot;
+    return () => {
+      dashboard.send = null;
+    };
+  },
+}));
 
 import { ChatPlaceWithList as ChatPlace } from './chatPlaceHarness';
 import { ingestServerEvent } from '../../../../src/services/serverRegistry';
+import { applyProxyStatus, resetProxyState } from '../../../../src/services/proxyRegistry';
 import { useToastContext } from '../../../../src/contexts/ToastContext';
 import type { ModelChoice } from '../../../../src/components/ChatMessagesPanel';
 import type { ChatDraft } from '../../../../src/types/messages';
@@ -85,6 +98,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  act(() => resetProxyState());
   serve(8, 'llama-3.2-3b', 'stopped');
   resetModelLibrary();
   resetRemoteState();
@@ -100,10 +114,50 @@ describe('ChatPlace, model picker', () => {
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     await waitFor(() => expect(modelPicker()).toHaveTextContent('Qwen3.8-27B'));
 
-    expect(await pickerGroup(user, 'On this Mac')).toEqual(['gemma-3-12b']);
-    expect(await pickerGroup(user, 'Loaded')).toEqual(['Qwen3.8-27B', 'llama-3.2-3b']);
-    expect(screen.getByRole('menuitemradio', { name: 'Qwen3.8-27B' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('menuitemradio', { name: 'llama-3.2-3b' })).toHaveAttribute('aria-checked', 'false');
+    expect(await pickerGroup(user, 'On this Mac')).toEqual(['gemma-3-12b · Not loaded']);
+    // The chat's own model is listed first, saying that nothing runs it.
+    expect(await pickerGroup(user, 'Loaded')).toEqual(['Qwen3.8-27B · Not loaded', 'llama-3.2-3b · Loaded']);
+    expect(screen.getByRole('menuitemradio', { name: 'Qwen3.8-27B · Not loaded' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menuitemradio', { name: 'llama-3.2-3b · Loaded' })).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it("says a running model's state as the endpoint's live stream gives it", async () => {
+    const user = userEvent.setup();
+    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null }));
+    renderPage();
+    await screen.findByRole('heading', { name: 'launchd KeepAlive' });
+    await waitFor(() => expect(dashboard.send).not.toBeNull());
+    act(() =>
+      dashboard.send?.({
+        admission: { slots: [{ model_id: 8, launch: { state: 'working', context_size: 8192, weights_bytes: 1, quantization: null, narration: null, flag_line: '' } }] },
+      }),
+    );
+    expect(await pickerGroup(user, 'Loaded')).toEqual(['Qwen3.8-27B · Not loaded', 'llama-3.2-3b · Working']);
+  });
+
+  it('while the endpoint is pinned, greys every model but the pinned one and names the pin once', async () => {
+    const user = userEvent.setup();
+    act(() =>
+      applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b' }),
+    );
+    renderPage();
+    await screen.findByRole('heading', { name: 'launchd KeepAlive' });
+    await pickerGroup(user, 'Loaded');
+    expect(screen.getAllByText('Pinned · only llama-3.2-3b')).toHaveLength(1);
+    expect(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' })).toBeDisabled();
+    expect(screen.getByRole('menuitemradio', { name: 'llama-3.2-3b · Loaded' })).toBeEnabled();
+    await user.click(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' }));
+    expect(onSwitchModel).not.toHaveBeenCalled();
+  });
+
+  it('greys nothing and names no pin while the endpoint serves any model', async () => {
+    const user = userEvent.setup();
+    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null }));
+    renderPage();
+    await screen.findByRole('heading', { name: 'launchd KeepAlive' });
+    await pickerGroup(user, 'Loaded');
+    expect(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' })).toBeEnabled();
+    expect(screen.queryByText(/^Pinned/)).not.toBeInTheDocument();
   });
 
   it('hands up the chosen model, and the conversation open when the switch lands', async () => {
@@ -114,7 +168,7 @@ describe('ChatPlace, model picker', () => {
     await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
     await selected(/Parsing GGUF/);
 
-    await pickModel(user, 'llama-3.2-3b');
+    await pickModel(user, 'llama-3.2-3b · Loaded');
 
     expect(onSwitchModel).toHaveBeenCalledTimes(1);
     const [choice, context] = onSwitchModel.mock.calls[0];
@@ -137,11 +191,10 @@ describe('ChatPlace, model picker', () => {
     await waitFor(() => expect(screen.getByRole('option', { name: /Parsing GGUF/ })).toHaveAttribute('aria-selected', 'true'));
     await screen.findByRole('heading', { name: 'Parsing GGUF' });
 
-    await pickModel(user, 'gemma-3-12b');
+    await pickModel(user, 'gemma-3-12b · Not loaded');
 
-    await waitFor(() =>
-      expect(screen.getByTestId('toasts')).toHaveTextContent('Could not start gemma-3-12b: not enough memory'),
-    );
+    // The inspector's sentence, the daemon's reason as it came.
+    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't load: not enough memory"));
     expect(modelPicker()).toHaveTextContent('Qwen3.8-27B');
     expect(modelPicker()).toBeEnabled();
   });
@@ -153,8 +206,8 @@ describe('ChatPlace, model picker', () => {
       const user = userEvent.setup();
       renderPage(undefined, 10);
       await screen.findByRole('heading', { name: 'launchd KeepAlive' });
-      expect(await pickerGroup(user, 'On this Mac')).toEqual(['gemma-3-12b']);
-      expect(screen.getAllByRole('menuitemradio', { name: 'Qwen3.8-27B' })).toHaveLength(1);
+      expect(await pickerGroup(user, 'On this Mac')).toEqual(['gemma-3-12b · Not loaded']);
+      expect(screen.getAllByRole('menuitemradio', { name: 'Qwen3.8-27B · Loaded' })).toHaveLength(1);
     } finally {
       serve(10, 'Qwen3.8-27B', 'stopped');
     }
@@ -176,7 +229,7 @@ describe('ChatPlace, model picker', () => {
     // Once the saved turn is drawn, the thread has stopped remounting.
     await screen.findByText('What is a GGUF?');
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'half a thought');
-    await pickModel(user, 'llama-3.2-3b');
+    await pickModel(user, 'llama-3.2-3b · Loaded');
     expect(onSwitchModel.mock.calls[0][1]().draft).toEqual({ text: 'half a thought', images: [] });
     page.unmount();
 
