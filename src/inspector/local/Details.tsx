@@ -2,7 +2,9 @@
  * Details ▸, closed until opened and remembered per viewer: the file (path
  * ⧉, size, Change path…), where it came from (repo ↗, the revision with its
  * full ref on hover, when it was downloaded and its files last checked,
- * read as UTC through `parseDbTimestamp`), the name and quant label (click
+ * read as UTC through `parseDbTimestamp`) and the line a file check or an
+ * update check writes there (`SourceStatus`; ⋯ Verify files and Check for
+ * updates open Details and bring Source into view), the name and quant label (click
  * to edit, one field per save), architecture, trained context, tags,
  * abilities, whether the template reads reasoning effort, measured speed
  * when a benchmark exists, and the raw GGUF metadata. A `dl` with a fixed
@@ -11,8 +13,8 @@
  * @module inspector/local/Details
  */
 
-import { useState, type FC, type ReactNode } from 'react';
-import { ChevronRight, ExternalLink } from 'lucide-react';
+import { useEffect, useRef, useState, type FC, type ReactNode } from 'react';
+import { Check, ChevronRight, ExternalLink } from 'lucide-react';
 import { CopyValue } from '../../components/CopyValue';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
@@ -28,8 +30,10 @@ import { Abilities } from './Abilities';
 import type { Update } from './Change';
 import { ReasoningSupport } from './ReasoningSupport';
 import { tokens } from './rows';
+import { SourceStatus } from './SourceStatus';
 import { Tags } from './Tags';
 import type { ModelDetailState } from './useModelDetail';
+import { checkVerdict, type Verification } from './useVerification';
 
 const OPEN_KEY = 'gglib.inspector.details';
 
@@ -106,12 +110,34 @@ interface DetailsProps {
   onUpdateModel: Update;
   /** A saved field or tag may change the launch: read it again. */
   onChanged: () => void;
+  verification: Verification;
+  /** Bumped to open Details and bring Source into view. */
+  reveal: number;
 }
 
-export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel, onChanged }) => {
+export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel, onChanged, verification, reveal }) => {
   const { showToast } = useToastContext();
   const [open, setOpen] = useState(remembered);
+  const source = useRef<HTMLDivElement>(null);
+  // Remounted (the options sheet hides Details), a reveal already shown is not shown again.
+  const shown = useRef(reveal);
+  useEffect(() => {
+    if (reveal !== shown.current) setOpen(true);
+  }, [reveal]);
+  useEffect(() => {
+    if (!open || reveal === shown.current) return;
+    // After the opened fold is laid out; centred, so the line has room to grow. jsdom has no scrollIntoView.
+    const frame = requestAnimationFrame(() => {
+      shown.current = reveal;
+      source.current?.scrollIntoView?.({ block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, reveal]);
   const d: ModelDetail | null = detail.modelDetail?.id === model.id ? detail.modelDetail : null;
+  // The daemon stores no time for a file check, so one answered here is the time it names; the stored time otherwise.
+  const { status } = verification;
+  const report = status.kind === 'verified' ? status.report : null;
+  const checkedAt = report?.verified_at ?? d?.lastUpdateCheck;
   const save = (updates: Parameters<Update>[1]) =>
     onUpdateModel(model.id, updates)
       .then(onChanged)
@@ -145,7 +171,7 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
             <Editable label="path" action="Change path…" value={model.filePath} onSave={(filePath) => save({ filePath })} />
           </span>
         </Item>
-        {(model.hfRepoId || d?.revision || d?.downloadDate) && (
+        {(model.hfRepoId || d?.revision || d?.downloadDate || status.kind !== 'idle') && (
           <Item label="Source">
             {model.hfRepoId && repo && (
               <Button variant="link" size="sm" className="font-mono text-xs font-normal" rightIcon={<Icon icon={ExternalLink} size={12} />} onClick={() => openUrl(repo)}>
@@ -160,9 +186,15 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
               )}
               {d?.revision && d.downloadDate && ' · '}
               {d?.downloadDate && <When at={d.downloadDate} before="downloaded " />}
-              {d?.lastUpdateCheck && ' · '}
-              {d?.lastUpdateCheck && <When at={d.lastUpdateCheck} before="files checked " />}
+              {(d?.revision || d?.downloadDate) && checkedAt && ' · '}
+              {checkedAt && <When at={checkedAt} before="files checked " />}
+              {report && checkVerdict(report) === 'intact' && (
+                <Icon icon={Check} size={12} className="ml-xs align-middle text-success" role="img" aria-hidden={false} aria-label="intact" />
+              )}
             </span>
+            <div ref={source} className={status.kind === 'idle' ? undefined : 'mt-xs'}>
+              <SourceStatus v={verification} />
+            </div>
           </Item>
         )}
         <Item label="Name">
