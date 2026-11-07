@@ -2,7 +2,8 @@
  * State for the loop guard's log on Diagnostics › Live.
  *
  * One request, one loading state and a reload, like `useDiagnostics`. It is
- * read when the Live tab opens, which draws the log only once it has a day.
+ * read when the Live tab opens, which draws the log once it has a day, or
+ * a failed read with its Retry.
  */
 
 import { useCallback, useEffect, useState } from 'react';

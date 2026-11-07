@@ -155,7 +155,7 @@ export const ProxyAdmissionPanel: FC<ProxyAdmissionPanelProps> = ({ admission })
           ))}
         </div>
       ) : (
-        <p className="text-sm text-text-muted">No model is loaded yet.</p>
+        <p className="text-sm text-text-muted">No model is loaded.</p>
       )}
 
       {admission.generation && <GenerationLine generation={admission.generation} />}

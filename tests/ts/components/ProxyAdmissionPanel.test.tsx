@@ -53,7 +53,7 @@ describe('ProxyAdmissionPanel', () => {
 
   it('reports an empty resident set rather than rendering nothing', () => {
     render(<ProxyAdmissionPanel admission={admission()} />);
-    expect(screen.getByText(/no model is loaded yet/i)).toBeInTheDocument();
+    expect(screen.getByText("No model is loaded.")).toBeInTheDocument();
   });
 
   it('names each resident model and whether it is primary', () => {
