@@ -20,7 +20,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ChatMessage } from '../../../../src/services/transport';
-import { agentRun, chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, pickModel, plusItem, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
 import { pngFile } from '../../fixtures/fakeImageStore';
 import { guiModel } from '../../fixtures/model';
 import type { AttachmentUpload } from '../../../../src/types/generated/AttachmentUpload';
@@ -73,7 +73,8 @@ function renderLocal(props: { draft?: ChatDraft; onSwitchModel?: (c: ModelChoice
   );
 }
 
-const attachButton = () => screen.getByRole('button', { name: 'Attach an image' });
+/** The composer's `[+]` › Add image…, the menu opened for it. */
+const attachButton = () => plusItem('Add image…');
 
 /**
  * The composer's text box once the open conversation is drawn: the thread,
@@ -140,10 +141,7 @@ describe('ChatPlace, images in the composer', () => {
     renderLocal();
     const box = await composerBox();
     await waitFor(() => expect(attachButton()).toBeEnabled());
-    expect(screen.getByRole('button', { name: /^Context: / })).toHaveAttribute(
-      'title',
-      '950 of 16,384 tokens (6%) after the last finished reply.',
-    );
+    expect(screen.getByRole('button', { name: /^Context: / })).toHaveAttribute('title', 'Context: 950 of 16,384 used');
 
     expect(fireEvent.paste(box, { clipboardData: { files: [pngFile(800, 600, 'shot.png')] } })).toBe(false);
 
@@ -421,7 +419,7 @@ describe('ChatPlace, images over a model switch', () => {
     await waitFor(() => expect(within(strip()).getByText(/~475 tokens/)).toBeInTheDocument());
     await user.type(box, 'half a thought');
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'llama-3.2-3b');
+    await pickModel(user, 'llama-3.2-3b');
     const { draft } = onSwitchModel.mock.calls[0][1]();
     expect(draft).toEqual({ text: 'half a thought', images: [shot] });
     first.unmount();

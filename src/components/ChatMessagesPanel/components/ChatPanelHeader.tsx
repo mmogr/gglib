@@ -1,7 +1,7 @@
 import { FC, ReactNode } from 'react';
 import { Input } from '../../ui/Input';
 import { StatusMark } from '../../status/StatusMark';
-import { Menu, type MenuItem } from '../../../places/library/Menu';
+import { Menu, type MenuItem } from '../../ui/Menu';
 import { TurnRow } from './TurnRow';
 
 interface ChatPanelHeaderProps {

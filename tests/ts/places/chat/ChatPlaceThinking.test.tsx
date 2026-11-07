@@ -1,10 +1,9 @@
 /**
- * The chat page's Thinking switch, on each kind of chat: a button in the
- * composer's margin, there only where the chat's model thinks, pressed while
- * the chat thinks and not where gglib remembers it switched off, when it
- * reads "Thinking off"; a click changes what the next send says, once, and
- * what the Tools popout sets for the whole device goes with every send as it
- * did. A choice whose turn was accepted is over: a chat left while its reply
+ * The chat page's Thinking switch, on each kind of chat: a labelled toggle
+ * in the composer, there only where the chat's model thinks, on while the
+ * chat thinks and off where gglib remembers it switched off; a click changes
+ * what the next send says, once, and what the agent limits (Tools ▸ › Agent
+ * limits…) set for the whole device goes with every send as it did. A choice whose turn was accepted is over: a chat left while its reply
  * is written, and changed since on another device, opens as that device left
  * it.
  *
@@ -24,7 +23,7 @@ import type { HubChat } from '../../../../src/types/generated/HubChat';
 import type { ModelInfo } from '../../../../src/types/generated/ModelInfo';
 import type { ModelRef } from '../../../../src/types/generated/ModelRef';
 import type { Thinking } from '../../../../src/types/generated/Thinking';
-import { agentRun, chatTransport, conversation, wrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, plusButton, plusItem, plusSubmenu, wrapper, type ChatFixture } from './chatPlaceHarness';
 import { FAR_FINGERPRINT, farEntry, pairedModels } from '../../fixtures/fakeFarDaemon';
 import { guiModel } from '../../fixtures/model';
 import type { GgufModel } from '../../../../src/types';
@@ -156,10 +155,17 @@ async function answered(fn: { mock: { results: Array<{ value: unknown }> } }) {
 }
 
 const composer = () => screen.getByRole('textbox', { name: 'Message' });
-/** The row an element is in: the turn's grid. */
-const rowOf = (element: HTMLElement) => element.closest('.grid') as HTMLElement;
-/** The switch, in the composer's row; null when the page draws none. */
-const chip = () => within(rowOf(composer())).queryByRole('button', { name: 'Thinking' });
+
+/** Open the agent limits: `[+]` › Tools ▸ › Agent limits…. */
+async function openLimits(user: ReturnType<typeof userEvent.setup>) {
+  const tools = await plusSubmenu(user, 'Tools');
+  await user.click(within(tools).getByRole('menuitem', { name: 'Agent limits…' }));
+  await screen.findByRole('dialog', { name: 'Agent limits' });
+}
+/** The composer an element is in: its form. */
+const rowOf = (element: HTMLElement) => element.closest('form') as HTMLElement;
+/** The switch, in the composer; null when the page draws none. */
+const chip = () => within(rowOf(composer())).queryByRole('switch', { name: 'Thinking' });
 
 /** Send `text` from the composer, and wait for its run to start and end and for this machine's list to be read after it. */
 async function exchange(user: ReturnType<typeof userEvent.setup>, text: string): Promise<AgentRunRequest> {
@@ -198,7 +204,7 @@ beforeEach(() => {
 afterEach(() => resetRemoteState());
 
 describe("ChatPlace, the Thinking switch on this machine's model", () => {
-  it('is a pressed button named Thinking, after the context ring, that says which way it is and takes the keyboard', async () => {
+  it('is a switch labelled Thinking, after [+] and before the context ring, that says which way it is and takes the keyboard', async () => {
     const user = userEvent.setup();
     fixture.rows[1].push({
       id: 12, conversation_id: 1, role: 'assistant', content: 'It restarts the job.', created_at: '2026-09-01T09:13:00Z',
@@ -207,50 +213,49 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     renderLocal();
     await screen.findByText('It restarts the job.');
 
-    const button = await within(rowOf(composer())).findByRole('button', { name: 'Thinking' });
+    const button = await within(rowOf(composer())).findByRole('switch', { name: 'Thinking' });
     expect(button.tagName).toBe('BUTTON');
+    expect(button).toHaveAttribute('type', 'button');
     expect(button).toBeEnabled();
-    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).toHaveAttribute('aria-checked', 'true');
     expect(button).toHaveAttribute('title', ON_TITLE);
+    expect(button.textContent).toBe('Thinking');
+    // Neutral either way: never ink.
+    expect(button).not.toHaveClass('bg-primary');
     const ring = screen.getByRole('button', { name: /^Context: / });
-    expect(ring.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The ring and the tools button beside it are as they were.
-    expect(ring).toHaveAttribute('title', '8,200 of 32,768 tokens (25%) after the last finished reply.');
-    expect(within(rowOf(composer())).getByRole('button', { name: 'Tools' })).toBeInTheDocument();
+    expect(button.compareDocumentPosition(ring) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(plusButton().compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     button.focus();
     expect(button).toHaveFocus();
     await user.keyboard('{Enter}');
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(chip()).toHaveAttribute('title', OFF_TITLE);
     await user.keyboard(' ');
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('reads "Thinking" while on and "Thinking off" while off, beside another icon, under the one name', async () => {
+  it('keeps the one label either way: its track, not its words or ink, says which', async () => {
     const user = userEvent.setup();
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
     await waitFor(() => expect(chip()).toBeInTheDocument());
 
     const on = chip()!;
-    expect(on).toHaveAttribute('aria-pressed', 'true');
-    expect(on.textContent).toBe('Thinking');
-    const brain = on.querySelector('svg')!.outerHTML;
+    expect(on).toHaveAttribute('aria-checked', 'true');
+    const track = on.querySelector('[aria-hidden] > span')!.className;
 
-    // Switched off it is the same button, named Thinking and not pressed:
-    // its words and its icon say which way it is, not its colours alone.
     await user.click(on);
     const off = chip()!;
     expect(off).toHaveAccessibleName('Thinking');
-    expect(off).toHaveAttribute('aria-pressed', 'false');
-    expect(off.textContent).toBe('Thinking off');
-    expect(off.querySelector('svg')!.outerHTML).not.toBe(brain);
+    expect(off).toHaveAttribute('aria-checked', 'false');
+    expect(off.textContent).toBe('Thinking');
+    expect(off.querySelector('[aria-hidden] > span')!.className).not.toBe(track);
+    expect(off).not.toHaveClass('bg-primary');
 
     await user.click(off);
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
-    expect(chip()!.textContent).toBe('Thinking');
-    expect(chip()!.querySelector('svg')!.outerHTML).toBe(brain);
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
+    expect(chip()!.querySelector('[aria-hidden] > span')!.className).toBe(track);
   });
 
   it.each([
@@ -260,8 +265,8 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     transport.current = pageTransport(model);
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
-    // The model's entry has landed: its quantisation is drawn from the same answer.
-    await within(rowOf(composer())).findByText('Q8_0');
+    // The model's entry has landed: whether it thinks is read from that answer.
+    await waitFor(() => expect(stub().getModel).toHaveBeenCalled());
     await answered(stub().getModel);
     expect(chip()).not.toBeInTheDocument();
   });
@@ -286,11 +291,11 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     fixture.conversations[0] = { ...fixture.conversations[0], settings: { thinking: 'off' } };
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'false'));
     expect(chip()).toHaveAttribute('title', OFF_TITLE);
 
     expect(Object.keys(await exchange(user, 'one'))).not.toContain('thinking');
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
   });
 
   it('says off on the send after a click and never again, then default once after a click back, with the device-wide effort and budget on every send', async () => {
@@ -300,22 +305,22 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     await screen.findByText('What does KeepAlive do?');
     await waitFor(() => expect(chip()).toBeInTheDocument());
     // The device-wide budget says nothing of this chat: the switch shows on.
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
 
     expect(Object.keys(await exchange(user, 'one'))).not.toContain('thinking');
 
     await user.click(chip()!);
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect((await exchange(user, 'two')).thinking).toBe('off');
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(Object.keys(await exchange(user, 'three'))).not.toContain('thinking');
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
 
     await user.click(chip()!);
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
     expect((await exchange(user, 'four')).thinking).toBe('default');
     expect(Object.keys(await exchange(user, 'five'))).not.toContain('thinking');
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
 
     expect(started).toHaveLength(5);
     for (const request of started) {
@@ -328,12 +333,12 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     window.localStorage.setItem(OVERRIDES_KEY, JSON.stringify({ reasoningBudgetTokens: 0 }));
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'true'));
 
     const sent = await exchange(user, 'one');
     expect(sent.reasoning_budget_tokens).toBe(0);
     expect(Object.keys(sent)).not.toContain('thinking');
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
   });
 
   it('a send gglib refused keeps the choice: the next send says it', async () => {
@@ -350,7 +355,7 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     await user.type(composer(), 'one{Enter}');
     await screen.findByText('the model is not ready');
     expect(started).toHaveLength(0);
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     // The text came back to the composer; send it again.
     await waitFor(() => expect(composer()).toHaveValue('one'));
     expect(stub().startAgentRun.getMockImplementation()).toBe(accept);
@@ -398,9 +403,9 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
 
     expect(Object.keys(await sendHeld(user, 'one'))).not.toContain('thinking');
     await user.click(chip()!);
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     await endHeld(end);
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
 
     expect((await exchange(user, 'two')).thinking).toBe('off');
   });
@@ -416,9 +421,9 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     expect((await sendHeld(user, 'one')).thinking).toBe('off');
     // gglib remembers Off from that send; the page has not read its list since.
     await user.click(chip()!);
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
     await endHeld(end);
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
 
     expect((await exchange(user, 'two')).thinking).toBe('default');
     expect(Object.keys(await exchange(user, 'three'))).not.toContain('thinking');
@@ -429,25 +434,25 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     fixture.conversations[1] = { ...fixture.conversations[1], settings: { thinking: 'off' } };
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'true'));
     await user.click(chip()!);
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
 
     await user.click(screen.getByRole('option', { name: /Parsing GGUF/ }));
     await screen.findByText('What is a tensor?');
     // Chat 2 remembers Off of its own; chat 1's click is not what shows here.
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'false'));
     await user.click(chip()!);
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
 
     await user.click(screen.getByRole('option', { name: /launchd KeepAlive/ }));
     await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'false'));
     expect(await exchange(user, 'one')).toMatchObject({ conversation_id: 1, thinking: 'off' });
 
     await user.click(screen.getByRole('option', { name: /Parsing GGUF/ }));
     await screen.findByText('What is a tensor?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'true'));
     expect(await exchange(user, 'two')).toMatchObject({ conversation_id: 2, thinking: 'default' });
   });
 
@@ -455,13 +460,13 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     const user = userEvent.setup();
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'true'));
 
     // A phone's turn switched chat 2 off since this page read its list.
     fixture.conversations = fixture.conversations.map((c) => (c.id === 2 ? { ...c, settings: { thinking: 'off' } } : c));
     await user.click(screen.getByRole('option', { name: /Parsing GGUF/ }));
     await screen.findByText('What is a tensor?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'false'));
     expect(Object.keys(await exchange(user, 'one'))).not.toContain('thinking');
   });
 
@@ -504,14 +509,14 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     fixture.conversations[0] = { ...fixture.conversations[0], settings: { thinking: 'off' } };
     const local = renderLocal();
     await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'false'));
     const end = holdRuns();
 
     // Switched on here, and gglib accepts the run that says so.
     await user.click(chip()!);
     expect((await sendHeld(user, 'one')).thinking).toBe('default');
     await answered(stub().startAgentRun);
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
     expect(fixture.conversations[0].settings?.thinking).toBeUndefined();
 
     // Left for one of the other machine's chats (the sidebar navigates): this
@@ -526,14 +531,14 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     far.unmount();
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'false'));
 
     expect(Object.keys(await exchange(user, 'two'))).not.toContain('thinking');
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(fixture.conversations.find((c) => c.id === 1)?.settings?.thinking).toBe('off');
   });
 
-  it("asks for the model's template support when the tools popout first opens, and shows a note in place of the effort dropdown where the template reads none", async () => {
+  it("asks for the model's template support when the agent limits first open, and shows a note in place of the effort dropdown where the template reads none", async () => {
     const user = userEvent.setup();
     const page = pageTransport();
     page.getModelDetail = vi.fn(async () => ({ reasoningEffortSupport: 'no' }));
@@ -543,16 +548,16 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     await waitFor(() => expect(chip()).toBeInTheDocument());
     expect(page.getModelDetail).not.toHaveBeenCalled();
 
-    const tools = within(rowOf(composer())).getByRole('button', { name: 'Tools' });
-    await user.click(tools);
+    await openLimits(user);
     expect(page.getModelDetail).toHaveBeenCalledTimes(1);
     expect(page.getModelDetail).toHaveBeenCalledWith(7);
     expect(await screen.findByText(/template does not declare reasoning effort/)).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Reasoning Effort' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Reasoning budget')).toBeInTheDocument();
 
-    await user.click(tools);
-    await user.click(tools);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await openLimits(user);
     expect(screen.getByText(/template does not declare reasoning effort/)).toBeInTheDocument();
     expect(page.getModelDetail).toHaveBeenCalledTimes(1);
   });
@@ -564,13 +569,13 @@ describe("ChatPlace, the Thinking switch on the paired machine's model", () => {
     connect();
     renderPaired();
     await screen.findByText('What does KeepAlive do?');
-    const button = await within(rowOf(composer())).findByRole('button', { name: 'Thinking' });
-    expect(button).toHaveAttribute('aria-pressed', 'true');
+    const button = await within(rowOf(composer())).findByRole('switch', { name: 'Thinking' });
+    expect(button).toHaveAttribute('aria-checked', 'true');
     // Nothing of this machine's catalogue was asked for it.
     expect(stub().getModel).not.toHaveBeenCalled();
 
     await user.click(button);
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(await exchange(user, 'one')).toMatchObject({ far: farRef, thinking: 'off' });
     const next = await exchange(user, 'two');
     expect(next).toMatchObject({ far: farRef });
@@ -582,7 +587,7 @@ describe("ChatPlace, the Thinking switch on the paired machine's model", () => {
     fixture.conversations[0] = { ...fixture.conversations[0], settings: { thinking: 'off' } };
     renderPaired();
     await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'false'));
   });
 
   it('draws none where that machine lists the model without the capability, as a gglib from before the switch does', async () => {
@@ -590,9 +595,9 @@ describe("ChatPlace, the Thinking switch on the paired machine's model", () => {
     farModels = [farEntry('qwen3', 3, { capabilities: ['embeddings'] }), farEntry('other', 4, { capabilities: ['reasoning'] })];
     renderPaired();
     await screen.findByText('What does KeepAlive do?');
-    // The rows have landed: the attach button, offered until they do, is read
-    // from the same list and withdrawn for a model that reads no images.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach an image' })).toBeDisabled());
+    // The rows have landed: Add image…, offered until they do, is read from
+    // the same list and withdrawn for a model that reads no images.
+    await waitFor(() => expect(plusItem('Add image…')).toBeDisabled());
     await answered(stub().listPairedModels);
     expect(chip()).not.toBeInTheDocument();
   });
@@ -623,7 +628,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
   it("is shown by the row its machine lists for the model the chat last ran on, though this machine's model does not think", async () => {
     transport.current = pageTransport({ tags: [] });
     await openFar();
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
     expect(chip()).toHaveAttribute('title', ON_TITLE);
   });
 
@@ -633,9 +638,9 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
 
     expect(await farExchange(user, 'one')).toEqual([1, expect.stringMatching(/^chat-/), 'one', [], undefined, false, undefined]);
     await user.click(chip()!);
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(await farExchange(user, 'two')).toEqual([1, expect.stringMatching(/^chat-/), 'two', [], 'off', false, undefined]);
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(await farExchange(user, 'three')).toEqual([1, expect.stringMatching(/^chat-/), 'three', [], undefined, false, undefined]);
     // No run was started on this machine for any of them.
     expect(started).toEqual([]);
@@ -645,13 +650,13 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
     const user = userEvent.setup();
     farSettings = { model_name: 'qwen3-8b', thinking: 'off' };
     await openFar();
-    expect(chip()).toHaveAttribute('aria-pressed', 'false');
+    expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(chip()).toHaveAttribute('title', OFF_TITLE);
 
     await user.click(chip()!);
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
     expect((await farExchange(user, 'one'))[4]).toBe('default');
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
     expect((await farExchange(user, 'two'))[4]).toBeUndefined();
   });
 
@@ -700,11 +705,11 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
       const first: ConversationSettings = { model_name: 'qwen3-8b', ...(remembers && { thinking: remembers }) };
       const there = twoFarChats({ ...first });
       await openFar();
-      await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', pressed));
+      await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', pressed));
 
       // Switched here, and that machine accepts the turn that says so.
       await user.click(chip()!);
-      expect(chip()).toHaveAttribute('aria-pressed', switched);
+      expect(chip()).toHaveAttribute('aria-checked', switched);
       await user.type(composer(), 'one{Enter}');
       await waitFor(() => expect(stub().addFarTurn).toHaveBeenCalledTimes(1));
       expect(stub().addFarTurn.mock.calls[0][4]).toBe(said);
@@ -712,7 +717,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
       expect(there.settings[1].thinking).toBe(said === 'off' ? 'off' : undefined);
       await screen.findByRole('button', { name: 'Stop' });
       // It still shows while the reply is written, with the chat not read since.
-      expect(chip()).toHaveAttribute('aria-pressed', switched);
+      expect(chip()).toHaveAttribute('aria-checked', switched);
 
       // Left while the reply is written: the chat is not read when it ends.
       const reads = () => stub().openFarChat.mock.calls.filter((call) => call[0] === 1).length;
@@ -728,11 +733,11 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
       await screen.findByText('Why did the build break?');
       await waitFor(() => expect(reads()).toBe(before + 1));
       await answered(stub().openFarChat);
-      await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', pressed));
+      await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', pressed));
 
       // The next turn, the switch untouched, says nothing: what the phone chose stands.
       expect((await farExchange(user, 'two'))[4]).toBeUndefined();
-      expect(chip()).toHaveAttribute('aria-pressed', pressed);
+      expect(chip()).toHaveAttribute('aria-checked', pressed);
       expect(there.settings[1].thinking).toBe(remembers);
     },
   );
@@ -740,7 +745,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
   it("is shown by the last reply's model for a chat whose settings name none", async () => {
     farSettings = undefined;
     await openFar();
-    expect(chip()).toHaveAttribute('aria-pressed', 'true');
+    expect(chip()).toHaveAttribute('aria-checked', 'true');
   });
 
   it('draws none for a far chat that has never run, and one appears with its first reply', async () => {
@@ -757,7 +762,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
       return agentRun(runId, id, 'queued');
     });
     expect((await farExchange(user, 'one'))[4]).toBeUndefined();
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'true'));
   });
 
   it('draws none where that machine lists no model as thinking, and its turns say nothing of it', async () => {
@@ -769,10 +774,10 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
     expect((await farExchange(user, 'one'))[4]).toBeUndefined();
   });
 
-  it('asks this machine nothing about a template for the tools popout, which says where the effort level applies', async () => {
+  it('asks this machine nothing about a template for the agent limits, which say where the effort level applies', async () => {
     const user = userEvent.setup();
     await openFar();
-    await user.click(within(rowOf(composer())).getByRole('button', { name: 'Tools' }));
+    await openLimits(user);
     expect(screen.getByRole('combobox', { name: 'Reasoning Effort' })).toBeInTheDocument();
     expect(screen.getByText('Applies to models whose template declares reasoning effort; others ignore it.')).toBeInTheDocument();
     expect(stub().getModelDetail).not.toHaveBeenCalled();

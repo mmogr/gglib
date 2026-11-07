@@ -14,6 +14,8 @@
  * A chat on this machine's model needs its port: the server registry's, or
  * the handoff's, since the registry may not have heard of it yet; with
  * neither, the model is not running, and the address goes to its inspector.
+ * Once open, the chat keeps the last port it had: a model unloaded or
+ * crashed while it is open leaves it open, its composer saying so.
  * A chat on the paired machine's model is `PairedChat`. One route serves
  * `/chat/new` and `/chat/:id`, and the place is keyed by its model, so the
  * address a first send replaces keeps the page. Leaving keeps the model
@@ -86,13 +88,20 @@ interface LocalChatProps {
 }
 
 function LocalChat({ modelId, conversationId, handoff, onOpened, onDeleted }: LocalChatProps) {
+  const navigate = useNavigate();
   const { servers, stopServer } = useServers();
   const server = servers.find((s) => s.modelId === modelId);
   const { startingModel, switchTo } = useChatSwitch(servers);
   const inLibrary = useModel(modelId);
   const handed = handoff?.modelId === modelId ? handoff : null;
 
-  const port = server?.port ?? handed?.port;
+  // The port last served on is kept: a model unloaded or crashed mid-chat
+  // keeps the chat open, its composer saying so. Only a chat opened on a
+  // model nothing serves goes to its inspector, where Load is.
+  const live = server?.port ?? handed?.port;
+  const [held, setHeld] = useState(live);
+  if (live !== undefined && live !== held) setHeld(live);
+  const port = live ?? held;
   if (port === undefined) return <Navigate to={paths.model(modelId)} replace />;
 
   return (
@@ -107,6 +116,9 @@ function LocalChat({ modelId, conversationId, handoff, onOpened, onDeleted }: Lo
       onUnloadModel={() => stopServer(modelId)}
       onOpened={onOpened}
       onDeleted={onDeleted}
+      onShowModel={() => navigate(paths.model(modelId))}
+      onShowLog={() => navigate(paths.log(modelId))}
+      onOpenFar={(id) => navigate(paths.newChat({ far: id }))}
     />
   );
 }

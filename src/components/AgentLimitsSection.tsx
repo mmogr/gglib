@@ -1,16 +1,20 @@
 /**
- * Agent limits inside the Tools popover — the GUI surface for
- * `AgentRequestConfig`'s BYO-MCP knobs. Values persist client-side
- * (`services/agentOverrides`), apply to every chat sent from this client,
- * and are read fresh at each send.
+ * Agent limits — the GUI surface for `AgentRequestConfig`'s BYO-MCP knobs.
+ * Values persist client-side (`services/agentOverrides`), apply to every
+ * chat sent from this client, and are read fresh at each send.
+ *
+ * Interim home: the composer's `[+]` › Tools ▸ › "Agent limits…" opens it in
+ * a small sheet (`ChatMessagesPanel/components/AgentLimitsSheet`) until
+ * Settings › Tools › Agent limits takes it (S1 `feat(gui)/settings-place`,
+ * S2 `feat(gui)/settings-tools`).
  */
 
 import { FC, useState } from 'react';
-import { Input } from '../ui/Input';
-import { Checkbox } from '../ui/Checkbox';
-import { ReasoningEffortField } from '../SamplingForm/ReasoningEffortField';
-import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
-import type { TemplateSupport } from '../../types';
+import { Input } from './ui/Input';
+import { Checkbox } from './ui/Checkbox';
+import { ReasoningEffortField } from './SamplingForm/ReasoningEffortField';
+import { INFERENCE_PARAMS } from '../constants/inferenceDefaults';
+import type { TemplateSupport } from '../types';
 import {
   MAX_OBSERVATION_STEPS_CEILING,
   MAX_PARALLEL_TOOLS_CEILING,
@@ -19,7 +23,7 @@ import {
   readStoredAgentOverrides,
   writeStoredAgentOverrides,
   type StoredAgentOverrides,
-} from '../../services/agentOverrides';
+} from '../services/agentOverrides';
 
 interface NumberRowProps {
   id: string;

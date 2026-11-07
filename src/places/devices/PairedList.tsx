@@ -29,7 +29,7 @@ import { getTransport } from '../../services/transport';
 import type { RemoteDevice, RemoteStatus } from '../../services/transport/types/remote';
 import { formatError } from '../../utils/errors';
 import { Group, Note } from '../library/Group';
-import { Menu } from '../library/Menu';
+import { Menu } from '../../components/ui/Menu';
 import type { PageActions } from './pageActions';
 
 /**

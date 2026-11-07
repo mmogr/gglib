@@ -1,6 +1,7 @@
 /**
- * The chat page's folder, on this machine's model: the chat's folder by its
- * name in the composer's margin, beside Thinking; a run says the folder only
+ * The chat page's folder, on this machine's model: chosen from `[+]` › Use
+ * a folder…, then a chip by its name in the composer, drawn only while one
+ * is set, × to clear it; a run says the folder only
  * when it changes it, the path chosen or `""` for Clear; and a run refused
  * for its folder hands the message back, says why above the composer, and
  * leaves the chip a warning until another folder is chosen or it is cleared.
@@ -18,7 +19,7 @@ import type { ConversationSettings } from '../../../../src/services/transport';
 import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
 import { TransportError } from '../../../../src/services/transport/errors';
 import { FOLDER_GONE } from '../../../../src/hooks/useChatFolder';
-import { agentRun, chatTransport, conversation, wrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, plusItem, wrapper, type ChatFixture } from './chatPlaceHarness';
 import { guiModel } from '../../fixtures/model';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
@@ -82,7 +83,7 @@ function renderLocal() {
 }
 
 const composer = () => screen.getByRole('textbox', { name: 'Message' });
-const rowOf = (element: HTMLElement) => element.closest('.grid') as HTMLElement;
+const rowOf = (element: HTMLElement) => element.closest('form') as HTMLElement;
 const margin = () => within(rowOf(composer()));
 
 /** Send `text`, and wait for its run to start and end and for the list to be read after it. */
@@ -120,11 +121,12 @@ describe('ChatPlace, the chat\'s folder', () => {
 
     expect((await exchange(user, 'first')).folder).toBeUndefined();
 
-    await user.click(await margin().findByRole('button', { name: 'Folder' }));
+    // No chip until one is set.
+    expect(margin().queryByRole('button', { name: 'Clear the folder' })).not.toBeInTheDocument();
+    await user.click(plusItem('Use a folder…'));
     await user.type(screen.getByRole('textbox', { name: 'Folder path' }), '/home/m/src/gglib{Enter}');
     expect(margin().getByText('gglib')).toBeInTheDocument();
-    // A chat with a folder has tools to speak of.
-    expect(margin().getByText('Tools active')).toBeInTheDocument();
+    expect(margin().getByText('gglib').closest('[title]')?.getAttribute('title')).toMatch(/^This chat's file tools read \/home\/m\/src\/gglib, read-only\./);
 
     expect((await exchange(user, 'read the README')).folder).toBe('/home/m/src/gglib');
     expect(fixture.conversations.find((c) => c.id === 1)?.settings?.folder).toBe('/home/m/src/gglib');
@@ -140,7 +142,9 @@ describe('ChatPlace, the chat\'s folder', () => {
     expect(await margin().findByText('gglib')).toBeInTheDocument();
 
     await user.click(margin().getByRole('button', { name: 'Clear the folder' }));
-    expect(margin().getByRole('button', { name: 'Folder' })).toBeInTheDocument();
+    // Unset, the chip goes.
+    expect(margin().queryByText('gglib')).not.toBeInTheDocument();
+    expect(margin().queryByRole('button', { name: 'Clear the folder' })).not.toBeInTheDocument();
     expect((await exchange(user, 'no files now')).folder).toBe('');
     expect(fixture.conversations.find((c) => c.id === 1)?.settings?.folder).toBeUndefined();
     expect((await exchange(user, 'still none')).folder).toBeUndefined();

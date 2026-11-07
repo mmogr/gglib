@@ -60,6 +60,9 @@ A chat is its own address: the conversation list (left) and the messages panel (
   - The title ▾ (Rename, Generate title, System prompt…, Export, Start over, Delete…) and the "Custom system prompt · Edit" line
   - **Message Editing**: Inline edit of a question (Send, asked again) or a reply (Save, kept as written); an edit that would rewrite a saved reply is made on a new branch of the chat, Branch from here on every turn, the options where a chat's branches part shown in the turn's margin, and Retry answering a chat that ends in a question (ADR 0017)
   - **Message Deletion**: Delete button with cascade deletion of subsequent messages
+  - The composer: one `[+]` menu (Add image…, Use a folder…, Draw a picture, Tools ▸), chips only when set, a labelled Thinking toggle, the context ring, the model picker ▾, and Send / Stop
+- **`AgentLimitsSection.tsx`**: The device-wide agent limits and reasoning controls (`services/agentOverrides`), opened from the composer's Tools ▸ › Agent limits… in a sheet: an interim home until Settings › Tools › Agent limits (S1 `feat(gui)/settings-place`, S2 `feat(gui)/settings-tools`)
+- **`ContextUsageDonut.tsx`**: A slot's context as a donut with its figure, for `proxy/SlotCard` (the tray and the live dashboard) until those go (T3, G1); the composer's ring is its own
 
 ### Server Management
 - **`ConnectClient.tsx`**: Connect a client on the endpoint place: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker, and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable

@@ -30,7 +30,7 @@ import type { RecommendationDto } from '../../../types/setup';
 import { formatError } from '../../../utils/errors';
 import { formatMemorySize, formatNumber, formatParamCount } from '../../../utils/format';
 import { Group, Note } from '../Group';
-import { Menu } from '../Menu';
+import { Menu } from '../../../components/ui/Menu';
 import { ModelListSkeleton } from '../ModelListSkeleton';
 import { ModelRow } from '../ModelRow';
 import { HF_SORTS } from './useHuggingFaceSearch';

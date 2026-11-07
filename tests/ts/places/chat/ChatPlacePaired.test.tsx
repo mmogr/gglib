@@ -13,9 +13,9 @@
  * machine, no picker offers this machine's models in its place, and a
  * conversation made here is made for the far model.
  *
- * Its Draw button is greyed: this machine is asked whether a message can
- * draw and told the model is the other machine's, and its reason is the
- * button's title.
+ * Its `[+]` › Draw a picture is greyed: this machine is asked whether a
+ * message can draw and told the model is the other machine's, and its
+ * reason is the item's title.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -80,6 +80,7 @@ vi.mock('../../../../src/services/transport', async () => {
 });
 
 import ChatPlace from '../../../../src/places/chat/ChatPlace';
+import { plusItem } from './chatPlaceHarness';
 import { ToastProvider, useToastContext } from '../../../../src/contexts/ToastContext';
 import { ConfirmProvider } from '../../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../../src/contexts/SettingsContext';
@@ -131,17 +132,16 @@ describe('ChatPlace, paired', () => {
     render(<ChatPlace paired={paired} modelName="qwen3" conversationId={1} />, { wrapper });
     await screen.findByText('qwen3 on desk');
 
-    const draw = await screen.findByRole('button', { name: 'Draw' });
-    await waitFor(() => expect(draw).toHaveAttribute('title', FAR_MODEL_REASON));
-    expect(draw).toBeDisabled();
-    expect(draw).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() => expect(plusItem('Draw a picture')).toHaveAttribute('title', FAR_MODEL_REASON));
+    expect(plusItem('Draw a picture')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: "Don't draw" })).not.toBeInTheDocument();
     expect(drawingAvailability).toHaveBeenLastCalledWith('this', { far: true, callsTools: null });
   });
 
   it('offers no picker, since the session cannot move to this machine', async () => {
     render(<ChatPlace paired={paired} modelName="qwen3" conversationId={1} />, { wrapper });
     await screen.findByText('qwen3 on desk');
-    expect(screen.queryByRole('combobox', { name: 'Model' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
   });
 
   it("an empty chat's first send makes its conversation for the far model, and hands it up", async () => {

@@ -21,7 +21,7 @@ import {
   BranchingContext,
   BranchEnd,
 } from './components';
-import type { MessageActionsContextValue, ModelChoice } from './components';
+import type { MessageActionsContextValue, ModelChoice, ModelGone } from './components';
 import {
   useTitleGeneration,
   useMessageDeletion,
@@ -98,6 +98,16 @@ interface ChatMessagesPanelProps {
   draw?: DrawSwitch;
   /** The frames the run's tools are making, by call, for the reply that shows them. */
   previews?: RunPreviews;
+  /** The paired machine the chat's model is on (a paired or a far chat), for the composer's away line. */
+  deskName?: string;
+  /** This machine's model was unloaded or crashed: the composer is replaced by a line that says so. */
+  modelGone?: ModelGone | null;
+  /** Open the model's inspector (the picker's Show <model>). */
+  onShowModel?: () => void;
+  /** Open the model's log (a crash's Show log). */
+  onShowLog?: () => void;
+  /** Open a new chat on the paired machine's model, from an empty chat's picker. */
+  onOpenFar?: (id: number) => void;
 }
 
 /** The notebook's column: the width its rows are laid out in. */
@@ -138,6 +148,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   branching,
   draw,
   previews = NO_PREVIEWS,
+  deskName,
+  modelGone = null,
+  onShowModel,
+  onShowLog,
+  onOpenFar,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   // The system prompt's editor, opened from its line or from the title ▾.
@@ -256,7 +271,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           />
         )}
       </ChatPanelHeader>
-      <ChatStatusBanners chatError={chatError} isServerConnected={isServerConnected} />
+      <ChatStatusBanners chatError={chatError} />
     </>
   );
 
@@ -311,6 +326,12 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       thinking={thinking}
                       folder={folder}
                       draw={draw}
+                      far={source === 'far'}
+                      deskName={deskName}
+                      modelGone={modelGone}
+                      onShowModel={onShowModel}
+                      onShowLog={onShowLog}
+                      onOpenFar={onOpenFar}
                     />
                   </ThreadPrimitive.Root>
                 </ThinkingTimingProvider>

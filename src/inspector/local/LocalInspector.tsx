@@ -34,7 +34,7 @@ import { useSettings } from '../../hooks/useSettings';
 import type { ServerViewModel } from '../../hooks/useServers';
 import { useEngineInstall } from '../../places/library/engineInstall';
 import { modelFacts } from '../../places/library/groups';
-import { Menu, type MenuItem } from '../../places/library/Menu';
+import { Menu, type MenuItem } from '../../components/ui/Menu';
 import { refreshModels } from '../../services/modelEvents';
 import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';

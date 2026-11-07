@@ -12,7 +12,7 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ChatMessage } from '../../../../src/services/transport';
 import type { HubChat } from '../../../../src/types/generated/HubChat';
-import { agentRun, chatTransport, conversation, framesThenWait, wrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, framesThenWait, plusItem, wrapper, type ChatFixture } from './chatPlaceHarness';
 import { farEntry, pairedModels } from '../../fixtures/fakeFarDaemon';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../../src/services/remoteRegistry';
 import { resetModelLibrary } from '../../../../src/services/modelRegistry';
@@ -164,14 +164,14 @@ describe('ChatPlace, the far machine’s chats', () => {
     const made = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:far-shot');
     joined();
     const local = renderPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach an image' })).toBeDisabled());
+    await waitFor(() => expect(plusItem('Add image…')).toBeDisabled());
 
     local.unmount();
     renderDesk();
 
     expect(await screen.findByRole('img', { name: 'Image, 640 × 480' })).toHaveAttribute('src', 'blob:far-shot');
     expect(far.fetchAttachmentBlob).toHaveBeenCalledWith('far', shot.id);
-    expect(screen.getByRole('button', { name: 'Attach an image' })).toBeEnabled();
+    expect(plusItem('Add image…')).toBeEnabled();
     made.mockRestore();
   });
 
@@ -189,7 +189,7 @@ describe('ChatPlace, the far machine’s chats', () => {
   it('a far chat shows the context ring where the far machine saved its context size', async () => {
     await openFarWith({ promptTokens: 8000, completionTokens: 200, contextSize: 32768 });
     const ring = screen.getByRole('button', { name: 'Context: 25 percent of context used' });
-    expect(ring).toHaveAttribute('title', '8,200 of 32,768 tokens (25%) after the last finished reply.');
+    expect(ring).toHaveAttribute('title', 'Context: 8,200 of 32,768 used');
   });
 
   it('a far chat whose rows carry counts and no size shows no ring', async () => {
@@ -204,7 +204,7 @@ describe('ChatPlace, the far machine’s chats', () => {
     await screen.findByText('Why did the build break?');
 
     expect(screen.queryByRole('button', { name: /Unload/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Model' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
   });
 
   it('this machine’s own chat still says "You"', async () => {

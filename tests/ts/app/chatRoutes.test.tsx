@@ -5,7 +5,9 @@
  * `?model=` or `?far=`, else on the last model used, the default, or the
  * first loaded, and the first send's conversation replaces the address
  * without remounting the place; a local chat on a model nothing serves goes
- * to its inspector; `/chat/far/:id` is the paired machine's own chat.
+ * to its inspector, and one whose model stops while it is open stays; the
+ * composer's Show <model>, Show log and a paired model's new chat navigate;
+ * `/chat/far/:id` is the paired machine's own chat.
  *
  * Each test serves its own model ids: the server registry outlives a test.
  */
@@ -51,10 +53,13 @@ interface Placard {
   desk?: { machineName: string };
   onOpened?: (id: number) => void;
   onDeleted?: () => void;
+  onShowModel?: () => void;
+  onShowLog?: () => void;
+  onOpenFar?: (id: number) => void;
 }
 // The place is a placard naming what it was given, with the two calls it makes up.
 vi.mock('../../../src/places/chat/ChatPlace', () => ({
-  default: function Place({ modelName, conversationId, serverPort, paired, desk, onOpened, onDeleted }: Placard) {
+  default: function Place({ modelName, conversationId, serverPort, paired, desk, onOpened, onDeleted, onShowModel, onShowLog, onOpenFar }: Placard) {
     useEffect(() => {
       mounts.count += 1;
     }, []);
@@ -71,6 +76,9 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
         {/* A run's end opens the chat it ended in, the one already open. */}
         <button onClick={() => conversationId !== null && onOpened?.(conversationId)}>run ends</button>
         <button onClick={() => onDeleted?.()}>delete it</button>
+        {onShowModel && <button onClick={onShowModel}>show the model</button>}
+        {onShowLog && <button onClick={onShowLog}>show its log</button>}
+        {onOpenFar && <button onClick={() => onOpenFar(7)}>a desk model</button>}
       </div>
     );
   },
@@ -148,6 +156,45 @@ describe('the chat routes', () => {
     const { at } = renderApp('/chat/3');
     await waitFor(() => expect(at()).toBe('/models/23'));
     expect(screen.getByRole('main', { name: 'Library' })).toBeInTheDocument();
+  });
+
+  it('a chat whose model stops while it is open stays open on the port it had', async () => {
+    serving(25, 5025, 'qwen3-8b');
+    daemon.chats = [chat(3, 25)];
+    const { at } = renderApp('/chat/3');
+    expect(await page()).toHaveAttribute('data-port', '5025');
+    const mounted = mounts.count;
+
+    stop(25);
+    served.splice(served.indexOf(25), 1);
+
+    expect(at()).toBe('/chat/3');
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5025');
+    expect(mounts.count).toBe(mounted);
+  });
+
+  it("a local chat's Show <model> opens its inspector, Show log its log, and a paired model a new chat on it", async () => {
+    const user = userEvent.setup();
+    serving(26, 5026);
+    daemon.chats = [chat(3, 26)];
+    const view = renderApp('/chat/3');
+    await page();
+    await user.click(screen.getByRole('button', { name: 'show the model' }));
+    await waitFor(() => expect(view.at()).toBe('/models/26'));
+    view.unmount();
+
+    const again = renderApp('/chat/3');
+    await page();
+    await user.click(screen.getByRole('button', { name: 'show its log' }));
+    await waitFor(() => expect(again.at()).toBe('/models/26/log'));
+    again.unmount();
+
+    act(() => applyRemoteStatus(connectedTo(DESK, 'desk')));
+    const third = renderApp('/chat/3');
+    await page();
+    await user.click(screen.getByRole('button', { name: 'a desk model' }));
+    await waitFor(() => expect(third.at()).toBe('/chat/new?far=7'));
+    expect(await page()).toHaveAttribute('data-paired', 'desk:7');
   });
 
   it('a conversation the daemon does not list, read again, opens an empty chat', async () => {

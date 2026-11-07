@@ -15,7 +15,7 @@ import { Icon } from '../../components/ui/Icon';
 import { Input } from '../../components/ui/Input';
 import { paths, settingsAt } from '../../app/paths';
 import type { LibrarySort, SortKey } from './groups';
-import { Menu } from './Menu';
+import { Menu } from '../../components/ui/Menu';
 
 const SORTS: { key: SortKey; label: string }[] = [
   { key: 'name', label: 'Name' },

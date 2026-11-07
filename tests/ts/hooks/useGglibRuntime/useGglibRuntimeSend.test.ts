@@ -83,7 +83,7 @@ describe('useGglibRuntime send', () => {
     expect(daemon.count('PUT', '/api/messages')).toBe(0);
   });
 
-  it('names no iteration limit, alone or beside the limits of the Tools popover: the daemon takes the stored one', async () => {
+  it('names no iteration limit, alone or beside the agent limits: the daemon takes the stored one', async () => {
     const hook = await mount(local);
     send(hook, 'hello');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));

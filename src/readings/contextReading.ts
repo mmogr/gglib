@@ -87,6 +87,11 @@ export function spokenReading(reading: ContextReading): string {
   return `${figure} percent of context used${near}`;
 }
 
+/** The ring's tooltip: "Context: 2,140 of 32,768 used". */
+export function contextTooltip(reading: ContextReading): string {
+  return `Context: ${formatCount(reading.used)} of ${formatCount(reading.size)} used`;
+}
+
 /** The detail's sentences, in the order they are read. */
 export function contextLines(reading: ContextReading): string[] {
   const lines = [

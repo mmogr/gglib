@@ -1,6 +1,7 @@
 /**
- * The composer's model picker: the model name in the composer margin, which
- * moves the chat to another model without leaving the conversation.
+ * The composer's model picker ▾: the model's name beside Send, a menu of
+ * Loaded, On this Mac and the paired machine's models, which moves the chat
+ * to another model without leaving the conversation.
  *
  * The page does not move itself: it hands the choice and the open
  * conversation up, and the chat route remounts it on the new
@@ -9,11 +10,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
-import { chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
+import { chatTransport, conversation, modelPicker, pickModel, pickerGroup, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
 import { guiModel } from '../../fixtures/model';
 import { applyLibraryRead, resetModelLibrary } from '../../../../src/services/modelRegistry';
 
@@ -87,17 +88,19 @@ afterEach(() => {
 });
 
 describe('ChatPlace, model picker', () => {
-  it('lists the servers running here, then the models that are not', async () => {
+  it('lists the models loaded here, the chat\'s own ticked, then the ones on this Mac that are not', async () => {
+    const user = userEvent.setup();
     renderPage();
-    // Queried afresh each time: the composer is remounted as the
-    // conversation's messages load, and a held element goes stale.
-    const picker = () => screen.getByRole('combobox', { name: 'Model' });
-    const names = (group: string) =>
-      within(within(picker()).getByRole('group', { name: group })).getAllByRole('option').map((o) => o.textContent);
+    // Once the conversation is drawn: the composer is remounted as its
+    // messages load, and a menu opened before then is gone.
+    await waitFor(() => expect(screen.getByRole('option', { name: /launchd KeepAlive/ })).toHaveAttribute('aria-selected', 'true'));
+    await screen.findByRole('heading', { name: 'launchd KeepAlive' });
+    await waitFor(() => expect(modelPicker()).toHaveTextContent('Qwen3.8-27B'));
 
-    await waitFor(() => expect(names('Not running')).toEqual(['gemma-3-12b']));
-    expect(names('Running')).toEqual(['llama-3.2-3b']);
-    expect(picker()).toHaveDisplayValue('Qwen3.8-27B');
+    expect(await pickerGroup(user, 'On this Mac')).toEqual(['gemma-3-12b']);
+    expect(await pickerGroup(user, 'Loaded')).toEqual(['Qwen3.8-27B', 'llama-3.2-3b']);
+    expect(screen.getByRole('menuitemradio', { name: 'Qwen3.8-27B' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menuitemradio', { name: 'llama-3.2-3b' })).toHaveAttribute('aria-checked', 'false');
   });
 
   it('hands up the chosen model, and the conversation open when the switch lands', async () => {
@@ -108,7 +111,7 @@ describe('ChatPlace, model picker', () => {
     await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
     await selected(/Parsing GGUF/);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'llama-3.2-3b');
+    await pickModel(user, 'llama-3.2-3b');
 
     expect(onSwitchModel).toHaveBeenCalledTimes(1);
     const [choice, context] = onSwitchModel.mock.calls[0];
@@ -125,30 +128,30 @@ describe('ChatPlace, model picker', () => {
     const user = userEvent.setup();
     onSwitchModel.mockRejectedValueOnce(new Error('not enough memory'));
     renderPage();
-    const picker = () => screen.getByRole('combobox', { name: 'Model' });
     // The composer is remounted as the conversation's messages load, so the
     // pick waits for one to be open, as the test above does.
     await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
     await waitFor(() => expect(screen.getByRole('option', { name: /Parsing GGUF/ })).toHaveAttribute('aria-selected', 'true'));
-    await waitFor(() => expect(within(picker()).getByRole('option', { name: 'gemma-3-12b' })).toBeInTheDocument());
+    await screen.findByRole('heading', { name: 'Parsing GGUF' });
 
-    await user.selectOptions(picker(), 'gemma-3-12b');
+    await pickModel(user, 'gemma-3-12b');
 
     await waitFor(() =>
       expect(screen.getByTestId('toasts')).toHaveTextContent('Could not start gemma-3-12b: not enough memory'),
     );
-    expect(picker()).toHaveDisplayValue('Qwen3.8-27B');
-    expect(picker()).toBeEnabled();
+    expect(modelPicker()).toHaveTextContent('Qwen3.8-27B');
+    expect(modelPicker()).toBeEnabled();
   });
 
   it('lists the current model once, though it is running and registered', async () => {
     serve(10, 'Qwen3.8-27B', 'running');
     applyLibraryRead({ models: [guiModel({ id: 10, name: 'Qwen3.8-27B' }), guiModel({ id: 9, name: 'gemma-3-12b' })] });
     try {
+      const user = userEvent.setup();
       renderPage(undefined, 10);
-      const picker = () => screen.getByRole('combobox', { name: 'Model' });
-      await waitFor(() => expect(within(picker()).getByRole('option', { name: 'gemma-3-12b' })).toBeInTheDocument());
-      expect(within(picker()).getAllByRole('option', { name: 'Qwen3.8-27B' })).toHaveLength(1);
+      await screen.findByRole('heading', { name: 'launchd KeepAlive' });
+      expect(await pickerGroup(user, 'On this Mac')).toEqual(['gemma-3-12b']);
+      expect(screen.getAllByRole('menuitemradio', { name: 'Qwen3.8-27B' })).toHaveLength(1);
     } finally {
       serve(10, 'Qwen3.8-27B', 'stopped');
     }
@@ -170,7 +173,7 @@ describe('ChatPlace, model picker', () => {
     // Once the saved turn is drawn, the thread has stopped remounting.
     await screen.findByText('What is a GGUF?');
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'half a thought');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'llama-3.2-3b');
+    await pickModel(user, 'llama-3.2-3b');
     expect(onSwitchModel.mock.calls[0][1]().draft).toEqual({ text: 'half a thought', images: [] });
     page.unmount();
 
@@ -194,8 +197,8 @@ describe('ChatPlace, model picker', () => {
       { wrapper },
     );
     const locked = async () => {
-      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Model' })).toBeDisabled());
-      expect(screen.getByText('Starting gemma-3-12b…')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText('Loading gemma-3-12b…')).toHaveAttribute('role', 'status'));
+      expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
     };
     await locked();
 

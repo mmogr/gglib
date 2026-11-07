@@ -15,7 +15,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │                       └── ThreadPrimitive   ← @assistant-ui message list, one notebook column
     │                             ├── ChatPanelHeader     ← head row: the title ▾, rename
     │                             │     └── SystemPromptLine  (own draft state)
-    │                             ├── ChatStatusBanners   ← chat error / server-down warning
+    │                             ├── ChatStatusBanners   ← the chat error
     │                             ├── RunPreviewsProvider ← the run's preview frames, for the replies
     │                             │     └── MessageBubbles      ← each turn a TurnRow: margin + body
     │                             │           ├── TurnMargin (who; figures or arrival, from `readings/turnFigures`)
@@ -24,7 +24,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │                             │           └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress
     │                             ├── BranchEnd           ← where other branches go on past the last message
     │                             ├── Unanswered          ← Retry, under a chat that ends in a question
-    │                             └── ComposerFooter      ← model, tools, context ring, Thinking switch, folder chip and Draw button; input, send / stop
+    │                             └── ComposerFooter      ← tiles, input; [+] menu, chips, Thinking, ring, model ▾, Send / Stop; or ModelGoneLine
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 
@@ -42,8 +42,8 @@ On this machine's chats a question and a reply can each be edited, a reply regen
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptLine`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
+| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptLine`, `ChatStatusBanners`, `ComposerFooter` with `PlusMenu`, `ModelPicker`, `ModelGoneLine`, `AgentLimitsSheet`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders; `RunPreviewsContext` — the run's preview frames, reaching a reply beside its message and never in it |
-| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading`, `usePictureRedraw`, `usePictureKeeping` |
+| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading`, `useModelLoadWait`, `usePictureRedraw`, `usePictureKeeping` |
 
 <!-- module-docs:end -->
