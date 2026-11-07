@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.31.0-rc.3](https://github.com/mmogr/gglib/compare/v0.31.0-rc.2...v0.31.0-rc.3) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gui:** the inspector also holds a far model, a Hugging Face repo, and a loaded model's log ([#1795](https://github.com/mmogr/gglib/issues/1795))
+* **gui:** verify and update results appear in Details ([#1794](https://github.com/mmogr/gglib/issues/1794))
+* **gui:** Load with options is a sheet, and the Serve modal is gone ([#1792](https://github.com/mmogr/gglib/issues/1792))
+* **gui:** the inspector says how a model runs and keeps the rest under Details ([#1791](https://github.com/mmogr/gglib/issues/1791))
+
+### What gglib now does
+
+* **gui:** Load with options is a sheet, and the Serve modal is gone ([#1792](https://github.com/mmogr/gglib/issues/1792)) ([cf9a3a8](https://github.com/mmogr/gglib/commit/cf9a3a89f68e06a7ce9f05a65945c09a1676eadb))
+* **gui:** the inspector also holds a far model, a Hugging Face repo, and a loaded model's log ([#1795](https://github.com/mmogr/gglib/issues/1795)) ([3988ea7](https://github.com/mmogr/gglib/commit/3988ea70f1766038a442480dc8736b70376368e0))
+* **gui:** the inspector says how a model runs and keeps the rest under Details ([#1791](https://github.com/mmogr/gglib/issues/1791)) ([a0d720f](https://github.com/mmogr/gglib/commit/a0d720f7fb4ce6e15107e39413683953edd96474))
+* **gui:** verify and update results appear in Details ([#1794](https://github.com/mmogr/gglib/issues/1794)) ([a70c815](https://github.com/mmogr/gglib/commit/a70c8158caeff6680976cf03a13ec3dcc7964292))
+
 ## [0.31.0-rc.2](https://github.com/mmogr/gglib/compare/v0.31.0-rc.1...v0.31.0-rc.2) (2026-11-07)
 
 
