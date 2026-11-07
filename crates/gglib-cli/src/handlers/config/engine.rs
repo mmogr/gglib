@@ -8,6 +8,8 @@
 //! build are run and drawn, in `llama_install` and `sd`. Nothing here
 //! replaces an engine while the daemon serves a model on it.
 
+use std::io::IsTerminal as _;
+
 use anyhow::{Result, bail};
 use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::RuntimeKind;
@@ -73,6 +75,10 @@ pub(super) async fn install(
 /// fails while the engine it would replace is still installed. The update
 /// is not offered while the daemon serves a model on the engine, nor when
 /// what it serves cannot be asked.
+///
+/// Without `yes`, a stdin that is not a terminal is nobody to ask, and it is
+/// not read: a pipe nobody writes to would wait forever. An update is then
+/// kept back, saying how to install it, and a missing engine is refused.
 pub(crate) async fn ensure_installed(ctx: &CliContext, kind: RuntimeKind, yes: bool) -> Result<()> {
     let state = pin_state(kind)?;
     match state.standing {
@@ -93,7 +99,16 @@ pub(crate) async fn ensure_installed(ctx: &CliContext, kind: RuntimeKind, yes: b
     for line in lines {
         println!("{line}");
     }
-    if !yes && !input::prompt_confirmation_default_yes(question)? {
+    let agreed = match offer_action(state.standing, yes, std::io::stdin().is_terminal()) {
+        OfferAction::Install => true,
+        OfferAction::Ask => input::prompt_confirmation_default_yes(question)?,
+        OfferAction::RefuseUnasked => bail!(refused_unasked(kind)),
+        OfferAction::KeepUnasked => {
+            println!("{}", kept_unasked(kind, &state));
+            return Ok(());
+        }
+    };
+    if !agreed {
         if state.standing == PinStanding::Missing {
             bail!(required_refusal(kind));
         }
@@ -112,6 +127,65 @@ pub(crate) async fn ensure_installed(ctx: &CliContext, kind: RuntimeKind, yes: b
             Ok(())
         }
         other => other,
+    }
+}
+
+/// What [`ensure_installed`] does about an engine that is missing or older
+/// than the pin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OfferAction {
+    /// The yes was given ahead of time: install without asking.
+    Install,
+    /// Ask on the terminal.
+    Ask,
+    /// Older, and nobody to ask: keep what is there, unasked.
+    KeepUnasked,
+    /// Missing, and nobody to ask: refuse, unasked.
+    RefuseUnasked,
+}
+
+/// The rule [`ensure_installed`] applies, given where the install stands
+/// (missing or older), the yes given ahead of time, and whether stdin is a
+/// terminal. Only a terminal is asked: a stdin that is not one may be a pipe
+/// that never ends, and reading it would wait forever.
+fn offer_action(standing: PinStanding, yes: bool, stdin_is_terminal: bool) -> OfferAction {
+    if yes {
+        OfferAction::Install
+    } else if stdin_is_terminal {
+        OfferAction::Ask
+    } else if standing == PinStanding::Missing {
+        OfferAction::RefuseUnasked
+    } else {
+        OfferAction::KeepUnasked
+    }
+}
+
+/// What a command says when it keeps an older `kind` because there is no
+/// terminal to ask about the update.
+fn kept_unasked(kind: RuntimeKind, state: &PinState) -> String {
+    format!(
+        "Keeping {} {}: there is no terminal to ask. Run '{}' to update it.",
+        kind.label(),
+        installed_release(state),
+        install_command(kind)
+    )
+}
+
+/// What a command says when it cannot go on without `kind` and there is no
+/// terminal to ask whether to install it.
+fn refused_unasked(kind: RuntimeKind) -> String {
+    format!(
+        "Not running in a terminal, so there is nobody to ask whether to install {}. {}",
+        kind.label(),
+        required_refusal(kind)
+    )
+}
+
+/// The command that installs `kind`.
+fn install_command(kind: RuntimeKind) -> &'static str {
+    match kind {
+        RuntimeKind::Llama => LLAMA_INSTALL_COMMAND,
+        RuntimeKind::StableDiffusion => SD_INSTALL_COMMAND,
     }
 }
 
