@@ -366,13 +366,13 @@ describe('the library, into a chat', () => {
     expect(screen.queryByRole('button', { name: 'Unload' })).not.toBeInTheDocument();
   });
 
-  it('a cold load of ?serve=1 opens the Serve dialog once the inspector can, then strips it', async () => {
+  it('a cold load of ?serve=1 opens the Load with options sheet once the inspector can, then strips it', async () => {
     library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
     here.detail = farDetail(9, 'gemma-3-12b', { filePath: '/models/g/gemma.gguf' });
     initModelEvents();
     const { at } = renderApp('/models/9?serve=1');
 
-    expect(await screen.findByRole('dialog', { name: /start model server/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Load with options' })).toBeInTheDocument();
     await waitFor(() => expect(at()).toBe('/models/9'));
   });
 

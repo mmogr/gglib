@@ -127,7 +127,7 @@ describe('the menu bridge', () => {
     stop();
   });
 
-  it('Start opens the picked model’s Serve dialog, and does nothing with none picked', async () => {
+  it('Start opens the picked model’s Load with options sheet, and does nothing with none picked', async () => {
     const { at, router, fire, stop } = await bridged('/library');
     await fire(MENU_EVENTS.START_SERVER);
     expect(at()).toBe('/library');

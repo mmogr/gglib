@@ -3,8 +3,9 @@
  * used to label the GGUF's trained window `(default)` — the same claim the
  * Serve action used to act on, rendered one component over. Nothing serves
  * the trained window by default; with nothing configured the server sizes the
- * launch itself. See ADR 0009, and `contextPlaceholder`, which is where
- * "what will a serve actually use" is answered.
+ * launch itself. See ADR 0009, and the Load with options sheet's Context
+ * placeholder (the explanation's `fit.servesAt`), which is where "what will a
+ * serve actually use" is answered.
  */
 
 import { describe, it, expect } from 'vitest';

@@ -17,7 +17,6 @@ import '@testing-library/jest-dom';
 import { SamplingForm } from '../../../src/components/SamplingForm';
 import type { InferenceFallback } from '../../../src/components/SamplingForm/fallbackCaption';
 import { ReasoningSupport } from '../../../src/inspector/local/ReasoningSupport';
-import { JinjaModeField } from '../../../src/components/ModelInspectorPanel/components/JinjaModeField';
 import type { SparseInferenceConfig, TemplateSupport } from '../../../src/types';
 
 const UPSTREAM: InferenceFallback = { kind: 'upstream' };
@@ -180,65 +179,5 @@ describe('the model inspector fact line', () => {
 
     expect(screen.getByText(/known after its first load/i)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
-  });
-});
-
-describe('the Jinja control, whose three launches a checkbox could not hold', () => {
-  const renderJinja = (value: boolean | null, hasAgentTag: boolean) => {
-    const onChange = vi.fn();
-    const onReset = vi.fn();
-    render(
-      <JinjaModeField
-        value={value}
-        hasAgentTag={hasAgentTag}
-        disabled={false}
-        onChange={onChange}
-        onReset={onReset}
-      />,
-    );
-    return { onChange, onReset };
-  };
-
-  it('does not call a deferred launch "disabled"', () => {
-    // The bug: an untouched control on an untagged model read "Disabled",
-    // describing a launch that sends no flag — and llama-server initialises
-    // `use_jinja` to true, so that launch runs with Jinja on.
-    renderJinja(null, false);
-
-    expect(screen.getByText(/^On — no flag sent/)).toBeInTheDocument();
-    expect(screen.queryByText(/disabled/i)).not.toBeInTheDocument();
-  });
-
-  it('names llama-server as the source of the deferred answer', () => {
-    renderJinja(null, false);
-
-    expect(screen.getByText(/no flag sent/i)).toBeInTheDocument();
-  });
-
-  it('distinguishes the agent-tag launch from the deferred one', () => {
-    renderJinja(null, true);
-
-    expect(screen.getByText(/agent tag/i)).toBeInTheDocument();
-  });
-
-  it.each<[boolean, RegExp]>([
-    [true, /--jinja, chosen for this launch/],
-    [false, /--no-jinja, chosen for this launch/],
-  ])('names the flag an explicit %s sends', (value, pattern) => {
-    renderJinja(value, false);
-
-    expect(screen.getByText(pattern)).toBeInTheDocument();
-  });
-
-  it('keeps "off" and "let llama-server decide" as separate choices', async () => {
-    const { onChange, onReset } = renderJinja(true, false);
-    const control = screen.getByLabelText('Jinja Templates');
-
-    await userEvent.selectOptions(control, 'off');
-    expect(onChange).toHaveBeenCalledWith(false);
-
-    await userEvent.selectOptions(control, 'auto');
-    // Not `onChange(false)` — deferring and disabling are different launches.
-    expect(onReset).toHaveBeenCalled();
   });
 });

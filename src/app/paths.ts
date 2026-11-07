@@ -28,7 +28,7 @@ export const paths = {
   farChat: (id: number) => `/chat/far/${id}`,
   /** The library with its search focused for Hugging Face (`browse`), or adding a GGUF file (`add`). */
   libraryAdd: (sub: 'browse' | 'add') => `/library?add=${sub === 'add' ? 'file' : 'browse'}`,
-  /** A model's inspector with its Serve dialog opened. */
+  /** A model's inspector with its Load with options sheet opened. */
   serve: (id: number) => `/models/${id}?serve=1`,
   /** The benchmarks, with `modelIds` picked to run. */
   benchmarks: (modelIds: number[] = []) =>
@@ -91,8 +91,8 @@ export function settingsSection(location: Pick<Location, 'search'>): SettingsSec
 /**
  * What the native menu or `+ ▾` asked the library to do, carried as search
  * parameters the page acts on once and strips: focus the search for Hugging
- * Face, add a GGUF file, or open the picked model's Serve dialog (interim,
- * until the Load sheet takes it over).
+ * Face, add a GGUF file, or open the picked model's Load with options sheet
+ * (which the inspector reads and strips itself).
  */
 export interface LibraryIntent {
   add: 'browse' | 'add' | null;

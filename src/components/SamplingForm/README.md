@@ -12,9 +12,9 @@ The form renders at three different rungs of the resolution ladder (request → 
 |---|---|---|
 | Settings → Global Inference Parameter Defaults | `{ kind: 'upstream' }` | a model's recipe where it has one, llama.cpp's own defaults otherwise — the caption names llama.cpp's number, and a model's own answer shows on the `explain` surface |
 | The inspector's Sampling and Reasoning rows (`compact`) | `{ kind: 'resolved', ownLayer: 'modelUserSet' }` | the global setting, or whatever the backend says |
-| `ServeModal` | `{ kind: 'resolved', ownLayer: 'request' }` | profile → model → global → the model's recipe, then llama.cpp's defaults |
+| `inspector/LoadOptionsSheet` | `{ kind: 'resolved', ownLayer: 'request' }` | profile → model → global → the model's recipe, then llama.cpp's defaults |
 
-On the `resolved` surfaces the caption, placeholder, and slider position all come from `GET /api/models/:id/explain`. Nothing here re-derives the ladder: `resolve_layers_with_sources` computes value and provenance in one pass so that no second implementation can explain a decision the resolution did not take.
+An unset slider shows no number (—); its caption names what it inherits. On the `resolved` surfaces the caption, placeholder, and slider position all come from `GET /api/models/:id/explain`. Nothing here re-derives the ladder: `resolve_layers_with_sources` computes value and provenance in one pass so that no second implementation can explain a decision the resolution did not take.
 
 `ownLayer` is what lets a caption stay quiet when the value on screen came from the very layer being edited — clearing that field will re-resolve to something the saved explanation cannot yet name.
 

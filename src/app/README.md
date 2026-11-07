@@ -8,7 +8,7 @@ The main window's shell: its addresses, its router, and what navigates or acts f
 
 | File | Role |
 |------|------|
-| `paths.ts` | Every path the app navigates to (`paths.library()`, `paths.model(id)`, `paths.chat(id)` …), `inspectorSubject` reading the selection back from the address, the settings dialog as a search parameter over the current place (`settingsAt`, `settingsSection`, `withoutSettings`), and the intents the menu and `+ ▾` carry in the address (`libraryIntent`: focus the search for Hugging Face, add a GGUF file, open the Serve dialog) |
+| `paths.ts` | Every path the app navigates to (`paths.library()`, `paths.model(id)`, `paths.chat(id)` …), `inspectorSubject` reading the selection back from the address, the settings dialog as a search parameter over the current place (`settingsAt`, `settingsSection`, `withoutSettings`), and the intents the menu and `+ ▾` carry in the address (`libraryIntent`: focus the search for Hugging Face, add a GGUF file, open the inspector's Load with options sheet) |
 | `router.tsx` | The routes and the one router: the library as a layout route over `/library`, `/models/:id` and `/far/:id` so a pick does not remount it; `createAppRouter(layout)` after the daemon's token has left the address; `appRouter()` for navigation from outside React; a memory router for tests |
 | `Shell.tsx` | The window: the sidebar (`src/sidebar/`) beside the place the address names, no header; under 720 px the sidebar is a drawer behind a menu button, closed by a move, the scrim or Escape |
 | `menuBridge.ts` | The native menu's events, handled from outside React: navigation through the router, model actions on the model the address names, the menu told what is selected on every move |

@@ -3,7 +3,6 @@ src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 334
 src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
 src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/McpServersPanel.tsx 482
-src/components/ModelInspectorPanel/components/ServeModal.tsx 380
 src/components/ProxyControl.tsx 358
 src/components/ProxySamplingPanel.tsx 403
 src/components/SamplingForm/SamplingForm.tsx 312

@@ -3,11 +3,10 @@
 <!-- module-docs:start -->
 
 What is left of the inspector before its redesign, each file kept until the
-PR that replaces it. A model of this machine is `src/inspector/` now; what
-stays here is the Serve dialog its ⋯ menu, `?serve=1` and the native menu's
-Serve still open (until the Load with options sheet, I2), and the paired
-machine's model and the Hugging Face preview (until the inspector holds
-those subjects itself, I4).
+PR that replaces it. A model of this machine is `src/inspector/` now, its
+Load with options sheet included; what stays here is the paired machine's
+model and the Hugging Face preview (until the inspector holds those
+subjects itself, I4).
 
 | File | Role | Removed by |
 |------|------|------------|
@@ -17,7 +16,7 @@ those subjects itself, I4).
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | The Serve dialog and its fields (I2); the metadata grid `FarModelInspector` draws with (I4) |
-| `hooks/` | The Serve dialog's state and start (I2); the Hugging Face preview's download (I4) |
+| `components/` | The metadata grid `FarModelInspector` draws with (I4) |
+| `hooks/` | The Hugging Face preview's download (I4) |
 
 <!-- module-docs:end -->

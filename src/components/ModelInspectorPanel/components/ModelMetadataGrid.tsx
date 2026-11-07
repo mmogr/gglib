@@ -51,8 +51,8 @@ interface ModelMetadataGridProps {
  * window the model was trained for, and nothing serves it by default. With no
  * per-model override and nothing configured, the server sizes the launch
  * itself — fitting a window to this machine where it can read the device, and
- * falling to the floor where it cannot. See ADR 0009, and `contextPlaceholder`,
- * which is where "what will a serve actually use" is answered.
+ * falling to the floor where it cannot. See ADR 0009, and the explanation's
+ * `fit.servesAt`, which is where "what will a serve actually use" is answered.
  */
 export function formatContextLength(model: MetadataModel): string {
   if (model.serverDefaults?.contextLength) {

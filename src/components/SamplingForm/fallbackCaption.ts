@@ -35,7 +35,7 @@ export type InferenceFallback =
    */
   | { kind: 'resolved'; ownLayer: SamplingLayerName; resolution: ResolutionState };
 
-/** A `useSamplingExplanation` result, narrowed to what the caption needs. */
+/** The sampling half of a model's explanation, and whether it is still read or failed. */
 export interface ResolutionState {
   explanation: SamplingExplanation | null;
   isLoading: boolean;

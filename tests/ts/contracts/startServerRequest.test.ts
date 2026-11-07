@@ -35,7 +35,7 @@
  * That fourth one used to be the opposite. This header recorded, accurately,
  * that the mapper sent 9 of 18 — `frequency_penalty`, `dynatemp_*`,
  * `top_n_sigma`, the four `dry_*` and `seed` omitted — and that eight of those
- * nine were controls the serve modal renders and this mapper then dropped on
+ * nine were controls the serve modal (now the Load with options sheet) renders and this mapper then dropped on
  * the floor, `seed` alone having no control. Each field is `Option`, so the
  * omission was well-formed on the wire and only wrong as UX, which is why
  * nothing failed.
@@ -186,7 +186,7 @@ describe('POST /api/servers/start request body', () => {
         repeatPenalty: FULL_CONFIG.repeatPenalty,
         presencePenalty: FULL_CONFIG.presencePenalty,
         minP: FULL_CONFIG.minP,
-        // The serve modal offers both, so both have to arrive. The effort is
+        // The Load with options sheet offers both, so both have to arrive. The effort is
         // conditional on the model's template and the budget is not, but that
         // distinction belongs to the server — a surface that dropped either
         // one here would be deciding it silently, on the wire.
