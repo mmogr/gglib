@@ -385,6 +385,38 @@ describe('the tray panel', () => {
     });
   });
 
+  describe('Start gglib, in the desktop app', () => {
+    const gone = async () => {
+      throw new Error('fetch failed');
+    };
+
+    it('starts gglib through start_gglib, held until the daemon answers', async () => {
+      window.__TAURI_INTERNALS__ = { invoke: vi.fn(async () => undefined) as never };
+      transport.getProxyStatus.mockImplementation(gone);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<TrayPanel />);
+      expect(await screen.findByText("gglib isn't running, so nothing can be served.")).toBeInTheDocument();
+      tauri.invoke.mockImplementationOnce(() => new Promise(() => {}));
+      await user.click(screen.getByRole('button', { name: 'Start gglib' }));
+      expect(tauri.invoke).toHaveBeenCalledWith('start_gglib');
+      expect(screen.getByRole('button', { name: 'Starting gglib…' })).toBeDisabled();
+    });
+
+    it("says a refused start in the app's words, and offers Start gglib again", async () => {
+      window.__TAURI_INTERNALS__ = { invoke: vi.fn(async () => undefined) as never };
+      transport.getProxyStatus.mockImplementation(gone);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<TrayPanel />);
+      await screen.findByText("gglib isn't running, so nothing can be served.");
+      tauri.invoke.mockImplementationOnce(async () => {
+        throw new Error('port 9887 is held by another program (not a gglib daemon)');
+      });
+      await user.click(screen.getByRole('button', { name: 'Start gglib' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('port 9887 is held by another program (not a gglib daemon)');
+      expect(screen.getByRole('button', { name: 'Start gglib' })).toBeEnabled();
+    });
+  });
+
   describe('Open gglib', () => {
     it('in the desktop app, asks for the main window through show_main_window', async () => {
       window.__TAURI_INTERNALS__ = { invoke: vi.fn(async () => undefined) as never };
