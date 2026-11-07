@@ -3,7 +3,6 @@
  *
  * This module provides:
  * - `useGglibRuntime` - Main hook for creating the chat runtime
- * - `buildRunRequest` - The body of an agent run (`PUT /api/runs/{id}?kind=agent`)
  *
  * @module useGglibRuntime
  */
@@ -14,9 +13,6 @@ export {
   type UseGglibRuntimeOptions,
   type UseGglibRuntimeReturn,
 } from './useGglibRuntime';
-
-// The body of an agent run
-export { buildRunRequest, type RunRequestOptions, type PartialAgentConfig } from './runRequest';
 
 // Message types (re-exported from types/messages)
 export type {

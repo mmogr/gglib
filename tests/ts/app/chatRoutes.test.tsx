@@ -2,10 +2,11 @@
  * The chat routes: a chat is addressed by its conversation, and its model is
  * read from it. `/chat/:id` opens that conversation on its model (the
  * paired machine's, for one made for it); `/chat/new` opens an empty one on
- * `?model=` or `?far=`, else on the last model used, the default, or the
- * first loaded, and the first send's conversation replaces the address
- * without remounting the place; a local chat on a model nothing serves goes
- * to its inspector, and one whose model stops while it is open stays; the
+ * `?model=` or `?far=`, else on the last model used or the default while
+ * the library has it, or the first loaded, and the first send's
+ * conversation replaces the address without remounting the place; a local
+ * chat on a model nothing serves opens all the same, with no port (a send
+ * loads the model), and one whose model stops while it is open stays; the
  * composer's Show <model>, Show log and a paired model's new chat navigate;
  * `/chat/far/:id` is the paired machine's own chat.
  *
@@ -87,6 +88,8 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
 }));
 
 import { HANDED, peekChatHandoff, setChatHandoff } from '../../../src/app/chatHandoff';
+import { applyLibraryRead, resetModelLibrary } from '../../../src/services/modelRegistry';
+import type { GgufModel } from '../../../src/types';
 import { refreshChats, resetChats } from '../../../src/services/chatRegistry';
 import { IDLE_STATUS, applyRemoteStatus, ingestRemoteEvent, resetRemoteState } from '../../../src/services/remoteRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
@@ -120,6 +123,11 @@ function stop(modelId: number) {
 
 const page = () => screen.findByTestId('chat-page');
 
+/** The library, as its first read answers it: models `ids`. */
+function library(...ids: number[]) {
+  act(() => applyLibraryRead({ models: ids.map((id) => ({ id, name: `model ${id}` }) as GgufModel) }));
+}
+
 describe('the chat routes', () => {
   const served: number[] = [];
   beforeEach(() => {
@@ -128,6 +136,7 @@ describe('the chat routes', () => {
     daemon.chats = [];
     daemon.settings = {};
     mounts.count = 0;
+    library();
     // The app's server bridge, as `AppContent` starts it: the list it reads
     // is what lets a chat say nothing serves its model.
     forgetServerList();
@@ -136,6 +145,7 @@ describe('the chat routes', () => {
   afterEach(() => {
     cleanupServerEvents();
     resetRemoteState();
+    resetModelLibrary();
     // Nothing a test served stays running for the next.
     served.splice(0).forEach(stop);
   });
@@ -162,11 +172,15 @@ describe('the chat routes', () => {
     expect(await page()).toHaveAttribute('data-port', '5022');
   });
 
-  it('a chat on a model nothing serves goes to its inspector', async () => {
+  it('a chat on a model nothing serves opens all the same, with no port: a send loads it', async () => {
+    library(23);
     daemon.chats = [chat(3, 23)];
     const { at } = renderApp('/chat/3');
-    await waitFor(() => expect(at()).toBe('/models/23'));
-    expect(screen.getByRole('main', { name: 'Library' })).toBeInTheDocument();
+    const chatPage = await page();
+    expect(at()).toBe('/chat/3');
+    expect(chatPage).toHaveAttribute('data-conversation', '3');
+    expect(chatPage).toHaveAttribute('data-port', '');
+    expect(chatPage).toHaveTextContent('Chatting with model 23');
   });
 
   describe('on a cold load, before the server list is heard', () => {
@@ -202,7 +216,7 @@ describe('the chat routes', () => {
       expect(`${router.state.location.pathname}${router.state.location.search}`).toBe('/chat/new?model=31');
       served.push(31);
       await act(async () => answer([listed(31, 5031)]));
-      expect(await page()).toHaveAttribute('data-port', '5031');
+      await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5031'));
     });
 
     it('reads the list again after reads that failed, waiting longer each time, rather than wait for ever', async () => {
@@ -224,7 +238,8 @@ describe('the chat routes', () => {
         await vi.advanceTimersByTimeAsync(1100);
       });
       expect(transport.listServers).toHaveBeenCalledTimes(2);
-      expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+      // The chat is open meanwhile: it needs no port to send.
+      expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '');
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2100);
       });
@@ -236,31 +251,29 @@ describe('the chat routes', () => {
       model_id: modelId, model_name: 'qwen3', pid: 1, port, started_at: Math.floor(++clock / 1000), runtime: 'llama',
     });
 
-    it('waits for it, then opens the chat on the model it lists as served', async () => {
+    it('opens the chat on the model it names at once, and takes the port once the list says it is served', async () => {
       const { at } = renderApp('/chat/new?model=27');
-      await act(async () => {});
-      expect(at()).toBe('/chat/new?model=27');
-      expect(screen.getByRole('status')).toHaveTextContent('Loading chat…');
-      expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+      expect(await page()).toHaveAttribute('data-port', '');
 
       served.push(27);
       await act(async () => answer([listed(27, 5027)]));
-      expect(await page()).toHaveAttribute('data-port', '5027');
+      await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5027'));
       expect(at()).toBe('/chat/new?model=27');
     });
 
-    it('goes to the inspector once the list it waited for serves nothing', async () => {
+    it('stays open with no port once the list it waited for serves nothing', async () => {
       const { at } = renderApp('/chat/new?model=28');
       await act(async () => {});
-      expect(at()).toBe('/chat/new?model=28');
       await act(async () => answer([]));
-      await waitFor(() => expect(at()).toBe('/models/28'));
+      expect(await page()).toHaveAttribute('data-port', '');
+      expect(at()).toBe('/chat/new?model=28');
     });
 
     it('a new chat with no model named waits for the list before picking the first loaded', async () => {
       const { at } = renderApp('/chat/new');
       await act(async () => {});
       expect(at()).toBe('/chat/new');
+      expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
       served.push(29);
       await act(async () => answer([listed(29, 5029)]));
       expect(await page()).toHaveAttribute('data-port', '5029');
@@ -395,25 +408,27 @@ describe('the chat routes', () => {
     await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5043'));
   });
 
-  it('/chat/new alone opens on the last model used, if loaded', async () => {
-    serving(27, 5027);
+  it('/chat/new alone opens on the last model used, loaded or not', async () => {
+    library(27, 28);
     serving(28, 5028);
     daemon.settings = { defaultModelId: 28 };
     daemon.chats = [chat(1, null, '2026-11-03 09:00:00'), chat(2, 27, '2026-11-02 09:00:00'), chat(3, 28, '2026-11-01 09:00:00')];
     renderApp('/chat/new');
-    expect(await page()).toHaveAttribute('data-port', '5027');
+    const chatPage = await page();
+    expect(chatPage).toHaveTextContent('Chatting with model 27');
+    expect(chatPage).toHaveAttribute('data-port', '');
   });
 
-  it('then the default model, if loaded, when the last one used is not', async () => {
+  it('then the default model, loaded or not, when the library no longer has the last one used', async () => {
+    library(30);
     serving(29, 5029);
-    serving(30, 5030);
     daemon.settings = { defaultModelId: 30 };
     daemon.chats = [chat(2, 31)];
     renderApp('/chat/new');
-    expect(await page()).toHaveAttribute('data-port', '5030');
+    expect(await page()).toHaveTextContent('Chatting with model 30');
   });
 
-  it('then the first loaded model, when neither is', async () => {
+  it('then the first loaded model, when the library has neither', async () => {
     serving(32, 5032);
     daemon.settings = { defaultModelId: 33 };
     daemon.chats = [chat(2, 31)];
@@ -421,21 +436,19 @@ describe('the chat routes', () => {
     expect(await page()).toHaveAttribute('data-port', '5032');
   });
 
-  it('with nothing loaded, the inspector of the last model used, where Load is', async () => {
-    daemon.settings = { defaultModelId: 33 };
+  it('waits for the library before it picks', async () => {
+    resetModelLibrary();
     daemon.chats = [chat(2, 34)];
     const { at } = renderApp('/chat/new');
-    await waitFor(() => expect(at()).toBe('/models/34'));
+    await act(async () => {});
+    expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+    library(34);
+    expect(await page()).toHaveTextContent('Chatting with model 34');
+    expect(at()).toBe('/chat/new');
   });
 
-  it('with nothing loaded and nothing used, the default model\'s inspector, else the library', async () => {
+  it('with nothing used, no default and nothing loaded, the library', async () => {
     daemon.settings = { defaultModelId: 33 };
-    const first = renderApp('/chat/new');
-    await waitFor(() => expect(first.at()).toBe('/models/33'));
-    first.unmount();
-
-    daemon.settings = {};
-    resetChats();
     const { at } = renderApp('/chat/new');
     await waitFor(() => expect(at()).toBe('/library'));
   });
@@ -454,8 +467,8 @@ describe('the chat routes', () => {
     const handoff = { modelId: 36, port: 5555, modelName: 'qwen3-8b' };
     setChatHandoff(handoff);
     // A plain visit: the address alone, not handed, so nothing serves 36.
-    const { at, router } = renderApp('/chat/3');
-    await waitFor(() => expect(at()).toBe('/models/36'));
+    const { router } = renderApp('/chat/3');
+    expect(await page()).toHaveAttribute('data-port', '');
     expect(peekChatHandoff()).toBe(handoff);
 
     await act(() => router.navigate('/chat/3', { state: HANDED }));

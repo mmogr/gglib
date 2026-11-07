@@ -39,6 +39,17 @@ useGglibRuntime                      send / edit / regenerate / Retry / Stop
               └── event: run (the end)         → show the rows the daemon saved
 ```
 
+A send is a turn (`LocalTurn`): the conversation and the new message, its
+images by the ids their uploads answered, and nothing else. The daemon
+rebuilds the history from what the conversation saved (`saved_history`,
+pinned against what the page used to send by
+`tests/ts/contracts/savedHistory.test.ts`), and runs the turn on the model,
+tools and limits the conversation's settings name, loading the model first
+when it is not running: a chat needs no served port. A conversation a send
+makes keeps the model the chat opened on (`model`: this machine's, or the
+paired machine's), and the composer's picker saves a new one as the
+conversation's (`app/useChatSwitch`).
+
 The daemon saves the user's message when a run starts and the reply when it
 ends; the page saves no turn. What `drawRun` draws is provisional: at the end
 the thread becomes the saved rows, with their ids, tool rows folded, and an
@@ -54,8 +65,8 @@ made on a new chat, a copy of the one it was made on as far as the change;
 the answer names it, and the page lists and opens it and tells the person the
 original is kept (`onBranched`). Only an edit of the last question, while
 nothing answers it, is made in place. When the answer says the chat it left
-is to be answered, a run answers it: `answer_saved` on the run's body, no
-messages, and the daemon runs from what is saved and saves only the reply.
+is to be answered, a run answers it: `answer_saved` on the turn, with no
+message, and the daemon runs from what is saved and saves only the reply.
 A chat that ends in a question nothing answers (`answerable`) offers Retry,
 which starts the same run. A refused change changes nothing, and the page
 never deletes. Branch from here copies the chat as far as the end of a turn
@@ -80,9 +91,7 @@ asked as the send starts: `thinking: "off"` or `"default"` on the run's body,
 or on a far turn's, and no key otherwise. Once the daemon, or the far machine,
 has accepted the turn that says it, the runtime calls the `accepted` the
 caller gave with the choice, before the reply is read; a turn that was
-refused never calls it. The runtime keeps no choice itself and weighs nothing:
-the device-wide effort and budget go on every local run as they did, and the
-daemon lets a chat's Off win.
+refused never calls it. The runtime keeps no choice itself and weighs nothing.
 
 A run on this machine says the chat's folder when the caller's `folder` gives
 one, asked as the run starts: `folder` on the run's body, a path or `""` for
@@ -99,7 +108,7 @@ A send says `draw: true` when the caller's `draw` gives something at that
 send, which is while the composer's Draw button is armed, on the run's body or
 on a far turn's, and so does an answer run (an edit, a regenerate or a Retry)
 started while it is armed; no key otherwise, and a run without it is offered no drawing
-tool whatever its `tool_filter` says. The runtime calls the `accepted` it was
+tool. The runtime calls the `accepted` it was
 given once the turn is taken, as it does for the Thinking choice, and never
 for a refused one.
 
@@ -111,11 +120,12 @@ call's frame goes when its `tool_call_complete` is drawn, a frame that comes
 after that is dropped, and none is held once the run ends or is no longer
 read.
 
-A chat with the paired machine's model (`pairedModel`) is another thing: a
-conversation of this machine's, run here, whose turns the daemon sends to that
-machine by the model's id there (`far` on the run's body). A conversation a
-send makes for it is made for that model, so its machine is fixed from its
-first turn.
+A chat with the paired machine's model (`model` names that machine) is another
+thing: a conversation of this machine's, run here, whose turns the daemon
+sends to that machine by the model's id there, which the conversation saved.
+A conversation a send makes for it is made for that model, so its machine is
+fixed from its first turn. While that machine is away its turn is a run that
+fails coded `conflict`, shown as any failed run is.
 
 All loop orchestration (context pruning, tool execution, stagnation detection,
 loop detection) lives in the Rust `gglib-agent` crate.
@@ -131,7 +141,7 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; keeps how the run it last read to its end ended (`endedRun`) until the conversation is left, which is how the page knows a reply finished in front of it; keeps what the daemon says beside the rows (`answerable`, `points`); hands up each reading of a far chat, unless it was left first; holds the preview frames of the run it is reading (`previews`), and none between readings |
 | `drawRun.ts` | Reads one run's events from the first and draws them; a `preview` item goes to the frames held beside the messages, until its call's result is drawn or the reading ends |
 | `runPreviews.ts` | A run's preview frames, by tool call: a `preview` event's data read as a frame or not at all, the newest kept for each call, and a frame as an image's `src` |
-| `runRequest.ts` | The run's body (`AgentRunRequest`), as sent now with the agent limits and reasoning controls (the composer's Tools ▸ › Agent limits…) (`runBodyFor`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name; `thinking` is in the body only when the run changes the chat's choice, and `folder` only when it changes the chat's folder (`""` for Clear); `answer_saved` only on a run that answers the question the chat ends in; `draw` only for a run started while Draw is armed: a send, or an answer run (an edit, a regenerate or a Retry); `image_model` only beside `draw`, when the chat chose one |
+| `runRequest.ts` | The turn's body (`LocalTurn`, `buildTurn`): the conversation, the message and its images by id, and no model, port, history, tool filter or limit; `thinking` only when the turn changes the chat's choice, and `folder` only when it changes the chat's folder (`""` for Clear); `answer_saved` only on a turn that answers the question the chat ends in; `draw` only for a turn started while Draw is armed: a send, or an answer turn (an edit, a regenerate or a Retry); `image_model` only beside `draw`, when the chat chose one. And the run id |
 | `savedRows.ts` | A conversation's saved thread with its branch points and whether it ends in a question, its live run, and the row a message is; a far chat's from the far machine, handed on as that machine answered it, its live run from the far listing's `live_run` |
 | `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events) and image store (upload, read), and the text a turn carries, to a far chat or as an edit |
 | `imageAttachments.ts` | The composer's image adapter: uploads an image when it is added (never when sent), says a refusal at once, turns a sent image into its stored id (only an id its own store answered: not one from the other machine's, as when the chat list moved there with images in the composer), and remembers each upload by its file so a draft handed back or carried over a model switch is not uploaded again |
@@ -140,7 +150,6 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | `turnImages.ts` | A turn's images: read off a message, checked before a send (an image the chat's store does not hold, its upload failed or made for another store, sends nothing), and handed back to the composer with the text |
 | `agentEventDispatch.ts` | One `AgentEvent` → message state; the switch `drawRun` runs per event |
 | `agentMessageState.ts` | Pure state-mutation helpers for in-flight assistant messages; a tool result's images go on its tool-call part's `artifact`, by id and facts; a running tool's `tool_progress` on its part until its result, and a turn's `waiting` on its message until its prompt is read |
-| `wireMessages.ts` | `GglibMessage[]` → backend wire-format conversion; every user message names its images by id |
 | `reasoningTiming.ts` | Tracks per-message reasoning segment durations |
 | `clock.ts` | Monotonic clock abstraction for timing |
 | `index.ts` | Public barrel export |
@@ -158,31 +167,12 @@ preserves the multi-message UI layout from the previous client-side loop.
 
 ## Configuration
 
-`useGglibRuntime` accepts optional overrides forwarded to the backend:
-
-| Option | Backend field | Default |
-|---|---|---|
-| `supportsToolCalls` | `tool_filter: []` when `false` | all tools |
-| Tools ▸ › Agent limits… → limits | `AgentConfig` fields, via `agentOverridesToWire()` | backend defaults |
-| Tools ▸ › Agent limits… → Reasoning | **top-level** `reasoning_effort` / `reasoning_budget_tokens`, via `reasoningOverridesToWire()` | resolved from the model / global / recipe layers |
-
-The last row is the one that is easy to get wrong. Both reasoning controls sit
-at the top level of `AgentRunRequest`, not inside `config` — they are per-turn
-shape rather than agent-loop tuning, and `AgentRequestConfig` declares neither,
-so a level routed through `config` would be dropped by serde without a word.
-That is why the store has two wire mappers rather than one.
-
-The page sends no iteration limit. For a run that names none the daemon
-takes the limit the conversation saved (a chat `gglib chat --max-iterations`
-started has one), then the persisted `maxToolIterations` setting, as it does
-for a paired device's turn, so the limit is the same whichever client sent
-the message.
-
-Internal tuning parameters (`max_stagnation_steps`, `context_budget_chars`,
-etc.) are controlled by the backend's `AgentConfig::default()` and are not
-exposed to untrusted callers.
-
-When `supportsToolCalls === false`, an empty `tool_filter` is sent so the
-backend exposes no tools to the model.
+A turn names no limit, no tool filter and no reasoning control: the daemon
+takes the conversation's saved settings (`PUT /api/conversations/{id}`),
+then this machine's stored ones, then its defaults, as it does for a paired
+device's turn, so a turn runs the same whichever client sent it. The
+composer's Tools ▸ › Agent limits… sheet and its tool checklist are not
+read by any turn until D6 (`feat(gui)/chat-settings-saved`) saves them as the
+conversation's or this machine's settings.
 
 <!-- module-docs:end -->

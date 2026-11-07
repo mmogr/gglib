@@ -47,7 +47,6 @@ afterEach(() => {
 const open: UseGglibRuntimeOptions = {
   conversationId: 1,
   conversation: conversation(1),
-  selectedServerPort: 9000,
   onError,
   onImageRefused,
 };
@@ -98,12 +97,8 @@ describe('useGglibRuntime images', () => {
 
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
     const [id] = [...daemon.images.stored.keys()].filter((k) => k !== old);
-    expect(daemon.only().request!.messages).toEqual([
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: 'this one', images: [old] },
-      { role: 'assistant', content: 'seen' },
-      { role: 'user', content: 'and this?', images: [id] },
-    ]);
+    // The turn carries its own image; the daemon reads the history's from its record.
+    expect(daemon.only().request).toStrictEqual({ conversation_id: 1, content: 'and this?', images: [id] });
     // The send uploaded nothing more.
     expect(daemon.count('POST', '/api/attachments')).toBe(1);
     const asked = hook.result.current.messages.findLast((m) => m.role === 'user')!;
@@ -118,9 +113,9 @@ describe('useGglibRuntime images', () => {
     await sendDraft(hook, '');
 
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-    const last = daemon.only().request!.messages.at(-1)!;
-    expect(last).toMatchObject({ role: 'user', content: '' });
-    expect(last.role === 'user' && last.images).toHaveLength(1);
+    const turn = daemon.only().request!;
+    expect(turn.content).toBe('');
+    expect(turn.images).toHaveLength(1);
   });
 
   it('a send refused by code gives back the text and the images, uploading nothing again', async () => {
@@ -295,7 +290,7 @@ describe('useGglibRuntime images on a far chat', () => {
     await sendDraft(hook, 'look');
     await waitFor(() => expect(daemons.here.count('PUT', '/api/runs/')).toBe(1));
     const [id] = daemons.here.images.stored.keys();
-    expect(daemons.here.only().request!.messages.at(-1)).toEqual({ role: 'user', content: 'look', images: [id] });
+    expect(daemons.here.only().request).toStrictEqual({ conversation_id: 1, content: 'look', images: [id] });
     expect(drafted(hook)).toEqual([]);
   });
 
@@ -312,7 +307,7 @@ describe('useGglibRuntime images on a far chat', () => {
 
     await waitFor(() => expect(daemons.here.count('PUT', '/api/runs/')).toBe(1));
     const [id] = daemons.here.images.stored.keys();
-    expect(daemons.here.only().request!.messages.at(-1)).toEqual({ role: 'user', content: 'look', images: [id] });
+    expect(daemons.here.only().request).toStrictEqual({ conversation_id: 1, content: 'look', images: [id] });
     expect(daemons.here.count('POST', '/api/attachments')).toBe(1);
     expect(onError).not.toHaveBeenCalled();
     expect(draft(hook)).toEqual({ text: '', images: [] });

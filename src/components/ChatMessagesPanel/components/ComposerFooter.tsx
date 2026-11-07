@@ -34,8 +34,10 @@ interface ComposerFooterProps {
   modelId?: number;
   /** Move the chat to another model; absent where there is none to pick. */
   onPickModel?: (choice: ModelChoice) => Promise<void>;
-  /** The model a switch is starting; the picker is locked until it lands. */
+  /** The model Load it again is starting, which the line says until it lands. */
   startingModel?: string | null;
+  /** Load the model again, from the line that says it was unloaded. */
+  onLoadModel?: () => Promise<void>;
   /** Unload the model; offered only while its server is up. */
   onUnloadModel?: () => Promise<void>;
   /** Its quantisation, from the model's catalogue entry, when known. */
@@ -150,6 +152,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   modelName,
   modelId,
   onPickModel,
+  onLoadModel,
   startingModel = null,
   onUnloadModel,
   quantization,
@@ -174,13 +177,12 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   const loadWait = useModelLoadWait();
 
   if (modelGone !== null) {
-    const loadAgain =
-      onPickModel && modelId !== undefined
-        ? () =>
-            void onPickModel({ modelId, modelName }).catch((error: unknown) =>
-              showToast(loadFailed(error), 'error'),
-            )
-        : undefined;
+    const loadAgain = onLoadModel
+      ? () =>
+          void onLoadModel().catch((error: unknown) =>
+            showToast(loadFailed(error), 'error'),
+          )
+      : undefined;
     return (
       <div className="mx-auto w-full max-w-[728px] shrink-0 px-lg pb-lg">
         <ModelGoneLine gone={modelGone} modelName={modelName} starting={startingModel} onLoadAgain={loadAgain} onShowLog={onShowLog} />
@@ -206,7 +208,6 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
       modelName={named}
       quantization={quantization}
       onPick={onPickModel}
-      starting={startingModel}
       onUnload={isServerConnected ? onUnloadModel : undefined}
       onShow={onShowModel}
       onOpenFar={saved ? undefined : onOpenFar}

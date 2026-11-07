@@ -1,6 +1,7 @@
-//! A run that answers the question its conversation ends in changes
-//! nothing when it is refused, and is refused when it names no
-//! conversation, sends messages of its own, or has nothing to answer.
+//! This machine's turn that answers the question its chat ends in
+//! (`answer_saved`), as an edit, a regenerate or Retry leaves it: refused
+//! when it carries a message of its own or there is nothing to answer, and
+//! made, saving nothing of its own, when there is.
 
 mod common;
 
@@ -8,7 +9,7 @@ use axum::Router;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::run_path;
-use gglib_core::domain::chat::{MessageRole, NewConversation, NewMessage};
+use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use serde_json::{Value, json};
 
 use common::harness::test_state_and_app;
@@ -25,6 +26,10 @@ async fn conversation(state: &gglib_axum::AppState, rows: &[(MessageRole, &str)]
     let id = history
         .create_conversation(NewConversation {
             title: "t".into(),
+            settings: Some(ConversationSettings {
+                model_name: Some("qwen".to_owned()),
+                ..ConversationSettings::default()
+            }),
             ..NewConversation::default()
         })
         .await
@@ -47,36 +52,34 @@ async fn contents(state: &gglib_axum::AppState, id: i64) -> Vec<String> {
     rows.into_iter().map(|r| r.content).collect()
 }
 
-fn answering(conversation: Option<i64>) -> Value {
-    json!({
-        "port": 9000,
-        "messages": [],
-        "conversation_id": conversation,
-        "answer_saved": true,
-    })
+fn answering(conversation: i64) -> Value {
+    json!({ "conversation_id": conversation, "content": "", "answer_saved": true })
 }
 
+/// An answer to a question that is saved is made, and saves nothing of its
+/// own: the question stays the chat's last row. Here its model cannot load,
+/// so the run fails with nothing written.
 #[tokio::test]
-async fn a_refusal_of_the_request_itself_saves_nothing() {
-    // No llama-server in the harness: the port is refused, as the chat
-    // route refuses it, after the history is read.
+async fn an_answer_to_a_saved_question_is_made_and_saves_no_message() {
     let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
     let id = conversation(&state, &[(MessageRole::User, "Q")]).await;
 
-    let (status, error) = put(&app, "e1", answering(Some(id))).await;
+    let (status, info) = put(&app, "e1", answering(id)).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(status, StatusCode::CREATED, "{info}");
     assert_eq!(contents(&state, id).await, ["Q"]);
 }
 
 #[tokio::test]
-async fn an_answer_names_its_conversation_and_sends_no_messages() {
+async fn an_answer_carries_no_message_of_its_own() {
     let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
     let id = conversation(&state, &[(MessageRole::User, "Q")]).await;
-    let mut speaking = answering(Some(id));
-    speaking["messages"] = json!([{ "role": "user", "content": "Q2" }]);
+    let mut speaking = answering(id);
+    speaking["content"] = json!("Q2");
+    let mut showing = answering(id);
+    showing["images"] = json!([gglib_core::domain::AttachmentId::of(b"x").to_string()]);
 
-    for body in [answering(None), speaking] {
+    for body in [speaking, showing] {
         let (status, error) = put(&app, "e1", body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
         assert_eq!(error["type"], "invalid_request");
@@ -93,7 +96,7 @@ async fn a_chat_that_ends_in_a_reply_has_nothing_to_answer() {
     )
     .await;
 
-    let (status, error) = put(&app, "e1", answering(Some(id))).await;
+    let (status, error) = put(&app, "e1", answering(id)).await;
 
     assert_eq!(status, StatusCode::CONFLICT, "{error}");
     assert_eq!(error["type"], "nothing_to_answer");

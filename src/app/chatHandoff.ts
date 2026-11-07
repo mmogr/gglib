@@ -1,7 +1,8 @@
 /**
  * What a chat hands to the chat it becomes: on a model switch, the model to
- * open on (the conversation keeps its address; it names its new model only
- * once a run has used it) and the unsent text and images in the composer;
+ * open on (the conversation keeps its address, and has saved its new model,
+ * which the chat list may not have read yet) and the unsent text and images
+ * in the composer;
  * on an Open chat, the port the model was just served on, which the server
  * registry may not have heard yet.
  *

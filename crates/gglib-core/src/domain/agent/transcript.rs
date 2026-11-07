@@ -87,3 +87,7 @@ pub fn saved_history(prompt: Option<&str>, rows: &[Message]) -> Vec<AgentMessage
 #[cfg(test)]
 #[path = "transcript_tests.rs"]
 mod transcript_tests;
+
+#[cfg(test)]
+#[path = "history_contract_tests.rs"]
+mod history_contract_tests;

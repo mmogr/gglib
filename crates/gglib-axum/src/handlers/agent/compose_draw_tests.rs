@@ -10,7 +10,6 @@ use serde_json::{Value, json};
 
 use super::{DRAW_TOOL, refuse_unavailable_drawing, with_drawing};
 use crate::error::HttpError;
-use crate::handlers::agent::run::create_run;
 use crate::handlers::agent::run_fixture::{conversation, drawing_state, saved, state};
 use crate::handlers::agent::turn_fixture::{TOOL, drawn, model, offers_nothing, page, sent};
 
@@ -279,35 +278,8 @@ async fn draw_is_refused_where_it_cannot_draw() {
     assert!(refuse_unavailable_drawing(&cannot, &plain).await.is_ok());
 }
 
-/// The run's door refuses it before a slot is taken, a run made or a row
-/// written.
-#[tokio::test]
-async fn a_run_that_cannot_draw_writes_nothing_and_takes_no_slot() {
-    let (_dir, state) = state().await;
-    let chat = conversation(&state).await;
-    let body = json!({
-        "port": 0,
-        "messages": [{ "role": "user", "content": "draw a fox" }],
-        "conversation_id": chat,
-        "draw": true,
-    });
-
-    let refused = create_run(&state, "r1", body).await;
-
-    match refused {
-        Err(HttpError::Coded { status, code, .. }) => {
-            assert_eq!((status.as_u16(), code), (400, "drawing_unavailable"));
-        }
-        other => panic!("not a coded refusal: {other:?}"),
-    }
-    assert!(saved(&state, chat).await.is_empty(), "no row was written");
-    assert_eq!(state.agent_semaphore.available_permits(), 1);
-    let listed =
-        gglib_core::ports::RunsPort::list(state.runs.as_ref(), &gglib_core::ports::RunScope::Local);
-    assert!(listed.runs.is_empty(), "no run was made");
-}
-
-/// The chat route refuses it too, before its slot is taken.
+/// The chat route refuses it before its slot is taken, as this machine's
+/// turn does (`hub_turn_route_tests`).
 #[tokio::test]
 async fn the_chat_route_refuses_a_draw_it_cannot_draw_before_its_slot() {
     let (_dir, state) = state().await;

@@ -1,11 +1,13 @@
-//! `PUT /api/runs/{id}?kind=agent` whose messages carry images: an image
-//! not stored, or images over 16 MiB together, history included, is
-//! refused by its code before a slot is taken or a model is reached, on
-//! this machine's model and the paired machine's alike (#1257).
+//! `PUT /api/runs/{id}?kind=agent`, this machine's turn, with images: an
+//! image not stored, or images over 16 MiB together, the chat's saved ones
+//! included, is refused by its code before a slot is taken or a model is
+//! reached, on this machine's model and the paired machine's alike
+//! (#1257).
 //!
-//! The harness runs no llama-server and no tunnel, so a run whose images
-//! pass is refused where any run is: the port, or the missing connection.
-//! That later refusal is each test's proof that the check let it through.
+//! The harness runs no llama-server and no tunnel, so a turn whose images
+//! pass is made, `201`, and then fails where its model cannot load or its
+//! paired machine is away. That `201` is each test's proof that the check
+//! let it through.
 
 mod common;
 
@@ -14,8 +16,9 @@ use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::{RUNS_PATH, run_path};
 use gglib_core::domain::AttachmentId;
-use gglib_core::domain::chat::NewConversation;
+use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use gglib_core::domain::runs::RunList;
+use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::request_pipeline::{MAX_IMAGE_BYTES, MAX_REQUEST_IMAGE_BYTES};
 use serde_json::{Value, json};
 
@@ -39,29 +42,63 @@ async fn upload(state: &gglib_axum::AppState, bytes: &[u8]) -> String {
     stored.info.id.to_string()
 }
 
-/// A question with `earlier`, its answer, and a question with `last`.
-fn messages(earlier: &[&str], last: &[&str]) -> Value {
-    json!([
-        { "role": "user", "content": "this one", "images": earlier },
-        { "role": "assistant", "content": "seen" },
-        { "role": "user", "content": "and this?", "images": last },
-    ])
+/// A chat on `model`, named `qwen`, with a question that carries
+/// `earlier` and its answer.
+async fn chat(state: &gglib_axum::AppState, model: Option<ModelRef>, earlier: &[&str]) -> i64 {
+    let history = state.core.chat_history();
+    let settings = ConversationSettings {
+        model,
+        model_name: Some("qwen".to_owned()),
+        ..ConversationSettings::default()
+    };
+    let id = history
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            settings: Some(settings),
+            ..NewConversation::default()
+        })
+        .await
+        .unwrap();
+    let images = earlier.iter().map(|i| AttachmentId::parse(i).unwrap());
+    for (role, content, images) in [
+        (MessageRole::User, "this one", images.collect()),
+        (MessageRole::Assistant, "seen", Vec::new()),
+    ] {
+        let row = NewMessage {
+            conversation_id: id,
+            role,
+            content: content.to_owned(),
+            metadata: None,
+            images,
+        };
+        history.save_message(row).await.unwrap();
+    }
+    id
 }
 
-fn local(messages: &Value) -> Value {
-    json!({ "port": 9000, "messages": messages })
+/// A chat on this machine's model, with `earlier` in its history.
+async fn here(state: &gglib_axum::AppState, earlier: &[&str]) -> i64 {
+    chat(state, None, earlier).await
 }
 
-fn far(messages: &Value) -> Value {
-    json!({
-        "port": 0,
-        "messages": messages,
-        "far": { "machine": { "kind": "paired", "fingerprint": "0a1b2c3d4e5f" }, "id": 3 },
-    })
+/// A chat on the paired machine's model 3, with `earlier` in its history.
+async fn there(state: &gglib_axum::AppState, earlier: &[&str]) -> i64 {
+    let model = ModelRef {
+        machine: Machine::Paired {
+            fingerprint: "0a1b2c3d4e5f".to_owned(),
+        },
+        id: 3,
+    };
+    chat(state, Some(model), earlier).await
 }
 
-async fn put(app: &Router, body: Value) -> (StatusCode, String) {
-    let uri = format!("{}?kind=agent", run_path("a1"));
+/// This machine's turn on `chat`, with `last`.
+fn turn(chat: i64, last: &[&str]) -> Value {
+    json!({ "conversation_id": chat, "content": "and this?", "images": last })
+}
+
+async fn put(app: &Router, id: &str, body: Value) -> (StatusCode, String) {
+    let uri = format!("{}?kind=agent", run_path(id));
     let (status, error) = call_json(app, Method::PUT, &uri, Some(body)).await;
     (
         status,
@@ -79,70 +116,58 @@ fn refusal(code: &str) -> (StatusCode, String) {
     (StatusCode::BAD_REQUEST, code.to_owned())
 }
 
-/// An id the history names that is not stored is refused by its code, on
-/// either machine's model; the same history with the image stored goes on
-/// to the port, or to the tunnel.
+fn made() -> (StatusCode, String) {
+    (StatusCode::CREATED, String::new())
+}
+
+/// An id the turn names that is not stored is refused by its code, on
+/// either machine's model; the same turn with the image stored is made.
 #[tokio::test]
-async fn an_image_the_history_names_that_is_not_stored_is_refused_by_code() {
+async fn an_image_the_turn_names_that_is_not_stored_is_refused_by_code() {
     let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
     let kept = upload(&state, &png(1, 64)).await;
     let gone = AttachmentId::of(b"never uploaded").to_string();
+    let (local, far) = (here(&state, &[]).await, there(&state, &[]).await);
 
-    let unknown = messages(&[&gone], &[]);
-    assert_eq!(
-        put(&app, local(&unknown)).await,
-        refusal("attachment_not_found")
-    );
-    assert_eq!(
-        put(&app, far(&unknown)).await,
-        refusal("attachment_not_found")
-    );
+    for chat in [local, far] {
+        let refused = put(&app, "a1", turn(chat, &[&gone])).await;
+        assert_eq!(refused, refusal("attachment_not_found"), "{chat}");
+    }
     no_runs(&app).await;
 
-    let stored = messages(&[&kept], &[]);
-    assert_eq!(put(&app, local(&stored)).await, refusal("invalid_request"));
-    assert_eq!(put(&app, far(&stored)).await.0, StatusCode::CONFLICT);
+    assert_eq!(put(&app, "a1", turn(local, &[&kept])).await, made());
+    assert_eq!(put(&app, "a2", turn(far, &[&kept])).await, made());
 }
 
 /// Two images at 8 MiB each are the 16 MiB a request may carry; the
-/// history's image and the turn's add up, and one image more is refused.
+/// chat's saved image and the turn's add up, and one image more is refused,
+/// with nothing saved.
 #[tokio::test]
 async fn images_over_16_mib_together_are_refused_by_code() {
     let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
     assert_eq!(MAX_REQUEST_IMAGE_BYTES, 2 * MAX_IMAGE_BYTES);
     let big = upload(&state, &png(2, MAX_IMAGE_BYTES)).await;
     let small = upload(&state, &png(3, 64)).await;
-    let conversation = state
-        .core
-        .chat_history()
-        .create_conversation(NewConversation {
-            title: "t".to_owned(),
-            ..NewConversation::default()
-        })
-        .await
-        .unwrap();
+    let (local, far) = (here(&state, &[&big]).await, there(&state, &[&big]).await);
 
-    let mut over = local(&messages(&[&big], &[&big, &small]));
-    over["conversation_id"] = json!(conversation);
-    assert_eq!(put(&app, over).await, refusal("request_images_too_large"));
-    assert_eq!(
-        put(&app, far(&messages(&[&big], &[&big, &small]))).await,
-        refusal("request_images_too_large")
-    );
+    for chat in [local, far] {
+        let over = put(&app, "a1", turn(chat, &[&big, &small])).await;
+        assert_eq!(over, refusal("request_images_too_large"), "{chat}");
+        let saved = state.core.chat_history().get_messages(chat).await;
+        assert_eq!(saved.unwrap().len(), 2, "nothing was saved");
+    }
     no_runs(&app).await;
-    let saved = state.core.chat_history().get_messages(conversation).await;
-    assert!(saved.unwrap().is_empty());
 
-    let at = messages(&[&big], &[&big]);
-    assert_eq!(put(&app, local(&at)).await, refusal("invalid_request"));
-    assert_eq!(put(&app, far(&at)).await.0, StatusCode::CONFLICT);
+    assert_eq!(put(&app, "a1", turn(local, &[&big])).await, made());
+    assert_eq!(put(&app, "a2", turn(far, &[&big])).await, made());
 }
 
-/// The check comes before a slot is taken: with every slot held, a run
+/// The check comes before a slot is taken: with every slot held, a turn
 /// whose image is not stored is still told why.
 #[tokio::test]
 async fn the_image_refusal_comes_before_the_slot() {
     let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let chat = here(&state, &[]).await;
     let slots = state.agent_semaphore.available_permits();
     let _held = std::sync::Arc::clone(&state.agent_semaphore)
         .try_acquire_many_owned(u32::try_from(slots).unwrap())
@@ -150,11 +175,11 @@ async fn the_image_refusal_comes_before_the_slot() {
     let gone = AttachmentId::of(b"never uploaded").to_string();
 
     assert_eq!(
-        put(&app, local(&messages(&[], &[]))).await,
+        put(&app, "a1", turn(chat, &[])).await,
         (StatusCode::TOO_MANY_REQUESTS, "agent_busy".to_owned())
     );
     assert_eq!(
-        put(&app, local(&messages(&[], &[&gone]))).await,
+        put(&app, "a1", turn(chat, &[&gone])).await,
         refusal("attachment_not_found")
     );
 }

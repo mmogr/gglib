@@ -269,53 +269,6 @@ impl AgentChatRequest {
     }
 }
 
-/// Request body for an agent run, `PUT /api/runs/{id}?kind=agent`: the body
-/// `/api/agent/chat` takes, and where to save the transcript.
-#[derive(Debug, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct AgentRunRequest {
-    /// The agent chat request, as `/api/agent/chat` takes it.
-    #[serde(flatten)]
-    #[cfg_attr(feature = "ts-bindings", ts(flatten))]
-    pub chat: AgentChatRequest,
-
-    /// The saved conversation the daemon writes the transcript to: the
-    /// request's last message when the run is created, if it is the user's,
-    /// and the reply when the run ends. Absent, nothing is saved.
-    #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
-    pub conversation_id: Option<i64>,
-
-    /// Whether the run answers the conversation's last question, already
-    /// saved, rather than a message of its own: it then sends no messages,
-    /// runs from the conversation's saved history, and saves only the
-    /// reply. An edit or a regenerate leaves the chat to be answered this
-    /// way (`POST /api/conversations/{id}/changes`), and so does Retry.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
-    pub answer_saved: bool,
-
-    /// The conversation's Thinking choice, said only on the run that changes
-    /// it: `off` runs this turn and the conversation's later ones with a
-    /// thinking budget of `0`, whatever `reasoning_budget_tokens` says;
-    /// `default` forgets that. Absent, the run is as the conversation
-    /// remembers. Without a `conversation_id` it holds for this run alone.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub thinking: Option<gglib_core::domain::Thinking>,
-
-    /// The conversation's folder, where gglib's own file tools read, said
-    /// only on the run that changes it: an absolute path to a folder on this
-    /// machine sets it, and the run and the conversation's later ones read
-    /// there; `""` forgets it. Absent, the run is as the conversation
-    /// remembers, and a conversation with no folder runs without the file
-    /// tools. Without a `conversation_id` it holds for this run alone, and
-    /// `""` is the same as absent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub folder: Option<String>,
-}
-
 #[cfg(test)]
 #[path = "dto_tests.rs"]
 mod dto_tests;

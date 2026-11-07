@@ -10,8 +10,8 @@
 //!
 //! The refusal of any run for a model that draws images is here too, by the
 //! same doors and before the same things: `sd-server` serves such a model
-//! and cannot chat, so a device's turn on a hub chat whose model draws, and
-//! a page's run on a port that serves one, are refused with
+//! and cannot chat, so a turn on a chat whose model draws, this machine's
+//! or a device's, and a chat route request on a port that serves one, are refused with
 //! `image_model_cannot_chat` before anything is loaded, held or written.
 //! The rule, the code and the words are core's
 //! ([`gglib_core::request_pipeline::refuse_unless_chats`]).

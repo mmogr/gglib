@@ -17,7 +17,7 @@ import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
 import { useToastContext } from '../../../../src/contexts/ToastContext';
 import type { ChatMessage } from '../../../../src/services/transport';
-import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../../src/types/generated/LocalTurn';
 import type { BranchPoint } from '../../../../src/types/generated/BranchPoint';
 import type { ChatChange } from '../../../../src/types/generated/ChatChange';
 import { agentRun, chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
@@ -76,7 +76,7 @@ function pageTransport() {
       if (change.kind === 'edit') save(branch, 'assistant', change.content);
       return { conversation_id: branch, forked: true, answer: false };
     }),
-    startAgentRun: vi.fn(async (id: string, request: AgentRunRequest) => {
+    startAgentRun: vi.fn(async (id: string, request: LocalTurn) => {
       const conversationId = request.conversation_id as number;
       fixture.runs = [agentRun(id, conversationId, 'in_progress'), ...fixture.runs];
       return agentRun(id, conversationId, 'queued');
@@ -137,7 +137,7 @@ describe('ChatPlace edits and Retry', () => {
     await user.click(screen.getByRole('button', { name: 'Retry' }));
 
     await waitFor(() => expect(stub().startAgentRun).toHaveBeenCalledTimes(1));
-    expect(stub().startAgentRun.mock.calls[0][1]).toMatchObject({ conversation_id: 1, answer_saved: true, messages: [] });
+    expect(stub().startAgentRun.mock.calls[0][1]).toStrictEqual({ conversation_id: 1, content: '', answer_saved: true });
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument());
   });
 

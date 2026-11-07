@@ -1,6 +1,6 @@
 //! A daemon turn runs on the context of the model its port serves, so each
 //! stage of the request pipeline that reads that context applies to the
-//! page's run and to a paired device's turn: the `reasoning` recipe,
+//! chat route's request and to a paired device's turn: the `reasoning` recipe,
 //! capability shaping, the truncation budget, the effort gate and the
 //! response parser.
 

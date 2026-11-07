@@ -1,7 +1,7 @@
 //! A run for a model that draws images is refused with
 //! `image_model_cannot_chat` at each daemon door, before anything is
 //! admitted, held or written: a device's turn on a hub chat whose model
-//! draws, and a page's run on a port an `sd-server` serves.
+//! draws, and a run on a port an `sd-server` serves.
 
 use std::path::PathBuf;
 use std::sync::Arc;

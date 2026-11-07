@@ -1,4 +1,4 @@
-//! This machine's own run and its conversation's folder: what a run says of
+//! This machine's own turn and its chat's folder: what a turn says of
 //! it, what the conversation remembers, what is refused before anything is
 //! written, and where gglib's own file tools are offered, by which root.
 
@@ -10,49 +10,49 @@ use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::RunsPort as _;
 use serde_json::{Value, json};
 
-use super::AgentChatRequest;
 use super::compose::{context_tests::LaunchedAt, take_permit};
-use super::dto::AgentRunRequest;
-use super::launch::{Transcript, launch};
-use super::run::{create_run, plan};
+use super::hub_turn::{Plan, plan, start_local};
+use super::launch::launch;
 use super::run_fixture::{End, LOCAL, device, finished_reply, prepared, saved, settled, state};
 use super::turn_fixture::{TOOL, hi, model, sent_by_device, sent_in};
 use crate::error::HttpError;
 use crate::state::AppState;
 
-/// A run's body saved to `conversation`, with `more` keys beside the chat
-/// request's.
-fn body(conversation: Option<i64>, more: &Value) -> Value {
-    let mut body = json!({
-        "port": 9000,
-        "messages": [{ "role": "user", "content": "hi" }],
-        "conversation_id": conversation,
-    });
-    let more = more.as_object().expect("keys").clone();
-    body.as_object_mut().expect("an object").extend(more);
+/// This machine's turn on `conversation` that says `folder`.
+fn saying(conversation: i64, folder: Option<&str>) -> Value {
+    let mut body = json!({ "conversation_id": conversation, "content": "hi" });
+    if let Some(folder) = folder {
+        body["folder"] = json!(folder);
+    }
     body
 }
 
-/// What a run that says `more` is planned with: its chat request, what it
-/// writes once it starts, and its folder.
+/// What this machine's turn that says `folder` is planned with: its chat
+/// request, what it writes once it starts, and its folder.
 async fn planned(
     state: &AppState,
-    conversation: Option<i64>,
-    more: &Value,
-) -> Result<(AgentChatRequest, Transcript, Option<PathBuf>), HttpError> {
-    let request: AgentRunRequest = serde_json::from_value(body(conversation, more)).unwrap();
-    plan(state, request).await
+    conversation: i64,
+    folder: Option<&str>,
+) -> Result<Plan, HttpError> {
+    let turn = hi(conversation);
+    plan(state, &LOCAL, turn, folder.map(str::to_owned)).await
 }
 
-/// Plan the run `more` says and run it to its end as run `id`: its folder.
-async fn run(state: &AppState, id: &str, conversation: i64, more: &Value) -> Option<PathBuf> {
-    let (_, transcript, folder) = planned(state, Some(conversation), more).await.unwrap();
+/// Plan the turn that says `folder` and run it to its end as run `id`: its
+/// folder.
+async fn run(
+    state: &AppState,
+    id: &str,
+    conversation: i64,
+    folder: Option<&str>,
+) -> Option<PathBuf> {
+    let planned = planned(state, conversation, folder).await.unwrap();
     let (p, _) = prepared(finished_reply(), End::Finish);
     let created = launch(
         state,
         id,
         LOCAL,
-        transcript,
+        planned.transcript,
         p,
         take_permit(state).expect("a slot"),
     )
@@ -60,7 +60,7 @@ async fn run(state: &AppState, id: &str, conversation: i64, more: &Value) -> Opt
     .unwrap();
     assert!(created.created, "{id}");
     settled(state).await;
-    folder
+    planned.folder
 }
 
 /// The folder conversation `id` remembers.
@@ -70,8 +70,13 @@ async fn remembered(state: &AppState, id: i64) -> Option<String> {
     conversation.settings.and_then(|settings| settings.folder)
 }
 
-/// A conversation whose settings are `settings`.
+/// A conversation whose settings are `settings`, on `qwen` unless they
+/// name a model.
 async fn chat_with(state: &AppState, settings: ConversationSettings) -> i64 {
+    let settings = ConversationSettings {
+        model_name: settings.model_name.or_else(|| Some("qwen".to_owned())),
+        ..settings
+    };
     state
         .core
         .chat_history()
@@ -94,10 +99,10 @@ async fn remembering(state: &AppState, folder: &str) -> i64 {
     chat_with(state, settings).await
 }
 
-/// The door's refusal of a run that says `more`: its status, its code and
-/// its message.
-async fn refused(state: &AppState, id: i64, more: &Value) -> (u16, &'static str, String) {
-    match create_run(state, "r1", body(Some(id), more)).await {
+/// The door's refusal of this machine's turn that says `folder`: its
+/// status, its code and its message.
+async fn refused(state: &AppState, id: i64, folder: Option<&str>) -> (u16, &'static str, String) {
+    match start_local(state, "r1", saying(id, folder)).await {
         Err(HttpError::Coded {
             status,
             code,
@@ -128,15 +133,15 @@ async fn a_said_folder_is_remembered_by_its_canonical_path_and_read_again() {
     let link = place.path().join("link");
     std::os::unix::fs::symlink(&project, &link).unwrap();
     let project = canonical(&project);
-    let id = super::run_fixture::conversation(&state).await;
+    let id = chat_with(&state, ConversationSettings::default()).await;
 
-    let said = run(&state, "r1", id, &json!({ "folder": shown(&link) })).await;
+    let said = run(&state, "r1", id, Some(&shown(&link))).await;
     assert_eq!(said.as_deref(), Some(project.as_path()));
     assert_eq!(remembered(&state, id).await, Some(shown(&project)));
 
-    let (_, transcript, next) = planned(&state, Some(id), &json!({})).await.unwrap();
-    assert_eq!(next.as_deref(), Some(project.as_path()));
-    assert_eq!(transcript.remember_folder, None, "nothing to write");
+    let next = planned(&state, id, None).await.unwrap();
+    assert_eq!(next.folder.as_deref(), Some(project.as_path()));
+    assert_eq!(next.transcript.remember_folder, None, "nothing to write");
 }
 
 /// `""` forgets the folder without checking it, so a folder that is gone
@@ -146,9 +151,9 @@ async fn the_empty_word_forgets_a_folder_even_one_that_is_gone() {
     let (_dir, state) = state().await;
     let id = remembering(&state, "/nonexistent/gglib-folder").await;
 
-    assert_eq!(run(&state, "r1", id, &json!({ "folder": "" })).await, None);
+    assert_eq!(run(&state, "r1", id, Some("")).await, None);
     assert_eq!(remembered(&state, id).await, None);
-    assert_eq!(run(&state, "r2", id, &json!({})).await, None);
+    assert_eq!(run(&state, "r2", id, None).await, None);
 }
 
 /// A said path that is relative, names nothing, or names a file is refused
@@ -168,7 +173,7 @@ async fn a_said_path_that_is_no_folder_is_refused_400_and_writes_nothing() {
         "/nonexistent/gglib-folder".to_owned(),
         shown(&file),
     ] {
-        let (status, code, message) = refused(&state, id, &json!({ "folder": path })).await;
+        let (status, code, message) = refused(&state, id, Some(&path)).await;
         assert_eq!((status, code), (400, "folder_unusable"), "{path}");
         assert!(message.contains(&path), "{path}: {message}");
     }
@@ -190,7 +195,7 @@ async fn a_remembered_folder_that_is_gone_is_refused_409() {
     std::fs::remove_dir(&gone).unwrap();
     let id = remembering(&state, &gone).await;
 
-    let (status, code, message) = refused(&state, id, &json!({})).await;
+    let (status, code, message) = refused(&state, id, None).await;
     assert_eq!((status, code), (409, "folder_missing"));
     assert!(message.contains(&gone), "{message}");
     assert!(state.runs.get(&LOCAL, "r1").is_err(), "no run was made");
@@ -198,26 +203,9 @@ async fn a_remembered_folder_that_is_gone_is_refused_409() {
     assert_eq!(remembered(&state, id).await, Some(gone));
 
     for another in [shown(place.path()), String::new()] {
-        let said = json!({ "folder": &another });
-        assert!(planned(&state, Some(id), &said).await.is_ok(), "{another}");
+        let said = planned(&state, id, Some(&another)).await;
+        assert!(said.is_ok(), "{another}");
     }
-}
-
-/// Without a conversation a said folder is this run's alone, and `""` is
-/// the same as saying nothing.
-#[tokio::test]
-async fn a_run_with_no_conversation_reads_its_folder_and_remembers_nothing() {
-    let (_dir, state) = state().await;
-    let place = tempfile::tempdir().unwrap();
-    let said = json!({ "folder": shown(place.path()) });
-
-    let (_, transcript, folder) = planned(&state, None, &said).await.unwrap();
-    assert_eq!(folder, Some(canonical(place.path())));
-    assert_eq!(transcript.remember_folder, None);
-    let (_, transcript, folder) = planned(&state, None, &json!({ "folder": "" }))
-        .await
-        .unwrap();
-    assert_eq!((folder, transcript.remember_folder), (None, None));
 }
 
 /// The description of `builtin:read_file` in a request, if it offers it.
@@ -236,13 +224,24 @@ async fn two_runs_at_once_name_their_own_folders() {
     let (_dir, state) = state().await;
     let model_id = model(&state, |_| {}).await;
     let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-    let page = |folder: &Path| json!({ "tool_filter": [TOOL], "folder": shown(folder) });
-    let (chat_a, _, in_a) = planned(&state, None, &page(a.path())).await.unwrap();
-    let (chat_b, _, in_b) = planned(&state, None, &page(b.path())).await.unwrap();
+    let on_tool = ConversationSettings {
+        model: Some(ModelRef {
+            machine: Machine::Local,
+            id: model_id,
+        }),
+        tools: vec![TOOL.to_owned()],
+        ..ConversationSettings::default()
+    };
+    let (one, two) = (
+        chat_with(&state, on_tool.clone()).await,
+        chat_with(&state, on_tool).await,
+    );
+    let in_a = planned(&state, one, Some(&shown(a.path()))).await.unwrap();
+    let in_b = planned(&state, two, Some(&shown(b.path()))).await.unwrap();
 
     let (sent_a, sent_b) = tokio::join!(
-        sent_in(&state, model_id, chat_a, in_a),
-        sent_in(&state, model_id, chat_b, in_b),
+        sent_in(&state, model_id, in_a.chat, in_a.folder),
+        sent_in(&state, model_id, in_b.chat, in_b.folder),
     );
 
     let (a, b) = (shown(&canonical(a.path())), shown(&canonical(b.path())));
@@ -255,7 +254,7 @@ async fn two_runs_at_once_name_their_own_folders() {
 /// A paired device's turn on a chat that remembers a folder, planned and
 /// prepared as a device's is (`hub_turn::plan`, whose folder for it is none,
 /// then the hold `late_on` takes once its model is found), is offered none of the file
-/// tools, even with every tool open to it, while the page's run on the same
+/// tools, even with every tool open to it, while this machine's turn on the same
 /// chat reads that folder.
 #[tokio::test]
 async fn a_devices_turn_on_a_chat_with_a_folder_is_offered_no_file_tool() {
@@ -293,8 +292,8 @@ async fn a_devices_turn_on_a_chat_with_a_folder_is_offered_no_file_tool() {
     assert!(names.contains(&TOOL), "{names:?}");
     assert!(!names.contains(&"builtin:read_file"), "{names:?}");
 
-    let (page, _, here) = planned(&state, Some(id), &json!({})).await.unwrap();
-    let page = sent_in(&state, model_id, page, here).await;
-    let told = read_file_description(&page).expect("the page's run is offered read_file");
+    let here = planned(&state, id, None).await.unwrap();
+    let page = sent_in(&state, model_id, here.chat, here.folder).await;
+    let told = read_file_description(&page).expect("this machine's turn is offered read_file");
     assert!(told.contains(&folder), "{told}");
 }

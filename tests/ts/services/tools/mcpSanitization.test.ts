@@ -13,7 +13,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerMcpTools } from '../../../../src/services/tools/mcpIntegration';
 import { resetToolRegistry, getToolRegistry } from '../../../../src/services/tools/registry';
-import { buildRunRequest } from '../../../../src/hooks/useGglibRuntime/runRequest';
 import type { McpTool } from '../../../../src/services/transport';
 import type { McpServerId } from '../../../../src/services/transport';
 
@@ -74,9 +73,16 @@ function enableAll(): void {
   for (const definition of registry.getDefinitions()) registry.enable(definition.function.name);
 }
 
-/** The tool filter of a run started now, as the daemon receives it. */
+/**
+ * The enabled tools by the names the daemon knows them by (`serverId:name`),
+ * or `null` when none is enabled: what the tool checklist names. A turn no
+ * longer carries them; the chat's saved tools do (D6).
+ */
 function toolFilter(): string[] | null {
-  return buildRunRequest({ messages: [], conversationId: 1, selectedServerPort: 9000 }).tool_filter;
+  const registry = getToolRegistry();
+  const enabled = registry.getEnabledDefinitions();
+  if (enabled.length === 0) return null;
+  return enabled.map((def) => registry.getBackendName(def.function.name));
 }
 
 // =============================================================================

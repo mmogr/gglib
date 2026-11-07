@@ -331,31 +331,4 @@ describe('ChatPlace, model picker', () => {
       expect(screen.queryByRole('group', { name: 'On desk' })).not.toBeInTheDocument();
     });
   });
-
-  it('stays locked while a model starts, across a change of conversation', async () => {
-    const user = userEvent.setup();
-    render(
-      <ChatPlace
-        modelName="Qwen3.8-27B"
-        modelId={7}
-        serverPort={4321}
-        startingModel="gemma-3-12b"
-        onSwitchModel={onSwitchModel}
-        conversationId={fixture.conversations[0]?.id ?? null}
-      />,
-      { wrapper },
-    );
-    const locked = async () => {
-      await waitFor(() => expect(screen.getByText('Loading gemma-3-12b…')).toHaveAttribute('role', 'status'));
-      expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
-    };
-    await locked();
-
-    // The composer, picker and all, remounts with the conversation.
-    await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
-    await waitFor(() =>
-      expect(screen.getByRole('option', { name: /Parsing GGUF/ })).toHaveAttribute('aria-selected', 'true'),
-    );
-    await locked();
-  });
 });
