@@ -7,7 +7,8 @@
  * launch's flag line. Hover offers Unload and Chat; ⋯ offers Chat with it,
  * Change launch options… (the Load with options sheet), Pin the endpoint to
  * it, Show log and Unload. Clicking a row inspects the model beside the
- * place. The queue and the room for a second model are lines of their own.
+ * place. The queue and the room for a second model are lines of their own,
+ * and Load a model… under them opens the palette (`LoadPalette`).
  *
  * Unload asks the daemon whatever this window believes (TX-12): the rows
  * are the dashboard's, and the server list may not have heard yet.
@@ -23,23 +24,27 @@ import { paths } from '../../app/paths';
 import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
+import type { PairedModelsState } from '../../hooks/usePairedModels';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 import { cn } from '../../utils/cn';
 import { Group, Note } from '../library/Group';
 import { Menu } from '../library/Menu';
 import { loadedRows, queuedLines, roomLine, type LoadedRow } from './lines';
+import { LoadPalette } from './LoadPalette';
 
 interface LoadedProps {
   snapshot: DashboardSnapshot;
   /** The model inspected beside the place, if any. */
   inspected: number | null;
+  /** The paired machine's models, for the palette's On <machine> group. */
+  paired: PairedModelsState;
   onUnload: (modelId: number) => void;
   onPin: (modelId: number) => void;
   /** A pin change is on its way: Pin waits for it. */
   pinning: boolean;
 }
 
-const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapshot' | 'inspected'>> = ({ row, selected, onUnload, onPin, pinning }) => {
+const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapshot' | 'inspected' | 'paired'>> = ({ row, selected, onUnload, onPin, pinning }) => {
   const navigate = useNavigate();
   const inspect = () => navigate(paths.endpointInspect(row.modelId));
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -105,8 +110,7 @@ const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapsho
   );
 };
 
-export const Loaded: FC<LoadedProps> = ({ snapshot, inspected, onUnload, onPin, pinning }) => {
-  const navigate = useNavigate();
+export const Loaded: FC<LoadedProps> = ({ snapshot, inspected, paired, onUnload, onPin, pinning }) => {
   const rows = loadedRows(snapshot);
   const room = roomLine(snapshot);
   return (
@@ -123,11 +127,7 @@ export const Loaded: FC<LoadedProps> = ({ snapshot, inspected, onUnload, onPin, 
       {queuedLines(snapshot).map((line) => (
         <Note key={line}>{line}</Note>
       ))}
-      <div className="px-sm">
-        <Button variant="ghost" size="sm" onClick={() => navigate(paths.library())}>
-          Load a model…
-        </Button>
-      </div>
+      <LoadPalette loaded={new Set(rows.map((r) => r.modelId))} paired={paired} />
     </Group>
   );
 };

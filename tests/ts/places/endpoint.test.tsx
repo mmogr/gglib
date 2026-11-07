@@ -261,12 +261,13 @@ describe('the endpoint place', () => {
       expect(screen.queryByText(/^Room for one more/)).not.toBeInTheDocument();
     });
 
-    it('with nothing loaded, says how a model gets loaded; Load a model… goes to the library', async () => {
+    it('with nothing loaded, says how a model gets loaded; Load a model… opens the palette', async () => {
       const { user, at } = renderEndpoint();
       await frame();
       expect(screen.getByText('Nothing loaded. An app loads a model by asking for it by name, or load one now.')).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Load a model…' }));
-      expect(at()).toBe('/library');
+      expect(screen.getByRole('dialog', { name: 'Load a model' })).toBeInTheDocument();
+      expect(at()).toBe('/endpoint');
     });
 
     it('Unload asks the daemon even when this window has not heard the model is loaded', async () => {

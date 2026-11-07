@@ -5,10 +5,11 @@
  * table here; a row says the plan's narration where it has a decision of
  * the same key (the words How it ran uses), else its arguments. Templates
  * has no decision of its own in the narration (its `flags` line also holds
- * the reasoning and embeddings flags), so it reads its arguments. The fit
- * sentence and the Context row's note are composed from
- * `ContextFit`'s figures; the Sampling and Reasoning rows count the
- * explanation's sources. Nothing is worked out that the daemon did not say.
+ * the reasoning and embeddings flags), so it reads its arguments. The
+ * Context row's note is composed from `ContextFit`'s figures (the fit
+ * sentence is `readings/launchFit`'s); the Sampling and Reasoning rows count
+ * the explanation's sources. Nothing is worked out that the daemon did not
+ * say.
  *
  * @module inspector/local/rows
  */
@@ -121,33 +122,6 @@ const SOURCE_ORDER: ChoiceSource[] = ['model_author', 'gglib', 'you'];
 export function chosenBy(args: LaunchArg[]): string {
   const sources = SOURCE_ORDER.filter((s) => args.some((a) => a.source === s));
   return sources.length === 0 ? '' : `chosen by ${sources.map((s) => CHOICE_WORDS[s]).join(', ')}`;
-}
-
-/** A context size: `32K` when it is whole thousands of 1,024, else the number. */
-export const tokens = (n: number): string => (n % 1024 === 0 ? `${n / 1024}K` : n.toLocaleString('en-US'));
-
-/** What a refused fit was missing, from the figures that are `null`. */
-function missing(fit: ContextFit): string {
-  const gaps = [
-    fit.budgetBytes === null && "this Mac's memory could not be read",
-    fit.weightsBytes === null && "the weights' size is not known",
-    fit.kvBytesPerToken === null && 'the model does not say what its context costs',
-  ].filter(Boolean);
-  return gaps.length > 0 ? `: ${gaps.join(', ')}` : '';
-}
-
-/**
- * The fit sentence: the context the model would be served at, of the window
- * it was trained for, and whether it fits this machine. `null` for an image
- * model, which has no context.
- */
-export function fitSentence(fit: ContextFit | null): string | null {
-  if (!fit) return null;
-  const trained = fit.trainedCtx ? `, of ${tokens(fit.trainedCtx)} trained` : '';
-  const at = tokens(fit.servesAt);
-  if (fit.fitted === null) return `Serves at ${at} context${trained}; gglib could not fit one to this Mac${missing(fit)}.`;
-  if (fit.servesAt <= fit.fitted) return `Fits this Mac with ${at} context${trained}.`;
-  return `Serves at ${at} context${trained}; ${tokens(fit.fitted)} fits this Mac.`;
 }
 
 /**

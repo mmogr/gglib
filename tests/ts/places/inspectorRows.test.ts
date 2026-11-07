@@ -1,8 +1,8 @@
 /**
- * `inspector/local/rows`: the fit sentence for each shape of fit, the
- * Context row's note, which decisions become rows and in what order, how a
- * row's arguments read, and how the Sampling row counts what the daemon
- * resolved.
+ * The fit sentence (`readings/launchFit`) for each shape of fit, and
+ * `inspector/local/rows`: the Context row's note, which decisions become
+ * rows and in what order, how a row's arguments read, and how the Sampling
+ * row counts what the daemon resolved.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -11,13 +11,13 @@ import {
   argsValue,
   chosenBy,
   contextNote,
-  fitSentence,
   narrated,
   runRows,
   samplingValue,
   setByYou,
   SAMPLING_KEYS,
 } from '../../../src/inspector/local/rows';
+import { fitSentence } from '../../../src/readings/launchFit';
 import type { ContextFit } from '../../../src/types/generated/ContextFit';
 import type { LaunchArg } from '../../../src/types/generated/LaunchArg';
 import { chatPlan, samplingExplanation } from '../fixtures/explain';

@@ -19,6 +19,18 @@ words (`readings/connect`, pinned by `contracts/connectClient.test.ts`);
 paired devices and their descriptions from `services/remoteRegistry`. State
 words are `components/status/words.ts`'s.
 
+Load a model… opens a palette of this machine's models not loaded, each
+with the fit sentence of its explanation (`readings/launchFit`, the
+inspector's) and, when the launch would unload a model first, the CLI's
+unload sentence (pinned by `contracts/unloadReason.test.ts`); the
+joined machine's models follow as On <machine>, loadable there as the far
+inspector allows. There is no route that explains many models, so each
+row is read on its own (`GET /api/models/:id/explain`), the highlighted
+row first, then the first rows of the list (the rows a list of six shows,
+by its scroll), three at a time. ⏎ loads with the model's id alone (IN-7);
+⌥⏎ opens Load with options. No shortcut opens it: ⌘L is the browser's
+address bar in `gglib web`.
+
 Turn on names no port (EP-2); a failed start or stop is the daemon's
 message as it said it (EP-1), so a port in use or llama.cpp missing is said
 when the daemon says it, never detected here. Serving one model, or every
@@ -47,7 +59,13 @@ Mac · N requests now" / "· no requests now", "No app has used it yet.",
 is `readings/throughput`'s, which no Rust computes); Activity's "Prompt cache
 71% reused", "N tool calls repaired", "N loop-guard trips", "N client
 sampling fields ignored", "Nothing to report yet.", "Clear prompt cache",
-"Live numbers ›", "All ›"; and ⋯'s "Live numbers", "Endpoint settings…".
+"Live numbers ›", "All ›"; ⋯'s "Live numbers", "Endpoint settings…"; and the palette's "Load a
+model" (its field), "fit unknown", "No model matches.", "No models on this
+Mac.", "Every model on this Mac is loaded.", "On <machine>", "Load on
+<machine>", "<machine> is away; Load waits until it is back.",
+"<machine>'s models could not be read just now.", "<machine> does not offer
+Load.", "Didn't load: <the daemon's words>" and "⏎ Load · ⌥⏎ Load with
+options…".
 The queue's wait is whole seconds, rounded down, as `gglib proxy dashboard`
 prints it ("4s", "1m 5s"); the inspector's "loaded 4m 10s" is
 `formatDuration`'s.
@@ -63,7 +81,10 @@ they can act (the endpoint up; Clear also its key revealed), and a row's
 |------|------|
 | `EndpointPlace.tsx` | The route: the title and ⋯ (Live numbers, Clear prompt cache, Endpoint settings…), the sections in order once the dashboard has spoken, the Model ID Connect a client and Test it share, the dashboard dialog, and the inspector beside it |
 | `Header.tsx` | The address line: On with the address, Copy, the meaning, Test it, Turn off; Pinned with its model and Unpin; Key required with Show; Off with Turn on, its sentence and Start when gglib launches; Starting; the daemon's failure and the proof's sentence |
-| `Loaded.tsx` | The resident rows (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯), the queue's lines, the room line, the empty sentence and Load a model… (the library until the palette) |
+| `Loaded.tsx` | The resident rows (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯), the queue's lines, the room line, the empty sentence and Load a model… (the palette) |
+| `LoadPalette.tsx` | Load a model…: the filter, this machine's models not loaded with quant, size and fit, On <machine>, ↑ ↓ Home End, ⏎ loads with nothing typed, ⌥⏎ opens Load with options, Esc gives focus back |
+| `paletteRows.ts` | Pure: the palette's rows (not loaded, matching the filter as the library's search does), a row's quant and size, its fit line from its explanation, and the paired machine's rows with why they cannot load there |
+| `useFitReads.ts` | The palette's explain reads: the highlighted row first, then the rows in view, three at most in flight, kept for one open, an answer to a closed open dropped |
 | `Serves.tsx` | Serves ▾: Every model, the loaded models, the library's other chat models; the pin chosen by its name |
 | `UsingIt.tsx` | Requests in flight from apps on this machine, one line per joined device in the daemon's words, or the empty sentence with Connect a client |
 | `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what gglib did; All ›; not drawn when empty |

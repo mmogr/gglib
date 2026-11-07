@@ -30,7 +30,7 @@ import { UNKNOWN, formatSize, getHuggingFaceUrl } from '../../utils/format';
 import { Abilities } from './Abilities';
 import type { Update } from './Change';
 import { ReasoningSupport } from './ReasoningSupport';
-import { tokens } from './rows';
+import { tokens } from '../../readings/launchFit';
 import { SourceStatus } from './SourceStatus';
 import { Tags } from './Tags';
 import type { ModelDetailState } from './useModelDetail';

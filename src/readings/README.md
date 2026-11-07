@@ -14,6 +14,7 @@ apart from the components that show them.
 | `connect.ts` | What the Endpoint page says of a proof (answered, or why not) and of a client's recipes (key lines said as the stored secret): the words `render_proof` and `render_client_config` print, held to `contracts/proxy/` |
 | `throughput.ts` | Tokens written per second of writing, for a request (Recent, the loaded inspector) and a reply (`turnFigures`): computed here, since no Rust does; nothing without both figures or with no time |
 | `capabilityFlags.ts` | `CAPABILITY_FLAGS`, the capability bitflags as `gglib_core::domain::ModelCapabilities` numbers them, and `CapabilityFlagName` |
+| `launchFit.ts` | What a launch plan says of its fit: the fit sentence from `plan.fit`'s figures (the inspector under Load, the endpoint's Load palette on each row) and the unload sentence from `plan.unloads`, the words `gglib model explain` prints, held to `contracts/models/unload_reason.json`; `tokens`, a context size as `32K` |
 | `drawingValues.ts` | `drawingValuesFrom`, the drawing settings (default image model, MCP drawing) read from the stored `AppSettings` |
 
 <!-- module-docs:end -->
