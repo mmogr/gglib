@@ -27,7 +27,7 @@ const TURN_OFF: &str = "Turn Off";
 /// menu bar appears, leaving nothing to hold references to.
 #[cfg(target_os = "macos")]
 pub(crate) struct AppMenu {
-    /// The Model and Endpoint menus' items, each beside its id.
+    /// The Model and Endpoint menus' items and Hide Inspector, each beside its id.
     pub stateful: Vec<(&'static str, MenuItem<Wry>)>,
 }
 
@@ -72,10 +72,12 @@ pub(crate) fn is_enabled(id: &str, state: MenuState) -> bool {
     match id {
         ids::LOAD | ids::LOAD_WITH_OPTIONS => state.inspected == Inspected::Idle,
         ids::UNLOAD => state.inspected == Inspected::Served,
-        ids::REMOVE => state.inspected != Inspected::Nothing,
+        // Hide Inspector too: the Model menu's rule, a model in the inspector.
+        ids::REMOVE | ids::HIDE_INSPECTOR => state.inspected != Inspected::Nothing,
         ids::ENDPOINT_SWITCH => state.endpoint != Endpoint::NoDaemon,
-        // A dead URL is worse than no URL.
-        ids::COPY_ENDPOINT_URL => state.endpoint == Endpoint::On,
+        // A dead URL is worse than no URL, and there is no client to connect
+        // to an endpoint that is off.
+        ids::COPY_ENDPOINT_URL | ids::CONNECT_CLIENT => state.endpoint == Endpoint::On,
         _ => true,
     }
 }
@@ -157,15 +159,40 @@ mod tests {
         assert_eq!(label(ids::COPY_ENDPOINT_URL, on), None);
     }
 
+    /// Copy and Connect a Client… need an endpoint that is on: a dead URL,
+    /// or a client with nothing to connect to.
     #[test]
-    fn copying_needs_an_endpoint_that_is_on() {
-        assert!(is_enabled(
-            ids::COPY_ENDPOINT_URL,
+    fn copying_and_connecting_need_an_endpoint_that_is_on() {
+        for id in [ids::COPY_ENDPOINT_URL, ids::CONNECT_CLIENT] {
+            assert!(
+                is_enabled(id, state(Endpoint::On, Inspected::Nothing)),
+                "{id}"
+            );
+            assert!(
+                !is_enabled(id, state(Endpoint::Off, Inspected::Nothing)),
+                "{id}"
+            );
+            assert!(
+                !is_enabled(id, state(Endpoint::NoDaemon, Inspected::Nothing)),
+                "{id}"
+            );
+        }
+    }
+
+    /// Hide Inspector has the Model menu's rule: something to hide.
+    #[test]
+    fn hide_inspector_needs_a_model_inspected() {
+        assert!(!is_enabled(
+            ids::HIDE_INSPECTOR,
             state(Endpoint::On, Inspected::Nothing)
         ));
-        assert!(!is_enabled(
-            ids::COPY_ENDPOINT_URL,
-            state(Endpoint::Off, Inspected::Nothing)
+        assert!(is_enabled(
+            ids::HIDE_INSPECTOR,
+            state(Endpoint::On, Inspected::Idle)
+        ));
+        assert!(is_enabled(
+            ids::HIDE_INSPECTOR,
+            state(Endpoint::Off, Inspected::Served)
         ));
     }
 
@@ -182,6 +209,8 @@ mod tests {
                 ids::REMOVE,
                 ids::ENDPOINT_SWITCH,
                 ids::COPY_ENDPOINT_URL,
+                ids::CONNECT_CLIENT,
+                ids::HIDE_INSPECTOR,
             ]
             .contains(&id);
             assert_eq!(is_enabled(id, initial), !needs_something, "{id}");

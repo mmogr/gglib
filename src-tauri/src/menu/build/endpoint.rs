@@ -1,15 +1,16 @@
 //! The Endpoint menu: turning it on or off and copying its address, both
-//! handled here in Rust, and the way to connect a client to it.
+//! handled here in Rust, and the way to connect a client to it. Copy and
+//! Connect are offered only while the endpoint is on.
 
 use tauri::{
     AppHandle, Wry,
     menu::{MenuItem, PredefinedMenuItem, Submenu},
 };
 
-use super::{Entry, item, stateful_items};
+use super::{Entry, stateful_items};
 use crate::menu::{TURN_ON, ids};
 
-/// Turn On / Off and Copy follow the endpoint's state; Connect does not.
+/// All three follow the endpoint's state.
 pub(super) const ENTRIES: &[Entry] = &[
     Entry {
         id: ids::ENDPOINT_SWITCH,
@@ -32,11 +33,8 @@ pub(super) fn submenu(
     app: &AppHandle,
     stateful: &mut Vec<(&'static str, MenuItem<Wry>)>,
 ) -> tauri::Result<Submenu<Wry>> {
-    let [stateful_entries @ .., connect] = ENTRIES else {
-        unreachable!()
-    };
-    let items = stateful_items(app, stateful_entries, stateful)?;
-    let [switch, copy] = items.as_slice() else {
+    let items = stateful_items(app, ENTRIES, stateful)?;
+    let [switch, copy, connect] = items.as_slice() else {
         unreachable!()
     };
 
@@ -44,11 +42,6 @@ pub(super) fn submenu(
         app,
         "Endpoint",
         true,
-        &[
-            switch,
-            copy,
-            &PredefinedMenuItem::separator(app)?,
-            &item(app, connect)?,
-        ],
+        &[switch, copy, &PredefinedMenuItem::separator(app)?, connect],
     )
 }

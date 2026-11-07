@@ -69,15 +69,6 @@ export default function EndpointPlace() {
   const [clearing, setClearing] = useState(false);
   const connectRef = useRef<HTMLDivElement>(null);
 
-  // The menu's Connect a Client… (`?connect=1`): scrolled to once the block
-  // is drawn, and the ask dropped from the address.
-  const connectAsked = new URLSearchParams(location.search).get('connect') === '1';
-  useEffect(() => {
-    if (!connectAsked || !connectRef.current) return;
-    connectRef.current.scrollIntoView?.({ behavior: 'smooth' });
-    navigate(withoutParam(location, 'connect'), { replace: true });
-  });
-
   const subject = inspectorSubject(location);
   const inspected = subject?.kind === 'model' ? subject.id : null;
   const snapshot = dash.snapshot;
@@ -90,6 +81,16 @@ export default function EndpointPlace() {
   const smallest = [...chatModels].sort((a, b) => a.sizeBytes - b.sizeBytes)[0]?.id ?? null;
   const modelId = picked ?? inspected ?? pinnedId ?? lastLoaded ?? settled ?? smallest;
   const up = facts.state === 'on' || facts.state === 'pinned';
+  // The menu's Connect a Client… (`?connect=1`): scrolled to once the block
+  // is drawn, and the ask dropped from the address. With the endpoint off
+  // there is no block to scroll to, and the ask is dropped at once, so it
+  // cannot scroll the page later when the endpoint comes on.
+  const connectAsked = new URLSearchParams(location.search).get('connect') === '1';
+  useEffect(() => {
+    if (!connectAsked || (up && !connectRef.current)) return;
+    connectRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+    navigate(withoutParam(location, 'connect'), { replace: true });
+  });
   const canLive = up && dash.port !== null;
   // A dialog asked for while it could not open does not open later by itself.
   if (live && !canLive) setLive(false);

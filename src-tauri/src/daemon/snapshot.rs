@@ -197,6 +197,18 @@ mod tests {
         assert_eq!(names, vec!["", "Qwen3-4B"]);
     }
 
+    /// A model the server list names twice is one loaded model, or the tray
+    /// would say "2 models loaded" for one.
+    #[test]
+    fn a_model_listed_twice_is_loaded_once() {
+        let snap = DaemonSnapshot::from_responses(
+            &json!({"running": false}),
+            &json!([{"model_id": 7, "model_name": "Qwen3-4B"}, {"model_id": 7, "model_name": "Qwen3-4B"}]),
+        );
+
+        assert_eq!(snap.resident.len(), 1);
+    }
+
     /// The endpoint's word is the daemon's own `state`, so a pinned run reads
     /// as pinned; a stopped proxy is off whatever `state` says, and a daemon
     /// that sends no `state` is read from `running`.

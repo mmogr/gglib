@@ -38,7 +38,7 @@ pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), ta
             &app::submenu(app)?,
             &file::submenu(app)?,
             &standard::edit(app)?,
-            &view::submenu(app)?,
+            &view::submenu(app, &mut stateful)?,
             &model::submenu(app, &mut stateful)?,
             &endpoint::submenu(app, &mut stateful)?,
             &standard::window(app)?,

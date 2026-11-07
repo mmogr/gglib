@@ -579,6 +579,23 @@ describe('the endpoint place', () => {
       }
     });
 
+    it('with the endpoint off, the ask to connect leaves the address at once and scrolls nothing later', async () => {
+      const scrolled: Element[] = [];
+      const before = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        const { at } = renderEndpoint(DOWN, '/endpoint?connect=1');
+        await waitFor(() => expect(at()).toBe('/endpoint'));
+        act(() => applyProxyStatus(UP));
+        expect(await screen.findByRole('region', { name: 'Connect a client' })).toBeInTheDocument();
+        expect(scrolled).toHaveLength(0);
+      } finally {
+        Element.prototype.scrollIntoView = before;
+      }
+    });
+
     it('before anything has used it, says so and offers Connect a client', async () => {
       renderEndpoint();
       await frame();

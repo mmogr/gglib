@@ -86,6 +86,16 @@ pub(super) fn is_on(id: &str, snap: &DaemonSnapshot) -> bool {
     }
 }
 
+/// Whether a click on the endpoint switch turns the endpoint off (else on).
+///
+/// The rule its label is drawn by, so the click does the verb it showed:
+/// "Turn Endpoint Off" stops, "Turn Endpoint On" starts. The macOS menu's
+/// Turn On / Off takes the same path (`proxy_actions::spawn_switch`).
+#[must_use]
+pub(crate) fn endpoint_switch_turns_off(snap: &DaemonSnapshot) -> bool {
+    is_on(ids::ENDPOINT_SWITCH, snap)
+}
+
 /// The text an entry shows for this snapshot; `None` for a separator. The
 /// status line's text is `icon::derive`'s, and is passed in.
 #[must_use]
@@ -168,6 +178,27 @@ mod tests {
         assert!(drawn(&off()).contains(&"Stop gglib…".to_owned()));
         assert!(drawn(&offline()).contains(&"Start gglib".to_owned()));
         assert!(drawn(&offline()).contains(&"Turn Endpoint On".to_owned()));
+    }
+
+    /// A click turns off what the switch says is on, and on what it says is
+    /// off — never the reverse of its label.
+    #[test]
+    fn the_endpoint_switch_turns_off_only_what_is_on() {
+        assert!(endpoint_switch_turns_off(&on()));
+        assert!(!endpoint_switch_turns_off(&off()));
+        assert!(!endpoint_switch_turns_off(&offline()));
+        let switch = ITEMS
+            .iter()
+            .find(|i| matches!(i, Item::Switch { id, .. } if *id == ids::ENDPOINT_SWITCH))
+            .expect("the endpoint switch is on the menu");
+        assert_eq!(
+            label(switch, "", &on()).as_deref(),
+            Some("Turn Endpoint Off")
+        );
+        assert_eq!(
+            label(switch, "", &off()).as_deref(),
+            Some("Turn Endpoint On")
+        );
     }
 
     /// The panel is listed only where the icon may have no left click.

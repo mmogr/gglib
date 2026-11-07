@@ -10,8 +10,10 @@ gglib (About gglib · Settings… ⌘, · the OS items) · File (Get Models… �
 Add a GGUF File… ⌘O · New Chat ⌘N) · Edit · View (Library ⌘1 · Endpoint ⌘2 ·
 Devices ⌘3 · Chat ⌘4 · Diagnostics ⌥⌘D · Hide Inspector ⌘I · Full Screen) ·
 Model (Load ⌘↩ · Load with Options… ⌥⌘↩ · Unload ⌘. · Remove from Library…
-⌘⌫, all disabled with no model inspected) · Endpoint (Turn On / Off ⌘P · Copy
-Endpoint URL ⇧⌘C · Connect a Client…) · Window · Help (gglib Documentation).
+⌘⌫, all disabled with no model inspected, as is Hide Inspector) · Endpoint
+(Turn On / Off ⌘P, disabled with no daemon · Copy Endpoint URL ⇧⌘C and
+Connect a Client…, both only while the endpoint is on) · Window · Help (gglib
+Documentation).
 
 A place is one `menu:navigate` event carrying a place id
 (`app::events::places`); the Model menu and Hide Inspector send events of

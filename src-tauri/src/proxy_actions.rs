@@ -66,7 +66,8 @@ pub(crate) async fn stop(app: &AppHandle) -> Result<(), String> {
 pub(crate) fn spawn_switch(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let on = app.state::<AppState>().snapshot.read().await.proxy_running;
+        let on =
+            crate::tray::endpoint_switch_turns_off(&*app.state::<AppState>().snapshot.read().await);
         let result = if on {
             stop(&app).await
         } else {
