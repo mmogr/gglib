@@ -1,17 +1,17 @@
 /**
  * Whether the gglib daemon is answering.
  *
- * Every other surface in the app can assume a daemon: the main window is only
- * reachable once one has been found, and the native tray menu reads the Rust
- * watcher's snapshot, which has "unreachable" as a first-class state. The tray
- * *popover* had neither. It rendered `useProxyState()`, which reports
+ * The tray popover and the main window's `ServiceGate` read this; the native
+ * tray menu reads the Rust watcher's snapshot, which has "unreachable" as a
+ * first-class state. The tray *popover* once had nothing of the kind. It rendered `useProxyState()`, which reports
  * `{running: false}` for a stopped proxy and for a daemon that is not there —
  * so a machine with no daemon showed "The proxy is stopped", and the Start
  * button fell into a connection error.
  *
  * Polling rather than reacting to a failed call: a reachability signal has to
  * recover on its own, and nothing else in the popover would ask again once its
- * one fetch had failed. Absolute each time, so it cannot drift.
+ * one fetch had failed. Absolute each time, so it cannot drift. What it asks is
+ * `/health` (`probeDaemon`), the route the desktop app's own probe asks.
  *
  * @module hooks/useDaemonReachable
  */
@@ -37,16 +37,12 @@ export function useDaemonReachable(): Reachability {
   useEffect(() => {
     let cancelled = false;
 
+    // `/health`, which needs no token and no key: any answer is a daemon
+    // there, a refused token and a missing key among them. An `/api` probe
+    // read a stale token as no daemon, and ran the key prompt every poll.
     const probe = async () => {
-      try {
-        await getTransport().getProxyStatus();
-        if (!cancelled) setReachable(true);
-      } catch {
-        // Any failure is the same answer: nothing is serving this app's API.
-        // Distinguishing a refused connection from a 500 would be a claim
-        // about the daemon's health that this poll cannot support.
-        if (!cancelled) setReachable(false);
-      }
+      const answers = await getTransport().probeDaemon();
+      if (!cancelled) setReachable(answers);
     };
 
     void probe();

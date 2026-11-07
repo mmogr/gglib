@@ -26,10 +26,10 @@ EP-2; a failure is the daemon's message, EP-1), and × is
 whatever this window believes (TX-12).
 
 No daemon is not a stopped endpoint (TM-8): while the daemon does not
-answer (`hooks/useDaemonReachable`, polled), the panel says so in one
+answer (`hooks/useDaemonReachable`, its `/health` polled), the panel says so in one
 sentence and Start gglib is drawn disabled, since only the tray menu can
 start the service. The registries let go of what the daemon said when it
-goes, and each is read again when the poll hears it (a list read replaces
+goes (`hooks/useDaemonRecovery`, which the main window's gate shares), and each is read again when the poll hears it (a list read replaces
 the running set, so a model that died with the old daemon is not drawn),
 and the event stream connects at once instead of sleeping out a reconnect
 wait that grew while the daemon was gone. A list read that failed, or that an

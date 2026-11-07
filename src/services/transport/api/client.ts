@@ -310,6 +310,16 @@ export async function del<T>(path: string, body?: unknown): Promise<T> {
 }
 
 /**
+ * Where this session's daemon answers its health probe (`/health`, outside
+ * every guard): `http://127.0.0.1:<port>/health` in the desktop app, the
+ * page's own origin in a browser.
+ */
+export async function healthUrl(): Promise<string> {
+  await getClient();
+  return `${apiBaseUrl}/health`;
+}
+
+/**
  * `fetch` against this session's daemon, for what `request` cannot carry: a
  * stream, a body that is not JSON, a reply that is not JSON.
  *

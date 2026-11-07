@@ -131,6 +131,8 @@ fn main() {
             commands::util::sync_menu_state,
             // OS integration: the tray panel's Open gglib
             commands::util::show_main_window,
+            // OS integration: the main window's Start gglib, when no daemon answers
+            commands::util::start_gglib,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
         ])
