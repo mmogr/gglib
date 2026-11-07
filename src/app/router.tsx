@@ -6,7 +6,8 @@
  * that sit over every place. The library is a layout route of its own over
  * `/library`, `/models/:id` (and its `/log`), `/far/:id` and
  * `/get/:owner/:name`, so picking a row changes the address without
- * remounting the page.
+ * remounting the page. `/endpoint` is the endpoint place, its inspector
+ * named by `?inspect=`.
  *
  * The router instance is module-scoped so the native menu can navigate from
  * outside React (`app/menuBridge`). It is created after `takeDaemonToken()`
@@ -20,6 +21,7 @@
 import type { ReactNode } from 'react';
 import { createBrowserRouter, createMemoryRouter, Navigate, type RouteObject } from 'react-router';
 
+import EndpointPlace from '../places/endpoint/EndpointPlace';
 import LibraryPlace from '../places/library/LibraryPlace';
 import { takeDaemonToken } from '../services/transport/api/daemonToken';
 import { BenchmarkRoute } from './BenchmarkRoute';
@@ -33,6 +35,7 @@ export const routes: RouteObject[] = [
     element: <LibraryPlace />,
     children: [{ path: 'library' }, { path: 'models/:id' }, { path: 'models/:id/log' }, { path: 'far/:id' }, { path: 'get/:owner/:name' }],
   },
+  { path: 'endpoint', element: <EndpointPlace /> },
   { path: 'chat/far/:id', element: <FarChatRoute /> },
   { path: 'chat/:modelId', element: <ChatRoute /> },
   { path: 'diagnostics/benchmarks', element: <BenchmarkRoute /> },

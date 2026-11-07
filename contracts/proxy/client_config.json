@@ -1,0 +1,272 @@
+[
+  {
+    "lines": [
+      "",
+      "  Connect your client  Model ID Qwen3-4B · gglib id 7",
+      "",
+      "    opencode                 opencode.json, in the project or in ~/.config/opencode/",
+      "      provider.gglib.npm             @ai-sdk/openai-compatible",
+      "      provider.gglib.options.baseURL http://127.0.0.1:8080/v1",
+      "      provider.gglib.options.apiKey  gglib",
+      "      provider.gglib.models          { \"Qwen3-4B\": {} }",
+      "      model                          gglib/Qwen3-4B",
+      "",
+      "    Cline / Roo / Continue   provider: OpenAI Compatible",
+      "      Base URL                       http://127.0.0.1:8080/v1",
+      "      API Key                        gglib  (unused, but most clients demand one)",
+      "      Model ID                       Qwen3-4B",
+      "",
+      "    Open WebUI               Settings -> Connections -> OpenAI API",
+      "      URL                            http://127.0.0.1:8080/v1",
+      "      Key                            gglib",
+      "",
+      "    VS Code Copilot (BYOK)   needs one fixed model, so serve only this one",
+      "      Run                            gglib serve 7",
+      "",
+      "    Any OpenAI client        environment variables: the official SDKs read OPENAI_BASE_URL, aider and litellm OPENAI_API_BASE",
+      "      OPENAI_BASE_URL                http://127.0.0.1:8080/v1",
+      "      OPENAI_API_BASE                http://127.0.0.1:8080/v1",
+      "      OPENAI_API_KEY                 gglib",
+      "      model                          Qwen3-4B",
+      "",
+      "    Check it from another shell:",
+      "      curl http://127.0.0.1:8080/v1/models",
+      "",
+      "  Dashboard  http://127.0.0.1:8080/v1/proxy/status",
+      ""
+    ],
+    "recipes": {
+      "base_url": "http://127.0.0.1:8080/v1",
+      "gglib_id": 7,
+      "key": "none_needed",
+      "model_id": "Qwen3-4B",
+      "recipes": [
+        {
+          "client": "opencode",
+          "hint": "opencode.json, in the project or in ~/.config/opencode/",
+          "lines": [
+            {
+              "label": "provider.gglib.npm",
+              "value": "@ai-sdk/openai-compatible"
+            },
+            {
+              "label": "provider.gglib.options.baseURL",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "provider.gglib.options.apiKey",
+              "value": "gglib"
+            },
+            {
+              "label": "provider.gglib.models",
+              "value": "{ \"Qwen3-4B\": {} }"
+            },
+            {
+              "label": "model",
+              "value": "gglib/Qwen3-4B"
+            }
+          ]
+        },
+        {
+          "client": "Cline / Roo / Continue",
+          "hint": "provider: OpenAI Compatible",
+          "lines": [
+            {
+              "label": "Base URL",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "API Key",
+              "value": "gglib  (unused, but most clients demand one)"
+            },
+            {
+              "label": "Model ID",
+              "value": "Qwen3-4B"
+            }
+          ]
+        },
+        {
+          "client": "Open WebUI",
+          "hint": "Settings -> Connections -> OpenAI API",
+          "lines": [
+            {
+              "label": "URL",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "Key",
+              "value": "gglib"
+            }
+          ]
+        },
+        {
+          "client": "VS Code Copilot (BYOK)",
+          "hint": "needs one fixed model, so serve only this one",
+          "lines": [
+            {
+              "label": "Run",
+              "value": "gglib serve 7"
+            }
+          ]
+        },
+        {
+          "client": "Any OpenAI client",
+          "hint": "environment variables: the official SDKs read OPENAI_BASE_URL, aider and litellm OPENAI_API_BASE",
+          "lines": [
+            {
+              "label": "OPENAI_BASE_URL",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "OPENAI_API_BASE",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "OPENAI_API_KEY",
+              "value": "gglib"
+            },
+            {
+              "label": "model",
+              "value": "Qwen3-4B"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "lines": [
+      "",
+      "  Connect your client  Model ID Qwen3-4B · gglib id 7",
+      "",
+      "    opencode                 opencode.json, in the project or in ~/.config/opencode/",
+      "      provider.gglib.npm             @ai-sdk/openai-compatible",
+      "      provider.gglib.options.baseURL http://127.0.0.1:8080/v1",
+      "      provider.gglib.options.apiKey  (set, not shown)  `gglib config settings reveal proxy-api-key` prints it",
+      "      provider.gglib.models          { \"Qwen3-4B\": {} }",
+      "      model                          gglib/Qwen3-4B",
+      "",
+      "    Cline / Roo / Continue   provider: OpenAI Compatible",
+      "      Base URL                       http://127.0.0.1:8080/v1",
+      "      API Key                        (set, not shown)  `gglib config settings reveal proxy-api-key` prints it",
+      "      Model ID                       Qwen3-4B",
+      "",
+      "    Open WebUI               Settings -> Connections -> OpenAI API",
+      "      URL                            http://127.0.0.1:8080/v1",
+      "      Key                            (set, not shown)  `gglib config settings reveal proxy-api-key` prints it",
+      "",
+      "    VS Code Copilot (BYOK)   needs one fixed model, so serve only this one",
+      "      Run                            gglib serve 7",
+      "",
+      "    Any OpenAI client        environment variables: the official SDKs read OPENAI_BASE_URL, aider and litellm OPENAI_API_BASE",
+      "      OPENAI_BASE_URL                http://127.0.0.1:8080/v1",
+      "      OPENAI_API_BASE                http://127.0.0.1:8080/v1",
+      "      OPENAI_API_KEY                 (set, not shown)  `gglib config settings reveal proxy-api-key` prints it",
+      "      model                          Qwen3-4B",
+      "",
+      "    Check it from another shell:",
+      "      curl -H \"Authorization: Bearer $(gglib config settings reveal proxy-api-key)\" http://127.0.0.1:8080/v1/models",
+      "",
+      "  Dashboard  http://127.0.0.1:8080/v1/proxy/status",
+      ""
+    ],
+    "recipes": {
+      "base_url": "http://127.0.0.1:8080/v1",
+      "gglib_id": 7,
+      "key": "required",
+      "model_id": "Qwen3-4B",
+      "recipes": [
+        {
+          "client": "opencode",
+          "hint": "opencode.json, in the project or in ~/.config/opencode/",
+          "lines": [
+            {
+              "label": "provider.gglib.npm",
+              "value": "@ai-sdk/openai-compatible"
+            },
+            {
+              "label": "provider.gglib.options.baseURL",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "provider.gglib.options.apiKey",
+              "value": "<your key>"
+            },
+            {
+              "label": "provider.gglib.models",
+              "value": "{ \"Qwen3-4B\": {} }"
+            },
+            {
+              "label": "model",
+              "value": "gglib/Qwen3-4B"
+            }
+          ]
+        },
+        {
+          "client": "Cline / Roo / Continue",
+          "hint": "provider: OpenAI Compatible",
+          "lines": [
+            {
+              "label": "Base URL",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "API Key",
+              "value": "the stored key (required)"
+            },
+            {
+              "label": "Model ID",
+              "value": "Qwen3-4B"
+            }
+          ]
+        },
+        {
+          "client": "Open WebUI",
+          "hint": "Settings -> Connections -> OpenAI API",
+          "lines": [
+            {
+              "label": "URL",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "Key",
+              "value": "<your key>"
+            }
+          ]
+        },
+        {
+          "client": "VS Code Copilot (BYOK)",
+          "hint": "needs one fixed model, so serve only this one",
+          "lines": [
+            {
+              "label": "Run",
+              "value": "gglib serve 7"
+            }
+          ]
+        },
+        {
+          "client": "Any OpenAI client",
+          "hint": "environment variables: the official SDKs read OPENAI_BASE_URL, aider and litellm OPENAI_API_BASE",
+          "lines": [
+            {
+              "label": "OPENAI_BASE_URL",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "OPENAI_API_BASE",
+              "value": "http://127.0.0.1:8080/v1"
+            },
+            {
+              "label": "OPENAI_API_KEY",
+              "value": "<your key>"
+            },
+            {
+              "label": "model",
+              "value": "Qwen3-4B"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

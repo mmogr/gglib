@@ -6,12 +6,14 @@ import { describe, it, expect } from 'vitest';
 
 import {
   benchmarkModelIds,
+  inspectorClosed,
   inspectorSubject,
   libraryIntent,
   menuModelId,
   paths,
   settingsAt,
   settingsSection,
+  withoutParam,
   withoutSettings,
 } from '../../../src/app/paths';
 
@@ -38,6 +40,25 @@ describe('paths', () => {
     expect(inspectorSubject({ pathname: '/library' })).toBeNull();
     expect(inspectorSubject({ pathname: '/chat/7' })).toBeNull();
     expect(inspectorSubject({ pathname: '/models/seven' })).toBeNull();
+  });
+
+  it('beside the endpoint, the subject is ?inspect=model:<id>, and × drops only that', () => {
+    expect(paths.endpoint()).toBe('/endpoint');
+    expect(paths.endpointInspect(7)).toBe('/endpoint?inspect=model:7');
+    expect(paths.endpointServe(7)).toBe('/endpoint?inspect=model:7&serve=1');
+    expect(inspectorSubject({ pathname: '/endpoint', search: '?inspect=model:7' })).toEqual({ kind: 'model', id: 7, log: false });
+    expect(inspectorSubject({ pathname: '/endpoint', search: '?inspect=model:7&serve=1' })).toEqual({ kind: 'model', id: 7, log: false });
+    expect(inspectorSubject({ pathname: '/endpoint', search: '' })).toBeNull();
+    expect(inspectorSubject({ pathname: '/endpoint' })).toBeNull();
+    expect(inspectorSubject({ pathname: '/endpoint', search: '?inspect=model:seven' })).toBeNull();
+    expect(inspectorSubject({ pathname: '/endpoint', search: '?inspect=far:3' })).toBeNull();
+    // Only the endpoint reads it: the library's subject is its path.
+    expect(inspectorSubject({ pathname: '/library', search: '?inspect=model:7' })).toBeNull();
+    expect(menuModelId({ pathname: '/endpoint', search: '?inspect=model:7' })).toBe(7);
+
+    expect(inspectorClosed({ pathname: '/endpoint', search: '?inspect=model:7&x=1' })).toBe('/endpoint?x=1');
+    expect(inspectorClosed({ pathname: '/models/7', search: '' })).toBe('/library');
+    expect(withoutParam({ pathname: '/endpoint', search: '?inspect=model:7&serve=1' }, 'serve')).toBe('/endpoint?inspect=model%3A7');
   });
 
   it("menuModelId is the inspector's model or the open chat's, and nothing elsewhere", () => {

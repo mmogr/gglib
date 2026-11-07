@@ -7,9 +7,11 @@
  * why in one line, with Show log.
  *
  * The ⋯ menu's Load with options… and Load and pin, a launch-line token's
- * Change for this model…, and `?serve=1` (the native menu's Serve) open
- * the Load with options sheet in the inspector's place; the address is
- * read here, acted on once, and stripped. Verify files and Check for
+ * Change for this model…, and `?serve=1` (the native menu's Serve, and the
+ * endpoint's Change launch options…) open the Load with options sheet in
+ * the inspector's place; the address is read here, acted on once, and
+ * stripped of `serve` alone. × closes to the library, or to the endpoint
+ * place without its `?inspect=` when beside it. Verify files and Check for
  * updates (offered for a model from Hugging Face) start the check at once
  * and open Details on Source, where its line is.
  *
@@ -19,11 +21,10 @@
 import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal, X } from 'lucide-react';
-import { libraryIntent, paths } from '../../app/paths';
+import { inspectorClosed, libraryIntent, paths, withoutParam } from '../../app/paths';
 import { CopyValue } from '../../components/CopyValue';
 import { InstallProgress } from '../../components/SetupWizard/InstallProgress';
 import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
-import { RESIDENCY_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
@@ -33,7 +34,6 @@ import type { ServerViewModel } from '../../hooks/useServers';
 import { useEngineInstall } from '../../places/library/engineInstall';
 import { modelFacts } from '../../places/library/groups';
 import { Menu, type MenuItem } from '../../places/library/Menu';
-import { useResidency } from '../../places/library/useResidency';
 import { refreshModels } from '../../services/modelEvents';
 import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
@@ -52,6 +52,7 @@ import { useExplain } from './useExplain';
 import { useLaunchFacts } from './useLaunchFacts';
 import { useLoad } from './useLoad';
 import { useModelDetail } from './useModelDetail';
+import { useResident } from './useResident';
 import { useRetagModel } from './useRetagModel';
 import { useSdStatus } from './useSdStatus';
 import { useVerification } from './useVerification';
@@ -94,7 +95,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
   const explain = useExplain(model.id, profile);
   const detail = useModelDetail({ modelId: model.id, ...DETAIL_CALLS });
   const facts = useLaunchFacts(model.id, loaded);
-  const state = useResidency().get(model.id) ?? facts?.state ?? 'loaded';
+  const resident = useResident(model.id, facts?.state);
   const load = useLoad(model, draws, onServerStarted, onStopServer);
   const install = useEngineInstall();
   const sd = useSdStatus(draws);
@@ -125,8 +126,9 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
     if (!serveAsked || served.current === location.key) return;
     served.current = location.key;
     setSheet({ pin: false, origin: 'menu' });
-    void navigate(location.pathname, { replace: true });
-  }, [serveAsked, location.key, location.pathname, navigate]);
+    // Only `serve` leaves: beside the endpoint, `inspect` is the subject.
+    void navigate(withoutParam(location, 'serve'), { replace: true });
+  }, [serveAsked, location, navigate]);
 
   const changed = () => {
     void explain.reload();
@@ -200,12 +202,12 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
             )}
             <span className="flex-1" />
             <Menu iconOnly name="More" label={<Icon icon={MoreHorizontal} size={14} />} items={items} />
-            <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={() => navigate(paths.library())}>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={() => navigate(inspectorClosed(location))}>
               <Icon icon={X} size={14} />
             </Button>
           </div>
           <p className="m-0 text-xs text-text-secondary tabular-nums">{modelFacts(model).filter(Boolean).join(' · ')}</p>
-          {loaded && <StatusMark kind={RESIDENCY_MARK[state]} word={RESIDENCY_WORDS[state]} className="text-xs" />}
+          {loaded && <StatusMark kind={RESIDENCY_MARK[resident.state]} word={resident.line} className="text-xs" />}
           {fit && <p className="m-0 text-sm text-text">{fit}</p>}
         </div>
 

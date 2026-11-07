@@ -11,27 +11,26 @@
  * line's own, until a place says it. ⧉ copies the whole address without
  * opening anything.
  *
- * Clicking the line opens today's proxy panel beside it (Turn on / off, the
- * dashboard, Clear Cache), until the Endpoint place takes the click (N1).
+ * Clicking the line opens the endpoint place (`/endpoint`); it is drawn
+ * raised while that place is open.
  *
  * @module sidebar/EndpointLine
  */
 
-import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { KeyRound } from 'lucide-react';
+import { paths } from '../app/paths';
 import { CopyValue } from '../components/CopyValue';
-import { ProxyPopover } from '../components/ProxyControl';
 import { StatusMark, type MarkKind } from '../components/status/StatusMark';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../components/status/words';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { useToastContext } from '../contexts/ToastContext';
-import { useClickOutside } from '../hooks/useClickOutside';
 import { useEndpointFacts, type EndpointFacts } from '../services/proxyRegistry';
 import { useAllServerStates } from '../services/serverRegistry';
 import type { EndpointState } from '../types/generated/EndpointState';
 import { cn } from '../utils/cn';
-import { POPOVER_BESIDE, SPREAD } from './placement';
+import { SPREAD } from './placement';
 
 const MARK: Record<EndpointState, MarkKind> = {
   on: 'on',
@@ -54,28 +53,25 @@ export function secondLine(facts: EndpointFacts, loaded: number): string {
   return `${loaded} loaded`;
 }
 
-export function EndpointLine() {
+export function EndpointLine({ current = false }: { current?: boolean }) {
   const facts = useEndpointFacts();
   const loaded = useAllServerStates().filter((s) => s.status === 'running').length;
-  const [open, setOpen] = useState(false);
-  const lineRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const { showToast } = useToastContext();
-
-  useClickOutside(lineRef, () => setOpen(false), open);
 
   const word = ENDPOINT_WORDS[facts.state];
   const keyRequired = facts.key === 'required';
   const keyLabel = `Key ${KEY_WORDS.required.toLowerCase()}`;
 
   return (
-    <div className="relative px-sm" ref={lineRef}>
-      <div className="flex flex-col gap-xs px-sm py-sm">
+    <div className="px-sm">
+      <div className={cn('flex flex-col gap-xs rounded-base px-sm py-sm', current && 'bg-surface-hover')}>
         <Button
           variant="ghost"
           fullWidth
           className={cn('h-auto gap-sm px-0 py-0', SPREAD)}
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
+          onClick={() => navigate(paths.endpoint())}
+          aria-current={current ? 'page' : undefined}
           aria-label={`Endpoint, ${word}`}
         >
           <span className="flex items-center gap-sm text-sm text-text">
@@ -105,8 +101,6 @@ export function EndpointLine() {
         )}
         <span className="text-xs text-text-muted">{secondLine(facts, loaded)}</span>
       </div>
-
-      <ProxyPopover open={open} onClose={() => setOpen(false)} className={POPOVER_BESIDE} />
     </div>
   );
 }

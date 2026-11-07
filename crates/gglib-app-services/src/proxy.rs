@@ -425,13 +425,12 @@ impl ProxyOps {
     /// The id a client sends for model `gglib_id`, as `/v1/models` lists it,
     /// and whether the model draws pictures: refused for an id the catalogue
     /// does not hold.
-    async fn listed(&self, gglib_id: i64) -> Result<(String, bool), GuiError> {
-        let models = self.core.models().list().await?;
+    fn listed(models: &[gglib_core::Model], gglib_id: i64) -> Result<(String, bool), GuiError> {
         let draws = models
             .iter()
             .find(|m| m.id == gglib_id)
             .map(|m| m.image_family.is_some());
-        let listed_id = crate::models::openai_ids(&models).remove(&gglib_id);
+        let listed_id = crate::models::openai_ids(models).remove(&gglib_id);
         match (listed_id, draws) {
             (Some(id), Some(draws)) => Ok((id, draws)),
             _ => Err(GuiError::NotFound {
@@ -452,7 +451,8 @@ impl ProxyOps {
     ) -> Result<crate::ClientRecipes, GuiError> {
         let base_url = self.reached_base_url().await?;
         let gglib_id = self.target_model(gglib_id)?;
-        let (model_id, _) = self.listed(gglib_id).await?;
+        let models = self.core.models().list().await?;
+        let (model_id, _) = Self::listed(&models, gglib_id)?;
         let key = self.key_state().await;
         Ok(crate::proxy_clients::recipes(&crate::ClientFacts {
             base_url,
@@ -479,7 +479,10 @@ impl ProxyOps {
     pub async fn prove(&self, gglib_id: Option<i64>) -> Result<crate::ProofOutcome, GuiError> {
         let base_url = self.reached_base_url().await?;
         let gglib_id = self.target_model(gglib_id)?;
-        let (model_id, draws) = self.listed(gglib_id).await?;
+        // Read once, before the proof: the answer is named from it, and a
+        // read after a proof that answered could only turn it into a failure.
+        let models = self.core.models().list().await?;
+        let (model_id, draws) = Self::listed(&models, gglib_id)?;
         if draws {
             return Err(GuiError::ValidationFailed(format!(
                 "{model_id} draws pictures, and the proof is a chat completion: name a chat model"
@@ -493,6 +496,7 @@ impl ProxyOps {
             &base_url,
             &model_id,
             key.as_deref(),
+            &crate::proxy_prove::library_files(&models),
             crate::proxy_prove::BIND_TIMEOUT,
             crate::proxy_prove::LOAD_TIMEOUT,
         )

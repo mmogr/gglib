@@ -1,0 +1,43 @@
+[
+  {
+    "answered": {
+      "answered_by": "Qwen3-4B",
+      "asked_for": "Qwen3-4B",
+      "elapsed_ms": 1350
+    },
+    "failed": null,
+    "line": "  ✓ answered in 1.4s by Qwen3-4B"
+  },
+  {
+    "answered": {
+      "answered_by": "qwen3-8b",
+      "asked_for": "Qwen3 8B",
+      "elapsed_ms": 949
+    },
+    "failed": null,
+    "line": "  ✓ answered in 0.9s by qwen3-8b (asked for Qwen3 8B)"
+  },
+  {
+    "answered": {
+      "answered_by": "Gemma-3-4B-It",
+      "asked_for": "Gemma-3-4B-It",
+      "elapsed_ms": 12040
+    },
+    "failed": null,
+    "line": "  ✓ answered in 12.0s by Gemma-3-4B-It"
+  },
+  {
+    "answered": {
+      "answered_by": "Gemma-3-4B-It",
+      "asked_for": "Gemma-3-4B-It",
+      "elapsed_ms": 40
+    },
+    "failed": null,
+    "line": "  ✓ answered in 0.0s by Gemma-3-4B-It"
+  },
+  {
+    "answered": null,
+    "failed": "the endpoint did not answer /health within 30s",
+    "line": "  ! the first request did not complete: the endpoint did not answer /health within 30s"
+  }
+]

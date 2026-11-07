@@ -64,7 +64,7 @@ A chat is its own address: the conversation list (left) and the messages panel (
 - **`ConversationListPanel/`**: Conversation list with search and management controls
 
 ### Server Management
-- **`ProxyControl.tsx`**: `ProxyPopover`, today's proxy panel (Turn on / off, the URL, the dashboard, Clear Cache), anchored by the sidebar's endpoint line until the Endpoint place replaces it
+- **`ConnectClient.tsx`**: Connect a client on the endpoint place: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker, and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable
 - **`RemoteControl.tsx`**: `RemotePopover`, the remote tunnel panel (ADR 0012) — this machine's proxy on another machine, or another's here; its two halves live in `remote/`; anchored by the sidebar's devices line until the Devices place replaces it
 
 ### Support Components

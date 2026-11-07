@@ -25,6 +25,8 @@ export interface MenuItem {
   danger?: boolean;
   /** Said on hover: what the action does, where its label cannot. */
   title?: string;
+  /** Drawn but not offered, while it cannot act. */
+  disabled?: boolean;
 }
 
 interface MenuProps {
@@ -74,6 +76,7 @@ export const Menu: FC<MenuProps> = ({ label, name, items, iconOnly = false }) =>
               role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
               aria-checked={item.checked}
               title={item.title}
+              disabled={item.disabled}
               className={cn(
                 'justify-start text-sm font-normal text-text',
                 item.danger && 'text-danger hover:text-danger',

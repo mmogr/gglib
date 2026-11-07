@@ -11,6 +11,7 @@
 //! resolution and the forward pipeline. It authenticates with the key the
 //! endpoint demands and never returns it.
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -31,9 +32,10 @@ pub const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ProofOutcome {
-    /// The model the answer names, which is the one that answered. A
-    /// pinned endpoint refuses every other model, so a proof of one asks
-    /// for the pin.
+    /// The model that answered, by the Model ID a client sends for it when
+    /// the answer names a library model's file (llama-server names a model
+    /// by its file), else as the answer named it. A pinned endpoint refuses
+    /// every other model, so a proof of one asks for the pin.
     pub answered_by: String,
     /// The id the request named.
     pub asked_for: String,
@@ -53,12 +55,15 @@ pub struct ProofRefusal {
 /// minimal completion for `model` and say who answered.
 ///
 /// `key` is what the request carries as its bearer, when the endpoint
-/// demands one; it is read, sent and forgotten.
+/// demands one; it is read, sent and forgotten. `library` is each library
+/// model's file beside the Model ID a client sends for it
+/// ([`library_files`]): the answer is said by Model ID ([`named_as_listed`]).
 pub async fn prove(
     client: &reqwest::Client,
     base_url: &str,
     model: &str,
     key: Option<&str>,
+    library: &[(std::path::PathBuf, String)],
     bind_timeout: Duration,
     load_timeout: Duration,
 ) -> Result<ProofOutcome, ProofRefusal> {
@@ -104,10 +109,47 @@ pub async fn prove(
         .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_owned))
         .unwrap_or_else(|| model.to_owned());
     Ok(ProofOutcome {
-        answered_by,
+        answered_by: named_as_listed(&answered_by, model, library),
         asked_for: model.to_owned(),
         elapsed_ms: u64::try_from(begun.elapsed().as_millis()).unwrap_or(u64::MAX),
     })
+}
+
+/// The answer's model as a client names it.
+///
+/// llama-server names the model in its answer by the file it was started
+/// with, so a proof answered through the endpoint reads as a path. An answer
+/// that is one of `library`'s files (each given with the Model ID a client
+/// sends for it) is said as that Model ID, `asked` first when two library
+/// models share the file; anything else is kept as it came.
+#[must_use]
+pub fn named_as_listed(
+    answered_by: &str,
+    asked: &str,
+    library: &[(std::path::PathBuf, String)],
+) -> String {
+    let answered = Path::new(answered_by);
+    let mut matching = library
+        .iter()
+        .filter(|(file, _)| file.as_path() == answered);
+    let first = matching.next();
+    let asked_too = first
+        .into_iter()
+        .chain(matching)
+        .find(|(_, id)| id == asked);
+    asked_too
+        .or(first)
+        .map_or_else(|| answered_by.to_owned(), |(_, id)| id.clone())
+}
+
+/// Each library model's file beside the Model ID a client sends for it, as
+/// [`prove`] reads them.
+pub(crate) fn library_files(models: &[gglib_core::Model]) -> Vec<(std::path::PathBuf, String)> {
+    let ids = crate::models::openai_ids(models);
+    models
+        .iter()
+        .filter_map(|m| ids.get(&m.id).map(|id| (m.file_path.clone(), id.clone())))
+        .collect()
 }
 
 /// Poll `/health` until the listener answers, or `bind_timeout` passes.

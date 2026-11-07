@@ -27,7 +27,7 @@ address names; a Hugging Face repo picked in the group opens at
 | `LibraryHeader.tsx` | "Library", `Sort ▾` (Name, Recently added, Size, Measured speed; Ascending, Descending), `+ ▾` (Find on Hugging Face, Add a GGUF file…, Add a tool server…), and the one search field, Enter included |
 | `LibraryRows.tsx` | The groups in order, each a listbox, the paired machine's headed by its name and reach; the empty, failed and loading states |
 | `Group.tsx` | A group of rows under its 12 px label, and the one line said in place of rows |
-| `useResidency.ts` | What each loaded model is doing, live: the residency state of each admission slot on the endpoint's dashboard stream, by model id |
+| `useResidency.ts` | The endpoint's dashboard as this window reads it (`useEndpointDashboard`: the one place its target is built, from the status's `base_url`, the port and the revealed key; the endpoint place and the loaded inspector read it too), and what each loaded model is doing in it, by model id |
 | `ModelRow.tsx` | One model: its name, one line of facts, at most one accessory, and the actions a hover or focus shows (copy the Model ID, Unload) |
 | `DownloadRow.tsx` | One download: its name, and a bar with the row's percentage and time left, or the word for what it is doing; × cancels it or takes it off the queue. `Downloads`, the Downloading group, drawn over the rows |
 | `EngineBanner.tsx` | The line above the groups when llama.cpp is missing or older than the pinned release, a model running on it or not, with Install or Update run through the daemon's install stream, its refusal shown as it came, and the status read again once it completes |

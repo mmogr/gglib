@@ -53,6 +53,7 @@ async fn the_answer_names_who_answered_and_the_key_travels_as_the_bearer() {
         &base,
         "Qwen3 8B",
         Some("k3y-5f3a"),
+        &[],
         Duration::from_secs(5),
         Duration::from_secs(5),
     )
@@ -92,6 +93,7 @@ async fn without_a_key_none_is_sent_and_an_answer_without_a_model_names_the_one_
         &base,
         "m",
         None,
+        &[],
         Duration::from_secs(5),
         Duration::from_secs(5),
     )
@@ -109,6 +111,7 @@ async fn a_refusal_carries_the_endpoints_status_and_words() {
         &base,
         "m",
         None,
+        &[],
         Duration::from_secs(5),
         Duration::from_secs(5),
     )
@@ -134,6 +137,7 @@ async fn a_listener_that_never_comes_is_said_within_the_bind_timeout() {
         &base,
         "m",
         None,
+        &[],
         Duration::from_millis(300),
         Duration::from_secs(1),
     )
@@ -317,4 +321,53 @@ async fn an_image_model_is_refused_before_any_request() {
         other => panic!("an image model must be refused up front: {other:?}"),
     }
     proxy.stop().await.expect("stop");
+}
+
+/// llama-server names the model in its answer by the file it was started
+/// with; the proof says it as the Model ID of the library model that file
+/// belongs to (the one asked for, when two share the file), and keeps an
+/// answer that is no library file as it came.
+#[test]
+fn an_answer_naming_a_library_file_is_said_as_its_model_id() {
+    let qwen = std::path::PathBuf::from("/Users/m/models/Qwen3-4B-Instruct-2507-Q8_0.gguf");
+    let gemma = std::path::PathBuf::from("/Users/m/models/gemma-3-4b-it-Q4_K_M.gguf");
+    let library = [
+        (gemma, "Gemma-3-4B-It".to_owned()),
+        (qwen.clone(), "Qwen3-4B-Instruct-2507".to_owned()),
+        (qwen, "Qwen3-4B-Copy".to_owned()),
+    ];
+    let path = "/Users/m/models/Qwen3-4B-Instruct-2507-Q8_0.gguf";
+    assert_eq!(
+        named_as_listed(path, "Gemma-3-4B-It", &library),
+        "Qwen3-4B-Instruct-2507"
+    );
+    assert_eq!(
+        named_as_listed(path, "Qwen3-4B-Copy", &library),
+        "Qwen3-4B-Copy"
+    );
+    assert_eq!(
+        named_as_listed("/elsewhere/other.gguf", "x", &library),
+        "/elsewhere/other.gguf"
+    );
+    assert_eq!(named_as_listed("qwen3-8b", "x", &library), "qwen3-8b");
+}
+
+/// The proof itself names the answer from the library it is given: an
+/// endpoint whose answer carries llama-server's file path is said by Model ID.
+#[tokio::test]
+async fn a_proof_answered_by_a_file_path_says_the_model_id() {
+    let (base, _served) = endpoint("200 OK", r#"{"model":"/m/q.gguf","choices":[]}"#).await;
+    let outcome = prove(
+        &gglib_proxy::loopback::client(),
+        &base,
+        "Q",
+        None,
+        &[(std::path::PathBuf::from("/m/q.gguf"), "Q".to_owned())],
+        Duration::from_secs(5),
+        Duration::from_secs(5),
+    )
+    .await
+    .expect("answered");
+    assert_eq!(outcome.answered_by, "Q");
+    assert_eq!(outcome.asked_for, "Q");
 }

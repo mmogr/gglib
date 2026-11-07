@@ -33,9 +33,6 @@ const GENERATED = join(REPO_ROOT, 'src/types/generated');
 const NOT_IMPORTED = [
   'AgentChatRequest',
   'AssistantContent',
-  // The Endpoint page's "Connect a client" and "Test it" (N1) read these.
-  'ClientRecipe',
-  'ClientRecipes',
   'DisableFastDownloadsResponse',
   'ErrorBody',
   'ExplainQueryParams',
@@ -43,9 +40,7 @@ const NOT_IMPORTED = [
   'ListRunsQuery',
   'ModelAgenticHistoryQuery',
   'ModelsResponse',
-  'ProofOutcome',
   'PublishedStateDto',
-  'RecipeLine',
   'StartServerBody',
   'VerifyResponse',
 ];
