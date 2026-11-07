@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.31.0-rc.2](https://github.com/mmogr/gglib/compare/v0.31.0-rc.1...v0.31.0-rc.2) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gui:** one search finds your models, then Hugging Face on Enter ([#1790](https://github.com/mmogr/gglib/issues/1790))
+* **gui:** the library is groups of rows, and downloads are rows ([#1789](https://github.com/mmogr/gglib/issues/1789))
+
+### What gglib now does
+
+* **gui:** one search finds your models, then Hugging Face on Enter ([#1790](https://github.com/mmogr/gglib/issues/1790)) ([8705103](https://github.com/mmogr/gglib/commit/87051038688fdfc4d3481212f923447bdc407827))
+* **gui:** the library is groups of rows, and downloads are rows ([#1789](https://github.com/mmogr/gglib/issues/1789)) ([aa925e3](https://github.com/mmogr/gglib/commit/aa925e36a3a73d91fb72215b57bf4e38f8efbb6c))
+* **models:** every library model says its size on disk ([#1788](https://github.com/mmogr/gglib/issues/1788)) ([839c4a0](https://github.com/mmogr/gglib/commit/839c4a0b1d48fdd14ad2264d674c67af8d3dda9f))
+
+
+### What it stopped getting wrong
+
+* **app-services:** the pin and the image refusal are tested, and each key fn keeps its own doc ([#1786](https://github.com/mmogr/gglib/issues/1786)) ([0b18efb](https://github.com/mmogr/gglib/commit/0b18efbe18bebd8c8cddcd4db791cb4f4c11488f))
+
+
+### Internal
+
+* **contracts:** the committed recording names the help's flags ([#1782](https://github.com/mmogr/gglib/issues/1782)) ([3b21ffd](https://github.com/mmogr/gglib/commit/3b21ffd98c54ab3b73635d9a5b269efa4ab7c160))
+* **deps:** update huggingface-hub requirement ([#1754](https://github.com/mmogr/gglib/issues/1754)) ([87c5d62](https://github.com/mmogr/gglib/commit/87c5d62bf0ce72ee750fce62538992af1e285dd8))
+* **gate:** CI Success names the job a skip waited on, and says a cancel can be a timeout ([#1783](https://github.com/mmogr/gglib/issues/1783)) ([3904009](https://github.com/mmogr/gglib/commit/3904009dde3a17613c0034cdb33703b1d9296a6c))
+* **prelude:** apt fetches from archive.ubuntu.com when the Azure mirror is slow ([#1781](https://github.com/mmogr/gglib/issues/1781)) ([ecac476](https://github.com/mmogr/gglib/commit/ecac476e2c880f46e1bb1de23fe782ed2c3eeda8))
+
 ## [0.31.0-rc.1](https://github.com/mmogr/gglib/compare/v0.30.1-rc.1...v0.31.0-rc.1) (2026-11-06)
 
 
