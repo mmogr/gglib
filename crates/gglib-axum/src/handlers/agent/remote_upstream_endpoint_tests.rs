@@ -79,7 +79,7 @@ async fn on(runtime: &Arc<Primary>) -> (tempfile::TempDir, AppState, i64) {
     let (dir, mut state) = state().await;
     Arc::get_mut(&mut state).expect("not yet shared").runtime =
         Arc::clone(runtime) as Arc<dyn ModelRuntimePort>;
-    let id = model(&state, |_| {}).await;
+    let id = model(&state, |m| m.variant_label = Some("Q4_K_M".to_owned())).await;
     (dir, state, id)
 }
 
@@ -126,6 +126,7 @@ async fn a_turn_dials_the_endpoint_with_its_key_and_the_models_id() {
     // The catalogue's name for the id, never what a port says it serves.
     assert_eq!(upstream.made_by.model, "catalogue-name");
     assert_eq!(upstream.counted_as, "catalogue-name");
+    assert_eq!(upstream.made_by.quantization.as_deref(), Some("Q4_K_M"));
 }
 
 /// Once its model is loaded the turn reads the context it was launched with,
