@@ -97,6 +97,15 @@ describe('the rules', () => {
     expect(isTicked({ tools: ['builtin:*'], off: false }, 'builtin:read_file')).toBe(false);
   });
 
+  it("ticks a server's whole row where the chat names some of its tools, and unticks it as none of them", () => {
+    // Narrowed while server 3 ran; now it is stopped, so its row is shown whole.
+    const narrowed = { tools: ['builtin:read_file', '3:search', '3:extract'], off: false };
+    const shown = ['builtin:read_file', '3:*'];
+    expect(shown.map((name) => isTicked(narrowed, name))).toEqual([true, true]);
+    expect(isTicked({ tools: ['builtin:read_file', '33:search'], off: false }, '3:*')).toBe(false);
+    expect(afterToggle(narrowed, '3:*', false, shown)).toEqual({ tools: ['builtin:read_file'], off: false });
+  });
+
   it('unticks one of every tool as every other row, each server not read named whole', () => {
     expect(afterToggle(EVERY_TOOL, 'builtin:read_file', false, ['builtin:read_file', 'builtin:get_current_time', '4:*'])).toEqual({
       tools: ['builtin:get_current_time', '4:*'],
@@ -159,6 +168,17 @@ describe('useChatTools', () => {
     expect(result.current!.ticked('3:search')).toBe(false);
     await waitFor(() => expect(onError).toHaveBeenCalledWith("Could not save this chat's tools: Conversation not found: 1"));
     await waitFor(() => expect(result.current!.ticked('3:search')).toBe(true));
+  });
+
+  it('a write after a refused one is still written', async () => {
+    const onError = vi.fn();
+    transport.updateConversationSettings.mockRejectedValueOnce(new Error('Conversation not found: 1'));
+    const { result } = mount({ onError });
+    act(() => result.current!.toggle('3:search', false, LISTED));
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    act(() => result.current!.all(false));
+    await waitFor(() => expect(transport.updateConversationSettings).toHaveBeenCalledTimes(2));
+    expect(transport.updateConversationSettings.mock.calls[1]).toEqual([1, { no_tools: true }]);
   });
 
   it('holds a new chat\'s choice and writes nothing, until its first send saves it to the chat it made', async () => {

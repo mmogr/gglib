@@ -81,10 +81,14 @@ const isWholeServer = (entry: string) => entry.endsWith(':*') && serverOf(entry)
 /**
  * Whether the saved entry `entry` names the tool `name`, as gglib reads the
  * list: exactly, by the bare name when the entry has no `:`, or as one of
- * every tool of its server (`<server id>:*`).
+ * every tool of its server (`<server id>:*`). A server's row shown whole
+ * (`name` is `<server id>:*`, its tools not listed) is named by any entry of
+ * that server: the chat's runs use some of its tools, so the row is ticked,
+ * and unticking it takes every entry of that server away.
  */
 function names(entry: string, name: string): boolean {
   if (entry === name) return true;
+  if (isWholeServer(name)) return serverOf(entry) === serverOf(name);
   if (isWholeServer(entry)) return serverOf(name) === serverOf(entry);
   const colon = name.indexOf(':');
   return !entry.includes(':') && colon >= 0 && entry === name.slice(colon + 1);
