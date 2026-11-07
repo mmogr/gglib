@@ -14,5 +14,6 @@ registries and routes say; every fact and word it shows is the daemon's.
 | `endpoint/` | The endpoint: `/endpoint`, its address, what is loaded and how, what it serves, how a client connects, who uses it, what gglib did; a model inspected beside it by `?inspect=model:<id>` |
 | `setup/` | Setup: five steps in one column (This Mac, Engines, First model, Endpoint, Connect), drawn in place of the shell by `app/SetupGate` until setup is done; not a route, and nothing opens it again |
 | `chat/` | One chat: `/chat/:id`, `/chat/new`, `/chat/far/:id`; the sidebar lists the chats and navigates |
+| `diagnostics/` | Diagnostics: `/diagnostics/:tab`, the live numbers, a loaded model's log, the benchmarks and the system checks |
 
 <!-- module-docs:end -->

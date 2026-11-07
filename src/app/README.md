@@ -20,7 +20,6 @@ The main window's shell: its addresses, its router, and what navigates or acts f
 | `FarChatRoute.tsx` | `/chat/far/:id`: one of the paired machine's own chats, read and carried on, never changed; no port |
 | `chatLoading.tsx` | What a chat route shows while it learns which chat to open, and when the list of chats cannot be read |
 | `openChat.ts` | "Chat" on a model: its latest conversation, else an empty chat on it, handed the port a start or a resident slot answers on (the inspector, the library, the endpoint's Loaded rows, the menu) |
-| `BenchmarkRoute.tsx` | `/diagnostics/benchmarks?models=…`: the benchmarks with the named models picked |
 | `useChatSwitch.ts` | Moving an open chat to another model: served first if not running, the last pick wins, a left chat hands nothing on |
 | `chatHandoff.ts` | What a chat hands to the chat it becomes across a navigation: the model to open on and its port and name, and the draft over a switch |
 

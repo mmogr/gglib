@@ -24,10 +24,10 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
 └─────────────────┬───────────────────────────────────┘
                   │  other addresses, lazy-loaded
        ┌──────────┴──────────────────┐
-       ▼ (/chat/:id)                 ▼ (/diagnostics/benchmarks)
-┌─────────────────────────┐   ┌───────────────┐
-│ ChatPlace (places/chat) │   │ BenchmarkPage │
-│ ┌─────────────────────┐ │   └───────────────┘
+       ▼ (/chat/:id)                 ▼ (/diagnostics/:tab)
+┌─────────────────────────┐   ┌──────────────────┐
+│ ChatPlace (places/chat) │   │ DiagnosticsPlace │
+│ ┌─────────────────────┐ │   └──────────────────┘
 │ │  ChatMessagesPanel  │ │
 │ └─────────────────────┘ │
 └─────────────────────────┘

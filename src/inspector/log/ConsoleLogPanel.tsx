@@ -41,8 +41,10 @@ const LogLine: FC<{ entry: ServerLogEntry; first: number }> = ({ entry, first })
 
 interface LogHeaderProps {
   modelName: string;
-  onBack: () => void;
-  onClose: () => void;
+  /** ‹ back to the model; none on Diagnostics › Logs, where the picker names it. */
+  onBack?: () => void;
+  /** ×; none on Diagnostics › Logs, which is not an inspector. */
+  onClose?: () => void;
   /** Following and Paused, ⧉ and ⋯, while there is a log to act on. */
   controls?: ReactNode;
 }
@@ -50,15 +52,19 @@ interface LogHeaderProps {
 /** `‹ <name> · Log`, the log's controls, and ×. */
 export const LogHeader: FC<LogHeaderProps> = ({ modelName, onBack, onClose, controls }) => (
   <div className="flex shrink-0 items-center gap-xs p-md">
-    <Button variant="ghost" size="sm" iconOnly aria-label={`Back to ${modelName}`} title={`Back to ${modelName}`} onClick={onBack}>
-      <Icon icon={ChevronLeft} size={14} />
-    </Button>
+    {onBack && (
+      <Button variant="ghost" size="sm" iconOnly aria-label={`Back to ${modelName}`} title={`Back to ${modelName}`} onClick={onBack}>
+        <Icon icon={ChevronLeft} size={14} />
+      </Button>
+    )}
     <h2 className="m-0 min-w-0 truncate text-base font-semibold text-text">{`${modelName} · Log`}</h2>
     <span className="flex-1" />
     {controls}
-    <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={onClose}>
-      <Icon icon={X} size={14} />
-    </Button>
+    {onClose && (
+      <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={onClose}>
+        <Icon icon={X} size={14} />
+      </Button>
+    )}
   </div>
 );
 
