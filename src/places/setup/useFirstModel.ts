@@ -17,9 +17,9 @@
  * @module places/setup/useFirstModel
  */
 
-import { useCallback, useState } from 'react';
-import { getDownloads, useDownloads } from '../../services/downloadsRegistry';
-import { queueDownload, refreshDownloads } from '../../services/downloadsEvents';
+import { useCallback, useState, useRef } from 'react';
+import { useDownloads } from '../../services/downloadsRegistry';
+import { queueDownload } from '../../services/downloadsEvents';
 import { useModelLibrary } from '../../services/modelRegistry';
 import type { DownloadRow, FinishedDownload, QueueSnapshot } from '../../services/transport/types/downloads';
 import type { GgufModel } from '../../types';
@@ -69,26 +69,31 @@ export function useFirstModel(rec: RecommendationDto | null, prepare: () => Prom
   const { snapshot } = useDownloads();
   const { models } = useModelLibrary();
 
+  // Which Get it is current: a choice made while its set-up runs (Skip,
+  // Choose another, Join) cancels it, so the model is not queued after all.
+  const asked = useRef(0);
+  const choose = useCallback((next: FirstChoice | null) => {
+    asked.current += 1;
+    setQueueing(false);
+    setChoice(next);
+  }, []);
+
   const get = useCallback(async () => {
     if (rec === null) return;
+    const mine = ++asked.current;
     setQueueing(true);
     setQueueError(null);
     await prepare();
+    if (asked.current !== mine) return;
     try {
+      // The queue attaches a download already under way and answers its id,
+      // so a second Get it follows the first.
       setDownloadId(await queueDownload(rec.repo));
-      setChoice('get');
+      if (asked.current === mine) setChoice('get');
     } catch (err) {
-      // Already queued: follow the row it has, if the queue read again shows one.
-      await refreshDownloads().catch(() => undefined);
-      const queued = rowsOf(getDownloads().snapshot).find((r) => r.model_id === rec.repo);
-      if (queued) {
-        setDownloadId(queued.id);
-        setChoice('get');
-      } else {
-        setQueueError(formatError(err));
-      }
+      if (asked.current === mine) setQueueError(formatError(err));
     } finally {
-      setQueueing(false);
+      if (asked.current === mine) setQueueing(false);
     }
   }, [rec, prepare]);
 
@@ -98,5 +103,5 @@ export function useFirstModel(rec: RecommendationDto | null, prepare: () => Prom
   const ended = downloadId === null || row !== null ? null : (snapshot?.finished.find((f) => f.id === downloadId) ?? null);
   const model = choice === 'get' && rec !== null ? modelFrom(models, rec.repo) : null;
 
-  return { choice, choose: setChoice, get, queueing, queueError, row, finished: ended, model };
+  return { choice, choose, get, queueing, queueError, row, finished: ended, model };
 }

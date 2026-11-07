@@ -22,7 +22,7 @@ import { getTransport } from '../../services/transport';
 import type { ModelsDirectoryInfo } from '../../types';
 import type { RecommendationDto, SetupStatus } from '../../types/setup';
 import { formatError } from '../../utils/errors';
-import { formatBudget, formatMemorySize } from '../../utils/format';
+import { formatBudget } from '../../utils/format';
 import { Item, Problem, Step } from './Step';
 
 interface ThisMacStepProps {
@@ -44,9 +44,9 @@ export const ThisMacStep: FC<ThisMacStepProps> = ({ status, rec, folder, onFolde
   const [typed, setTyped] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // With no recommendation there is no budget to name: the machine's RAM, in the label Rust gives it.
-  const total = status.systemMemory ? `${formatMemorySize(status.systemMemory.totalRamBytes)} system RAM` : null;
-  const facts = [status.llamaPlatformDescription, rec ? formatBudget(rec) : total].filter(Boolean).join(' · ');
+  // The budget is the recommendation's, with Rust's own label. With none
+  // there is no budget to name, and the GUI does not work one out.
+  const facts = [status.llamaPlatformDescription, rec ? formatBudget(rec) : null].filter(Boolean).join(' · ');
   const note = folderNote(folder);
 
   const saveFolder = async (path: string) => {

@@ -195,12 +195,12 @@ describe('setup', () => {
     expect(screen.getByRole('textbox', { name: 'Models folder' })).toBeInTheDocument();
   });
 
-  it("says the machine's RAM when nothing fits, and says so on First model", async () => {
+  it('names no memory figure of its own when nothing fits, and says so on First model', async () => {
     api.getRecommendedModel.mockResolvedValue(null);
     const { user } = start();
     const region = await step('This Mac');
-    expect(region).toHaveTextContent('macOS ARM64 (Metal) · 48.0 GiB system RAM');
-    expect(region).not.toHaveTextContent('unified memory');
+    await waitFor(() => expect(region).toHaveTextContent('macOS ARM64 (Metal)'));
+    expect(region).not.toHaveTextContent('GiB');
 
     await reach(user, 'First model');
     const first = await step('First model');
@@ -240,20 +240,7 @@ describe('setup', () => {
     expect(transport.queueDownload).toHaveBeenCalledTimes(2);
   });
 
-  it('follows the download the queue already has for the repo, in place of a refusal', async () => {
-    transport.queueDownload.mockRejectedValueOnce(new Error("Download 'unsloth/Qwen3-8B-GGUF:Q4_K_M' is already in the queue."));
-    queue.snapshot = queueSnapshot({ revision: 9, active: { ...ROW, id: `${REC.repo}:Q4_K_M` } });
-    const { user } = start();
-    await reach(user, 'First model');
-    const region = await step('First model');
-    await user.click(within(region).getByRole('button', { name: 'Get it' }));
-
-    expect(await within(region).findByText('1.25 GiB / 5.00 GiB · 52.0 MB/s · ETA 1m 12s')).toBeInTheDocument();
-    expect(within(region).queryByRole('alert')).not.toBeInTheDocument();
-    expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
-  });
-
-  it("says a refusal with no row of the repo's in the queue as it came, with Retry", async () => {
+  it("says a refusal as it came, with Retry", async () => {
     transport.queueDownload.mockRejectedValueOnce(new Error('queue full: max 10 downloads'));
     const { user } = start();
     await reach(user, 'First model');
@@ -280,6 +267,38 @@ describe('setup', () => {
     await waitFor(() => expect(order).toEqual(['fast', 'queue']));
     await press(user, 'Back');
     expect(within(await step('Engines')).getByRole('group', { name: 'Faster downloads' })).toHaveTextContent('set up');
+  });
+
+  it('queues the model only once the set-up has landed, saying so meanwhile; a Skip then queues nothing', async () => {
+    let landed: () => void = () => {};
+    api.enableFastDownloads.mockImplementationOnce(() => new Promise<void>((resolve) => (landed = resolve)));
+    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    await reach(user, 'First model');
+    const first = await step('First model');
+    await user.click(within(first).getByRole('button', { name: 'Get it' }));
+    expect(await within(first).findByText('setting up faster downloads first')).toBeInTheDocument();
+    await act(async () => {});
+    expect(transport.queueDownload).not.toHaveBeenCalled();
+
+    // Skip while pip runs: the choice sticks, and the set-up landing queues nothing.
+    await user.click(within(first).getByRole('button', { name: 'Skip' }));
+    expect(await step('Endpoint')).toBeInTheDocument();
+    await act(async () => landed());
+    await act(async () => {});
+    expect(transport.queueDownload).not.toHaveBeenCalled();
+    expect(await step('Endpoint')).not.toHaveTextContent('The test runs when');
+  });
+
+  it('queues the model once the set-up lands', async () => {
+    let landed: () => void = () => {};
+    api.enableFastDownloads.mockImplementationOnce(() => new Promise<void>((resolve) => (landed = resolve)));
+    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    await reach(user, 'First model');
+    await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
+    await act(async () => {});
+    expect(transport.queueDownload).not.toHaveBeenCalled();
+    await act(async () => landed());
+    await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(1));
   });
 
   it("warns of a failed accelerator in the daemon's words and downloads anyway, and Retry sets it up", async () => {
@@ -466,6 +485,21 @@ describe('setup', () => {
     await press(user, 'Continue');
     expect(await step('Endpoint')).toBeInTheDocument();
     await press(user, 'Back');
+    expect(await step('First model')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, ADVANCE_MS + 300));
+    expect(screen.getByRole('region', { name: 'First model' })).toBeInTheDocument();
+  });
+
+  it('moves an Already done step on once, ever: left by Back before it does, it stays when come back to', async () => {
+    library.models = [QWEN];
+    act(() => applyProxyStatus(UP));
+    const { user } = start(setupStatus({ llamaInstalled: true }));
+    await reach(user, 'First model');
+    expect(await step('First model')).toHaveTextContent('Already done');
+
+    await press(user, 'Back');
+    expect(await step('Engines')).toBeInTheDocument();
+    await press(user, 'Continue');
     expect(await step('First model')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, ADVANCE_MS + 300));
     expect(screen.getByRole('region', { name: 'First model' })).toBeInTheDocument();
