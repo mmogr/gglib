@@ -15,7 +15,7 @@
  * @module sidebar/ChatList
  */
 
-import { useEffect, useRef, useState, type FC } from 'react';
+import { useEffect, useId, useRef, useState, type FC } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal, Plus, Search } from 'lucide-react';
 import { chatAddress, paths } from '../app/paths';
@@ -66,6 +66,7 @@ interface RowProps {
 const ChatRow: FC<RowProps> = ({ chat, current, running, unread, onOpen, onRename, onDelete }) => {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(chat.title);
+  const unreadId = useId();
 
   if (renaming && onRename) {
     const commit = () => {
@@ -103,11 +104,17 @@ const ChatRow: FC<RowProps> = ({ chat, current, running, unread, onOpen, onRenam
           current && 'text-text',
         )}
         aria-current={current ? 'page' : undefined}
+        aria-describedby={unread ? unreadId : undefined}
         title={chat.title}
         onClick={onOpen}
       >
         <span className="truncate">{chat.title}</span>
       </Button>
+      {unread && (
+        <span id={unreadId} className="sr-only">
+          New reply
+        </span>
+      )}
       {running && <StatusMark kind="changing" label="Reply running" className="absolute right-sm group-hover/row:hidden group-focus-within/row:hidden" />}
       {onRename && onDelete && (
         <div className="absolute right-xs hidden group-hover/row:block group-focus-within/row:block">
@@ -132,7 +139,10 @@ const ChatRow: FC<RowProps> = ({ chat, current, running, unread, onOpen, onRenam
   );
 };
 
-/** The joined machine's own chats, at the foot: read while joined, gone after. */
+/**
+ * The joined machine's own chats, at the foot: read while joined, gone after.
+ * Keyed by that machine, so another one joining reads its own.
+ */
 const DeskGroup: FC<{ query: string; currentId: number | null; machine: string; onOpen: (id: number) => void }> = ({
   query,
   currentId,
@@ -171,7 +181,7 @@ export function ChatList() {
   const location = useLocation();
   const navigate = useNavigate();
   const address = chatAddress(location);
-  const { list, fetched } = useChats('this');
+  const { list, fetched, failed } = useChats('this');
   const { status } = useRemoteState();
   const { showToast } = useToastContext();
   const { confirm } = useConfirmContext();
@@ -243,7 +253,9 @@ export function ChatList() {
             ))}
           </div>
         ) : shown.length === 0 ? (
-          <p className="m-0 px-sm py-xs text-xs text-text-muted">{query.trim() ? 'No matching chats' : 'No chats yet.'}</p>
+          <p className="m-0 px-sm py-xs text-xs text-text-muted">
+            {query.trim() ? 'No matching chats' : failed ? "The chats couldn't be read." : 'No chats yet.'}
+          </p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-[2px] p-0">
             {shown.map((chat) => (
@@ -262,6 +274,7 @@ export function ChatList() {
         )}
         {status?.connected && (
           <DeskGroup
+            key={status.connected.ticket_fingerprint}
             query={query}
             currentId={address?.kind === 'far' ? address.id : null}
             machine={pairedName(status)}

@@ -137,29 +137,37 @@ describe('the menu bridge', () => {
     stop();
   });
 
-  it('⌘N or Ctrl+N starts a chat from anywhere, until the bridge stops', async () => {
-    const { at, router, stop } = await bridged('/models/7');
+  const press = (init: KeyboardEventInit) =>
     act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', init));
     });
-    expect(at()).toBe('/chat/new');
 
-    await act(() => router.navigate('/library'));
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'N', ctrlKey: true, shiftKey: true }));
-    });
-    expect(at()).toBe('/library');
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true }));
-    });
+  it('Ctrl+N starts a chat from anywhere off a Mac, ⌘N does not, until the bridge stops', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Linux x86_64');
+    const { at, router, stop } = await bridged('/models/7');
+    press({ key: 'n', metaKey: true });
+    expect(at()).toBe('/models/7');
+    press({ key: 'N', ctrlKey: true, shiftKey: true });
+    expect(at()).toBe('/models/7');
+    press({ key: 'n', ctrlKey: true });
     expect(at()).toBe('/chat/new');
 
     stop();
     await act(() => router.navigate('/library'));
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true }));
-    });
+    press({ key: 'n', ctrlKey: true });
     expect(at()).toBe('/library');
+    vi.restoreAllMocks();
+  });
+
+  it('⌘N starts a chat on a Mac, and Ctrl+N is left to the text field it is a key of', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    const { at, stop } = await bridged('/models/7');
+    press({ key: 'n', ctrlKey: true });
+    expect(at()).toBe('/models/7');
+    press({ key: 'n', metaKey: true });
+    expect(at()).toBe('/chat/new');
+    stop();
+    vi.restoreAllMocks();
   });
 
   it('Start opens the picked model’s Load with options sheet, and does nothing with none picked', async () => {

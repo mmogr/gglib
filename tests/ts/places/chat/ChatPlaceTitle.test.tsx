@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../../src/services/transport';
@@ -162,6 +162,20 @@ describe("ChatPlace, a chat's title", () => {
       prompt: DEFAULT_TITLE_GENERATION_PROMPT,
     });
     expect(stub().updateConversationTitle).toHaveBeenCalledWith(1, 'Sums');
+  });
+
+  it("the title ▾'s Generate title is greyed while a reply is written, saying why", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    const id = await ask(user, '2+2?');
+
+    await user.click(within(screen.getByRole('heading', { name: 'New Chat' })).getByRole('button'));
+    const item = screen.getByRole('menuitem', { name: 'Generate title' });
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute('title', 'Wait for the reply to finish');
+    await user.keyboard('{Escape}');
+    end(id, 'completed', '2+2 equals 4.');
+    await screen.findByRole('heading', { name: 'Sums' });
   });
 
   it('takes a chat with no title at all for a new one', async () => {

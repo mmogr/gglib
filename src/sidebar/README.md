@@ -23,6 +23,12 @@ devices line the devices place (`places/devices`). Interim homes, each named
 with the PR that removes it: Settings opens the dialog over the place
 (→ S1); Diagnostics opens the benchmarks (→ G1).
 
+The chats' own words, not the daemon's: Chats, Filter chats, New chat,
+"No chats yet.", "No matching chats", "The chats couldn't be read.",
+"On <machine>", "Reply running" (the arc), "New reply" (an unseen reply,
+said to a screen reader beside the bold), "More for <title>", Rename,
+Delete…, Chat title, Loading chats.
+
 | File | Role |
 |------|------|
 | `Sidebar.tsx` | The column: the strip the traffic lights sit on, Library with its count, the endpoint and devices lines, the chats, the foot; `placeOf(pathname)` says which row the address belongs to |

@@ -68,6 +68,8 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
       >
         Chatting with {modelName}
         <button onClick={() => onOpened?.(5)}>first send</button>
+        {/* A run's end opens the chat it ended in, the one already open. */}
+        <button onClick={() => conversationId !== null && onOpened?.(conversationId)}>run ends</button>
         <button onClick={() => onDeleted?.()}>delete it</button>
       </div>
     );
@@ -153,6 +155,30 @@ describe('the chat routes', () => {
     const { at } = renderApp('/chat/77');
     await waitFor(() => expect(at()).toBe('/chat/new'));
     expect(transport.listConversations.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('a conversation missing from a first list made before it is found by the read again', async () => {
+    serving(44, 5044);
+    daemon.chats = [chat(78, 44)];
+    // The first read predates it; the route's own read again lists it.
+    transport.listConversations.mockResolvedValueOnce([]);
+    const { at } = renderApp('/chat/78');
+    expect(await page()).toHaveAttribute('data-conversation', '78');
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5044');
+    expect(at()).toBe('/chat/78');
+  });
+
+  it('a list that could not be read opens the chat by its id on the fallback model, not an empty chat', async () => {
+    serving(45, 5045);
+    transport.listConversations.mockRejectedValue(new Error('daemon gone'));
+    try {
+      const { at } = renderApp('/chat/79');
+      expect(await page()).toHaveAttribute('data-conversation', '79');
+      expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5045');
+      expect(at()).toBe('/chat/79');
+    } finally {
+      transport.listConversations.mockImplementation(async () => daemon.chats.map((c) => ({ ...c })));
+    }
   });
 
   it("/chat/new?model= opens an empty chat on it, and the first send's conversation replaces the address without remounting the place", async () => {
@@ -275,6 +301,28 @@ describe('the chat routes', () => {
     await act(() => router.navigate('/chat/3', { state: HANDED }));
     await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5038'));
     expect(screen.getByTestId('chat-page')).toHaveAttribute('data-conversation', '3');
+  });
+
+  it('a run that ends after a model switch keeps the chat on the model it was moved to, the old one unloaded', async () => {
+    const user = userEvent.setup();
+    serving(46, 5046);
+    serving(47, 5047, 'gemma');
+    daemon.chats = [chat(3, 46)];
+    const { at, router } = renderApp('/chat/3');
+    expect(await page()).toHaveAttribute('data-port', '5046');
+
+    setChatHandoff({ modelId: 47, port: 5047, modelName: 'gemma' });
+    await act(() => router.navigate('/chat/3', { state: HANDED }));
+    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5047'));
+    stop(46);
+    const mounted = mounts.count;
+
+    // The list still names 46: no run has written 47 to it yet.
+    await user.click(screen.getByRole('button', { name: 'run ends' }));
+
+    expect(at()).toBe('/chat/3');
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5047');
+    expect(mounts.count).toBe(mounted);
   });
 
   it("/chat/new?far= opens an empty chat on the paired machine's model", async () => {

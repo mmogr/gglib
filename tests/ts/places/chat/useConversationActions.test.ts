@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import type { ConversationSummary } from '../../../../src/services/transport';
+import type { ModelRef } from '../../../../src/types/generated/ModelRef';
 
 const transport = vi.hoisted(() => ({
   deleteConversation: vi.fn(async () => {}),
@@ -34,13 +35,13 @@ const open: ConversationSummary = {
   updated_at: '2026-09-30 09:13:07',
 };
 
-function actions(far: boolean) {
+function actions(far: boolean, pairedModel?: ModelRef) {
   const confirm = vi.fn(async () => true);
   const onOpened = vi.fn();
   const onDeleted = vi.fn();
   const onError = vi.fn();
   const { result } = renderHook(() =>
-    useConversationActions({ far, activeConversation: open, confirm, onError, onOpened, onDeleted }),
+    useConversationActions({ far, activeConversation: open, confirm, onError, onOpened, onDeleted, pairedModel }),
   );
   return { ...result.current, confirm, onOpened, onDeleted, onError };
 }
@@ -89,5 +90,11 @@ describe('useConversationActions', () => {
 
     await here.updateSystemPrompt('be brief');
     expect(transport.updateConversationSystemPrompt).toHaveBeenCalledWith(1, 'be brief');
+  });
+
+  it("Start over on a chat with the paired machine's model makes the copy for that model too", async () => {
+    const far: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
+    await actions(false, far).startOver();
+    expect(transport.createConversation).toHaveBeenCalledWith(expect.objectContaining({ model: far }));
   });
 });

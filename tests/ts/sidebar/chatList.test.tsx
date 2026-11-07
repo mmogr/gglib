@@ -68,7 +68,7 @@ const titles = () =>
   within(chats())
     .getAllByRole('listitem')
     .filter((li) => !li.closest('[aria-label^="On "]'))
-    .map((li) => li.textContent);
+    .map((li) => li.querySelector('button')?.textContent ?? li.querySelector('input')?.value);
 const rowButton = (title: string) => within(chats()).getByRole('button', { name: title });
 const rowOf = (title: string) => rowButton(title).closest('li') as HTMLElement;
 const marks = () => JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY) ?? '{}');
@@ -121,7 +121,9 @@ describe('the sidebar chats', () => {
     await waitFor(() => expect(within(rowOf('Rust lifetimes')).getByRole('img', { name: 'Reply running' })).toBeInTheDocument());
     expect(within(rowOf('Quantisation notes')).queryByRole('img', { name: 'Reply running' })).not.toBeInTheDocument();
     expect(rowButton('Quantisation notes')).toHaveClass('font-semibold');
+    expect(rowButton('Quantisation notes')).toHaveAccessibleDescription('New reply');
     expect(rowButton('Five largest files, in bash')).not.toHaveClass('font-semibold');
+    expect(rowButton('Five largest files, in bash')).not.toHaveAttribute('aria-describedby');
 
     await user.click(rowButton('Quantisation notes'));
     await waitFor(() => expect(rowButton('Quantisation notes')).not.toHaveClass('font-semibold'));
@@ -157,6 +159,29 @@ describe('the sidebar chats', () => {
     daemon.chats = [];
     renderShell('/library');
     expect(await within(chats()).findByText('No chats yet.')).toBeInTheDocument();
+  });
+
+  it('a list that cannot be read says so, not that there are no chats', async () => {
+    transport.listConversations.mockRejectedValueOnce(new Error('daemon gone'));
+    renderShell('/library');
+    expect(await within(chats()).findByText("The chats couldn't be read.")).toBeInTheDocument();
+    expect(within(chats()).queryByText('No chats yet.')).not.toBeInTheDocument();
+  });
+
+  it('⋯ Rename: Escape leaves the title as it was', async () => {
+    const user = userEvent.setup();
+    renderShell('/library');
+    await waitFor(() => expect(titles()).toHaveLength(3));
+
+    await user.click(within(chats()).getByRole('button', { name: 'More for Rust lifetimes' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    const field = within(chats()).getByRole('textbox', { name: 'Chat title' });
+    await user.clear(field);
+    await user.type(field, 'Borrow checker{Escape}');
+
+    expect(within(chats()).queryByRole('textbox', { name: 'Chat title' })).not.toBeInTheDocument();
+    expect(titles()[0]).toBe('Rust lifetimes');
+    expect(transport.updateConversationTitle).not.toHaveBeenCalled();
   });
 
   it('+ starts a chat at once: an empty one, no dialog', async () => {
@@ -233,6 +258,49 @@ describe('the sidebar chats', () => {
     await user.click(within(desk).getByRole('button', { name: 'Why the build broke' }));
     expect(app.at()).toBe('/chat/far/4');
     expect(within(desk).getByRole('button', { name: 'Why the build broke' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('another machine joining lists its own chats, never the last one\'s', async () => {
+    const connected = (fingerprint: string, name: string) => ({
+      ...IDLE_STATUS,
+      paired_name: name,
+      connected: { port: 41234, base_url: 'http://127.0.0.1:41234/v1', ticket_fingerprint: fingerprint, path: 'direct' as const, away_for_s: null },
+    });
+    act(() => applyRemoteStatus(connected('3ca82708b995', 'desk')));
+    renderShell('/library');
+    const desk = await within(chats()).findByRole('region', { name: 'On desk' });
+    await within(desk).findByText('Why the build broke');
+
+    // Study's chats are read, and until they land none of desk's are shown as study's.
+    let answer: (list: Array<{ id: number; title: string; updated_at: string }>) => void = () => {};
+    transport.listFarChats.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    act(() => applyRemoteStatus(connected('ffeeddccbbaa', 'study')));
+    await waitFor(() => expect(transport.listFarChats).toHaveBeenCalledTimes(2));
+    expect(within(chats()).queryByText('Why the build broke')).not.toBeInTheDocument();
+    expect(within(chats()).queryByText('Morning summary')).not.toBeInTheDocument();
+
+    await act(async () => answer([{ id: 4, title: 'Thesis outline', updated_at: '2026-11-06 10:00:00' }]));
+    const study = await within(chats()).findByRole('region', { name: 'On study' });
+    expect(within(study).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Thesis outline']);
+  });
+
+  it('a machine that leaves takes its chats with it: joining again shows none of them until read', async () => {
+    const connected = {
+      ...IDLE_STATUS,
+      paired_name: 'desk',
+      connected: { port: 41234, base_url: 'http://127.0.0.1:41234/v1', ticket_fingerprint: '3ca82708b995', path: 'direct' as const, away_for_s: null },
+    };
+    act(() => applyRemoteStatus(connected));
+    renderShell('/library');
+    await within(chats()).findByText('Why the build broke');
+
+    act(() => applyRemoteStatus({ ...IDLE_STATUS, paired_name: 'desk' }));
+    await waitFor(() => expect(within(chats()).queryByRole('region', { name: /^On / })).not.toBeInTheDocument());
+
+    transport.listFarChats.mockImplementationOnce(() => new Promise(() => {}));
+    act(() => applyRemoteStatus(connected));
+    await waitFor(() => expect(transport.listFarChats).toHaveBeenCalledTimes(2));
+    expect(within(chats()).queryByText('Why the build broke')).not.toBeInTheDocument();
   });
 
   it('with no machine joined there is no "On" group, and the far machine is not asked', async () => {

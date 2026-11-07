@@ -191,6 +191,18 @@ describe('ChatPlace, the system prompt line', () => {
     expect(screen.queryByRole('textbox', { name: 'System prompt' })).not.toBeInTheDocument();
   });
 
+  it('a draft left by Cancel is gone when the editor opens again: it starts from what the chat has', async () => {
+    const user = userEvent.setup();
+    renderPlace();
+    await screen.findByText('What does KeepAlive do?');
+    await fromTitleMenu(user, 'System prompt…');
+    await user.type(screen.getByRole('textbox', { name: 'System prompt' }), ' Never mind.');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await fromTitleMenu(user, 'System prompt…');
+    expect(screen.getByRole('textbox', { name: 'System prompt' })).toHaveValue(DEFAULT_SYSTEM_PROMPT);
+  });
+
   it("a custom prompt is one line; Edit opens it, Cancel keeps it, and Reset to default saves the chat back to none", async () => {
     const user = userEvent.setup();
     fixture.conversations = [{ ...conversation(1, 'launchd KeepAlive'), system_prompt: 'Answer in haiku.' }];

@@ -7,7 +7,8 @@
  * in the sidebar's list at once. A list is read again when something asks
  * (`refreshChats`): the sidebar when it mounts and when a reply ends, the
  * place after anything it changes. A read that lands after a newer one was
- * asked is dropped; one that fails keeps the list it had.
+ * asked is dropped; one that fails keeps the list it had, and says so
+ * (`failed`), so a first read that fails is not taken for no chats.
  *
  * @module services/chatRegistry
  */
@@ -35,13 +36,15 @@ interface SourceChats {
   /** The list, newest first; `null` until the first read lands. */
   list: ConversationSummary[] | null;
   fetched: FetchedList | null;
+  /** The last read failed: the list is the one before it, or empty for a first read. */
+  failed: boolean;
 }
 
 type ChatsState = Record<ChatSource, SourceChats>;
 
 const EMPTY: ChatsState = {
-  this: { list: null, fetched: null },
-  far: { list: null, fetched: null },
+  this: { list: null, fetched: null, failed: false },
+  far: { list: null, fetched: null, failed: false },
 };
 
 const store = createEventStore<ChatsState>(EMPTY);
@@ -77,27 +80,23 @@ export async function refreshChats(source: ChatSource = 'this'): Promise<void> {
         ? (await getTransport().listFarChats()).map(summaryOf)
         : await getTransport().listConversations();
   } catch {
-    // The list it had stays; an empty first read says there is nothing.
-    if (ticket === asked[source] && store.getState()[source].list === null) {
-      store.setState({ ...store.getState(), [source]: { list: [], fetched: null } });
-    }
+    // The list it had stays, marked as not read.
+    if (ticket !== asked[source]) return;
+    const had = store.getState()[source];
+    store.setState({ ...store.getState(), [source]: { list: had.list ?? [], fetched: had.fetched, failed: true } });
     return;
   }
   if (ticket !== asked[source]) return;
   const sorted = [...list].sort(newestFirst);
   store.setState({
     ...store.getState(),
-    [source]: { list: sorted, fetched: { ids: list.map((c) => c.id), askedAt, source } },
+    [source]: { list: sorted, fetched: { ids: list.map((c) => c.id), askedAt, source }, failed: false },
   });
 }
 
 /** `source`'s chats, newest first, and the list as the daemon last sent it. */
 export function useChats(source: ChatSource = 'this'): SourceChats {
   return store.useStore()[source];
-}
-
-export function getChats(source: ChatSource = 'this'): SourceChats {
-  return store.getState()[source];
 }
 
 /** Forget both lists, for a test, or a far machine that is gone. */

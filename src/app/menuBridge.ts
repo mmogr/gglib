@@ -147,10 +147,12 @@ export function startMenuBridge({ notify }: { notify: Notify }): () => void {
   tell();
   const unsubscribe = appRouter().subscribe(tell);
 
-  // ⌘N / Ctrl+N starts a chat from anywhere. A window key, not a menu item:
-  // the native menu has no New Chat to send.
+  // ⌘N on a Mac, Ctrl+N elsewhere, starts a chat from anywhere (Ctrl+N is a
+  // Mac text field's next line). A window key, not a menu item: the native
+  // menu has no New Chat to send.
   const onKey = (event: KeyboardEvent) => {
-    if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'n') return;
+    const command = /Mac|iPhone|iPad/.test(navigator.platform) ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+    if (!command || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'n') return;
     event.preventDefault();
     navigate(paths.newChat());
   };

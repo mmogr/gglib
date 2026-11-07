@@ -14,7 +14,7 @@ interface SystemPromptLineProps {
 }
 
 /** Whether `conversation` has a system prompt of its own, not the default. */
-export function hasCustomPrompt(conversation: ConversationSummary | null): boolean {
+function hasCustomPrompt(conversation: ConversationSummary | null): boolean {
   const prompt = conversation?.system_prompt?.trim();
   return !!prompt && prompt !== DEFAULT_SYSTEM_PROMPT;
 }

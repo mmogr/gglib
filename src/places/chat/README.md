@@ -19,4 +19,12 @@ system prompt line.
 | `ChatPlace.tsx` | The place: a conversation on this machine's model, the paired machine's model, or one of that machine's own chats (read and carried on, never changed); hands up the conversation it opens (a first send, a branch, Start over) and a delete of the open one, so the address follows |
 | `useConversationActions.ts` | What the title ▾ does to the open chat: Rename, Start over (same prompt), Export, the system prompt, Delete… (asked first, shared with the sidebar's ⋯); each acts on this machine's daemon and does nothing on a far chat |
 
+The words this place says that are its own, not the daemon's (state words
+come from `components/status/words.ts`):
+
+- the title ▾: Rename · Generate title · System prompt… · Export · Start over (same prompt)… · Delete…; Generate title's reasons: "Start a server to generate titles", "Wait for the reply to finish", "Ask the model for a title"
+- the system prompt: "Custom system prompt · Edit", Reset to default, Cancel, Save
+- the confirm sheets: `Delete "<title>"?` / "Its messages are deleted too. This cannot be undone."; "Start over with the same prompt?" / "This conversation is deleted, and an empty one with its title and system prompt takes its place."
+- a far chat's picker line: "<machine> picks the model"; while a route decides: "Loading chat…"
+
 <!-- module-docs:end -->

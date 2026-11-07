@@ -121,10 +121,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
   };
 
   const conversations = useChats(source).list ?? NO_CHATS;
-  const syncConversations = async (options: { preferredId?: number | null } = {}) => {
-    if (options.preferredId) open(options.preferredId);
-    else await refreshChats(source);
-  };
+  const syncConversations = () => refreshChats(source);
 
   // What a chat remembers can change on another device, and only its
   // machine's list says it: read it again as one is opened.

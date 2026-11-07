@@ -116,7 +116,7 @@ export function ChatRoute() {
   const navigate = useNavigate();
   const address = chatAddress(location);
   const handoff = useHandoff(location);
-  const { list } = useChats('this');
+  const { list, failed } = useChats('this');
   const { servers } = useServers();
   const { settings } = useSettings();
   // The chat this route just opened, and on what: kept until a run names it.
@@ -127,7 +127,9 @@ export function ChatRoute() {
   const conversationId = address?.kind === 'saved' ? address.id : null;
   const conversation = conversationId === null ? null : list?.find((c) => c.id === conversationId) ?? null;
   const justOpened = opened !== null && opened.id === conversationId ? opened.target : null;
-  const missing = conversationId !== null && list !== null && conversation === null && !handoff && !justOpened;
+  // A list that could not be read says nothing of whether the chat is there:
+  // the chat opens on the fallback model, its thread read by its id.
+  const missing = conversationId !== null && list !== null && !failed && conversation === null && !handoff && !justOpened;
 
   useEffect(() => {
     if (list === null) void refreshChats('this');
@@ -157,7 +159,9 @@ export function ChatRoute() {
   const on = target;
   const onOpened = (id: number) => {
     setOpened({ id, target: on });
-    navigate(paths.chat(id), { replace: true });
+    // A run's end opens the chat it is in: already the address, which a
+    // replace would make a new entry, dropping a model switch's handoff.
+    if (id !== conversationId) navigate(paths.chat(id), { replace: true });
   };
   const onDeleted = () =>
     navigate(paths.newChat(on.kind === 'local' ? { model: on.id } : { far: on.id }), { replace: true });
