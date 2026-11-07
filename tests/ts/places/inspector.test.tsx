@@ -356,11 +356,12 @@ describe('the inspector, a model on this machine', () => {
     const user = userEvent.setup();
     const head = (await screen.findByRole('heading', { name: 'Gemma-3-4B-It' })).parentElement as HTMLElement;
     const complaints = vi.spyOn(appLogger, 'error').mockImplementation(() => {});
-    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('clipboard refused'));
+    const refused = new Error('clipboard refused');
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(refused);
     try {
       await user.click(within(head).getByRole('button', { name: 'More' }));
       await user.click(screen.getByRole('menuitem', { name: 'Copy path' }));
-      await waitFor(() => expect(complaints).toHaveBeenCalledWith('component.model', 'Failed to copy the path', expect.anything()));
+      await waitFor(() => expect(complaints).toHaveBeenCalledWith('component.model', 'Failed to copy the path', { error: refused }));
       expect(within(head).queryByText('Copied')).not.toBeInTheDocument();
     } finally {
       complaints.mockRestore();

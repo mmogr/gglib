@@ -150,8 +150,21 @@ describe('ChatPlace, model picker', () => {
     const llama = screen.getByRole('menuitemradio', { name: 'llama-3.2-3b · Loaded' });
     expect(llama).toBeEnabled();
     expect(llama).not.toHaveAttribute('aria-describedby');
+    // The chat's own model is never greyed by a pin: it is the one already open.
+    const own = screen.getByRole('menuitemradio', { name: 'Qwen3.8-27B · Not loaded' });
+    expect(own).toBeEnabled();
+    expect(own).not.toHaveAttribute('aria-describedby');
     await user.click(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' }));
     expect(onSwitchModel).not.toHaveBeenCalled();
+  });
+
+  it('draws no Loaded heading while nothing runs', async () => {
+    const user = userEvent.setup();
+    act(() => ingestServerEvent({ type: 'stopped', modelId: '8', port: 5555, updatedAt: Date.now() + 1, modelName: 'llama-3.2-3b' }));
+    renderPage();
+    await screen.findByRole('heading', { name: 'launchd KeepAlive' });
+    expect(await pickerGroup(user, 'On this Mac')).toEqual(['Qwen3.8-27B · Not loaded', 'llama-3.2-3b · Not loaded', 'gemma-3-12b · Not loaded']);
+    expect(screen.queryByRole('group', { name: 'Loaded' })).not.toBeInTheDocument();
   });
 
   it('greys nothing and names no pin while the endpoint serves any model', async () => {
