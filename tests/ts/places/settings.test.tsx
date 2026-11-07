@@ -27,7 +27,7 @@ vi.mock('../../../src/places/settings/EngineCard', () => ({ EngineCard: ({ kind 
 vi.mock('../../../src/places/settings/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => <p>system checks</p> }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
-import { daemon, resetDaemon, transport, writes } from './settingsDaemon';
+import { daemon, holdWrites, resetDaemon, transport, writes } from './settingsDaemon';
 import { renderApp } from './harness';
 import { mcpServer, mcpServerInfo } from '../fixtures/mcp';
 
@@ -43,7 +43,7 @@ afterEach(() => vi.useRealTimers());
 
 describe('the address', () => {
   it.each([
-    ['general', 'General', 'Start gglib at login'],
+    ['general', 'General', 'Start the endpoint when gglib launches'],
     ['endpoint', 'Endpoint', 'Port'],
     ['models', 'Models', 'Download queue size'],
     ['tools', 'Tools', 'Let MCP clients draw'],
@@ -87,13 +87,13 @@ describe('saving as you go', () => {
   it('writes a ticked box alone, the moment it moves, and Undo writes back what was stored', async () => {
     renderApp('/settings/general');
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('checkbox', { name: /^Start gglib at login/ }));
-    await waitFor(() => expect(writes()).toEqual([{ startAtLogin: true }]));
-    expect(check('Start gglib at login')).toBeChecked();
+    await user.click(await screen.findByRole('checkbox', { name: /^Start the endpoint when gglib launches/ }));
+    await waitFor(() => expect(writes()).toEqual([{ proxyAutostart: true }]));
+    expect(check('Start the endpoint when gglib launches')).toBeChecked();
 
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
-    await waitFor(() => expect(writes()).toEqual([{ startAtLogin: true }, { startAtLogin: null }]));
-    expect(check('Start gglib at login')).not.toBeChecked();
+    await waitFor(() => expect(writes()).toEqual([{ proxyAutostart: true }, { proxyAutostart: null }]));
+    expect(check('Start the endpoint when gglib launches')).not.toBeChecked();
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
   });
 
@@ -169,6 +169,74 @@ describe('saving as you go', () => {
   });
 });
 
+describe('a write on its way', () => {
+  it('holds the box until it lands, so an edit then is not compared with the value before it', async () => {
+    resetDaemon({ proxyPort: 8081 });
+    const release = holdWrites();
+    renderApp('/settings/endpoint');
+    const user = userEvent.setup();
+    const port = await screen.findByLabelText('Port');
+    await user.clear(port);
+    await user.type(port, '8082{Enter}');
+    await waitFor(() => expect(port).toBeDisabled());
+    await user.tab();
+    expect(writes()).toEqual([{ proxyPort: 8082 }]);
+
+    release();
+    await waitFor(() => expect(port).toBeEnabled());
+    await user.clear(port);
+    await user.type(port, '8081{Enter}');
+    await waitFor(() => expect(writes()).toEqual([{ proxyPort: 8082 }, { proxyPort: 8081 }]));
+    expect(daemon.settings.proxyPort).toBe(8081);
+  });
+
+  it('holds a checkbox until it lands', async () => {
+    const release = holdWrites();
+    renderApp('/settings/general');
+    const user = userEvent.setup();
+    const box = await screen.findByRole('checkbox', { name: /^Start the endpoint when gglib launches/ });
+    await user.click(box);
+    await waitFor(() => expect(box).toBeDisabled());
+    release();
+    await waitFor(() => expect(box).toBeEnabled());
+    expect(box).toBeChecked();
+  });
+
+  it('keeps Undo for five seconds after the latest of two writes, not the first', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    resetDaemon({ proxyPort: 8081 });
+    renderApp('/settings/endpoint');
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const port = await screen.findByLabelText('Port');
+    await user.clear(port);
+    await user.type(port, '8082{Enter}');
+    await screen.findByRole('button', { name: 'Undo' });
+    await act(async () => {
+      vi.advanceTimersByTime(3_000);
+    });
+    await user.clear(port);
+    await user.type(port, '8083{Enter}');
+    await waitFor(() => expect(writes()).toEqual([{ proxyPort: 8082 }, { proxyPort: 8083 }]));
+    await act(async () => {
+      vi.advanceTimersByTime(2_500);
+    });
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(3_000);
+    });
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+  });
+});
+
+describe('opening the place', () => {
+  it('reads the settings again, though the provider is already up', async () => {
+    const app = renderApp('/library');
+    await waitFor(() => expect(transport.getSettings).toHaveBeenCalledTimes(1));
+    await act(() => app.router.navigate('/settings/general'));
+    await waitFor(() => expect(transport.getSettings).toHaveBeenCalledTimes(2));
+  });
+});
+
 describe('the API key', () => {
   const stubClipboard = () => {
     const writeText = vi.fn(async () => {});
@@ -211,6 +279,7 @@ describe('the API key', () => {
     await user.type(screen.getByLabelText('API key'), 'sk-new');
     await user.click(screen.getByRole('button', { name: 'Replace' }));
     expect(await screen.findByText('Replace the API key?')).toBeInTheDocument();
+    expect(screen.getByText('Clients that send the old key are refused within a few seconds.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(writes()).toEqual([]);
 
@@ -237,6 +306,20 @@ describe('the API key', () => {
     expect(writes()).toEqual([{ proxyApiKey: null }, { proxyApiKey: 'sk-old' }]);
   });
 
+  it('keeps the typed key when the Replace is refused, with the refusal under it', async () => {
+    resetDaemon({}, 'sk-old');
+    daemon.refuse = 'the settings could not be saved';
+    renderApp('/settings/endpoint');
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Replace' }));
+    await user.type(screen.getByLabelText('API key'), 'sk-new');
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Replace' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('the settings could not be saved');
+    expect(box('API key')).toHaveValue('sk-new');
+    expect(daemon.key).toBe('sk-old');
+  });
+
   it('writes nothing when the key in use cannot be read for Undo', async () => {
     resetDaemon({}, 'sk-old');
     transport.revealSecret.mockRejectedValueOnce(new Error('the daemon is locked'));
@@ -245,21 +328,6 @@ describe('the API key', () => {
     await user.click(await screen.findByRole('button', { name: 'Clear' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('could not be read, so it was left as it is: the daemon is locked');
     expect(writes()).toEqual([]);
-  });
-});
-
-describe('when a change takes effect', () => {
-  it('says so under the fields read at a restart, and not under those read at once', async () => {
-    renderApp('/settings/endpoint');
-    const port = (await screen.findByLabelText('Port')).closest('div.flex-col') as HTMLElement;
-    expect(within(port).getByText('Takes effect when the endpoint next turns on.')).toBeInTheDocument();
-    const servers = box('Model servers start at').closest('div.flex-col') as HTMLElement;
-    expect(within(servers).getByText('Takes effect for the next model loaded.')).toBeInTheDocument();
-    const lan = check('Share on the local network').closest('div.flex-col') as HTMLElement;
-    expect(within(lan).getByText('Takes effect when gglib next starts.')).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'What gglib does to requests' }));
-    const repair = check('Repair broken tool calls').closest('div.flex-col') as HTMLElement;
-    expect(within(repair).queryByText(/^Takes effect/)).not.toBeInTheDocument();
   });
 });
 

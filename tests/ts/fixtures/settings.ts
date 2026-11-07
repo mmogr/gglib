@@ -14,7 +14,6 @@
 import type { AppSettings } from '../../../src/types';
 
 const UNSET: AppSettings = {
-  defaultDownloadPath: null,
   defaultContextSize: null,
   proxyPort: null,
   llamaBasePort: null,
@@ -27,8 +26,6 @@ const UNSET: AppSettings = {
   inferenceProfiles: null,
   setupCompleted: null,
   titleGenerationPrompt: null,
-  bindHost: null,
-  shareLan: null,
   proxyHost: null,
   proxyAllowedHosts: null,
   proxyCacheOnDisk: null,

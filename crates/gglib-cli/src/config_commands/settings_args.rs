@@ -66,23 +66,12 @@ pub struct SettingsSetArgs {
     /// Maximum number of downloads that can be queued (1-50)
     #[arg(long)]
     pub max_download_queue_size: Option<u32>,
-    /// Default download path for models
-    #[arg(long)]
-    pub default_download_path: Option<String>,
     /// Maximum agent iterations for tool-calling loop (clamped to 1-50 when a loop runs)
     #[arg(long)]
     pub max_tool_iterations: Option<u32>,
     /// Maximum stagnation steps before stopping agent loop
     #[arg(long)]
     pub max_stagnation_steps: Option<u32>,
-    /// Host address `gglib web` binds to (an IP, e.g. 127.0.0.1 or 0.0.0.0).
-    /// The `--host` flag overrides this for a single run.
-    #[arg(long)]
-    pub bind_host: Option<String>,
-    /// Expose `gglib web` on all LAN interfaces and broadcast over mDNS.
-    /// WARNING: makes `GGLib` visible to every device on your network.
-    #[arg(long)]
-    pub share_lan: Option<bool>,
     /// Address the endpoint binds (an IP, e.g. 127.0.0.1 or 0.0.0.0), for
     /// `proxy`, `serve` and the desktop app alike; `--host` on `proxy` and
     /// `serve` overrides it for one run, and `up` binds loopback by name.

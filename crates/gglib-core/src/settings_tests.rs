@@ -13,7 +13,6 @@ fn test_default_settings() {
     assert_eq!(settings.default_context_size, None);
     assert_eq!(settings.proxy_port, Some(DEFAULT_PROXY_PORT));
     assert_eq!(settings.llama_base_port, Some(DEFAULT_LLAMA_BASE_PORT));
-    assert_eq!(settings.default_download_path, None);
     assert_eq!(settings.max_download_queue_size, Some(10));
 }
 
@@ -56,18 +55,6 @@ fn test_validate_port_too_low() {
     assert!(matches!(
         validate_settings(&settings),
         Err(SettingsError::InvalidPort(80))
-    ));
-}
-
-#[test]
-fn test_validate_empty_path() {
-    let settings = Settings {
-        default_download_path: Some(String::new()),
-        ..Default::default()
-    };
-    assert!(matches!(
-        validate_settings(&settings),
-        Err(SettingsError::EmptyDownloadPath)
     ));
 }
 

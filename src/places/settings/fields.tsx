@@ -1,7 +1,8 @@
 /**
  * The settings place's fields, each saving itself on change: a text or a
- * number written when the person leaves the box or presses Enter (Escape
- * puts back the stored value), a checkbox or a choice the moment it moves.
+ * number written when the person leaves the box or presses Enter (a text
+ * area only when it is left; Escape puts back the stored value in either),
+ * held while its write is on its way, a checkbox or a choice the moment it moves.
  *
  * A field reads its stored value from the settings the provider holds and
  * writes `{ [key]: value }` under the binding's own name (ST-7), through
@@ -12,7 +13,7 @@
  * @module places/settings/fields
  */
 
-import { useState, type ReactNode } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { Input } from '../../components/ui/Input';
@@ -84,7 +85,14 @@ export function TextSetting<K extends Key>(props: TextProps<K>) {
     placeholder,
     'aria-describedby': settingDescriptionId(id),
     'aria-invalid': save.error !== null || undefined,
+    // Held while its write is on its way, as the checkboxes and choices are:
+    // an edit made then would be compared with the value before the write.
+    disabled: save.saving,
     onBlur: () => void commit(),
+    onKeyDown: (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (event.key === 'Enter' && !multiline) void commit();
+      if (event.key === 'Escape') setDraft(null);
+    },
   };
 
   return (
@@ -117,10 +125,6 @@ export function TextSetting<K extends Key>(props: TextProps<K>) {
           autoComplete="off"
           spellCheck={false}
           onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') void commit();
-            if (event.key === 'Escape') setDraft(null);
-          }}
         />
       )}
     </SettingField>

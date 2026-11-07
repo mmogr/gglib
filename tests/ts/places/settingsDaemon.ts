@@ -18,6 +18,8 @@ export const daemon = {
   folder: { path: '/models', source: 'default', default_path: '/models', exists: true, writable: true } as ModelsDirectoryInfo,
   servers: [] as McpServerInfo[],
   refuse: null as string | null,
+  /** While set, a settings write waits for it before it lands. */
+  hold: null as Promise<void> | null,
 };
 
 /** A fresh install with `overrides`, and `key` held if given. */
@@ -27,12 +29,14 @@ export function resetDaemon(overrides: Partial<AppSettings> = {}, key: string | 
   daemon.folder = { path: '/models', source: 'default', default_path: '/models', exists: true, writable: true };
   daemon.servers = [];
   daemon.refuse = null;
+  daemon.hold = null;
   Object.values(transport).forEach((fn) => fn.mockClear());
 }
 
 export const transport = {
   getSettings: vi.fn(async () => ({ ...daemon.settings })),
   updateSettings: vi.fn(async (update: UpdateSettingsRequest): Promise<AppSettings> => {
+    if (daemon.hold !== null) await daemon.hold;
     if (daemon.refuse !== null) throw new Error(daemon.refuse);
     const { proxyApiKey, ...rest } = update;
     if (proxyApiKey !== undefined) daemon.key = proxyApiKey;
@@ -56,6 +60,18 @@ export const transport = {
   subscribe: vi.fn(() => () => {}),
   onEventStreamOpen: vi.fn(() => () => {}),
 };
+
+/** Hold every settings write until the returned function is called. */
+export function holdWrites(): () => void {
+  let release = () => {};
+  daemon.hold = new Promise<void>((resolve) => {
+    release = () => {
+      daemon.hold = null;
+      resolve();
+    };
+  });
+  return release;
+}
 
 /** Every settings write so far, in order. */
 export const writes = (): UpdateSettingsRequest[] => transport.updateSettings.mock.calls.map(([update]) => update);

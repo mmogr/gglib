@@ -66,7 +66,7 @@ export const SecretSetting: FC<{ note: string }> = ({ note }) => {
     if (isSet) {
       const yes = await confirm({
         title: 'Replace the API key?',
-        description: 'Clients that send the old key are refused once the endpoint next turns on.',
+        description: 'Clients that send the old key are refused within a few seconds.',
         confirmLabel: 'Replace',
       });
       if (!yes) return;

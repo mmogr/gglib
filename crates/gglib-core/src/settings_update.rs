@@ -25,7 +25,6 @@ use super::{Device, LoopGuardMode, RemotePairing, RemoteServe};
 /// - `Some(Some(value))` = set field to value
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SettingsUpdate {
-    pub default_download_path: Option<Option<String>>,
     pub default_context_size: Option<Option<u64>>,
     pub proxy_port: Option<Option<u16>>,
     pub llama_base_port: Option<Option<u16>>,
@@ -39,8 +38,6 @@ pub struct SettingsUpdate {
     pub inference_profiles: Option<Option<Vec<InferenceProfile>>>,
     pub setup_completed: Option<Option<bool>>,
     pub title_generation_prompt: Option<Option<String>>,
-    pub bind_host: Option<Option<String>>,
-    pub share_lan: Option<Option<bool>>,
     pub proxy_host: Option<Option<String>>,
     pub proxy_allowed_hosts: Option<Option<Vec<String>>>,
     pub proxy_cache_on_disk: Option<Option<bool>>,
@@ -92,17 +89,11 @@ pub enum SettingsError {
     )]
     InvalidQueueSize(u32),
 
-    #[error("Download path cannot be empty")]
-    EmptyDownloadPath,
-
     #[error("Invalid inference parameter: {0}")]
     InvalidInferenceConfig(String),
 
     #[error("Invalid inference profile: {0}")]
     InvalidInferenceProfile(String),
-
-    #[error("Bind host must be an IP address (e.g. 127.0.0.1 or 0.0.0.0), got '{0}'")]
-    InvalidBindHost(String),
 
     #[error("The endpoint's address must be an IP address (e.g. 127.0.0.1 or 0.0.0.0), got '{0}'")]
     InvalidProxyHost(String),

@@ -1,6 +1,6 @@
 /**
- * Settings › Endpoint: its port and key, who may reach it, its prompt cache
- * on disk, where the model servers behind it start, and under "What gglib
+ * Settings › Endpoint: its port and key, its address and who may reach it,
+ * its prompt cache on disk, where the model servers behind it start, and under "What gglib
  * does to requests" the four things the endpoint does to a request. Each
  * saves on change; those the endpoint reads when it turns on say so.
  *
@@ -13,12 +13,12 @@
  */
 
 import type { FC } from 'react';
-import { LLAMA_BASE_PORT, PROXY_PORT } from '../../constants/settingsDefaults';
+import { LLAMA_BASE_PORT, PROXY_CACHE_DISK_GB, PROXY_PORT } from '../../constants/settingsDefaults';
 import type { LoopGuardMode } from '../../types/generated/LoopGuardMode';
 import { Disclosure } from './Disclosure';
-import { NumberSetting, TextSetting, ToggleSetting, numberOrNull } from './fields';
+import { NumberSetting, TextSetting, ToggleSetting } from './fields';
 import { LoopGuardTripsPanel } from './LoopGuardTripsPanel';
-import { ON_ENDPOINT_START, ON_GGLIB_START, ON_NEXT_LOAD } from './notes';
+import { ON_ENDPOINT_START, ON_GGLIB_START, ON_KEY_CHANGE } from './notes';
 import { SecretSetting } from './SecretSetting';
 
 /** The hosts as the box shows them, one comma between each. */
@@ -47,28 +47,12 @@ export const EndpointSection: FC = () => (
       note={ON_ENDPOINT_START}
     />
 
-    <SecretSetting note={ON_ENDPOINT_START} />
-
-    <ToggleSetting k="shareLan" id="share-lan-input" label="Share on the local network" note={ON_GGLIB_START}>
-      Binds gglib beyond loopback: every device on your network can reach it, and its management
-      API can download models and start or stop them on this machine. Set an API key first.
-    </ToggleSetting>
-
-    <TextSetting
-      k="bindHost"
-      id="bind-host-input"
-      label="Bind address"
-      defaultHint="127.0.0.1"
-      placeholder="127.0.0.1"
-      mono
-      description="The literal IP gglib binds; a hostname is refused, so the bind and the mDNS record agree. --host overrides it for one run."
-      note={ON_GGLIB_START}
-    />
+    <SecretSetting note={ON_KEY_CHANGE} />
 
     <TextSetting
       k="proxyHost"
       id="proxy-host-input"
-      label="Endpoint address"
+      label="Bind address"
       defaultHint="127.0.0.1"
       placeholder="127.0.0.1"
       mono
@@ -93,16 +77,11 @@ export const EndpointSection: FC = () => (
       Keeps prompt caches across model swaps and restarts, in the data folder&apos;s slots.
     </ToggleSetting>
 
-    <TextSetting
+    <NumberSetting
       k="proxyCacheDiskGb"
       id="proxy-cache-disk-gb-input"
       label="Disk budget (GiB)"
-      type="number"
-      min="1"
-      width="xs"
-      defaultHint="sized from free disk"
-      placeholder="auto"
-      fromText={numberOrNull}
+      spec={PROXY_CACHE_DISK_GB}
       description="How much disk the prompt cache may hold before its oldest slots are swept, at least 1 GiB."
       note={ON_ENDPOINT_START}
     />
@@ -113,7 +92,7 @@ export const EndpointSection: FC = () => (
       label="Model servers start at"
       spec={LLAMA_BASE_PORT}
       description="The first port a model's server is given."
-      note={ON_NEXT_LOAD}
+      note={ON_GGLIB_START}
     />
 
     <Disclosure label="What gglib does to requests">

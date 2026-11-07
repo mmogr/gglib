@@ -26,7 +26,6 @@ const { getSettings, updateSettings } = transport;
 const fetchSettings = getSettings;
 
 const mockSettings: AppSettings = appSettings({
-  defaultDownloadPath: '/models',
   defaultContextSize: 4096,
   proxyPort: MOCK_PROXY_PORT,
   llamaBasePort: MOCK_BASE_PORT,
@@ -256,5 +255,32 @@ describe('useSettings', () => {
       await result.current.save({ proxyPort: 3 });
     });
     expect(showToast).toHaveBeenCalledWith('Settings applied', 'success');
+  });
+
+  /**
+   * A read begun before a save and answered after it is overtaken: putting
+   * its answer up would show the value from before the save (TX-2).
+   */
+  it('drops a read the save overtook', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let answer: (s: AppSettings) => void = () => {};
+    vi.mocked(fetchSettings).mockReturnValueOnce(new Promise<AppSettings>((resolve) => (answer = resolve)));
+    let reading: Promise<void> = Promise.resolve();
+    act(() => {
+      reading = result.current.refresh();
+    });
+    const saved = { ...mockSettings, proxyPort: 9191 };
+    vi.mocked(updateSettings).mockResolvedValue(saved);
+    await act(async () => {
+      await result.current.save({ proxyPort: 9191 });
+    });
+    await act(async () => {
+      answer(mockSettings);
+      await reading;
+    });
+
+    expect(result.current.settings?.proxyPort).toBe(9191);
   });
 });

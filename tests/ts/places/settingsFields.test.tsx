@@ -77,8 +77,6 @@ const STORED = {
   llamaBasePort: 9100,
   maxDownloadQueueSize: 5,
   defaultContextSize: 8192,
-  shareLan: true,
-  bindHost: '0.0.0.0',
   proxyHost: null,
   proxyAllowedHosts: ['desk.local'],
   proxyCacheOnDisk: null,
@@ -95,7 +93,6 @@ const STORED = {
   defaultModelId: 3,
   defaultImageModelId: 5,
   mcpDrawing: true,
-  defaultDownloadPath: '/downloads',
   inferenceDefaults: { temperature: 0.4, topK: 40 } as never,
 };
 
@@ -107,11 +104,10 @@ beforeEach(() => {
 const changes: [string, string, Change, UpdateSettingsRequest][] = [
   ['general', 'start at login', tick('start-at-login-input'), { startAtLogin: false }],
   ['general', 'endpoint at launch', tick('proxy-autostart-input'), { proxyAutostart: false }],
+  ['general', 'menu bar', tick('close-to-tray-input'), { closeToTray: true }],
   ['endpoint', 'port', retype('proxy-port-input', '8082'), { proxyPort: 8082 }],
   ['endpoint', 'port emptied', retype('proxy-port-input', ''), { proxyPort: null }],
-  ['endpoint', 'LAN sharing', tick('share-lan-input'), { shareLan: false }],
-  ['endpoint', 'bind address', retype('bind-host-input', '127.0.0.1'), { bindHost: '127.0.0.1' }],
-  ['endpoint', 'endpoint address', retype('proxy-host-input', ' 0.0.0.0 '), { proxyHost: '0.0.0.0' }],
+  ['endpoint', 'bind address', retype('proxy-host-input', ' 0.0.0.0 '), { proxyHost: '0.0.0.0' }],
   ['endpoint', 'allowed hosts', retype('proxy-allowed-hosts-input', 'gglib.lan, ,192.168.1.20'), { proxyAllowedHosts: ['gglib.lan', '192.168.1.20'] }],
   ['endpoint', 'allowed hosts emptied', retype('proxy-allowed-hosts-input', ''), { proxyAllowedHosts: null }],
   ['endpoint', 'prompt cache on disk', tick('proxy-cache-on-disk-input'), { proxyCacheOnDisk: true }],
@@ -121,8 +117,6 @@ const changes: [string, string, Change, UpdateSettingsRequest][] = [
   ['endpoint', 'loop guard off', disclosed('What gglib does to requests', tick('loop-guard-input')), { loopGuardMode: 'off' }],
   ['endpoint', 'agent sampling cap', disclosed('What gglib does to requests', tick('agentic-sampling-input')), { agenticSampling: true }],
   ['endpoint', 'client sampling', disclosed('What gglib does to requests', tick('trust-client-sampling-input')), { trustClientSampling: false }],
-  ['models', 'staging folder', retype('download-path-input', '/elsewhere'), { defaultDownloadPath: '/elsewhere' }],
-  ['models', 'staging folder emptied', retype('download-path-input', ''), { defaultDownloadPath: null }],
   ['models', 'queue size', retype('max-queue-size-input', '6'), { maxDownloadQueueSize: 6 }],
   ['models', 'context', retype('context-size-input', '4096'), { defaultContextSize: 4096 }],
   ['models', 'model for gglib q', choose('default-model-select', '4'), { defaultModelId: 4 }],
@@ -137,6 +131,11 @@ const changes: [string, string, Change, UpdateSettingsRequest][] = [
 ];
 
 describe('each field writes its own name, alone', () => {
+  // The desktop app, which draws every field.
+  beforeEach(() => {
+    desktop.is = true;
+  });
+
   it.each(changes)('%s › %s', async (section, _name, change, sent) => {
     renderApp(`/settings/${section}`);
     await screen.findByRole('heading', { level: 2 });
@@ -146,26 +145,84 @@ describe('each field writes its own name, alone', () => {
   });
 });
 
+/** A field's whole block: its label, box, hint row, note and save line. */
+const block = (id: string) => field(id).closest('div.flex-col') as HTMLElement;
+
 describe('the number fields', () => {
-  it('put the default in the box and under it, announced with the field, within the range the backend takes', async () => {
-    resetDaemon();
-    renderApp('/settings/endpoint');
-    const port = await screen.findByLabelText('Port');
-    expect(port).toHaveAttribute('placeholder', '8080');
-    expect(port).toHaveAttribute('min', '1024');
-    expect(port).toHaveAttribute('max', '65535');
-    const hint = document.getElementById(port.getAttribute('aria-describedby') ?? '');
-    expect(hint).toHaveTextContent('Default: 8080');
+  // [section, field, its disclosure, placeholder, what the hint says, min, max]
+  const NUMBERS: [string, string, string | null, string, string | RegExp, string, string | null][] = [
+    ['endpoint', 'proxy-port-input', null, '8080', 'Default: 8080', '1024', '65535'],
+    ['endpoint', 'server-port-input', null, '9000', 'Default: 9000', '1024', '65535'],
+    ['endpoint', 'proxy-cache-disk-gb-input', null, 'auto', 'Left empty, it is sized from free disk.', '1', null],
+    ['models', 'max-queue-size-input', null, '10', 'Default: 10', '1', '50'],
+    ['models', 'context-size-input', null, 'auto', /the server sizes each launch/, '512', '1000000'],
+    ['tools', 'max-tool-iterations-input', 'Agent limits', '25', 'Default: 25', '1', '50'],
+    ['tools', 'max-stagnation-steps-input', 'Agent limits', '5', 'Default: 5', '1', '100'],
+  ];
+
+  it.each(NUMBERS)(
+    '%s › %s: the default in the box and under it, announced with it, within the range the backend takes',
+    async (section, id, disclosure, placeholder, hint, min, max) => {
+      resetDaemon();
+      renderApp(`/settings/${section}`);
+      await screen.findByRole('heading', { level: 2 });
+      if (disclosure) await userEvent.setup().click(await screen.findByRole('button', { name: disclosure }));
+      await waitFor(() => field(id));
+      const input = field(id);
+      expect(input).toHaveAttribute('placeholder', placeholder);
+      expect(input).toHaveAttribute('min', min);
+      if (max === null) expect(input).not.toHaveAttribute('max');
+      else expect(input).toHaveAttribute('max', max);
+      const described = document.getElementById(input.getAttribute('aria-describedby') ?? '');
+      expect(described).toHaveTextContent(hint);
+      if (typeof hint !== 'string' || !hint.startsWith('Default:')) expect(described).not.toHaveTextContent('Default:');
+    },
+  );
+});
+
+describe('when a change takes effect', () => {
+  const ENDPOINT = 'Takes effect when the endpoint next turns on.';
+  const GGLIB = 'Takes effect when gglib next starts.';
+  const DESKTOP = 'Takes effect when the desktop app next starts.';
+  const KEY = 'A new key takes effect within a few seconds. A cleared key stops being required when the endpoint next turns on.';
+  // [section, field, its disclosure, its note or null for one read where it is used]
+  const NOTES: [string, string, string | null, string | null][] = [
+    ['general', 'start-at-login-input', null, DESKTOP],
+    ['general', 'proxy-autostart-input', null, GGLIB],
+    ['general', 'close-to-tray-input', null, null],
+    ['endpoint', 'proxy-port-input', null, ENDPOINT],
+    ['endpoint', 'proxy-api-key-input', null, KEY],
+    ['endpoint', 'proxy-host-input', null, ENDPOINT],
+    ['endpoint', 'proxy-allowed-hosts-input', null, ENDPOINT],
+    ['endpoint', 'proxy-cache-on-disk-input', null, ENDPOINT],
+    ['endpoint', 'proxy-cache-disk-gb-input', null, ENDPOINT],
+    ['endpoint', 'server-port-input', null, GGLIB],
+    ['endpoint', 'tool-call-repair-input', 'What gglib does to requests', null],
+    ['endpoint', 'loop-guard-input', 'What gglib does to requests', null],
+    ['endpoint', 'agentic-sampling-input', 'What gglib does to requests', null],
+    ['endpoint', 'trust-client-sampling-input', 'What gglib does to requests', null],
+    ['models', 'models-dir-input', null, null],
+    ['models', 'max-queue-size-input', null, null],
+    ['models', 'context-size-input', null, ENDPOINT],
+    ['models', 'default-model-select', null, null],
+    ['models', 'default-image-model-select', null, null],
+    ['tools', 'mcp-drawing-input', null, null],
+    ['tools', 'max-tool-iterations-input', 'Agent limits', null],
+    ['tools', 'max-stagnation-steps-input', 'Agent limits', null],
+    ['tools', 'title-prompt-input', null, null],
+  ];
+
+  beforeEach(() => {
+    desktop.is = true;
   });
 
-  it('say what an empty box does where there is no one default', async () => {
-    resetDaemon();
-    renderApp('/settings/models');
-    const context = await screen.findByLabelText('Context for models without their own');
-    expect(context).toHaveAttribute('placeholder', 'auto');
-    const hint = document.getElementById(context.getAttribute('aria-describedby') ?? '');
-    expect(hint).toHaveTextContent(/the server sizes each launch/);
-    expect(hint).not.toHaveTextContent('Default:');
+  it.each(NOTES)('%s › %s', async (section, id, disclosure, note) => {
+    renderApp(`/settings/${section}`);
+    await screen.findByRole('heading', { level: 2 });
+    if (disclosure) await userEvent.setup().click(await screen.findByRole('button', { name: disclosure }));
+    await waitFor(() => field(id));
+    const said = within(block(id)).queryAllByText(/takes effect|stops being required/i).map((p) => p.textContent);
+    expect(said).toEqual(note === null ? [] : [note]);
   });
 });
 
@@ -198,10 +255,17 @@ describe('the models folder', () => {
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenCalledWith('/Volumes/big/models'));
   });
 
-  it('says a folder that is not there yet, or cannot be written', async () => {
+  it('says a folder that is not there yet, or cannot be written, with the attention mark', async () => {
     daemon.folder = { ...daemon.folder, exists: false, writable: false };
     renderApp('/settings/models');
-    expect(await screen.findByText('will be created · not writable')).toBeInTheDocument();
+    const said = await screen.findByText('will be created · not writable');
+    expect(said.closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
+  });
+
+  it('says a folder that is there and writable plainly, with no mark', async () => {
+    renderApp('/settings/models');
+    const said = await screen.findByText('exists · writable');
+    expect(said.closest('[data-kind]')).toBeNull();
   });
 });
 
@@ -227,6 +291,20 @@ describe('Stop runaway loops', () => {
     await user.click(field('loop-guard-input'));
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(writes()).toEqual([{ loopGuardMode: 'off' }, { loopGuardMode: 'refuse' }]));
+  });
+});
+
+describe('the title prompt', () => {
+  it('puts the stored prompt back on Escape, and then writes nothing when left', async () => {
+    renderApp('/settings/tools');
+    const user = userEvent.setup();
+    const prompt = await screen.findByLabelText('Title prompt');
+    await user.type(prompt, ' and more');
+    expect(prompt).toHaveValue('a prompt the user wrote and more');
+    await user.keyboard('{Escape}');
+    expect(prompt).toHaveValue('a prompt the user wrote');
+    await user.tab();
+    expect(writes()).toEqual([]);
   });
 });
 
@@ -278,6 +356,17 @@ describe('Sampling defaults', () => {
     expect(writes()).toEqual([]);
   });
 
+  it('writes nothing for a Save with nothing stored and nothing set', async () => {
+    resetDaemon();
+    renderApp('/settings/models');
+    const user = userEvent.setup();
+    const sampling = within(await screen.findByRole('region', { name: 'Sampling defaults' }));
+    await user.click(sampling.getByRole('button', { name: 'Change…' }));
+    await user.click(sampling.getByRole('button', { name: 'Save' }));
+    expect(sampling.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(writes()).toEqual([]);
+  });
+
   it('says None set when no default is stored', async () => {
     resetDaemon();
     renderApp('/settings/models');
@@ -300,10 +389,11 @@ describe('Profiles in the place', () => {
 });
 
 describe('the menu bar toggle', () => {
-  it('is drawn in the desktop app only', async () => {
+  it('and the login item are drawn in the desktop app only', async () => {
     const web = renderApp('/settings/general');
-    await screen.findByRole('checkbox', { name: /^Start gglib at login/ });
+    await screen.findByRole('checkbox', { name: /^Start the endpoint when gglib launches/ });
     expect(document.querySelector('#close-to-tray-input')).toBeNull();
+    expect(document.querySelector('#start-at-login-input')).toBeNull();
     web.unmount();
     desktop.is = true;
     renderApp('/settings/general');

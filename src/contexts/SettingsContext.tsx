@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { AppSettings, UpdateSettingsRequest } from "../types";
@@ -43,13 +44,18 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Counts every read and write begun. A read applies its answer only when
+  // nothing began after it, so a read overtaken by a save (or by a later
+  // read) cannot put back what was there before (TX-2).
+  const turn = useRef(0);
 
   const load = useCallback(async () => {
+    const mine = ++turn.current;
     try {
       setLoading(true);
       setError(null);
       const result = await getTransport().getSettings();
-      setSettings(result);
+      if (mine === turn.current) setSettings(result);
     } catch (err) {
       const message = formatError(err);
       setError(message);
@@ -64,6 +70,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
       try {
         setSaving(true);
         setError(null);
+        ++turn.current;
         const result = await getTransport().updateSettings(updates);
         setSettings(result);
         toast?.("Settings applied", "success");

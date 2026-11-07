@@ -64,9 +64,6 @@ pub const DEFAULT_CONTEXT_SIZE: u64 = 4096;
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Settings {
-    /// Default directory for downloading models.
-    pub default_download_path: Option<String>,
-
     /// Default context size for models (e.g., 8192, 32768).
     ///
     /// `None` means the user has chosen nothing, and is the ordinary state —
@@ -130,24 +127,11 @@ pub struct Settings {
     /// Custom prompt template for generating chat titles.
     pub title_generation_prompt: Option<String>,
 
-    // ── Network binding ─────────────────────────────────────────────
-    /// Override the bind host for `gglib web`.
-    ///
-    /// `None` → use the compiled-in default (`127.0.0.1`). The `--host` flag
-    /// takes precedence for a single run without changing this value.
-    pub bind_host: Option<String>,
-
-    /// Whether `gglib web` binds all LAN interfaces and broadcasts over mDNS.
-    ///
-    /// `None`/`Some(false)` → localhost-only. The `--share-lan` flag can turn
-    /// this on for a single run, but cannot turn it off — clear it here.
-    pub share_lan: Option<bool>,
-
     // ── The endpoint ────────────────────────────────────────────────
     /// The address the endpoint (the OpenAI-compatible proxy) binds.
     ///
-    /// `None` → loopback ([`DEFAULT_PROXY_HOST`]). A literal IP, as
-    /// `bind_host` is: `0.0.0.0` accepts LAN clients, and binding off
+    /// `None` → loopback ([`DEFAULT_PROXY_HOST`]). A literal IP:
+    /// `0.0.0.0` accepts LAN clients, and binding off
     /// loopback makes the proxy demand a key. `gglib proxy --host` and
     /// `gglib serve --host` override it for one run.
     pub proxy_host: Option<String>,
@@ -354,7 +338,6 @@ impl Settings {
     #[must_use]
     pub const fn with_defaults() -> Self {
         Self {
-            default_download_path: None,
             // `None`, not the floor. This is what `gglib config settings
             // reset` writes, and a stored value is the evidence that the user
             // chose a number — the settings modal shows an empty box when
@@ -379,8 +362,6 @@ impl Settings {
             inference_profiles: None,
             setup_completed: None,
             title_generation_prompt: None,
-            bind_host: None,
-            share_lan: None,
             proxy_host: None,
             proxy_allowed_hosts: None,
             proxy_cache_on_disk: None,
@@ -463,9 +444,6 @@ impl Settings {
 
     /// Merge another settings into this one, only updating fields that are Some.
     pub fn merge(&mut self, other: &SettingsUpdate) {
-        if let Some(ref path) = other.default_download_path {
-            self.default_download_path.clone_from(path);
-        }
         if let Some(ref ctx_size) = other.default_context_size {
             self.default_context_size = *ctx_size;
         }
@@ -501,12 +479,6 @@ impl Settings {
         }
         if let Some(ref v) = other.title_generation_prompt {
             self.title_generation_prompt.clone_from(v);
-        }
-        if let Some(ref v) = other.bind_host {
-            self.bind_host.clone_from(v);
-        }
-        if let Some(ref v) = other.share_lan {
-            self.share_lan = *v;
         }
         if let Some(ref v) = other.proxy_host {
             self.proxy_host.clone_from(v);
@@ -581,25 +553,8 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         return Err(SettingsError::InvalidQueueSize(queue_size));
     }
 
-    // Validate download path if specified
-    if settings
-        .default_download_path
-        .as_ref()
-        .is_some_and(|p| p.trim().is_empty())
-    {
-        return Err(SettingsError::EmptyDownloadPath);
-    }
-
-    // Validate the bind host if specified. Requiring a literal IP (rather than
-    // accepting a name) keeps the value unambiguous for both the TCP bind and
-    // the mDNS address record.
-    if let Some(ref host) = settings.bind_host
-        && host.parse::<std::net::IpAddr>().is_err()
-    {
-        return Err(SettingsError::InvalidBindHost(host.clone()));
-    }
-
-    // The endpoint's bind is held to the same rule, for the same reason.
+    // The endpoint's bind must be a literal IP rather than a name, which
+    // keeps the value unambiguous for the TCP bind.
     if let Some(ref host) = settings.proxy_host
         && host.parse::<std::net::IpAddr>().is_err()
     {

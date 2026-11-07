@@ -1,6 +1,5 @@
 /**
- * Settings › Models: where the library lives and where downloads wait, how
- * many may queue, the context for a model without its own, the model `gglib
+ * Settings › Models: where the library lives, how many downloads may queue, the context for a model without its own, the model `gglib
  * q` uses and the one a drawing uses, the sampling defaults and the
  * profiles. Each saves on change.
  *
@@ -16,7 +15,8 @@ import { CONTEXT_SIZE, MAX_DOWNLOAD_QUEUE_SIZE } from '../../constants/settingsD
 import { drawingValuesFrom } from '../../readings/drawingValues';
 import { useModelLibrary } from '../../services/modelRegistry';
 import type { AppSettings, GgufModel } from '../../types';
-import { ChoiceSetting, NumberSetting, TextSetting, numberOrNull, type Choice } from './fields';
+import { ChoiceSetting, NumberSetting, numberOrNull, type Choice } from './fields';
+import { ON_ENDPOINT_START } from './notes';
 import { InferenceProfiles } from './InferenceProfiles';
 import { ModelsFolder } from './ModelsFolder';
 import { SamplingDefaults } from './SamplingDefaults';
@@ -48,16 +48,6 @@ export const ModelsSection: FC = () => {
     <>
       <ModelsFolder />
 
-      <TextSetting
-        k="defaultDownloadPath"
-        id="download-path-input"
-        label="Download staging folder"
-        defaultHint="the models folder"
-        placeholder="the models folder"
-        mono
-        description="Where a download waits before it joins the library. Leave it empty to download straight into the models folder."
-      />
-
       <NumberSetting
         k="maxDownloadQueueSize"
         id="max-queue-size-input"
@@ -72,6 +62,7 @@ export const ModelsSection: FC = () => {
         label="Context for models without their own"
         spec={CONTEXT_SIZE}
         description="The context window of a model with no context of its own set."
+        note={ON_ENDPOINT_START}
       />
 
       <ChoiceSetting

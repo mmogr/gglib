@@ -23,7 +23,6 @@ use crate::handlers::model::resolver;
 /// name, and only the library can say which id a name is.
 fn update_from(args: SettingsSetArgs, image_model: Option<i64>) -> SettingsUpdate {
     SettingsUpdate {
-        default_download_path: args.default_download_path.map(Some),
         default_context_size: args.default_context_size.map(Some),
         proxy_port: args.proxy_port.map(Some),
         llama_base_port: args.llama_base_port.map(Some),
@@ -36,8 +35,6 @@ fn update_from(args: SettingsSetArgs, image_model: Option<i64>) -> SettingsUpdat
         inference_profiles: None,
         setup_completed: None,
         title_generation_prompt: None,
-        bind_host: args.bind_host.map(Some),
-        share_lan: args.share_lan.map(Some),
         proxy_host: args.proxy_host.map(Some),
         proxy_allowed_hosts: args.proxy_allowed_hosts.map(Some),
         proxy_cache_on_disk: args.proxy_cache_on_disk.map(Some),

@@ -15,7 +15,7 @@ import type { SparseInferenceConfig } from '../../types';
 import { useStored } from './fields';
 import { summarize } from './InferenceProfiles';
 import { SaveLine } from './SaveLine';
-import { useSettingSave } from './useFieldSave';
+import { sameValue, useSettingSave } from './useFieldSave';
 
 const KEYS = [...SAMPLING_KEYS, ...REASONING_KEYS] as readonly CompactKey[];
 
@@ -26,7 +26,14 @@ export const SamplingDefaults: FC = () => {
   const set = stored !== null && Object.values(stored).some((v) => v !== null && v !== undefined);
 
   const submit = async () => {
-    if (draft !== null && (await save.commit(draft))) setDraft(null);
+    if (draft === null) return;
+    // Nothing stored and nothing typed is no change: `{}` would store an
+    // empty set of defaults where there was none.
+    if (stored === null && sameValue(draft, {})) {
+      setDraft(null);
+      return;
+    }
+    if (await save.commit(draft)) setDraft(null);
   };
 
   return (

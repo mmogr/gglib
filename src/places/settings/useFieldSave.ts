@@ -53,6 +53,9 @@ export function useUndoableWrite<V>(stored: V, write: (value: V) => Promise<unkn
   const [error, setError] = useState<string | null>(null);
   const [undoTo, setUndoTo] = useState<{ value: V } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A write on its way. `stored` moves only when it lands, so a second
+  // commit compared against it then would be judged against a stale value.
+  const busy = useRef(false);
 
   const stopTimer = () => {
     if (timer.current !== null) clearTimeout(timer.current);
@@ -62,6 +65,7 @@ export function useUndoableWrite<V>(stored: V, write: (value: V) => Promise<unkn
 
   const run = useCallback(
     async (value: V): Promise<boolean> => {
+      busy.current = true;
       setSaving(true);
       setError(null);
       try {
@@ -71,6 +75,7 @@ export function useUndoableWrite<V>(stored: V, write: (value: V) => Promise<unkn
         setError(formatError(err));
         return false;
       } finally {
+        busy.current = false;
         setSaving(false);
       }
     },
@@ -79,6 +84,9 @@ export function useUndoableWrite<V>(stored: V, write: (value: V) => Promise<unkn
 
   const commit = useCallback(
     async (next: V, before?: V): Promise<boolean> => {
+      // The field is held while a write is on its way; one that slips in
+      // (an Enter, then the blur its disabling brings) is that write again.
+      if (busy.current) return false;
       const previous = before === undefined ? stored : before;
       if (before === undefined && sameValue(next, stored)) {
         setError(null);

@@ -11,7 +11,7 @@ import type { LoopGuardMode } from "./LoopGuardMode";
  * omitted key (leave unchanged) — the same pattern used by
  * [`UpdateModelRequest::server_defaults`](super::UpdateModelRequest::server_defaults).
  */
-export type UpdateSettingsRequest = { defaultDownloadPath?: string | null, defaultContextSize?: number | null, proxyPort?: number | null, llamaBasePort?: number | null, maxDownloadQueueSize?: number | null, maxToolIterations?: number | null, maxStagnationSteps?: number | null, 
+export type UpdateSettingsRequest = { defaultContextSize?: number | null, proxyPort?: number | null, llamaBasePort?: number | null, maxDownloadQueueSize?: number | null, maxToolIterations?: number | null, maxStagnationSteps?: number | null, 
 /**
  * Default model ID for quick commands (e.g., `gglib question`).
  */
@@ -25,4 +25,4 @@ defaultImageModelId?: number | null, inferenceDefaults?: InferenceConfig | null,
  * it untouched, so a client updating an unrelated setting cannot drop
  * profiles it never knew about.
  */
-inferenceProfiles?: Array<InferenceProfile> | null, setupCompleted?: boolean | null, titleGenerationPrompt?: string | null, bindHost?: string | null, shareLan?: boolean | null, proxyHost?: string | null, proxyAllowedHosts?: Array<string> | null, proxyCacheOnDisk?: boolean | null, proxyCacheDiskGb?: number | null, proxyApiKey?: string | null, trustClientSampling?: boolean | null, loopGuardMode?: LoopGuardMode | null, toolCallRepair?: boolean | null, mcpDrawing?: boolean | null, agenticSampling?: boolean | null, proxyAutostart?: boolean | null, closeToTray?: boolean | null, startAtLogin?: boolean | null, };
+inferenceProfiles?: Array<InferenceProfile> | null, setupCompleted?: boolean | null, titleGenerationPrompt?: string | null, proxyHost?: string | null, proxyAllowedHosts?: Array<string> | null, proxyCacheOnDisk?: boolean | null, proxyCacheDiskGb?: number | null, proxyApiKey?: string | null, trustClientSampling?: boolean | null, loopGuardMode?: LoopGuardMode | null, toolCallRepair?: boolean | null, mcpDrawing?: boolean | null, agenticSampling?: boolean | null, proxyAutostart?: boolean | null, closeToTray?: boolean | null, startAtLogin?: boolean | null, };

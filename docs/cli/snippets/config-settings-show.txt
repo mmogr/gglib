@@ -4,10 +4,8 @@ Current application settings:
   General
   ────────────────────────────────────────
   agentic-sampling         None
-  bind-host                None
   close-to-tray            None
   default-context-size     None (sized per launch)
-  default-download-path    None
   default-image-model-id   None
   default-model-id         2 (Qwen3-4B-Instruct-2507)
   inference-profiles       None
@@ -28,7 +26,6 @@ Current application settings:
   remote-enabled           None
   remote-pairing           None
   remote-serve             None
-  share-lan                None
   start-at-login           None
   title-generation-prompt  None
   tool-call-repair         None
