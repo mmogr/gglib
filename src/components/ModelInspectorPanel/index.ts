@@ -1,6 +1,3 @@
-// Barrel export for ModelInspectorPanel feature
-export { default as ModelInspectorPanel } from './ModelInspectorPanel';
+// What is left of the old inspector until I2 and I4 replace it.
 export { FarModelInspector } from './FarModelInspector';
-
-// Re-export hooks for testing/advanced usage
-export * from './hooks';
+export { HfInspector } from './HfInspector';

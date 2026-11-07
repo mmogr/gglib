@@ -15,7 +15,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-import { InspectorCapabilities } from '../../../src/components/ModelInspectorPanel/components/InspectorCapabilities';
+import { Abilities } from '../../../src/inspector/local/Abilities';
 import { CAPABILITY_FLAGS } from '../../../src/readings/capabilityFlags';
 
 import { rust } from './rustSource';
@@ -48,7 +48,7 @@ describe('the capability flags are the same four on every surface', () => {
   });
 
   it('labels each box with the flag name as words', () => {
-    render(<InspectorCapabilities modelId={7} capabilities={0} onChanged={vi.fn()} onError={vi.fn()} />);
+    render(<Abilities modelId={7} capabilities={0} onChanged={vi.fn()} onError={vi.fn()} />);
 
     const labels = screen.getAllByRole('checkbox').map((box) => box.closest('label')?.textContent ?? '');
     expect(labels).toHaveLength(TABLE.length);

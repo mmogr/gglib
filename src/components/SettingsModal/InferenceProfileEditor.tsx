@@ -18,7 +18,7 @@ import type {
 import { INFERENCE_CONFIG_KEYS, INFERENCE_PARAMS } from "../../constants/inferenceDefaults";
 import type { ReasoningEffortLevel } from "../../constants/reasoningEffort";
 import { PARAM_LABELS } from "../../utils/samplingProvenance";
-import { ReasoningEffortField } from "../InferenceParametersForm/ReasoningEffortField";
+import { ReasoningEffortField } from "../SamplingForm/ReasoningEffortField";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Stack, Label } from "../primitives";
@@ -30,7 +30,7 @@ import { Stack, Label } from "../primitives";
  * exhaustive key type is what makes a new sampling parameter a compile error
  * here instead of a field the editor silently drops. Labels and bounds come
  * from the shared tables — `PARAM_LABELS` and `INFERENCE_PARAMS`, the same
- * ones `InferenceParametersForm` reads — so this file no longer keeps its own
+ * ones `SamplingForm` reads — so this file no longer keeps its own
  * copy of either.
  */
 const HINTS: Record<SamplingParamKey, string> = {

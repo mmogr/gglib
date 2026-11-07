@@ -10,12 +10,6 @@ import { formatError } from '../../../utils/errors';
 
 export interface ServerActionsConfig {
   model: GgufModel | null;
-  servers: ServerViewModel[];
-  // Edit mode state
-  editedName: string;
-  editedQuantization: string;
-  editedFilePath: string;
-  editedInferenceDefaults: SparseInferenceConfig | undefined;
   // Serve modal state
   customContext: string;
   customPort: string;
@@ -26,44 +20,27 @@ export interface ServerActionsConfig {
   inferenceParams: SparseInferenceConfig | undefined;
   /** Serve as a pinned proxy instead of a bare model start. */
   pinProxy: boolean;
-  editedServerDefaults: import('../../../types').ServerConfig | null | undefined;
-  // Callbacks
-  onStopServer: (modelId: number) => Promise<void>;
-  onRemoveModel: (id: number, force: boolean) => void;
-  onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: SparseInferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null }) => Promise<void>;
   onServerStarted?: (serverInfo: ServerViewModel) => void;
   onLlamaServerNotInstalled?: (metadata: LlamaServerNotInstalledMetadata) => void;
-  // State setters
   setIsServing: (serving: boolean) => void;
-  setIsDeleting: (deleting: boolean) => void;
   closeServeModal: () => void;
-  closeDeleteModal: () => void;
-  resetEditState: () => void;
 }
 
 export interface ServerActionsResult {
   handleStartServer: () => Promise<void>;
-  handleToggleServer: () => Promise<void>;
-  handleConfirmDelete: () => Promise<void>;
-  handleSave: () => Promise<void>;
-  isRunning: boolean;
 }
 
 /**
- * Hook for server-related async actions.
- * Handles starting/stopping servers, deleting models, and saving edits.
+ * The Serve dialog's start (the inspector's "Load with options…" and "Load
+ * and pin", `?serve=1` and the native menu's Serve), until the Load with
+ * options sheet replaces the dialog (I2). Sends what the dialog's fields
+ * hold and nothing resolved on the person's behalf.
  */
 export function useServerActions(config: ServerActionsConfig): ServerActionsResult {
   const { showToast } = useToastContext();
-  
+
   const {
     model,
-    servers,
-    editedName,
-    editedQuantization,
-    editedFilePath,
-    editedInferenceDefaults,
-    editedServerDefaults,
     customContext,
     customPort,
     jinjaOverride,
@@ -71,21 +48,12 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     mtpNMaxOverride,
     mtpPMinOverride,
     inferenceParams,
-    onStopServer,
-    onRemoveModel,
-    onUpdateModel,
     onServerStarted,
     onLlamaServerNotInstalled,
     setIsServing,
-    setIsDeleting,
     closeServeModal,
-    closeDeleteModal,
-    resetEditState,
     pinProxy,
   } = config;
-
-  const activeServer = model?.id ? servers.find(s => s.modelId === model.id) : undefined;
-  const isRunning = !!activeServer;
 
   const handleStartServer = useCallback(async () => {
     if (!model?.id) return;
@@ -126,7 +94,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
 
       const serveConfig: ServeConfig = {
         // The sampling half, spread rather than named field by field. The
-        // modal renders the whole `InferenceParametersForm`, which offers
+        // modal renders the whole `SamplingForm`, which offers
         // seventeen of the eighteen — every one but `seed`, which has no
         // control. Naming nine of them dropped eight the surface had just
         // offered, and `seed` along with them.
@@ -218,71 +186,5 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     }
   }, [model, customContext, customPort, jinjaOverride, hasAgentTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
 
-  const handleToggleServer = useCallback(async () => {
-    if (!model?.id) return;
-    
-    if (isRunning) {
-      try {
-        await onStopServer(model.id);
-      } catch (error) {
-        appLogger.error('hook.ui', 'Failed to stop server', { error, modelId: model.id });
-        showToast(`Failed to stop server: ${formatError(error)}`, 'error');
-      }
-    }
-  }, [model, isRunning, onStopServer, showToast]);
-
-  const handleConfirmDelete = useCallback(async () => {
-    if (!model?.id) return;
-    setIsDeleting(true);
-    try {
-      await onRemoveModel(model.id, true);
-      closeDeleteModal();
-    } catch (error) {
-      appLogger.error('hook.ui', 'Failed to remove model', { error, modelId: model.id });
-      showToast(`Failed to remove model: ${formatError(error)}`, 'error');
-    } finally {
-      setIsDeleting(false);
-    }
-  }, [model, onRemoveModel, closeDeleteModal, setIsDeleting, showToast]);
-
-  const handleSave = useCallback(async () => {
-    if (!model?.id) return;
-    try {
-      const updates: { name?: string; quantization?: string; filePath?: string; inferenceDefaults?: SparseInferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null } = {};
-      
-      if (editedName !== model.name) {
-        updates.name = editedName;
-      }
-      if (editedQuantization !== (model.quantization || '')) {
-        updates.quantization = editedQuantization || undefined;
-      }
-      if (editedFilePath !== model.filePath) {
-        updates.filePath = editedFilePath;
-      }
-      // Always include inferenceDefaults if it was edited (even if set to empty object to clear)
-      if (JSON.stringify(editedInferenceDefaults) !== JSON.stringify(model.inferenceDefaults)) {
-        updates.inferenceDefaults = editedInferenceDefaults;
-      }
-      // Include serverDefaults if it was edited (null = clear override, object = set value, undefined = no change)
-      if (editedServerDefaults !== model.serverDefaults) {
-        updates.serverDefaults = editedServerDefaults;
-      }
-      
-      if (Object.keys(updates).length > 0) {
-        await onUpdateModel(model.id, updates);
-      }
-      resetEditState();
-    } catch (error) {
-      appLogger.error('hook.ui', 'Failed to update model', { error, modelId: model?.id });
-      showToast(`Failed to update model: ${formatError(error)}`, 'error');
-    }
-  }, [model, editedName, editedQuantization, editedFilePath, editedInferenceDefaults, editedServerDefaults, onUpdateModel, resetEditState, showToast]);
-
-  return {
-    handleStartServer,
-    handleToggleServer,
-    handleConfirmDelete,
-    handleSave,
-    isRunning,
-  };
+  return { handleStartServer };
 }

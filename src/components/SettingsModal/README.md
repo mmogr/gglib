@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-Application settings modal: models directory path, base port configuration, per-request context size, default model selection, inference defaults, named inference profiles, and advanced controls (tool iteration limit, title-generation prompt). Uses `InferenceParametersForm` for the defaults section.
+Application settings modal: models directory path, base port configuration, per-request context size, default model selection, inference defaults, named inference profiles, and advanced controls (tool iteration limit, title-generation prompt). Uses `SamplingForm` for the defaults section.
 
 ## Key Files
 

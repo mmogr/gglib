@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import {
   fallbackCaption,
   type InferenceFallback,
-} from '../../../src/components/InferenceParametersForm/fallbackCaption';
+} from '../../../src/components/SamplingForm/fallbackCaption';
 import type { DefaultsOriginName } from '../../../src/types';
 import { resolvedConfig } from '../fixtures/inference';
 import { samplingExplanation } from '../fixtures/explain';

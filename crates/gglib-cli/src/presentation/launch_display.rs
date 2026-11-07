@@ -6,6 +6,10 @@
 //! from the [`LaunchPlan`] the explain call answers with, the one
 //! `GET /api/models/{id}/explain` sends, and nothing here resolves a flag,
 //! a source or a figure of its own.
+//!
+//! The tests also record `contracts/models/launch_line.json`: a few plans
+//! beside the command line `LaunchPlan::command_line` makes of each, which
+//! the GUI's launch line is held to.
 
 use std::fmt::Write as _;
 
@@ -249,6 +253,111 @@ mod tests {
         assert_eq!(
             context_text(&fit),
             "Context\n  serves at              4096 (built-in default)\n  fitted to hardware     unknown\n    device budget        96.00 GiB\n    weights              3.99 GiB\n    kv bytes/token       unknown\n    trained window       unknown\n    before snapping      unknown\n"
+        );
+    }
+    /// The plans `contracts/models/launch_line.json` records: an ordinary
+    /// llama launch, one whose values need quoting for a shell (a space, a
+    /// single quote, a double quote, a tab, an empty value), and an image
+    /// model's.
+    fn recorded_plans() -> Vec<LaunchPlan> {
+        use ChoiceSource::{Gglib, ModelAuthor, You};
+        let plan = |program: &str, args: Vec<LaunchArg>| LaunchPlan {
+            program: program.to_owned(),
+            args,
+            narration: LaunchNarration::new("m", None, 0),
+            unloads: None,
+            fit: None,
+        };
+        let a = |flag: &str, value: Option<&str>, decision: &str, source| LaunchArg {
+            decision: decision.to_owned(),
+            ..arg(flag, value, source, "why")
+        };
+        vec![
+            plan(
+                "llama-server",
+                vec![
+                    a("-m", Some("/models/qwen3-4b.gguf"), "model", ModelAuthor),
+                    a("--host", Some("127.0.0.1"), "host", Gglib),
+                    a("--port", Some("auto"), "port", Gglib),
+                    a("--metrics", None, "metrics", Gglib),
+                    a("--parallel", Some("1"), "parallel", Gglib),
+                    a("-c", Some("32768"), "ctx", Gglib),
+                    a("--jinja", None, "templates", Gglib),
+                    a("--cache-type-k", Some("q8_0"), "kv", Gglib),
+                    a("--cache-type-v", Some("q8_0"), "kv", Gglib),
+                    a(
+                        "--reasoning-format",
+                        Some("deepseek"),
+                        "reasoning",
+                        ModelAuthor,
+                    ),
+                ],
+            ),
+            plan(
+                "llama-server",
+                vec![
+                    a(
+                        "-m",
+                        Some("/Users/m/Library/Application Support/gglib/a b.gguf"),
+                        "model",
+                        ModelAuthor,
+                    ),
+                    a("--mmproj", Some("/it's/mmproj.gguf"), "images", You),
+                    a("--alias", Some("say \"hi\""), "model", Gglib),
+                    a("--sep", Some("a\tb"), "model", Gglib),
+                    a("--empty", Some(""), "model", Gglib),
+                ],
+            ),
+            plan(
+                "sd-server",
+                vec![
+                    a(
+                        "--diffusion-model",
+                        Some("/m/flux1-schnell-q8_0.gguf"),
+                        "model",
+                        ModelAuthor,
+                    ),
+                    a("--vae", Some("/m/ae.safetensors"), "parts", You),
+                    a("--listen-ip", Some("127.0.0.1"), "host", Gglib),
+                    a("--listen-port", Some("auto"), "port", Gglib),
+                    a("--steps", Some("4"), "recipe", Gglib),
+                ],
+            ),
+        ]
+    }
+
+    /// One row of `contracts/models/launch_line.json`: a plan as the wire
+    /// sends it, and the command line made of it.
+    #[derive(serde::Serialize)]
+    struct RecordedLine {
+        plan: LaunchPlan,
+        line: String,
+    }
+
+    /// The checked-in file is exactly what `command_line` makes of each
+    /// plan. Run with `GGLIB_RECORD_CONTRACTS=1` to rewrite it after a
+    /// deliberate change.
+    #[test]
+    fn the_checked_in_launch_lines_are_the_command_lines() {
+        let recorded: Vec<RecordedLine> = recorded_plans()
+            .into_iter()
+            .map(|plan| RecordedLine {
+                line: plan.command_line(),
+                plan,
+            })
+            .collect();
+        let mut want = serde_json::to_string_pretty(&recorded).expect("serialise");
+        want.push('\n');
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/models/launch_line.json");
+        if std::env::var_os("GGLIB_RECORD_CONTRACTS").is_some() {
+            std::fs::create_dir_all(path.parent().unwrap()).expect("make contracts/models");
+            std::fs::write(&path, &want).expect("write launch_line.json");
+        }
+        let have = std::fs::read_to_string(&path).expect("read contracts/models/launch_line.json");
+        assert!(
+            have == want,
+            "contracts/models/launch_line.json is stale; rerun with GGLIB_RECORD_CONTRACTS=1\n{want}"
         );
     }
 }

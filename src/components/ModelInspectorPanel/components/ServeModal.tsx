@@ -6,11 +6,11 @@ import { Icon } from '../../ui/Icon';
 import { Banner } from '../../ui/Banner';
 import { Input } from '../../ui/Input';
 import { Modal } from '../../ui/Modal';
-import { InferenceParametersForm } from '../../InferenceParametersForm';
+import { SamplingForm } from '../../SamplingForm';
 import { JinjaModeField } from './JinjaModeField';
 import { contextPlaceholder } from './contextPlaceholder';
 import { useSamplingExplanation } from '../hooks/useSamplingExplanation';
-import { useSdStatus } from '../hooks/useSdStatus';
+import { useSdStatus } from '../../../inspector/local/useSdStatus';
 import { ImageServeDetails } from './ImageServeDetails';
 import type {
   GgufModel,
@@ -363,7 +363,7 @@ export const ServeModal: FC<ServeModalProps> = ({
                   <p className="mt-sm mb-md text-sm text-text-secondary">
                     Override sampling parameters for this session.
                   </p>
-                  <InferenceParametersForm
+                  <SamplingForm
                     value={inferenceParams}
                     onChange={onInferenceParamsChange}
                     disabled={isServing}

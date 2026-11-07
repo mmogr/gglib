@@ -1,0 +1,286 @@
+/**
+ * The inspector for a model on this machine: its name (⧉ copies the Model
+ * ID), ⋯ and ×; one line of facts (the library row's); the fit sentence;
+ * Load and Chat (Chat and Unload once loaded, with its state); the Model ID
+ * to use it by; How it runs (How it ran once loaded); and Details, closed.
+ *
+ * Until the Load with options sheet (I2) the ⋯ menu's Load with options…
+ * and Load and pin open the Serve dialog, which `?serve=1` and the native
+ * menu's Serve reach through `onRegisterServeModalOpener`; until verify
+ * results move into Details (I3) Verify files and Check for updates open
+ * the verification dialog.
+ *
+ * @module inspector/local/LocalInspector
+ */
+
+import { useEffect, useState, type FC } from 'react';
+import { useNavigate } from 'react-router';
+import { MoreHorizontal, X } from 'lucide-react';
+import { paths } from '../../app/paths';
+import { CopyValue } from '../../components/CopyValue';
+import { ServeModal } from '../../components/ModelInspectorPanel/components/ServeModal';
+import { useServeModal } from '../../components/ModelInspectorPanel/hooks/useServeModal';
+import { useServerActions } from '../../components/ModelInspectorPanel/hooks/useServerActions';
+import { InstallProgress } from '../../components/SetupWizard/InstallProgress';
+import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
+import { RESIDENCY_WORDS } from '../../components/status/words';
+import { Button } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
+import { VerificationModal } from '../../components/VerificationModal';
+import { useConfirmContext } from '../../contexts/ConfirmContext';
+import { useToastContext } from '../../contexts/ToastContext';
+import { useSettings } from '../../hooks/useSettings';
+import type { ServerViewModel } from '../../hooks/useServers';
+import { useEngineInstall } from '../../places/library/engineInstall';
+import { modelFacts } from '../../places/library/groups';
+import { Menu, type MenuItem } from '../../places/library/Menu';
+import { useResidency } from '../../places/library/useResidency';
+import { refreshModels } from '../../services/modelEvents';
+import { openUrl } from '../../services/platform';
+import { getTransport } from '../../services/transport';
+import type { GgufModel } from '../../types';
+import { formatError } from '../../utils/errors';
+import { getHuggingFaceUrl } from '../../utils/format';
+import type { Update } from './Change';
+import { Details } from './Details';
+import { HowItRuns } from './HowItRuns';
+import { fitSentence } from './rows';
+import { useExplain } from './useExplain';
+import { useLaunchFacts } from './useLaunchFacts';
+import { useLoad } from './useLoad';
+import { useModelDetail } from './useModelDetail';
+import { useRetagModel } from './useRetagModel';
+import { useSdStatus } from './useSdStatus';
+
+export interface LocalInspectorProps {
+  model: GgufModel;
+  servers: ServerViewModel[];
+  /** A server started here for a chat: open that chat on its port. */
+  onServerStarted: (server: ServerViewModel) => void;
+  onStopServer: (modelId: number) => Promise<void>;
+  /** Remove the model from the library (its file stays); rejects with the daemon's refusal. */
+  onRemoveModel: (id: number) => Promise<void>;
+  onUpdateModel: Update;
+  /** Hand the place the Serve dialog's opener, for `?serve=1` and the native menu. */
+  onRegisterServeModalOpener?: (opener: () => void) => void;
+  /** Open Settings where the image runtime is installed. */
+  onOpenSystemSettings?: () => void;
+}
+
+/** The detail's reads and tag writes: one set for every render, so a read does not start another. */
+const DETAIL_CALLS = {
+  getModelDetail: (id: number) => getTransport().getModelDetail(id),
+  onAddTag: (id: number, tag: string) => getTransport().addModelTag(id, tag),
+  onRemoveTag: (id: number, tag: string) => getTransport().removeModelTag(id, tag),
+  onRefresh: refreshModels,
+};
+
+export const LocalInspector: FC<LocalInspectorProps> = (props) => {
+  const { model, servers, onServerStarted, onStopServer, onRemoveModel, onUpdateModel, onRegisterServeModalOpener, onOpenSystemSettings } = props;
+  const navigate = useNavigate();
+  const { showToast } = useToastContext();
+  const { confirm } = useConfirmContext();
+  const { settings } = useSettings();
+  const [profile, setProfile] = useState<string | null>(null);
+  const [verify, setVerify] = useState<'verify' | 'update' | null>(null);
+
+  const draws = model.imageFamily !== undefined;
+  const loaded = servers.some((s) => s.modelId === model.id);
+  const explain = useExplain(model.id, profile);
+  const detail = useModelDetail({ modelId: model.id, ...DETAIL_CALLS });
+  const facts = useLaunchFacts(model.id, loaded);
+  const state = useResidency().get(model.id) ?? facts?.state ?? 'loaded';
+  const load = useLoad(model, draws, onServerStarted, onStopServer);
+  const install = useEngineInstall();
+  const sd = useSdStatus(draws);
+  const sdMissing = draws && sd.status?.installed === false;
+  const retag = useRetagModel({ modelId: model.id, reload: detail.reload, showToast, confirm });
+
+  const serve = useServeModal(model.id);
+  const tagged = (tag: string) => detail.tags.some((t) => t.toLowerCase() === tag);
+  const { handleStartServer } = useServerActions({
+    model,
+    customContext: serve.customContext,
+    customPort: serve.customPort,
+    jinjaOverride: serve.jinjaOverride,
+    hasAgentTag: tagged('agent'),
+    mtpNMaxOverride: serve.mtpNMaxOverride,
+    mtpPMinOverride: serve.mtpPMinOverride,
+    inferenceParams: serve.inferenceParams,
+    pinProxy: serve.pinProxy,
+    onServerStarted,
+    onLlamaServerNotInstalled: () => load.markLlamaMissing(),
+    setIsServing: serve.setIsServing,
+    closeServeModal: serve.closeServeModal,
+  });
+  const { openServeModal, setPinProxy } = serve;
+  useEffect(() => onRegisterServeModalOpener?.(openServeModal), [onRegisterServeModalOpener, openServeModal]);
+
+  const openSheet = (pin: boolean) => {
+    openServeModal();
+    setPinProxy(pin);
+  };
+  const changed = () => {
+    void explain.reload();
+    void detail.reload();
+  };
+  const copied = (what: string) => () => showToast(`Copied ${what}`, 'success');
+  const repo = getHuggingFaceUrl(model.hfRepoId);
+
+  const remove = async () => {
+    const yes = await confirm({
+      title: `Remove ${model.name} from the library?`,
+      description: 'The file stays on disk.',
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!yes) return;
+    await onRemoveModel(model.id).catch((err: unknown) => showToast(`Could not remove ${model.name}: ${formatError(err)}`, 'error'));
+  };
+
+  const items: MenuItem[] = [
+    { label: 'Load with options…', onPick: () => openSheet(false) },
+    { label: 'Load and pin', onPick: () => openSheet(true) },
+    { label: 'Verify files', onPick: () => setVerify('verify'), gapBefore: true },
+    ...(model.hfRepoId ? [{ label: 'Check for updates', onPick: () => setVerify('update') }] : []),
+    {
+      label: 'Re-detect tags',
+      onPick: () => void retag.handleRetag(false),
+      gapBefore: true,
+      title: 'Adds the capability tags the GGUF implies and removes none.',
+    },
+    {
+      label: 'Rebuild tags…',
+      onPick: () => void retag.handleRetag(true),
+      title: 'Derives the detected tags again from the GGUF, dropping those it no longer finds, hand-added ones included.',
+    },
+    { label: 'Copy path', onPick: () => void navigator.clipboard.writeText(model.filePath).then(copied('the path')), gapBefore: true },
+    ...(repo ? [{ label: 'Open on Hugging Face', onPick: () => void openUrl(repo) }] : []),
+    { label: 'Benchmark…', onPick: () => navigate(paths.benchmarks([model.id])), gapBefore: true },
+    { label: 'Remove from library…', onPick: () => void remove(), gapBefore: true, danger: true },
+  ];
+
+  const fit = loaded ? null : fitSentence(explain.explanation?.plan.fit ?? null);
+  const installing = load.needsLlama && install.installing;
+
+  return (
+    <div className="flex flex-col gap-lg p-md">
+      <div className="flex flex-col gap-xs">
+        <div className="flex items-center gap-xs">
+          <h2 className="m-0 min-w-0 truncate text-base font-semibold text-text">{model.name}</h2>
+          {model.openaiId !== null && (
+            <CopyValue value={model.openaiId} label={`Copy the Model ID ${model.openaiId}`} onCopied={copied(model.openaiId)} />
+          )}
+          <span className="flex-1" />
+          <Menu iconOnly name="More" label={<Icon icon={MoreHorizontal} size={14} />} items={items} />
+          <Button variant="ghost" size="sm" iconOnly aria-label="Close" title="Close" onClick={() => navigate(paths.library())}>
+            <Icon icon={X} size={14} />
+          </Button>
+        </div>
+        <p className="m-0 text-xs text-text-secondary tabular-nums">{modelFacts(model).filter(Boolean).join(' · ')}</p>
+        {loaded && <StatusMark kind={RESIDENCY_MARK[state]} word={RESIDENCY_WORDS[state]} className="text-xs" />}
+        {fit && <p className="m-0 text-sm text-text">{fit}</p>}
+      </div>
+
+      <div className="flex flex-col gap-sm">
+        <div className="flex items-center gap-sm">
+          {loaded ? (
+            <>
+              <Button onClick={() => navigate(paths.chat(model.id))}>Chat</Button>
+              <Button variant="secondary" onClick={load.unload} isLoading={load.busy === 'unload'}>
+                Unload
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={load.load} isLoading={load.busy === 'load' || installing} disabled={sdMissing || load.busy !== null}>
+                {load.needsLlama ? 'Install llama.cpp' : 'Load'}
+              </Button>
+              {!draws && (
+                <Button variant="secondary" onClick={load.loadForChat} isLoading={load.busy === 'chat'} disabled={load.busy !== null || installing}>
+                  Chat
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+        {installing && <InstallProgress progress={install.progress} />}
+        {sdMissing && (
+          <p className="m-0 flex items-center gap-sm text-xs text-text-secondary">
+            Drawing needs stable-diffusion.cpp.
+            {onOpenSystemSettings && (
+              <Button variant="link" size="sm" className="text-xs font-normal" onClick={onOpenSystemSettings}>
+                Install
+              </Button>
+            )}
+          </p>
+        )}
+        {load.error && (
+          <p role="alert" className="m-0 flex items-baseline gap-xs text-xs text-text">
+            <StatusMark kind="failed" label="Failed" />
+            {`Didn't load: ${load.error}`}
+          </p>
+        )}
+        {model.openaiId !== null && (
+          <p className="m-0 flex items-center gap-xs text-xs text-text-secondary">
+            Model ID <code className="font-mono text-text">{model.openaiId}</code>
+            <CopyValue value={model.openaiId} label="Copy the Model ID" onCopied={copied(model.openaiId)} />
+          </p>
+        )}
+      </div>
+
+      <HowItRuns
+        model={model}
+        detail={detail.modelDetail?.id === model.id ? detail.modelDetail : null}
+        explanation={explain.explanation}
+        failed={explain.failed}
+        narration={loaded ? (facts?.narration ?? null) : undefined}
+        profiles={settings?.inferenceProfiles ?? []}
+        profile={profile}
+        onProfile={setProfile}
+        onUpdateModel={onUpdateModel}
+        onChanged={changed}
+      />
+
+      <Details model={model} detail={detail} loaded={loaded} onUpdateModel={onUpdateModel} />
+
+      {serve.showServeModal && (
+        <ServeModal
+          model={model}
+          settings={settings}
+          customContext={serve.customContext}
+          customPort={serve.customPort}
+          jinjaOverride={serve.jinjaOverride}
+          isServing={serve.isServing}
+          hasAgentTag={tagged('agent')}
+          hasMtpTag={tagged('mtp')}
+          mtpNMaxOverride={serve.mtpNMaxOverride}
+          mtpPMinOverride={serve.mtpPMinOverride}
+          inferenceParams={serve.inferenceParams}
+          reasoningEffortSupport={detail.modelDetail?.reasoningEffortSupport}
+          pinProxy={serve.pinProxy}
+          onPinProxyChange={setPinProxy}
+          onContextChange={serve.setCustomContext}
+          onPortChange={serve.setCustomPort}
+          onJinjaChange={serve.setJinjaOverride}
+          onJinjaReset={() => serve.setJinjaOverride(null)}
+          onMtpNMaxChange={serve.setMtpNMaxOverride}
+          onMtpPMinChange={serve.setMtpPMinOverride}
+          onInferenceParamsChange={serve.setInferenceParams}
+          onClose={serve.closeServeModal}
+          onStart={handleStartServer}
+          components={detail.modelDetail?.components}
+          onOpenSystemSettings={
+            onOpenSystemSettings
+              ? () => {
+                  serve.closeServeModal();
+                  onOpenSystemSettings();
+                }
+              : undefined
+          }
+        />
+      )}
+      <VerificationModal modelId={model.id} modelName={model.name} open={verify !== null} onClose={() => setVerify(null)} mode={verify ?? 'verify'} />
+    </div>
+  );
+};

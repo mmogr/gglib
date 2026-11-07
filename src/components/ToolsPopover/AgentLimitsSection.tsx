@@ -8,7 +8,7 @@
 import { FC, useState } from 'react';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
-import { ReasoningEffortField } from '../InferenceParametersForm/ReasoningEffortField';
+import { ReasoningEffortField } from '../SamplingForm/ReasoningEffortField';
 import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
 import type { TemplateSupport } from '../../types';
 import {

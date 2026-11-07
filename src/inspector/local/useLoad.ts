@@ -1,0 +1,115 @@
+/**
+ * The inspector's main actions: Load, Chat and Unload.
+ *
+ * Load is one click and sends nothing the person did not choose: the model's
+ * id, and no context, port or sampling (IN-7); the daemon resolves the rest
+ * as `gglib model explain` says it would. A load opens no chat. Chat on a
+ * model that is not loaded loads it first, then hands the new server's port
+ * to the chat (`onServerStarted`). Unload always asks the daemon (TX-12,
+ * `safeStopServer` behind `onStopServer`).
+ *
+ * llama.cpp missing (the setup status says so, or a load is refused for
+ * it) turns Load into Install llama.cpp: the library banner's install
+ * (`places/library/engineInstall`), then the load (or the chat) that asked
+ * for it once the install completes. A failed load is one line, in the
+ * daemon's words.
+ *
+ * @module inspector/local/useLoad
+ */
+
+import { useEffect, useRef, useState } from 'react';
+import { useLlamaStatus } from '../../hooks/useLlamaStatus';
+import type { ServerViewModel } from '../../hooks/useServers';
+import { installLlama, useEngineInstall } from '../../places/library/engineInstall';
+import { getTransport } from '../../services/transport';
+import { TransportError } from '../../services/transport/errors';
+import type { GgufModel } from '../../types';
+import { formatError } from '../../utils/errors';
+
+type Then = 'load' | 'chat';
+
+export interface LoadState {
+  /** What is in flight: a load, a load for a chat, or an unload. */
+  busy: Then | 'unload' | null;
+  /** Why the last load or unload failed, in the daemon's words. */
+  error: string | null;
+  /** llama.cpp must be installed before this model can load. */
+  needsLlama: boolean;
+  load: () => void;
+  /** Load, then open the chat on the new server. */
+  loadForChat: () => void;
+  unload: () => void;
+  /** A start elsewhere (the Serve dialog) was refused for want of llama.cpp. */
+  markLlamaMissing: () => void;
+}
+
+export function useLoad(
+  model: GgufModel,
+  draws: boolean,
+  onServerStarted: (server: ServerViewModel) => void,
+  onStopServer: (modelId: number) => Promise<void>,
+): LoadState {
+  const [busy, setBusy] = useState<LoadState['busy']>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [refused, setRefused] = useState(false);
+  const { status: llama, checkStatus } = useLlamaStatus();
+  const install = useEngineInstall();
+  const after = useRef<Then | null>(null);
+  const needsLlama = !draws && (refused || llama?.installed === false);
+
+  const start = async (then: Then) => {
+    setError(null);
+    setBusy(then);
+    try {
+      const { port } = await getTransport().serveModel({ id: model.id });
+      if (then === 'chat') onServerStarted({ modelId: model.id, modelName: model.name, port, status: 'running' });
+    } catch (err) {
+      if (TransportError.hasCode(err, 'LLAMA_SERVER_NOT_INSTALLED')) setRefused(true);
+      else setError(formatError(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const go = (then: Then) => {
+    if (!needsLlama) return void start(then);
+    after.current = then;
+    installLlama();
+  };
+
+  // An install this inspector asked for completed: load as it was asked to.
+  const seen = useRef(install.completed);
+  useEffect(() => {
+    if (install.completed === seen.current) return;
+    seen.current = install.completed;
+    setRefused(false);
+    void checkStatus();
+    const then = after.current;
+    after.current = null;
+    if (then) void start(then);
+    // `start` is this render's; the effect runs on a completion only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [install.completed]);
+
+  const unload = async () => {
+    setError(null);
+    setBusy('unload');
+    try {
+      await onStopServer(model.id);
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return {
+    busy,
+    error: error ?? (needsLlama ? install.refusal : null),
+    needsLlama,
+    load: () => go('load'),
+    loadForChat: () => go('chat'),
+    unload: () => void unload(),
+    markLlamaMissing: () => setRefused(true),
+  };
+}

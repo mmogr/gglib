@@ -28,11 +28,9 @@ import { useRemoteState } from '../../services/remoteRegistry';
 import type { GgufModel } from '../../types';
 import type { InspectorSubject } from '../../app/paths';
 import { canSee } from '../../utils/canSee';
-import { formatParamCount, formatSize } from '../../utils/format';
-import { imageFamilyLabel } from '../../utils/imageFamily';
 import { Downloads } from './DownloadRow';
 import { Group, Note } from './Group';
-import { libraryGroups, matchesFar, type LibrarySort } from './groups';
+import { libraryGroups, matchesFar, modelFacts, type LibrarySort } from './groups';
 import { ModelListSkeleton } from './ModelListSkeleton';
 import { ModelRow } from './ModelRow';
 import { useResidency } from './useResidency';
@@ -47,17 +45,6 @@ interface LibraryRowsProps {
   onPickLocal: (id: number) => void;
   onPickFar: (id: number) => void;
   onUnload: (id: number) => void;
-}
-
-/** The facts under a model's name: params, quant, size, and what it can do. */
-function factsOf(model: GgufModel): (string | null | false)[] {
-  return [
-    formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount),
-    model.quantization,
-    model.sizeBytes > 0 && formatSize(model.sizeBytes),
-    canSee(model) && 'sees images',
-    model.imageFamily !== undefined && `draws (${imageFamilyLabel(model.imageFamily)})`,
-  ];
 }
 
 export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, servers, paired, onPickLocal, onPickFar, onUnload }) => {
@@ -99,7 +86,7 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
       <ModelRow
         key={model.id}
         name={model.name}
-        facts={factsOf(model)}
+        facts={modelFacts(model)}
         accessory={accessory}
         actions={
           <>

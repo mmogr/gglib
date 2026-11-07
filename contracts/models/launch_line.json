@@ -1,0 +1,185 @@
+[
+  {
+    "plan": {
+      "program": "llama-server",
+      "args": [
+        {
+          "flag": "-m",
+          "value": "/models/qwen3-4b.gguf",
+          "decision": "model",
+          "source": "model_author",
+          "reason": "why"
+        },
+        {
+          "flag": "--host",
+          "value": "127.0.0.1",
+          "decision": "host",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--port",
+          "value": "auto",
+          "decision": "port",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--metrics",
+          "decision": "metrics",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--parallel",
+          "value": "1",
+          "decision": "parallel",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "-c",
+          "value": "32768",
+          "decision": "ctx",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--jinja",
+          "decision": "templates",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--cache-type-k",
+          "value": "q8_0",
+          "decision": "kv",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--cache-type-v",
+          "value": "q8_0",
+          "decision": "kv",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--reasoning-format",
+          "value": "deepseek",
+          "decision": "reasoning",
+          "source": "model_author",
+          "reason": "why"
+        }
+      ],
+      "narration": {
+        "model_name": "m",
+        "quantization": null,
+        "weights_bytes": 0,
+        "decisions": []
+      },
+      "fit": null
+    },
+    "line": "llama-server -m /models/qwen3-4b.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 32768 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --reasoning-format deepseek"
+  },
+  {
+    "plan": {
+      "program": "llama-server",
+      "args": [
+        {
+          "flag": "-m",
+          "value": "/Users/m/Library/Application Support/gglib/a b.gguf",
+          "decision": "model",
+          "source": "model_author",
+          "reason": "why"
+        },
+        {
+          "flag": "--mmproj",
+          "value": "/it's/mmproj.gguf",
+          "decision": "images",
+          "source": "you",
+          "reason": "why"
+        },
+        {
+          "flag": "--alias",
+          "value": "say \"hi\"",
+          "decision": "model",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--sep",
+          "value": "a\tb",
+          "decision": "model",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--empty",
+          "value": "",
+          "decision": "model",
+          "source": "gglib",
+          "reason": "why"
+        }
+      ],
+      "narration": {
+        "model_name": "m",
+        "quantization": null,
+        "weights_bytes": 0,
+        "decisions": []
+      },
+      "fit": null
+    },
+    "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty ''"
+  },
+  {
+    "plan": {
+      "program": "sd-server",
+      "args": [
+        {
+          "flag": "--diffusion-model",
+          "value": "/m/flux1-schnell-q8_0.gguf",
+          "decision": "model",
+          "source": "model_author",
+          "reason": "why"
+        },
+        {
+          "flag": "--vae",
+          "value": "/m/ae.safetensors",
+          "decision": "parts",
+          "source": "you",
+          "reason": "why"
+        },
+        {
+          "flag": "--listen-ip",
+          "value": "127.0.0.1",
+          "decision": "host",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--listen-port",
+          "value": "auto",
+          "decision": "port",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--steps",
+          "value": "4",
+          "decision": "recipe",
+          "source": "gglib",
+          "reason": "why"
+        }
+      ],
+      "narration": {
+        "model_name": "m",
+        "quantization": null,
+        "weights_bytes": 0,
+        "decisions": []
+      },
+      "fit": null
+    },
+    "line": "sd-server --diffusion-model /m/flux1-schnell-q8_0.gguf --vae /m/ae.safetensors --listen-ip 127.0.0.1 --listen-port auto --steps 4"
+  }
+]
