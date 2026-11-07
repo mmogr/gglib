@@ -154,7 +154,6 @@ fn profiles_use_camel_case_on_the_wire() {
         proxy_port: None,
         llama_base_port: None,
         max_download_queue_size: None,
-        show_memory_fit_indicators: None,
         max_tool_iterations: None,
         max_stagnation_steps: None,
         default_model_id: None,

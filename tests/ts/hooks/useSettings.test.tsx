@@ -230,4 +230,31 @@ describe('useSettings', () => {
 
     expect(result.current.error).toBeNull();
   });
+
+  /**
+   * The settings place says how each write went under its field, so a quiet
+   * write raises no toast either way; any other write still does.
+   */
+  it('raises no toast for a quiet write, and one for any other', async () => {
+    const showToast = vi.fn();
+    const { result } = renderHook(() => useSettings(), {
+      wrapper: ({ children }: { children: ReactNode }) => <SettingsProvider showToast={showToast}>{children}</SettingsProvider>,
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    vi.mocked(updateSettings).mockResolvedValue(mockSettings);
+
+    await act(async () => {
+      await result.current.save({ proxyPort: 1 }, { quiet: true });
+    });
+    vi.mocked(updateSettings).mockRejectedValueOnce(new Error('refused'));
+    await act(async () => {
+      await result.current.save({ proxyPort: 2 }, { quiet: true }).catch(() => {});
+    });
+    expect(showToast).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.save({ proxyPort: 3 });
+    });
+    expect(showToast).toHaveBeenCalledWith('Settings applied', 'success');
+  });
 });

@@ -19,7 +19,6 @@ const UNSET: AppSettings = {
   proxyPort: null,
   llamaBasePort: null,
   maxDownloadQueueSize: null,
-  showMemoryFitIndicators: null,
   maxToolIterations: null,
   maxStagnationSteps: null,
   defaultModelId: null,

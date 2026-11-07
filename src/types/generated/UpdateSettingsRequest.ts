@@ -11,7 +11,7 @@ import type { LoopGuardMode } from "./LoopGuardMode";
  * omitted key (leave unchanged) — the same pattern used by
  * [`UpdateModelRequest::server_defaults`](super::UpdateModelRequest::server_defaults).
  */
-export type UpdateSettingsRequest = { defaultDownloadPath?: string | null, defaultContextSize?: number | null, proxyPort?: number | null, llamaBasePort?: number | null, maxDownloadQueueSize?: number | null, showMemoryFitIndicators?: boolean | null, maxToolIterations?: number | null, maxStagnationSteps?: number | null, 
+export type UpdateSettingsRequest = { defaultDownloadPath?: string | null, defaultContextSize?: number | null, proxyPort?: number | null, llamaBasePort?: number | null, maxDownloadQueueSize?: number | null, maxToolIterations?: number | null, maxStagnationSteps?: number | null, 
 /**
  * Default model ID for quick commands (e.g., `gglib question`).
  */

@@ -69,7 +69,7 @@ export interface SecretFieldProps {
 }
 
 /** The value `secret` names, refusing when nothing is stored. */
-async function revealed(secret: SecretRef): Promise<string> {
+export async function revealed(secret: SecretRef): Promise<string> {
   const value = await getTransport().revealSecret(secret);
   if (value === null) throw new Error('nothing is stored');
   return value;
@@ -80,7 +80,7 @@ async function revealed(secret: SecretRef): Promise<string> {
  * where `ClipboardItem` takes one, so the write starts inside the click and
  * WebKit keeps the user gesture.
  */
-function copySecret(secret: SecretRef): Promise<void> {
+export function copySecret(secret: SecretRef): Promise<void> {
   if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
     const text = revealed(secret).then((value) => new Blob([value], { type: 'text/plain' }));
     return navigator.clipboard.write([new ClipboardItem({ 'text/plain': text })]);

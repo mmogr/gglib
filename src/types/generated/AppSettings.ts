@@ -10,7 +10,7 @@ import type { LoopGuardMode } from "./LoopGuardMode";
  * for a fresh install with no saved values, which is what callers resolving
  * their own fallbacks need to test against.
  */
-export type AppSettings = { defaultDownloadPath: string | null, defaultContextSize: number | null, proxyPort: number | null, llamaBasePort: number | null, maxDownloadQueueSize: number | null, showMemoryFitIndicators: boolean | null, maxToolIterations: number | null, maxStagnationSteps: number | null, 
+export type AppSettings = { defaultDownloadPath: string | null, defaultContextSize: number | null, proxyPort: number | null, llamaBasePort: number | null, maxDownloadQueueSize: number | null, maxToolIterations: number | null, maxStagnationSteps: number | null, 
 /**
  * Default model ID for quick commands (e.g., `gglib question`).
  */

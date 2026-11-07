@@ -19,9 +19,10 @@ around a count ("2 loaded", "Sharing · 2 paired", "code 1:42") are this
 folder's own until the places that own them say them.
 
 The endpoint line opens the endpoint place (`places/endpoint`) and the
-devices line the devices place (`places/devices`). Interim homes, each named
-with the PR that removes it: Settings opens the dialog over the place
-(→ S1); Diagnostics opens the benchmarks (→ G1).
+devices line the devices place (`places/devices`), and Settings the settings
+place on General (`places/settings`), raised while it is open. Interim homes,
+each named with the PR that removes it: Diagnostics opens the benchmarks
+(→ G1).
 
 The chats' own words, not the daemon's: Chats, Filter chats, New chat,
 "No chats yet.", "No matching chats", "The chats couldn't be read.",

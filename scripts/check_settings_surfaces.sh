@@ -20,7 +20,7 @@
 #         field appears in `SettingsSetArgs`, in
 #         `config_commands/settings_args.rs`.
 #   GUI — the camelCase name appears in `src/`, which is where the TypeScript
-#         mirror and the settings modal both live.
+#         mirror and the settings place both live.
 #
 # One is enough. Several settings are deliberately CLI-only (a scripted
 # install has no modal) and a few are deliberately GUI-only (`close_to_tray`
@@ -282,7 +282,7 @@ person has. Pick one:
      `crates/gglib-cli/src/handlers/config/settings/set.rs`. That is the one
      place: a test there fails for a flag left out of it.
   2. Give it a GUI control: add the camelCase field to `src/types/index.ts`
-     and a control in the settings modal.
+     and a control in the settings place (`src/places/settings/`).
   3. Delete the setting, and whatever reads it.
   4. Exempt it in this script, with a reason — but only if something other
      than a person is meant to write it.

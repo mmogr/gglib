@@ -166,7 +166,6 @@ fn a_remote_machine() -> Settings {
         proxy_port: Some(9191),
         llama_base_port: Some(9500),
         max_download_queue_size: Some(3),
-        show_memory_fit_indicators: Some(false),
         max_tool_iterations: Some(40),
         max_stagnation_steps: Some(9),
         default_model_id: Some(7),

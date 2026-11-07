@@ -7,7 +7,7 @@
  * while the rest stays); Settings and Diagnostics pinned at the foot,
  * Diagnostics in tertiary text. The place that is open is the address, so
  * the open row is read from it, and every row navigates through
- * `app/paths`. Settings opens the dialog over the place until Settings is a place (S1);
+ * `app/paths`. Settings opens the settings place on General;
  * Diagnostics opens the benchmarks until Diagnostics has its tabs (G1).
  *
  * @module sidebar/Sidebar
@@ -16,7 +16,7 @@
 import { useLocation, useNavigate } from 'react-router';
 import type { ReactNode } from 'react';
 import { Button } from '../components/ui/Button';
-import { paths, settingsAt } from '../app/paths';
+import { paths } from '../app/paths';
 import { isDesktop } from '../services/platform';
 import { useModelLibrary } from '../services/modelRegistry';
 import { cn } from '../utils/cn';
@@ -26,7 +26,7 @@ import { ChatList } from './ChatList';
 import { SPREAD } from './placement';
 
 /** Which sidebar row the address at `pathname` belongs to. */
-export type SidebarPlace = 'library' | 'endpoint' | 'devices' | 'chats' | 'diagnostics' | null;
+export type SidebarPlace = 'library' | 'endpoint' | 'devices' | 'chats' | 'settings' | 'diagnostics' | null;
 
 export function placeOf(pathname: string): SidebarPlace {
   const [, first] = pathname.split('/');
@@ -34,6 +34,7 @@ export function placeOf(pathname: string): SidebarPlace {
   if (first === 'endpoint') return 'endpoint';
   if (first === 'devices') return 'devices';
   if (first === 'chat') return 'chats';
+  if (first === 'settings') return 'settings';
   if (first === 'diagnostics') return 'diagnostics';
   return null;
 }
@@ -101,7 +102,7 @@ export function Sidebar() {
       <ChatList />
 
       <div className="flex shrink-0 flex-col gap-xs border-t border-border px-sm py-sm">
-        <Row current={false} onClick={() => navigate(settingsAt(location, 'general'), { replace: true })}>
+        <Row current={place === 'settings'} onClick={() => navigate(paths.settings())}>
           <span>Settings</span>
         </Row>
         <Row current={place === 'diagnostics'} tertiary onClick={() => navigate(paths.benchmarks())}>

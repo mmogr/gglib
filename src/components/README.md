@@ -47,7 +47,6 @@ A chat is its own address: the conversation list (left) and the messages panel (
 ## Core Components
 
 ### Layout & Navigation
-- **`SettingsModal.tsx`**: Configuration modal for models directory and preferences, opened from the sidebar's foot
 - **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and tells its caller, which says "copied" where it lives
 
 ### Model Management

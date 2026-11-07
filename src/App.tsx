@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { RouterProvider, useLocation, useNavigate } from "react-router";
-import SettingsModal from "./components/SettingsModal";
+import { RouterProvider } from "react-router";
 import SetupWizard from "./components/SetupWizard";
 import { ToastContainer } from "./components/Toast";
 import { useDownloadToasts } from "./hooks/useDownloadToasts";
@@ -10,7 +9,6 @@ import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { startMenuBridge } from "./app/menuBridge";
-import { settingsSection, withoutSettings } from "./app/paths";
 import { createAppRouter } from "./app/router";
 import { Shell } from "./app/Shell";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
@@ -23,16 +21,11 @@ import { syncBuiltinTools } from "./services/tools";
 
 /**
  * The layout every place sits in: the shell (the sidebar and the place the
- * address names) and the dialogs drawn over whichever place is open.
+ * address names) and the toasts drawn over whichever place is open.
  * Separated from `App` so it can use the toast context and the router.
  */
 export function AppContent() {
-  const location = useLocation();
-  const navigate = useNavigate();
   const { toasts, showToast, dismissToast } = useToastContext();
-  // The settings dialog is open when the address says so, over the place;
-  // opened and closed by replacing the entry, so Back never reopens it.
-  const openSettings = settingsSection(location);
 
   // Initialize the registries: servers, proxy, remote, the model library
   // and the download queue
@@ -73,13 +66,6 @@ export function AppContent() {
     <SettingsProvider showToast={showToast}>
       <>
         <Shell />
-        {openSettings && (
-          <SettingsModal
-            isOpen
-            initialTab={openSettings}
-            onClose={() => navigate(withoutSettings(location), { replace: true })}
-          />
-        )}
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </>
     </SettingsProvider>

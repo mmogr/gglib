@@ -87,9 +87,6 @@ pub struct Settings {
     /// Maximum number of downloads that can be queued, within [`DOWNLOAD_QUEUE_RANGE`].
     pub max_download_queue_size: Option<u32>,
 
-    /// Whether to show memory fit indicators in `HuggingFace` browser.
-    pub show_memory_fit_indicators: Option<bool>,
-
     /// Maximum iterations for tool calling agentic loop.
     pub max_tool_iterations: Option<u32>,
 
@@ -371,7 +368,6 @@ impl Settings {
             proxy_port: Some(DEFAULT_PROXY_PORT),
             llama_base_port: Some(DEFAULT_LLAMA_BASE_PORT),
             max_download_queue_size: Some(10),
-            show_memory_fit_indicators: Some(true),
             #[allow(clippy::cast_possible_truncation)] // compile-time constants, always < u32::MAX
             max_tool_iterations: Some(crate::domain::agent::DEFAULT_MAX_ITERATIONS as u32),
             #[allow(clippy::cast_possible_truncation)]
@@ -481,9 +477,6 @@ impl Settings {
         }
         if let Some(ref queue_size) = other.max_download_queue_size {
             self.max_download_queue_size = *queue_size;
-        }
-        if let Some(ref show_fit) = other.show_memory_fit_indicators {
-            self.show_memory_fit_indicators = *show_fit;
         }
         if let Some(ref iters) = other.max_tool_iterations {
             self.max_tool_iterations = *iters;

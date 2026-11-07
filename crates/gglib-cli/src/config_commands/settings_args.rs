@@ -54,7 +54,7 @@ pub struct SettingsSetArgs {
     /// machine where gglib can read the device, and the built-in floor where it cannot.
     /// Setting it pins every launch to that number. This flag cannot clear the value
     /// again — `gglib config settings unset default-context-size` is what returns it to
-    /// unset, and the settings modal can clear the field alone.
+    /// unset, and the settings place can clear the field alone.
     #[arg(long)]
     pub default_context_size: Option<u64>,
     /// Port for the OpenAI-compatible proxy server (>= 1024)
@@ -75,9 +75,6 @@ pub struct SettingsSetArgs {
     /// Maximum stagnation steps before stopping agent loop
     #[arg(long)]
     pub max_stagnation_steps: Option<u32>,
-    /// Show memory fit indicators in `HuggingFace` browser
-    #[arg(long)]
-    pub show_memory_fit_indicators: Option<bool>,
     /// Host address `gglib web` binds to (an IP, e.g. 127.0.0.1 or 0.0.0.0).
     /// The `--host` flag overrides this for a single run.
     #[arg(long)]

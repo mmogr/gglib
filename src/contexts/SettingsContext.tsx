@@ -19,7 +19,12 @@ export interface SettingsContextValue {
   saving: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  save: (updates: UpdateSettingsRequest) => Promise<AppSettings>;
+  /**
+   * Write `updates`. `quiet` raises no toast either way, for a caller that
+   * says how the write went beside the field it came from (the settings
+   * place); a failure still rejects.
+   */
+  save: (updates: UpdateSettingsRequest, options?: { quiet?: boolean }) => Promise<AppSettings>;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -54,18 +59,19 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
   }, []);
 
   const save = useCallback(
-    async (updates: UpdateSettingsRequest): Promise<AppSettings> => {
+    async (updates: UpdateSettingsRequest, options?: { quiet?: boolean }): Promise<AppSettings> => {
+      const toast = options?.quiet ? undefined : showToast;
       try {
         setSaving(true);
         setError(null);
         const result = await getTransport().updateSettings(updates);
         setSettings(result);
-        showToast?.("Settings applied", "success");
+        toast?.("Settings applied", "success");
         return result;
       } catch (err) {
         const message = formatError(err);
         setError(message);
-        showToast?.(message, "error");
+        toast?.(message, "error");
         throw err;
       } finally {
         setSaving(false);

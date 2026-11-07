@@ -30,7 +30,6 @@ pub struct SettingsUpdate {
     pub proxy_port: Option<Option<u16>>,
     pub llama_base_port: Option<Option<u16>>,
     pub max_download_queue_size: Option<Option<u32>>,
-    pub show_memory_fit_indicators: Option<Option<bool>>,
     pub max_tool_iterations: Option<Option<u32>>,
     pub max_stagnation_steps: Option<Option<u32>>,
     pub default_model_id: Option<Option<i64>>,

@@ -1,5 +1,5 @@
 /**
- * Default values and accepted ranges for the numeric fields in the settings modal.
+ * Default values and accepted ranges for the numeric fields in the settings place.
  *
  * The authoritative values live in Rust — `Settings::with_defaults()` in
  * `crates/gglib-core/src/settings.rs`, and the bounds `validate_settings()`

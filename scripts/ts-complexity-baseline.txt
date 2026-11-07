@@ -5,7 +5,6 @@ src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/McpServersPanel.tsx 482
 src/components/ProxySamplingPanel.tsx 403
 src/components/SamplingForm/SamplingForm.tsx 312
-src/components/SettingsModal.tsx 361
 src/components/SetupWizard/SetupWizard.tsx 705
 src/hooks/useGglibRuntime/agentMessageState.ts 340
 src/hooks/useGglibRuntime/useGglibRuntime.ts 326

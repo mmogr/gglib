@@ -28,7 +28,6 @@ fn update_from(args: SettingsSetArgs, image_model: Option<i64>) -> SettingsUpdat
         proxy_port: args.proxy_port.map(Some),
         llama_base_port: args.llama_base_port.map(Some),
         max_download_queue_size: args.max_download_queue_size.map(Some),
-        show_memory_fit_indicators: args.show_memory_fit_indicators.map(Some),
         max_tool_iterations: args.max_tool_iterations.map(Some),
         max_stagnation_steps: args.max_stagnation_steps.map(Some),
         default_model_id: None,

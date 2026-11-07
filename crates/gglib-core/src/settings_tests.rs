@@ -15,7 +15,6 @@ fn test_default_settings() {
     assert_eq!(settings.llama_base_port, Some(DEFAULT_LLAMA_BASE_PORT));
     assert_eq!(settings.default_download_path, None);
     assert_eq!(settings.max_download_queue_size, Some(10));
-    assert_eq!(settings.show_memory_fit_indicators, Some(true));
 }
 
 #[test]

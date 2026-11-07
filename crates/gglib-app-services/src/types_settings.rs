@@ -23,7 +23,6 @@ pub struct AppSettings {
     pub proxy_port: Option<u16>,
     pub llama_base_port: Option<u16>,
     pub max_download_queue_size: Option<u32>,
-    pub show_memory_fit_indicators: Option<bool>,
     pub max_tool_iterations: Option<u32>,
     pub max_stagnation_steps: Option<u32>,
     /// Default model ID for quick commands (e.g., `gglib question`).
@@ -98,7 +97,6 @@ impl From<gglib_core::Settings> for AppSettings {
             proxy_port: settings.proxy_port,
             llama_base_port: settings.llama_base_port,
             max_download_queue_size: settings.max_download_queue_size,
-            show_memory_fit_indicators: settings.show_memory_fit_indicators,
             max_tool_iterations: settings.max_tool_iterations,
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
@@ -155,9 +153,6 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub max_download_queue_size: Option<Option<u32>>,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub show_memory_fit_indicators: Option<Option<bool>>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub max_tool_iterations: Option<Option<u32>>,
@@ -270,7 +265,6 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             proxy_port: request.proxy_port,
             llama_base_port: request.llama_base_port,
             max_download_queue_size: request.max_download_queue_size,
-            show_memory_fit_indicators: request.show_memory_fit_indicators,
             max_tool_iterations: request.max_tool_iterations,
             max_stagnation_steps: request.max_stagnation_steps,
             default_model_id: request.default_model_id,
