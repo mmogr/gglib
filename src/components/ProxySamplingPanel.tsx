@@ -32,11 +32,10 @@
  *
  * Recorded here so a reviewer reads a decision rather than an omission.
  *
- * **The tray popover (`pages/TrayPanel`).** It does not compose this panel —
- * verified, not assumed: it renders `components/proxy`'s `ProxyMetricsGrid`,
- * which is active connections and inference slots, and the sampling panel has
- * never been part of that grid. The popover answers "is the endpoint up and
- * what is it doing"; a readback whose whole value is the distinction between
+ * **The tray popover (`tray/TrayPanel`).** It does not compose this panel:
+ * it says the endpoint, what is loaded and the devices, and nothing of
+ * sampling. The popover answers "is the endpoint up and what is it doing";
+ * a readback whose whole value is the distinction between
  * blind and clean needs the room to carry its reasons, and a three-line
  * summary of it in a popover would be the collapse this panel exists to
  * prevent. So the reasoning rows land here, where the rest of the audit

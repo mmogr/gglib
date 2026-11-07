@@ -45,7 +45,7 @@ paths the copy prints, your models folder among them.
 ```bash
 node shot.mjs "$URL" ../assets/gui-library.png steps/library.json
 node shot.mjs "$URL" ../assets/gui-chat.png    steps/chat.json
-W=360 H=560 node shot.mjs "${URL/\/#/\/tray.html#}" ../assets/tray-dashboard.png
+W=360 H=480 node shot.mjs "${URL/\/#/\/tray.html#}" ../assets/tray-dashboard.png
 ```
 
 1440×900 at 2× unless `W` and `H` say otherwise; `SCHEME=light` for the

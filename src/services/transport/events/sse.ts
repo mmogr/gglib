@@ -59,6 +59,8 @@ export class SSEConnectionManager<T = unknown> {
   readonly opened = new OpenSignal();
   private running = false;
   private abort: AbortController | null = null;
+  /** Ends the current reconnect wait early, while one is running. */
+  private wake: (() => void) | null = null;
   private readonly path: string;
   private readonly parse: (msg: SseEvent) => unknown;
 
@@ -107,6 +109,16 @@ export class SSEConnectionManager<T = unknown> {
     this.running = false;
     this.abort?.abort();
     this.abort = null;
+    this.wake?.();
+  }
+
+  /**
+   * Cut a reconnect wait short and connect now: for a reader that knows the
+   * daemon is back, so its stream need not sleep out a backoff that grew
+   * while the daemon was gone. Nothing happens while connected or stopped.
+   */
+  retryNow(): void {
+    this.wake?.();
   }
 
   /**
@@ -114,17 +126,21 @@ export class SSEConnectionManager<T = unknown> {
    */
   private async start(): Promise<void> {
     this.running = true;
-    this.abort = new AbortController();
+    // Each start owns its controller, so a loop stopped while it slept in a
+    // reconnect wait ends when it wakes, whatever a later start set going:
+    // one stream, however often the readers come and go.
+    const abort = new AbortController();
+    this.abort = abort;
 
     const backoff = new Backoff();
 
-    while (this.running && this.abort && !this.abort.signal.aborted) {
+    while (!abort.signal.aborted) {
       try {
         appLogger.debug('transport.sse', '[SSE] Connecting to', { path: this.path });
 
         // The daemon's base URL and the session's token are resolved here, on
         // each connection, so one made after a renewal presents the new token.
-        const response = await apiFetch(this.path, { signal: this.abort.signal });
+        const response = await apiFetch(this.path, { signal: abort.signal });
         this.opened.announce();
 
         for await (const msg of readSse(response)) {
@@ -141,7 +157,7 @@ export class SSEConnectionManager<T = unknown> {
         appLogger.debug('transport.sse', '[SSE] Stream ended');
       } catch (error) {
         // Don't reconnect if explicitly stopped
-        if (!this.running || this.abort?.signal.aborted) {
+        if (abort.signal.aborted) {
           break;
         }
 
@@ -150,7 +166,17 @@ export class SSEConnectionManager<T = unknown> {
         const wait = backoff.next();
         appLogger.debug('transport.sse', '[SSE] Reconnecting', { waitMs: wait });
 
-        await new Promise((resolve) => setTimeout(resolve, wait));
+        let wake: () => void = () => {};
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, wait);
+          wake = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          this.wake = wake;
+        });
+        // Only this loop's own: a stopped loop waking late leaves a newer one's alone.
+        if (this.wake === wake) this.wake = null;
       }
     }
 
@@ -309,4 +335,12 @@ export function subscribeSseEvent<K extends AppEventType>(
  */
 export function onEventStreamOpen(handler: () => void): Unsubscribe {
   return getSharedManager().opened.listen(handler);
+}
+
+/**
+ * Connect the shared stream now if it is waiting to reconnect: for a reader
+ * that has just heard the daemon come back.
+ */
+export function reconnectEventStreamNow(): void {
+  sharedManager?.retryNow();
 }

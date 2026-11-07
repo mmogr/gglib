@@ -1,22 +1,14 @@
 /**
  * Tests for the shared proxy display components.
  *
- * These render on three surfaces (the header dropdown, the dashboard modal
- * and the tray popover), so a regression here is a regression everywhere.
+ * The dashboard modal renders these sections, so a regression here is one
+ * there.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import {
-  ActiveConnectionsSection,
-  EndpointCopyBar,
-  InferenceSlotsSection,
-  ProxyStatusPill,
-  ProxyToggleButton,
-  proxyEndpointUrl,
-} from '../../../src/components/proxy';
+import { ActiveConnectionsSection, InferenceSlotsSection } from '../../../src/components/proxy';
 import type {
   ActiveConnectionSnapshot,
   DashboardSnapshot,
@@ -28,91 +20,6 @@ const connection = (overrides: Partial<ActiveConnectionSnapshot> = {}): ActiveCo
 
 const snapshot = (overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot =>
   dashboardSnapshot(overrides);
-
-describe('ProxyStatusPill', () => {
-  it('reads Running when the proxy is up', () => {
-    render(<ProxyStatusPill running />);
-    expect(screen.getByText('Running')).toBeInTheDocument();
-  });
-
-  /**
-   * A stopped proxy is idle, not broken. Danger red is reserved for real
-   * failures, so the stopped indicator must not carry it — its dot wears the
-   * neutral offline colour and the text stays quiet.
-   */
-  it('styles a stopped proxy as idle rather than as an error', () => {
-    render(<ProxyStatusPill running={false} />);
-    const indicator = screen.getByText('Stopped');
-    expect(indicator.querySelector('.bg-offline')).not.toBeNull();
-    expect(indicator.className).not.toContain('danger');
-    expect(indicator.innerHTML).not.toContain('danger');
-  });
-});
-
-describe('proxyEndpointUrl', () => {
-  it('brackets an IPv6 address', () => {
-    expect(proxyEndpointUrl('fe80::1', 8080)).toBe('http://[fe80::1]:8080/v1');
-  });
-
-  it('builds the /v1 base URL clients are pointed at', () => {
-    expect(proxyEndpointUrl('127.0.0.1', 8080)).toBe('http://127.0.0.1:8080/v1');
-  });
-});
-
-describe('EndpointCopyBar', () => {
-  beforeEach(() => {
-    Object.assign(navigator, {
-      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
-  });
-
-  it('shows the endpoint URL', () => {
-    render(<EndpointCopyBar host="127.0.0.1" port={8080} />);
-    expect(screen.getByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
-  });
-
-  it('copies the URL and reports it back to the caller', async () => {
-    const onCopied = vi.fn();
-    render(<EndpointCopyBar host="127.0.0.1" port={9000} onCopied={onCopied} />);
-
-    await userEvent.click(screen.getByTitle('Copy URL'));
-
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://127.0.0.1:9000/v1');
-    expect(onCopied).toHaveBeenCalledWith('http://127.0.0.1:9000/v1');
-  });
-});
-
-describe('ProxyToggleButton', () => {
-  it('offers to start when stopped, and calls onStart', async () => {
-    const onStart = vi.fn();
-    const onStop = vi.fn();
-    render(
-      <ProxyToggleButton running={false} pending={false} onStart={onStart} onStop={onStop} />,
-    );
-
-    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
-
-    expect(onStart).toHaveBeenCalledOnce();
-    expect(onStop).not.toHaveBeenCalled();
-  });
-
-  it('offers to stop when running, and calls onStop', async () => {
-    const onStart = vi.fn();
-    const onStop = vi.fn();
-    render(<ProxyToggleButton running pending={false} onStart={onStart} onStop={onStop} />);
-
-    await userEvent.click(screen.getByRole('button', { name: /stop proxy/i }));
-
-    expect(onStop).toHaveBeenCalledOnce();
-    expect(onStart).not.toHaveBeenCalled();
-  });
-
-  it('disables itself and shows progress while pending', () => {
-    render(<ProxyToggleButton running pending onStart={vi.fn()} onStop={vi.fn()} />);
-    const button = screen.getByRole('button', { name: /stopping/i });
-    expect(button).toBeDisabled();
-  });
-});
 
 describe('ActiveConnectionsSection', () => {
   it('says so when nothing is in flight', () => {

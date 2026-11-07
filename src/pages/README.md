@@ -9,9 +9,9 @@ Top-level page components for the gglib GUI application.
 Two entry points build two windows; the main one routes by address (`app/router`):
 
 ```text
-main.tsx ──► App.tsx ──► router                tray-main.tsx ──► TrayPanel.tsx
+main.tsx ──► App.tsx ──► router                tray-main.tsx ──► tray/TrayPanel.tsx
                 │  /library /models/:id(/log)      (separate "tray" Tauri window:
-                │  /far/:id /get/:owner/:name       proxy status, endpoint, metrics)
+                │  /far/:id /get/:owner/:name       endpoint, loaded, devices)
                 │  /chat/:id  /chat/new  /chat/far/:id
                 │  /diagnostics/benchmarks
                 ▼
@@ -26,7 +26,6 @@ main.tsx ──► App.tsx ──► router                tray-main.tsx ──�
 | Page | Description |
 |------|-------------|
 | [`BenchmarkPage.tsx`](BenchmarkPage.tsx) | Benchmark workflows: compare, perf, and sampling-parameter tune, at `/diagnostics/benchmarks` through `app/BenchmarkRoute` |
-| [`TrayPanel.tsx`](TrayPanel.tsx) | Proxy tray window — is the endpoint up, and what is it doing (status, endpoint copy bar, connections, slots) |
 
 The main window's landing page, the library at `/library`, `/models/:id` (and its `/log`), `/far/:id` and `/get/:owner/:name`, is a place (`src/places/library/`), not a page, and so is a chat (`src/places/chat/`). A model's log is its inspector's, not a view of the chat.
 
