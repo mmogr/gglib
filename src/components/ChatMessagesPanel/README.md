@@ -21,7 +21,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │                             │     │     └── MessageBubbles      ← a question's filled block; a reply's plain text
     │                             │     │           ├── ReplyArrival (until the first token: phase, prompt reading, bar)
     │                             │     │           ├── ThinkingBlock (the fold) → ToolCallRow per tool call
-    │                             │     │           ├── MarkdownMessageContent, MessageImages / ToolImages
+    │                             │     │           ├── MarkdownMessageContent, MessageImages / ToolImages → PictureSheet
     │                             │     │           └── TurnFoot: time on hover, FigureLine, TurnActions, BranchSwitcher
     │                             │     ├── BranchEnd           ← where other branches go on past the last message
     │                             │     └── Unanswered          ← the failed run's line, or Retry under a question nothing answers
@@ -41,6 +41,7 @@ State words come from `components/status/words.ts`; figures and their words from
 - the action line: Copy / Copied · Retry · Edit · ⋯ (Branch from here · Delete…); their names Copy reply, Copy message, Retry this reply, Edit reply, Edit message, More for this reply, More for this message
 - the confirm sheet: "Delete this message?" / "The N messages after it are deleted too. This cannot be undone." / Delete; the refusal: "A reply is still being written here. Stop it or wait, then delete."
 - the lines past the last turn: "Other branches go on from here.", "Nothing answers this yet." Retry, "The reply failed: <the run's reason>." Retry
+- the picture sheet: Picture, Fix a part, Redo, Keep this picture?, Close (×); the brush row (Brush): Brush size, Rub out, Undo, Clear, "Brush over the part to fix"; "What the brushed part should show", "What the picture should show", How much to change (a little · a lot), Drawn with (Image model, "The default image model", `<model> · <family>`); Cancel, Fix this part, Draw it again; "Say what the picture should show.", "Brush over the part to fix first."; the render: "Loading the image model…", "Waiting for the GPU, place 2 in line…", "Waiting for the GPU…", "Drawing, step 6 of 20…" or "Drawing…" (the step and total from the daemon's progress), "Finishing the picture…", the bar (Drawing), Stop, "The picture so far"; after: Hold to see the original, Discard, Try again, Keep / Keeping…, "The picture drawn again", "The picture was drawn but could not be kept: <reason>"; closing: "Discard the new picture?" / "It has not been kept. The picture it came from stays in the chat." / Discard
 - a question's sender: `<device>`, "Other machine"; a reply with nothing: "Stopped before it wrote anything.", "No text."; the arrival line: the phases of `ArrivingPhase`, `1,240 of 3,420 tokens read`, `2,100 from cache`
 
 ## Key Files
@@ -53,7 +54,7 @@ State words come from `components/status/words.ts`; figures and their words from
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptLine`, `ChatStatusBanners`, `ComposerFooter` with `PlusMenu`, `ModelPicker`, `ModelGoneLine`, `AgentLimitsSheet`) and message rendering (`MessageBubbles`, `ThinkingBlock`, `ToolCallRow`, `TurnFoot`, `TurnActions`, `ReplyArrival`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `MessageActionsContext`) |
+| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptLine`, `ChatStatusBanners`, `ComposerFooter` with `PlusMenu`, `ModelPicker`, `ModelGoneLine`, `AgentLimitsSheet`) and message rendering (`MessageBubbles`, `ThinkingBlock`, `ToolCallRow`, `TurnFoot`, `TurnActions`, `ReplyArrival`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `MessageActionsContext`), and the picture sheet (`PictureSheet`, `SheetFrame`, `PictureWork`, `PictureBrush`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders; `RunPreviewsContext` — the run's preview frames, reaching a reply beside its message and never in it |
 | `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading`, `useModelLoadWait`, `usePictureRedraw`, `usePictureKeeping` |
 
