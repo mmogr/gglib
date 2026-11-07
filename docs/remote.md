@@ -490,18 +490,19 @@ projector on its disk, and only what `--remote` allows on a model there —
 *Chat* and *Load*. Nothing that changes it (edit, tags, delete, Start or Stop here) is offered, and the
 native menu's Start, Stop and Remove have nothing selected while a desktop
 row is, so they cannot act on a model here that shares its number. A model
-the desktop is serving says *Serving on desk*, in place of *Load*, which has
-the desktop load it now so the first turn does not wait, and reads it again
-when it lands. While the rows are away or stale, both buttons are disabled.
-The inspector also shows the command that does the same from a terminal here,
-`gglib chat <id> --remote`, since that id without the flag is this machine's.
+the desktop is serving says *Loaded on desk*, in place of *Load on desk*,
+which has the desktop load it now so the first turn does not wait, and reads
+it again when it lands. While the desktop is away both buttons are disabled
+and a line says why; while its rows could not be read, a line says so with
+*Retry*. The inspector's Details also show the command that does the same
+from a terminal here, `gglib chat <id> --remote`, since that id without the
+flag is this machine's.
 
 *Chat* opens a chat with the desktop's model: the conversation is this
 machine's, the agent loop runs here, and each turn is sent to the desktop by
 the model's id there, so no other model of its name answers. The head reads
-`qwen3 on desk`; there is no Console tab (the log, the port and the uptime
-belong to a process on the desktop) and no model picker, because a chat's
-machine is fixed. The conversation is made for that model, and every run
+`qwen3 on desk`; there is no log here (it belongs to a process on the
+desktop) and no model picker, because a chat's machine is fixed. The conversation is made for that model, and every run
 keeps it on the conversation by its machine, so a paired device's turn on it
 is refused rather than answered by a model here, and `gglib chat --continue`
 goes back to the desktop. The list beside it holds the desktop's chats and

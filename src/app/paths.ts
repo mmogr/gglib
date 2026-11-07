@@ -1,8 +1,9 @@
 /**
  * Every path the app navigates to, written here and nowhere else.
  *
- * A screen is a place with an address: the library, a model in it, the
- * paired machine's model, a chat on a model, the settings, the diagnostics.
+ * A screen is a place with an address: the library, a model in it (or its
+ * log), the paired machine's model, a Hugging Face repo, a chat on a model,
+ * the settings, the diagnostics.
  * The sidebar, the native menu, a row's click and a test all go through
  * these, so a path's shape is changed in one file. Reading a path back is
  * `inspectorSubject`, the one reader of what the address names.
@@ -19,11 +20,14 @@ export const paths = {
   library: () => '/library',
   /** The library with one of this machine's models in the inspector. */
   model: (id: number) => `/models/${id}`,
+  /** The library with the log of this machine's model `id` in the inspector. */
+  log: (id: number) => `/models/${id}/log`,
   /** The library with the paired machine's model `id` (its id there) in the inspector. */
   far: (id: number) => `/far/${id}`,
-  /** A chat on this machine's model `id`, served here; `view` opens the Console. */
-  chat: (modelId: number, view: 'chat' | 'console' = 'chat') =>
-    view === 'console' ? `/chat/${modelId}?view=console` : `/chat/${modelId}`,
+  /** The library with the Hugging Face repo `owner/name` in the inspector. */
+  hf: (repo: string) => `/get/${repo.split('/').map(encodeURIComponent).join('/')}`,
+  /** A chat on this machine's model `id`, served here. */
+  chat: (modelId: number) => `/chat/${modelId}`,
   /** A chat on the paired machine's model `id` (its id there). */
   farChat: (id: number) => `/chat/far/${id}`,
   /** The library with its search focused for Hugging Face (`browse`), or adding a GGUF file (`add`). */
@@ -35,8 +39,14 @@ export const paths = {
     modelIds.length > 0 ? `/diagnostics/benchmarks?models=${modelIds.join(',')}` : '/diagnostics/benchmarks',
 } as const;
 
-/** What the inspector shows: one of this machine's models, or one of the paired machine's. */
-export type InspectorSubject = { kind: 'model'; id: number } | { kind: 'far'; id: number };
+/**
+ * What the inspector shows: one of this machine's models (`log`: its log),
+ * one of the paired machine's, or a Hugging Face repo by its `owner/name`.
+ */
+export type InspectorSubject =
+  | { kind: 'model'; id: number; log: boolean }
+  | { kind: 'far'; id: number }
+  | { kind: 'hf'; repo: string };
 
 /** A path segment that is a model id: digits, nothing else. */
 function idOf(segment: string | undefined): number | null {
@@ -44,15 +54,31 @@ function idOf(segment: string | undefined): number | null {
   return Number(segment);
 }
 
+/** A path segment as it was written, or `null` for one that is not text. */
+function decoded(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The subject the address names, read from the path: `/models/:id` is this
- * machine's model, `/far/:id` the paired machine's, anything else nothing.
+ * machine's model and `/models/:id/log` its log, `/far/:id` the paired
+ * machine's, `/get/:owner/:name` a Hugging Face repo, anything else nothing.
  */
 export function inspectorSubject(location: Pick<Location, 'pathname'>): InspectorSubject | null {
-  const [, place, second] = location.pathname.split('/');
+  const [, place, second, third, ...rest] = location.pathname.split('/');
   if (place === 'models') {
     const id = idOf(second);
-    return id === null ? null : { kind: 'model', id };
+    if (id === null || rest.length > 0 || (third !== undefined && third !== 'log')) return null;
+    return { kind: 'model', id, log: third === 'log' };
+  }
+  if (place === 'get') {
+    const owner = second ? decoded(second) : null;
+    const name = third ? decoded(third) : null;
+    return owner && name && rest.length === 0 ? { kind: 'hf', repo: `${owner}/${name}` } : null;
   }
   if (place === 'far') {
     const id = idOf(second);

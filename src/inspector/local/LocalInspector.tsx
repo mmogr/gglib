@@ -2,7 +2,9 @@
  * The inspector for a model on this machine: its name (⧉ copies the Model
  * ID), ⋯ and ×; one line of facts (the library row's); the fit sentence;
  * Load and Chat (Chat and Unload once loaded, with its state); the Model ID
- * to use it by; How it runs (How it ran once loaded); and Details, closed.
+ * to use it by; How it runs (How it ran once loaded); ▸ Log with the
+ * server's last line once loaded; and Details, closed. A failed load says
+ * why in one line, with Show log.
  *
  * The ⋯ menu's Load with options… and Load and pin, a launch-line token's
  * Change for this model…, and `?serve=1` (the native menu's Serve) open
@@ -40,6 +42,7 @@ import { formatError } from '../../utils/errors';
 import { getHuggingFaceUrl } from '../../utils/format';
 import { componentRoleLabel } from '../../utils/imageFamily';
 import { LoadOptionsSheet, type SheetOpen } from '../LoadOptionsSheet';
+import { LogLink } from './LogLink';
 import type { Update } from './Change';
 import { Details } from './Details';
 import { HowItRuns } from './HowItRuns';
@@ -85,7 +88,8 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
   const [sheet, setSheet] = useState<SheetOpen | null>(null);
 
   const draws = model.imageFamily !== undefined;
-  const loaded = servers.some((s) => s.modelId === model.id);
+  const port = servers.find((s) => s.modelId === model.id)?.port;
+  const loaded = port !== undefined;
   const explain = useExplain(model.id, profile);
   const detail = useModelDetail({ modelId: model.id, ...DETAIL_CALLS });
   const facts = useLaunchFacts(model.id, loaded);
@@ -242,6 +246,11 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
             <p role="alert" className="m-0 flex items-baseline gap-xs text-xs text-text">
               <StatusMark kind="failed" label="Failed" />
               {`${load.error.action === 'unload' ? "Didn't unload" : "Didn't load"}: ${load.error.message}`}
+              {load.error.action === 'load' && (
+                <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => navigate(paths.log(model.id))}>
+                  Show log
+                </Button>
+              )}
             </p>
           )}
           {model.openaiId !== null && (
@@ -266,6 +275,8 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
         onChanged={changed}
         onChangeToken={(focus) => setSheet({ pin: false, focus, origin: 'line' })}
       />
+
+      {port !== undefined && <LogLink modelId={model.id} port={port} />}
 
       <Details
         model={model}

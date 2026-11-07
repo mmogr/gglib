@@ -28,8 +28,6 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 
-In the page's Console view the panel draws only its head (`headOnly`), and the page puts the server beneath it; the thread and composer stay mounted, hidden.
-
 A far chat (`source="far"`, the machine this one is joined to) is read and carried on but not changed here: the head shows its title alone, and no turn is edited, regenerated or deleted. The margin names the paired device behind a turn when its row does, and says "You" only for this machine's own user turns.
 
 On this machine's chats a question and a reply can each be edited, a reply regenerated, and any turn branched from. An edit or regenerate that would rewrite a saved reply is made on a new branch of the chat, which the page opens, saying the original is kept (ADR 0017); the panel holds no rule of when that happens. Where the chat's family holds other turns, the turn's margin shows the options, and choosing one opens its chat.

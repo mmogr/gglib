@@ -37,7 +37,8 @@ import { checkVerdict, type Verification } from './useVerification';
 
 const OPEN_KEY = 'gglib.inspector.details';
 
-function remembered(): boolean {
+/** Whether this viewer last left Details open; the far model's Details share it. */
+export function remembered(): boolean {
   try {
     return localStorage.getItem(OPEN_KEY) === 'open';
   } catch {
@@ -45,7 +46,7 @@ function remembered(): boolean {
   }
 }
 
-function remember(open: boolean): void {
+export function remember(open: boolean): void {
   try {
     localStorage.setItem(OPEN_KEY, open ? 'open' : 'closed');
   } catch {
@@ -56,7 +57,7 @@ function remember(open: boolean): void {
 const days = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 
 /** A database time as "6 days ago", the exact time on hover. */
-const When: FC<{ at: string; before?: string }> = ({ at, before }) => {
+export const When: FC<{ at: string; before?: string }> = ({ at, before }) => {
   const date = parseDbTimestamp(at);
   const ago = Math.round((date.getTime() - Date.now()) / 86_400_000);
   return <span title={date.toLocaleString()}>{`${before ?? ''}${days.format(ago, 'day')}`}</span>;
@@ -96,7 +97,7 @@ const Editable: FC<{ label: string; value: string; onSave: (value: string) => Pr
   );
 };
 
-const Item: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+export const Item: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
   <>
     <dt className="text-xs text-text-secondary">{label}</dt>
     <dd className="m-0 min-w-0 break-words text-xs text-text">{children}</dd>

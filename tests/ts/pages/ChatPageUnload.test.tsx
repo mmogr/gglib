@@ -2,8 +2,8 @@
  * Leaving a chat and unloading its model are two different wishes (#1211).
  *
  * The proxy serves the chat's model to every client, Copilot included, so
- * Close only leaves the chat, and Unload, beside the model picker and in the
- * Console, is the one control that stops the model. The page hands each up
+ * Close only leaves the chat, and Unload, beside the model picker, is the
+ * one control that stops the model (the model's inspector has its own). The page hands each up
  * to the chat route, which `tests/ts/places/libraryChat.test.tsx` pins; this
  * one pins which control hands up which.
  */
@@ -20,10 +20,6 @@ vi.mock('../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('../../../src/services/transport');
   return { ...actual, getTransport: () => transport.current };
 });
-// The Console's log is the daemon's; no stream opens.
-vi.mock('../../../src/hooks/useServerLogs', () => ({
-  useServerLogs: () => ({ logs: [], clearLogs: () => {}, isAutoScroll: true, setIsAutoScroll: () => {}, copyAllLogs: () => {} }),
-}));
 
 import ChatPage from '../../../src/pages/ChatPage';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
@@ -131,17 +127,6 @@ describe('ChatPage, Close and Unload', () => {
     await user.click(await screen.findByRole('button', { name: 'Unload' }));
 
     await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('Could not unload qwen3: daemon unreachable'));
-  });
-
-  it("the Console's Unload model hands up the unload, not Close", async () => {
-    const user = userEvent.setup();
-    renderLocal();
-    await user.click(within(await head()).getByRole('tab', { name: /console/i }));
-
-    await user.click(screen.getByRole('button', { name: 'Unload model' }));
-
-    expect(onUnloadModel).toHaveBeenCalledTimes(1);
-    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('a chat with another machine offers no Unload: the model is not this one’s', async () => {

@@ -206,21 +206,24 @@ describe('the one search', () => {
     expect(await screen.findByText('Hugging Face rate limit reached')).toBeInTheDocument();
   });
 
-  it('opens an exact user/repo in the inspector, and a pick of the library drops it', async () => {
+  it('opens an exact user/repo in the inspector at its address, read once, and a pick of the library drops it', async () => {
     transport.getHfModelSummary.mockResolvedValue(hfRepo('owner/Qwen3-8B-GGUF'));
     const { at } = renderLibrary();
     const user = userEvent.setup();
     await user.type(field(), 'owner/Qwen3-8B-GGUF{Enter}');
 
     const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
-    expect(within(inspector).getByRole('heading', { name: 'Qwen3-8B-GGUF' })).toBeInTheDocument();
+    expect(within(inspector).getByRole('heading', { name: 'owner/Qwen3-8B-GGUF' })).toBeInTheDocument();
+    expect(at()).toBe('/get/owner/Qwen3-8B-GGUF');
+    // The inspector takes the summary Enter read; it does not read it again.
+    expect(transport.getHfModelSummary).toHaveBeenCalledTimes(1);
     expect(transport.getHfModelSummary).toHaveBeenCalledWith('owner/Qwen3-8B-GGUF');
     expect(transport.browseHfModels).not.toHaveBeenCalled();
     expect(field()).toHaveValue('');
 
     await user.click(screen.getByRole('option', { name: /Qwen3-4B/ }));
     expect(at()).toBe('/models/1');
-    expect(screen.queryByRole('heading', { name: 'Qwen3-8B-GGUF' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'owner/Qwen3-8B-GGUF' })).not.toBeInTheDocument();
   });
 
   it('a Hugging Face pick leaves a model picked in the library', async () => {
@@ -230,9 +233,9 @@ describe('the one search', () => {
     await user.type(field(), 'a{Enter}');
     await user.click(await screen.findByRole('option', { name: /owner\/a/ }));
 
-    expect(at()).toBe('/library');
+    expect(at()).toBe('/get/owner/a');
     expect(screen.getByRole('option', { name: /owner\/a/ })).toHaveAttribute('aria-selected', 'true');
-    expect(within(screen.getByRole('complementary', { name: 'Inspector' })).getByRole('heading', { name: 'a' })).toBeInTheDocument();
+    expect(within(screen.getByRole('complementary', { name: 'Inspector' })).getByRole('heading', { name: 'owner/a' })).toBeInTheDocument();
   });
 
   it("offers user/repo:QUANT's download as the first row, and queues it", async () => {
@@ -345,7 +348,7 @@ describe('the one search', () => {
     expect(at()).toBe('/models/1');
 
     await act(async () => answer(hfRepo('owner/slow-GGUF')));
-    expect(screen.queryByRole('heading', { name: 'slow-GGUF' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'owner/slow-GGUF' })).not.toBeInTheDocument();
     expect(field()).toHaveValue('qwen');
     const rows = within(screen.getByRole('region', { name: 'Library' }));
     expect(rows.getAllByRole('option', { selected: true }).map((o) => o.textContent)).toEqual([expect.stringContaining('Qwen3-4B')]);
@@ -362,11 +365,11 @@ describe('the one search', () => {
     await user.clear(field());
     await user.type(field(), 'owner/b-GGUF{Enter}');
     const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
-    expect(within(inspector).getByRole('heading', { name: 'b-GGUF' })).toBeInTheDocument();
+    expect(within(inspector).getByRole('heading', { name: 'owner/b-GGUF' })).toBeInTheDocument();
 
     await act(async () => answerFirst(hfRepo('owner/a-GGUF')));
-    expect(within(inspector).getByRole('heading', { name: 'b-GGUF' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'a-GGUF' })).not.toBeInTheDocument();
+    expect(within(inspector).getByRole('heading', { name: 'owner/b-GGUF' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'owner/a-GGUF' })).not.toBeInTheDocument();
   });
 
   /** Enter `repo`, whose answer waits for the returned function. */
@@ -395,7 +398,7 @@ describe('the one search', () => {
 
     await answer(hfRepo('owner/slow-GGUF'));
     expect(at()).toBe('/models/1');
-    expect(screen.queryByRole('heading', { name: 'slow-GGUF' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'owner/slow-GGUF' })).not.toBeInTheDocument();
     expect(field()).toHaveValue('owner/slow-GGUF');
   });
 

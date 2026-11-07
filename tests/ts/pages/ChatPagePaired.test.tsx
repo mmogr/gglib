@@ -5,10 +5,9 @@
  * page has a model id here, it has a server port, and this window's server
  * registry knows how that model is doing. None hold across a tunnel — the
  * daemon supplies the port and the key per turn, and the registry only ever
- * hears about servers started here. Left as they were, the console would be
- * offered for a process this machine cannot see and the registry's silence
- * would be read as the server having stopped, locking the composer on a chat
- * that works perfectly.
+ * hears about servers started here. Left as they were, the registry's
+ * silence would be read as the server having stopped, locking the composer
+ * on a chat that works perfectly.
  *
  * And the session's machine is fixed: the head names the model and its
  * machine, no picker offers this machine's models in its place, and a
@@ -114,15 +113,11 @@ describe('ChatPage, paired', () => {
     createConversation.mockClear();
   });
 
-  it('names the model and its machine, offers no console, and asks this machine nothing', async () => {
+  it('names the model and its machine, and asks this machine nothing', async () => {
     render(<ChatPage paired={paired} modelName="qwen3" onClose={async () => {}} />, { wrapper });
 
     // The composer names the model and the machine it runs on.
     await waitFor(() => expect(screen.getByText('qwen3 on desk')).toBeInTheDocument());
-    // The console reports a process on the other machine, which this window
-    // has no port, id or log for.
-    expect(screen.queryByRole('tab', { name: /console/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /chat/i })).toBeInTheDocument();
     // No model id here to ask about, so the capability probe is never sent.
     expect(getServerToolSupport).not.toHaveBeenCalled();
   });

@@ -1,5 +1,5 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
-src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 334
+src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 326
 src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
 src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/McpServersPanel.tsx 482
@@ -11,7 +11,7 @@ src/components/SetupWizard/SetupWizard.tsx 705
 src/hooks/useGglibRuntime/agentMessageState.ts 340
 src/hooks/useGglibRuntime/useGglibRuntime.ts 326
 src/hooks/useGglibRuntime/useRunReader.ts 317
-src/pages/ChatPage.tsx 408
+src/pages/ChatPage.tsx 365
 src/services/tools/registry.ts 358
 src/services/transport/api/client.ts 336
 src/services/transport/events/sse.ts 312

@@ -5,7 +5,6 @@ import {
   useThread,
 } from '@assistant-ui/react';
 import type { ToastType } from '../Toast';
-import { cn } from '../../utils/cn';
 import {
   ChatPanelHeader,
   SystemPromptSection,
@@ -84,11 +83,6 @@ interface ChatMessagesPanelProps {
   /** The head's margin: the page's own controls. */
   headMargin?: React.ReactNode;
   /**
-   * Show only the head, for the page's Console view, which draws the server
-   * beneath it. The thread and composer stay mounted, hidden.
-   */
-  headOnly?: boolean;
-  /**
    * Whose chat it is. A far chat is read and continued here, never changed:
    * no rename, restart, export or prompt edit, and no turn edited or deleted.
    */
@@ -139,7 +133,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   onUnloadModel,
   quantization,
   headMargin,
-  headOnly = false,
   source = 'this',
   imageInput,
   thinking,
@@ -262,9 +255,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Render
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className={cn('flex flex-col overflow-hidden relative min-w-0 bg-background', headOnly ? 'shrink-0 max-h-[40vh] overflow-y-auto' : 'flex-1 md:h-full md:min-h-0')}>
-      {headOnly && <NotebookColumn>{head}</NotebookColumn>}
-      <div hidden={headOnly} className={cn('flex flex-col flex-1 min-h-0', headOnly && 'hidden')}>
+    <div className="flex flex-col overflow-hidden relative min-w-0 bg-background flex-1 md:h-full md:min-h-0">
+      <div className="flex flex-col flex-1 min-h-0">
         {messageLoading ? (
           <div className="flex-1 min-h-0 overflow-y-auto">
             <NotebookColumn>

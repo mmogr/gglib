@@ -4,8 +4,9 @@
  * Every screen has an address (`app/paths`). The routes are the children of
  * one layout, which `App` supplies: the providers, the header and the dialogs
  * that sit over every place. The library is a layout route of its own over
- * `/library`, `/models/:id` and `/far/:id`, so picking a row changes the
- * address without remounting the page.
+ * `/library`, `/models/:id` (and its `/log`), `/far/:id` and
+ * `/get/:owner/:name`, so picking a row changes the address without
+ * remounting the page.
  *
  * The router instance is module-scoped so the native menu can navigate from
  * outside React (`app/menuBridge`). It is created after `takeDaemonToken()`
@@ -30,7 +31,7 @@ export const routes: RouteObject[] = [
   { index: true, element: <Navigate to={paths.library()} replace /> },
   {
     element: <LibraryPlace />,
-    children: [{ path: 'library' }, { path: 'models/:id' }, { path: 'far/:id' }],
+    children: [{ path: 'library' }, { path: 'models/:id' }, { path: 'models/:id/log' }, { path: 'far/:id' }, { path: 'get/:owner/:name' }],
   },
   { path: 'chat/far/:id', element: <FarChatRoute /> },
   { path: 'chat/:modelId', element: <ChatRoute /> },

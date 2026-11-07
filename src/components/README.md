@@ -54,8 +54,6 @@ A chat is its own address, with tab switching:
 - **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and tells its caller, which says "copied" where it lives
 
 ### Model Management
-- **`ModelInspectorPanel/`**: What is left of the old inspector: the paired machine's model and the Hugging Face preview (until I4)
-- **`VisionChip.tsx`**: The neutral "Vision" chip on a paired machine's model that reads images, in its inspector's header
 - **`SamplingForm/`**: The sampling form: Settings' global defaults, the Load with options sheet's per-launch values, and (compact) the inspector's Sampling and Reasoning rows
 
 ### Chat Interface
@@ -66,10 +64,6 @@ A chat is its own address, with tab switching:
   - **Message Editing**: Inline edit of a question (Send, asked again) or a reply (Save, kept as written); an edit that would rewrite a saved reply is made on a new branch of the chat, Branch from here on every turn, the options where a chat's branches part shown in the turn's margin, and Retry answering a chat that ends in a question (ADR 0017)
   - **Message Deletion**: Delete button with cascade deletion of subsequent messages
 - **`ConversationListPanel/`**: Conversation list with search and management controls
-
-### Console View
-When a model is served, users can switch between Chat and Console views:
-- **`ConsoleInfoPanel/`**: Left panel showing server info (port, uptime, context usage), live metrics from `/metrics` endpoint, and an Unload model button. Uses `useServerState` hook to subscribe to backend lifecycle events - polling automatically stops when server stops and resumes on the next `server_started` frame.
 
 ### Server Management
 - **`ProxyControl.tsx`**: `ProxyPopover`, today's proxy panel (Turn on / off, the URL, the dashboard, Clear Cache), anchored by the sidebar's endpoint line until the Endpoint place replaces it

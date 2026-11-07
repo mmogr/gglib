@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
 
-import { useServerMetrics } from '../../../../src/components/ConsoleInfoPanel/useServerMetrics';
 import {
   applyTuneRun,
   startAgenticRun,
@@ -75,7 +73,6 @@ const DAEMON_FETCHES: [name: string, path: string, start: (signal: AbortSignal) 
 const OTHER_FETCHES: [name: string, url: string, start: () => unknown][] = [
   ['the proxy dashboard stream', 'http://127.0.0.1:8080/v1/proxy/status/stream', () => subscribeProxyDashboard('127.0.0.1', 8080, null, noop)],
   ['the proxy cache clear', 'http://127.0.0.1:8080/v1/proxy/cache/clear', () => clearProxyCache('127.0.0.1', 8080, null).catch(noop)],
-  ['the llama-server metrics poll', 'http://127.0.0.1:9000/metrics', () => renderHook(() => useServerMetrics(9000, true)).unmount],
 ];
 
 describe('API auth headers', () => {

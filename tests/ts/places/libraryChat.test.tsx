@@ -103,6 +103,11 @@ vi.mock('../../../src/services/transport/api/client', () => ({
   }),
 }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: shell.listen }));
+// A loaded model's ▸ Log reads the server's log; here it has none, and no stream opens.
+vi.mock('../../../src/services/platform/serverLogs', () => ({
+  getServerLogs: vi.fn(async () => []),
+  listenToServerLogs: vi.fn(async () => () => {}),
+}));
 vi.mock('../../../src/services/remoteEvents', () => ({
   refreshRemoteStatus: vi.fn(),
 }));
