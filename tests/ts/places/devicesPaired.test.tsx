@@ -140,7 +140,7 @@ describe('Paired devices', () => {
     const app = renderApp('/devices');
     expect(screen.getByText('Tool servers shared with them: tavily, github')).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Change ›' }));
-    expect(app.at()).toBe('/devices?settings=mcp');
+    expect(app.at()).toBe('/settings/tools');
   });
 
   it('hides the tool servers and the fingerprint while not shared', () => {

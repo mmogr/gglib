@@ -12,10 +12,8 @@ import {
   libraryIntent,
   menuModelId,
   paths,
-  settingsAt,
   settingsSection,
   withoutParam,
-  withoutSettings,
 } from '../../../src/app/paths';
 
 describe('paths', () => {
@@ -90,15 +88,14 @@ describe('paths', () => {
     expect(chatAddress({ pathname: '/models/7', search: '' })).toBeNull();
   });
 
-  it('the settings dialog is a search parameter over the place, opened and closed without moving', () => {
-    const at = { pathname: '/models/7', search: '?serve=1' };
-    const opened = settingsAt(at, 'system');
-    expect(opened).toBe('/models/7?serve=1&settings=system');
-    expect(settingsSection({ search: '?serve=1&settings=system' })).toBe('system');
-    expect(settingsSection({ search: '?settings=nope' })).toBeNull();
-    expect(settingsSection({ search: '' })).toBeNull();
-    expect(withoutSettings({ pathname: '/models/7', search: '?serve=1&settings=system' })).toBe('/models/7?serve=1');
-    expect(withoutSettings({ pathname: '/library', search: '?settings=general' })).toBe('/library');
+  it('settings is a place with a section in its path, General when none is named', () => {
+    expect(paths.settings()).toBe('/settings/general');
+    expect(paths.settings('engines')).toBe('/settings/engines');
+    for (const section of ['general', 'endpoint', 'models', 'tools', 'engines', 'about'] as const) {
+      expect(settingsSection(paths.settings(section).split('/')[2])).toBe(section);
+    }
+    expect(settingsSection('system')).toBeNull();
+    expect(settingsSection(undefined)).toBeNull();
   });
 
   it("reads the library's intents and the benchmark ids, dropping what is not one", () => {

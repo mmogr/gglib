@@ -9,11 +9,11 @@
  */
 
 import type { FC, Ref } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { Plus, Search } from 'lucide-react';
 import { Icon } from '../../components/ui/Icon';
 import { Input } from '../../components/ui/Input';
-import { paths, settingsAt } from '../../app/paths';
+import { paths } from '../../app/paths';
 import type { LibrarySort, SortKey } from './groups';
 import { Menu } from '../../components/ui/Menu';
 
@@ -35,7 +35,6 @@ interface LibraryHeaderProps {
 }
 
 export const LibraryHeader: FC<LibraryHeaderProps> = ({ sort, onSort, query, onQuery, onEnter, onFocus, inputRef }) => {
-  const location = useLocation();
   const navigate = useNavigate();
   return (
     <div className="flex shrink-0 flex-col gap-sm px-md pb-sm pt-md">
@@ -59,7 +58,7 @@ export const LibraryHeader: FC<LibraryHeaderProps> = ({ sort, onSort, query, onQ
           items={[
             { label: 'Find on Hugging Face', onPick: () => navigate(paths.libraryAdd('browse')) },
             { label: 'Add a GGUF file…', onPick: () => navigate(paths.libraryAdd('add')) },
-            { label: 'Add a tool server…', onPick: () => navigate(settingsAt(location, 'mcp'), { replace: true }) },
+            { label: 'Add a tool server…', onPick: () => navigate(paths.settings('tools')) },
           ]}
         />
       </div>

@@ -25,7 +25,7 @@ import { useToastContext } from '../../contexts/ToastContext';
 import { usePairedModels } from '../../hooks/usePairedModels';
 import { useServers, type ServerViewModel } from '../../hooks/useServers';
 import { openChatOn } from '../../app/openChat';
-import { inspectorSubject, libraryIntent, paths, settingsAt } from '../../app/paths';
+import { inspectorSubject, libraryIntent, paths } from '../../app/paths';
 import { useDownloads } from '../../services/downloadsRegistry';
 import type { HfPickState } from '../../inspector/hf/HfInspector';
 import { removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
@@ -152,7 +152,7 @@ export default function LibraryPlace() {
         onStopServer={stopServer}
         onRemoveModel={removeModel}
         onUpdateModel={updateModel}
-        onOpenSystemSettings={() => navigate(settingsAt(location, 'system'), { replace: true })}
+        onOpenSystemSettings={() => navigate(paths.settings('engines'))}
       />
     </div>
   );

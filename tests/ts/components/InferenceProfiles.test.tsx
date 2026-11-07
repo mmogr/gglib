@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
-import { InferenceProfiles } from '../../../src/components/SettingsModal/InferenceProfiles';
-import { profileNameError } from '../../../src/components/SettingsModal/InferenceProfileEditor';
+import { InferenceProfiles } from '../../../src/places/settings/InferenceProfiles';
+import { profileNameError } from '../../../src/places/settings/InferenceProfileEditor';
 import type { AppSettings, InferenceProfile, SparseInferenceProfile } from '../../../src/types';
 import { resolvedConfig } from '../fixtures/inference';
 import { appSettings } from '../fixtures/settings';
+import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 
 const getSettings = vi.fn();
 const updateSettings = vi.fn();
@@ -27,6 +28,21 @@ function coding(overrides: Partial<InferenceProfile> = {}): InferenceProfile {
     listInModels: false,
     ...overrides,
   };
+}
+
+/** The profiles, with the confirm sheet a Delete asks through. */
+const renderProfiles = () =>
+  render(
+    <ConfirmProvider>
+      <InferenceProfiles />
+    </ConfirmProvider>,
+  );
+
+/** ⋯ Delete… on the profile `name`, answered Delete. */
+async function deleteProfile(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole('button', { name: `More for ${name}` }));
+  await user.click(screen.getByRole('menuitem', { name: 'Delete…' }));
+  await user.click(await screen.findByRole('button', { name: 'Delete' }));
 }
 
 function settings(profiles: InferenceProfile[]): AppSettings {
@@ -49,7 +65,7 @@ beforeEach(() => {
 
 describe('InferenceProfiles', () => {
   it('lists configured profiles with the parameters they set', async () => {
-    render(<InferenceProfiles />);
+    renderProfiles();
 
     expect(await screen.findByText('coding')).toBeInTheDocument();
     expect(screen.getByText(/temperature=0\.2/)).toBeInTheDocument();
@@ -58,7 +74,7 @@ describe('InferenceProfiles', () => {
 
   it('marks only profiles that are advertised in the model picker', async () => {
     getSettings.mockResolvedValue(settings([coding(), coding({ name: 'chat', listInModels: true })]));
-    render(<InferenceProfiles />);
+    renderProfiles();
 
     await screen.findByText('coding');
     // One badge, for the one listed profile.
@@ -67,9 +83,9 @@ describe('InferenceProfiles', () => {
 
   it('prompts to create one when none are configured', async () => {
     getSettings.mockResolvedValue(settings([]));
-    render(<InferenceProfiles />);
+    renderProfiles();
 
-    expect(await screen.findByText(/no inference profiles/i)).toBeInTheDocument();
+    expect(await screen.findByText('No profiles yet. Add one, or install the starter profiles.')).toBeInTheDocument();
   });
 
   /**
@@ -80,7 +96,7 @@ describe('InferenceProfiles', () => {
   it('omits blank parameters instead of sending zero', async () => {
     getSettings.mockResolvedValue(settings([]));
     const user = userEvent.setup();
-    render(<InferenceProfiles />);
+    renderProfiles();
 
     await user.click(await screen.findByRole('button', { name: /add profile/i }));
     await user.type(screen.getByLabelText(/^name$/i), 'chat');
@@ -98,14 +114,42 @@ describe('InferenceProfiles', () => {
   it('saves the whole list when deleting, keeping the others', async () => {
     getSettings.mockResolvedValue(settings([coding(), coding({ name: 'chat' })]));
     const user = userEvent.setup();
-    render(<InferenceProfiles />);
+    renderProfiles();
 
     await screen.findByText('coding');
-    await user.click(screen.getAllByRole('button', { name: /delete/i })[0]);
+    await deleteProfile(user, 'coding');
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalled());
     const sent = updateSettings.mock.calls[0][0].inferenceProfiles;
     expect(sent.map((p: SparseInferenceProfile) => p.name)).toEqual(['chat']);
+  });
+
+  it('asks before deleting, and sends nothing when the answer is Cancel', async () => {
+    const user = userEvent.setup();
+    renderProfiles();
+
+    await screen.findByText('coding');
+    await user.click(screen.getByRole('button', { name: 'More for coding' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete…' }));
+    expect(await screen.findByText('Delete the profile "coding"?')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(screen.getByText('coding')).toBeInTheDocument();
+  });
+
+  it('edits in a sheet, and Cancel closes it with nothing sent', async () => {
+    const user = userEvent.setup();
+    renderProfiles();
+
+    await screen.findByText('coding');
+    await user.click(screen.getByRole('button', { name: /^edit$/i }));
+    const sheet = await screen.findByRole('dialog', { name: 'Edit coding' });
+    expect(sheet).toHaveTextContent('Show in the model picker');
+    await user.click(within(sheet).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
   /**
@@ -116,10 +160,10 @@ describe('InferenceProfiles', () => {
     getSettings.mockResolvedValue(settings([coding()]));
     updateSettings.mockRejectedValue(new Error('Invalid inference profile: name is reserved'));
     const user = userEvent.setup();
-    render(<InferenceProfiles />);
+    renderProfiles();
 
     await screen.findByText('coding');
-    await user.click(screen.getByRole('button', { name: /delete/i }));
+    await deleteProfile(user, 'coding');
 
     expect(await screen.findByText(/invalid inference profile/i)).toBeInTheDocument();
   });
@@ -148,7 +192,7 @@ describe('InferenceProfiles', () => {
       ]),
     );
 
-    render(<InferenceProfiles />);
+    renderProfiles();
     await screen.findByText('coding');
     await user.click(screen.getByRole('button', { name: /^edit$/i }));
 
@@ -187,7 +231,7 @@ describe('installing the starter profiles', () => {
       settings: settings(NINE.map((name) => coding({ name, description: `the ${name} profile` }))),
     });
     const user = userEvent.setup();
-    render(<InferenceProfiles />);
+    renderProfiles();
 
     await user.click(await screen.findByRole('button', { name: /install starter profiles/i }));
 
@@ -205,7 +249,7 @@ describe('installing the starter profiles', () => {
   it('says so when there was nothing left to add', async () => {
     installProfileTemplates.mockResolvedValue({ installed: [], kept: NINE, settings: settings([coding()]) });
     const user = userEvent.setup();
-    render(<InferenceProfiles />);
+    renderProfiles();
 
     await user.click(await screen.findByRole('button', { name: /install starter profiles/i }));
 
@@ -215,7 +259,7 @@ describe('installing the starter profiles', () => {
   it('surfaces a refusal and leaves the list as it was', async () => {
     installProfileTemplates.mockRejectedValue(new Error('the settings could not be saved'));
     const user = userEvent.setup();
-    render(<InferenceProfiles />);
+    renderProfiles();
 
     await user.click(await screen.findByRole('button', { name: /install starter profiles/i }));
 

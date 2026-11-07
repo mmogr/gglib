@@ -27,7 +27,7 @@ import { useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal } from 'lucide-react';
 import { openChatOn } from '../../app/openChat';
-import { inspectorClosed, inspectorSubject, settingsAt } from '../../app/paths';
+import { inspectorClosed, inspectorSubject, paths } from '../../app/paths';
 import { ConnectClient } from '../../components/ConnectClient';
 import { ProxyDashboardModal } from '../../components/ProxyDashboardModal';
 import { Icon } from '../../components/ui/Icon';
@@ -122,7 +122,7 @@ export default function EndpointPlace() {
             items={[
               { label: 'Live numbers', onPick: () => setLive(true), disabled: !canLive },
               { label: 'Clear prompt cache', onPick: () => void clear(), disabled: !canClear },
-              { label: 'Endpoint settings…', onPick: () => navigate(settingsAt(location, 'general'), { replace: true }), gapBefore: true },
+              { label: 'Endpoint settings…', onPick: () => navigate(paths.settings('endpoint')), gapBefore: true },
             ]}
           />
         </div>
@@ -156,7 +156,7 @@ export default function EndpointPlace() {
         onStopServer={stopServer}
         onRemoveModel={removeModel}
         onUpdateModel={updateModel}
-        onOpenSystemSettings={() => navigate(settingsAt(location, 'system'), { replace: true })}
+        onOpenSystemSettings={() => navigate(paths.settings('engines'))}
       />
 
       {dash.port !== null && <ProxyDashboardModal isOpen={live} onClose={() => setLive(false)} host={dash.host} port={dash.port} />}

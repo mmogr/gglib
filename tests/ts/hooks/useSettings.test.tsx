@@ -26,7 +26,6 @@ const { getSettings, updateSettings } = transport;
 const fetchSettings = getSettings;
 
 const mockSettings: AppSettings = appSettings({
-  defaultDownloadPath: '/models',
   defaultContextSize: 4096,
   proxyPort: MOCK_PROXY_PORT,
   llamaBasePort: MOCK_BASE_PORT,
@@ -229,5 +228,59 @@ describe('useSettings', () => {
     });
 
     expect(result.current.error).toBeNull();
+  });
+
+  /**
+   * The settings place says how each write went under its field, so a quiet
+   * write raises no toast either way; any other write still does.
+   */
+  it('raises no toast for a quiet write, and one for any other', async () => {
+    const showToast = vi.fn();
+    const { result } = renderHook(() => useSettings(), {
+      wrapper: ({ children }: { children: ReactNode }) => <SettingsProvider showToast={showToast}>{children}</SettingsProvider>,
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    vi.mocked(updateSettings).mockResolvedValue(mockSettings);
+
+    await act(async () => {
+      await result.current.save({ proxyPort: 1 }, { quiet: true });
+    });
+    vi.mocked(updateSettings).mockRejectedValueOnce(new Error('refused'));
+    await act(async () => {
+      await result.current.save({ proxyPort: 2 }, { quiet: true }).catch(() => {});
+    });
+    expect(showToast).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.save({ proxyPort: 3 });
+    });
+    expect(showToast).toHaveBeenCalledWith('Settings applied', 'success');
+  });
+
+  /**
+   * A read begun before a save and answered after it is overtaken: putting
+   * its answer up would show the value from before the save (TX-2).
+   */
+  it('drops a read the save overtook', async () => {
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let answer: (s: AppSettings) => void = () => {};
+    vi.mocked(fetchSettings).mockReturnValueOnce(new Promise<AppSettings>((resolve) => (answer = resolve)));
+    let reading: Promise<void> = Promise.resolve();
+    act(() => {
+      reading = result.current.refresh();
+    });
+    const saved = { ...mockSettings, proxyPort: 9191 };
+    vi.mocked(updateSettings).mockResolvedValue(saved);
+    await act(async () => {
+      await result.current.save({ proxyPort: 9191 });
+    });
+    await act(async () => {
+      answer(mockSettings);
+      await reading;
+    });
+
+    expect(result.current.settings?.proxyPort).toBe(9191);
   });
 });

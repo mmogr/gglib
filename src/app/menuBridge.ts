@@ -26,7 +26,7 @@ import { getTransport } from '../services/transport';
 import { formatError } from '../utils/errors';
 import { confirm } from './confirm';
 import { chatPathOn } from './openChat';
-import { menuModelId, paths, settingsAt } from './paths';
+import { menuModelId, paths } from './paths';
 import { appRouter } from './router';
 
 export type Notify = (message: string, type?: ToastType) => void;
@@ -83,7 +83,7 @@ async function removeSelected(notify: Notify): Promise<void> {
 /** The handlers, one per event the menu sends. */
 export function menuHandlers(notify: Notify) {
   return {
-    [MENU_EVENTS.OPEN_SETTINGS]: () => void appRouter().navigate(settingsAt(appRouter().state.location, 'general'), { replace: true }),
+    [MENU_EVENTS.OPEN_SETTINGS]: () => navigate(paths.settings()),
     [MENU_EVENTS.ADD_MODEL_FILE]: () => navigate(paths.libraryAdd('add')),
     [MENU_EVENTS.SHOW_DOWNLOADS]: () => navigate(paths.libraryAdd('browse')),
     [MENU_EVENTS.SHOW_CHAT]: () => void showChat(notify),

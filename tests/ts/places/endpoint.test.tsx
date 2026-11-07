@@ -687,7 +687,7 @@ describe('the endpoint place', () => {
 
       await user.click(screen.getByRole('button', { name: 'More' }));
       await user.click(screen.getByRole('menuitem', { name: 'Endpoint settings…' }));
-      expect(at()).toBe('/endpoint?settings=general');
+      expect(at()).toBe('/settings/endpoint');
     });
   });
 

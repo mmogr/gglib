@@ -87,7 +87,7 @@ describe('the menu bridge', () => {
     expect(menu.setSelectedModel).toHaveBeenLastCalledWith(7);
     expect(menu.setSelectedModel).toHaveBeenCalledTimes(1);
 
-    await act(() => router.navigate('/models/7?settings=general'));
+    await act(() => router.navigate('/models/7?serve=1'));
     expect(menu.setSelectedModel).toHaveBeenCalledTimes(1);
     await act(() => router.navigate('/library'));
     expect(at()).toBe('/library');
@@ -100,12 +100,12 @@ describe('the menu bridge', () => {
     expect(menu.handlers).toBeNull();
   });
 
-  it('Settings opens the dialog over the place; Add Model adds a file and Downloads finds on Hugging Face', async () => {
+  it('Settings opens the settings place on General; Add Model adds a file and Downloads finds on Hugging Face', async () => {
     const { at, router, fire, stop } = await bridged('/models/7');
     await fire(MENU_EVENTS.OPEN_SETTINGS);
-    expect(at()).toBe('/models/7?settings=general');
-    // Over the place, not after it: Back from here leaves the dialog behind.
-    expect(router.state.historyAction).toBe('REPLACE');
+    expect(at()).toBe('/settings/general');
+    // A place of its own: Back returns to the one it was opened from.
+    expect(router.state.historyAction).toBe('PUSH');
     await fire(MENU_EVENTS.ADD_MODEL_FILE);
     expect(at()).toBe('/library?add=file');
     await fire(MENU_EVENTS.SHOW_DOWNLOADS);

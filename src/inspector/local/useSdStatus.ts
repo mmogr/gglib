@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useInstalledVersion } from '../../components/SettingsModal/useEngine';
+import { useInstalledVersion } from '../../hooks/useEngine';
 import { getEngineStatus } from '../../services/transport/api/setup';
 import type { EngineStatus } from '../../types/setup';
 import { formatError } from '../../utils/errors';
