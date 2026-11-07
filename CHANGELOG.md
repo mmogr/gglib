@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.31.0-rc.4](https://github.com/mmogr/gglib/compare/v0.31.0-rc.3...v0.31.0-rc.4) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gui:** devices have a page: share this Mac, paired devices, use another machine ([#1800](https://github.com/mmogr/gglib/issues/1800))
+* **gui:** the endpoint has a page: its address, what is loaded and how, and who uses it ([#1798](https://github.com/mmogr/gglib/issues/1798))
+* **cli:** a piped "y" (`yes | gglib serve …`) no longer accepts the install; use a terminal, `gglib up --yes`, or `gglib config llama install`.
+
+### What gglib now does
+
+* **gui:** devices have a page: share this Mac, paired devices, use another machine ([#1800](https://github.com/mmogr/gglib/issues/1800)) ([9dd7d3c](https://github.com/mmogr/gglib/commit/9dd7d3ceebbefa6a524f067e21d3611b6a26b711))
+* **gui:** Load a model… is a palette on the endpoint page ([#1799](https://github.com/mmogr/gglib/issues/1799)) ([4c5fdce](https://github.com/mmogr/gglib/commit/4c5fdce3ed21f267ba3d1f923e69d025a1d1d752))
+* **gui:** the endpoint has a page: its address, what is loaded and how, and who uses it ([#1798](https://github.com/mmogr/gglib/issues/1798)) ([e876a06](https://github.com/mmogr/gglib/commit/e876a06732d7134080975d0054999e75e065c48e))
+
+
+### What it stopped getting wrong
+
+* **cli:** gglib model load asks about an engine update only on a terminal ([#1796](https://github.com/mmogr/gglib/issues/1796)) ([531c23d](https://github.com/mmogr/gglib/commit/531c23d96076c3b377bd2a390a263b8f42fa8ef0))
+
 ## [0.31.0-rc.3](https://github.com/mmogr/gglib/compare/v0.31.0-rc.2...v0.31.0-rc.3) (2026-11-07)
 
 
