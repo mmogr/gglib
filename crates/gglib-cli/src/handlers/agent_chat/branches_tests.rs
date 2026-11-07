@@ -1,22 +1,21 @@
 //! `/retry`, `/edit`, `/branch` and `/branches` on a session's saved chat,
 //! over a database of its own: a change that would rewrite a saved reply
 //! is made on a new branch, which the session goes on in, and the chat it
-//! was made on is kept as it was.
+//! was made on is kept as it was. Whether the chat the change leaves is to
+//! be answered is what the session's next turn says (`answer_saved`).
 
 use gglib_core::domain::attachment::{AttachmentId, AttachmentInfo};
 use gglib_core::domain::branching::{BranchOption, BranchPoint};
 use gglib_core::domain::chat::MessageRole::{Assistant, User};
-use gglib_core::domain::chat::NewMessage;
+use gglib_core::domain::chat::{ConversationSettings, NewMessage};
 
 use super::*;
 use crate::bootstrap::{CliContext, test_context};
-use crate::target::TurnModel;
 
 /// A chat holding `rows`, and the session saved to it.
 async fn chat<'a>(ctx: &'a CliContext, rows: &[(MessageRole, &str)]) -> Conversation<'a> {
-    let made_by = TurnModel::here("qwen".to_owned(), None).made_by();
     let history = ctx.app.chat_history();
-    let made = Conversation::create(history, None, None, made_by).await;
+    let made = Conversation::create(history, None, ConversationSettings::default(), None).await;
     let conversation = made.expect("a conversation");
     for (role, content) in rows {
         let row = NewMessage {
@@ -41,42 +40,18 @@ const ANSWERED: [(MessageRole, &str); 2] = [
     (Assistant, "Day 1: temples"),
 ];
 
-fn system(content: &str) -> AgentMessage {
-    AgentMessage::System {
-        content: content.to_owned(),
-    }
-}
-
-fn said(history: &[AgentMessage]) -> Vec<String> {
-    history
-        .iter()
-        .map(|m| match m {
-            AgentMessage::System { content } => format!("system: {content}"),
-            AgentMessage::User { content, .. } => format!("user: {content}"),
-            other => format!("{:?}", other.char_count()),
-        })
-        .collect()
-}
-
 #[tokio::test]
 async fn retry_answers_a_saved_reply_again_on_a_new_branch_and_the_session_goes_on_there() {
     let dir = tempfile::tempdir().expect("a directory");
     let ctx = test_context(dir.path()).await;
-    let original = chat(&ctx, &ANSWERED).await;
-    let id = original.id;
-    let mut persistence = Some(original);
+    let mut session = chat(&ctx, &ANSWERED).await;
+    let id = session.id;
 
-    let next = go(&mut persistence, Ask::Retry, &[system("Be brief.")])
-        .await
-        .expect("moved");
+    let answer = go(&mut session, Ask::Retry).await;
 
-    let branch = persistence.as_ref().expect("saved").id;
+    let branch = session.id;
     assert_ne!(branch, id);
-    assert!(next.answer);
-    assert_eq!(
-        said(&next.history),
-        ["system: Be brief.", "user: Plan a trip to Kyoto"]
-    );
+    assert!(answer);
     assert_eq!(
         contents(&ctx, id).await,
         ["Plan a trip to Kyoto", "Day 1: temples"]
@@ -88,15 +63,14 @@ async fn retry_answers_a_saved_reply_again_on_a_new_branch_and_the_session_goes_
 async fn retry_answers_a_question_nothing_answers_where_it_is() {
     let dir = tempfile::tempdir().expect("a directory");
     let ctx = test_context(dir.path()).await;
-    let original = chat(&ctx, &[(User, "Plan a trip to Kyoto")]).await;
-    let id = original.id;
-    let mut persistence = Some(original);
+    let mut session = chat(&ctx, &[(User, "Plan a trip to Kyoto")]).await;
+    let id = session.id;
 
-    let next = go(&mut persistence, Ask::Retry, &[]).await.expect("moved");
+    let answer = go(&mut session, Ask::Retry).await;
 
-    assert_eq!(persistence.as_ref().expect("saved").id, id);
-    assert!(next.answer);
-    assert_eq!(said(&next.history), ["user: Plan a trip to Kyoto"]);
+    assert_eq!(session.id, id);
+    assert!(answer);
+    assert_eq!(contents(&ctx, id).await, ["Plan a trip to Kyoto"]);
     assert_eq!(
         ctx.app
             .chat_history()
@@ -112,18 +86,12 @@ async fn retry_answers_a_question_nothing_answers_where_it_is() {
 async fn an_edit_of_an_answered_question_branches_and_one_nothing_answers_is_made_in_place() {
     let dir = tempfile::tempdir().expect("a directory");
     let ctx = test_context(dir.path()).await;
-    let original = chat(&ctx, &ANSWERED).await;
-    let id = original.id;
-    let mut persistence = Some(original);
+    let mut session = chat(&ctx, &ANSWERED).await;
+    let id = session.id;
 
-    let next = go(
-        &mut persistence,
-        Ask::Edit("Plan a trip to Osaka".into()),
-        &[],
-    )
-    .await;
-    let branch = persistence.as_ref().expect("saved").id;
-    assert!(next.expect("moved").answer);
+    let answer = go(&mut session, Ask::Edit("Plan a trip to Osaka".into())).await;
+    let branch = session.id;
+    assert!(answer);
     assert_ne!(branch, id);
     assert_eq!(contents(&ctx, branch).await, ["Plan a trip to Osaka"]);
     assert_eq!(
@@ -131,14 +99,9 @@ async fn an_edit_of_an_answered_question_branches_and_one_nothing_answers_is_mad
         ["Plan a trip to Kyoto", "Day 1: temples"]
     );
 
-    let next = go(
-        &mut persistence,
-        Ask::Edit("Plan a trip to Nara".into()),
-        &[],
-    )
-    .await;
-    assert!(next.expect("moved").answer);
-    assert_eq!(persistence.as_ref().expect("saved").id, branch);
+    let answer = go(&mut session, Ask::Edit("Plan a trip to Nara".into())).await;
+    assert!(answer);
+    assert_eq!(session.id, branch);
     assert_eq!(contents(&ctx, branch).await, ["Plan a trip to Nara"]);
 }
 
@@ -146,16 +109,14 @@ async fn an_edit_of_an_answered_question_branches_and_one_nothing_answers_is_mad
 async fn branch_copies_the_chat_to_go_on_in_and_answers_nothing() {
     let dir = tempfile::tempdir().expect("a directory");
     let ctx = test_context(dir.path()).await;
-    let original = chat(&ctx, &ANSWERED).await;
-    let id = original.id;
-    let mut persistence = Some(original);
+    let mut session = chat(&ctx, &ANSWERED).await;
+    let id = session.id;
 
-    let next = go(&mut persistence, Ask::Branch, &[]).await.expect("moved");
+    let answer = go(&mut session, Ask::Branch).await;
 
-    let branch = persistence.as_ref().expect("saved").id;
+    let branch = session.id;
     assert_ne!(branch, id);
-    assert!(!next.answer);
-    assert_eq!(said(&next.history).len(), 2);
+    assert!(!answer);
     assert_eq!(contents(&ctx, branch).await, contents(&ctx, id).await);
 }
 
@@ -163,14 +124,13 @@ async fn branch_copies_the_chat_to_go_on_in_and_answers_nothing() {
 async fn a_change_that_cannot_be_made_leaves_the_session_where_it_was() {
     let dir = tempfile::tempdir().expect("a directory");
     let ctx = test_context(dir.path()).await;
-    let original = chat(&ctx, &[(Assistant, "Hello! Ask me anything.")]).await;
-    let id = original.id;
-    let mut persistence = Some(original);
+    let mut session = chat(&ctx, &[(Assistant, "Hello! Ask me anything.")]).await;
+    let id = session.id;
 
     for ask in [Ask::Retry, Ask::Edit("Hi".into()), Ask::Edit(String::new())] {
-        assert!(go(&mut persistence, ask, &[]).await.is_none());
+        assert!(!go(&mut session, ask).await);
     }
-    assert_eq!(persistence.as_ref().expect("saved").id, id);
+    assert_eq!(session.id, id);
     assert_eq!(
         ctx.app
             .chat_history()
@@ -180,7 +140,6 @@ async fn a_change_that_cannot_be_made_leaves_the_session_where_it_was() {
             .len(),
         1
     );
-    assert!(go(&mut None, Ask::Branch, &[]).await.is_none());
 }
 
 #[test]

@@ -3,7 +3,7 @@
 use std::io;
 use std::path::Path;
 
-use super::{AgentSessionParams, admits_a_file_tool, files_line, in_dir, of_session};
+use super::{admits_a_file_tool, files_line, in_dir, of_session};
 use crate::handlers::agent_chat::resume_settings::tests::chat_args;
 use crate::handlers::inference::chat::ChatArgs;
 
@@ -54,22 +54,21 @@ fn no_folder_says_why() {
     let off = "Files: off in your home folder or /; cd into a project to read it, or --no-tools";
     assert_eq!(files_line(None, None), off);
     assert_eq!(files_line(None, Some("desk")), off);
-    assert_eq!(in_dir(Ok("/".into()), None), (None, Some(off.to_owned())));
+    assert_eq!(in_dir(Ok("/".into()), None), (None, off.to_owned()));
 
     let gone = io::Error::from(io::ErrorKind::NotFound);
     let (root, line) = in_dir(Err(gone), None);
     assert_eq!(root, None);
-    let line = line.expect("a line");
     assert!(
         line.starts_with("Files: off; the folder this ran in cannot be read"),
         "{line}"
     );
 }
 
-/// A session reads the directory it runs in, canonical, unless its list
-/// admits no file tool; then it has no folder and says nothing, its
-/// directory unread. A test runs in its crate's directory, which is
-/// neither home nor `/`.
+/// A session's turns say the directory it runs in, canonical, as their
+/// folder, unless its list admits no file tool or it has `--no-tools`; then
+/// they say none and it says nothing, its directory unread. A test runs in
+/// its crate's directory, which is neither home nor `/`.
 #[test]
 fn a_session_reads_where_it_runs_unless_its_list_admits_no_file_tool() {
     let here = std::env::current_dir().unwrap().canonicalize().unwrap();
@@ -79,12 +78,13 @@ fn a_session_reads_where_it_runs_unless_its_list_admits_no_file_tool() {
             no_tools,
             ..chat_args()
         };
-        of_session(&AgentSessionParams::from(&args))
+        of_session(&args, None)
     };
 
-    let (root, line) = session(&[], false);
-    assert_eq!(root.as_deref(), Some(here.as_path()));
-    assert_eq!(line, Some(format!("Files: {} (read-only)", here.display())));
+    let (folder, line) = session(&[], false);
+    let here = here.display().to_string();
+    assert_eq!(folder.as_deref(), Some(here.as_str()));
+    assert_eq!(line, Some(format!("Files: {here} (read-only)")));
     assert_eq!(session(&["builtin:read_file"], false).0, Some(here));
     assert_eq!(session(&["tavily_search"], false), (None, None));
     assert_eq!(session(&[], true), (None, None));

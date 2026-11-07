@@ -10,6 +10,7 @@ mod recorded_servers;
 pub(crate) mod remove;
 pub(crate) mod resolver;
 pub(crate) mod retag;
+mod start_body;
 pub(crate) mod update;
 mod update_components;
 mod update_projector;

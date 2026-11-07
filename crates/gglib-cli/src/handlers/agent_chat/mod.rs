@@ -1,6 +1,5 @@
 #![doc = include_str!("README.md")]
 mod branches;
-pub(crate) mod config;
 pub(crate) mod drain;
 pub(crate) mod draw;
 mod files;
@@ -14,14 +13,12 @@ pub(crate) mod repl;
 mod repl_line;
 pub(crate) mod resume_settings;
 pub(crate) mod sampling_warning;
-pub(crate) mod sight;
 mod thinking_dispatch;
 mod tool_format;
-pub(crate) mod upstream;
+pub(crate) mod turn;
 
 use anyhow::{Result, bail};
 
-use gglib_core::domain::agent::{AgentMessage, TurnLimits, saved_history};
 use gglib_core::domain::chat::ConversationSettings;
 
 use crate::bootstrap::CliContext;
@@ -30,15 +27,16 @@ use crate::handlers::inference::chat::ChatArgs;
 
 use self::images::TurnImages;
 use self::persistence::Conversation;
-use self::sight::Sight;
+use self::turn::Shown;
 
 /// Entry point: start the interactive agentic REPL.
 ///
-/// Manages the server lifecycle (auto-start / stop) around the REPL session.
-/// When `args.continue_id` is set, loads a previous conversation and resumes
-/// with the original session parameters (saved settings fill in any CLI args
-/// the user didn't explicitly provide), unless the daemon is replying to
-/// that conversation ([`refuse_running_elsewhere`]).
+/// The daemon runs the session's turns ([`turn`]): this finds or starts it,
+/// makes or resumes the conversation with the settings this command line
+/// names, and sends each message typed as a turn on it. When
+/// `args.continue_id` is set the conversation resumes as it was saved, with
+/// what this command line names in place of what it saved, unless the
+/// daemon is replying to it ([`refuse_running_elsewhere`]).
 pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // Before anything is stored: an image, a setting, a row.
     if let Some(id) = args.continue_id {
@@ -47,59 +45,44 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // A file that cannot be attached ends the command before a conversation
     // is made or a model asked for.
     let (attachments, mut receipts) = (ctx.app.attachments(), std::io::stderr());
-    let mut images = TurnImages::attach(attachments, &args.images, false, &mut receipts).await?;
-    let Session {
-        args,
-        mut params,
-        limits,
-        persistence,
-        prior_messages,
-    } = prepare(ctx, args).await?;
-    let sight = Sight::of_session(ctx, &params).await?;
-    images.judge(sight, &prior_messages).await?;
-
-    // 2. Compose the agent with the (possibly merged) args.
-    let inference_config = args.sampling.clone().into_inference_config();
-    let sampling = if inference_config == gglib_core::domain::InferenceConfig::default() {
-        None
-    } else {
-        Some(inference_config)
-    };
-    let prior_chars: usize = prior_messages
-        .iter()
-        .map(gglib_core::AgentMessage::char_count)
-        .sum();
-    let banner = config::BannerInfo {
-        quiet: false,
-        sampling: sampling.clone(),
-        prior_history_chars: if prior_chars > 0 {
-            Some(prior_chars)
-        } else {
-            None
-        },
-    };
-    // The session's Draw switch, and the image tool it arms (`/draw`).
-    let draw = draw::DrawSwitch::for_session(ctx, params.target, params.port).await;
-    params.drawing = draw.tool(ctx);
-    let (sandbox_root, files_line) = files::of_session(&params);
-    let agent = config::compose(ctx, &params, sandbox_root, sampling, &banner).await?;
-    if let Some(line) = files_line.filter(|_| !banner.quiet) {
+    let images = TurnImages::attach(attachments, &args.images, false, &mut receipts).await?;
+    let (args, conversation) = prepare(ctx, args).await?;
+    // The daemon runs the turns: found, or started, once the chat is ready.
+    let daemon = daemon_client::ensure_daemon(ctx).await?;
+    let settings = ctx.app.settings().get().await?;
+    for line in sampling_warning::notices(&args.sampling, args.target, &settings) {
         eprintln!("{line}");
     }
 
-    // The llama-server belongs to the daemon and stays warm for the next
-    // session; nothing to stop here.
-    let history = prior_messages;
-    repl::run_repl_with_prior(agent, &args, limits, persistence, history, images, draw).await
+    // The session's Draw switch (`/draw`), and the folder its file tools read.
+    let draw = draw::DrawSwitch::for_session(&daemon, args.target);
+    let (folder, files_line) = files::of_session(&args, conversation.machine.as_deref());
+    if let Some(line) = files_line {
+        eprintln!("{line}");
+    }
+
+    let session = repl::Session {
+        daemon,
+        conversation,
+        images,
+        draw,
+        folder,
+        thinking: args.thinking,
+        shown: Shown {
+            verbose: args.verbose,
+            quiet: false,
+        },
+    };
+    repl::run_repl(session).await
 }
 
 /// Refuse to continue chat `id` while the daemon is replying to it for the
 /// page or a paired device, and so writing its rows: the rule the daemon
 /// refuses a second run by ([`gglib_core::domain::runs::RunInfo::holds`]),
 /// read off its own listing. Refused only on the daemon's word. With none
-/// running no daemon run is replying; and one that does not list its runs for
-/// this data root's token, as another data root's does not, has said nothing
-/// of this chat.
+/// running no daemon run is replying, and none is started to ask; one that
+/// does not list its runs for this data root's token, as another data
+/// root's does not, has said nothing of this chat.
 async fn refuse_running_elsewhere(ctx: &CliContext, id: i64) -> Result<()> {
     if let Ok(daemon) = daemon_client::running(ctx).await
         && let Ok(listed) = daemon.run_list().await
@@ -114,22 +97,11 @@ async fn refuse_running_elsewhere(ctx: &CliContext, id: i64) -> Result<()> {
     Ok(())
 }
 
-/// A session ready to compose: the merged args, the parameters its agent is
-/// composed with, the limits its turns run with, the conversation it saves
-/// to, and the messages it resumes.
-struct Session<'a> {
-    args: ChatArgs,
-    params: config::AgentSessionParams,
-    limits: TurnLimits,
-    persistence: Option<Conversation<'a>>,
-    prior_messages: Vec<AgentMessage>,
-}
-
-/// What [`run`] does before it composes its agent: read the settings, create
-/// or resume the conversation, and settle the model and the profile.
-async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>> {
-    // 1. If resuming, load the conversation first and merge saved settings
-    //    into args so the agent is composed with the correct parameters.
+/// What [`run`] does before its first turn: read the settings, settle the
+/// model and the profile, and make or resume the conversation with what this
+/// command line names. The conversation is the session's: the daemon reads
+/// its settings on every turn, and saves the turn to it.
+async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<(ChatArgs, Conversation<'a>)> {
     let mut args = args.clone();
 
     // Strip any `{model}:{profile}` suffix before a conversation is created:
@@ -164,11 +136,9 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         None
     };
 
-    let (resumed, prior_messages, saved) = if let Some(conv) = stored {
+    let resumed = if let Some(conv) = stored {
         let id = conv.id;
-        let (merged_args, prior, saved) = resume_conversation(ctx, &args, conv).await?;
-        args = merged_args;
-        (Some(id), prior, saved)
+        Some((id, resume_conversation(ctx, &mut args, conv).await?))
     } else {
         args.identifier = args
             .target
@@ -176,13 +146,8 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
                 bail!("model identifier is required (use --continue <ID> to resume a session)")
             })
             .await?;
-        (None, Vec::new(), None)
+        None
     };
-    // By the rule the daemon reads a turn's Thinking choice with: `--thinking`
-    // wins and is remembered below, once there is a conversation to remember
-    // it; without it the chat runs as it remembers.
-    let remembered = saved.as_ref().and_then(|s| s.thinking);
-    let remember = resume_settings::settle_thinking(&mut args, remembered);
 
     // On a resume the identifier came from storage, not from this command
     // line. An explicit `--profile` is therefore the only thing the user
@@ -198,16 +163,9 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         )
         .await?;
     }
-    // Then the profile the conversation was saved with, if nothing named one.
-    let selected_profile = resume_settings::restore_profile(
-        selected_profile,
-        args.target,
-        configured_profiles,
-        saved.as_ref().and_then(|s| s.profile.as_deref()),
-    );
 
     // Resolved once, on the machine that serves the turn, before anything
-    // is saved: a far model that is not there is refused here. A resume on
+    // is saved: a model that is not there is refused here. A resume on
     // another model than the conversation stored then stores that one.
     let turn = args
         .target
@@ -215,70 +173,40 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         .await?;
     args.identifier.clone_from(&turn.identifier);
     let profile = selected_profile.as_ref();
-    let persistence = match resumed {
-        Some(id) => {
+    let conversation = match resumed {
+        Some((id, saved)) => {
             let typed = typed_this_invocation;
-            let kept = resume_settings::resumed_settings(saved, &args, typed, profile, &turn)?;
-            let conv = Conversation::resume(ctx.app.chat_history(), id, turn.made_by());
-            Some(conv.record_settings(kept).await)
+            let kept =
+                resume_settings::resumed_settings(ctx, saved, &args, typed, profile, &turn).await?;
+            let conv = Conversation::resume(ctx.app.chat_history(), id, turn.machine.clone());
+            conv.record_settings(kept).await?;
+            if let Some(prompt) = &args.system_prompt {
+                conv.record_system_prompt(prompt).await?;
+            }
+            conv
         }
-        None => resume_settings::new_conversation(ctx, &args, profile, &turn).await,
+        None => resume_settings::new_conversation(ctx, &args, profile, &turn).await?,
     };
-    // After the settings a resume replaces whole, which hold what the chat
-    // remembered before this session.
-    if let (Some(conv), Some(choice)) = (&persistence, remember) {
-        conv.remember_thinking(choice).await;
-    }
-
-    let params = config::AgentSessionParams {
-        model_identifier: args.identifier.clone(),
-        profile: selected_profile,
-        turn: Some(turn),
-        ..config::AgentSessionParams::from(&args)
-    };
-    // By the rule the daemon resolves a turn's limits with, and only now:
-    // `args` holds the flag, or on a resume the limit the chat saved, so the
-    // chat's own comes before this machine's stored one, and a new chat has
-    // saved only what the command line named.
-    let limits = TurnLimits::resolve(args.max_iterations, Some(&settings));
-    Ok(Session {
-        args,
-        params,
-        limits,
-        persistence,
-        prior_messages,
-    })
+    Ok((args, conversation))
 }
 
-/// Load a previous conversation, merge its saved settings into args, and prepare for resume.
-///
-/// Settings restoration follows the principle: **saved settings are defaults,
-/// explicit CLI flags override**. For example:
-/// ```text
-/// gglib chat other-model --continue 42 --temperature 0.9
-/// ```
-/// uses `other-model` and temperature `0.9` from the CLI, but restores
-/// everything else (system prompt, `top_p`, tools, etc.) from conversation 42.
-/// The one flag a chat overrides is `--reasoning-budget-tokens`, on a chat
-/// with Thinking switched off and no `--thinking` named: `prepare` settles
-/// that next ([`resume_settings::settle_thinking`]), and says so on stderr.
-/// Which machine it resumes on, and by which id, `prepare` has already taken
-/// from the model the conversation stored. The saved settings come back too:
-/// whether their profile applies is [`resume_settings::restore_profile`]'s
-/// to decide, and what the resume saves in their place is
-/// [`resume_settings::resumed_settings`]'s.
+/// Show a previous conversation's last turns, and take from what it saved
+/// the model `args` resumes with when the command line names none and the
+/// conversation stored none by its machine. Its settings come back whole:
+/// what the resume saves in their place is
+/// [`resume_settings::resumed_settings`]'s to say. Which machine it resumes
+/// on, and by which id, `prepare` has already taken from the model the
+/// conversation stored.
 async fn resume_conversation(
     ctx: &CliContext,
-    args: &ChatArgs,
+    args: &mut ChatArgs,
     conv: gglib_core::domain::chat::Conversation,
-) -> Result<(ChatArgs, Vec<AgentMessage>, Option<ConversationSettings>)> {
+) -> Result<Option<ConversationSettings>> {
     let history = ctx.app.chat_history();
     let conv_id = conv.id;
 
     let db_messages = history.get_messages(conv_id).await?;
-    let msg_count = db_messages.len();
-
-    if msg_count == 0 {
+    if db_messages.is_empty() {
         println!("Conversation #{conv_id} has no messages — starting fresh.");
     } else {
         print!(
@@ -287,23 +215,17 @@ async fn resume_conversation(
         );
     }
 
-    // Merge saved settings into a copy of the current args.
-    let merged = resume_settings::apply_saved_settings(
-        args,
-        conv.system_prompt.as_deref(),
-        conv.settings.as_ref(),
-    );
-
-    if merged.identifier.is_empty() {
+    if args.identifier.is_empty()
+        && let Some(name) = conv.settings.as_ref().and_then(|s| s.model_name.as_ref())
+    {
+        args.identifier.clone_from(name);
+    }
+    if args.identifier.is_empty() {
         bail!(
             "cannot resume conversation #{conv_id}: no model name was saved and none was provided on the CLI"
         );
     }
-
-    // The history as every surface reads it back. The system prompt is the
-    // conversation's, unless this command line names another.
-    let prior_messages = saved_history(merged.system_prompt.as_deref(), &db_messages);
-    Ok((merged, prior_messages, conv.settings))
+    Ok(conv.settings)
 }
 
 #[cfg(test)]

@@ -15,6 +15,7 @@ pub(crate) mod tool_progress;
 pub(crate) mod tool_types;
 mod transcript;
 mod turn_usage;
+mod waiting;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
 pub use config::{

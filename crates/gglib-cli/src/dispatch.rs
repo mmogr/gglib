@@ -86,23 +86,17 @@ pub async fn dispatch(
         }
         Commands::Chat {
             identifier,
-            context,
             system_prompt,
             sampling,
             profile,
-            retry,
             no_tools,
-            upstream,
             remote: _,
             max_iterations,
             tools,
             limits,
             images,
-            model,
             continue_id,
             thinking,
-            observation_tools,
-            max_observation_steps,
             command,
         } => {
             // Subcommand takes priority (e.g. `gglib chat history`)
@@ -115,13 +109,10 @@ pub async fn dispatch(
             } else {
                 let args = handlers::inference::chat::ChatArgs {
                     identifier,
-                    context,
                     system_prompt,
                     sampling,
                     profile: profile.profile,
-                    retry_policy: retry.into_policy(),
                     no_tools,
-                    port: upstream.port,
                     target,
                     max_iterations,
                     tools,
@@ -129,11 +120,8 @@ pub async fn dispatch(
                     max_parallel: limits.max_parallel,
                     images: images.images,
                     verbose, // global flag forwarded here
-                    model,
                     continue_id,
                     thinking: thinking.map(Into::into),
-                    observation_tools,
-                    max_observation_steps,
                 };
                 handlers::inference::chat::execute(ctx, args).await?;
             }
@@ -143,48 +131,33 @@ pub async fn dispatch(
             question,
             model,
             file,
-            context,
             show_prompt,
             quiet,
             sampling,
             profile,
             no_tools,
-            upstream,
             remote: _,
             max_iterations,
             tools,
             limits,
             images,
-            observation_tools,
-            max_observation_steps,
         } => {
-            // When --no-tools is set, override tools to an empty allowlist
-            // so the agent loop exposes zero tools to the model.
-            let effective_tools = if no_tools {
-                vec!["__none__".into()]
-            } else {
-                tools
-            };
-
             let args = handlers::inference::agent_question::QuestionArgs {
                 question,
                 model_arg: model,
                 file,
-                port: upstream.port,
                 target,
                 max_iterations,
-                tools: effective_tools,
+                tools,
+                no_tools,
                 tool_timeout_ms: limits.tool_timeout_ms,
                 max_parallel: limits.max_parallel,
                 images: images.images,
-                observation_tools,
-                max_observation_steps,
                 show_prompt,
                 verbose, // global flag forwarded here, as on `chat`
                 quiet,
                 sampling,
                 profile: profile.profile,
-                context,
             };
             handlers::inference::agent_question::execute(ctx, args).await?;
         }

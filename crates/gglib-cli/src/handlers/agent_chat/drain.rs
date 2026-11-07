@@ -1,7 +1,8 @@
 //! Async event-stream consumer for the agentic chat loop.
 //!
 //! [`drain_event_stream`] pulls [`AgentEvent`]s from a
-//! [`tokio::sync::mpsc::Receiver`] and renders each event through the
+//! [`tokio::sync::mpsc::UnboundedReceiver`], fed from a daemon run's frames
+//! (`super::turn`), and renders each event through the
 //! [`super::renderer`] and [`super::thinking_dispatch`] modules.
 //!
 //! Inline `<think>` reclassification is handled upstream by
@@ -15,7 +16,6 @@ use gglib_core::domain::agent::AgentEvent;
 use tokio::sync::mpsc;
 
 use super::markdown::render_markdown;
-use super::persistence::Reply;
 use super::progress_line;
 use super::renderer::render_event;
 use super::thinking_dispatch::{
@@ -23,14 +23,13 @@ use super::thinking_dispatch::{
 };
 
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
-/// arrives, rendering each event. Each is first added to `reply`, when the
-/// turn is saved: what is saved of a turn is what arrived here, in order.
+/// arrives, rendering each event. Nothing is saved here: the daemon saves
+/// the run's turn as it runs it.
 ///
 /// Returns `true` only when the turn completed with a [`AgentEvent::FinalAnswer`]
 /// event.  Returns `false` when the channel closes without one (e.g. the loop
 /// hit max iterations or stagnated).  Cancellation (Ctrl+C) is handled by the
-/// caller via `tokio::select!`; beyond rendering, this function's only side
-/// effect is that record in `reply`.
+/// caller via `tokio::select!`; this function only renders.
 ///
 /// When stdout is a TTY and `quiet` is `false`, tokens are buffered and
 /// rendered through [`termimad`] on completion (Rich mode).  An
@@ -41,13 +40,10 @@ use super::thinking_dispatch::{
 /// [`AgentEvent::ReasoningDelta`]) are routed to stderr through a
 /// "Thinking" banner; content tokens go to stdout.
 ///
-/// The caller **must** gate any history update on the return value: history
-/// from a failed or incomplete turn must not replace the previous context.
 pub(crate) async fn drain_event_stream(
-    rx: &mut mpsc::Receiver<AgentEvent>,
+    rx: &mut mpsc::UnboundedReceiver<AgentEvent>,
     verbose: bool,
     quiet: bool,
-    mut reply: Option<&mut Reply>,
 ) -> bool {
     let rich = !quiet && io::stdout().is_terminal();
     let stderr_tty = io::stderr().is_terminal();
@@ -57,10 +53,7 @@ pub(crate) async fn drain_event_stream(
     // wipes it.
     let mut progress_showing = false;
 
-    while let Some(mut event) = rx.recv().await {
-        if let Some(reply) = reply.as_deref_mut() {
-            reply.heard(&mut event);
-        }
+    while let Some(event) = rx.recv().await {
         let is_progress = matches!(
             event,
             AgentEvent::ToolProgress { .. } | AgentEvent::Waiting { .. }
@@ -110,17 +103,6 @@ pub(crate) async fn drain_event_stream(
                     println!();
                 }
 
-                #[expect(
-                    clippy::debug_assert_with_mut_call,
-                    reason = "this returns next and never reads `rx` again, so an event taken \
-                              in debug builds only changes nothing"
-                )]
-                {
-                    debug_assert!(
-                        rx.try_recv().is_err(),
-                        "events after FinalAnswer violate agent protocol"
-                    );
-                }
                 return true;
             }
 

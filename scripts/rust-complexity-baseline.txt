@@ -105,7 +105,7 @@ crates/gglib-core/src/contracts/http/daemon.rs 482
 crates/gglib-core/src/contracts/http/images.rs 302
 crates/gglib-core/src/domain/admission.rs 438
 crates/gglib-core/src/domain/agent/config.rs 795
-crates/gglib-core/src/domain/agent/events.rs 402
+crates/gglib-core/src/domain/agent/events.rs 408
 crates/gglib-core/src/domain/agent/events_tests.rs 309
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 414
 crates/gglib-core/src/domain/agent/openai_history.rs 301

@@ -39,22 +39,6 @@ fn closed_port() -> u16 {
     listener.local_addr().expect("its address").port()
 }
 
-/// What `gglib <args>` printed, stdout then stderr, over the data directory
-/// `root`: at the log level a run has when nothing sets one, with nothing on
-/// stdin, and no daemon (its port is one nothing listens on).
-fn printed(root: &Path, args: &[&str]) -> (String, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
-        .args(args)
-        .env("GGLIB_DATA_DIR", root)
-        .env("GGLIB_DAEMON_PORT", closed_port().to_string())
-        .env_remove("RUST_LOG")
-        .stdin(Stdio::null())
-        .output()
-        .unwrap_or_else(|e| panic!("running `gglib {}`: {e}", args.join(" ")));
-    let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
-    (text(&out.stdout), text(&out.stderr))
-}
-
 /// `gglib mcp <args>` over the data directory `root`, with no daemon: its
 /// port is one nothing listens on.
 fn mcp(root: &Path, args: &[&str]) -> Output {
@@ -203,43 +187,6 @@ fn a_stored_sse_server_is_listed_as_not_supported_yet_refused_a_run_and_an_edit_
         listed.contains("No MCP servers configured."),
         "got: {listed}"
     );
-}
-
-/// Both commands start the eager servers and then the lazy ones before the
-/// first turn, with tools switched off as with them on. Neither is to try a
-/// server it cannot run, so neither has a failure to warn of.
-///
-/// Each run is seen to get past that start: the chat session opens, and
-/// `gglib q` goes on to fail at the port nothing listens on.
-#[test]
-fn chat_commands_say_nothing_of_a_stored_sse_server() {
-    let root = tempfile::tempdir().expect("temp data dir");
-    stored_sse(root.path(), "remote-lazy", McpLifecycle::Lazy);
-    stored_sse(root.path(), "remote-eager", McpLifecycle::Eager);
-    let chat = (&["chat", "qwen"][..], "Agentic chat ready");
-    let question = (
-        &["q", "hi", "--model", "qwen"][..],
-        "request to llama-server failed",
-    );
-
-    for (command, past_the_start) in [chat, question] {
-        for tools in [&[][..], &["--no-tools"]] {
-            let port = closed_port().to_string();
-            let args = [command, &["--port", &port], tools].concat();
-
-            let (stdout, stderr) = printed(root.path(), &args);
-
-            let ran = format!(
-                "`gglib {}`\nstdout: {stdout}\nstderr: {stderr}",
-                args.join(" ")
-            );
-            assert!(
-                stdout.contains(past_the_start) || stderr.contains(past_the_start),
-                "{ran}"
-            );
-            assert!(!stderr.contains("MCP"), "{ran}");
-        }
-    }
 }
 
 #[test]

@@ -6,8 +6,8 @@
 //! branch of the chat, a copy as far as the change, and the chat it was made
 //! on is kept as it was. Only an edit of the last question, while nothing
 //! answers it, is made in place. The session then goes on in the chat the
-//! change leaves, from its saved history, and answers it when the change
-//! says so.
+//! change leaves, and when the change says so answers it, with a turn that
+//! says `answer_saved` and adds no message.
 //!
 //! The session's chat is its own: `--continue` is refused while the daemon
 //! is replying to it, so a change here is never made under a reply being
@@ -15,7 +15,6 @@
 
 use std::fmt::Write as _;
 
-use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::branching::{self, ChatChange, ChatThread};
 use gglib_core::domain::chat::{Message, MessageRole};
 
@@ -35,15 +34,6 @@ pub(super) enum Ask {
     Edit(String),
     /// `/branch`: the whole chat copied into a new branch to go on in.
     Branch,
-}
-
-/// Where a change leaves the session.
-pub(super) struct Next {
-    /// The history it goes on from: the session's prompt, then every saved
-    /// message of the chat it is now in.
-    pub history: Vec<AgentMessage>,
-    /// Whether that chat ends in a question it is now to answer.
-    pub answer: bool,
 }
 
 /// The change `ask` asks of a chat whose messages are `rows`, or why there
@@ -76,75 +66,49 @@ fn change_for(ask: Ask, rows: &[Message]) -> Result<Option<ChatChange>, &'static
     }
 }
 
-/// Make `ask` to the session's chat, `persistence`, and move the session to
-/// the chat the change leaves. The session's system prompt, which heads
-/// `session`, its history, heads the history it goes on from. `None` when
-/// nothing was made; why is said on stderr.
-pub(super) async fn go(
-    persistence: &mut Option<Conversation<'_>>,
-    ask: Ask,
-    session: &[AgentMessage],
-) -> Option<Next> {
-    let prompt = match session.first() {
-        Some(AgentMessage::System { content }) => Some(content.as_str()),
-        _ => None,
-    };
-    let Some(conversation) = persistence.as_ref() else {
-        eprintln!("This session is not saved, so it is not changed: send your next message.");
-        return None;
-    };
+/// Make `ask` to the session's chat, `conversation`, and move the session
+/// to the chat the change leaves. `true` when that chat ends in a question
+/// it is now to answer; `false` when nothing was made, and why is said on
+/// stderr, or when the change leaves nothing to answer.
+pub(super) async fn go(conversation: &mut Conversation<'_>, ask: Ask) -> bool {
     let history = conversation.history();
     let rows = match history.get_messages(conversation.id).await {
         Ok(rows) => rows,
         Err(e) => {
             eprintln!("The chat could not be read: {e}");
-            return None;
+            return false;
         }
     };
     let made = match change_for(ask, &rows) {
         Ok(made) => made,
         Err(why) => {
             eprintln!("{why}");
-            return None;
+            return false;
         }
     };
-    let (target, answer) = match made {
-        None => (conversation.id, true),
-        Some(change) => match history.change(conversation.id, &change, false).await {
-            Ok(changed) => {
-                if changed.forked {
-                    eprintln!(
-                        "Saved as a new branch, chat #{}. Chat #{} is kept as it was.",
-                        changed.conversation_id, conversation.id
-                    );
-                }
-                (changed.conversation_id, changed.answer)
-            }
-            Err(e) => {
-                eprintln!("Nothing was changed: {e}");
-                return None;
-            }
-        },
+    let Some(change) = made else {
+        return true;
     };
-    *persistence = Some(conversation.moved_to(target));
-    match history.get_messages(target).await {
-        Ok(rows) => Some(Next {
-            history: saved_history(prompt, &rows),
-            answer,
-        }),
+    match history.change(conversation.id, &change, false).await {
+        Ok(changed) => {
+            if changed.forked {
+                eprintln!(
+                    "Saved as a new branch, chat #{}. Chat #{} is kept as it was.",
+                    changed.conversation_id, conversation.id
+                );
+            }
+            *conversation = conversation.moved_to(changed.conversation_id);
+            changed.answer
+        }
         Err(e) => {
-            eprintln!("The chat could not be read: {e}");
-            None
+            eprintln!("Nothing was changed: {e}");
+            false
         }
     }
 }
 
 /// Print the branch points along the session's chat.
-pub(super) async fn list(persistence: Option<&Conversation<'_>>) {
-    let Some(conversation) = persistence else {
-        eprintln!("This session is not saved, so it has no branches.");
-        return;
-    };
+pub(super) async fn list(conversation: &Conversation<'_>) {
     match conversation.history().thread(conversation.id).await {
         Ok(thread) => print!("{}", describe(conversation.id, &thread)),
         Err(e) => eprintln!("The chat could not be read: {e}"),

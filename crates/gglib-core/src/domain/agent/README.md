@@ -19,7 +19,8 @@ no infrastructure concerns.
 | `tool_progress` | [`ToolProgressUpdate`] — how far a running tool has got (a [`ToolStage`], steps, place in line), sent to a [`ToolProgressSink`] that never blocks; [`PreviewFrame`] — a small PNG of the image being made, shown and never logged |
 | [`messages`] | [`AgentMessage`] — closed conversation-turn enum; a user turn names its images by id, and each is charged [`IMAGE_CHARGE_CHARS`] against the context budget |
 | `messages_serde` | Custom `Serialize`/`Deserialize` impls for [`AssistantContent`] |
-| [`events`] | [`AgentEvent`] (SSE units), [`LlmStreamEvent`] (stream protocol) |
+| [`events`] | [`AgentEvent`] (SSE units, read back from a run's log by a client of the daemon's door), [`LlmStreamEvent`] (stream protocol) |
+| `waiting` | [`AgentEvent::waiting_sentence`] — what a wait before a reply says, worded once for every surface: "Loading Qwen3-4B… 12 s", "waiting for an image render, step 3 of 20" |
 | [`loop_detection`] | [`LoopDetector`] — repeated tool-call-batch guard (FNV-1a batch signatures) |
 | [`stagnation`] | [`StagnationDetector`] — repeated assistant-text guard |
 | `transcript` | [`to_new_message`] — an agent message as a saved chat row; [`saved_history`] — a saved chat's prompt and rows as the messages its next turn starts from, the one history every turn is sent, pinned against what the page used to send by `contracts/chats/history.json` |

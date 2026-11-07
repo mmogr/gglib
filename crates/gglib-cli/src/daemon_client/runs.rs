@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures_util::StreamExt as _;
+use gglib_core::domain::hub_chats::LocalTurn;
 use gglib_core::domain::runs::{RunInfo, RunList};
 use gglib_core::sse::DataFrames;
 use serde_json::Value;
@@ -32,6 +33,27 @@ impl DaemonHandle {
             .timeout(Duration::from_secs(15))
             .send()
             .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Start an agent run: `turn` added to one of this machine's chats,
+    /// which the daemon answers on the model, tools and limits the chat's
+    /// settings save. A turn the daemon refuses before any run is made, a
+    /// folder that is not one or a model that cannot read the turn's
+    /// images, is an error in the daemon's own words.
+    pub(crate) async fn run_turn(&self, id: &str, turn: &LocalTurn) -> Result<RunInfo> {
+        let response = self
+            .request(reqwest::Method::PUT, &agent_run_path(id))
+            .json(turn)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await?;
+        if response.status().is_client_error()
+            && response.status() != reqwest::StatusCode::UNAUTHORIZED
+        {
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("{}", Self::error_message(body));
+        }
         Ok(Self::expect_ok(response).await?.json().await?)
     }
 
@@ -79,6 +101,12 @@ impl DaemonHandle {
     }
 }
 
+/// The path that starts agent run `id`: [`paths::run_path`] with
+/// `?kind=agent`, as the chat page sends a turn.
+fn agent_run_path(id: &str) -> String {
+    format!("{}?kind=agent", paths::run_path(id))
+}
+
 /// Read an event stream, handing each item to `on`, until `on` breaks, the
 /// run's end arrives, or the stream closes.
 pub(crate) async fn read_events<B, E>(
@@ -106,11 +134,14 @@ where
 }
 
 /// Take `chunk`, and return every item it completed: `id:` and `data:` make
-/// a frame, `event: run` the run's end. Keep-alive comments are skipped.
+/// a frame, `event: run` the run's end. Keep-alive comments are skipped, and
+/// so is a tool's `event: preview`, which is never logged, carries no
+/// number, and is not shown here.
 pub(crate) fn drain_items(frames: &mut DataFrames, chunk: &[u8]) -> Result<Vec<RunItem>> {
     frames
         .push_events(chunk)
         .into_iter()
+        .filter(|event| event.name.as_deref() != Some("preview"))
         .map(|event| {
             if event.name.as_deref() == Some("run") {
                 let info =

@@ -1,6 +1,6 @@
 //! [`ToolCallWriting`]: how far the model has got writing a tool call.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// How far the model has got writing a tool call, sent while it writes one.
 ///
@@ -15,7 +15,7 @@ use serde::Serialize;
 /// the markup back until the call is complete and releases it as one piece,
 /// so one of these comes then, at the end, with a small count, and nothing
 /// comes while the markup streams.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolCallWriting {
     /// The tool, as the call names it (`builtin:generate_image`).
     pub tool_name: String,

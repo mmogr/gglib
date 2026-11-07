@@ -3,8 +3,11 @@
 Three ways to ask a model from the terminal. `chat` is a session with tools
 that remembers; `q` is one question, built for pipes; `run` starts a reply
 the daemon finishes while you do something else. Every one goes through the
-daemon, so the model it loads is the model the proxy and the chat page see,
-unless `--port` names a llama-server already running here.
+daemon, so the model it loads is the model the proxy and the chat page see.
+`chat` and `q` are clients of the same door as the chat page: the daemon runs
+each turn through the endpoint, with the chat's tools, and saves it to the
+chat. While the model loads, the reply waits on one line on stderr,
+`Loading Qwen3-4B… 12 s`.
 
 <!-- snippet: q -->
 ```console
@@ -63,6 +66,9 @@ gglib q --remote -m <id> "Why is this test flaky?"   # on the paired machine
 
 - At a terminal, once the answer is in, `q` offers to go on as a chat
   (`Continue chatting?`); `-Q`, or input from a pipe, skips the offer.
+- The question is a saved chat from the start, made before it is asked:
+  a question that fails keeps what arrived of its reply, marked as stopped.
+- Its file tools read the directory it was asked in.
 - `question` is the long spelling of the same command.
 
 ## `chat`
@@ -102,10 +108,16 @@ Session #10 saved. Resume with: gglib chat --continue 10
 
 - `--continue <id>` resumes one on the machine it ran on, and `gglib chat
   history` lists them, each model by its id and its machine.
-- A turn is saved as the chat page's is: your message when you send it, the
-  reply when the turn ends, with its reasoning and how it was made. A turn
-  stopped by Ctrl+C or an error keeps what had arrived of its reply, marked
-  as stopped.
+- A turn is the chat page's, saved by the daemon: your message when you send
+  it, the reply when the turn ends, with its reasoning and how it was made.
+  Ctrl+C stops the run on the daemon, and a turn stopped by it or by an error
+  keeps what had arrived of its reply, marked as stopped.
+- The flags a session names are saved with the chat, and the daemon reads
+  them on every turn, the chat page's included: the model, `--tools`,
+  `--no-tools`, the tool limits, `--max-iterations`, `--profile` and five
+  sampling flags. `--continue` keeps what the chat saved, with what its
+  command line names in its place; `-s` replaces the chat's system prompt.
+- A model this machine does not have is refused before a chat is made.
 - A chat the daemon is still replying to, for the chat page or a paired
   device, is not continued: `--continue` says the chat is running elsewhere
   and names the run, before it stores anything. Wait for the reply, or stop
@@ -117,8 +129,9 @@ The file tools, `read_file`, `list_directory` and `grep_search`, read the
 directory `chat` was launched in, read-only, and nothing outside it. The
 session says so once, on stderr: `Files: <dir> (read-only)`.
 
-- That is where each invocation runs, `--continue` included: a folder the
-  chat page chose for the same conversation is not read here.
+- That is where each invocation runs, `--continue` included. Each turn says
+  the folder, as the chat page's does, and the chat remembers it: the folder
+  the chat page chose for it is replaced.
 - Launched in your home folder or in `/` it reads no files, and says
   `Files: off in your home folder or /; cd into a project to read it, or
   --no-tools`; launched in a directory deleted since, it reads none and says
@@ -138,10 +151,10 @@ session says so once, on stderr: `Files: <dir> (read-only)`.
 the choice runs this session and the chat remembers it, on a new chat or
 with `--continue`.
 
-- `off` runs with a thinking budget of `0`, whatever
-  `--reasoning-budget-tokens` says; `on` runs with the budget typed.
-- Without it a resumed chat runs as it remembers, and a chat switched off
-  says so on stderr when that sets a typed budget aside.
+- The choice goes on each of the session's turns, and the daemon remembers
+  it on the chat. `off` runs with a thinking budget of `0`; `on` with the
+  model's own.
+- Without it a resumed chat runs as it remembers.
 
 [The two reasoning controls](../sampling.md#the-two-reasoning-controls)
 explains the budget.
@@ -154,11 +167,21 @@ carries them.
 - `--max-iterations` caps the loop; without it, the limit a resumed chat
   saved, then the `max-tool-iterations` setting, which is the order the chat
   page and a paired device's turn follow too.
-- `--tools` is an allowlist, evaluated once at session start; parallelism
-  and timeout caps bound each step.
-- A dual-threshold loop guard: `--observation-tool` and
-  `--max-observation-steps` let read-only tools repeat more often than
-  mutating ones before loop detection fires.
+- `--tools` is an allowlist, saved with the chat; parallelism and timeout
+  caps bound each step.
+- The endpoint's loop guard stops a turn that repeats itself, as it does
+  for every client.
+
+### Sampling
+
+A chat keeps five sampling flags: `--temperature`, `--top-p`, `--top-k`,
+`--max-tokens` and `--repeat-penalty`. Any other sampling flag does not
+take effect, and the session says so on stderr.
+
+- The endpoint takes a client's sampling only while **Let clients set
+  sampling** is on (`gglib config settings set --trust-client-sampling
+  true`). While it is off, a session that names one of the four it gates
+  says so once, on stderr, before its first turn.
 
 ### `/draw`
 
@@ -179,8 +202,8 @@ typed, and only that one, with the daemon's image model
   with the default. A chosen model that has since
   gone, or lost a file, is never swapped for the default: `/draw` says why it
   cannot draw and how to choose again.
-- The choice is not saved with the chat, and the chat model is neither told
-  of it nor able to make it.
+- The choice is said on each turn that draws, and is not saved with the
+  chat; the chat model is neither told of it nor able to make it.
 
 ## `run`
 

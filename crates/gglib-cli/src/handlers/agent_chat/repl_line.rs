@@ -4,7 +4,7 @@
 //! next message with the images attached to it. The loop in
 //! [`repl`](super::repl) does what it says.
 
-use gglib_core::domain::agent::AgentMessage;
+use gglib_core::domain::attachment::AttachmentId;
 
 use super::branches::Ask;
 use super::images::TurnImages;
@@ -32,7 +32,10 @@ pub(super) enum Line {
     Draw(Option<String>),
     /// Anything else is the user's next message. It carries every image
     /// attached since the last one, and none waits after it.
-    Send(AgentMessage),
+    Send {
+        content: String,
+        images: Vec<AttachmentId>,
+    },
 }
 
 /// Read `input`, a trimmed line, as a [`Line`]. `images` gains the file an
@@ -61,10 +64,10 @@ pub(super) async fn read(input: &str, images: &mut TurnImages<'_>) -> Line {
     if let Some(reply) = images.command(input).await {
         return Line::Image(reply);
     }
-    Line::Send(AgentMessage::User {
+    Line::Send {
         content: input.to_owned(),
         images: images.take(),
-    })
+    }
 }
 
 #[cfg(test)]

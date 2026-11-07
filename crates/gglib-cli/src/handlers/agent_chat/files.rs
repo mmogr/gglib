@@ -2,6 +2,11 @@
 //! which is the directory the session was launched in, and the one stderr
 //! line the session starts with about it ([ADR 0023], decision 2).
 //!
+//! The folder goes on each of the session's turns, as the chat page's does,
+//! and the daemon remembers it on the chat: launched in home or `/`, or in a
+//! directory that cannot be read, the turn says `""`, and the chat reads no
+//! folder.
+//!
 //! [ADR 0023]: https://github.com/mmogr/gglib/blob/main/docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md
 
 use std::io;
@@ -10,27 +15,32 @@ use std::path::{Path, PathBuf};
 use gglib_core::domain::folder;
 use gglib_mcp::{BUILTIN_PREFIX, FILE_TOOLS};
 
-use super::config::AgentSessionParams;
-use crate::target::Target;
+use crate::handlers::inference::chat::ChatArgs;
 
-/// The folder a session's file tools read, and the line that says so.
+/// The folder a session's turns say, and the line that says so; `sent_to`
+/// names the paired machine a `--remote` session's turns are answered on.
 ///
 /// The folder is where this process runs, every invocation, `--continue`
-/// included, by [`folder::launched`]'s rule: never home or `/`. A session
-/// whose `--tools` list admits no file tool has none, and its directory is
-/// not read.
-pub(super) fn of_session(params: &AgentSessionParams) -> (Option<PathBuf>, Option<String>) {
-    if !admits_a_file_tool(&params.tools) {
+/// included, by [`folder::launched`]'s rule: never home or `/`, for which it
+/// is `""`, no folder. A session with `--no-tools`, or whose `--tools` list
+/// admits no file tool, says none, and its directory is not read.
+pub(super) fn of_session(
+    args: &ChatArgs,
+    sent_to: Option<&str>,
+) -> (Option<String>, Option<String>) {
+    if args.no_tools || !admits_a_file_tool(&args.tools) {
         return (None, None);
     }
-    in_dir(std::env::current_dir(), sent_to(params))
+    let (root, line) = in_dir(std::env::current_dir(), sent_to);
+    let folder = root.map_or_else(String::new, |dir| dir.display().to_string());
+    (Some(folder), Some(line))
 }
 
 /// [`of_session`] for a session whose list admits a file tool, launched in
 /// `cwd` as the process reads it, its turns sent to `sent_to`. A directory
 /// that cannot be read, deleted since the shell entered it, is no folder:
 /// the session starts without file tools and says why.
-fn in_dir(cwd: io::Result<PathBuf>, sent_to: Option<&str>) -> (Option<PathBuf>, Option<String>) {
+fn in_dir(cwd: io::Result<PathBuf>, sent_to: Option<&str>) -> (Option<PathBuf>, String) {
     let cwd = match cwd {
         Ok(cwd) => cwd,
         Err(e) => {
@@ -38,24 +48,12 @@ fn in_dir(cwd: io::Result<PathBuf>, sent_to: Option<&str>) -> (Option<PathBuf>, 
                 "Files: off; the folder this ran in cannot be read ({e}). cd into a project to \
                  read it, or --no-tools"
             );
-            return (None, Some(line));
+            return (None, line);
         }
     };
     let root = folder::launched(&cwd);
     let line = files_line(root.as_deref(), sent_to);
-    (root, Some(line))
-}
-
-/// The paired machine a `--remote` session's turns, and what its file tools
-/// read, are sent to; `None` for a session on this machine.
-fn sent_to(params: &AgentSessionParams) -> Option<&str> {
-    (params.target == Target::Remote).then(|| {
-        let machine = params
-            .turn
-            .as_ref()
-            .and_then(|turn| turn.machine.as_deref());
-        machine.unwrap_or("the paired machine")
-    })
+    (root, line)
 }
 
 /// Whether a session's tool allowlist lets a file tool ([`FILE_TOOLS`])

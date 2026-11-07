@@ -131,14 +131,13 @@ pub(crate) struct StartServerBody {
     pub config: StartServerRequest,
 }
 
-/// `POST /api/servers/start` response: the port, and the daemon's own
-/// sentence about the start, which `gglib model load` prints as it came.
+/// `POST /api/servers/start` response: the daemon's own sentence about the
+/// start, which `gglib model load` prints as it came.
 ///
 /// The CLI's reading of `gglib_app_services::types::StartServerResponse`;
 /// `a_start_server_response_deserializes_into_the_narrowing` pins it.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct StartServerDto {
-    pub port: u16,
     pub message: String,
 }
 

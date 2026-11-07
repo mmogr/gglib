@@ -4,7 +4,6 @@
 use clap::CommandFactory as _;
 
 use super::*;
-use crate::commands::Commands;
 use crate::target::REACHES;
 
 fn remote(argv: &[&str]) -> bool {
@@ -106,26 +105,34 @@ fn a_line_with_nothing_to_refuse_gets_clap_s_error() {
     }
 }
 
-/// `--remote` and `--port` name different machines, so they exclude each
-/// other on both commands that take both.
+/// The flags `chat` and `q` no longer take, since the daemon runs their
+/// turns, are refused by name rather than taken and ignored.
 #[test]
-fn remote_and_port_are_exclusive_on_both_agent_commands() {
-    for argv in [
-        &["gglib", "q", "--remote", "--port", "9000", "hi"][..],
-        &["gglib", "chat", "--remote", "--port", "9000", "m"],
+fn the_flags_of_the_in_process_loop_are_refused_on_both_agent_commands() {
+    for flag in [
+        &["--port", "9000"][..],
+        &["--observation-tool", "read_file"],
+        &["--max-observation-steps", "3"],
+        &["--ctx-size", "8192"],
+        &["-c", "8192"],
+        &["--mlock"],
     ] {
+        for command in [&["gglib", "q", "hi"][..], &["gglib", "chat", "m"]] {
+            let argv = [command, flag].concat();
+            assert!(
+                matches!(parse_from(&argv), Err(Refusal::Clap(_))),
+                "{}",
+                argv.join(" ")
+            );
+        }
+    }
+    for chat_only in [&["--no-retry"][..], &["--model", "qwen"]] {
+        let argv = [&["gglib", "chat", "m"][..], chat_only].concat();
         assert!(
-            matches!(parse_from(argv), Err(Refusal::Clap(_))),
+            matches!(parse_from(&argv), Err(Refusal::Clap(_))),
             "{}",
             argv.join(" ")
         );
-    }
-    match parse_from(["gglib", "q", "--remote", "hi"]) {
-        Ok((cli, true)) => match cli.command {
-            Some(Commands::Question { upstream, .. }) => assert_eq!(upstream.port, None),
-            _ => panic!("expected the Question variant"),
-        },
-        _ => panic!("q --remote did not parse as remote"),
     }
 }
 

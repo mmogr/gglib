@@ -5,43 +5,36 @@
 //! button pressed. [`DrawSwitch`] is that switch: `/draw` asks the daemon
 //! whether it can draw and arms it, and it is cleared after each send, so a
 //! model never starts a render on its own. The message sent while it is
-//! armed does draw, once: its run's first reply must be the call for the
-//! picture, and the reply after it is offered no tools
-//! ([`DrawSwitch::first_call`]).
+//! armed says `draw` on its turn ([`DrawSwitch::turn`]), and the daemon's
+//! run then draws, once.
 //!
 //! `/draw <model>` chooses the image model the session's pictures are drawn
 //! with, by its name or id among the daemon's image models, and arms the
 //! next message; `/draw default` goes back to the daemon's default rule;
 //! `/draw list` prints the models ([`DrawSwitch::say`]). The choice is held
-//! for the session, by this switch and nowhere else: it goes on each request
-//! the image tool hands the daemon, and never to the chat model.
+//! for the session, by this switch and nowhere else: it goes on each turn
+//! that draws as its `image_model`, and never to the chat model.
 //!
-//! The CLI never drives `sd-server` itself. The tool draws through the
-//! daemon ([`ImageGenerator`]), so a render queues with the daemon's
-//! other work; a session with no daemon, or one whose model is on another
-//! machine (`--remote`), cannot draw, and `/draw` says why.
+//! The CLI never drives `sd-server` itself: the daemon's run draws, and
+//! whether it can is the daemon's answer ([`ImageGenerator`]). A session
+//! whose model is on another machine (`--remote`) cannot draw, and `/draw`
+//! says why.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use gglib_core::contracts::http::images::{DrawingAvailability, ImageModelRow};
-use gglib_core::domain::agent::FirstCall;
 use gglib_core::ports::ImageGenerationPort;
-use gglib_core::services::{AttachmentService, drawing_availability};
-use gglib_mcp::{DrawArm, DrawWith, DrawingTool};
+use gglib_core::services::drawing_availability;
+use gglib_mcp::DrawWith;
 
-use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonHandle, images::ImageGenerator};
+use crate::daemon_client::{DaemonHandle, images::ImageGenerator};
 use crate::target::Target;
 
-/// Why a `--remote` session cannot draw: its loop would run the tool here,
-/// while the chat's model is there.
+/// Why a `--remote` session cannot draw: the chat's model is there, and the
+/// picture would be drawn here.
 const FAR: &str = "this chat's model is on another machine, so it cannot draw here; a chat kept \
                    on that machine draws with its image model";
-
-/// Why a `--port` session with no daemon cannot draw.
-const NO_DAEMON: &str = "no gglib daemon is running to draw with; start one with `gglib daemon \
-                         run`, then type /draw again";
 
 /// A session's Draw switch.
 #[derive(Debug)]
@@ -55,28 +48,13 @@ pub(crate) struct DrawSwitch {
 }
 
 impl DrawSwitch {
-    /// The switch of a session on `target`, reusing a llama-server on `port`
-    /// when one is named. A session the daemon starts a model for draws
-    /// through that daemon; one on `--port` only through a daemon already
-    /// running, and none is started for it.
-    pub(crate) async fn for_session(ctx: &CliContext, target: Target, port: Option<u16>) -> Self {
+    /// The switch of a session on `target`, which asks `daemon` whether it
+    /// can draw.
+    pub(crate) fn for_session(daemon: &DaemonHandle, target: Target) -> Self {
         if target == Target::Remote {
             return Self::off(FAR);
         }
-        // A test that names no stand-in daemon never reaches this machine's.
-        #[cfg(test)]
-        if daemon_client::STAND_IN_PORT.try_with(|_| ()).is_err() {
-            return Self::off(NO_DAEMON);
-        }
-        let daemon = if port.is_some() {
-            match daemon_client::running(ctx).await {
-                Ok(daemon) => daemon,
-                Err(_) => return Self::off(NO_DAEMON),
-            }
-        } else {
-            DaemonHandle::new(ctx, gglib_proxy::loopback::client()).await
-        };
-        Self::through(Arc::new(ImageGenerator::Daemon(daemon)))
+        Self::through(Arc::new(ImageGenerator::Daemon(daemon.clone())))
     }
 
     /// A switch that draws through `images`.
@@ -95,17 +73,6 @@ impl DrawSwitch {
             model: DrawWith::default(),
             with: Err(reason.to_owned()),
         }
-    }
-
-    /// The drawing tool this session's loop is composed with, armed only
-    /// while this switch is; none for a session that cannot draw.
-    pub(crate) fn tool(&self, ctx: &CliContext) -> Option<(DrawingTool, DrawArm)> {
-        let images = self.with.as_ref().ok()?;
-        let store = AttachmentService::new(ctx.app.attachments().store());
-        Some((
-            DrawingTool::new(Arc::clone(images), Arc::new(store)).drawing_with(self.model.clone()),
-            DrawArm::Shared(Arc::clone(&self.armed)),
-        ))
     }
 
     /// A `/draw` line: with nothing after it, [`Self::arm`]; `list`, the
@@ -206,14 +173,12 @@ impl DrawSwitch {
         self.model.get()
     }
 
-    /// What the next message's run is held to while the switch is armed:
-    /// its first reply calls the image tool and its second is offered no
-    /// tools, as with a run sent with the page's Draw button. Nothing while
-    /// it is off.
-    pub(crate) fn first_call(&self) -> Option<FirstCall> {
-        self.armed
-            .load(Ordering::SeqCst)
-            .then(DrawingTool::first_call)
+    /// What the next message's turn says of drawing: whether it draws, and
+    /// with the session's image model, if one was chosen. It draws while the
+    /// switch is armed, and never says a model when it does not.
+    pub(crate) fn turn(&self) -> (bool, Option<u32>) {
+        let draws = self.armed.load(Ordering::SeqCst);
+        (draws, self.model.get().filter(|_| draws))
     }
 
     /// A message was sent and its turn is over: the switch is off again.
