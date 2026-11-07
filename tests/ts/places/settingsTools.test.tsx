@@ -152,6 +152,7 @@ describe('a row', () => {
 
     expect(await row('tavily').findByText('npx was not found on PATH')).toBeInTheDocument();
     expect(row('github').queryByText('npx was not found on PATH')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 
@@ -189,6 +190,24 @@ describe('Test', () => {
     expect(other).toHaveAttribute('title', 'Another test is running');
     answerTest({ ok: true, error: null, tools: [] });
     await waitFor(() => expect(other).toBeEnabled());
+  });
+});
+
+describe('a row busy', () => {
+  it('stays busy while its own action is on its way, whatever another row finishes', async () => {
+    let release = () => {};
+    daemon.startHold = new Promise<void>((resolve) => (release = resolve));
+    const user = await openTools(tavily(), mcpServerInfo({ server: mcpServer({ id: 4, name: 'github' }) }));
+
+    await user.click(row('tavily').getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(row('tavily').getByRole('button', { name: 'Edit' })).toBeDisabled());
+    await user.click(row('github').getByRole('button', { name: 'Test' }));
+    expect(await row('github').findByText('Connected — 0 tools offered')).toBeInTheDocument();
+
+    expect(row('github').getByRole('button', { name: 'Edit' })).toBeEnabled();
+    expect(row('tavily').getByRole('button', { name: 'Edit' })).toBeDisabled();
+    release();
+    await waitFor(() => expect(row('tavily').getByRole('button', { name: 'Edit' })).toBeEnabled());
   });
 });
 
@@ -409,7 +428,12 @@ describe('the add sheet', () => {
 
 describe('Edit', () => {
   const stored = () =>
-    tavily({ env_keys: ['TOKEN', 'ROOT'], lifecycle: 'eager', config: { command: 'npx', args: ['-y', 'tavily-mcp'], working_dir: '/srv' } });
+    tavily({
+      env_keys: ['TOKEN', 'ROOT'],
+      enabled: false,
+      lifecycle: 'eager',
+      config: { command: 'npx', args: ['-y', 'tavily-mcp'], working_dir: '/srv', path_extra: '/opt/x' },
+    });
 
   it('opens the same sheet filled from the stored server, More open where it holds something', async () => {
     const user = await openTools(stored());
@@ -420,9 +444,10 @@ describe('Edit', () => {
     expect(sheet().getByLabelText('Name')).toHaveValue('tavily');
     expect(sheet().getByLabelText('Command')).toHaveValue('npx');
     expect(sheet().getByLabelText('Arguments')).toHaveValue('-y tavily-mcp');
-    expect(sheet().getByRole('checkbox', { name: /^Use in chats/ })).toBeChecked();
+    expect(sheet().getByRole('checkbox', { name: /^Use in chats/ })).not.toBeChecked();
     expect(sheet().getByRole('button', { name: 'More' })).toHaveAttribute('aria-expanded', 'true');
     expect(sheet().getByLabelText('Working directory')).toHaveValue('/srv');
+    expect(sheet().getByLabelText('Extra PATH')).toHaveValue('/opt/x');
     expect(sheet().getByRole('checkbox', { name: /^Start when gglib starts/ })).toBeChecked();
   });
 
@@ -440,10 +465,10 @@ describe('Edit', () => {
     expect(transport.updateMcpServer).toHaveBeenCalledWith(3, {
       name: 'tavily',
       server_type: 'stdio',
-      enabled: true,
+      enabled: false,
       lifecycle: 'eager',
       env: [{ key: 'TOKEN' }, { key: 'ROOT' }],
-      config: { command: 'npx', args: ['-y', 'tavily-mcp'], working_dir: '/srv', path_extra: undefined },
+      config: { command: 'npx', args: ['-y', 'tavily-mcp'], working_dir: '/srv', path_extra: '/opt/x' },
     });
   });
 
@@ -515,6 +540,40 @@ describe('one list (ST-8)', () => {
     await user.click(row('tavily').getByRole('button', { name: 'Edit' }));
 
     expect(sheet().queryByLabelText('TOKEN, kept')).not.toBeInTheDocument();
+  });
+
+  it('says the empty sentence again after a refused add is cancelled, the refusal said only in the sheet', async () => {
+    const user = await openTools();
+    await user.click(screen.getByRole('button', { name: 'Add a server' }));
+    await user.type(sheet().getByLabelText('Name'), 'files');
+    await user.type(sheet().getByLabelText('Command'), 'cat');
+    daemon.refuse = 'a server named files already exists';
+    await user.click(sheet().getByRole('button', { name: 'Add' }));
+    expect(await sheet().findByText('a server named files already exists')).toBeInTheDocument();
+
+    await user.click(sheet().getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByText('No tool servers yet. Add one to give chats tools such as web search.')).toBeInTheDocument();
+    expect(screen.queryByText(/a server named files already exists/)).not.toBeInTheDocument();
+  });
+
+  it('says a failed read on its own line while servers are listed', async () => {
+    const user = await openTools(tavily());
+    daemon.refuseList = 'the daemon did not answer';
+
+    await user.click(row('tavily').getByRole('button', { name: 'Start' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't read the tool servers: the daemon did not answer");
+    expect(screen.getByRole('listitem', { name: 'tavily' })).toBeInTheDocument();
+  });
+
+  it('says a failed first read, and not that there are none', async () => {
+    daemon.refuseList = 'the daemon did not answer';
+    renderApp('/settings/tools');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't read the tool servers: the daemon did not answer");
+    expect(screen.queryByText('No tool servers yet. Add one to give chats tools such as web search.')).not.toBeInTheDocument();
   });
 
   it('says there are none in one sentence', async () => {

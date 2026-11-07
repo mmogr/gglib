@@ -7,7 +7,8 @@
  * server routes keep `servers` as the daemon would: an add stored as sent
  * (its variables as keys), an edit merged, a start running with `tools`, a
  * test answering `tested`, a path resolution answering `resolution` and
- * marking the server valid when it succeeds.
+ * marking the server valid when it succeeds; a start held while
+ * `startHold` is set, a list read refused while `refuseList` is.
  */
 
 import { vi } from 'vitest';
@@ -32,6 +33,10 @@ export const daemon = {
   /** What a test answers; while `null`, a test waits until it is set by `answerTest`. */
   tested: { ok: true, error: null, tools: [] } as McpTestResult | null,
   resolution: { success: true, resolved_path: '/usr/local/bin/npx', attempts: [], warnings: [] } as ResolutionStatus,
+  /** While set, a tool server start waits for it. */
+  startHold: null as Promise<void> | null,
+  /** While set, a read of the tool servers is refused in these words. */
+  refuseList: null as string | null,
   refuse: null as string | null,
   /** While set, a settings write waits for it before it lands. */
   hold: null as Promise<void> | null,
@@ -47,6 +52,8 @@ export function resetDaemon(overrides: Partial<AppSettings> = {}, key: string | 
   daemon.tested = { ok: true, error: null, tools: [] };
   daemon.resolution = { success: true, resolved_path: '/usr/local/bin/npx', attempts: [], warnings: [] };
   testWaiters.length = 0;
+  daemon.startHold = null;
+  daemon.refuseList = null;
   daemon.refuse = null;
   daemon.hold = null;
   Object.values(transport).forEach((fn) => fn.mockClear());
@@ -68,7 +75,10 @@ export const transport = {
     if (daemon.refuse !== null) throw new Error(daemon.refuse);
     daemon.folder = { ...daemon.folder, path, source: path === daemon.folder.default_path ? 'default' : 'explicit' };
   }),
-  listMcpServers: vi.fn(async () => daemon.servers.map((info) => ({ ...info }))),
+  listMcpServers: vi.fn(async () => {
+    if (daemon.refuseList !== null) throw new Error(daemon.refuseList);
+    return daemon.servers.map((info) => ({ ...info }));
+  }),
   addMcpServer: vi.fn(async (server: NewMcpServer) => {
     if (daemon.refuse !== null) throw new Error(daemon.refuse);
     const { env, ...rest } = server;
@@ -90,6 +100,7 @@ export const transport = {
     daemon.servers = daemon.servers.filter((info) => info.server.id !== id);
   }),
   startMcpServer: vi.fn(async (id: number) => {
+    if (daemon.startHold !== null) await daemon.startHold;
     if (daemon.refuse !== null) throw new Error(daemon.refuse);
     patchServer(id, (info) => ({ ...info, status: 'running', tools: daemon.tools }));
     return found(id);

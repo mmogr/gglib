@@ -3,12 +3,14 @@
  * status the daemon's server routes answer with (`McpServerStatusDto`).
  *
  * Rust writes no word for these states yet (`gglib_core::domain::state_words`
- * has none for MCP); the words are what `gglib mcp list` prints
- * (`status_and_tools` in `gglib-cli`'s `mcp_cli.rs`), capitalised as a row
- * shows a state. The `Record` is over the generated type, so a state the
- * daemon adds fails to compile here until it has a word. A failed server is
- * the one state that carries its own text: the daemon's reason, said under
- * the row.
+ * has none for MCP). The four named states' words are what `gglib mcp list`
+ * prints for them (`status_and_tools` in `gglib-cli`'s `mcp_cli.rs`:
+ * running, starting, stopped, not supported yet), capitalised as a row shows
+ * a state. "Failed" is the GUI's own, the visual system's word for ✕, where
+ * the CLI prints `error: <reason>`. The `Record` is over the generated type,
+ * so a state the daemon adds fails to compile here until it has a word. A
+ * failed server is the one state that carries its own text: the daemon's
+ * reason, said under the row.
  *
  * @module places/settings/tools/serverState
  */

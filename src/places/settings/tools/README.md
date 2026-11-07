@@ -6,7 +6,9 @@ Settings › Tools' tool servers (MCP): a row each and the one sheet that adds
 and edits them, over the one list `ToolsSection` reads (ST-8). The list is
 read when the section opens and again after every change made here; the
 daemon announces no change to its tool servers, so there is no Refresh and
-one added from a terminal shows the next time the section opens.
+one added from a terminal shows the next time the section opens. A read that
+fails is said on its own line over whatever is listed; a refused change is
+said where it was asked, never as the list's error.
 
 A row is the server's name, its state as a shape and a word, and "N tools"
 while it runs. Hover or focus shows Test, Start or Stop, Edit and ⋯ Remove…
@@ -28,7 +30,7 @@ without its value (ADR 0027).
 |------|------|
 | `ToolServers.tsx` | The list, its one-sentence empty state, + Add a server, and the sheet for an add or an edit |
 | `ServerRow.tsx` | One server: name, state, tool count; Test, Start/Stop, Edit, ⋯ Remove… with their greyed reasons; Needs relink and Fix; the opened row; the last action's outcome |
-| `useServerActions.ts` | What the row actions do over the one list: the server they are busy on, one test at a time, each outcome kept to its row, Fix reading the list again once it resolves |
+| `useServerActions.ts` | What the row actions do over the one list: the servers each busy on its own, one test at a time, each outcome kept to its row, Fix reading the list again once it resolves |
 | `serverState.ts` | A status from the server routes as a shape and a word (`SERVER_STATE_WORDS`, `FAILED_WORD`), with a failure's reason |
 | `ServerSheet.tsx` | The add and edit sheet: quick starts, Name, Command, Arguments, Environment variables, Use in chats, ▸ More (Working directory, Extra PATH, Start when gglib starts); `serverSent`, what a save sends |
 | `TemplatePicker.tsx` | The quick starts (`SERVER_TEMPLATES`: Tavily Web Search, GitHub, Brave Search) and the line saying reading files is built in |
@@ -38,8 +40,8 @@ without its value (ADR 0027).
 ## Words this folder says that Rust does not
 
 The state words "Running", "Starting", "Stopped", "Not supported yet" and
-"Failed" (`gglib mcp list` prints the first four in lower case; Rust has no
-MCP state word yet); "N tools" / "1 tool"; "Tool servers", "No tool servers
+"Failed" (`gglib mcp list` prints the first four in lower case and
+`error: <reason>` for the fifth; Rust has no MCP state word yet); "N tools" / "1 tool"; "Tool servers", "No tool servers
 yet. Add one to give chats tools such as web search.", "Add a server",
 "Asking gglib"; "Test", "Start", "Stop", "Edit", "More for <name>",
 "Remove…", "Remove "<name>"?", "This cannot be undone.", "Remove"; "Not
@@ -49,8 +51,8 @@ its tools, then stop it"; "Needs relink", "Fix", "Find the command's
 executable again", "Resolved: <path>", "Could not resolve executable.",
 "Suggested fix: <the daemon's>", "Install Node.js if not installed (includes
 npm/npx)."; "Connected — N tools offered", "Connection failed — <the
-daemon's words>"; "Devices may use it", "Disabled, so it offers no tools",
-"Could not change whether paired devices may use it"; the sheet's "Add a
+daemon's words>"; "Devices may use it", "Disabled, so it offers no tools";
+"Couldn't read the tool servers: <the daemon's words>"; the sheet's "Add a
 server", "Edit <name>", "Quick start", each template's name and line,
 "Reading files is built in: choose a folder in a chat. Every template here
 needs an API key.", "Name", "Command", "One executable, found on PATH: npx,

@@ -2,6 +2,7 @@ import { FC, ReactNode, useState } from 'react';
 import { Checkbox } from '../../../components/ui/Checkbox';
 import { Label, Stack } from '../../../components/primitives';
 import type { McpServer, McpServerId } from '../../../services/transport';
+import { formatError } from '../../../utils/errors';
 
 interface AllowRemoteCheckboxProps {
   /** The server whose flag the box shows and sets. */
@@ -29,7 +30,7 @@ export const AllowRemoteCheckbox: FC<AllowRemoteCheckboxProps> = ({ server, labe
     try {
       await onToggle(server.id, allow);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not change whether paired devices may use it');
+      setError(formatError(e));
     } finally {
       setBusy(false);
     }

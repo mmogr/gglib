@@ -73,7 +73,7 @@ export const ServerRow: FC<ServerRowProps> = ({ info, actions, setAllowRemote, o
   const state = serverState(info);
   const running = isServerRunning(info);
   const runnable = !isServerUnsupported(info);
-  const busy = actions.busy === server.id;
+  const busy = actions.busy.has(server.id);
   const relink = !server.is_valid && server.server_type === 'stdio';
   const outcome = actions.outcome(server.id);
   const command = [server.config.command, ...(server.config.args ?? [])].filter(Boolean).join(' ');

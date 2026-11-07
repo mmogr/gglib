@@ -6,7 +6,8 @@
  * Test is `gglib mcp test`: a throwaway instance started, its tools listed,
  * then stopped, so it leaves nothing running. One test at a time across the
  * list: two would each start an instance, and a failure would land on
- * whichever row was clicked second. Fix is the daemon's path resolution;
+ * whichever row was clicked second. Each row is busy on its own, so one
+ * action ending never frees another row's buttons early. Fix is the daemon's path resolution;
  * once it resolves, the list is read again so the row stops needing it.
  *
  * @module places/settings/tools/useServerActions
@@ -25,8 +26,8 @@ export type RowOutcome =
   | { kind: 'refused'; message: string };
 
 export interface ServerActions {
-  /** The server an action is on its way for. */
-  busy: McpServerId | null;
+  /** The servers an action is on its way for. */
+  busy: ReadonlySet<McpServerId>;
   /** Whether a test is running, on any row. */
   testing: boolean;
   outcome: (id: McpServerId) => RowOutcome | null;
@@ -49,7 +50,7 @@ function unresolved(status: Awaited<ReturnType<ReturnType<typeof getTransport>['
 export function useServerActions(mcp: UseMcpServersResult): ServerActions {
   const { startServer, stopServer, removeServer, refresh } = mcp;
   const { confirm } = useConfirmContext();
-  const [busy, setBusy] = useState<McpServerId | null>(null);
+  const [busy, setBusy] = useState<ReadonlySet<McpServerId>>(new Set());
   const [testing, setTesting] = useState(false);
   const [outcomes, setOutcomes] = useState<ReadonlyMap<McpServerId, RowOutcome>>(new Map());
 
@@ -67,13 +68,17 @@ export function useServerActions(mcp: UseMcpServersResult): ServerActions {
     async (info: McpServerInfo, work: () => Promise<RowOutcome | null>) => {
       const id = info.server.id;
       said(id, null);
-      setBusy(id);
+      setBusy((prev) => new Set(prev).add(id));
       try {
         said(id, await work());
       } catch (e) {
         said(id, { kind: 'refused', message: formatError(e) });
       } finally {
-        setBusy(null);
+        setBusy((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       }
     },
     [said],

@@ -8,7 +8,9 @@
  * list is read when the section opens and again after every change made
  * here, so nothing offers a Refresh. The daemon announces no change to its
  * tool servers, so one made from a terminal shows the next time the section
- * opens.
+ * opens. A read that fails is said on its own line, over
+ * whatever is listed; a refused change is said where it was asked (the
+ * sheet, or under its row), never here.
  *
  * @module places/settings/tools/ToolServers
  */
@@ -33,12 +35,17 @@ export const ToolServers: FC<{ mcp: UseMcpServersResult }> = ({ mcp }) => {
   return (
     <section aria-label="Tool servers" className="flex flex-col gap-sm">
       <span className="text-sm font-semibold text-text">Tool servers</span>
+      {error !== null && (
+        <p role="alert" className="m-0 text-sm text-danger">
+          {`Couldn't read the tool servers: ${error}`}
+        </p>
+      )}
       {loading ? (
         <StatusMark kind="changing" label="Asking gglib" />
       ) : servers.length === 0 ? (
-        <p className="m-0 text-sm text-text-secondary">
-          {error ?? 'No tool servers yet. Add one to give chats tools such as web search.'}
-        </p>
+        error === null && (
+          <p className="m-0 text-sm text-text-secondary">No tool servers yet. Add one to give chats tools such as web search.</p>
+        )
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {servers.map((info) => (
