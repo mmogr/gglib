@@ -14,10 +14,9 @@ interface AllowRemoteCheckboxProps {
 
 /**
  * Whether paired devices may use one MCP server: the box the MCP panel shows
- * on each row it can open and the Remote popover shows as its checklist, so
- * both set the one flag the same way. A change applies from a device's next
- * run, with no restart. A disabled server is said to offer nothing, and a
- * refused change is said beside the box.
+ * on each row it can open, the one place that flag is set. A change applies
+ * from a device's next run, with no restart. A disabled server is said to
+ * offer nothing, and a refused change is said beside the box.
  */
 export const AllowRemoteCheckbox: FC<AllowRemoteCheckboxProps> = ({ server, label, onToggle }) => {
   const [busy, setBusy] = useState(false);

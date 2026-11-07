@@ -26,12 +26,13 @@ import { openLatestChat } from './openLatestChat';
 import { SPREAD } from './placement';
 
 /** Which sidebar row the address at `pathname` belongs to. */
-export type SidebarPlace = 'library' | 'endpoint' | 'chats' | 'diagnostics' | null;
+export type SidebarPlace = 'library' | 'endpoint' | 'devices' | 'chats' | 'diagnostics' | null;
 
 export function placeOf(pathname: string): SidebarPlace {
   const [, first] = pathname.split('/');
   if (first === 'library' || first === 'models' || first === 'far') return 'library';
   if (first === 'endpoint') return 'endpoint';
+  if (first === 'devices') return 'devices';
   if (first === 'chat') return 'chats';
   if (first === 'diagnostics') return 'diagnostics';
   return null;
@@ -95,7 +96,7 @@ export function Sidebar() {
       </div>
 
       <EndpointLine current={place === 'endpoint'} />
-      <DevicesLine />
+      <DevicesLine current={place === 'devices'} />
 
       <div className="flex flex-col gap-xs px-sm mt-sm">
         <Row current={place === 'chats'} onClick={() => void openLatestChat(navigate)}>

@@ -3,8 +3,8 @@
  *
  * A screen is a place with an address: the library, a model in it (or its
  * log), the paired machine's model, a Hugging Face repo, the endpoint (with
- * a model inspected beside it), a chat on a model, the settings, the
- * diagnostics.
+ * a model inspected beside it), a chat on a model, the devices, the
+ * settings, the diagnostics.
  * The sidebar, the native menu, a row's click and a test all go through
  * these, so a path's shape is changed in one file. Reading a path back is
  * `inspectorSubject`, the one reader of what the address names.
@@ -41,6 +41,8 @@ export const paths = {
   libraryAdd: (sub: 'browse' | 'add') => `/library?add=${sub === 'add' ? 'file' : 'browse'}`,
   /** A model's inspector with its Load with options sheet opened. */
   serve: (id: number) => `/models/${id}?serve=1`,
+  /** The devices: sharing this Mac, the paired devices, using another machine. */
+  devices: () => '/devices',
   /** The benchmarks, with `modelIds` picked to run. */
   benchmarks: (modelIds: number[] = []) =>
     modelIds.length > 0 ? `/diagnostics/benchmarks?models=${modelIds.join(',')}` : '/diagnostics/benchmarks',

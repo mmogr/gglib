@@ -5,7 +5,7 @@ import SetupWizard from "./components/SetupWizard";
 import { ToastContainer } from "./components/Toast";
 import { useDownloadToasts } from "./hooks/useDownloadToasts";
 import { useFileDropGuard } from "./hooks/useFileDropGuard";
-import { useOfferOutcomes } from "./components/remote/useOfferOutcomes";
+import { useOfferOutcomes } from "./app/useOfferOutcomes";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";

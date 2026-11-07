@@ -1,24 +1,35 @@
 /**
  * The devices line says what the tunnel is doing in the daemon's words: the
  * machine this one has joined and its reach, sharing and how many paired,
- * a pairing code still waiting, or nothing. A click opens today's remote
- * panel beside it.
+ * a pairing code still on offer as "code m:ss" counting down to its own
+ * deadline, or nothing. A click opens the Devices place.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
-vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: async () => true }));
-vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ listMcpServers: async () => [], getSettings: async () => ({}) }),
+const transport = vi.hoisted(() => ({
+  subscribe: vi.fn(() => () => {}),
+  listModels: vi.fn(async () => []),
+  getSettings: vi.fn(async () => ({})),
+  getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null })),
+  revealSecret: vi.fn(async () => null),
 }));
 
-import { DevicesLine, devicesSaying } from '../../../src/sidebar/DevicesLine';
+vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: async () => true }));
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+vi.mock('../../../src/components/ProxyDashboardModal', () => ({ ProxyDashboardModal: () => null }));
+vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
+
+import { devicesSaying } from '../../../src/sidebar/DevicesLine';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState, showOffer } from '../../../src/services/remoteRegistry';
 import type { RemoteStatus } from '../../../src/services/transport/types/remote';
-import { PlaceProviders } from '../places/harness';
+import { renderShell } from '../places/harness';
 
 /** Joined to `desk`, reached as `reach` says. */
 function joined(reach: RemoteStatus['reach'], awayFor: number | null = null): RemoteStatus {
@@ -52,29 +63,30 @@ const line = () => screen.getByRole('button', { name: /^devices/i });
 
 describe('what the devices line says', () => {
   it('nothing while the tunnel is off and nothing is joined', () => {
-    expect(devicesSaying(IDLE_STATUS, false)).toBeNull();
+    expect(devicesSaying(IDLE_STATUS, null)).toBeNull();
   });
 
   it('the joined machine and its reach, in the daemon\'s words', () => {
-    expect(devicesSaying(joined('connected'), false)).toEqual({ mark: 'on', word: 'Connected', name: 'desk' });
-    expect(devicesSaying(joined('away', 90), false)).toEqual({ mark: 'away', word: 'Away', name: 'desk' });
-    expect(devicesSaying(joined('disconnected'), false)).toEqual({ mark: 'off', word: 'Disconnected', name: 'desk' });
+    expect(devicesSaying(joined('connected'), null)).toEqual({ mark: 'on', word: 'Connected', name: 'desk' });
+    expect(devicesSaying(joined('away', 90), null)).toEqual({ mark: 'away', word: 'Away', name: 'desk' });
+    expect(devicesSaying(joined('disconnected'), null)).toEqual({ mark: 'off', word: 'Disconnected', name: 'desk' });
   });
 
   it('sharing and how many devices are paired', () => {
-    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [] }, false)).toEqual({ mark: 'on', word: 'Sharing · 0 paired' });
-    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [device, { ...device, id: 'dev-2' }] }, false)).toEqual({
+    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [] }, null)).toEqual({ mark: 'on', word: 'Sharing · 0 paired' });
+    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [device, { ...device, id: 'dev-2' }] }, null)).toEqual({
       mark: 'on',
       word: 'Sharing · 2 paired',
     });
   });
 
-  it('a code waiting, over everything else', () => {
-    expect(devicesSaying(joined('connected'), true)).toEqual({ mark: 'attention', word: 'Code waiting' });
+  it('a code on offer as its time left, over everything else', () => {
+    expect(devicesSaying(joined('connected'), 102)).toEqual({ mark: 'attention', word: 'code 1:42' });
+    expect(devicesSaying(null, 9)).toEqual({ mark: 'attention', word: 'code 0:09' });
   });
 
   it('a turning mark before the daemon has answered', () => {
-    expect(devicesSaying(null, false)).toEqual({ mark: 'changing', word: '' });
+    expect(devicesSaying(null, null)).toEqual({ mark: 'changing', word: '' });
   });
 });
 
@@ -82,61 +94,48 @@ describe('the devices line', () => {
   beforeEach(() => {
     resetRemoteState();
   });
+  afterEach(() => vi.useRealTimers());
 
   it('is named by what it says, and says nothing when there is nothing', () => {
     applyRemoteStatus(IDLE_STATUS);
-    render(<DevicesLine />, { wrapper: PlaceProviders });
+    renderShell('/library');
     expect(line()).toHaveAccessibleName('Devices');
   });
 
   it('names the joined machine and its reach', () => {
     applyRemoteStatus(joined('away', 120));
-    render(<DevicesLine />, { wrapper: PlaceProviders });
+    renderShell('/library');
     expect(line()).toHaveAccessibleName('Devices, desk Away');
     expect(screen.getByText('desk')).toBeInTheDocument();
     expect(screen.getByText('Away')).toBeInTheDocument();
   });
 
-  it('says a code is waiting on the line itself, so a closed panel is not a lost code', () => {
+  it("says a code on offer as its time left, counting down to the code's deadline", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     applyRemoteStatus({ ...IDLE_STATUS, enabled: true, pairing_active: true });
     showOffer({
       ticket: 't',
       code: '119284',
       pairing: 't-119284',
-      expires_in_s: 120,
+      expires_in_s: 102,
       device: 'dev-99887766',
       mcp_servers: [],
       already_up: false,
     });
-    render(<DevicesLine />, { wrapper: PlaceProviders });
-    expect(line()).toHaveAccessibleName('Devices, Code waiting');
-    expect(line()).toHaveAttribute('title', 'A pairing code is waiting');
+    renderShell('/library');
+    expect(line()).toHaveAccessibleName('Devices, code 1:42');
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(line()).toHaveAccessibleName(/^Devices, code 1:3[12]$/);
+    expect(screen.getByText(/^code 1:3[12]$/)).toBeInTheDocument();
   });
 
-  it('a click opens today\'s remote panel, and a second closes it', async () => {
+  it('a click opens the Devices place, and the line is then the open row', async () => {
     applyRemoteStatus(IDLE_STATUS);
-    render(<DevicesLine />, { wrapper: PlaceProviders });
-    const user = userEvent.setup();
-    await user.click(line());
-    expect(screen.getByRole('heading', { name: 'Remote' })).toBeInTheDocument();
-    await user.click(line());
-    expect(screen.queryByRole('heading', { name: 'Remote' })).not.toBeInTheDocument();
-  });
-
-  it('a click anywhere else closes the panel; a click inside it does not', async () => {
-    applyRemoteStatus(IDLE_STATUS);
-    render(
-      <>
-        <DevicesLine />
-        <p>elsewhere</p>
-      </>,
-      { wrapper: PlaceProviders },
-    );
-    const user = userEvent.setup();
-    await user.click(line());
-    await user.click(screen.getByRole('heading', { name: 'Remote' }));
-    expect(screen.getByRole('heading', { name: 'Remote' })).toBeInTheDocument();
-    await user.click(screen.getByText('elsewhere'));
-    expect(screen.queryByRole('heading', { name: 'Remote' })).not.toBeInTheDocument();
+    const app = renderShell('/library');
+    expect(line()).not.toHaveAttribute('aria-current');
+    await userEvent.setup().click(line());
+    expect(app.at()).toBe('/devices');
+    expect(await screen.findByRole('heading', { name: 'Devices' })).toBeInTheDocument();
+    expect(line()).toHaveAttribute('aria-current', 'page');
   });
 });

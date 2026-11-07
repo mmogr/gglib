@@ -23,6 +23,7 @@ import { createBrowserRouter, createMemoryRouter, Navigate, type RouteObject } f
 
 import EndpointPlace from '../places/endpoint/EndpointPlace';
 import LibraryPlace from '../places/library/LibraryPlace';
+import DevicesPlace from '../places/devices/DevicesPlace';
 import { takeDaemonToken } from '../services/transport/api/daemonToken';
 import { BenchmarkRoute } from './BenchmarkRoute';
 import { ChatRoute } from './ChatRoute';
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
   { path: 'endpoint', element: <EndpointPlace /> },
   { path: 'chat/far/:id', element: <FarChatRoute /> },
   { path: 'chat/:modelId', element: <ChatRoute /> },
+  { path: 'devices', element: <DevicesPlace /> },
   { path: 'diagnostics/benchmarks', element: <BenchmarkRoute /> },
   { path: '*', element: <Navigate to={paths.library()} replace /> },
 ];

@@ -28,6 +28,7 @@ describe('paths', () => {
     expect(paths.farChat(3)).toBe('/chat/far/3');
     expect(paths.benchmarks([9, 11])).toBe('/diagnostics/benchmarks?models=9,11');
     expect(paths.benchmarks()).toBe('/diagnostics/benchmarks');
+    expect(paths.devices()).toBe('/devices');
 
     expect(inspectorSubject({ pathname: '/models/7' })).toEqual({ kind: 'model', id: 7, log: false });
     expect(inspectorSubject({ pathname: '/models/7/log' })).toEqual({ kind: 'model', id: 7, log: true });
