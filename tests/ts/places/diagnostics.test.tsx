@@ -32,6 +32,7 @@ const dashboard = vi.hoisted(() => ({
   opened: vi.fn((_h: string, _p: number, _k: unknown) => {}),
   clear: vi.fn(async (_h: string, _p: number, _k?: string | null) => ({ status: 'ok', message: 'Prompt cache cleared' })),
 }));
+const perfMounts = vi.hoisted(() => ({ mounted: 0, unmounted: 0 }));
 const reads = vi.hoisted(() => ({
   runs: vi.fn(async (_limit?: number, _offset?: number): Promise<unknown[]> => []),
   trips: vi.fn(async (_days: number): Promise<unknown[]> => []),
@@ -78,13 +79,25 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
 }));
 // The modes are their own tests' (benchmarkAbort, tuneStreamEnds, …); here
 // each says which mode it is, whether it is the open one, and its models.
-vi.mock('../../../src/places/diagnostics/benchmarks/PerfCompareTab', () => ({
-  PerfCompareTab: (p: { mode: string; active: boolean; initialModelIds?: number[]; onRunComplete: () => void }) => (
-    <div data-testid="perf-compare" data-mode={p.mode} data-active={String(p.active)} data-ids={(p.initialModelIds ?? []).join(',')}>
-      <button type="button" onClick={p.onRunComplete}>finish perf</button>
-    </div>
-  ),
-}));
+vi.mock('../../../src/places/diagnostics/benchmarks/PerfCompareTab', async () => {
+  const { useEffect } = await import('react');
+  return {
+    PerfCompareTab: (p: { mode: string; active: boolean; initialModelIds?: number[]; onRunComplete: () => void }) => {
+      // A run in flight lives as long as this does: its unmount aborts it.
+      useEffect(() => {
+        perfMounts.mounted += 1;
+        return () => {
+          perfMounts.unmounted += 1;
+        };
+      }, []);
+      return (
+        <div data-testid="perf-compare" data-mode={p.mode} data-active={String(p.active)} data-ids={(p.initialModelIds ?? []).join(',')}>
+          <button type="button" onClick={p.onRunComplete}>finish perf</button>
+        </div>
+      );
+    },
+  };
+});
 vi.mock('../../../src/places/diagnostics/benchmarks/Tune/TuneTab', () => ({ TuneTab: () => <div data-testid="tune" /> }));
 vi.mock('../../../src/places/diagnostics/benchmarks/Agentic/AgenticTab', () => ({ AgenticTab: () => <div data-testid="agentic" /> }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
@@ -159,6 +172,7 @@ const TUNE_RUN = {
   created_at: '2026-11-07T10:00:00Z',
   completed_at: null,
 };
+const LATEST_REASONING = { effort: null, budget: null };
 const TRIP_DAY = { day: '2026-11-06', model_name: 'Qwen3-4B', gglib_version: '0.31.0', mode: 'note', scanned: 9, trips: 1, loops: 1, stagnations: 0, sessions: 1 };
 
 const live = () => screen.getByRole('tabpanel', { name: 'Live' });
@@ -298,6 +312,39 @@ describe('the diagnostics place', () => {
       );
     });
 
+    const NONE = dashboardSnapshot();
+    it.each<[string, Partial<DashboardSnapshot>]>([
+      ['Requests', { active_connections: [activeConnection()] }],
+      ['Requests', { recent_requests: [recentRequest()] }],
+      ['Loaded and queue', { admission: { ...NONE.admission, slots: [residentSlot(1, 'Qwen3-4B')] } }],
+      ['Loaded and queue', { admission: { ...NONE.admission, queued: [{ model_name: 'Qwen3-4B', waiting: 1, oldest_wait_ms: 4000 }] } }],
+      ['Loaded and queue', { admission: { ...NONE.admission, generation: { render: { model_name: 'flux', step: 1, total: 20 }, llm_inflight: 0, waiting: 0 } } }],
+      ['Loaded and queue', { admission: { ...NONE.admission, generation: { render: null, llm_inflight: 0, waiting: 2 } } }],
+      ['Loaded and queue', { admission: { ...NONE.admission, total_queued: 3 } }],
+      ['Loaded and queue', { admission: { ...NONE.admission, total_swaps: 1 } }],
+      ['Agent cache', { agent_usage: { ...NONE.agent_usage, reporting_requests: 1 } }],
+      ['Agent cache', { agent_usage: { ...NONE.agent_usage, unreported_requests: 1 } }],
+      ['Sampling readback', { sampling_audit: samplingAudit({ state: { state: 'comparing', comparisons: 2, divergences: 0 } }) }],
+      ['Sampling readback', { sampling_audit: samplingAudit({ baseline: { state: 'unreadable', reason: '/props timed out' } }) }],
+      ['Sampling readback', { sampling_audit: samplingAudit({ client_fields_discarded: 1 }) }],
+      ['Sampling readback', { sampling_audit: samplingAudit({ client_fields_rejected: 1 }) }],
+      ['Sampling readback', { sampling_audit: samplingAudit({ reasoning: { ...samplingAudit().reasoning, latest: LATEST_REASONING } }) }],
+      ['Slots', { slots_available: true, slots_status: null, slots: [slotSnapshot()] }],
+      ['Slots', { slots_status: 'slots are disabled (--no-slots)', admission: { ...NONE.admission, slots: [residentSlot(1, 'Qwen3-4B')] } }],
+    ])('draws %s from one minimal frame, which folds it when empty', async (name, overrides) => {
+      renderAt('/diagnostics/live');
+      await frame(overrides);
+      expect(sectionNames()).toContain(name);
+      expect(fold()).not.toHaveTextContent(name);
+    });
+
+    it('folds Slots while llama.cpp reports none, with nothing loaded and no reason', async () => {
+      renderAt('/diagnostics/live');
+      await frame({ slots_available: true, slots_status: null, slots: [] });
+      expect(sectionNames()).not.toContain('Slots');
+      expect(fold()).toHaveTextContent('Slots');
+    });
+
     it('Requests: in flight with its phase, then every request kept, newest first, and the total', async () => {
       renderAt('/diagnostics/live');
       await frame({
@@ -338,6 +385,53 @@ describe('the diagnostics place', () => {
       await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('Prompt cache cleared'));
     });
 
+    it('Clear is off while its clear is on its way, and a failed clear says why', async () => {
+      let answer: (v: { status: string; message: string }) => void = () => {};
+      dashboard.clear.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+      const { user } = renderAt('/diagnostics/live');
+      await frame({ cache: CACHE });
+      const clearButton = () => within(screen.getByRole('region', { name: 'Prompt cache' })).getByRole('button', { name: 'Clear' });
+      await waitFor(() => expect(clearButton()).toBeEnabled());
+      await user.click(clearButton());
+      expect(clearButton()).toBeDisabled();
+      await act(async () => answer({ status: 'ok', message: '' }));
+      await waitFor(() => expect(clearButton()).toBeEnabled());
+      // No message from the proxy: the fallback.
+      expect(screen.getByTestId('toasts')).toHaveTextContent('Prompt cache cleared');
+
+      dashboard.clear.mockImplementationOnce(async () => Promise.reject(new Error('the proxy refused: no model loaded')));
+      await user.click(clearButton());
+      await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('the proxy refused: no model loaded'));
+    });
+
+    it('a failed loop-guard read stays drawn with Retry, through its read, until the log lands', async () => {
+      let land: (days: unknown[]) => void = () => {};
+      reads.trips.mockImplementationOnce(async () => Promise.reject(new Error('daemon unreachable')));
+      const { user } = renderAt('/diagnostics/live');
+      const region = await screen.findByRole('region', { name: 'Loop-guard trips' });
+      expect(reads.trips).toHaveBeenCalledWith(30);
+      expect(region).toHaveTextContent('daemon unreachable');
+
+      reads.trips.mockImplementationOnce(() => new Promise((resolve) => (land = resolve)));
+      await user.click(within(region).getByRole('button', { name: 'Retry' }));
+      expect(screen.getByRole('region', { name: 'Loop-guard trips' })).toHaveTextContent("Reading the loop guard's log…");
+      expect(screen.queryByText(/^Nothing yet: .*Loop-guard trips/)).not.toBeInTheDocument();
+
+      await act(async () => land([TRIP_DAY]));
+      const rows = within(screen.getByRole('region', { name: 'Loop-guard trips' })).getAllByRole('row');
+      expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['2026-11-06', 'Qwen3-4B', '0.31.0', 'note', '9', '1', '1', '0', '1']);
+    });
+
+    it('Tune activity is the tune runs alone, newest eight', async () => {
+      const tunes = Array.from({ length: 9 }, (_, i) => ({ ...TUNE_RUN, id: 50 - i }));
+      reads.runs.mockImplementation(async () => [{ ...TUNE_RUN, id: 60, run_type: 'perf' }, ...tunes]);
+      renderAt('/diagnostics/live');
+      const tune = await screen.findByRole('region', { name: 'Tune activity' });
+      expect(within(tune).getAllByText(/^run #\d+$/).map((r) => r.textContent)).toEqual(
+        ['run #50', 'run #49', 'run #48', 'run #47', 'run #46', 'run #45', 'run #44', 'run #43'],
+      );
+    });
+
     it('while the endpoint is off, says so, opens no stream, and still shows the reads', async () => {
       reads.trips.mockImplementation(async () => [TRIP_DAY]);
       renderAt('/diagnostics/live', DOWN);
@@ -346,12 +440,15 @@ describe('the diagnostics place', () => {
       expect(dashboard.opened).not.toHaveBeenCalled();
     });
 
-    it('before the first frame, says it is reading', async () => {
+    it('before the first frame, says it is reading, and folds only the reads', async () => {
       renderAt('/diagnostics/live');
       await waitFor(() => expect(dashboard.send).not.toBeNull());
+      await waitFor(() => expect(reads.trips).toHaveBeenCalled());
       expect(screen.getByText("Reading the endpoint's numbers…")).toBeInTheDocument();
+      expect(fold()).toHaveTextContent(/^Nothing yet: Tune activity · Loop-guard trips\.$/);
       await frame();
       expect(screen.queryByText("Reading the endpoint's numbers…")).not.toBeInTheDocument();
+      expect(fold()).toHaveTextContent(/^Nothing yet: Requests · /);
     });
 
     it("opens no second stream beside another surface's (TX-1)", async () => {
@@ -401,7 +498,7 @@ describe('the diagnostics place', () => {
         'Port 9001',
         'Uptime 1m 00s',
         'Context 8,192 tokens',
-        'KV use 1,024 of 4,096 tokens · 25%',
+        'KV use · slot 0 1,024 of 4,096 tokens · 25%',
         'Writing 34 t/s',
         'Active requests 2',
       ]);
@@ -416,6 +513,32 @@ describe('the diagnostics place', () => {
 
       stop(2);
       await waitFor(() => expect(picker).toHaveValue('1'));
+      // Its next load does not take the picker back to it.
+      serve(2, 'Gemma-3-4B-It', 9002);
+      await waitFor(() => expect(within(picker).getAllByRole('option')).toHaveLength(2));
+      expect(picker).toHaveValue('1');
+    });
+
+    it("gives each of the primary's slots its own KV use, as the CLI prints them, and none whose size is unknown", async () => {
+      serve(1, 'Qwen3-4B', 9001);
+      renderAt('/diagnostics/logs');
+      await frame({
+        admission: { ...dashboardSnapshot().admission, slots: [residentSlot(1, 'Qwen3-4B')] },
+        slots_available: true,
+        slots_status: null,
+        slots: [
+          slotSnapshot({ id: 0, n_ctx: 4096, n_prompt_tokens: 1000, next_token: { n_decoded: 24 } }),
+          slotSnapshot({ id: 1, n_ctx: null, n_prompt_tokens: 500 }),
+          slotSnapshot({ id: 2, n_ctx: 4096, n_prompt_tokens: 2048 }),
+        ],
+      });
+      const facts = screen.getByRole('complementary', { name: 'Facts' });
+      await waitFor(() => expect(within(facts).getAllByRole('term').length).toBeGreaterThan(1));
+      const kv = within(facts)
+        .getAllByRole('term')
+        .filter((t) => t.textContent?.startsWith('KV use'))
+        .map((t) => `${t.textContent} ${t.nextElementSibling?.textContent}`);
+      expect(kv).toEqual(['KV use · slot 0 1,024 of 4,096 tokens · 25%', 'KV use · slot 2 2,048 of 4,096 tokens · 50%']);
     });
 
     it('with the endpoint off, gives the port alone', async () => {
@@ -452,6 +575,28 @@ describe('the diagnostics place', () => {
       await user.click(within(modes).getByRole('tab', { name: 'Agentic' }));
       expect(screen.getByTestId('agentic')).toBeInTheDocument();
       expect(screen.queryByTestId('tune')).not.toBeInTheDocument();
+    });
+
+    it('once opened, stays mounted under another tab, so a run in flight is not aborted', async () => {
+      perfMounts.mounted = 0;
+      perfMounts.unmounted = 0;
+      const { user } = renderAt('/diagnostics/live');
+      expect(screen.queryByTestId('perf-compare')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'Benchmarks' }));
+      await screen.findByTestId('perf-compare');
+      expect(perfMounts.mounted).toBe(1);
+
+      await user.click(screen.getByRole('tab', { name: 'Live' }));
+      expect(screen.getByRole('tabpanel', { name: 'Live' })).toBeInTheDocument();
+      expect(screen.queryByRole('tabpanel', { name: 'Benchmarks' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('perf-compare')).not.toBeVisible();
+      await user.click(screen.getByRole('tab', { name: 'Logs' }));
+      expect(perfMounts.unmounted).toBe(0);
+
+      await user.click(screen.getByRole('tab', { name: 'Benchmarks' }));
+      expect(screen.getByTestId('perf-compare')).toBeVisible();
+      expect(screen.queryByRole('tabpanel', { name: 'Logs' })).not.toBeInTheDocument();
+      expect(perfMounts).toEqual({ mounted: 1, unmounted: 0 });
     });
 
     it('Recent Runs is read on opening and after a run, with no Refresh', async () => {

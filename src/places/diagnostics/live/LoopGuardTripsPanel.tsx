@@ -29,15 +29,15 @@ const COLUMNS = [
   'Sessions',
 ];
 
-/** The log as `useLoopGuardTrips` holds it, which the Live tab reads to know whether to draw it. */
+/**
+ * The log as `useLoopGuardTrips` holds it. The Live tab draws it only once
+ * it holds a day or an error, so an empty log is never drawn here.
+ */
 export const LoopGuardTripsPanel: FC<{ state: LoopGuardTripsState }> = ({ state }) => {
   const { days, loading, error, reload } = state;
 
-  if (loading && !days) {
-    return <p className="text-xs text-text-muted m-0">Reading the loop guard&apos;s log…</p>;
-  }
-
-  if (error) {
+  // A failed read, until a read lands; Retry's read in flight says so.
+  if (error && !loading) {
     return (
       <Banner
         variant="danger"
@@ -52,7 +52,9 @@ export const LoopGuardTripsPanel: FC<{ state: LoopGuardTripsState }> = ({ state 
     );
   }
 
-  if (!days) return null;
+  if (days === null) {
+    return <p className="text-xs text-text-muted m-0">Reading the loop guard&apos;s log…</p>;
+  }
 
   return (
     <section aria-label="Loop guard log">
@@ -68,44 +70,37 @@ export const LoopGuardTripsPanel: FC<{ state: LoopGuardTripsState }> = ({ state 
           Refresh
         </Button>
       </div>
-      {days.length === 0 ? (
-        <p className="m-0 text-xs text-text-muted">
-          Nothing scanned in the last {LOOP_GUARD_LOG_DAYS} days — the guard is off, or no request
-          reached it.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="text-left text-text-muted border-b border-border">
-                {COLUMNS.map((column) => (
-                  <th key={column} className="px-xs py-2xs font-semibold">
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {days.map((d) => (
-                <tr
-                  key={`${d.day}|${d.model_name}|${d.gglib_version}|${d.mode}`}
-                  className="border-b border-border-light"
-                >
-                  <td className="px-xs py-2xs font-mono tabular-nums">{d.day}</td>
-                  <td className="px-xs py-2xs font-mono">{d.model_name}</td>
-                  <td className="px-xs py-2xs font-mono">{d.gglib_version}</td>
-                  <td className="px-xs py-2xs">{d.mode}</td>
-                  <td className="px-xs py-2xs tabular-nums">{d.scanned}</td>
-                  <td className="px-xs py-2xs tabular-nums">{d.trips}</td>
-                  <td className="px-xs py-2xs tabular-nums">{d.loops}</td>
-                  <td className="px-xs py-2xs tabular-nums">{d.stagnations}</td>
-                  <td className="px-xs py-2xs tabular-nums">{d.sessions}</td>
-                </tr>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="text-left text-text-muted border-b border-border">
+              {COLUMNS.map((column) => (
+                <th key={column} className="px-xs py-2xs font-semibold">
+                  {column}
+                </th>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </tr>
+          </thead>
+          <tbody>
+            {days.map((d) => (
+              <tr
+                key={`${d.day}|${d.model_name}|${d.gglib_version}|${d.mode}`}
+                className="border-b border-border-light"
+              >
+                <td className="px-xs py-2xs font-mono tabular-nums">{d.day}</td>
+                <td className="px-xs py-2xs font-mono">{d.model_name}</td>
+                <td className="px-xs py-2xs font-mono">{d.gglib_version}</td>
+                <td className="px-xs py-2xs">{d.mode}</td>
+                <td className="px-xs py-2xs tabular-nums">{d.scanned}</td>
+                <td className="px-xs py-2xs tabular-nums">{d.trips}</td>
+                <td className="px-xs py-2xs tabular-nums">{d.loops}</td>
+                <td className="px-xs py-2xs tabular-nums">{d.stagnations}</td>
+                <td className="px-xs py-2xs tabular-nums">{d.sessions}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="m-0 mt-xs text-xs text-text-muted">
         A trip is the guard&apos;s decision, not a delivery: a noted request can still fail to
         reach the model.

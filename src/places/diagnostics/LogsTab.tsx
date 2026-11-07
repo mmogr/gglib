@@ -2,9 +2,9 @@
  * Diagnostics › Logs: a loaded model's llama-server output (the Log
  * subject's panel, `inspector/log/ConsoleLogPanel`), picked from the models
  * loaded now, with its facts in a column beside it (`logFacts`). The first
- * loaded model is picked until another is; a pick that unloads falls back
- * to the first again. With nothing loaded, one sentence says when a log
- * shows.
+ * loaded model is picked until another is; a pick that unloads is
+ * forgotten, and the first is picked again. With nothing loaded, one
+ * sentence says when a log shows.
  *
  * @module places/diagnostics/LogsTab
  */
@@ -21,7 +21,10 @@ export function LogsTab() {
   const { snapshot } = useEndpointDashboard();
   const [picked, setPicked] = useState<number | null>(null);
   const loaded = servers.filter((s) => s.status === 'running' && s.port > 0);
-  const server = loaded.find((s) => s.modelId === picked) ?? loaded[0];
+  const pick = loaded.find((s) => s.modelId === picked);
+  // A pick that unloads is forgotten, so its next load does not take the picker back.
+  if (picked !== null && pick === undefined) setPicked(null);
+  const server = pick ?? loaded[0];
 
   if (server === undefined) {
     return (

@@ -108,7 +108,7 @@ const RECENT_SHOWN = 5;
 export function recentRows(snapshot: DashboardSnapshot | null, shown = RECENT_SHOWN): RecentRow[] {
   const recent = snapshot?.recent_requests ?? [];
   return recent
-    .slice(-Math.min(shown, recent.length))
+    .slice(-shown)
     .reverse()
     .map((r, i) => {
       const rate = requestRate(r);

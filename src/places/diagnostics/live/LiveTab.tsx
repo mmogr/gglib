@@ -15,14 +15,13 @@
  * @module places/diagnostics/live/LiveTab
  */
 
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Button } from '../../../components/ui/Button';
-import { useToastContext } from '../../../contexts/ToastContext';
-import { clearProxyCache } from '../../../services/clients/proxyDashboard';
 import { formatCount } from '../../../utils/format';
-import { formatError } from '../../../utils/errors';
+import { useClearCache } from '../../endpoint/useClearCache';
 import { Group, Note } from '../../library/Group';
 import { useEndpointDashboard } from '../../library/useResidency';
+import type { DashboardSnapshot } from '../../../services/transport/types/dashboard';
 import { LoopGuardTripsPanel } from './LoopGuardTripsPanel';
 import { ProxyAdmissionPanel } from './ProxyAdmissionPanel';
 import { CacheUsageRows, ProxyCachePanel } from './ProxyCachePanel';
@@ -42,69 +41,71 @@ import {
 import { TuneActivityCard, useTuneActivity } from './TuneActivityCard';
 import { useLoopGuardTrips } from './useLoopGuardTrips';
 
-interface Section {
+/** A section read from the frame, drawn only once there is one. */
+interface FrameSection {
   name: string;
+  frame: true;
+  has: (s: DashboardSnapshot) => boolean;
+  aside?: (s: DashboardSnapshot) => ReactNode;
+  body: (s: DashboardSnapshot) => ReactNode;
+}
+
+/** A section from one of the daemon's reads, drawn whatever the endpoint does. */
+interface ReadSection {
+  name: string;
+  frame: false;
   has: boolean;
-  aside?: ReactNode;
   body: () => ReactNode;
 }
 
 export function LiveTab() {
   const dash = useEndpointDashboard();
-  const { showToast } = useToastContext();
   const tune = useTuneActivity();
   const trips = useLoopGuardTrips();
-  const [clearing, setClearing] = useState(false);
+  const cache = useClearCache(dash);
   const s = dash.snapshot;
 
-  // Clear presents the proxy's key, so it waits for the reveal.
-  const canClear = dash.port !== null && dash.apiKey !== undefined;
-  const clear = async () => {
-    if (dash.port === null || dash.apiKey === undefined) return;
-    setClearing(true);
-    try {
-      const result = await clearProxyCache(dash.host, dash.port, dash.apiKey);
-      showToast(result.message || 'Prompt cache cleared', 'success');
-    } catch (err) {
-      showToast(formatError(err), 'error');
-    } finally {
-      setClearing(false);
-    }
-  };
-
-  const sections: Section[] = [
+  const sections: (FrameSection | ReadSection)[] = [
     {
       name: 'Requests',
-      has: hasRequests(s),
-      aside: s && <span className="font-normal tabular-nums">{`${formatCount(s.total_requests)} since the endpoint turned on`}</span>,
-      body: () => <RequestsSection snapshot={s} />,
+      frame: true,
+      has: hasRequests,
+      aside: (f) => <span className="font-normal tabular-nums">{`${formatCount(f.total_requests)} since the endpoint turned on`}</span>,
+      body: (f) => <RequestsSection snapshot={f} />,
     },
-    { name: 'Loaded and queue', has: hasLoaded(s), body: () => <ProxyAdmissionPanel admission={s?.admission} /> },
-    { name: 'Launch decisions', has: hasLaunch(s), body: () => <ProxyLaunchPanel launch={s?.launch} /> },
+    { name: 'Loaded and queue', frame: true, has: hasLoaded, body: (f) => <ProxyAdmissionPanel admission={f.admission} /> },
+    { name: 'Launch decisions', frame: true, has: hasLaunch, body: (f) => <ProxyLaunchPanel launch={f.launch} /> },
     {
       name: 'Prompt cache',
-      has: hasPromptCache(s),
-      aside: (
-        <Button variant="link" size="sm" className="text-xs font-normal" disabled={!canClear || clearing} onClick={() => void clear()}>
+      frame: true,
+      has: hasPromptCache,
+      aside: () => (
+        <Button variant="link" size="sm" className="text-xs font-normal" disabled={!cache.canClear || cache.clearing} onClick={() => void cache.clear()}>
           Clear
         </Button>
       ),
-      body: () => <ProxyCachePanel cache={s?.cache} />,
+      body: (f) => <ProxyCachePanel cache={f.cache} />,
     },
     // A separate population from the proxied figure above: GUI-chat runs
     // talk to llama-server directly, so their reuse is never averaged in.
-    { name: 'Agent cache', has: hasAgentCache(s), body: () => <CacheUsageRows usage={s?.agent_usage} /> },
-    { name: 'Sampling readback', has: hasSampling(s), body: () => <ProxySamplingPanel audit={s?.sampling_audit} /> },
-    { name: 'Per-model signals', has: hasSignals(s), body: () => <ModelSignalsSection snapshot={s} /> },
-    { name: 'Tune activity', has: (tune?.length ?? 0) > 0, body: () => <TuneActivityCard entries={tune ?? []} /> },
-    { name: 'Slots', has: hasSlots(s), body: () => <SlotsSection snapshot={s} /> },
+    { name: 'Agent cache', frame: true, has: hasAgentCache, body: (f) => <CacheUsageRows usage={f.agent_usage} /> },
+    { name: 'Sampling readback', frame: true, has: hasSampling, body: (f) => <ProxySamplingPanel audit={f.sampling_audit} /> },
+    { name: 'Per-model signals', frame: true, has: hasSignals, body: (f) => <ModelSignalsSection snapshot={f} /> },
+    { name: 'Tune activity', frame: false, has: tune !== null && tune.length > 0, body: () => <TuneActivityCard entries={tune ?? []} /> },
+    { name: 'Slots', frame: true, has: hasSlots, body: (f) => <SlotsSection snapshot={f} /> },
     {
       name: 'Loop-guard trips',
+      frame: false,
+      // A failed read stays drawn, through its Retry's read, until one lands.
       has: (trips.days?.length ?? 0) > 0 || trips.error !== null,
       body: () => <LoopGuardTripsPanel state={trips} />,
     },
   ];
-  const empty = sections.filter((x) => !x.has).map((x) => x.name);
+  // Without a frame the frame sections are not said to be empty: the line
+  // above says why there is none.
+  const empty = sections
+    .filter((x) => (x.frame ? s !== null && !x.has(s) : !x.has))
+    .map((x) => x.name);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -114,13 +115,20 @@ export function LiveTab() {
         ) : (
           s === null && <Note>Reading the endpoint&apos;s numbers…</Note>
         )}
-        {sections
-          .filter((x) => x.has)
-          .map((x) => (
-            <Group key={x.name} label={x.name} aside={x.aside}>
+        {sections.map((x) => {
+          if (x.frame) {
+            return s !== null && x.has(s) ? (
+              <Group key={x.name} label={x.name} aside={x.aside?.(s)}>
+                <div className="px-md">{x.body(s)}</div>
+              </Group>
+            ) : null;
+          }
+          return x.has ? (
+            <Group key={x.name} label={x.name}>
               <div className="px-md">{x.body()}</div>
             </Group>
-          ))}
+          ) : null;
+        })}
         {empty.length > 0 && <Note>{`Nothing yet: ${empty.join(' · ')}.`}</Note>}
       </div>
     </div>

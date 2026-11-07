@@ -92,6 +92,7 @@ only while it can act (the endpoint up and its key revealed), and a row's
 | `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what gglib did; All ›; not drawn when empty |
 | `Activity.tsx` | ▸ Activity: the dashboard's other sections as sentences, Clear prompt cache, Live numbers › |
 | `lines.ts` | Pure: the loaded rows, the queue's lines, the room line, the recent rows, the cache's reuse and the activity sentences, from one dashboard frame |
+| `useClearCache.ts` | Clear prompt cache with the revealed key, its toast either way; also Diagnostics › Live's Clear |
 | `useEndpointActions.ts` | Turn on (no port), Turn off, serve one model or every model (stop, then start), and Test it, with the daemon's message for a failure |
 
 <!-- module-docs:end -->

@@ -12,13 +12,17 @@ when the tab opens.
 Sections, each drawn only when it has something (`sections.ts`), in this
 order: Requests (in flight, then every request the proxy keeps, newest
 first, and the total since the endpoint turned on), Loaded and queue (the
-residents, swaps, requests admitted, the second slot's sentence in full),
-Launch decisions, Prompt cache (with Clear, which presents the revealed
-key), Agent cache, Sampling readback, Per-model signals, Tune activity,
+residents, swaps, requests admitted, the second slot's sentence in full;
+kept while its counters are above zero after an unload),
+Launch decisions, Prompt cache (with Clear, the endpoint place's own
+`useClearCache`, which presents the revealed key), Agent cache, Sampling readback, Per-model signals, Tune activity,
 Slots (llama.cpp's slots on the primary as bars with their tokens and
 percent, or the proxy's reason it reports none while a model is loaded),
 Loop-guard trips (the last 30 days, the window `gglib proxy trips` reads by
-default). The names of the sections with nothing fold into one 12 px line.
+default; a failed read stays drawn through its Retry's read). The names of
+the sections with nothing fold into one 12 px line; before the first frame,
+or with the endpoint off, the frame sections are left out of it, since a
+line above says why there is no frame.
 
 The panels are presentational: the frame, or the read's state, arrives as
 a prop.
@@ -27,6 +31,7 @@ a prop.
 |------|------|
 | `LiveTab.tsx` | The tab: the stream, the two reads, Clear, the sections in order and the folded line |
 | `sections.ts` | Whether each frame section has anything to show |
+| `slotContext.ts` | One slot's context, tokens of its own size and the percent, as the CLI prints it slot by slot |
 | `ProxyMetricsGrid.tsx` | `RequestsSection`, `SlotsSection` and `ModelSignalsSection`, drawn from the frame |
 | `ConnectionRow.tsx` | One in-flight request: model name, phase, and a prompt-progress bar while the prompt is being processed |
 | `ModelSignalsCard.tsx` | One model's per-model signals, under the rules `gglib proxy dashboard` prints them by: only what fired, repairs as a ratio, trips by detector, agent-path trips against their own decisions, the repeat counters under "Observed" |

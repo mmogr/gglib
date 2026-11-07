@@ -33,7 +33,6 @@ import { useSettings } from '../../hooks/useSettings';
 import { usePairedModels } from '../../hooks/usePairedModels';
 import { useServers, type ServerViewModel } from '../../hooks/useServers';
 import { Inspector } from '../../inspector/Inspector';
-import { clearProxyCache } from '../../services/clients/proxyDashboard';
 import { removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
 import { useModelLibrary } from '../../services/modelRegistry';
 import { useEndpointFacts } from '../../services/proxyRegistry';
@@ -46,6 +45,7 @@ import { Header } from './Header';
 import { Loaded } from './Loaded';
 import { Recent } from './Recent';
 import { Serves } from './Serves';
+import { useClearCache } from './useClearCache';
 import { useEndpointActions } from './useEndpointActions';
 import { UsingIt } from './UsingIt';
 
@@ -62,7 +62,6 @@ export default function EndpointPlace() {
   const { status: remote } = useRemoteState();
   const { settings } = useSettings();
   const [picked, setPicked] = useState<number | null>(null);
-  const [clearing, setClearing] = useState(false);
   const connectRef = useRef<HTMLDivElement>(null);
 
   const subject = inspectorSubject(location);
@@ -80,20 +79,10 @@ export default function EndpointPlace() {
   const toLive = () => navigate(paths.diagnostics('live'));
 
   const unload = (id: number) => void stopServer(id).catch((err) => showToast(formatError(err), 'error'));
-  // Clear presents the proxy's key, so it waits for the reveal.
-  const canClear = up && dash.port !== null && dash.apiKey !== undefined;
-  const clear = async () => {
-    if (!canClear || dash.port === null) return;
-    setClearing(true);
-    try {
-      const result = await clearProxyCache(dash.host, dash.port, dash.apiKey ?? null);
-      showToast(result.message || 'Prompt cache cleared', 'success');
-    } catch (err) {
-      showToast(formatError(err), 'error');
-    } finally {
-      setClearing(false);
-    }
-  };
+  // Clear presents the proxy's key, so it waits for the reveal; and only while the endpoint is up.
+  const cache = useClearCache(dash);
+  const canClear = up && cache.canClear;
+  const clear = () => (canClear ? cache.clear() : Promise.resolve());
 
   // A model started for a chat opens its chat, with the port it was served on.
   const handleServerStarted = (server: ServerViewModel) => {
@@ -138,7 +127,7 @@ export default function EndpointPlace() {
           )}
           {up && snapshot && <Recent snapshot={snapshot} onAll={toLive} />}
           {up && snapshot && (
-            <Activity snapshot={snapshot} clearing={clearing} canClear={canClear} onClear={() => void clear()} onLive={toLive} />
+            <Activity snapshot={snapshot} clearing={cache.clearing} canClear={canClear} onClear={() => void clear()} onLive={toLive} />
           )}
         </div>
       </section>

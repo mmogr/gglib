@@ -5,11 +5,13 @@
  *
  * Benchmarks reads `?models=` for the models picked to run (a model's
  * ⋯ Benchmark… sends them), and its code loads only when the tab opens.
+ * Once opened it stays mounted, hidden while another tab is open, so a
+ * run in flight is not aborted by a look at Live or Logs.
  *
  * @module places/diagnostics/DiagnosticsPlace
  */
 
-import { lazy, Suspense, type FC } from 'react';
+import { lazy, Suspense, useState, type FC } from 'react';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router';
 import { benchmarkModelIds, DIAGNOSTICS_TABS, diagnosticsTab, paths, type DiagnosticsTab } from '../../app/paths';
 import { StatusMark } from '../../components/status/StatusMark';
@@ -50,18 +52,20 @@ function SystemTab() {
   );
 }
 
-const CONTENT: Readonly<Record<DiagnosticsTab, FC>> = {
+/** The tabs drawn afresh each time they open; Benchmarks is kept (below). */
+const CONTENT: Readonly<Record<Exclude<DiagnosticsTab, 'benchmarks'>, FC>> = {
   live: LiveTab,
   logs: LogsTab,
-  benchmarks: BenchmarksTab,
   system: SystemTab,
 };
 
 export default function DiagnosticsPlace() {
   const tab = diagnosticsTab(useParams().tab);
   const navigate = useNavigate();
+  const [benchmarksOpened, setBenchmarksOpened] = useState(false);
+  if (tab === 'benchmarks' && !benchmarksOpened) setBenchmarksOpened(true);
   if (tab === null) return <Navigate to={paths.diagnostics()} replace />;
-  const Content = CONTENT[tab];
+  const Content = tab === 'benchmarks' ? null : CONTENT[tab];
 
   return (
     <section aria-label="Diagnostics" className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -75,9 +79,16 @@ export default function DiagnosticsPlace() {
         onChange={(id) => navigate(paths.diagnostics(id))}
         tabs={DIAGNOSTICS_TABS.map((id) => ({ id, label: TAB_NAMES[id] }))}
       />
-      <div role="tabpanel" aria-label={TAB_NAMES[tab]} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <Content key={tab} />
-      </div>
+      {Content && (
+        <div role="tabpanel" aria-label={TAB_NAMES[tab]} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <Content key={tab} />
+        </div>
+      )}
+      {benchmarksOpened && (
+        <div role="tabpanel" aria-label={TAB_NAMES.benchmarks} hidden={tab !== 'benchmarks'} className="min-h-0 flex-1 flex-col overflow-hidden [&:not([hidden])]:flex">
+          <BenchmarksTab />
+        </div>
+      )}
     </section>
   );
 }

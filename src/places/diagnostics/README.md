@@ -13,12 +13,14 @@ Live; a model's ⋯ Benchmark… opens Benchmarks with `?models=` picking it.
   stream, each section only when it has something, the rest folded into one
   line.
 - **Logs**: a loaded model's llama-server output, picked from the models
-  loaded now, with its port, uptime, context, KV use (the primary model
-  only), writing rate and active requests beside it, each only when the
-  daemon has it. With nothing loaded, one sentence.
+  loaded now, with its port, uptime, context, each llama.cpp slot's KV use
+  (the primary model only, slot by slot as the CLI prints them), writing
+  rate and active requests beside it, each only when the daemon has it. A
+  pick that unloads is forgotten. With nothing loaded, one sentence.
 - **Benchmarks** (`benchmarks/`): Perf, Compare, Tune and Agentic as
   segmented tabs, Recent Runs under them, read on opening and after a run.
-  Its code loads when the tab opens.
+  Its code loads when the tab opens, and once opened it stays mounted,
+  hidden under another tab, so a run in flight survives a look elsewhere.
 - **System**: `gglib config check-deps`, `paths` and `fast-downloads
   status`: dependencies, acceleration, paths, the download accelerator, and
   Re-check.
@@ -33,10 +35,12 @@ Words with no Rust twin: the tab names "Live", "Logs", "Benchmarks",
 "System"; "Diagnostics"; Live's section names "Requests", "Loaded and
 queue", "Launch decisions", "Prompt cache", "Agent cache", "Sampling
 readback", "Per-model signals", "Tune activity", "Slots", "Loop-guard
-trips"; "<n> since the endpoint turned on", "Clear", "Nothing yet: <names>.",
+trips"; "<n> since the endpoint turned on", "Clear", "Prompt cache cleared"
+(when the proxy's answer has no message), "Nothing yet: <names>.", "In
+flight", "Recent requests", "Slot <n> context",
 "The endpoint is off. Its live numbers show while it is on.", "Reading the
 endpoint's numbers…", "Slot <n> · active", "<used> of <size> tokens · <n>%",
-"context unknown"; Logs' "Model", "Port", "Uptime", "Context", "KV use",
+"context unknown"; Logs' "Facts", "Model", "Port", "Uptime", "Context", "KV use · slot <n>",
 "Writing", "Active requests", "<n> tokens", "Nothing is loaded. A model's
 log shows here while it is loaded."; "Loading".
 

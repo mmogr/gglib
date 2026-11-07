@@ -7,17 +7,15 @@
  */
 
 import type { FC } from 'react';
-import { tokensInUse } from '../../../services/transport/slotTokens';
 import type { DashboardSnapshot } from '../../../services/transport/types/dashboard';
-import { usagePercent } from '../../../utils/contextUsage';
-import { formatCount } from '../../../utils/format';
 import { recentRows } from '../../endpoint/lines';
 import { ConnectionRow } from './ConnectionRow';
 import { ModelSignalsCard, countOf, hasSignal } from './ModelSignalsCard';
+import { slotContext, slotContextWords } from './slotContext';
 
 interface SectionProps {
-  /** Latest dashboard snapshot, or `null` before the first event arrives. */
-  snapshot: DashboardSnapshot | null;
+  /** The latest dashboard frame. */
+  snapshot: DashboardSnapshot;
 }
 
 /**
@@ -26,7 +24,7 @@ interface SectionProps {
  * its tokens, its rate and what gglib did to it in the proxy's words.
  */
 export const RequestsSection: FC<SectionProps> = ({ snapshot }) => {
-  const connections = snapshot?.active_connections ?? [];
+  const connections = snapshot.active_connections;
   const rows = recentRows(snapshot, Infinity);
   return (
     <div className="flex flex-col gap-sm">
@@ -62,33 +60,30 @@ export const RequestsSection: FC<SectionProps> = ({ snapshot }) => {
  * proxy's reason for it.
  */
 export const SlotsSection: FC<SectionProps> = ({ snapshot }) => {
-  if (!snapshot?.slots_available || snapshot.slots.length === 0) {
-    return <p className="m-0 text-xs text-text-secondary">{snapshot?.slots_status}</p>;
+  if (!snapshot.slots_available || snapshot.slots.length === 0) {
+    return <p className="m-0 text-xs text-text-secondary">{snapshot.slots_status}</p>;
   }
   return (
     <ul aria-label="Slots" className="m-0 flex list-none flex-col gap-sm p-0">
       {snapshot.slots.map((slot) => {
-        const used = tokensInUse(slot);
-        const size = slot.n_ctx;
-        const known = used !== null && size !== null && size > 0;
-        const percent = known ? usagePercent(used, size) : 0;
+        const context = slotContext(slot);
         return (
           <li key={slot.id} className="flex flex-col gap-xs text-xs text-text-secondary tabular-nums">
             <span className="flex justify-between gap-md">
               <span className="text-text">{`Slot ${slot.id}${slot.is_processing ? ' · active' : ''}`}</span>
-              <span>{known ? `${formatCount(used)} of ${formatCount(size)} tokens · ${percent}%` : 'context unknown'}</span>
+              <span>{context ? slotContextWords(context) : 'context unknown'}</span>
             </span>
-            {known && (
+            {context && (
               <span
                 role="progressbar"
                 aria-label={`Slot ${slot.id} context`}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={percent}
+                aria-valuenow={context.percent}
                 className="block h-[2px] w-full overflow-hidden rounded-full bg-surface-elevated"
               >
                 {/* Dynamic: the bar's fill is the slot's share of its context. */}
-                <span className="block h-full bg-text-secondary" style={{ width: `${percent}%` }} />
+                <span className="block h-full bg-text-secondary" style={{ width: `${context.percent}%` }} />
               </span>
             )}
           </li>
@@ -104,13 +99,11 @@ export const SlotsSection: FC<SectionProps> = ({ snapshot }) => {
  *
  * Only a model with something to report gets a card, since listing every
  * clean one would bury the one that is not. A clean run says so over its
- * denominator, and a run that has recorded nothing says that instead: "none"
- * is a claim only evidence earns. Nothing at all before the first snapshot.
- * Cards come in name order, as the CLI's do: the proxy sends a hash map, and
+ * denominator; Live draws this only once a model has been counted, so
+ * "none" is always a claim over evidence. Cards come in name order, as the CLI's do: the proxy sends a hash map, and
  * its order can change from one frame to the next.
  */
 export const ModelSignalsSection: FC<SectionProps> = ({ snapshot }) => {
-  if (!snapshot) return null;
   const perModel = Object.entries(snapshot.per_model_defects).sort(([a], [b]) =>
     a < b ? -1 : a > b ? 1 : 0,
   );
@@ -130,11 +123,7 @@ export const ModelSignalsSection: FC<SectionProps> = ({ snapshot }) => {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-text-muted">
-          {perModel.length === 0
-            ? 'Nothing recorded yet.'
-            : `None across ${across}, ${countOf(perModel.length, 'model')}.`}
-        </p>
+        <p className="text-sm text-text-muted">{`None across ${across}, ${countOf(perModel.length, 'model')}.`}</p>
       )}
     </div>
   );

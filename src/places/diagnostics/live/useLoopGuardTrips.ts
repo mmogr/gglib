@@ -29,11 +29,16 @@ export function useLoopGuardTrips(): LoopGuardTripsState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // The error is cleared when an answer lands, not when the read starts:
+  // the Live tab draws the log while it holds days or an error, so a Retry
+  // that cleared it first would fold the section away under its button.
   const reload = useCallback(() => {
     setLoading(true);
-    setError(null);
     return getLoopGuardTrips(LOOP_GUARD_LOG_DAYS)
-      .then(setDays)
+      .then((read) => {
+        setDays(read);
+        setError(null);
+      })
       .catch((err: unknown) => {
         setError(formatError(err));
       })
