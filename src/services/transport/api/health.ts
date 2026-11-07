@@ -2,12 +2,13 @@
  * Whether a daemon is there at all, and whether it takes this page's token.
  *
  * `probeDaemon` asks `/health`, the route the desktop app's own probe and
- * the CLI ask, which sits outside the token and key guards. Any answer is a
- * daemon: a refused token or a missing API key is a daemon that is there.
+ * the CLI ask, which sits outside the token and key guards: a refused token
+ * or a missing API key is a daemon that is there. As those probes do, it
+ * counts only an answer that says it is gglib's (`service: "gglib-daemon"`):
+ * another program on the port is no daemon. The daemon lets the pages it
+ * lets read `/api` read `/health` too (CORS), the desktop window included.
  * It is a plain `fetch`, so it never runs the client's 401 handling (the
- * API key prompt, the token re-read), and `no-cors`, because the route
- * carries no CORS headers and the desktop window is another origin: an
- * answer resolves, and only no answer rejects.
+ * API key prompt, the token re-read).
  *
  * `tokenRefusal` is the one `/api` read (`/api/version`) a browser tab makes
  * to learn whether the daemon takes the token it holds. A daemon that
@@ -24,12 +25,17 @@ import { TOKEN_REQUIRED } from './daemonToken';
 /** Whether a daemon answers at this session's address. */
 export async function probeDaemon(): Promise<boolean> {
   try {
-    await fetch(await healthUrl(), { mode: 'no-cors', cache: 'no-store' });
-    return true;
+    const response = await fetch(await healthUrl(), { cache: 'no-store' });
+    if (!response.ok) return false;
+    const body = (await response.json()) as { service?: unknown } | null;
+    return body?.service === GGLIB_DAEMON;
   } catch {
     return false;
   }
 }
+
+/** What `/health` says it is, on a gglib daemon (`gglib-axum`'s `health_check`). */
+const GGLIB_DAEMON = 'gglib-daemon';
 
 /** The daemon's sentence when it refuses this session's token, else `null`. */
 export async function tokenRefusal(): Promise<string | null> {

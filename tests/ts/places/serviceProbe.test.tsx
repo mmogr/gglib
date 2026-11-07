@@ -6,8 +6,10 @@
  * and the window says the daemon's own sentence, not that gglib was lost; a
  * daemon that wants an API key is there too, and the probe never asks for
  * the key, however many polls; no answer at `/health` is gglib gone, and the
- * window comes back when it answers. The probe goes to `/health` with no
- * credential, and only no answer is gone.
+ * window comes back when it answers; another program answering on the port
+ * is no daemon, as Rust's probes say. The probe goes to `/health` with no
+ * credential, and counts only an answer that says it is gglib's. In the
+ * desktop app it asks the daemon's own address and never the tab's token.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -27,6 +29,8 @@ const json = (body: unknown, status = 200) =>
 /** What the daemon does: answer `/health` or not, and how it answers `/api`. */
 const daemon = {
   up: true,
+  /** What answers `/health`: gglib's daemon, or another program on its port. */
+  health: (): Response => json({ service: 'gglib-daemon', status: 'ok' }),
   api: (): Response => json({ semver: '0.31.0', display: '0.31.0', sha: 'a', fingerprint: 'a' }),
 };
 
@@ -54,11 +58,12 @@ beforeEach(() => {
   localStorage.clear();
   window.history.replaceState(null, '', '/settings/about');
   daemon.up = true;
+  daemon.health = () => json({ service: 'gglib-daemon', status: 'ok' });
   daemon.api = () => json({ semver: '0.31.0', display: '0.31.0', sha: 'a', fingerprint: 'a' });
   fetchMock = vi.fn(async (url: string) => {
     if (String(url).endsWith('/health')) {
       if (!daemon.up) throw new TypeError('Failed to fetch');
-      return json({ service: 'gglib-daemon', status: 'ok' });
+      return daemon.health();
     }
     if (!daemon.up) throw new TypeError('Failed to fetch');
     return daemon.api();
@@ -68,6 +73,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -118,13 +124,38 @@ describe("the window's gate in a browser", () => {
     expect(screen.queryByText(LOST)).not.toBeInTheDocument();
   });
 
-  it('asks /health with no credential, and outside CORS', async () => {
+  it('asks /health with no credential, and not from the cache', async () => {
     localStorage.setItem('gglib_daemon_token', 'held');
     await renderGate();
     expect(await screen.findByText('the window')).toBeInTheDocument();
 
     const [url, init] = calls('/health')[0];
     expect(url).toBe('/health');
-    expect(init).toEqual({ mode: 'no-cors', cache: 'no-store' });
+    expect(init).toEqual({ cache: 'no-store' });
+  });
+
+  it('takes another program answering on the port for no daemon, as Rust does', async () => {
+    daemon.health = () => new Response('<html>not gglib</html>', { status: 200, headers: { 'content-type': 'text/html' } });
+    await renderGate();
+    expect(await screen.findByText(LOST)).toBeInTheDocument();
+    expect(screen.queryByText('the window')).not.toBeInTheDocument();
+
+    daemon.health = () => json({ service: 'something-else', status: 'ok' });
+    await nextProbe();
+    expect(screen.getByText(LOST)).toBeInTheDocument();
+  });
+});
+
+describe("the window's gate in the desktop app", () => {
+  it("asks the daemon's own address, and never asks about a tab's token", async () => {
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
+      invoke: vi.fn(async (cmd: string) => (cmd === 'get_embedded_api_info' ? { port: 9887, token: 'desk' } : null)),
+    };
+    await renderGate();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+    await nextProbe();
+
+    expect(calls('/health')[0][0]).toBe('http://127.0.0.1:9887/health');
+    expect(calls('/api/version')).toHaveLength(0);
   });
 });
