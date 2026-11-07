@@ -149,7 +149,7 @@ export function useEngine(kind: RuntimeKind): EngineState {
       // network drop — must not leave the card spinning forever.
       () =>
         fail(
-          'The connection to the install ended before it reported a result. It may still be running — reopen this tab to check.',
+          'The connection to the install ended before it reported a result. It may still be running: open Settings › Engines again to check.',
         ),
     );
   }, [kind, product]);

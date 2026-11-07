@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { ProxyAdmissionPanel } from '../../../src/components/ProxyAdmissionPanel';
+import { ProxyAdmissionPanel } from '../../../src/places/diagnostics/live/ProxyAdmissionPanel';
 import type {
   AdmissionSnapshot,
   ResidentSlotSnapshot,
@@ -53,7 +53,7 @@ describe('ProxyAdmissionPanel', () => {
 
   it('reports an empty resident set rather than rendering nothing', () => {
     render(<ProxyAdmissionPanel admission={admission()} />);
-    expect(screen.getByText(/no model is loaded yet/i)).toBeInTheDocument();
+    expect(screen.getByText("No model is loaded.")).toBeInTheDocument();
   });
 
   it('names each resident model and whether it is primary', () => {

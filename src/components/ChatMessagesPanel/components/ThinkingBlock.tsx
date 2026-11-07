@@ -1,35 +1,55 @@
-import React, { useState } from 'react';
-import { Brain, ChevronRight } from 'lucide-react';
+import React, { useId, useState, type ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '../../../utils/cn';
+import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
-import { formatThinkingDuration } from '../../../readings/turnFigures';
+import { foldSummary } from '../../../readings/turnFigures';
 
 interface ThinkingBlockProps {
   /** Message ID for timing tracker lookup */
   messageId: string;
   /** Segment index within the message (for multiple thinking blocks) */
   segmentIndex: number;
-  /** The thinking/reasoning content to display */
+  /** The reasoning text; empty for a reply that called tools without it. */
   thinking: string;
   /** Duration in seconds from parsed transcript, or null if not persisted yet */
   durationSeconds: number | null;
   /** Whether thinking is still in progress (streaming) */
   isStreaming?: boolean;
-  /** Whether to start expanded (default: false) */
+  /** Open until the person chooses: while the reply arrives. */
   defaultExpanded?: boolean;
-  /** The turn's margin already says how long it thought: the header does not. */
-  timeInMargin?: boolean;
+  /** How many tools the reply called, for the summary. */
+  toolCalls?: number;
+  /** The rows of those calls, under the reasoning. */
+  children?: ReactNode;
 }
 
+// react-markdown draws a block as <pre><code>, and says nothing else of
+// which code is inline: the <pre> is the block, and <code> alone is inline.
+const COMPONENTS: Partial<Components> = {
+  pre: ({ children }) => (
+    <pre className="my-sm p-sm text-xs font-mono bg-surface rounded-base overflow-x-auto [&_code]:bg-transparent! [&_code]:p-0!">
+      {children}
+    </pre>
+  ),
+  code: ({ className, children, node: _node, ...rest }) => (
+    <code className={cn('py-[1px] px-[5px] text-xs font-mono bg-surface rounded-sm', className)} {...rest}>
+      {children}
+    </code>
+  ),
+};
+
 /**
- * Collapsible block for displaying reasoning model "thinking" content.
- * Shows live timer during streaming, final duration after completion.
- * Supports fallback to timing tracker when transcript lacks duration attrs.
+ * A reply's fold: one 12 px line, `▸ Thought for 3 s · 2 tool calls`,
+ * that opens in place onto the reasoning and one row per tool call. While
+ * the reply thinks the line is live ("Thinking… 4.2 s", from the timing
+ * tracker until the transcript has a duration). It is open while the reply
+ * arrives and closed after, unless the person has chosen.
  */
 const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   messageId,
@@ -38,106 +58,48 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   durationSeconds,
   isStreaming = false,
   defaultExpanded = false,
-  timeInMargin = false,
+  toolCalls = 0,
+  children,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const expanded = choice ?? defaultExpanded;
+  const bodyId = useId();
   const timing = useThinkingTiming();
 
-  const handleToggle = () => {
-    setIsExpanded((prev) => !prev);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleToggle();
-    }
-  };
-
-  // Compute display duration: live elapsed time or final duration
+  // Live elapsed time while thinking; the transcript's, or the tracker's, after.
+  // The tick is read so that every tick draws the seconds again.
   const tracker = timing?.timingTracker ?? null;
-  const tick = timing?.tick ?? 0; // Reference tick to trigger re-renders
-  
-  // Live elapsed time (only during streaming)
+  void timing?.tick;
   const liveElapsedMs =
-    isStreaming && durationSeconds == null
-      ? (tracker?.getElapsedMs(messageId, segmentIndex) ?? null)
-      : null;
-  
-  // Final duration (from transcript or tracker fallback)
-  const finalDurationSec =
-    durationSeconds ??
-    (!isStreaming ? (tracker?.getDurationSec(messageId, segmentIndex) ?? null) : null);
-  
-  // Reference tick to ensure re-renders during streaming
-  void tick;
-  
-  // Display seconds (live or final)
-  const displaySeconds =
-    finalDurationSec ?? (liveElapsedMs != null ? liveElapsedMs / 1000 : null);
+    isStreaming && durationSeconds == null ? (tracker?.getElapsedMs(messageId, segmentIndex) ?? null) : null;
+  const finalSeconds =
+    durationSeconds ?? (!isStreaming ? (tracker?.getDurationSec(messageId, segmentIndex) ?? null) : null);
+  const seconds = finalSeconds ?? (liveElapsedMs != null ? liveElapsedMs / 1000 : null);
 
-  // Generate label based on state
-  const getLabel = () => {
-    if (isStreaming) {
-      if (displaySeconds != null) {
-        return `Thinking… ${formatThinkingDuration(displaySeconds)}`;
-      }
-      return 'Thinking…';
-    }
-    if (timeInMargin) return 'Reasoning';
-    if (displaySeconds != null) {
-      return `Thought for ${formatThinkingDuration(displaySeconds)}`;
-    }
-    return 'Reasoning';
-  };
-
-  // react-markdown draws a block as <pre><code>, and says nothing else of
-  // which code is inline: the <pre> is the block, and <code> alone is inline.
-  const components: Partial<Components> = {
-    pre: ({ children }) => (
-      <pre className="my-[0.5rem] p-[0.625rem] text-xs font-mono bg-background rounded-base overflow-x-auto [&_code]:bg-transparent! [&_code]:p-0!">
-        {children}
-      </pre>
-    ),
-    code: ({ className, children, node: _node, ...rest }) => (
-      <code className={cn('py-[0.125rem] px-[0.375rem] text-xs font-mono bg-background rounded-sm', className)} {...rest}>
-        {children}
-      </code>
-    ),
-  };
+  const summary = foldSummary({ thinking: !!thinking, live: isStreaming, seconds, toolCalls });
 
   return (
-    <div className={'mb-md rounded-md bg-surface-elevated overflow-hidden'}>
-      <div
-        className="flex items-center gap-sm py-sm px-md cursor-pointer select-none transition-colors duration-150 hover:bg-background-hover focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-[-2px]"
-        role="button"
-        tabIndex={0}
-        onClick={handleToggle}
-        onKeyDown={handleKeyDown}
-        aria-expanded={isExpanded}
+    <div className="flex flex-col">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="self-start h-auto gap-xs px-0 py-[2px] text-xs font-normal text-text-muted tabular-nums hover:bg-transparent hover:text-text-secondary"
+        aria-expanded={expanded}
+        aria-controls={bodyId}
+        leftIcon={<Icon icon={ChevronRight} size={12} className={cn('transition-transform duration-150', expanded && 'rotate-90')} />}
+        onClick={() => setChoice(!expanded)}
       >
-        <Icon
-          icon={ChevronRight}
-          size={12}
-          className={cn('text-text-muted transition-transform duration-200 shrink-0', isExpanded && 'rotate-90')}
-        />
-        <Icon icon={Brain} size={14} className="text-text-muted shrink-0" />
-        <span className="text-sm font-semibold text-text-muted font-mono tabular-nums">{getLabel()}</span>
-        {isStreaming && <span className="w-[12px] h-[12px] border-2 border-text-muted border-t-transparent rounded-full animate-spin-360 ml-auto shrink-0" />}
-      </div>
-      
-      <div className={cn('max-h-0 overflow-hidden transition-[max-height] duration-[0.25s] ease-out', isExpanded && 'max-h-[500px] overflow-y-auto')}>
-        <div className="px-md pb-md">
-          <div className="text-sm leading-[1.5] text-text-muted [&_p]:my-[0.5rem] [&_p:first-child]:mt-[0.75rem] [&_p:last-child]:mb-0 [&_ul]:my-[0.5rem] [&_ul]:pl-[1.25rem] [&_ol]:my-[0.5rem] [&_ol]:pl-[1.25rem] [&_li]:my-[0.25rem]">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeHighlight]}
-              components={components}
-            >
-              {thinking || ''}
+        {summary}
+      </Button>
+      <div id={bodyId} hidden={!expanded} className="mt-xs pl-base flex flex-col gap-sm">
+        {thinking && (
+          <div className="text-sm leading-[1.5] text-text-muted [&_p]:my-sm [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-sm [&_ul]:pl-lg [&_ol]:my-sm [&_ol]:pl-lg">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={COMPONENTS}>
+              {thinking}
             </ReactMarkdown>
           </div>
-        </div>
+        )}
+        {children}
       </div>
     </div>
   );

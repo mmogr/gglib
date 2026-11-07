@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { AgenticProxyPair } from '../../../src/components/Benchmark/Agentic/AgenticProxyPair';
+import { AgenticProxyPair } from '../../../src/places/diagnostics/benchmarks/Agentic/AgenticProxyPair';
 import type { AgenticEvalReport, ArmScores, ProxyArms } from '../../../src/types/benchmark';
 import type { ModelDefectCounts } from '../../../src/types/generated/ModelDefectCounts';
 import { agenticReport, armDelta, armScores } from '../fixtures/agentic';

@@ -12,11 +12,11 @@ import '@testing-library/jest-dom';
 
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 vi.mock('../../../src/places/endpoint/EndpointPlace', () => ({ default: () => <main aria-label="Endpoint" /> }));
-vi.mock('../../../src/app/BenchmarkRoute', () => ({ BenchmarkRoute: () => <main aria-label="Benchmarks" /> }));
+vi.mock('../../../src/places/diagnostics/DiagnosticsPlace', () => ({ default: () => <main aria-label="Diagnostics" /> }));
 vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
-vi.mock('../../../src/components/SetupWizard', () => ({ default: () => null }));
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
+  isDesktop: () => false,
   syncMenuStateSilent: vi.fn(),
   setSelectedModel: vi.fn(async () => {}),
   listenToMenuEvents: vi.fn(async () => () => {}),
@@ -31,7 +31,11 @@ vi.mock('../../../src/services/downloadsEvents', () => ({
   cleanupDownloadEvents: vi.fn(),
   onDownloadEndings: vi.fn(() => () => {}),
 }));
-vi.mock('../../../src/services/transport', () => ({ getTransport: () => ({ getSettings: async () => ({}) }) }));
+// The daemon answers the window's health probe and takes its token, so the
+// shell is drawn, not the service-not-running screen.
+vi.mock('../../../src/services/transport', () => ({
+  getTransport: () => ({ getSettings: async () => ({}), probeDaemon: async () => true, tokenRefusal: async () => null }),
+}));
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getSetupStatus: async () => ({ setupCompleted: true }),
 }));
@@ -58,7 +62,7 @@ describe('App', () => {
 
     await act(() => appRouter().navigate('/diagnostics/benchmarks'));
 
-    expect(await screen.findByRole('main', { name: 'Benchmarks' })).toBeInTheDocument();
+    expect(await screen.findByRole('main', { name: 'Diagnostics' })).toBeInTheDocument();
   });
 
   it('refuses a file dropped anywhere nothing takes it, and leaves any other drag alone', async () => {

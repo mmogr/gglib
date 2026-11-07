@@ -4,7 +4,8 @@
 //! configured.
 //!
 //! The tables are the text the command printed before it read its
-//! explanation from `ModelOps::explain`, character for character.
+//! explanation from `ModelOps::explain`, character for character. What a
+//! running daemon says is in `explain_daemon_tests.rs`.
 
 use std::path::Path;
 

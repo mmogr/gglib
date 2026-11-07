@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import type { UserEvent } from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import ChatPlace, { type ChatPlaceProps } from '../../../../src/places/chat/ChatPlace';
@@ -94,7 +94,7 @@ export function chatTransport(fixture: ChatFixture) {
   return {
     getServerToolSupport: vi.fn(async () => ({ supports_tool_calls: true, detected_format: null })),
     getModel: vi.fn(async () => ({ quantization: 'Q8_0' })),
-    // Asked by the tools popout the first time it opens, for the effort row.
+    // Asked by the agent limits sheet the first time it opens, for the effort row.
     getModelDetail: vi.fn(async () => ({ reasoningEffortSupport: 'unknown' })),
     // A copy, as a fetch gives: the page must not see the fixture change under it.
     listConversations: vi.fn(async () => [...fixture.conversations]),
@@ -153,4 +153,47 @@ export async function fromTitleMenu(user: UserEvent, item: string): Promise<void
   const heading = await screen.findByRole('heading', { level: 2 });
   await user.click(within(heading).getByRole('button'));
   await user.click(screen.getByRole('menuitem', { name: item }));
+}
+
+/** The composer's `[+]` button. */
+export const plusButton = () => screen.getByRole('button', { name: 'Add to the message' });
+
+/**
+ * The `[+]` menu's item `name`, the menu opened for it if it is not open.
+ * Synchronous, so a `waitFor` can ask it again as the composer remounts.
+ */
+export function plusItem(name: string | RegExp): HTMLElement {
+  const plus = plusButton();
+  if (plus.getAttribute('aria-expanded') !== 'true') fireEvent.click(plus);
+  return screen.getByRole('menuitem', { name });
+}
+
+/** The submenu `name` of the `[+]` menu, opened. */
+export async function plusSubmenu(user: UserEvent, name: 'Draw a picture' | 'Tools'): Promise<HTMLElement> {
+  const item = plusItem(name);
+  if (item.getAttribute('aria-expanded') !== 'true') await user.click(item);
+  return screen.getByRole('menu', { name });
+}
+
+/** The Thinking toggle. */
+export const thinkingSwitch = () => screen.getByRole('switch', { name: 'Thinking' });
+/** The Thinking toggle, or null where none is drawn. */
+export const noThinkingSwitch = () => screen.queryByRole('switch', { name: 'Thinking' });
+
+/** The composer's model picker ▾. */
+export const modelPicker = () => screen.getByRole('button', { name: /^Model: / });
+
+/** The picker's choices in group `group`, by name. */
+export async function pickerGroup(user: UserEvent, group: string): Promise<string[]> {
+  const picker = modelPicker();
+  if (picker.getAttribute('aria-expanded') !== 'true') await user.click(picker);
+  const items = screen.getByRole('group', { name: group }).querySelectorAll('[role^="menuitem"]');
+  return [...items].map((item) => item.textContent ?? '');
+}
+
+/** Pick `name` from the composer's model picker ▾. */
+export async function pickModel(user: UserEvent, name: string): Promise<void> {
+  const picker = modelPicker();
+  if (picker.getAttribute('aria-expanded') !== 'true') await user.click(picker);
+  await user.click(screen.getByRole('menuitemradio', { name }));
 }

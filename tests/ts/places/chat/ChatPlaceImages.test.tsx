@@ -20,7 +20,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ChatMessage } from '../../../../src/services/transport';
-import { agentRun, chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, pickModel, plusItem, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
 import { pngFile } from '../../fixtures/fakeImageStore';
 import { guiModel } from '../../fixtures/model';
 import type { AttachmentUpload } from '../../../../src/types/generated/AttachmentUpload';
@@ -73,7 +73,8 @@ function renderLocal(props: { draft?: ChatDraft; onSwitchModel?: (c: ModelChoice
   );
 }
 
-const attachButton = () => screen.getByRole('button', { name: 'Attach an image' });
+/** The composer's `[+]` › Add image…, the menu opened for it. */
+const attachButton = () => plusItem('Add image…');
 
 /**
  * The composer's text box once the open conversation is drawn: the thread,
@@ -140,10 +141,7 @@ describe('ChatPlace, images in the composer', () => {
     renderLocal();
     const box = await composerBox();
     await waitFor(() => expect(attachButton()).toBeEnabled());
-    expect(screen.getByRole('button', { name: /^Context: / })).toHaveAttribute(
-      'title',
-      '950 of 16,384 tokens (6%) after the last finished reply.',
-    );
+    expect(screen.getByRole('button', { name: /^Context: / })).toHaveAttribute('title', 'Context: 950 of 16,384 used');
 
     expect(fireEvent.paste(box, { clipboardData: { files: [pngFile(800, 600, 'shot.png')] } })).toBe(false);
 
@@ -171,6 +169,37 @@ describe('ChatPlace, images in the composer', () => {
     await user.click(within(strip()).getByRole('button', { name: 'Remove dropped.png' }));
     await waitFor(() => expect(within(strip()).queryByRole('img', { name: 'dropped.png' })).not.toBeInTheDocument());
     expect(within(strip()).getByRole('img', { name: 'picked.png' })).toBeInTheDocument();
+  });
+
+  it('a tile says "uploading…" while its upload is out, then what it costs once it is in', async () => {
+    let land: (upload: AttachmentUpload) => void = () => {};
+    const held = vi.fn((_source: string, _image: Blob) => new Promise<AttachmentUpload>((resolve) => {
+      land = resolve;
+    }));
+    page({ imageInput: true, contextLength: 4_096 }, { uploadAttachment: held });
+    renderLocal();
+    const box = await composerBox();
+    await waitFor(() => expect(attachButton()).toBeEnabled());
+
+    expect(fireEvent.paste(box, { clipboardData: { files: [pngFile(800, 600, 'shot.png')] } })).toBe(false);
+    await waitFor(() => expect(within(strip()).getByText('uploading…')).toBeInTheDocument());
+    expect(within(strip()).queryByText(/tokens/)).not.toBeInTheDocument();
+
+    await act(async () => land({ id: SHOT, mime: 'image/png', width: 800, height: 600, image_tokens: 475 }));
+    await waitFor(() => expect(within(strip()).getByText('~475 tokens · 12% of context')).toBeInTheDocument());
+    expect(within(strip()).queryByText('uploading…')).not.toBeInTheDocument();
+  });
+
+  it('a tile whose upload was refused says "not uploaded", and costs nothing', async () => {
+    page({ imageInput: true, contextLength: 4_096 }, { uploadAttachment: vi.fn(async () => { throw new Error('the store is full'); }) });
+    renderLocal();
+    const box = await composerBox();
+    await waitFor(() => expect(attachButton()).toBeEnabled());
+
+    expect(fireEvent.paste(box, { clipboardData: { files: [pngFile(800, 600, 'shot.png')] } })).toBe(false);
+    await waitFor(() => expect(within(strip()).getByText('not uploaded')).toBeInTheDocument());
+    expect(within(strip()).queryByText(/tokens|uploading/)).not.toBeInTheDocument();
+    expect(within(strip()).getByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
   });
 
   it('an image the store refuses is said in a toast, by its code', async () => {
@@ -341,12 +370,12 @@ describe('ChatPlace, a tool\'s images', () => {
     expect(fetchAttachmentBlob).toHaveBeenCalledWith('this', DRAWN_TOO);
     // Only by id from this machine's store: nothing else is asked for.
     expect(new Set(fetchAttachmentBlob.mock.calls.map(([source, id]) => `${source}:${id}`))).toEqual(new Set([`this:${DRAWN}`, `this:${DRAWN_TOO}`]));
-    const tools = screen.getByRole('list', { name: 'Tool execution status' });
+    const tools = screen.getByRole('list', { name: 'Tool calls' });
     expect(within(tools).queryByRole('img')).not.toBeInTheDocument();
     expect(tools).not.toContainElement(strip());
   });
 
-  it('shows a finished reply\'s tool images under its text while "How this was made" is closed, once, in the order made', async () => {
+  it('shows a finished reply\'s tool images under its text while its fold is closed, once, in the order made', async () => {
     const user = userEvent.setup();
     fixture.rows = {
       1: [asked, savedReply('Here is your fox.', ['draw_1', 'draw_2']), toolRow(13, 'draw_1', drawn), toolRow(14, 'draw_2', drawnLater)],
@@ -359,7 +388,7 @@ describe('ChatPlace, a tool\'s images', () => {
     expect(strips()).toHaveLength(1);
     expect(shownSizes()).toEqual(['Image, 1024 × 1024', 'Image, 640 × 480', 'Image, 512 × 512']);
 
-    const toggle = screen.getByRole('button', { name: 'How this was made' });
+    const toggle = screen.getByRole('button', { name: '2 tool calls' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     const detail = document.getElementById(toggle.getAttribute('aria-controls')!)!;
     expect(detail).not.toBeVisible();
@@ -368,7 +397,7 @@ describe('ChatPlace, a tool\'s images', () => {
     // Under the text, not above it.
     expect(text.compareDocumentPosition(strip()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    // Opening the detail shows the tool's row, and the images are not drawn again.
+    // Opening the fold shows the tool's rows, and the images are not drawn again.
     await user.click(toggle);
     expect(detail).toBeVisible();
     expect(within(detail).queryByRole('img')).not.toBeInTheDocument();
@@ -392,14 +421,15 @@ describe('ChatPlace, a tool\'s images', () => {
   });
 
   it('shows a tool call without images as before: its row, no strip, nothing read', async () => {
+    const user = userEvent.setup();
     fixture.rows = { 1: [asked, savedReply('', ['draw_1']), toolRow(13, 'draw_1')] };
     page({ imageInput: false });
     renderLocal();
 
-    const rows = await screen.findByRole('list', { name: 'Tool execution status' });
+    await user.click(await screen.findByRole('button', { name: '1 tool call' }));
+    const rows = screen.getByRole('list', { name: 'Tool calls' });
     const [item] = within(rows).getAllByRole('listitem');
-    expect(item).toHaveTextContent(/^Draw$/);
-    expect(item.children).toHaveLength(1);
+    expect(within(item).getByRole('button', { name: 'Draw' })).toBeInTheDocument();
     expect(strips()).toHaveLength(0);
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(fetchAttachmentBlob).not.toHaveBeenCalled();
@@ -421,7 +451,7 @@ describe('ChatPlace, images over a model switch', () => {
     await waitFor(() => expect(within(strip()).getByText(/~475 tokens/)).toBeInTheDocument());
     await user.type(box, 'half a thought');
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'llama-3.2-3b');
+    await pickModel(user, 'llama-3.2-3b');
     const { draft } = onSwitchModel.mock.calls[0][1]();
     expect(draft).toEqual({ text: 'half a thought', images: [shot] });
     first.unmount();

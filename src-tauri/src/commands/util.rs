@@ -83,3 +83,18 @@ pub(crate) async fn sync_menu_state(state: tauri::State<'_, AppState>) -> Result
 pub(crate) async fn show_main_window(app: AppHandle) -> Result<(), String> {
     crate::tray::window::show_main(&app).map_err(|e| format!("Could not show the main window: {e}"))
 }
+
+/// Start the gglib daemon: the main window's Start gglib, on the screen it
+/// shows while the daemon is not running.
+///
+/// The same `Daemon::restart` the tray menu's Start gglib runs, so the two
+/// start a daemon one way; it returns once the new daemon answers. The
+/// refusal is the daemon handle's own words (one already running, the port
+/// held by another program, no `gglib` binary to launch), which the window
+/// shows as they are. The tray is asked to repaint either way.
+#[tauri::command]
+pub(crate) async fn start_gglib(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let started = state.daemon.restart().await;
+    state.refresh.now();
+    started
+}

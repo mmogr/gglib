@@ -55,7 +55,7 @@ crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320
 crates/gglib-cli/src/commands.rs 379
 crates/gglib-cli/src/config_commands/settings_args.rs 307
-crates/gglib-cli/src/daemon_client/calls.rs 380
+crates/gglib-cli/src/daemon_client/calls.rs 384
 crates/gglib-cli/src/daemon_client/images.rs 321
 crates/gglib-cli/src/daemon_client/images_tests.rs 466
 crates/gglib-cli/src/dispatch.rs 309
@@ -95,7 +95,7 @@ crates/gglib-cli/src/presentation/launch_display.rs 415
 crates/gglib-cli/tests/llama_asks_first.rs 400
 crates/gglib-cli/tests/mcp_servers.rs 893
 crates/gglib-cli/tests/setup_scripts.rs 366
-crates/gglib-core/src/contracts/http/daemon.rs 468
+crates/gglib-core/src/contracts/http/daemon.rs 481
 crates/gglib-core/src/contracts/http/images.rs 302
 crates/gglib-core/src/domain/admission.rs 438
 crates/gglib-core/src/domain/agent/config.rs 795

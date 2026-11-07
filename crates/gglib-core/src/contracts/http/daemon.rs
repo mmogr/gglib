@@ -277,6 +277,19 @@ pub fn model_repair_path(id: i64) -> String {
 /// The verbs [`model_repair_path`] is called with.
 pub const MODEL_REPAIR_METHODS: &[&str] = &["POST"];
 
+/// The launch a Load of model `id` would make now, interpolating `id` into
+/// [`MODELS_LIST_PATH`].
+///
+/// `gglib model explain` asks the daemon, whose plan is read against the
+/// models it has loaded. Query `profile` names a configured profile.
+#[must_use]
+pub fn model_explain_path(id: i64) -> String {
+    format!("{MODELS_LIST_PATH}/{id}/explain")
+}
+
+/// The verbs [`model_explain_path`] is called with.
+pub const MODEL_EXPLAIN_METHODS: &[&str] = &["GET"];
+
 /// Benchmark comparison run (SSE).
 pub const BENCHMARK_COMPARE_PATH: &str = "/api/benchmark/compare";
 

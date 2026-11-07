@@ -54,7 +54,7 @@ describe('the effort control across the three template states', () => {
   });
 
   it('says why it is hidden rather than simply vanishing', () => {
-    // The `ToolSupportIndicator` split: unknown renders nothing, a definite
+    // Tools ▸'s split: unknown shows the checklist, a definite
     // "no" renders something visible. A control that disappears with no
     // explanation reads as a feature gglib does not have.
     renderForm({ reasoningEffort: 'no' });

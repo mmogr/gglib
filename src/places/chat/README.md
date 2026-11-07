@@ -25,6 +25,6 @@ come from `components/status/words.ts`):
 - the title ▾: Rename · Generate title · System prompt… · Export · Start over (same prompt)… · Delete…; Generate title's reasons: "Start a server to generate titles", "Wait for the reply to finish", "Ask the model for a title"
 - the system prompt: "Custom system prompt · Edit", Reset to default, Cancel, Save
 - the confirm sheets: `Delete "<title>"?` / "Its messages are deleted too. This cannot be undone."; "Start over with the same prompt?" / "This conversation is deleted, and an empty one with its title and system prompt takes its place."
-- a far chat's picker line: "<machine> picks the model"; while a route decides: "Loading chat…"; when the list of chats cannot be read twice: "The chat couldn't be read." with "Try again" (the chat's model is never guessed)
+- a far chat's picker line: "<machine> picks the model", and a chat on the paired machine's model "<model> on <machine>" (the composer's other words are `components/ChatMessagesPanel/components/README.md`'s); while a route decides: "Loading chat…"; when the list of chats cannot be read twice: "The chat couldn't be read." with "Try again" (the chat's model is never guessed)
 
 <!-- module-docs:end -->

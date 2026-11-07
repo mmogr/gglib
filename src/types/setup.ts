@@ -1,5 +1,5 @@
 /**
- * Setup wizard types.
+ * Setup types.
  * Types for the first-run system setup status and provisioning endpoints.
  */
 

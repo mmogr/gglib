@@ -40,6 +40,8 @@ gate's URL is fixed when it is made. No daemon, or one that does not answer,
 gives a turn that holds nothing, said once; no render turn is granted here.
 
 `repair.rs` holds the call that has the daemon repair a model, and
+`explain.rs` the one that asks it for a model's launch explained over the
+models it has loaded, which `gglib model explain` prints while it runs.
 `settings.rs` the one that sends it a download queue size a command
 stored, through the settings route the app writes with.
 `images.rs` is `ImageGenerator`, core's image generation port over the

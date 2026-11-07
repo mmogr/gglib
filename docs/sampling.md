@@ -144,7 +144,7 @@ runs the turn with a budget of `0` and the chat remembers it
 (`ConversationSettings.thinking`); `default` forgets it; a turn that says
 neither runs as the chat remembers. A remembered `off` beats the request's own
 `reasoning_budget_tokens`: the chat page keeps one budget per browser, not per
-chat, in its Tools popover, and once one is set sends it with every message,
+chat, in its agent limits (the composer's Tools ▸ › Agent limits…), and once one is set sends it with every message,
 and a chat that was switched off does not start thinking again because of it.
 Nothing else is remembered. A request's own budget and `reasoning_effort` are
 that request's, and with `default`, or with nothing remembered, the budget
@@ -177,8 +177,8 @@ one a paired machine lists with the `reasoning` capability. It shows what the
 chat remembers, reading "Thinking off" while the chat is switched off, and a
 click is said by the next message sent and not again once gglib has accepted
 that message. The page applies no rule of its own between the
-switch and the Tools popover's budget: each is sent as it is set, and the rule
-above decides. For a chat on one of this machine's models the popover's effort
+switch and the agent limits' budget: each is sent as it is set, and the rule
+above decides. For a chat on one of this machine's models the agent limits' effort
 dropdown follows the [three support states](#three-support-states-and-what-each-one-does)
 below, and is replaced by a note where the model's template was observed to
 read no level.

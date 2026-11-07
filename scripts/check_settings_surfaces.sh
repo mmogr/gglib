@@ -69,7 +69,7 @@ fi
 
 # Fields nothing settable is expected for, and why.
 declare -A EXEMPT=(
-  [setup_completed]="written by the setup wizard when it finishes, not chosen"
+  [setup_completed]="written by setup's Open gglib when it finishes, not chosen"
   [default_model_id]="set by \`gglib model default\`, not by config settings"
   [inference_defaults]="edited through \`gglib config inference\` and the model inspector"
   [inference_profiles]="edited through \`gglib config profile\` and the profile editor"

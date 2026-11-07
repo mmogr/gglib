@@ -101,11 +101,14 @@ export interface RecentRow {
 /** How many of the recent requests Recent shows, as `gglib proxy dashboard` does. */
 const RECENT_SHOWN = 5;
 
-/** The last five requests, newest first (the proxy sends them oldest first). */
-export function recentRows(snapshot: DashboardSnapshot | null): RecentRow[] {
+/**
+ * The last `shown` requests (five, unless asked for more), newest first;
+ * the proxy sends them oldest first.
+ */
+export function recentRows(snapshot: DashboardSnapshot | null, shown = RECENT_SHOWN): RecentRow[] {
   const recent = snapshot?.recent_requests ?? [];
   return recent
-    .slice(-RECENT_SHOWN)
+    .slice(-shown)
     .reverse()
     .map((r, i) => {
       const rate = requestRate(r);

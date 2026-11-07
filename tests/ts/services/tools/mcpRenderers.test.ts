@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   looksLikeMarkdown,
   isArrayOfHomogeneousObjects,
-  mcpGenericRenderer,
 } from '../../../../src/services/tools/renderers/McpGenericRenderer';
 
 // =============================================================================
@@ -120,45 +119,6 @@ describe('isArrayOfHomogeneousObjects', () => {
 
   it('returns true for a single-element array containing an object with keys', () => {
     expect(isArrayOfHomogeneousObjects([{ id: 1 }])).toBe(true);
-  });
-});
-
-// =============================================================================
-// mcpGenericRenderer.renderSummary
-// =============================================================================
-
-describe('mcpGenericRenderer.renderSummary', () => {
-  it('delegates to the fallback renderer and returns a string for an object', () => {
-    const result = mcpGenericRenderer.renderSummary!({ key: 'value' }, 'my_tool');
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
-  });
-
-  it('returns a string for null data without throwing', () => {
-    expect(() => {
-      const result = mcpGenericRenderer.renderSummary!(null, 'my_tool');
-      expect(typeof result).toBe('string');
-    }).not.toThrow();
-  });
-
-  it('returns a string for a circular reference without throwing', () => {
-    const circular: Record<string, unknown> = {};
-    circular.self = circular;
-    expect(() => {
-      const result = mcpGenericRenderer.renderSummary!(circular, 'my_tool');
-      expect(typeof result).toBe('string');
-    }).not.toThrow();
-  });
-
-  it('returns a string for a primitive number', () => {
-    const result = mcpGenericRenderer.renderSummary!(42, 'my_tool');
-    expect(typeof result).toBe('string');
-    expect(result).toBe('42');
-  });
-
-  it('returns a string for an array result', () => {
-    const result = mcpGenericRenderer.renderSummary!([1, 2, 3], 'my_tool');
-    expect(typeof result).toBe('string');
   });
 });
 

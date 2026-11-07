@@ -2,6 +2,8 @@
  * Shared formatting utilities for displaying bytes, time, and numbers.
  */
 
+import type { RecommendationDto } from '../types/generated/RecommendationDto';
+
 /**
  * Placeholder for a value that is not known yet.
  *
@@ -197,4 +199,18 @@ export function formatMemorySize(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(0)} MiB`;
   }
   return `${(bytes / 1024).toFixed(0)} KiB`;
+}
+
+/** The memory a recommendation was sized against, in the words `gglib up` names it: `43.2 GiB unified memory`. */
+export function formatBudget(rec: Pick<RecommendationDto, 'budgetBytes' | 'budgetLabel'>): string {
+  return `${formatMemorySize(rec.budgetBytes)} ${rec.budgetLabel}`;
+}
+
+/**
+ * The line under a recommendation, from its own figures: why this model,
+ * then what it needs of that memory, as `gglib up`'s `needs` row says it.
+ */
+export function formatRecommendation(rec: RecommendationDto): string {
+  const why = rec.rationale.charAt(0).toUpperCase() + rec.rationale.slice(1);
+  return `${why}. Needs ${formatMemorySize(rec.requiredBytes)} of ${formatBudget(rec)}.`;
 }

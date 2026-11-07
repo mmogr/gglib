@@ -3,7 +3,7 @@
 Tauri command handlers.
 
 After Phase 3 HTTP API consolidation, only OS-specific commands remain:
-- util: API discovery, menu sync, OS integration, and showing the main window (the tray panel's Open gglib)
+- util: API discovery, menu sync, OS integration, showing the main window (the tray panel's Open gglib), and starting the daemon (the main window's Start gglib, the tray menu's own `Daemon::restart`)
 - `app_logs`: Frontend-to-backend logging bridge
 
 All business logic is exposed via HTTP API (gglib-axum).
