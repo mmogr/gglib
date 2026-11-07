@@ -82,7 +82,7 @@ they can act (the endpoint up; Clear also its key revealed), and a row's
 |------|------|
 | `EndpointPlace.tsx` | The route: the title and ⋯ (Live numbers, Clear prompt cache, Endpoint settings…), the sections in order once the dashboard has spoken, the Model ID Connect a client and Test it share, the dashboard dialog, and the inspector beside it |
 | `Header.tsx` | The address line: On with the address, Copy, the meaning, Test it, Turn off; Pinned with its model and Unpin; Key required with Show; Off with Turn on, its sentence and Start when gglib launches; Starting; the daemon's failure and the proof's sentence |
-| `Loaded.tsx` | The resident rows (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯), the queue's lines, the room line, the empty sentence and Load a model… (the palette) |
+| `Loaded.tsx` | The resident rows (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯; Chat opens the model's latest chat, else an empty one, handed the slot's port through `app/openChat`), the queue's lines, the room line, the empty sentence and Load a model… (the palette) |
 | `LoadPalette.tsx` | Load a model…: the filter, this machine's models not loaded with quant, size and fit, On <machine>, ↑ ↓ Home End, ⏎ loads with nothing typed, ⌥⏎ opens Load with options, Esc gives focus back |
 | `paletteRows.ts` | Pure: the palette's rows (not loaded, matching the filter as the library's search does), a row's quant and size, its fit line from its explanation, and the paired machine's rows with why they cannot load there |
 | `useFitReads.ts` | The palette's explain reads: the highlighted row first, then the rows in view, three at most in flight across opens, kept for one open, an answer to a closed open dropped |

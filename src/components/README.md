@@ -26,11 +26,10 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
        ┌──────────┴──────────────────┐
        ▼ (/chat/:id)                 ▼ (/diagnostics/benchmarks)
 ┌─────────────────────────┐   ┌───────────────┐
-│        ChatPage         │   │ BenchmarkPage │
-│ ┌────────────┬────────┐ │   └───────────────┘
-│ │Conversation│Messages│ │
-│ │    List    │ Panel  │ │
-│ └────────────┴────────┘ │
+│ ChatPlace (places/chat) │   │ BenchmarkPage │
+│ ┌─────────────────────┐ │   └───────────────┘
+│ │  ChatMessagesPanel  │ │
+│ └─────────────────────┘ │
 └─────────────────────────┘
 ```
 
@@ -58,10 +57,9 @@ A chat is its own address: the conversation list (left) and the messages panel (
 - **`ChatMessagesPanel/`**: Message display with markdown rendering and composer
   - **`ThinkingBlock.tsx`**: Collapsible "Thinking" section for reasoning models, shows live duration during streaming and final "Thought for X seconds" on completion
   - **`ConfirmDeleteModal.tsx`**: Modal dialog for confirming message deletion with cascade warning
-  - AI-generated title button (✨) for auto-naming conversations via LLM
+  - The title ▾ (Rename, Generate title, System prompt…, Export, Start over, Delete…) and the "Custom system prompt · Edit" line
   - **Message Editing**: Inline edit of a question (Send, asked again) or a reply (Save, kept as written); an edit that would rewrite a saved reply is made on a new branch of the chat, Branch from here on every turn, the options where a chat's branches part shown in the turn's margin, and Retry answering a chat that ends in a question (ADR 0017)
   - **Message Deletion**: Delete button with cascade deletion of subsequent messages
-- **`ConversationListPanel/`**: Conversation list with search and management controls
 
 ### Server Management
 - **`ConnectClient.tsx`**: Connect a client on the endpoint place: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker, and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable

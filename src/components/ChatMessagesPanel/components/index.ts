@@ -2,7 +2,7 @@
 
 // Panel chrome
 export { ChatPanelHeader } from './ChatPanelHeader';
-export { SystemPromptSection } from './SystemPromptSection';
+export { SystemPromptLine } from './SystemPromptLine';
 export { ChatStatusBanners } from './ChatStatusBanners';
 export { ComposerFooter } from './ComposerFooter';
 export { ImageInputContext } from './ComposerImages';

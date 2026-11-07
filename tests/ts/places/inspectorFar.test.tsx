@@ -51,7 +51,7 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
   getRecommendedModel: vi.fn(async () => null),
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn() }));
-vi.mock('../../../src/pages/ChatPage', () => ({
+vi.mock('../../../src/places/chat/ChatPlace', () => ({
   default: ({ modelName }: { modelName: string }) => <div data-testid="chat-page">{`Chatting with ${modelName}`}</div>,
 }));
 

@@ -19,7 +19,7 @@
 import type { FC, KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { MoreHorizontal } from 'lucide-react';
-import { HANDED, setChatHandoff } from '../../app/chatHandoff';
+import { openChatOn } from '../../app/openChat';
 import { paths } from '../../app/paths';
 import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
@@ -53,10 +53,7 @@ const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapsho
     inspect();
   };
   // The port is handed on, since the server list may not have heard of it yet.
-  const chat = () => {
-    setChatHandoff({ modelId: row.modelId, port: row.port, modelName: row.name });
-    navigate(paths.chat(row.modelId), { state: HANDED });
-  };
+  const chat = () => void openChatOn(navigate, { id: row.modelId, port: row.port, name: row.name });
   const unload = () => onUnload(row.modelId);
   return (
     <div

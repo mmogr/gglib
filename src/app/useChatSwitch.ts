@@ -8,7 +8,7 @@
  * wins and this switch is dropped, and a chat that has been left (this hook
  * unmounted) hands nothing on. The conversation and the draft are read when
  * the switch lands, not when the model was picked, so one chosen while it
- * loaded is the one that opens.
+ * loaded is the one that opens, at its own address, on the new model.
  *
  * @module app/useChatSwitch
  */
@@ -62,8 +62,10 @@ export function useChatSwitch(servers: ServerViewModel[]): ChatSwitch {
       }
       if (ticket !== latest.current || !open.current) return;
       const { conversationId, draft } = context();
-      setChatHandoff({ modelId: choice.modelId, port, modelName: choice.modelName, conversationId, draft });
-      navigate(paths.chat(choice.modelId), { state: HANDED });
+      setChatHandoff({ modelId: choice.modelId, port, modelName: choice.modelName, draft });
+      // The conversation keeps its address; an empty chat's names the model.
+      const to = conversationId === null ? paths.newChat({ model: choice.modelId }) : paths.chat(conversationId);
+      navigate(to, { state: HANDED });
     },
     [servers, navigate],
   );

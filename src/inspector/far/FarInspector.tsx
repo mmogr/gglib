@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState, type FC } from 'react';
 import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
+import { chatPathOnFar } from '../../app/openChat';
 import { paths } from '../../app/paths';
 import { CopyValue } from '../../components/CopyValue';
 import { REACH_MARK, StatusMark } from '../../components/status/StatusMark';
@@ -100,7 +101,7 @@ export const FarInspector: FC<FarInspectorProps> = ({ id, paired }) => {
     </Button>
   );
   const chatButton = actions.includes('chat') && (
-    <Button variant={detail?.isServing ? 'primary' : 'secondary'} disabled={!reached || !detail} onClick={() => navigate(paths.farChat(id))}>
+    <Button variant={detail?.isServing ? 'primary' : 'secondary'} disabled={!reached || !detail} onClick={() => paired.group && void chatPathOnFar({ machine: paired.group.machine, id }).then((to) => navigate(to))}>
       Chat
     </Button>
   );

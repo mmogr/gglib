@@ -33,6 +33,8 @@ const transport = vi.hoisted(() => ({
   getProxyClients: vi.fn(async (_id: number | null): Promise<unknown> => null),
   revealSecret: vi.fn(async (): Promise<string | null> => null),
   updateSettings: vi.fn(async (u: Record<string, unknown>) => u),
+  // This machine's chats, for Chat on a model: its latest, else an empty one.
+  listConversations: vi.fn(async (): Promise<unknown[]> => []),
 }));
 const settingsAnswer = vi.hoisted(() => ({ value: { proxyAutostart: false } as Record<string, unknown> }));
 const dashboard = vi.hoisted(() => ({
@@ -76,8 +78,10 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
 vi.mock('../../../src/components/ProxyDashboardModal', () => ({
   ProxyDashboardModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div role="dialog" aria-label="Live numbers" /> : null),
 }));
-vi.mock('../../../src/pages/ChatPage', () => ({
-  default: ({ serverPort }: { serverPort?: number }) => <div data-testid="chat-page" data-port={serverPort} />,
+vi.mock('../../../src/places/chat/ChatPlace', () => ({
+  default: ({ serverPort, conversationId }: { serverPort?: number; conversationId: number | null }) => (
+    <div data-testid="chat-page" data-port={serverPort} data-conversation={conversationId ?? 'none'} />
+  ),
 }));
 
 import { ENDPOINT_WORDS, KEY_WORDS, RESIDENCY_WORDS } from '../../../src/components/status/words';
@@ -85,6 +89,7 @@ import { cleanupModelEvents, initModelEvents } from '../../../src/services/model
 import { applyProxyStatus, resetProxyState } from '../../../src/services/proxyRegistry';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
+import { resetChats } from '../../../src/services/chatRegistry';
 import type { ProxyStatus } from '../../../src/services/transport/types/proxy';
 import type { DashboardSnapshot } from '../../../src/services/transport/types/dashboard';
 import type { RemoteDevice } from '../../../src/types/generated/RemoteDevice';
@@ -121,7 +126,9 @@ const alert = () => screen.getByRole('alert');
 
 describe('the endpoint place', () => {
   beforeEach(() => {
+    resetChats();
     for (const mock of Object.values(transport)) mock.mockClear();
+    transport.listConversations.mockImplementation(async () => []);
     transport.revealSecret.mockImplementation(async () => null);
     transport.getProxyClients.mockImplementation(async () => null);
     dashboard.clear.mockClear();
@@ -313,8 +320,24 @@ describe('the endpoint place', () => {
       await frame(admitted([residentSlot(1, 'Qwen3-4B', { port: 9431 })]));
       await user.click(within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'More for Qwen3-4B' }));
       await user.click(screen.getByRole('menuitem', { name: 'Chat with it' }));
-      expect(at()).toBe('/chat/1');
+      // No chat on it yet: an empty one on it.
+      await waitFor(() => expect(at()).toBe('/chat/new?model=1'));
       expect(await screen.findByTestId('chat-page')).toHaveAttribute('data-port', '9431');
+    });
+
+    it("a row's Chat opens the model's latest chat, handed the slot's port", async () => {
+      transport.listConversations.mockImplementation(async () => [
+        { id: 4, title: 'older', model_id: 1, system_prompt: null, created_at: '2026-11-01 09:00:00', updated_at: '2026-11-01 09:00:00' },
+        { id: 5, title: 'newer', model_id: 1, system_prompt: null, created_at: '2026-11-02 09:00:00', updated_at: '2026-11-02 09:00:00' },
+        { id: 6, title: 'other model', model_id: 2, system_prompt: null, created_at: '2026-11-03 09:00:00', updated_at: '2026-11-03 09:00:00' },
+      ]);
+      const { user, at } = renderEndpoint();
+      await frame(admitted([residentSlot(1, 'Qwen3-4B', { port: 9431 })]));
+      await user.click(within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'Chat' }));
+      await waitFor(() => expect(at()).toBe('/chat/5'));
+      const chat = await screen.findByTestId('chat-page');
+      expect(chat).toHaveAttribute('data-port', '9431');
+      expect(chat).toHaveAttribute('data-conversation', '5');
     });
 
     it('Pin waits while a pin change is on its way', async () => {

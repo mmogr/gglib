@@ -1,6 +1,6 @@
 /**
  * A button that opens a short menu under it: the library header's `Sort ▾`
- * and `+ ▾`, and the inspector's ⋯. An item is an action, or a choice that
+ * and `+ ▾`, the inspector's ⋯, a chat's title ▾ and a sidebar chat's ⋯. An item is an action, or a choice that
  * is ticked when it is the one in force; a danger item is drawn as one. The
  * menu closes on a pick, a click outside, or Escape.
  *
@@ -25,7 +25,7 @@ export interface MenuItem {
   danger?: boolean;
   /** Said on hover: what the action does, where its label cannot. */
   title?: string;
-  /** Drawn but not offered, while it cannot act. */
+  /** Offered but not now: drawn greyed, with why in `title` when given. */
   disabled?: boolean;
 }
 
@@ -37,9 +37,13 @@ interface MenuProps {
   items: MenuItem[];
   /** The button is its icon alone, with no ▾ (the inspector's ⋯). */
   iconOnly?: boolean;
+  /** Which edge of the button the menu hangs from: its right (the default) or its left. */
+  align?: 'start' | 'end';
+  /** The button's own look, where it is more than a control (a chat's title). */
+  className?: string;
 }
 
-export const Menu: FC<MenuProps> = ({ label, name, items, iconOnly = false }) => {
+export const Menu: FC<MenuProps> = ({ label, name, items, iconOnly = false, align = 'end', className }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useClickOutside(ref, () => setOpen(false), open);
@@ -53,6 +57,7 @@ export const Menu: FC<MenuProps> = ({ label, name, items, iconOnly = false }) =>
         aria-expanded={open}
         aria-label={name}
         iconOnly={iconOnly}
+        className={className}
         rightIcon={iconOnly ? undefined : <Icon icon={ChevronDown} size={12} />}
         onClick={() => setOpen((o) => !o)}
       >
@@ -61,7 +66,7 @@ export const Menu: FC<MenuProps> = ({ label, name, items, iconOnly = false }) =>
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-popover mt-xs flex min-w-[200px] flex-col rounded-base bg-surface-elevated p-xs shadow-lg"
+          className={cn(align === 'end' ? 'right-0' : 'left-0', 'absolute top-full z-popover mt-xs flex min-w-[200px] flex-col rounded-base bg-surface-elevated p-xs shadow-lg')}
           onKeyDown={(event) => {
             if (event.key !== 'Escape') return;
             event.preventDefault();

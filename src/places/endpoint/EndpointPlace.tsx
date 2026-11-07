@@ -26,8 +26,8 @@
 import { useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal } from 'lucide-react';
-import { HANDED, setChatHandoff } from '../../app/chatHandoff';
-import { inspectorClosed, inspectorSubject, paths, settingsAt } from '../../app/paths';
+import { openChatOn } from '../../app/openChat';
+import { inspectorClosed, inspectorSubject, settingsAt } from '../../app/paths';
 import { ConnectClient } from '../../components/ConnectClient';
 import { ProxyDashboardModal } from '../../components/ProxyDashboardModal';
 import { Icon } from '../../components/ui/Icon';
@@ -101,9 +101,9 @@ export default function EndpointPlace() {
     }
   };
 
+  // A model started for a chat opens its chat, with the port it was served on.
   const handleServerStarted = (server: ServerViewModel) => {
-    setChatHandoff({ modelId: server.modelId, port: server.port, modelName: server.modelName });
-    navigate(paths.chat(server.modelId), { state: HANDED });
+    void openChatOn(navigate, { id: server.modelId, port: server.port, name: server.modelName });
   };
   const removeModel = async (id: number) => {
     await removeLibraryModel(id);

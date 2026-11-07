@@ -3,11 +3,11 @@
  *
  * "gglib" atop, over the strip the traffic lights sit on; then Library with
  * how many models it holds, the endpoint line (two lines tall, the
- * signature), Devices; Chats under all three; Settings and Diagnostics at
- * the foot, Diagnostics in tertiary text. The place that is open is the
- * address, so the open row is read from it, and every row navigates through
- * `app/paths`. Chats opens the latest chat until the list lives here (C1);
- * Settings opens the dialog over the place until Settings is a place (S1);
+ * signature), Devices; the chats under all three (`ChatList`, which scrolls
+ * while the rest stays); Settings and Diagnostics pinned at the foot,
+ * Diagnostics in tertiary text. The place that is open is the address, so
+ * the open row is read from it, and every row navigates through
+ * `app/paths`. Settings opens the dialog over the place until Settings is a place (S1);
  * Diagnostics opens the benchmarks until Diagnostics has its tabs (G1).
  *
  * @module sidebar/Sidebar
@@ -22,7 +22,7 @@ import { useModelLibrary } from '../services/modelRegistry';
 import { cn } from '../utils/cn';
 import { DevicesLine } from './DevicesLine';
 import { EndpointLine } from './EndpointLine';
-import { openLatestChat } from './openLatestChat';
+import { ChatList } from './ChatList';
 import { SPREAD } from './placement';
 
 /** Which sidebar row the address at `pathname` belongs to. */
@@ -98,15 +98,9 @@ export function Sidebar() {
       <EndpointLine current={place === 'endpoint'} />
       <DevicesLine current={place === 'devices'} />
 
-      <div className="flex flex-col gap-xs px-sm mt-sm">
-        <Row current={place === 'chats'} onClick={() => void openLatestChat(navigate)}>
-          <span>Chats</span>
-        </Row>
-      </div>
+      <ChatList />
 
-      <div className="flex-1" />
-
-      <div className="flex flex-col gap-xs border-t border-border px-sm py-sm">
+      <div className="flex shrink-0 flex-col gap-xs border-t border-border px-sm py-sm">
         <Row current={false} onClick={() => navigate(settingsAt(location, 'general'), { replace: true })}>
           <span>Settings</span>
         </Row>

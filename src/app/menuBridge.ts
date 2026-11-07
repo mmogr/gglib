@@ -4,7 +4,7 @@
  * The menu's items name places and actions: Settings, Add Model, Downloads,
  * Chat, Refresh, Start, Stop and Remove for the selected model. Navigation
  * goes through the router; a model action reads the model the address names
- * (`menuModelId`: the inspector's, or the open chat's) and calls the
+ * (`menuModelId`: the inspector's) and calls the
  * registries, the transport and the confirm store. The menu is told what is selected from the address too,
  * on every move, so its Start, Stop and Remove act on the model the page
  * shows. Nothing here needs a component to be mounted, which is what
@@ -25,12 +25,13 @@ import { isServerRunning, runningModelIds } from '../services/serverRegistry';
 import { getTransport } from '../services/transport';
 import { formatError } from '../utils/errors';
 import { confirm } from './confirm';
+import { chatPathOn } from './openChat';
 import { menuModelId, paths, settingsAt } from './paths';
 import { appRouter } from './router';
 
 export type Notify = (message: string, type?: ToastType) => void;
 
-/** The model the menu acts on: the inspector's, or the open chat's. */
+/** The model the menu acts on: the inspector's. */
 function selectedModelId(): number | null {
   return menuModelId(appRouter().state.location);
 }
@@ -39,23 +40,21 @@ function navigate(to: string): void {
   void appRouter().navigate(to);
 }
 
-/** Chat: the selected model's server, else the first running, else nothing. */
-function showChat(notify: Notify): void {
+/** Chat: on the selected model's server, else the first running, else nothing. */
+async function showChat(notify: Notify): Promise<void> {
   const selected = selectedModelId();
   const target = selected !== null && isServerRunning(selected) ? selected : runningModelIds()[0];
   if (target === undefined) {
     notify('No servers are currently running. Start a server first to use chat.', 'warning');
     return;
   }
-  navigate(paths.chat(target));
+  navigate(await chatPathOn(target));
 }
 
 async function stopSelected(): Promise<void> {
   const selected = selectedModelId();
   if (selected === null || !isServerRunning(selected)) return;
   await safeStopServer(selected);
-  const { pathname } = appRouter().state.location;
-  if (pathname === paths.chat(selected)) navigate(paths.model(selected));
   syncMenuStateSilent();
 }
 
@@ -87,7 +86,7 @@ export function menuHandlers(notify: Notify) {
     [MENU_EVENTS.OPEN_SETTINGS]: () => void appRouter().navigate(settingsAt(appRouter().state.location, 'general'), { replace: true }),
     [MENU_EVENTS.ADD_MODEL_FILE]: () => navigate(paths.libraryAdd('add')),
     [MENU_EVENTS.SHOW_DOWNLOADS]: () => navigate(paths.libraryAdd('browse')),
-    [MENU_EVENTS.SHOW_CHAT]: () => showChat(notify),
+    [MENU_EVENTS.SHOW_CHAT]: () => void showChat(notify),
     [MENU_EVENTS.REFRESH_MODELS]: () => void refreshModels(),
     [MENU_EVENTS.START_SERVER]: () => {
       const selected = selectedModelId();
@@ -148,9 +147,21 @@ export function startMenuBridge({ notify }: { notify: Notify }): () => void {
   tell();
   const unsubscribe = appRouter().subscribe(tell);
 
+  // ⌘N on a Mac, Ctrl+N elsewhere, starts a chat from anywhere (Ctrl+N is a
+  // Mac text field's next line). A window key, not a menu item: the native
+  // menu has no New Chat to send.
+  const onKey = (event: KeyboardEvent) => {
+    const command = /Mac|iPhone|iPad/.test(navigator.platform) ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+    if (!command || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'n') return;
+    event.preventDefault();
+    navigate(paths.newChat());
+  };
+  window.addEventListener('keydown', onKey);
+
   return () => {
     stopped = true;
     stopListening?.();
     unsubscribe();
+    window.removeEventListener('keydown', onKey);
   };
 }

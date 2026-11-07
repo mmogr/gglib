@@ -8,8 +8,8 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 
 | File | Role |
 |------|------|
-| `ChatPanelHeader.tsx` | The notebook's head row: title or rename field, AI title generation, conversation actions; the page's controls in its margin |
-| `SystemPromptSection.tsx` | System prompt card; owns its own draft/edit state and reports only on save |
+| `ChatPanelHeader.tsx` | The chat's head: the title (16/600) as the menu button for Rename · Generate title · System prompt… · Export · Start over (same prompt)… — Delete…, or the rename field; a far chat's title is plain |
+| `SystemPromptLine.tsx` | Nothing for the default prompt, "Custom system prompt · Edit" for the chat's own, and the inline editor (Reset to default, Cancel, Save); owns its draft and reports only a save |
 | `ChatStatusBanners.tsx` | Chat error banner and the read-only warning shown while the server is down |
 | `ComposerFooter.tsx` | The composer on the turns' grid: model, quantisation, tools, the context ring and the Thinking switch (a button named Thinking, pressed while the chat thinks and reading "Thinking off" beside another icon while it does not, drawn only where `useThinkingSwitch` says the model does), the chat's folder (`FolderChip`, drawn where `useChatFolder` offers one; a chat with a folder counts as having tools configured for the tool support badge) and the Draw button (pressed for the next message alone and reading "Draw on" while it is; greyed, its title the reason, where `useDrawSwitch` says a message cannot draw) with the image model menu beside it (`ImageModelMenu`) in the margin; in the body the attached images, then attach, input and Stop/Send, with paste and drop taking images only where `ImageInputContext` says the model reads them |
 | `FolderChip.tsx` | The chat's folder, where its file tools read (`useChatFolder`): with none a chip named Folder that chooses one; with one its name, the whole path on hover, Clear on the chip and Change beside it; a warning, its title the reason, where a send was refused for it. Change opens the native dialog on desktop and a typed path field on web (Enter uses it, Escape leaves it) |
