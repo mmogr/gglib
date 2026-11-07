@@ -5,13 +5,16 @@
  * ticked when it is the one in force, a box ticked on and off that leaves
  * the menu open, or a submenu (`▸`) that opens beside it; a danger item is
  * drawn as one. A heading names the items after it, as a group, and a note
- * is a line of text that does nothing. The menu closes on a pick, a click
- * outside, or Escape.
+ * is a line of text that does nothing. A disabled item with a reason says it
+ * under itself, in a line it is described by, not only on hover. The menu
+ * closes on a pick, a click outside, or Escape, and a pick or Escape gives
+ * the focus back to its button; Escape in an open submenu closes that
+ * submenu alone, the focus back on its item.
  *
  * @module components/ui/Menu
  */
 
-import { Fragment, useRef, useState, type FC, type ReactNode } from 'react';
+import { Fragment, useId, useRef, useState, type FC, type ReactNode } from 'react';
 import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from './Button';
 import { Icon } from './Icon';
@@ -97,6 +100,9 @@ interface ListProps {
 
 const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close }) => {
   const [openSub, setOpenSub] = useState<string | null>(null);
+  const baseId = useId();
+  /** The items that open a submenu, by label: Escape there gives each its focus back. */
+  const subItems = useRef(new Map<string, HTMLButtonElement>());
 
   const entry = (item: MenuItem, index: number) => {
     const key = `${index}:${item.label}`;
@@ -108,8 +114,18 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
       );
     }
     const sub = item.submenu;
+    const reasonId = item.disabled && item.title ? `${baseId}-${index}` : undefined;
     const button = (
       <Button
+        ref={
+          sub
+            ? (element: HTMLButtonElement | null) => {
+                if (element) subItems.current.set(item.label, element);
+                else subItems.current.delete(item.label);
+              }
+            : undefined
+        }
+        aria-describedby={reasonId}
         type="button"
         variant="ghost"
         size="sm"
@@ -142,10 +158,16 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
         {item.label}
       </Button>
     );
-    if (!sub) return <Fragment key={key}>{button}</Fragment>;
+    const reason = reasonId && (
+      <p id={reasonId} className="m-0 px-2.5 pb-xs text-xs text-text-secondary">
+        {item.title}
+      </p>
+    );
+    if (!sub) return <Fragment key={key}>{button}{reason}</Fragment>;
     return (
       <div key={key} className="relative">
         {button}
+        {reason}
         {openSub === item.label && (
           <MenuList
             label={item.label}
@@ -164,6 +186,14 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
     <div
       role="menu"
       aria-label={label}
+      onKeyDown={(event) => {
+        // A submenu open here closes first, and its item takes the focus.
+        if (event.key !== 'Escape' || openSub === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        subItems.current.get(openSub)?.focus();
+        setOpenSub(null);
+      }}
       className={cn(
         'absolute z-popover flex min-w-[200px] flex-col rounded-base bg-surface-elevated p-xs shadow-lg',
         // A long list scrolls; one with a submenu cannot, since a scrolling
@@ -200,7 +230,13 @@ export const Menu: FC<MenuProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   useClickOutside(ref, () => setOpen(false), open);
+  /** Close on a pick or Escape: the focus goes back to the button. */
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
 
   return (
     <div
@@ -209,10 +245,11 @@ export const Menu: FC<MenuProps> = ({
       onKeyDown={(event) => {
         if (!open || event.key !== 'Escape') return;
         event.preventDefault();
-        setOpen(false);
+        close();
       }}
     >
       <Button
+        ref={trigger}
         type="button"
         variant="ghost"
         size="sm"
@@ -236,7 +273,7 @@ export const Menu: FC<MenuProps> = ({
           items={items}
           toward={align === 'end' ? 'left' : 'right'}
           side={side}
-          close={() => setOpen(false)}
+          close={close}
           className={cn(align === 'end' ? 'right-0' : 'left-0', side === 'above' ? 'bottom-full mb-xs' : 'top-full mt-xs')}
         />
       )}

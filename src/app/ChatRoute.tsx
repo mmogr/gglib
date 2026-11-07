@@ -16,6 +16,8 @@
  * neither, the model is not running, and the address goes to its inspector.
  * Once open, the chat keeps the last port it had: a model unloaded or
  * crashed while it is open leaves it open, its composer saying so.
+ * Neither "nothing serves it" nor the fallback is decided before the server
+ * list's first read lands: a cold load renders before the registry is filled.
  * A chat on the paired machine's model is `PairedChat`. One route serves
  * `/chat/new` and `/chat/:id`, and the place is keyed by its model, so the
  * address a first send replaces keeps the page. Leaving keeps the model
@@ -28,6 +30,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate, type Location } from 'react-router';
 
 import { useServers, type ServerViewModel } from '../hooks/useServers';
+import { useServerListHeard } from '../services/serverEvents';
 import { useSettings } from '../hooks/useSettings';
 import { lastUsedModel, modelOf, refreshChats, useChats, type ChatModel } from '../services/chatRegistry';
 import { useModel } from '../services/modelRegistry';
@@ -102,7 +105,10 @@ function LocalChat({ modelId, conversationId, handoff, onOpened, onDeleted }: Lo
   const [held, setHeld] = useState(live);
   if (live !== undefined && live !== held) setHeld(live);
   const port = live ?? held;
-  if (port === undefined) return <Navigate to={paths.model(modelId)} replace />;
+  // Nothing serves it only once the server list has been heard: a cold load
+  // renders before the registry's first read lands.
+  const heard = useServerListHeard();
+  if (port === undefined) return heard ? <Navigate to={paths.model(modelId)} replace /> : CHAT_LOADING;
 
   return (
     <ChatPlace
@@ -130,6 +136,7 @@ export function ChatRoute() {
   const handoff = useHandoff(location);
   const { list, failed } = useChats('this');
   const { servers } = useServers();
+  const heard = useServerListHeard();
   const { settings } = useSettings();
   // The chat this route just opened, and on what: kept until a run names it.
   const [opened, setOpened] = useState<{ id: number; target: Target } | null>(null);
@@ -173,7 +180,8 @@ export function ChatRoute() {
   if (target === null) {
     if (missing) return rechecked === location.key ? <Navigate to={paths.newChat()} replace /> : CHAT_LOADING;
     if (unread) return reread === location.key ? <ChatUnread onRetry={() => setReread(null)} /> : CHAT_LOADING;
-    if (list === null) return CHAT_LOADING;
+    // The fallback picks among the models loaded: not before they are heard.
+    if (list === null || !heard) return CHAT_LOADING;
     target = fallback(list, settings?.defaultModelId ?? null, servers);
   }
   if (target.kind === 'go') return <Navigate to={target.to} replace />;

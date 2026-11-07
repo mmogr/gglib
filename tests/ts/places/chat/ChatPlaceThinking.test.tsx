@@ -220,6 +220,11 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     expect(button).toHaveAttribute('aria-checked', 'true');
     expect(button).toHaveAttribute('title', ON_TITLE);
     expect(button.textContent).toBe('Thinking');
+    // The track and the label are two children the button's gap stands between.
+    const [track, label] = Array.from(button.children);
+    expect(track.querySelector('[aria-hidden]')).not.toBeNull();
+    expect(label).toHaveTextContent(/^Thinking$/);
+    expect(button).toHaveClass('gap-2');
     // Neutral either way: never ink.
     expect(button).not.toHaveClass('bg-primary');
     const ring = screen.getByRole('button', { name: /^Context: / });

@@ -171,6 +171,37 @@ describe('ChatPlace, images in the composer', () => {
     expect(within(strip()).getByRole('img', { name: 'picked.png' })).toBeInTheDocument();
   });
 
+  it('a tile says "uploading…" while its upload is out, then what it costs once it is in', async () => {
+    let land: (upload: AttachmentUpload) => void = () => {};
+    const held = vi.fn((_source: string, _image: Blob) => new Promise<AttachmentUpload>((resolve) => {
+      land = resolve;
+    }));
+    page({ imageInput: true, contextLength: 4_096 }, { uploadAttachment: held });
+    renderLocal();
+    const box = await composerBox();
+    await waitFor(() => expect(attachButton()).toBeEnabled());
+
+    expect(fireEvent.paste(box, { clipboardData: { files: [pngFile(800, 600, 'shot.png')] } })).toBe(false);
+    await waitFor(() => expect(within(strip()).getByText('uploading…')).toBeInTheDocument());
+    expect(within(strip()).queryByText(/tokens/)).not.toBeInTheDocument();
+
+    await act(async () => land({ id: SHOT, mime: 'image/png', width: 800, height: 600, image_tokens: 475 }));
+    await waitFor(() => expect(within(strip()).getByText('~475 tokens · 12% of context')).toBeInTheDocument());
+    expect(within(strip()).queryByText('uploading…')).not.toBeInTheDocument();
+  });
+
+  it('a tile whose upload was refused says "not uploaded", and costs nothing', async () => {
+    page({ imageInput: true, contextLength: 4_096 }, { uploadAttachment: vi.fn(async () => { throw new Error('the store is full'); }) });
+    renderLocal();
+    const box = await composerBox();
+    await waitFor(() => expect(attachButton()).toBeEnabled());
+
+    expect(fireEvent.paste(box, { clipboardData: { files: [pngFile(800, 600, 'shot.png')] } })).toBe(false);
+    await waitFor(() => expect(within(strip()).getByText('not uploaded')).toBeInTheDocument());
+    expect(within(strip()).queryByText(/tokens|uploading/)).not.toBeInTheDocument();
+    expect(within(strip()).getByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
+  });
+
   it('an image the store refuses is said in a toast, by its code', async () => {
     const tooLarge = new TransportError('VALIDATION', 'too large', { status: 413, type: 'image_too_large' });
     page({ imageInput: true }, { uploadAttachment: vi.fn(async () => { throw tooLarge; }) });

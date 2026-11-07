@@ -96,8 +96,8 @@ describe('folderItem', () => {
 });
 
 describe('drawItem', () => {
-  it("is greyed with the machine's reason where a message cannot draw and nothing is chosen", () => {
-    expect(drawItem(draw({ available: false, reason: 'no image model' }))).toEqual({ label: 'Draw a picture', disabled: true, title: 'no image model' });
+  it("is greyed with the machine's reason, its first letter capitalised, where a message cannot draw and nothing is chosen", () => {
+    expect(drawItem(draw({ available: false, reason: 'no image model' }))).toEqual({ label: 'Draw a picture', disabled: true, title: 'No image model' });
   });
 
   it('with fewer than two models, is one action that sets Draw, and never unsets it', () => {
@@ -132,7 +132,7 @@ describe('drawItem', () => {
     const stuck = draw({ available: false, reason: 'gone; choose another', models: [], picked: 7 });
     const item = drawItem(stuck)!;
     expect(item.disabled).toBeFalsy();
-    expect(item.submenu![0]).toEqual({ label: 'gone; choose another', note: true });
+    expect(item.submenu![0]).toEqual({ label: 'Gone; choose another', note: true });
     expect(item.submenu!.find((i) => i.label === 'Model 7 (no longer listed)')).toMatchObject({ checked: true });
   });
 });

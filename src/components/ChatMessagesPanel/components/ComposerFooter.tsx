@@ -28,7 +28,7 @@ interface ComposerFooterProps {
   /** Whether the assistant is currently producing a response. */
   isThreadRunning: boolean;
   onStopGeneration: () => void;
-  /** The model the next send goes to, as the page names it. */
+  /** The model the next send goes to, by its bare name; empty for a far chat, whose machine picks it. */
   modelName: string;
   /** Its registry id; absent for a chat with another machine. */
   modelId?: number;
@@ -51,6 +51,8 @@ interface ComposerFooterProps {
   draw?: DrawSwitch;
   /** A far chat: one of the paired machine's own. */
   far?: boolean;
+  /** Whether the chat is a saved conversation (its turns may still be loading), not a new one. */
+  saved?: boolean;
   /** The paired machine the chat's model is on (a paired or a far chat), for the away line. */
   deskName?: string;
   /** This machine's model is no longer loaded: the composer is replaced by a line that says so. */
@@ -83,24 +85,29 @@ const ThinkingToggle: FC<{ thinking: ThinkingSwitch }> = ({ thinking }) => (
     aria-checked={thinking.on}
     onClick={thinking.toggle}
     title={thinking.on ? THINKING_ON : THINKING_OFF}
-    className="gap-xs font-normal"
+    className="font-normal"
+    leftIcon={<Track on={thinking.on} />}
   >
-    <span
-      aria-hidden
-      className={cn(
-        'relative inline-block h-3 w-[22px] shrink-0 rounded-full transition-colors duration-150',
-        thinking.on ? 'bg-text-secondary' : 'bg-surface-elevated',
-      )}
-    >
-      <span
-        className={cn(
-          'absolute top-[2px] h-2 w-2 rounded-full transition-[left] duration-150',
-          thinking.on ? 'left-[12px] bg-background' : 'left-[2px] bg-text-muted',
-        )}
-      />
-    </span>
     Thinking
   </Button>
+);
+
+/** The switch's track and knob: which way it is, beside its label. */
+const Track: FC<{ on: boolean }> = ({ on }) => (
+  <span
+    aria-hidden
+    className={cn(
+      'relative inline-block h-3 w-[22px] shrink-0 rounded-full transition-colors duration-150',
+      on ? 'bg-text-secondary' : 'bg-surface-elevated',
+    )}
+  >
+    <span
+      className={cn(
+        'absolute top-[2px] h-2 w-2 rounded-full transition-[left] duration-150',
+        on ? 'left-[12px] bg-background' : 'left-[2px] bg-text-muted',
+      )}
+    />
+  </span>
 );
 
 /** `Draw ×`: the next message draws; × sends it without. */
@@ -152,6 +159,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   folder,
   draw,
   far = false,
+  saved = false,
   deskName,
   modelGone = null,
   onShowModel,
@@ -180,6 +188,8 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
     );
   }
 
+  // The model as the picker names it: on the paired machine, it says so.
+  const named = far ? `${deskName} picks the model` : deskName !== undefined ? `${modelName} on ${deskName}` : modelName;
   const model = away ? (
     <span role="status" className="flex min-w-0 items-center gap-xs px-sm text-sm text-text-secondary">
       <StatusMark kind="away" />
@@ -188,22 +198,24 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   ) : loadWait !== null ? (
     <span role="status" className="flex items-center gap-xs px-sm text-sm text-text-secondary tabular-nums">
       <StatusMark kind="changing" />
-      {RESIDENCY_WORDS.loading} {modelName}… {loadWait} s
+      {RESIDENCY_WORDS.loading} {far ? 'the model' : modelName}… {loadWait} s
     </span>
   ) : (
     <ModelPicker
       modelId={modelId}
-      modelName={modelName}
+      modelName={named}
       quantization={quantization}
       onPick={onPickModel}
       starting={startingModel}
       onUnload={isServerConnected ? onUnloadModel : undefined}
       onShow={onShowModel}
-      onOpenFar={empty ? onOpenFar : undefined}
+      onOpenFar={saved ? undefined : onOpenFar}
     />
   );
 
   const sendable = isServerConnected && away === null;
+  // A new chat asks; a saved one replies, once its turns are known to be there.
+  const placeholder = !saved && !far ? `Ask ${modelName} anything` : empty ? '' : 'Reply…';
 
   return (
     <div className="mx-auto w-full max-w-[1000px] shrink-0 px-lg pb-lg pt-md">
@@ -215,7 +227,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
             addAttachmentOnPaste={imageInput.offered}
             submitOnEnter={sendable}
             className="max-h-[150px] min-h-[40px] resize-none bg-transparent px-sm py-xs text-base text-text outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder={empty && !far ? `Ask ${modelName} anything` : 'Reply…'}
+            placeholder={placeholder}
             disabled={!isServerConnected}
           />
           <div className="flex items-center gap-xs">

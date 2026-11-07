@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ConversationSettings } from '../../../../src/services/transport';
@@ -132,6 +132,34 @@ describe('ChatPlace, the chat\'s folder', () => {
     expect(fixture.conversations.find((c) => c.id === 1)?.settings?.folder).toBe('/home/m/src/gglib');
     expect((await exchange(user, 'and the CONTRIBUTING')).folder).toBeUndefined();
     expect(margin().getByText('gglib')).toBeInTheDocument();
+  });
+
+  it('takes a typed path on Enter without sending the message drafted beside it, and is no form inside the composer\'s', async () => {
+    const user = userEvent.setup();
+    const errors = vi.spyOn(console, 'error');
+    renderLocal();
+    await screen.findByText('What does KeepAlive do?');
+
+    await user.type(composer(), 'half a thought');
+    await user.click(plusItem('Use a folder…'));
+    const field = screen.getByRole('textbox', { name: 'Folder path' });
+    expect(field.closest('form')).toBe(rowOf(composer()));
+    await user.type(field, '/home/m/src/gglib{Enter}');
+
+    expect(margin().getByText('gglib')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Folder path' })).not.toBeInTheDocument();
+    expect(composer()).toHaveValue('half a thought');
+    await act(async () => {});
+    expect(started).toEqual([]);
+
+    // Escape leaves it as it was, and sends nothing either.
+    await user.click(margin().getByRole('button', { name: 'gglib' }));
+    await user.type(screen.getByRole('textbox', { name: 'Folder path' }), '/elsewhere{Escape}');
+    expect(margin().getByText('gglib')).toBeInTheDocument();
+    expect(composer()).toHaveValue('half a thought');
+    expect(started).toEqual([]);
+    expect(errors.mock.calls.flat().join(' ')).not.toMatch(/cannot be a descendant of/);
+    errors.mockRestore();
   });
 
   it('says "" on the run after Clear, and then nothing', async () => {

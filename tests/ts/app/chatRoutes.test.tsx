@@ -38,6 +38,8 @@ const transport = vi.hoisted(() => ({
   listPairedModels: vi.fn(async () => pairedModels([farEntry('qwen3-8b', 7)])),
   getSettings: vi.fn(async () => daemon.settings),
   listConversations: vi.fn(async () => daemon.chats.map((c) => ({ ...c }))),
+  // Read only by a test that bridges the server list, as the app does at start.
+  listServers: vi.fn(async (): Promise<unknown[]> => []),
 }));
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/transport')>()),
@@ -88,6 +90,7 @@ import { HANDED, peekChatHandoff, setChatHandoff } from '../../../src/app/chatHa
 import { refreshChats, resetChats } from '../../../src/services/chatRegistry';
 import { IDLE_STATUS, applyRemoteStatus, ingestRemoteEvent, resetRemoteState } from '../../../src/services/remoteRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
+import { cleanupServerEvents, initServerEvents } from '../../../src/services/serverEvents';
 import { renderApp } from '../places/harness';
 
 const DESK = '3ca82708b995';
@@ -156,6 +159,51 @@ describe('the chat routes', () => {
     const { at } = renderApp('/chat/3');
     await waitFor(() => expect(at()).toBe('/models/23'));
     expect(screen.getByRole('main', { name: 'Library' })).toBeInTheDocument();
+  });
+
+  describe('on a cold load, before the server list is heard', () => {
+    let answer: (list: unknown[]) => void = () => {};
+    beforeEach(() => {
+      transport.listServers.mockImplementation(() => new Promise<unknown[]>((resolve) => (answer = resolve)));
+      initServerEvents();
+    });
+    afterEach(() => {
+      cleanupServerEvents();
+      transport.listServers.mockImplementation(async () => []);
+    });
+    const listed = (modelId: number, port: number) => ({
+      model_id: modelId, model_name: 'qwen3', pid: 1, port, started_at: Math.floor(++clock / 1000), runtime: 'llama',
+    });
+
+    it('waits for it, then opens the chat on the model it lists as served', async () => {
+      const { at } = renderApp('/chat/new?model=27');
+      await act(async () => {});
+      expect(at()).toBe('/chat/new?model=27');
+      expect(screen.getByRole('status')).toHaveTextContent('Loading chat…');
+      expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+
+      served.push(27);
+      await act(async () => answer([listed(27, 5027)]));
+      expect(await page()).toHaveAttribute('data-port', '5027');
+      expect(at()).toBe('/chat/new?model=27');
+    });
+
+    it('goes to the inspector once the list it waited for serves nothing', async () => {
+      const { at } = renderApp('/chat/new?model=28');
+      await act(async () => {});
+      expect(at()).toBe('/chat/new?model=28');
+      await act(async () => answer([]));
+      await waitFor(() => expect(at()).toBe('/models/28'));
+    });
+
+    it('a new chat with no model named waits for the list before picking the first loaded', async () => {
+      const { at } = renderApp('/chat/new');
+      await act(async () => {});
+      expect(at()).toBe('/chat/new');
+      served.push(29);
+      await act(async () => answer([listed(29, 5029)]));
+      expect(await page()).toHaveAttribute('data-port', '5029');
+    });
   });
 
   it('a chat whose model stops while it is open stays open on the port it had', async () => {

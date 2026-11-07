@@ -261,7 +261,7 @@ describe('ChatPlace, Draw a picture ▸', () => {
 
     // Asked about, refused, and shown as chosen still.
     expect(askedAbout().at(-1)).toBe(7);
-    const REASON = 'the image model chosen (id 7) is no longer on this machine; choose another';
+    const REASON = 'The image model chosen (id 7) is no longer on this machine; choose another';
     await waitFor(() => expect(drawItem()).toHaveAttribute('title', REASON));
     expect(drawItem()).toBeEnabled();
     await close(user);
@@ -291,7 +291,7 @@ describe('ChatPlace, Draw a picture ▸', () => {
     models = [FLUX];
     await pick(user, /^qwen-image-q8/);
 
-    await waitFor(() => expect(drawItem()).toHaveAttribute('title', 'the image model chosen (id 7) is no longer on this machine; choose another'));
+    await waitFor(() => expect(drawItem()).toHaveAttribute('title', 'The image model chosen (id 7) is no longer on this machine; choose another'));
     await close(user);
     expect(await choices(user)).toEqual({
       names: ['Default (flux-schnell)', 'Model 7 (no longer listed)', 'flux-schnell · Flux.1 · loaded'],

@@ -48,8 +48,10 @@ describe('FolderChip', () => {
     render(<Chip held={held} />);
     const chip = screen.getByRole('button', { name: 'gglib' });
     expect(chip).toHaveAttribute('title', folderTitle('/home/m/src/gglib', held));
-    // Inside the composer's form: never a submit.
+    // Inside the composer's form: never a submit. Chip text is 12 px.
     expect(chip).toHaveAttribute('type', 'button');
+    expect(chip).toHaveClass('text-xs');
+    expect(chip).not.toHaveClass('text-sm');
 
     await user.click(chip);
     expect(held.pick).toHaveBeenCalledTimes(1);

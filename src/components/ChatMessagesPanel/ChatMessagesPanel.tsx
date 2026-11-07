@@ -69,7 +69,7 @@ interface ChatMessagesPanelProps {
   supportsToolCalls?: boolean | null;
   /** Detected tool-calling format, e.g. "hermes" or "llama3". */
   toolFormat?: string | null;
-  /** The model the next send goes to, as the page names it. */
+  /** The model the next send goes to, by its bare name; empty for a far chat, whose machine picks it. */
   modelName: string;
   /** Its registry id; absent for a chat with another machine. */
   modelId?: number;
@@ -327,6 +327,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       folder={folder}
                       draw={draw}
                       far={source === 'far'}
+                      saved={activeConversationId !== null}
                       deskName={deskName}
                       modelGone={modelGone}
                       onShowModel={onShowModel}

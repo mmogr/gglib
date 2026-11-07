@@ -17,6 +17,8 @@ import type { ReactNode } from 'react';
 import { chatTransport, conversation, modelPicker, pickModel, pickerGroup, wrapper as pageWrapper, type ChatFixture } from './chatPlaceHarness';
 import { guiModel } from '../../fixtures/model';
 import { applyLibraryRead, resetModelLibrary } from '../../../../src/services/modelRegistry';
+import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../../src/services/remoteRegistry';
+import { farEntry, pairedModels } from '../../fixtures/fakeFarDaemon';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../../src/services/transport', async () => {
@@ -85,6 +87,7 @@ beforeEach(() => {
 afterEach(() => {
   serve(8, 'llama-3.2-3b', 'stopped');
   resetModelLibrary();
+  resetRemoteState();
 });
 
 describe('ChatPlace, model picker', () => {
@@ -181,6 +184,68 @@ describe('ChatPlace, model picker', () => {
     await screen.findByText('What is a GGUF?');
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('half a thought'));
+  });
+
+  describe("the paired machine's models", () => {
+    const onOpenFar = vi.fn();
+    function joinDesk() {
+      (transport.current as Record<string, unknown>).listPairedModels = vi.fn(async () => pairedModels([farEntry('Llama-3.3-70B', 42)]));
+      act(() =>
+        applyRemoteStatus({
+          ...IDLE_STATUS,
+          connected: { port: 41234, base_url: 'http://127.0.0.1:41234/v1', ticket_fingerprint: '3ca82708b995', path: 'direct', away_for_s: null },
+          paired_name: 'desk',
+        }),
+      );
+    }
+    const renderOn = (conversationId: number | null) =>
+      render(
+        <ChatPlace
+          modelName="Qwen3.8-27B"
+          modelId={7}
+          serverPort={4321}
+          conversationId={conversationId}
+          onSwitchModel={onSwitchModel}
+          onOpenFar={onOpenFar}
+        />,
+        { wrapper },
+      );
+
+    beforeEach(() => onOpenFar.mockClear());
+
+    it('are a group of their own in a new chat, and one opens a new chat on it', async () => {
+      const user = userEvent.setup();
+      joinDesk();
+      renderOn(null);
+      await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(async () => expect(await pickerGroup(user, 'On desk')).toEqual(['Llama-3.3-70B']));
+      const desk = screen.getByRole('menuitem', { name: 'Llama-3.3-70B' });
+      expect(desk).toBeEnabled();
+      expect(desk).toHaveAttribute('title', 'Opens a new chat on Llama-3.3-70B, on desk.');
+      await user.click(desk);
+      expect(onOpenFar).toHaveBeenCalledWith(42);
+      expect(onSwitchModel).not.toHaveBeenCalled();
+    });
+
+    it('are listed greyed in a saved chat, which stays on its machine, saying why under each', async () => {
+      const user = userEvent.setup();
+      joinDesk();
+      renderOn(1);
+      await screen.findByRole('heading', { name: 'launchd KeepAlive' });
+      await waitFor(async () => expect(await pickerGroup(user, 'On desk')).toEqual(['Llama-3.3-70B']));
+      const desk = screen.getByRole('menuitem', { name: 'Llama-3.3-70B' });
+      expect(desk).toBeDisabled();
+      expect(desk).toHaveAccessibleDescription('A chat stays on its machine. Start a new chat to use this model.');
+      expect(onOpenFar).not.toHaveBeenCalled();
+    });
+
+    it('are not there with no machine joined', async () => {
+      const user = userEvent.setup();
+      renderOn(null);
+      await screen.findByRole('textbox', { name: 'Message' });
+      await pickerGroup(user, 'Loaded');
+      expect(screen.queryByRole('group', { name: 'On desk' })).not.toBeInTheDocument();
+    });
   });
 
   it('stays locked while a model starts, across a change of conversation', async () => {

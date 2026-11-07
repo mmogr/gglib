@@ -1,4 +1,4 @@
-import { FC, FormEvent, useState } from 'react';
+import { FC, KeyboardEvent, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
@@ -61,15 +61,20 @@ export const FolderChip: FC<FolderChipProps> = ({ folder, typing, setTyping }) =
     if (typing) setDraft(path ?? '');
   }
 
-  const submit = (event: FormEvent) => {
+  // No form of its own: the field sits in the composer's form, and a form
+  // may not hold another. Enter uses the path and Escape leaves it, each
+  // kept from the composer, so neither sends the message drafted there.
+  const onKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter' && event.key !== 'Escape') return;
     event.preventDefault();
-    if (draft.trim() !== '') folder.choose(draft);
+    event.stopPropagation();
+    if (event.key === 'Enter' && draft.trim() !== '') folder.choose(draft);
     setTyping(false);
   };
 
   if (typing) {
     return (
-      <form onSubmit={submit} className="w-[220px]">
+      <span className="inline-block w-[220px]">
         <Input
           size="sm"
           aria-label="Folder path"
@@ -79,10 +84,10 @@ export const FolderChip: FC<FolderChipProps> = ({ folder, typing, setTyping }) =
           value={draft}
           autoFocus
           onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => event.key === 'Escape' && setTyping(false)}
+          onKeyDown={onKey}
           onBlur={() => setTyping(false)}
         />
-      </form>
+      </span>
     );
   }
 
@@ -99,7 +104,7 @@ export const FolderChip: FC<FolderChipProps> = ({ folder, typing, setTyping }) =
         type="button"
         variant="ghost"
         size="sm"
-        className="min-w-0 pr-xs font-mono font-normal text-current"
+        className="min-w-0 pr-xs font-mono text-xs font-normal text-current"
         title={error ? `${path ?? ''}${path ? ': ' : ''}${error}` : folderTitle(path ?? '', folder)}
         onClick={() => changeFolder(folder, setTyping)}
       >

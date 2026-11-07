@@ -160,7 +160,8 @@ describe('ChatPlace, Draw a picture', () => {
     await renderPage();
 
     expect(drawItem()).toBeDisabled();
-    expect(drawItem()).toHaveAttribute('title', NO_DRAWING.reason);
+    // The machine's words, its first letter capitalised.
+    expect(drawItem()).toHaveAttribute('title', 'No image model is installed; download one first');
     expect(unDraw()).not.toBeInTheDocument();
 
     await ask(user, 'draw a lighthouse');

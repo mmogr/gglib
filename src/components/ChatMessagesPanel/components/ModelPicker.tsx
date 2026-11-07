@@ -29,7 +29,7 @@ interface ModelPickerProps {
   onUnload?: () => Promise<void>;
   /** Open the model's inspector, where its log is. */
   onShow?: () => void;
-  /** Open a new chat on the paired machine's model, by its id there; offered only while the chat is empty. */
+  /** Open a new chat on the paired machine's model, by its id there; offered only in a new chat. */
   onOpenFar?: (id: number) => void;
 }
 
@@ -47,7 +47,7 @@ const STAYS = 'A chat stays on its machine. Start a new chat to use this model.'
  * here hands it to the page, which moves the chat there, starting the model
  * first if it is not running; meanwhile the picker is locked and says so.
  * A chat's machine is fixed, so a paired machine's model opens a new chat
- * on it, and only from an empty one. A chat with another machine has
+ * on it from a new chat, and is listed greyed, with why, in a saved one. A chat with another machine has
  * nothing here to pick, so it names its model as text.
  */
 export const ModelPicker: FC<ModelPickerProps> = ({

@@ -255,7 +255,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
           endedRun={endedRun}
           supportsToolCalls={far ? null : supportsToolCalls}
           toolFormat={far ? null : toolFormat}
-          modelName={desk ? `${desk.machineName} picks the model` : paired ? `${modelName} on ${paired.machineName}` : modelName}
+          modelName={modelName}
           modelId={far ? undefined : modelId}
           source={source}
           onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({

@@ -132,7 +132,7 @@ describe('ChatPlace, paired', () => {
     render(<ChatPlace paired={paired} modelName="qwen3" conversationId={1} />, { wrapper });
     await screen.findByText('qwen3 on desk');
 
-    await waitFor(() => expect(plusItem('Draw a picture')).toHaveAttribute('title', FAR_MODEL_REASON));
+    await waitFor(() => expect(plusItem('Draw a picture')).toHaveAttribute('title', `T${FAR_MODEL_REASON.slice(1)}`));
     expect(plusItem('Draw a picture')).toBeDisabled();
     expect(screen.queryByRole('button', { name: "Don't draw" })).not.toBeInTheDocument();
     expect(drawingAvailability).toHaveBeenLastCalledWith('this', { far: true, callsTools: null });

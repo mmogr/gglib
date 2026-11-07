@@ -105,7 +105,7 @@ describe('ChatPlace, the composer', () => {
     await waitFor(() => expect(plusItem('Add image…')).toBeDisabled());
     expect(plusItem('Add image…')).toHaveAttribute('title', 'This model cannot read images: it has no projector.');
     await waitFor(() => expect(plusItem('Draw a picture')).toBeDisabled());
-    expect(plusItem('Draw a picture')).toHaveAttribute('title', 'no image model is installed; download one first');
+    expect(plusItem('Draw a picture')).toHaveAttribute('title', 'No image model is installed; download one first');
     expect(plusItem('Use a folder…')).toBeEnabled();
     expect(plusItem('Use a folder…').getAttribute('title')).toMatch(/^Choose a folder on the machine gglib runs on/);
     expect(plusItem('Tools')).toHaveAttribute('aria-haspopup', 'menu');
@@ -196,6 +196,53 @@ describe('ChatPlace, the composer', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
+  it('closes [+] on Escape, the focus back on [+]; in a submenu, Escape closes that alone, the focus on its item', async () => {
+    const user = userEvent.setup();
+    await syncWith([tool('get_current_time')]);
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+
+    await user.click(plusButton());
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(plusButton()).toHaveAttribute('aria-expanded', 'false');
+    expect(plusButton()).toHaveFocus();
+
+    const tools = await plusSubmenu(user, 'Tools');
+    within(tools).getByRole('menuitemcheckbox', { name: 'Get Current Time' }).focus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu', { name: 'Tools' })).not.toBeInTheDocument();
+    expect(plusButton()).toHaveAttribute('aria-expanded', 'true');
+    expect(plusItem('Tools')).toHaveFocus();
+    expect(plusItem('Tools')).toHaveAttribute('aria-expanded', 'false');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(plusButton()).toHaveFocus();
+  });
+
+  it('gives the focus back to the picker when a choice closes it', async () => {
+    const user = userEvent.setup();
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+    const picker = screen.getByRole('button', { name: 'Model: Qwen3.8-27B' });
+    await user.click(picker);
+    await user.click(screen.getByRole('menuitemradio', { name: 'Qwen3.8-27B' }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(picker).toHaveFocus();
+  });
+
+  it('says a greyed item\'s reason under it, as its description, not only on hover', async () => {
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+    await waitFor(() => expect(plusItem('Draw a picture')).toBeDisabled());
+    const reason = 'No image model is installed; download one first';
+    expect(plusItem('Draw a picture')).toHaveAccessibleDescription(reason);
+    expect(within(screen.getByRole('menu')).getByText(reason).tagName).toBe('P');
+    // An item that can be used has no such line.
+    expect(plusItem('Use a folder…')).not.toHaveAttribute('aria-describedby');
+  });
+
   it('says "Ask <model> anything" in an empty chat and "Reply…" once it has turns', async () => {
     const page = renderLocal(null);
     const box = await screen.findByRole('textbox', { name: 'Message' });
@@ -205,6 +252,14 @@ describe('ChatPlace, the composer', () => {
     renderLocal();
     await screen.findByText('It restarts the job whenever it exits.');
     expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Reply…');
+  });
+
+  it('says nothing in the box of a saved chat whose turns are not there, rather than a new chat\'s "Ask"', async () => {
+    fixture.rows[1] = [];
+    renderLocal();
+    const box = await screen.findByRole('textbox', { name: 'Message' });
+    await act(async () => {});
+    expect(box).toHaveAttribute('placeholder', '');
   });
 
   it('has Send, in ink, which becomes Stop while a reply is written', async () => {
@@ -250,18 +305,37 @@ describe('ChatPlace, a chat on the paired machine', () => {
     paired_name: 'desk',
   });
 
-  function renderPaired() {
+  function renderPaired(conversationId: number | null = 1) {
     return render(
       <ChatPlace
         paired={{ far: { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 }, machineName: 'desk' }}
         modelName="qwen3"
-        conversationId={1}
+        conversationId={conversationId}
       />,
       { wrapper },
     );
   }
 
-  it('names the model as plain text, and while desk is away says so and disables Send', async () => {
+  it('asks the model by its own name in an empty chat; only the plain picker says "on desk"', async () => {
+    act(() => applyRemoteStatus(away(null)));
+    renderPaired(null);
+    const box = await screen.findByRole('textbox', { name: 'Message' });
+    expect(box).toHaveAttribute('placeholder', 'Ask qwen3 anything');
+    expect(within(composer()).getByText('qwen3 on desk')).toBeInTheDocument();
+  });
+
+  it('says the paired model is loading by its own name while a reply waits for it', async () => {
+    act(() => applyRemoteStatus(away(null)));
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    fixture.frames.r1 = [{ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0 }];
+    renderPaired();
+    expect(await screen.findByText(/^Loading qwen3… \d+ s$/)).toHaveAttribute('role', 'status');
+    expect(screen.queryByText(/on desk…/)).not.toBeInTheDocument();
+  });
+
+  const startAgentRun = vi.fn(async () => {});
+  it('names the model as plain text, and while desk is away says so and disables Send and Enter', async () => {
+    (transport.current as Record<string, unknown>).startAgentRun = startAgentRun;
     act(() => applyRemoteStatus(away(null)));
     renderPaired();
     await screen.findByText('It restarts the job whenever it exits.');
@@ -276,6 +350,13 @@ describe('ChatPlace, a chat on the paired machine', () => {
     expect(within(composer()).getByText(`desk is away since ${since}. Your message will wait.`)).toBeInTheDocument();
     expect(within(composer()).queryByText('qwen3 on desk')).not.toBeInTheDocument();
     expect(within(composer()).getByRole('button', { name: 'Send' })).toBeDisabled();
+
+    // Nor does Enter send: the message waits in the box.
+    await userEvent.setup().type(screen.getByRole('textbox', { name: 'Message' }), '{Enter}');
+    await act(async () => {});
+    expect(startAgentRun).not.toHaveBeenCalled();
+    // Enter, not sending, is a new line in it.
+    expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('Still there?\n');
   });
 });
 

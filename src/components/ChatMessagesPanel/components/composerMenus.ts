@@ -22,6 +22,14 @@ export const NOT_LOADED = 'The model is not loaded.';
 /** Draw ▸'s title while it is pressed. */
 export const DRAW_ARMED = 'The next message draws a picture. × on the chip sends it without drawing.';
 
+/**
+ * A reason the daemon wrote, as the menu shows it: its words kept, its first
+ * letter capitalised, since the machine writes it to follow a colon.
+ */
+export function asSentence(reason: string | undefined): string | undefined {
+  return reason && reason.charAt(0).toUpperCase() + reason.slice(1);
+}
+
 /** What drawing would do, naming the image model when its machine did. */
 export function drawOffer(model: string | undefined): string {
   return `Let the next message draw a picture${model ? ` with ${model}` : ''}. It applies to that message only.`;
@@ -73,8 +81,9 @@ export function missingTitle(row: ImageModelRow): string | undefined {
 export function drawItem(draw: DrawSwitch | undefined): MenuItem | null {
   if (!draw) return null;
   const { models, picked, pick } = draw;
+  const reason = asSentence(draw.reason);
   const choosing = models.length >= 2 || picked !== null;
-  if (!draw.available && !choosing) return { label: 'Draw a picture', disabled: true, title: draw.reason };
+  if (!draw.available && !choosing) return { label: 'Draw a picture', disabled: true, title: reason };
   if (!choosing) {
     return {
       label: 'Draw a picture',
@@ -84,7 +93,7 @@ export function drawItem(draw: DrawSwitch | undefined): MenuItem | null {
   }
   const unlisted = picked !== null && !models.some((row) => row.id === picked);
   const submenu: MenuItem[] = [
-    ...(!draw.available && draw.reason ? [{ label: draw.reason, note: true }] : []),
+    ...(!draw.available && reason ? [{ label: reason, note: true }] : []),
     { label: defaultLabel(models), checked: picked === null, onPick: () => pick(null) },
     ...(unlisted ? [{ label: `Model ${picked} (no longer listed)`, checked: true, onPick: () => pick(picked) }] : []),
     ...models.map((row) => ({
@@ -95,7 +104,7 @@ export function drawItem(draw: DrawSwitch | undefined): MenuItem | null {
       onPick: () => pick(row.id),
     })),
   ];
-  return { label: 'Draw a picture', submenu, title: draw.available ? drawOffer(draw.model) : draw.reason };
+  return { label: 'Draw a picture', submenu, title: draw.available ? drawOffer(draw.model) : reason };
 }
 
 /** A tool's name as the checklist reads it: `get_current_time` is "Get Current Time". */
