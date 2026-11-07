@@ -8,8 +8,9 @@
  * button) and opens gglib. The blocks scroll inside; the footer stays.
  *
  * No daemon is not a stopped endpoint (TM-8): while the daemon does not
- * answer, the panel says so in one sentence and Start gglib is drawn
- * disabled, since only the tray menu can start the service; the poll in
+ * answer, the panel says so in one sentence. In the desktop app Start gglib
+ * starts it the way the tray menu does (`start_gglib`), a refusal said under
+ * the sentence in the app's words; elsewhere it is drawn disabled. The poll in
  * `useDaemonReachable` notices it coming back, and Turn on becomes live.
  * Before the first answer, and until the registries have heard the
  * daemon, the panel claims neither.
@@ -36,7 +37,8 @@ import { useDaemonRecovery } from '../hooks/useDaemonRecovery';
 import { useServers } from '../hooks/useServers';
 import { useEndpointActions } from '../places/endpoint/useEndpointActions';
 import { useEndpointDashboard } from '../places/library/useResidency';
-import { appLogger, isDesktop, showMainWindow } from '../services/platform';
+import { appLogger, isDesktop, showMainWindow, startGglib } from '../services/platform';
+import { formatError } from '../utils/errors';
 import { cleanupProxyEvents, initProxyEvents } from '../services/proxyEvents';
 import { useEndpointFacts, useProxyState } from '../services/proxyRegistry';
 import { cleanupRemoteEvents, initRemoteEvents } from '../services/remoteEvents';
@@ -94,6 +96,23 @@ export const TrayPanel: FC = () => {
   const ready = live && heard;
 
   const up = facts.state !== 'off';
+  // Start gglib: held until the poll hears the daemon, a refusal said.
+  const [starting, setStarting] = useState(false);
+  const [startRefusal, setStartRefusal] = useState<string | null>(null);
+  if (reachable !== false && (starting || startRefusal !== null)) {
+    setStarting(false);
+    setStartRefusal(null);
+  }
+  const startService = async () => {
+    setStarting(true);
+    setStartRefusal(null);
+    try {
+      await startGglib();
+    } catch (err) {
+      setStartRefusal(formatError(err));
+      setStarting(false);
+    }
+  };
   const openGglib = () =>
     void showMainWindow().catch((err: unknown) => appLogger.error('component.tray', 'Could not show the main window', { error: err }));
 
@@ -103,9 +122,18 @@ export const TrayPanel: FC = () => {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {reachable === false && (
-          <p className="m-0 px-md py-md text-sm text-text-secondary">
-            gglib isn&apos;t running, so nothing can be served. Start it from the tray menu.
-          </p>
+          <div className="flex flex-col gap-sm px-md py-md">
+            <p className="m-0 text-sm text-text-secondary">
+              {isDesktop()
+                ? "gglib isn't running, so nothing can be served."
+                : "gglib isn't running, so nothing can be served. Start it from the tray menu."}
+            </p>
+            {startRefusal !== null && (
+              <p role="alert" className="m-0 text-sm text-text-secondary">
+                {startRefusal}
+              </p>
+            )}
+          </div>
         )}
         {ready && (
           <>
@@ -122,8 +150,14 @@ export const TrayPanel: FC = () => {
 
       <footer className="flex shrink-0 items-center justify-between gap-sm px-md py-md">
         {reachable === false ? (
-          // Disabled, not hidden (TM-8): only the tray menu can start the service.
-          <Button disabled>Start gglib</Button>
+          isDesktop() ? (
+            <Button variant="primary" disabled={starting} onClick={() => void startService()}>
+              {starting ? 'Starting gglib…' : 'Start gglib'}
+            </Button>
+          ) : (
+            // Disabled, not hidden (TM-8): nothing here can start the service.
+            <Button disabled>Start gglib</Button>
+          )
         ) : !ready ? (
           // Neither Turn on nor Turn off until the panel knows which is true.
           <span />

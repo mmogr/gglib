@@ -27,8 +27,10 @@ whatever this window believes (TX-12).
 
 No daemon is not a stopped endpoint (TM-8): while the daemon does not
 answer (`hooks/useDaemonReachable`, its `/health` polled), the panel says so in one
-sentence and Start gglib is drawn disabled, since only the tray menu can
-start the service. The registries let go of what the daemon said when it
+sentence. In the desktop app Start gglib starts it as the tray menu does
+(`start_gglib`), held as "Starting gglib…" until the poll hears it, and a
+refusal is said under the sentence in the app's words; elsewhere it is
+drawn disabled. The registries let go of what the daemon said when it
 goes (`hooks/useDaemonRecovery`, which the main window's gate shares), and each is read again when the poll hears it (a list read replaces
 the running set, so a model that died with the old daemon is not drawn),
 and the event stream connects at once instead of sleeping out a reconnect
@@ -47,14 +49,14 @@ Words of the panel with no Rust twin: "gglib", "Endpoint", "On · only
 "Copied", "Loaded", "Nothing loaded. A model loads on its first request.",
 "Nothing loaded." (while off),
 "Unload <model>" (×'s name), "Devices", "Sharing", "On · N paired", "Off" (sharing), "gglib
-isn't running, so nothing can be served. Start it from the tray menu.",
-"Start gglib", "Turn on", "Turn off", "Open gglib", "Copy the endpoint
+isn't running, so nothing can be served." (with " Start it from the tray
+menu." where there is no Start), "Start gglib", "Starting gglib…", "Turn on", "Turn off", "Open gglib", "Copy the endpoint
 address" (⧉'s name, the sidebar's), "Failed" and "No further detail was
 reported.".
 
 | File | Role |
 |------|------|
-| `TrayPanel.tsx` | The panel: "gglib", the three blocks while the daemon answers, the not-running sentence while it does not, the footer (Turn on or Turn off, Start gglib disabled, Open gglib), and the bridges it starts |
+| `TrayPanel.tsx` | The panel: "gglib", the three blocks while the daemon answers, the not-running sentence while it does not, the footer (Turn on or Turn off, Start gglib, Open gglib), and the bridges it starts |
 | `Endpoint.tsx` | `Endpoint ● On` (`endpointSaying`: Starting and Connecting as ◌, Pinned as "On · only <model>"), the address with ⧉ and a one-second Copied, Key required with Copy key, the dimmed Off line, and a failed turn on or off |
 | `Loaded.tsx` | One row per loaded model (`trayLoadedRows`: the dashboard's, else the running servers as Loaded) with its word and ×; the empty sentence once known; a failed unload |
 | `Devices.tsx` | The joined machine with its reach while there is one, and Sharing On · N paired or Off (`devicesLines`); not drawn before the first status |
