@@ -308,3 +308,43 @@ fn uninstall_with_nothing_removed_says_nothing_was_there() {
         ["llama.cpp is not installed."]
     );
 }
+
+/// Only a terminal is asked. Without `--yes`, a stdin that is not one (a
+/// pipe nobody writes to, as a backgrounded `gglib model load` had) is never
+/// read: an update is kept and a missing engine refused, unasked.
+#[test]
+fn an_offer_with_no_terminal_is_answered_without_reading_stdin() {
+    use PinStanding::{Missing, Older};
+    for standing in [Missing, Older] {
+        assert_eq!(offer_action(standing, true, false), OfferAction::Install);
+        assert_eq!(offer_action(standing, true, true), OfferAction::Install);
+        assert_eq!(offer_action(standing, false, true), OfferAction::Ask);
+    }
+    assert_eq!(offer_action(Older, false, false), OfferAction::KeepUnasked);
+    assert_eq!(
+        offer_action(Missing, false, false),
+        OfferAction::RefuseUnasked
+    );
+}
+
+#[test]
+fn an_update_kept_for_want_of_a_terminal_says_how_to_install_it() {
+    assert_eq!(
+        kept_unasked(
+            RuntimeKind::Llama,
+            &state(PinStanding::Older, Some("b10327"))
+        ),
+        "Keeping llama.cpp b10327: there is no terminal to ask. Run 'gglib config llama install' \
+         to update it."
+    );
+}
+
+#[test]
+fn a_missing_engine_with_no_terminal_is_refused_with_the_install_command() {
+    assert_eq!(
+        refused_unasked(RuntimeKind::StableDiffusion),
+        "Not running in a terminal, so there is nobody to ask whether to install \
+         stable-diffusion.cpp. stable-diffusion.cpp is required to serve an image model. Run \
+         'gglib config sd install' manually."
+    );
+}

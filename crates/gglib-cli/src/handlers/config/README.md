@@ -13,9 +13,11 @@ The two engines, llama.cpp and stable-diffusion.cpp, are installed the
 same way, by `engine`: `install`, which `update` is too, installs the pinned
 release when what is there is missing or older, and is refused while the
 daemon that serves this data root runs a model on that engine; `uninstall`
-removes what an install put there, refused the same way; `ensure_installed` is the offer `gglib serve` and `gglib up` make before
+removes what an install put there, refused the same way; `ensure_installed` is the offer `gglib serve`, `gglib model load` and `gglib up` make before
 they need an engine, of the install when it is missing and of the pin when
-what is there is older. Whether there is anything to install, and whether it
+what is there is older. Only a terminal is asked: with no terminal and no
+`--yes`, stdin is not read, an update is kept back and a missing engine
+refused. Whether there is anything to install, and whether it
 is a download or a source build, are `gglib_runtime::engine`'s to say.
 
 What is each engine's own: `llama` routes llama.cpp's subcommands, and
