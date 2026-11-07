@@ -8,8 +8,6 @@ import type { DashboardSnapshot } from '../../services/transport/types/dashboard
 interface SectionProps {
   /** Latest dashboard snapshot, or `null` before the first event arrives. */
   snapshot: DashboardSnapshot | null;
-  /** Render at popover scale: smaller donuts. */
-  compact?: boolean;
 }
 
 /** Section heading on the contract's type ladder — shared so proxy surfaces can't drift. */
@@ -44,7 +42,7 @@ export const ActiveConnectionsSection: FC<SectionProps> = ({ snapshot }) => {
  * Falls back to the snapshot's own `slots_status` string when llama.cpp is not
  * reporting slots, so the reason shows through instead of an empty panel.
  */
-export const InferenceSlotsSection: FC<SectionProps> = ({ snapshot, compact = false }) => {
+export const InferenceSlotsSection: FC<SectionProps> = ({ snapshot }) => {
   const hasSlots = Boolean(snapshot?.slots_available && snapshot.slots.length > 0);
 
   return (
@@ -56,7 +54,6 @@ export const InferenceSlotsSection: FC<SectionProps> = ({ snapshot, compact = fa
             <SlotCard
               key={slot.id}
               slot={slot}
-              size={compact ? 56 : 80}
               tick={snapshot}
               resetKey={snapshot?.launch?.model_name}
             />

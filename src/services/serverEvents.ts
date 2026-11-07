@@ -19,6 +19,7 @@
  */
 
 import { bridgeEvents } from './bridgeEvents';
+import { createEventStore } from './createEventStore';
 import { getTransport } from './transport';
 import { ingestServerEvent } from './serverRegistry';
 import {
@@ -29,6 +30,12 @@ import {
 // The ordering is `bridgeEvents`'s: subscribe first, then fetch the list, and
 // drop a list that a live event or a cleanup overtook. No `reset`: this
 // registry keeps what it holds across a cleanup.
+/**
+ * Whether the list has been read since the registry was last told to forget
+ * it: the difference between no servers running and not knowing yet.
+ */
+const listHeard = createEventStore(false);
+
 const bridge = bridgeEvents({
   category: 'server',
   onEvent: (payload) => {
@@ -42,8 +49,26 @@ const bridge = bridgeEvents({
   // normalizer's own entry point for one: it is snake_case where the event
   // frames are camelCase.
   read: () => getTransport().listServers(),
-  apply: (servers) => ingestServerEvent(normalizeServerSnapshotFromList(servers)),
+  apply: (servers) => {
+    ingestServerEvent(normalizeServerSnapshotFromList(servers));
+    listHeard.setState(true);
+  },
 });
+
+/** Whether a read of the list has landed: until one has, an empty registry is not "nothing running". */
+export function useServerListHeard(): boolean {
+  return listHeard.useStore();
+}
+
+/** Forget that the list was read, for a reader whose daemon went away; the next read sets it again. */
+export function forgetServerList(): void {
+  listHeard.setState(false);
+}
+
+/** Read the list again, as hydration does: for a reader whose daemon has come back. */
+export function refreshServers(): void {
+  void bridge.refresh();
+}
 
 /**
  * Start bridging server lifecycle events into the registry.

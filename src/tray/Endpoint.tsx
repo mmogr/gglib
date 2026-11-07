@@ -11,7 +11,7 @@
  * copies the key the panel already revealed for its dashboard stream, so it
  * waits for that reveal. Off dims the bar to "Off. Clients can't connect.";
  * Turn on is the footer's. A copy says "Copied" for one second beside its
- * button, since the popover has no toast host.
+ * button, since the popover has no toast host; a copy that fails says why.
  *
  * @module tray/Endpoint
  */
@@ -23,6 +23,7 @@ import { ENDPOINT_WORDS, KEY_WORDS } from '../components/status/words';
 import { Button } from '../components/ui/Button';
 import type { EndpointFacts } from '../services/proxyRegistry';
 import type { EndpointBusy } from '../places/endpoint/useEndpointActions';
+import { formatError } from '../utils/errors';
 import { Failure } from './Failure';
 
 /** How long "Copied" stays up, in ms. */
@@ -71,9 +72,14 @@ export const Endpoint: FC<EndpointProps> = ({ facts, busy, error, apiKey }) => {
   const saying = endpointSaying(facts, busy);
   const up = facts.state !== 'off';
 
+  const [copyError, setCopyError] = useState<string | null>(null);
   const copyKey = () => {
     if (!apiKey) return;
-    void navigator.clipboard.writeText(apiKey).then(showKeyCopied);
+    setCopyError(null);
+    navigator.clipboard
+      .writeText(apiKey)
+      .then(showKeyCopied)
+      .catch((err: unknown) => setCopyError(formatError(err)));
   };
 
   return (
@@ -110,6 +116,7 @@ export const Endpoint: FC<EndpointProps> = ({ facts, busy, error, apiKey }) => {
         </p>
       )}
 
+      {copyError !== null && <Failure message={copyError} />}
       {error !== null && <Failure message={error} />}
     </section>
   );

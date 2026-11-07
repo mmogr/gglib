@@ -11,8 +11,8 @@ Everything here is presentational — the dashboard snapshot arrives as a prop r
 | File | Role |
 |------|------|
 | `ConnectionRow.tsx` | One in-flight request: model name, phase, and a prompt-progress bar while the prompt is being processed |
-| `SlotCard.tsx` | One llama.cpp inference slot as a context-usage donut; `size` shrinks it for the popover |
-| `ProxyMetricsGrid.tsx` | `ActiveConnectionsSection`, `InferenceSlotsSection` and `ModelSignalsSection`, which the modal renders with its cache panels between them. `compact` renders the slots smaller |
+| `SlotCard.tsx` | One llama.cpp inference slot as a context-usage donut and its generation rate |
+| `ProxyMetricsGrid.tsx` | `ActiveConnectionsSection`, `InferenceSlotsSection` and `ModelSignalsSection`, which the modal renders with its cache panels between them |
 | `ModelSignalsCard.tsx` | One model's per-model signals, under the rules `gglib proxy dashboard` prints them by: only what fired, repairs as a ratio, trips by detector, agent-path trips against their own decisions, the repeat counters under "Observed" |
 | `RequestThroughput.tsx` | Requests per second as a `Readout` and a `Sparkline`, over `useMetricHistory`'s rate mode |
 

@@ -17,25 +17,27 @@
  * The panel is its own window with none of the app's providers
  * (`tray-main.tsx`), so it starts its own bridges for the registries it
  * reads, the same `proxyRegistry`, `serverRegistry`, `remoteRegistry` and
- * dashboard stream as the main window: started while the daemon answers and
- * started again when it comes back, so what the panel says is read afresh. Everything it does is HTTP except
- * Open gglib, its one window action (`show_main_window`, TM-9).
+ * dashboard stream as the main window. They stay up for the panel's life,
+ * so there is one event stream however often the daemon comes and goes
+ * (TX-1): when it goes, what the registries held is let go; when it comes
+ * back, each is read again. Everything it does is HTTP except Open gglib,
+ * its one window action (`show_main_window`, TM-9).
  *
  * @module tray/TrayPanel
  */
 
-import { useEffect, useState, type FC } from 'react';
+import { useEffect, useRef, useState, type FC } from 'react';
 import { Button } from '../components/ui/Button';
 import { useDaemonReachable } from '../hooks/useDaemonReachable';
 import { useServers } from '../hooks/useServers';
 import { useEndpointActions } from '../places/endpoint/useEndpointActions';
 import { useEndpointDashboard } from '../places/library/useResidency';
 import { appLogger, isDesktop, showMainWindow } from '../services/platform';
-import { cleanupProxyEvents, initProxyEvents } from '../services/proxyEvents';
-import { useEndpointFacts, useProxyState } from '../services/proxyRegistry';
-import { cleanupRemoteEvents, initRemoteEvents } from '../services/remoteEvents';
-import { useRemoteState } from '../services/remoteRegistry';
-import { cleanupServerEvents, initServerEvents } from '../services/serverEvents';
+import { cleanupProxyEvents, initProxyEvents, refreshProxyStatus } from '../services/proxyEvents';
+import { resetProxyState, useEndpointFacts, useProxyState } from '../services/proxyRegistry';
+import { cleanupRemoteEvents, initRemoteEvents, refreshRemoteStatus } from '../services/remoteEvents';
+import { resetRemoteState, useRemoteState } from '../services/remoteRegistry';
+import { cleanupServerEvents, forgetServerList, initServerEvents, refreshServers, useServerListHeard } from '../services/serverEvents';
 import { Devices } from './Devices';
 import { Endpoint } from './Endpoint';
 import { Loaded, trayLoadedRows } from './Loaded';
@@ -47,12 +49,11 @@ export const TrayPanel: FC = () => {
   const actions = useEndpointActions();
   const { servers } = useServers();
   const { status: remote } = useRemoteState();
+  const listHeard = useServerListHeard();
 
-  // Started once the daemon answers and taken down when it stops, so a
-  // daemon that comes back is read afresh: the event stream has no backlog.
-  const live = reachable === true;
+  // Up for the panel's life: taking them down with the daemon and up again
+  // could leave the old stream's reconnect loop running beside the new one.
   useEffect(() => {
-    if (!live) return undefined;
     initProxyEvents();
     initServerEvents();
     initRemoteEvents();
@@ -61,7 +62,26 @@ export const TrayPanel: FC = () => {
       cleanupServerEvents();
       cleanupRemoteEvents();
     };
-  }, [live]);
+  }, []);
+
+  // The daemon going lets go of what it said; its coming back reads it
+  // again, since the event stream has no backlog. A first answer needs no
+  // re-read: the bridges' own reads are on their way.
+  const live = reachable === true;
+  const wasDown = useRef(false);
+  useEffect(() => {
+    if (reachable === false) {
+      wasDown.current = true;
+      resetProxyState();
+      resetRemoteState();
+      forgetServerList();
+    } else if (reachable === true && wasDown.current) {
+      wasDown.current = false;
+      refreshProxyStatus();
+      refreshServers();
+      void refreshRemoteStatus();
+    }
+  }, [reachable]);
 
   // The probe answering is not the registries having heard: until the
   // bridge's own read lands they hold nothing, which would draw a running
@@ -90,7 +110,11 @@ export const TrayPanel: FC = () => {
         {ready && (
           <>
             <Endpoint facts={facts} busy={actions.busy} error={actions.error} apiKey={dash.apiKey} />
-            <Loaded rows={trayLoadedRows(dash.snapshot, servers)} known={dash.snapshot !== null || !up} />
+            <Loaded
+              rows={trayLoadedRows(dash.snapshot, listHeard ? servers : [])}
+              known={dash.snapshot !== null || (!up && listHeard)}
+              off={!up}
+            />
             <Devices status={remote} />
           </>
         )}
@@ -100,12 +124,15 @@ export const TrayPanel: FC = () => {
         {reachable === false ? (
           // Disabled, not hidden (TM-8): only the tray menu can start the service.
           <Button disabled>Start gglib</Button>
+        ) : !ready ? (
+          // Neither Turn on nor Turn off until the panel knows which is true.
+          <span />
         ) : up ? (
-          <Button disabled={!ready} isLoading={actions.busy === 'off'} onClick={() => void actions.turnOff()}>
+          <Button isLoading={actions.busy === 'off'} onClick={() => void actions.turnOff()}>
             Turn off
           </Button>
         ) : (
-          <Button disabled={!ready} isLoading={actions.busy === 'on'} onClick={() => void actions.turnOn()}>
+          <Button isLoading={actions.busy === 'on'} onClick={() => void actions.turnOn()}>
             Turn on
           </Button>
         )}

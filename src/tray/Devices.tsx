@@ -1,9 +1,9 @@
 /**
  * The tray's Devices block: the machine this one has joined, with its reach
- * (`REACH_WORDS`: Connected, Away, Disconnected), then "Sharing On · N
- * paired" while this machine lets devices in. Each line is drawn only when
- * the daemon's status has the fact for it, and the block not at all when
- * neither line has one, or before the first status.
+ * (`REACH_WORDS`: Connected, Away, Disconnected), only while one is; then
+ * Sharing, "On · N paired" while this machine lets devices in and "Off"
+ * while it does not, which is a fact too. Not drawn before the first
+ * status.
  *
  * The facts are `remoteRegistry`'s; the joined machine's name is
  * `pairedName`'s, and N counts the roster's rows as the sidebar's devices
@@ -26,17 +26,19 @@ export interface DeviceLine {
   word: string;
 }
 
-/** The block's lines, each only when the status has its fact. */
+/** The block's lines: the joined machine while there is one, then sharing; none before a status. */
 export function devicesLines(status: RemoteStatus | null): DeviceLine[] {
   if (status === null) return [];
   const lines: DeviceLine[] = [];
   if (status.connected !== null) {
     lines.push({ label: pairedName(status), mark: REACH_MARK[status.reach], word: REACH_WORDS[status.reach] });
   }
-  if (status.enabled) {
-    // `?? []`: a daemon from before the roster answers status without one.
-    lines.push({ label: 'Sharing', mark: 'on', word: `On · ${(status.devices ?? []).length} paired` });
-  }
+  // `?? []`: a daemon from before the roster answers status without one.
+  lines.push(
+    status.enabled
+      ? { label: 'Sharing', mark: 'on', word: `On · ${(status.devices ?? []).length} paired` }
+      : { label: 'Sharing', mark: 'off', word: 'Off' },
+  );
   return lines;
 }
 
