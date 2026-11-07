@@ -178,12 +178,18 @@ describe('a write on its way', () => {
     const port = await screen.findByLabelText('Port');
     await user.clear(port);
     await user.type(port, '8082{Enter}');
-    await waitFor(() => expect(port).toBeDisabled());
+    await waitFor(() => expect(port).toHaveAttribute('readonly'));
+    expect(port).toHaveAttribute('aria-busy', 'true');
+    // Held, not disabled: the keyboard keeps its place.
+    expect(port).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(port).toHaveValue(8082);
     await user.tab();
+    expect(port).toHaveValue(8082);
     expect(writes()).toEqual([{ proxyPort: 8082 }]);
 
     release();
-    await waitFor(() => expect(port).toBeEnabled());
+    await waitFor(() => expect(port).not.toHaveAttribute('readonly'));
     await user.clear(port);
     await user.type(port, '8081{Enter}');
     await waitFor(() => expect(writes()).toEqual([{ proxyPort: 8082 }, { proxyPort: 8081 }]));
@@ -196,9 +202,13 @@ describe('a write on its way', () => {
     const user = userEvent.setup();
     const box = await screen.findByRole('checkbox', { name: /^Start the endpoint when gglib launches/ });
     await user.click(box);
-    await waitFor(() => expect(box).toBeDisabled());
+    await waitFor(() => expect(box).toHaveAttribute('aria-busy', 'true'));
+    expect(box).toBeEnabled();
+    // A second click while the first is on its way changes nothing.
+    await user.click(box);
+    expect(writes()).toHaveLength(1);
     release();
-    await waitFor(() => expect(box).toBeEnabled());
+    await waitFor(() => expect(box).not.toHaveAttribute('aria-busy'));
     expect(box).toBeChecked();
   });
 

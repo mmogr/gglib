@@ -87,9 +87,13 @@ export function TextSetting<K extends Key>(props: TextProps<K>) {
     'aria-invalid': save.error !== null || undefined,
     // Held while its write is on its way, as the checkboxes and choices are:
     // an edit made then would be compared with the value before the write.
-    disabled: save.saving,
+    // Read-only, not disabled: disabling a focused box drops the keyboard's
+    // focus to the page, and it does not come back.
+    readOnly: save.saving,
+    'aria-busy': save.saving || undefined,
     onBlur: () => void commit(),
     onKeyDown: (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (save.saving) return;
       if (event.key === 'Enter' && !multiline) void commit();
       if (event.key === 'Escape') setDraft(null);
     },
@@ -179,8 +183,13 @@ export function ToggleSetting<K extends Key>({ k, id, label, children, note, on,
       <Checkbox
         id={id}
         checked={checked}
-        disabled={save.saving}
-        onChange={(event) => void save.commit(toWire ? toWire(event.target.checked) : (event.target.checked as Wire<K>))}
+        // Held by ignoring a change while its write is on its way, not by
+        // disabling, which would drop the keyboard's focus.
+        aria-busy={save.saving || undefined}
+        onChange={(event) => {
+          if (save.saving) return;
+          void save.commit(toWire ? toWire(event.target.checked) : (event.target.checked as Wire<K>));
+        }}
         label={<span className="font-semibold">{label}</span>}
         description={children}
       />
@@ -219,8 +228,12 @@ export function ChoiceSetting<K extends Key>({ k, id, label, description, choice
         id={id}
         value={toText(stored)}
         aria-describedby={settingDescriptionId(id)}
-        disabled={disabled || save.saving}
-        onChange={(event) => void save.commit(fromText(event.target.value))}
+        disabled={disabled}
+        aria-busy={save.saving || undefined}
+        onChange={(event) => {
+          if (save.saving) return;
+          void save.commit(fromText(event.target.value));
+        }}
       >
         {choices.map((choice) => (
           <option key={choice.value} value={choice.value}>

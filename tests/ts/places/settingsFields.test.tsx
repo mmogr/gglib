@@ -183,6 +183,8 @@ describe('the number fields', () => {
 describe('when a change takes effect', () => {
   const ENDPOINT = 'Takes effect when the endpoint next turns on.';
   const GGLIB = 'Takes effect when gglib next starts.';
+  const NEXT_LOAD =
+    'Takes effect for the next model loaded. A model the endpoint loads for a client keeps the value the endpoint turned on with.';
   const DESKTOP = 'Takes effect when the desktop app next starts.';
   const KEY = 'A new key takes effect within a few seconds. A cleared key stops being required when the endpoint next turns on.';
   // [section, field, its disclosure, its note or null for one read where it is used]
@@ -203,7 +205,7 @@ describe('when a change takes effect', () => {
     ['endpoint', 'trust-client-sampling-input', 'What gglib does to requests', null],
     ['models', 'models-dir-input', null, null],
     ['models', 'max-queue-size-input', null, null],
-    ['models', 'context-size-input', null, ENDPOINT],
+    ['models', 'context-size-input', null, NEXT_LOAD],
     ['models', 'default-model-select', null, null],
     ['models', 'default-image-model-select', null, null],
     ['tools', 'mcp-drawing-input', null, null],

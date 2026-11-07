@@ -8,7 +8,7 @@ fn kebab_round_trips_through_camel() {
     for (kebab, camel) in [
         ("default-context-size", "defaultContextSize"),
         ("proxy-port", "proxyPort"),
-        ("share-lan", "shareLan"),
+        ("proxy-host", "proxyHost"),
         ("setup-completed", "setupCompleted"),
     ] {
         assert_eq!(kebab_to_camel(kebab), camel);

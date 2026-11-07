@@ -16,7 +16,7 @@ import { drawingValuesFrom } from '../../readings/drawingValues';
 import { useModelLibrary } from '../../services/modelRegistry';
 import type { AppSettings, GgufModel } from '../../types';
 import { ChoiceSetting, NumberSetting, numberOrNull, type Choice } from './fields';
-import { ON_ENDPOINT_START } from './notes';
+import { ON_NEXT_LOAD } from './notes';
 import { InferenceProfiles } from './InferenceProfiles';
 import { ModelsFolder } from './ModelsFolder';
 import { SamplingDefaults } from './SamplingDefaults';
@@ -62,7 +62,7 @@ export const ModelsSection: FC = () => {
         label="Context for models without their own"
         spec={CONTEXT_SIZE}
         description="The context window of a model with no context of its own set."
-        note={ON_ENDPOINT_START}
+        note={ON_NEXT_LOAD}
       />
 
       <ChoiceSetting

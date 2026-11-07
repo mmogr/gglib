@@ -349,7 +349,7 @@ scan_double_options() {
     #
     # Only the text *before* the declaration joins the attribute buffer. The
     # declaration itself must never vouch for the field: `default_model_id`
-    # and `default_download_path` both contain "default" in their names, and
+    # and `default_context_size` both contain "default" in their names, and
     # would otherwise satisfy the check on their own spelling.
     # `pub(crate)` and friends are matched too. Requiring whitespace straight
     # after `pub` reproduced the original bug exactly: the field was invisible
