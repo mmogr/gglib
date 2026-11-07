@@ -220,14 +220,11 @@ pub(super) async fn prepare_over(
 
     let local_model = upstream.local_model;
     let far_model = upstream.far_model.clone();
-    // Through this machine's endpoint, its loop guard sees every request and
-    // counts what it decides; a count here would count each trip twice.
-    let endpoint = upstream.door.as_ref().is_some_and(|door| !door.is_far());
     // Its guard decisions to the same process's ledger, which is the only
     // reason the chat route's trips are counted at all (#1091). The name is
     // `resolve`'s, not `req`'s: a request that named no model is counted
     // under the model actually running on the port.
-    let guard = (!endpoint).then(|| AgentGuardReporter {
+    let guard = reports_its_guard(upstream.door.as_ref()).then(|| AgentGuardReporter {
         sink: state.proxy.agent_guard_sink(),
         model: upstream.counted_as,
     });
@@ -276,6 +273,16 @@ pub(super) async fn prepare_over(
         local_model,
         far_model,
     }
+}
+
+/// Whether a loop through `door` reports its own guard's decisions to this
+/// process's ledger: a loop on llama-server's port does, and so does one on
+/// a paired machine's model, which this machine counts as it composed it. A
+/// loop through this machine's endpoint does not: the endpoint's loop guard
+/// sees every request and counts what it decides, and a count here would
+/// count each trip twice.
+pub(super) fn reports_its_guard(door: Option<&gglib_runtime::Door>) -> bool {
+    door.is_none_or(gglib_runtime::Door::is_far)
 }
 
 /// The loop config a request runs with: what it names, and for the limits

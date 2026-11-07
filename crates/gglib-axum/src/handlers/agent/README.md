@@ -90,7 +90,13 @@ then drop the load's lease and dial the endpoint (`hub_turn::late_on`,
 `remote_upstream::through_endpoint`): at the door's root
 (`ProxyOps::door`, the endpoint turned on first when it is off, as starting
 a model turns it on), with the key it demands, the model named by its
-catalogue id. Every request of the loop is then a request to the endpoint
+catalogue id. The turn is read from the catalogue's row for that id (its
+name, quantisation, images and ladder), never from what the port serves by
+the time it dials: the load's lease is gone, so the port may be empty or
+serve another model, and the endpoint loads the chat's model again. A turn's
+limit is written only when the endpoint's own ladder, with the sampling it
+was started with and its default profile, names no `max_tokens`. Every
+request of the loop is then a request to the endpoint
 like any client's: shaped by its pipeline, guarded by its loop guard,
 admitted on its queue, counted in its ledger (Endpoint › Recent, `gglib
 proxy dashboard`) and in its one prompt-cache figure. Nothing holds the

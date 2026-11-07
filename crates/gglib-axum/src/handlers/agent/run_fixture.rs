@@ -90,6 +90,18 @@ pub(in crate::handlers) async fn state() -> (tempfile::TempDir, AppState) {
     })
     .await
     .expect("bootstrap an isolated context");
+    // A turn whose model loads dials this machine's endpoint, turning it on
+    // where the settings say when it is off. Its stored port is one this
+    // process holds for good, so such a turn is refused at the door and no
+    // test ever binds the default port, which the user's own gglib may hold.
+    let held = std::net::TcpListener::bind("127.0.0.1:0").expect("a port to hold");
+    let port = held.local_addr().unwrap().port();
+    Box::leak(Box::new(held));
+    let update = gglib_core::SettingsUpdate {
+        proxy_port: Some(Some(port)),
+        ..gglib_core::SettingsUpdate::default()
+    };
+    state.core.settings().update(update).await.unwrap();
     (dir, Arc::new(state))
 }
 

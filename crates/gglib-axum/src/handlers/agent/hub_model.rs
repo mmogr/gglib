@@ -23,7 +23,6 @@ use gglib_core::domain::chat::{Conversation, Message};
 use gglib_core::domain::{Machine, ModelCapabilities, ModelRef, RuntimeKind};
 use gglib_core::ports::{Admission, LaunchOverrides, ModelRuntimeError, RunScope};
 
-use super::AgentChatRequest;
 use super::launch::Loading;
 use super::run::coded;
 use crate::error::HttpError;
@@ -169,7 +168,16 @@ fn serving(running: &[ServerInfo], id: i64) -> Option<u16> {
     running.iter().find(|s| s.model_id == id).map(|s| s.port)
 }
 
-/// `chat` on the port `model` is served on, loading it first when it is not
+/// A turn's model once it is found running or loaded: its catalogue id, the
+/// one the turn dials the endpoint with, and the port it was on then, which
+/// only says where to read the context it was launched with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Loaded {
+    pub(super) id: i64,
+    pub(super) port: u16,
+}
+
+/// The port `model` is served on, loading it first when it is not
 /// running, as `/v1/models/{name}/load` does. A running server is matched by
 /// the id `model` resolves to, and a load is asked for by that id, so a
 /// second model of the same name is neither found nor loaded in its place.
@@ -178,7 +186,9 @@ fn serving(running: &[ServerInfo], id: i64) -> Option<u16> {
 ///
 /// The load's lease is dropped once it is in: the turn's requests go
 /// through this machine's endpoint, which admits each of them, so nothing
-/// here keeps the model resident between them.
+/// here keeps the model resident between them, and the port may serve
+/// another model, or none, by the time the turn dials. So the turn is told
+/// the model by its id, which is what it dials with, never by its port.
 ///
 /// # Errors
 ///
@@ -187,15 +197,13 @@ fn serving(running: &[ServerInfo], id: i64) -> Option<u16> {
 pub(super) async fn on_model(
     state: &AppState,
     model: &str,
-    mut chat: AgentChatRequest,
     loading: &Loading,
-) -> Result<AgentChatRequest, HttpError> {
+) -> Result<Loaded, HttpError> {
     let found = state.core.models().get(model).await.ok().flatten();
     let id = found.as_ref().map(|m| m.id);
     let servers = state.servers.list_servers().await;
-    if let Some(port) = id.and_then(|id| serving(&servers, id)) {
-        chat.port = port;
-        return Ok(chat);
+    if let Some((id, port)) = id.and_then(|id| Some((id, serving(&servers, id)?))) {
+        return Ok(Loaded { id, port });
     }
     loading.waiting(found.as_ref().map_or(model, |m| m.name.as_str()));
     let model = id.map_or_else(|| model.to_owned(), |id| id.to_string());
@@ -225,8 +233,12 @@ pub(super) async fn on_model(
                 )
             }
         })?;
-    chat.port = Admission::into_target(admission).port;
-    Ok(chat)
+    let target = Admission::into_target(admission);
+    Ok(Loaded {
+        // The catalogue's id; a name it does not hold, by what was loaded.
+        id: id.unwrap_or_else(|| i64::from(target.model_id)),
+        port: target.port,
+    })
 }
 
 #[cfg(test)]

@@ -195,3 +195,31 @@ async fn a_far_run_shows_the_picture_when_the_far_machine_says_the_model_reads_i
         assert_eq!(upstream.model_context, want);
     }
 }
+
+/// A turn through this machine's endpoint, for a model that reads images,
+/// is shown the drawn picture the same way: read here, on the message after
+/// it, once. The note on what it is shown is the endpoint's to write, as
+/// its pipeline writes it for any client.
+#[tokio::test]
+async fn a_turn_through_the_endpoint_after_a_draw_shows_the_picture() {
+    let (_dir, state) = drawing_state().await;
+    let picture = uploaded(&state).await;
+    let id = server(&state, true).await;
+    let body = json!({ "tool_filter": [], "messages": page_history(picture.as_str()) });
+
+    let turn =
+        turn_fixture::turn_through_endpoint(&state, id, page(&state, body).await, REPLY).await;
+
+    assert!(turn.ended_well, "{:?}", turn.events);
+    let request = &turn.requests[0];
+    let sent = request["messages"].as_array().unwrap();
+    assert_eq!(sent.len(), 5, "no note added here: {request}");
+    let parts = sent[4]["content"].as_array().expect("parts");
+    assert_eq!(
+        parts[0],
+        json!({ "type": "text", "text": DRAWN_PICTURE_LINE })
+    );
+    let url = parts[1]["image_url"]["url"].as_str().unwrap();
+    assert!(url.starts_with("data:image/png;base64,"), "{url}");
+    assert_eq!(request.to_string().matches("\"image_url\":").count(), 1);
+}

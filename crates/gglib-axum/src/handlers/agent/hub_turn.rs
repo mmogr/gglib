@@ -269,17 +269,15 @@ pub(super) fn late_on(
 ) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
-            let far = chat.far.is_some();
-            let chat = if far {
-                chat
+            let loaded = if chat.far.is_some() {
+                None
             } else {
-                on_model(&state, &model, chat, &loading).await?
+                Some(on_model(&state, &model, &loading).await?)
             };
             let chat = device_tools::settle(&state, chat, &asked).await;
-            let upstream = if far {
-                remote_upstream::resolve(&state, &chat).await
-            } else {
-                remote_upstream::through_endpoint(&state, &chat).await
+            let upstream = match loaded {
+                None => remote_upstream::resolve(&state, &chat).await,
+                Some(loaded) => remote_upstream::through_endpoint(&state, &chat, loaded).await,
             };
             let upstream = upstream.map_err(with_code)?;
             Ok(prepare_over(&state, chat, upstream, folder).await)

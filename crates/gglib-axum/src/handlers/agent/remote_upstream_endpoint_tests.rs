@@ -8,7 +8,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
-use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::agent::{AgentEvent, MADE_KEYS, TurnUsage};
 use gglib_core::ports::{
     Admission, AdmissionLease, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget,
@@ -19,6 +18,7 @@ use serde_json::json;
 
 use super::{endpoint, this_machines_door};
 use crate::error::HttpError;
+use crate::handlers::agent::hub_model::Loaded;
 use crate::handlers::agent::run::with_code;
 use crate::handlers::agent::run_fixture::{
     End, conversation, device, meta, prepared, saved, saving, settled, state,
@@ -83,16 +83,11 @@ async fn on(runtime: &Arc<Primary>) -> (tempfile::TempDir, AppState, i64) {
     (dir, state, id)
 }
 
-/// The model `model_id` on [`PORT`], as the servers list it.
-fn served(model_id: i64) -> ServerInfo {
-    ServerInfo {
-        model_id,
-        model_name: "qwen".to_owned(),
-        pid: None,
+/// The model `model_id`, found or loaded on [`PORT`].
+const fn served(model_id: i64) -> Loaded {
+    Loaded {
+        id: model_id,
         port: PORT,
-        started_at: 0,
-        runtime: gglib_core::domain::RuntimeKind::Llama,
-        launch: None,
     }
 }
 
@@ -128,7 +123,9 @@ async fn a_turn_dials_the_endpoint_with_its_key_and_the_models_id() {
     assert_eq!(dialled.key.as_deref(), Some("sk-this-machines-endpoint"));
     assert!(!dialled.is_far(), "this machine's own endpoint");
     assert_eq!(upstream.local_model, Some((PORT, id)));
-    assert_eq!(upstream.made_by.model, "qwen");
+    // The catalogue's name for the id, never what a port says it serves.
+    assert_eq!(upstream.made_by.model, "catalogue-name");
+    assert_eq!(upstream.counted_as, "catalogue-name");
 }
 
 /// Once its model is loaded the turn reads the context it was launched with,

@@ -33,13 +33,21 @@ impl AdmissionRelease for Releases {
     fn progress(&self, _slot: usize) {}
 }
 
-/// A runtime with one model, which it loads onto the fake llama-server at
-/// `port` when it is admitted, and keeps loaded until [`Self::unload`].
+/// What is resident on the fake llama-server's port: a model's id and name.
+pub(super) type Resident = Option<(i64, String)>;
+
+/// A runtime that loads the model it is asked for onto the fake
+/// llama-server at `port`, the only port it has, and keeps it there until
+/// [`Self::unload`]. It records what each admission asked for, and can
+/// change what is resident right after the next load ([`Self::swap_after_load`]),
+/// as a request from another client would between the load and the dial.
 #[derive(Debug)]
 pub(super) struct Loader {
     port: u16,
     model: i64,
-    loaded: Mutex<bool>,
+    resident: Mutex<Resident>,
+    after_load: Mutex<Option<Resident>>,
+    asked: Mutex<Vec<String>>,
     admitted: AtomicUsize,
     released: Arc<Releases>,
 }
@@ -57,14 +65,24 @@ impl Loader {
         self.admitted() - self.released.0.load(Ordering::SeqCst)
     }
 
-    /// Unload the model, as a swap or `gglib model unload` would.
-    pub(super) fn unload(&self) {
-        *self.loaded.lock().unwrap() = false;
+    /// What each admission asked for, in order.
+    pub(super) fn asked(&self) -> Vec<String> {
+        self.asked.lock().unwrap().clone()
     }
 
-    fn target(&self, just_started: bool) -> RunningTarget {
-        let id = u32::try_from(self.model).unwrap();
-        RunningTarget::local(self.port, id, NAME.to_owned(), 4096, just_started)
+    /// Unload the model, as a swap or `gglib model unload` would.
+    pub(super) fn unload(&self) {
+        *self.resident.lock().unwrap() = None;
+    }
+
+    /// Right after the next load, leave `resident` on the port instead.
+    pub(super) fn swap_after_load(&self, resident: Resident) {
+        *self.after_load.lock().unwrap() = Some(resident);
+    }
+
+    fn target((id, name): &(i64, String), port: u16, just_started: bool) -> RunningTarget {
+        let id = u32::try_from(*id).unwrap();
+        RunningTarget::local(port, id, name.clone(), 4096, just_started)
     }
 }
 
@@ -75,28 +93,42 @@ pub(super) const NAME: &str = "catalogue-name";
 impl ModelRuntimePort for Loader {
     async fn admit(
         &self,
-        _model_name: &str,
+        model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         self.admitted.fetch_add(1, Ordering::SeqCst);
-        let was = std::mem::replace(&mut *self.loaded.lock().unwrap(), true);
+        self.asked.lock().unwrap().push(model_name.to_owned());
+        let wanted = (self.model, NAME.to_owned());
+        let mut resident = self.resident.lock().unwrap();
+        let just_started = resident.as_ref() != Some(&wanted);
+        let target = Self::target(&wanted, self.port, just_started);
+        *resident = self
+            .after_load
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Some(wanted));
+        drop(resident);
         let owner: Arc<dyn AdmissionRelease> = Arc::clone(&self.released) as _;
         Ok(Admission {
-            target: self.target(!was),
+            target,
             lease: AdmissionLease::new(owner, 0),
         })
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {
-        (*self.loaded.lock().unwrap()).then(|| self.target(false))
+        let resident = self.resident.lock().unwrap().clone()?;
+        Some(Self::target(&resident, self.port, false))
     }
 
     async fn list_running(&self) -> Vec<ProcessHandle> {
-        let loaded = *self.loaded.lock().unwrap();
-        let handle = ProcessHandle::new(self.model, NAME.to_owned(), None, self.port, 1);
-        loaded.then_some(handle).into_iter().collect()
+        let resident = self.resident.lock().unwrap().clone();
+        resident
+            .map(|(id, name)| ProcessHandle::new(id, name, None, self.port, 1))
+            .into_iter()
+            .collect()
     }
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
@@ -134,6 +166,16 @@ pub(super) struct Daemon {
 /// `upstream_port`, its endpoint started with `key` stored as its
 /// `proxy_api_key` (none: open).
 pub(super) async fn daemon(upstream_port: u16, key: Option<&str>) -> Daemon {
+    daemon_started(upstream_port, key, |_| {}).await
+}
+
+/// [`daemon`], its endpoint started with `config` as `start` leaves it
+/// (`gglib serve`'s sampling flags, a default profile).
+pub(super) async fn daemon_started(
+    upstream_port: u16,
+    key: Option<&str>,
+    start: impl FnOnce(&mut ProxyConfig),
+) -> Daemon {
     let (dir, state) = super::run_fixture::state().await;
     let model = super::turn_fixture::model(&state, |entry| entry.name = NAME.to_owned()).await;
     if let Some(key) = key {
@@ -142,7 +184,9 @@ pub(super) async fn daemon(upstream_port: u16, key: Option<&str>) -> Daemon {
     let loader = Arc::new(Loader {
         port: upstream_port,
         model,
-        loaded: Mutex::new(false),
+        resident: Mutex::new(None),
+        after_load: Mutex::new(None),
+        asked: Mutex::new(Vec::new()),
         admitted: AtomicUsize::new(0),
         released: Arc::new(Releases::default()),
     });
@@ -169,11 +213,12 @@ pub(super) async fn daemon(upstream_port: u16, key: Option<&str>) -> Daemon {
     }));
     context.proxy = proxy;
     context.runtime = runtime;
-    let config = ProxyConfig {
+    let mut config = ProxyConfig {
         host: "127.0.0.1".to_owned(),
         port: 0,
         ..ProxyConfig::default()
     };
+    start(&mut config);
     let address = context
         .proxy
         .start(config, None)

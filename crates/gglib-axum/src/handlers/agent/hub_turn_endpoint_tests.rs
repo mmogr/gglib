@@ -8,7 +8,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gglib_core::domain::runs::RunStatus;
+use gglib_core::domain::{InferenceConfig, InferenceProfile};
 use gglib_core::ports::{RunEvent, RunScope, RunsPort as _};
+use gglib_runtime::proxy::ProxyConfig;
 use serde_json::Value;
 use tokio::io::AsyncWriteExt as _;
 use tokio::net::TcpListener;
@@ -16,7 +18,7 @@ use tokio::sync::Notify;
 
 use super::hub_turn_tests::turn;
 use super::start;
-use crate::handlers::agent::endpoint_fixture::{Daemon, NAME, daemon, store_key};
+use crate::handlers::agent::endpoint_fixture::{Daemon, NAME, daemon, daemon_started, store_key};
 use crate::handlers::agent::run_fixture::{device, settled};
 use crate::handlers::agent::turn_fixture::REPLY;
 use crate::handlers::remote::fake_far::{Fake, far};
@@ -315,4 +317,116 @@ async fn cancelling_a_turn_lets_the_endpoint_go_of_the_model() {
 
     assert_eq!(writing, 1, "the endpoint's request held the model");
     assert_eq!(status(&d.state, &local, "l1"), RunStatus::Cancelled);
+}
+
+/// The load lets go of the model before the turn dials, so by then another
+/// client may have swapped it off its port, leaving the port empty or
+/// serving another model. The turn is still the chat's model's: it dials
+/// with that model's id, the endpoint loads it again, the turn replies, and
+/// its reply says the chat's model made it, never the one on the port.
+#[tokio::test]
+async fn a_model_swapped_off_its_port_before_the_dial_is_still_the_one_sent() {
+    let another: (i64, String) = (9_999, "another-model".to_owned());
+    for after in [None, Some(another.clone())] {
+        let (fake, port) = llama().await;
+        let d = daemon(port, None).await;
+        let chat = d.chat().await;
+        let local = RunScope::Local;
+        d.loader.swap_after_load(after.clone());
+
+        start(&d.state, local.clone(), "l1", turn(chat, "hi"), None)
+            .await
+            .unwrap();
+        let said = frames(&d.state, &local, "l1").await;
+        d.stop().await;
+
+        let swapped = format!("{after:?}");
+        assert_eq!(
+            status(&d.state, &local, "l1"),
+            RunStatus::Completed,
+            "{swapped}: {said:?}"
+        );
+        let asked = d.loader.asked();
+        assert_eq!(asked.len(), 2, "the load, then the endpoint's: {asked:?}");
+        let theirs = [another.0.to_string(), another.1.clone()];
+        assert!(
+            !asked.iter().any(|a| theirs.contains(a)),
+            "{swapped}: {asked:?}"
+        );
+        let made_by = said
+            .iter()
+            .find(|frame| frame["type"] == "turn_usage")
+            .map(|frame| frame["model"].clone());
+        assert_eq!(made_by, Some(Value::from(NAME)), "{swapped}: {said:?}");
+        assert_eq!(completions(&fake), 1, "{swapped}");
+    }
+}
+
+/// The `max_tokens` the endpoint's model request reaches llama-server with,
+/// for one turn on an endpoint started as `start` says.
+async fn sent_limit(start: impl FnOnce(&mut ProxyConfig), profile: Option<&str>) -> Value {
+    let (fake, port) = llama().await;
+    let d = daemon_started(port, None, start).await;
+    if let Some(name) = profile {
+        let limited = InferenceProfile {
+            name: name.to_owned(),
+            description: None,
+            config: InferenceConfig {
+                max_tokens: Some(700),
+                ..InferenceConfig::default()
+            },
+            list_in_models: false,
+        };
+        let update = gglib_core::SettingsUpdate {
+            inference_profiles: Some(Some(vec![limited])),
+            ..gglib_core::SettingsUpdate::default()
+        };
+        d.state.core.settings().update(update).await.unwrap();
+    }
+    let chat = d.chat().await;
+    start_turn(&d, chat).await;
+    d.stop().await;
+    let request = fake
+        .seen
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|request| request.uri == "/v1/chat/completions")
+        .map(|request| request.body.clone())
+        .expect("the turn reached the model");
+    let body: Value = serde_json::from_str(&request).unwrap();
+    body["max_tokens"].clone()
+}
+
+async fn start_turn(d: &Daemon, chat: i64) {
+    let local = RunScope::Local;
+    start(&d.state, local.clone(), "l1", turn(chat, "hi"), None)
+        .await
+        .unwrap();
+    let said = frames(&d.state, &local, "l1").await;
+    assert_eq!(
+        status(&d.state, &local, "l1"),
+        RunStatus::Completed,
+        "{said:?}"
+    );
+}
+
+/// The turn's limit never outranks what the endpoint's own ladder names: the
+/// sampling it was started with (`gglib serve --max-tokens`) and its
+/// default profile (`gglib serve --profile`) reach the model. Started with
+/// neither, the model gets the turn's limit.
+#[tokio::test]
+async fn the_endpoints_own_limit_outranks_the_turns() {
+    let started = |config: &mut ProxyConfig| {
+        config.inference_override = Some(InferenceConfig {
+            max_tokens: Some(512),
+            ..InferenceConfig::default()
+        });
+    };
+    assert_eq!(sent_limit(started, None).await, Value::from(512));
+
+    let profiled = |config: &mut ProxyConfig| config.default_profile = Some("short".to_owned());
+    assert_eq!(sent_limit(profiled, Some("short")).await, Value::from(700));
+
+    assert_eq!(sent_limit(|_| {}, None).await, Value::from(16_384));
 }

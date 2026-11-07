@@ -161,3 +161,24 @@ async fn the_endpoints_loop_guard_ending_the_run_ends_it_cleanly() {
     });
     assert_eq!(answer.as_deref(), Some(GUARD_ENDED), "{:?}", done.events);
 }
+
+/// A loop through this machine's endpoint leaves its guard's count to the
+/// endpoint; one on a paired machine's model, or on llama-server's port,
+/// still counts its own here.
+#[test]
+fn only_a_loop_through_this_machines_endpoint_leaves_its_guard_uncounted() {
+    let door = |name: Option<&str>| gglib_runtime::Door {
+        root_url: "http://127.0.0.1:9931".to_owned(),
+        key: Some("k".to_owned()),
+        name: name.map(str::to_owned),
+    };
+    assert!(
+        !super::reports_its_guard(Some(&door(None))),
+        "this machine's endpoint"
+    );
+    assert!(
+        super::reports_its_guard(Some(&door(Some("desk")))),
+        "a paired machine's"
+    );
+    assert!(super::reports_its_guard(None), "llama-server's port");
+}

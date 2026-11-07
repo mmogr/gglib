@@ -23,6 +23,7 @@ use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use gglib_runtime::Door;
 
 use super::AgentChatRequest;
+use super::hub_model::Loaded;
 use crate::handlers::remote::far_error;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
 
@@ -215,52 +216,106 @@ pub(super) async fn this_machines_door(state: &AppState) -> Result<Door, HttpErr
         .map_err(|closed| HttpError::from(GuiError::from(closed)))
 }
 
-/// A turn on this machine's model `server` serves, through this machine's
-/// endpoint `door`, as any client sends one: to the door's root with its
-/// key, naming the model by its catalogue id, which the endpoint resolves
-/// before any name. The endpoint shapes the request, so the stored sampling
-/// layers go unused; the model's context is kept for what the turn still
-/// reads of it here: whether it sees images, and its class, for the turn's
-/// limit. The turns report the context the model was launched with, read
-/// once it is loaded (#1272). The endpoint trims to the context it serves.
+/// A turn on this machine's model `loaded`, through this machine's endpoint
+/// `door`, as any client sends one: to the door's root with its key, naming
+/// the model by its catalogue id, which the endpoint resolves before any
+/// name and loads again if it is no longer resident.
+///
+/// Everything is read from the catalogue's row for that id, never from what
+/// its port serves now: the load's lease is gone, so another client may have
+/// swapped the model out, or another in onto the same port, and the turn is
+/// still the chat's model's. The endpoint shapes the request; the model's
+/// context and the endpoint's own layers ([`endpoint_layers`]) are kept for
+/// what the turn still reads of them here: whether it sees images, and
+/// whether the endpoint's ladder names a `max_tokens`, for the turn's limit. The turns report the context the model was launched
+/// with when it is still the one in the primary slot (#1272), and none
+/// otherwise. The endpoint trims to the context it serves.
 ///
 /// No hold is taken: the endpoint admits each request, and its lease is the
-/// turn's. Between two requests the model can be swapped out, and the next
-/// request loads it again.
+/// turn's.
 ///
 /// # Errors
 ///
-/// What [`local`] refuses.
+/// `image_model_cannot_chat` (400) for a model that draws, and
+/// `model_cannot_read_images` (400) when a message carries an image it
+/// cannot read.
 pub(super) async fn endpoint(
     state: &AppState,
     req: &AgentChatRequest,
-    server: ServerInfo,
+    loaded: Loaded,
     door: Door,
 ) -> Result<Upstream, HttpError> {
-    let id = server.model_id;
-    let mut upstream = local(state, req, server).await?;
-    upstream.made_by.context_size =
-        launched_context(state.runtime.as_ref(), upstream.local_model).await;
-    upstream.base_url.clone_from(&door.root_url);
-    upstream.model = Some(id.to_string());
-    upstream.door = Some(door);
-    Ok(upstream)
+    let Loaded { id, port } = loaded;
+    let by_id = id.to_string();
+    super::image_gate::chats_named(state, &by_id).await?;
+    super::image_gate::served(state, id, &req.messages).await?;
+    let model_context = request_pipeline::resolve(state.catalog.as_ref(), Some(&by_id)).await;
+    let layers = endpoint_layers(state).await;
+    let row = state.core.models().get_by_id(id).await.ok().flatten();
+    let name = row
+        .as_ref()
+        .map_or_else(|| by_id.clone(), |m| m.name.clone());
+    let quantization = row
+        .as_ref()
+        .and_then(|m| m.quant_label().map(str::to_owned));
+    let local_model = Some((port, id));
+    Ok(Upstream {
+        base_url: door.root_url.clone(),
+        door: Some(door),
+        model_context,
+        layers,
+        model: Some(by_id),
+        counted_as: name.clone(),
+        made_by: MadeBy {
+            model: name,
+            quantization,
+            device: None,
+            context_size: launched_context(state.runtime.as_ref(), local_model).await,
+        },
+        local_model,
+        far_model: None,
+    })
 }
 
-/// [`endpoint`] for a turn whose model is now served on `req.port`: found
-/// there, or loaded there by the turn.
+/// The stored layers the running endpoint folds a bare id's request with:
+/// the sampling it was started with (`gglib serve`'s flags), its default
+/// profile, this machine's global defaults and its agentic switch. Handed to
+/// the adapter for the one thing it folds through a door: whether the
+/// endpoint's ladder names a `max_tokens`, which a turn's limit would
+/// otherwise outrank. A settings read that fails leaves the global layer and
+/// the profile out, and the switch on.
+async fn endpoint_layers(state: &AppState) -> SamplingLayers {
+    let settings = state.core.settings().get().await.unwrap_or_default();
+    let (cli_override, default_profile) = state.proxy.started_sampling().await.unwrap_or_default();
+    // As the endpoint reads it: a default profile that is no longer
+    // configured is no layer.
+    let profile = default_profile.and_then(|name| {
+        let profiles = settings.inference_profiles.as_deref().unwrap_or_default();
+        let found = profiles.iter().find(|p| p.name == name)?;
+        Some(found.config.clone())
+    });
+    SamplingLayers {
+        cli_override,
+        profile,
+        agentic_adjustments: settings.effective_agentic_sampling(),
+        global: settings.inference_defaults,
+        ..SamplingLayers::default()
+    }
+}
+
+/// [`endpoint`] for a turn whose model was just found running or loaded,
+/// once [`this_machines_door`] is open.
 ///
 /// # Errors
 ///
-/// What `validate_port` refuses (the model gone from its port), then
-/// [`this_machines_door`]'s and [`endpoint`]'s.
+/// [`this_machines_door`]'s, then [`endpoint`]'s.
 pub(super) async fn through_endpoint(
     state: &AppState,
     req: &AgentChatRequest,
+    loaded: Loaded,
 ) -> Result<Upstream, HttpError> {
-    let server = validate_port(state, req.port).await?;
     let door = this_machines_door(state).await?;
-    endpoint(state, req, server, door).await
+    endpoint(state, req, loaded, door).await
 }
 
 /// A far request's upstream: the far proxy's root through the tunnel, the

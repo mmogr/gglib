@@ -110,7 +110,8 @@ async fn turn_as(
                 key: Some(ENDPOINT_KEY.to_owned()),
                 name: None,
             };
-            let upstream = endpoint(state, &chat, server, door).await.unwrap();
+            let loaded = super::hub_model::Loaded { id: model_id, port };
+            let upstream = endpoint(state, &chat, loaded, door).await.unwrap();
             prepare_over(state, chat, upstream, None).await
         }
     };
