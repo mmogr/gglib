@@ -14,7 +14,11 @@ export interface UseMcpServersResult {
   servers: McpServerInfo[];
   /** Whether the initial load is in progress */
   loading: boolean;
-  /** Error message if any operation failed */
+  /**
+   * Why the list could not be read, or `null`. A change that is refused
+   * (add, update, remove, start, stop, open to devices) is thrown to its
+   * caller, which says it where it was asked, and never set here.
+   */
   error: string | null;
   /** Refresh the server list */
   refresh: () => Promise<void>;
@@ -45,7 +49,8 @@ export interface UseMcpServersResult {
  *   const { servers, loading, error, addServer, startServer, stopServer } = useMcpServers();
  *
  *   if (loading) return <div>Loading...</div>;
- *   if (error) return <div>Error: {error}</div>;
+ *   // `error` is only the list read's failure; an action's refusal is thrown to its caller.
+ *   if (error) return <div>Couldn't read the tool servers: {error}</div>;
  *
  *   return (
  *     <div>
@@ -86,81 +91,46 @@ export function useMcpServers(): UseMcpServersResult {
 
   const addServer = useCallback(
     async (server: NewMcpServer) => {
-      setError(null);
-      try {
-        const result = await getTransport().addMcpServer(server);
-        await refresh();
-        return result;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to add server";
-        setError(msg);
-        throw e;
-      }
+      const result = await getTransport().addMcpServer(server);
+      await refresh();
+      return result;
     },
     [refresh]
   );
 
   const updateServerFn = useCallback(
     async (id: McpServerId, updates: UpdateMcpServer) => {
-      setError(null);
-      try {
-        await getTransport().updateMcpServer(id, updates);
-        await refresh();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to update server";
-        setError(msg);
-        throw e;
-      }
+      await getTransport().updateMcpServer(id, updates);
+      await refresh();
     },
     [refresh]
   );
 
   const removeServerFn = useCallback(
     async (id: McpServerId) => {
-      setError(null);
-      try {
-        await getTransport().removeMcpServer(id);
-        await refresh();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to remove server";
-        setError(msg);
-        throw e;
-      }
+      await getTransport().removeMcpServer(id);
+      await refresh();
     },
     [refresh]
   );
 
   const startServerFn = useCallback(
     async (id: McpServerId) => {
-      setError(null);
-      try {
-        const { tools } = await getTransport().startMcpServer(id);
-        await refresh();
-        // Sync MCP tools to the tool registry so they're available for chat
-        await syncAllMcpTools();
-        return tools;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to start server";
-        setError(msg);
-        throw e;
-      }
+      const { tools } = await getTransport().startMcpServer(id);
+      await refresh();
+      // Sync MCP tools to the tool registry so they're available for chat
+      await syncAllMcpTools();
+      return tools;
     },
     [refresh]
   );
 
   const stopServerFn = useCallback(
     async (id: McpServerId) => {
-      setError(null);
-      try {
-        await getTransport().stopMcpServer(id);
-        await refresh();
-        // Sync MCP tools to remove stopped server's tools from registry
-        await syncAllMcpTools();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to stop server";
-        setError(msg);
-        throw e;
-      }
+      await getTransport().stopMcpServer(id);
+      await refresh();
+      // Sync MCP tools to remove stopped server's tools from registry
+      await syncAllMcpTools();
     },
     [refresh]
   );

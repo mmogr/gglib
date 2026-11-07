@@ -214,8 +214,8 @@ does not put the tunnel back, and says so.
 The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
 pairs or the code runs out. Its MCP checklist, shown whether remote access is
-on or off, sets the same flag `allow-remote` does, as does the box on each row
-of the MCP servers panel.
+on or off, sets the same flag `allow-remote` does, as does Devices may use it
+in an opened tool server row under Settings › Tools.
 
 ### A key per device
 

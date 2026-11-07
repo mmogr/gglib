@@ -1,7 +1,8 @@
 import { FC, ReactNode, useState } from 'react';
-import { Checkbox } from '../ui/Checkbox';
-import { Label, Stack } from '../primitives';
-import type { McpServer, McpServerId } from '../../services/transport';
+import { Checkbox } from '../../../components/ui/Checkbox';
+import { Label, Stack } from '../../../components/primitives';
+import type { McpServer, McpServerId } from '../../../services/transport';
+import { formatError } from '../../../utils/errors';
 
 interface AllowRemoteCheckboxProps {
   /** The server whose flag the box shows and sets. */
@@ -13,8 +14,9 @@ interface AllowRemoteCheckboxProps {
 }
 
 /**
- * Whether paired devices may use one MCP server: the box the MCP panel shows
- * on each row it can open, the one place that flag is set. A change applies
+ * Whether paired devices may use one MCP server: "Devices may use it" in an
+ * opened tool server row that can be opened to them, the one place that flag
+ * is set (ADR 0025). A change applies
  * from a device's next run, with no restart. A disabled server is said to
  * offer nothing, and a refused change is said beside the box.
  */
@@ -28,7 +30,7 @@ export const AllowRemoteCheckbox: FC<AllowRemoteCheckboxProps> = ({ server, labe
     try {
       await onToggle(server.id, allow);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not change whether paired devices may use it');
+      setError(formatError(e));
     } finally {
       setBusy(false);
     }

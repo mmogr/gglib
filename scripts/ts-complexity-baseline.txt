@@ -1,6 +1,5 @@
 src/places/diagnostics/benchmarks/Tune/TuneTab.tsx 306
 src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 363
-src/components/McpServersPanel.tsx 482
 src/places/diagnostics/live/ProxySamplingPanel.tsx 403
 src/components/SamplingForm/SamplingForm.tsx 312
 src/hooks/useGglibRuntime/agentMessageState.ts 340

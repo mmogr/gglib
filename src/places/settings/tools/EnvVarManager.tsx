@@ -1,13 +1,13 @@
 import { FC } from "react";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
-import { Icon } from "../ui/Icon";
-import { IconButton } from "../ui/IconButton";
-import { SecretField, editedValue, type SecretEdit } from "../ui/SecretField";
-import { SecretInput } from "../ui/SecretInput";
+import { Button } from "../../../components/ui/Button";
+import { Input } from "../../../components/ui/Input";
+import { Icon } from "../../../components/ui/Icon";
+import { IconButton } from "../../../components/ui/IconButton";
+import { SecretField, editedValue, type SecretEdit } from "../../../components/ui/SecretField";
+import { SecretInput } from "../../../components/ui/SecretInput";
 import { Plus, X } from "lucide-react";
-import { Stack, Label } from '../primitives';
-import type { McpEnvUpdate } from '../../services/transport';
+import { Stack, Label } from '../../../components/primitives';
+import type { McpEnvUpdate } from '../../../services/transport';
 
 /**
  * A variable in the editor: one stored server `serverId` keeps, named by its
@@ -72,7 +72,7 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
   return (
     <Stack gap="xs">
       <div className="flex justify-between items-center">
-        <Label size="sm">Environment Variables</Label>
+        <Label size="sm">Environment variables</Label>
         <Button
           type="button"
           variant="ghost"

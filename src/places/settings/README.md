@@ -34,11 +34,10 @@ The loop guard is a checkbox: on writes `note`, off writes `off`; `refuse`
 is the terminal's and shows as on with a line saying so. The image model
 choice lists only models that draw, keeping a stored id that is not one.
 
-Interim sections, each until the PR that replaces it:
+Tools' tool servers are `tools/` (its own README): a row each and one
+sheet to add and edit, over one list (ST-8). "This device" under Agent
+limits is the chat's per-device `AgentLimitsSection`.
 
-- **Tools** hosts today's `McpServersPanel` and its add and edit dialog over
-  one list (ST-8) until S2 (`feat(gui)/settings-tools`); "This device" is
-  the chat's per-device `AgentLimitsSection`.
 
 | File | Role |
 |------|------|
@@ -46,8 +45,9 @@ Interim sections, each until the PR that replaces it:
 | `GeneralSection.tsx` | Start the endpoint when gglib launches; in the desktop app only, Start gglib at login and Keep running in the menu bar when the window closes |
 | `EndpointSection.tsx` | Port, the API key, Bind address (the endpoint's), Allowed hosts (`hostsText`/`hostsFrom`), the prompt cache on disk and its budget, Model servers start at; What gglib does to requests: Repair broken tool calls, Stop runaway loops (with its trips), Cap sampling on agent runs, Let clients set sampling |
 | `ModelsSection.tsx` | The models folder, Download queue size, Context for models without their own, Model for gglib q, Image model for drawing (`imageChoices`), Sampling defaults, Profiles |
-| `ToolsSection.tsx` | The tool servers (interim), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, This device), Title prompt with Reset |
-| `EnginesSection.tsx` | A row for llama.cpp and for stable-diffusion.cpp, Faster downloads, then the system checks (interim) |
+| `ToolsSection.tsx` | The tool servers (`tools/`, over the one `useMcpServers`), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, This device), Title prompt with Reset, the "Learn more about MCP" footnote |
+| `tools/` | The tool server rows and their add and edit sheet: its own README |
+| `EnginesSection.tsx` | A row for llama.cpp and for stable-diffusion.cpp, then Faster downloads |
 | `AboutSection.tsx` | The build, Documentation (the native Help menu's address), and Stop gglib… asked first, then held as Stopping gglib… until the window's service-not-running screen takes over (`app/ServiceDown`); a refusal in the daemon's words |
 | `useFieldSave.ts` | One field's write: `useUndoableWrite` (nothing for the value stored, Undo for `UNDO_MS`, the refusal kept), `useSettingSave` (`{ [key]: value }` through the provider), `sameValue` |
 | `fields.tsx` | The fields that save themselves: `TextSetting` (a box, or a text area, with Reset where asked), `NumberSetting` (its spec's default, hint and range), `ToggleSetting` (its polarity and what it writes), `ChoiceSetting`; `useStored` reads a setting back under the name it writes |
@@ -58,7 +58,7 @@ Interim sections, each until the PR that replaces it:
 | `SamplingDefaults.tsx` | One line of what is set, Change… opening the sampling form in place (the fields set and Add a value), Save writing `inferenceDefaults` alone |
 | `InferenceProfiles.tsx` | The profiles: a row each with "in model picker", Edit and ⋯ Delete… (asked first), Add profile, Install starter profiles (the daemon's nine); the editor in a sheet; every change writes the whole list (`summarize` for a row's values) |
 | `InferenceProfileEditor.tsx` | One profile's form, its fields unchanged (ST-5): name (checked as the server checks it), description, the sixteen numbers left blank to fall through, reasoning effort, Show in the model picker |
-| `Disclosure.tsx` | A ▸ line opening what it holds in place, closed when the section opens |
+| `Disclosure.tsx` | A ▸ line opening what it holds in place, closed when the section opens unless told open; never submits a form it sits in |
 | `notes.ts` | When a change takes effect, for the fields read when the endpoint turns on, when gglib starts, or when the desktop app starts, and the key's own |
 | `EngineRow.tsx` | One engine's row: the release, the download or acceleration, prebuilt or built from source, and its state in one line; Install, Update to the pin… (asked first), ⋯ Reinstall (over a download only) and Remove… (asked first), every one disabled while a model runs on it with which to stop (ST-11); the CPU build's warning where an install is offered, a source build's command, the install's progress and how it ended; ▸ Details |
 | `EngineDetails.tsx` | An engine row's Details: the install record (release or built from, download or acceleration, date), the binary and what it reports, the model serving on it, where it stands against its pin; only what the status has |
@@ -75,7 +75,7 @@ on.", "Takes effect when gglib next starts.", "Takes effect when the desktop
 app next starts.", "A new key takes effect within a few seconds. A cleared
 key stops being required when the endpoint next turns on."; "Saved." / "Undo"; "Asking gglib" and "Couldn't read the
 settings: <the daemon's words>"; "What gglib does to requests", "Agent
-limits", "This device"; the loop guard's "Refusing, as … set it: a looping
+limits", "This device", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
 request is answered with a 400."; the API key's "Set", "Replace", "Clear",
 "Cancel", "The new key", "none", the Show/Hide/Copy labels, "Copied the API
 key." and its failures, "Replace the API key?" with "Clients that send the
