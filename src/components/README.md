@@ -61,12 +61,13 @@ A chat is its own address: the conversation list (left) and the messages panel (
   - **Message Deletion**: Delete button with cascade deletion of subsequent messages
 
 ### Server Management
-- **`ConnectClient.tsx`**: Connect a client on the endpoint place: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker, and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable
+- **`ConnectClient.tsx`**: Connect a client on the endpoint place and setup's Connect step: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker, and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable
 
 ### Tool servers
 - **`mcp/`**: `AllowRemoteCheckbox`, whether paired devices may use one tool server, on each row of the MCP panel that can open it
 
 ### Support Components
 - **`Toast/`**: Reusable toast notification system for success/error/info messages
+- **`InstallProgress.tsx`**: One engine install's latest event: a bar for the download phase, a labelled spinner for every other, the download named for its `product`; setup's Engines step, the library's llama.cpp banner, the inspector's Install llama.cpp, the image parts and the Settings engine card draw their installs with it
 
 <!-- module-docs:end -->

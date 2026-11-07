@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { SamplingForm } from '../components/SamplingForm';
-import { InstallProgress } from '../components/SetupWizard/InstallProgress';
+import { InstallProgress } from '../components/InstallProgress';
 import { StatusMark } from '../components/status/StatusMark';
 import { Button } from '../components/ui/Button';
 import { Checkbox } from '../components/ui/Checkbox';
