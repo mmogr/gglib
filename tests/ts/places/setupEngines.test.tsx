@@ -173,7 +173,10 @@ describe("setup's engines", () => {
     await waitFor(() => expect(llama).toHaveTextContent('ready'));
     expect(api.streams).toHaveLength(0);
 
-    // Found: the poll stops.
+    // Found: the poll stops. Its interval is cleared by a passive effect,
+    // which React runs after the ready line paints, so flush it before
+    // counting: a loaded runner could otherwise advance the clock between.
+    await act(async () => {});
     const found = api.getEngineStatus.mock.calls.length;
     act(() => vi.advanceTimersByTime(BUILD_POLL_MS * 3));
     await new Promise((r) => setTimeout(r, 20));
