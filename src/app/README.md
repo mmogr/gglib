@@ -17,7 +17,7 @@ The main window's shell: its addresses, its router, and what navigates or acts f
 | `ChatRoute.tsx` | `/chat/:id` and `/chat/new?model=`/`?far=`: a conversation on the model it names (else the last used, the default, the first loaded), keyed by the model so a first send's replaced address keeps the place, its port from the server registry or the start that opened it |
 | `PairedChat.tsx` | A conversation kept here on the paired machine's model, its machine fixed for the chat's life |
 | `FarChatRoute.tsx` | `/chat/far/:id`: one of the paired machine's own chats, read and carried on, never changed; no port |
-| `chatLoading.tsx` | What a chat route shows while it learns which chat to open |
+| `chatLoading.tsx` | What a chat route shows while it learns which chat to open, and when the list of chats cannot be read |
 | `openChat.ts` | "Chat" on a model: its latest conversation, else an empty chat on it, handed the port a start or a resident slot answers on (the inspector, the library, the endpoint's Loaded rows, the menu) |
 | `BenchmarkRoute.tsx` | `/diagnostics/benchmarks?models=…`: the benchmarks with the named models picked |
 | `useChatSwitch.ts` | Moving an open chat to another model: served first if not running, the last pick wins, a left chat hands nothing on |

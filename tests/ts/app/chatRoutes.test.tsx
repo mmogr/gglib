@@ -168,14 +168,34 @@ describe('the chat routes', () => {
     expect(at()).toBe('/chat/78');
   });
 
-  it('a list that could not be read opens the chat by its id on the fallback model, not an empty chat', async () => {
+  it('a list that could not be read is read again, and the chat opens on its own model, never a guessed one', async () => {
     serving(45, 5045);
+    serving(46, 5046);
+    // The last one used is on 45: a guess would open there.
+    daemon.chats = [chat(80, 45, '2026-11-03 09:00:00'), chat(79, 46, '2026-11-01 09:00:00')];
+    transport.listConversations.mockRejectedValueOnce(new Error('daemon busy'));
+    const { at } = renderApp('/chat/79');
+    expect(await page()).toHaveAttribute('data-conversation', '79');
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5046');
+    expect(mounts.count).toBe(1);
+    expect(at()).toBe('/chat/79');
+  });
+
+  it('a list that still cannot be read says so with Try again, opens nothing, and opens the chat once it is read', async () => {
+    const user = userEvent.setup();
+    serving(45, 5045);
+    serving(46, 5046);
+    // The last one used is on 45: a guess would open there.
+    daemon.chats = [chat(80, 45, '2026-11-03 09:00:00'), chat(79, 46, '2026-11-01 09:00:00')];
     transport.listConversations.mockRejectedValue(new Error('daemon gone'));
     try {
       const { at } = renderApp('/chat/79');
-      expect(await page()).toHaveAttribute('data-conversation', '79');
-      expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5045');
+      expect(await screen.findByText(/The chat couldn't be read/)).toBeInTheDocument();
+      expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
       expect(at()).toBe('/chat/79');
+      transport.listConversations.mockImplementation(async () => daemon.chats.map((c) => ({ ...c })));
+      await user.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(await page()).toHaveAttribute('data-port', '5046');
     } finally {
       transport.listConversations.mockImplementation(async () => daemon.chats.map((c) => ({ ...c })));
     }

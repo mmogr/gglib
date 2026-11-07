@@ -32,7 +32,7 @@ import { useModel } from '../services/modelRegistry';
 import type { ConversationSummary } from '../services/transport';
 import type { Machine } from '../types/generated/Machine';
 import { clearChatHandoff, peekChatHandoff, wasHanded, type ChatHandoff } from './chatHandoff';
-import { CHAT_LOADING } from './chatLoading';
+import { CHAT_LOADING, ChatUnread } from './chatLoading';
 import { PairedChat } from './PairedChat';
 import { chatAddress, paths } from './paths';
 import { useChatSwitch } from './useChatSwitch';
@@ -123,13 +123,16 @@ export function ChatRoute() {
   const [opened, setOpened] = useState<{ id: number; target: Target } | null>(null);
   // The location whose missing conversation the list was read again for.
   const [rechecked, setRechecked] = useState<string | null>(null);
+  // The location whose unreadable list was read once more.
+  const [reread, setReread] = useState<string | null>(null);
 
   const conversationId = address?.kind === 'saved' ? address.id : null;
   const conversation = conversationId === null ? null : list?.find((c) => c.id === conversationId) ?? null;
   const justOpened = opened !== null && opened.id === conversationId ? opened.target : null;
-  // A list that could not be read says nothing of whether the chat is there:
-  // the chat opens on the fallback model, its thread read by its id.
+  // A list that could not be read says nothing of whether the chat is there,
+  // nor of its model: it is read once more, and never guessed.
   const missing = conversationId !== null && list !== null && !failed && conversation === null && !handoff && !justOpened;
+  const unread = conversationId !== null && failed && conversation === null && !handoff && !justOpened;
 
   useEffect(() => {
     if (list === null) void refreshChats('this');
@@ -139,6 +142,12 @@ export function ChatRoute() {
     const key = location.key;
     void refreshChats('this').then(() => setRechecked(key));
   }, [missing, rechecked, location.key]);
+
+  useEffect(() => {
+    if (!unread || reread === location.key) return;
+    const key = location.key;
+    void refreshChats('this').then(() => setReread(key));
+  }, [unread, reread, location.key]);
 
   if (address === null || address.kind === 'far') return <Navigate to={paths.library()} replace />;
 
@@ -151,6 +160,7 @@ export function ChatRoute() {
   }
   if (target === null) {
     if (missing) return rechecked === location.key ? <Navigate to={paths.newChat()} replace /> : CHAT_LOADING;
+    if (unread) return reread === location.key ? <ChatUnread onRetry={() => setReread(null)} /> : CHAT_LOADING;
     if (list === null) return CHAT_LOADING;
     target = fallback(list, settings?.defaultModelId ?? null, servers);
   }
