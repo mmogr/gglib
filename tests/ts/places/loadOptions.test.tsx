@@ -434,6 +434,34 @@ describe('the Load with options sheet', () => {
     expect(bodies()[0][1]).toEqual({ id: 9, mlock: false, contextLength: 16384 });
   });
 
+  it('says why an install failed after the daemon refused a load for want of llama.cpp', async () => {
+    const { TransportError } = await import('../../../src/services/transport/errors');
+    post.mockRejectedValueOnce(new TransportError('LLAMA_SERVER_NOT_INSTALLED', 'llama-server is not installed'));
+    renderInspector();
+    const { u, dialog } = await openSheet();
+    await u.click(within(dialog).getByRole('button', { name: 'Load' }));
+    await u.click(await within(dialog).findByRole('button', { name: 'Install llama.cpp' }));
+    act(() => install.onEvent.llama({ type: 'failed', message: 'disk full' }));
+
+    expect(await within(dialog).findByText("Didn't load: disk full")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/not installed/)).not.toBeInTheDocument();
+  });
+
+  it('loads nothing when an install completes under a value that no longer passes', async () => {
+    setup.llamaInstalled = false;
+    renderInspector();
+    const { u, dialog } = await openSheet();
+    await u.click(within(dialog).getByRole('checkbox', { name: /This load only/ }));
+    await u.click(await within(dialog).findByRole('button', { name: 'Install llama.cpp' }));
+    await u.type(within(dialog).getByRole('spinbutton', { name: 'Context' }), '0');
+
+    setup.llamaInstalled = true;
+    act(() => install.onEvent.llama({ type: 'completed', version: 'b1' }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(post).not.toHaveBeenCalled();
+    expect(transport.updateModel).not.toHaveBeenCalled();
+  });
+
   it('offers Speculative when the plan drafts or the model has its own MTP default, without the tag', async () => {
     explain.answer = launchExplanation(samplingExplanation(), chatPlan({ args: [...chatPlan().args, ...MTP_ARGS] }));
     renderInspector();

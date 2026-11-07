@@ -222,6 +222,13 @@ describe('SamplingForm', () => {
       expect(screen.getByRole('button', { name: /Reset Top K to default/ })).toBeInTheDocument();
     });
 
+    it('shows a set slider its number, and an unset one none', () => {
+      renderForm(UPSTREAM, { topP: 0.5 });
+
+      expect(screen.getByText('0.50')).toBeInTheDocument();
+      expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    });
+
     it('clears the parameter when reset is pressed', async () => {
       const onChange = renderForm(UPSTREAM, { topK: 80 });
 

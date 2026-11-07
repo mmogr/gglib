@@ -149,6 +149,8 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
     seen.current = llama.completed;
     if (!asked.current) return;
     asked.current = false;
+    // The fields stay editable during the install: what is typed now must still pass.
+    if (blocked !== null) return;
     void submit();
     // `submit` is this render's, with what was typed; the effect runs on a completion only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,6 +159,8 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
   const go = () => {
     if (!load.needsLlama) return void submit();
     asked.current = true;
+    // A refusal from an earlier load gives way to what the install says.
+    setError(null);
     installLlama();
   };
   const failure = error ?? (load.needsLlama && llama.refusal ? `Didn't load: ${llama.refusal}` : null);
