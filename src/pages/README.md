@@ -10,8 +10,9 @@ Two entry points build two windows; the main one routes by address (`app/router`
 
 ```text
 main.tsx ──► App.tsx ──► router                tray-main.tsx ──► TrayPanel.tsx
-                │  /library /models/:id /far/:id   (separate "tray" Tauri window:
-                │  /chat/:modelId  /chat/far/:id    proxy status, endpoint, metrics)
+                │  /library /models/:id(/log)      (separate "tray" Tauri window:
+                │  /far/:id /get/:owner/:name       proxy status, endpoint, metrics)
+                │  /chat/:modelId  /chat/far/:id
                 │  /diagnostics/benchmarks
                 ▼
   places/library · ChatPage · BenchmarkPage
@@ -28,9 +29,9 @@ main.tsx ──► App.tsx ──► router                tray-main.tsx ──�
 | [`BenchmarkPage.tsx`](BenchmarkPage.tsx) | Benchmark workflows: compare, perf, and sampling-parameter tune, at `/diagnostics/benchmarks` through `app/BenchmarkRoute` |
 | [`TrayPanel.tsx`](TrayPanel.tsx) | Proxy tray window — is the endpoint up, and what is it doing (status, endpoint copy bar, connections, slots) |
 
-`chatTabs.tsx` is a supporting piece of `ChatPage`, not a routed page: the view tabs, and the controls the notebook's head carries in its margin. So is `useChatConversations.ts`: the conversation list, from this machine or, on a computer joined with `gglib remote join`, the far machine, read live through this machine's daemon and never copied; this machine's list holds only the chats the session's machine can carry on, since a chat's machine is fixed. And `useConversationActions.ts`: delete, rename, restart, export and the system prompt, which act on this machine's daemon and so do nothing while a far chat is open.
+`useChatConversations.ts` is a supporting piece of `ChatPage`, not a routed page: the conversation list, from this machine or, on a computer joined with `gglib remote join`, the far machine, read live through this machine's daemon and never copied; this machine's list holds only the chats the session's machine can carry on, since a chat's machine is fixed. And `useConversationActions.ts`: delete, rename, restart, export and the system prompt, which act on this machine's daemon and so do nothing while a far chat is open.
 
-The main window's landing page, the library at `/library`, `/models/:id` and `/far/:id`, is a place (`src/places/library/`), not a page.
+The main window's landing page, the library at `/library`, `/models/:id` (and its `/log`), `/far/:id` and `/get/:owner/:name`, is a place (`src/places/library/`), not a page. A model's log is its inspector's, not a view of the chat.
 
 ### Chat Page
 

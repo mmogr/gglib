@@ -12,7 +12,7 @@ use gglib_core::ports::{
 
 use crate::error::GuiError;
 use crate::hf_image_preview::image_look;
-use crate::hf_quantizations::quantizations_response;
+use crate::hf_quantizations::{listed_pick, quantizations_response};
 use crate::types::{
     HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
     QueueDownloadResponse, ToolSupportResponse,
@@ -234,14 +234,14 @@ impl DownloadOps {
         // The budget the picker chooses a variant by, so the Fit column and
         // the download it leads to agree.
         let budget_bytes = download_budget().await;
-
-        Ok(quantizations_response(
-            model_id,
-            quants,
-            look.family.is_some(),
-            look.preview,
-            budget_bytes,
-        ))
+        let is_image = look.family.is_some();
+        let picked = listed_pick(&quants, is_image, budget_bytes).await;
+        let mut response =
+            quantizations_response(model_id, quants, is_image, look.preview, budget_bytes);
+        if let Some(variant) = picked.and_then(|i| response.quantizations.get_mut(i)) {
+            variant.picked = true;
+        }
+        Ok(response)
     }
 
     /// Check if a `HuggingFace` model supports tool/function calling.

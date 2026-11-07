@@ -65,13 +65,13 @@ describe('ChatPage, conversation list', () => {
     await waitFor(() => expect(search).toHaveFocus());
   });
 
-  it('keeps the view switcher and Close with the notebook, not the list', async () => {
+  it('keeps Close with the notebook, not the list, and offers no view to switch to', async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: /^Conversations/ }));
     const title = await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     const head = title.closest('.grid') as HTMLElement;
-    expect(within(head).getByRole('tab', { name: /chat/i })).toBeVisible();
+    expect(within(head).queryByRole('tab')).not.toBeInTheDocument();
     expect(within(head).getByRole('button', { name: 'Close' })).toBeVisible();
   });
 

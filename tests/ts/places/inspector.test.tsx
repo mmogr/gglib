@@ -73,6 +73,11 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
   getRecommendedModel: vi.fn(async () => null),
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn() }));
+// A loaded model's ▸ Log reads the server's log; here it has none, and no stream opens.
+vi.mock('../../../src/services/platform/serverLogs', () => ({
+  getServerLogs: vi.fn(async () => []),
+  listenToServerLogs: vi.fn(async () => () => {}),
+}));
 vi.mock('../../../src/pages/ChatPage', () => ({
   default: ({ modelName, serverPort }: { modelName: string; serverPort?: number }) => (
     <div data-testid="chat-page" data-port={serverPort}>{`Chatting with ${modelName}`}</div>

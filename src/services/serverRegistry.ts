@@ -149,7 +149,9 @@ export function ingestServerEvent(evt: ServerEvent): void {
       if (!existing || evt.updatedAt >= existing.updatedAt) {
         setServerState(evt.modelId, {
           status: evt.type,
-          port: evt.port,
+          // A stop or a crash names no port; the last one known is kept,
+          // where that server's log stays on the daemon.
+          port: evt.port ?? existing?.port,
           updatedAt: evt.updatedAt,
           // Clear health on lifecycle transitions (will be updated by health monitor)
           health: evt.type === 'running' ? { status: 'healthy' } : undefined,

@@ -7,8 +7,9 @@
  * updates open Details and bring Source into view), the name and quant label (click
  * to edit, one field per save), architecture, trained context, tags,
  * abilities, whether the template reads reasoning effort, measured speed
- * when a benchmark exists, and the raw GGUF metadata. A `dl` with a fixed
- * label column.
+ * when a benchmark exists, the loaded server's llama-server port ("port
+ * 9001, internal": clients use the endpoint), and the raw GGUF metadata.
+ * A `dl` with a fixed label column.
  *
  * @module inspector/local/Details
  */
@@ -37,7 +38,8 @@ import { checkVerdict, type Verification } from './useVerification';
 
 const OPEN_KEY = 'gglib.inspector.details';
 
-function remembered(): boolean {
+/** Whether this viewer last left Details open; the far model's Details share it. */
+export function remembered(): boolean {
   try {
     return localStorage.getItem(OPEN_KEY) === 'open';
   } catch {
@@ -45,7 +47,7 @@ function remembered(): boolean {
   }
 }
 
-function remember(open: boolean): void {
+export function remember(open: boolean): void {
   try {
     localStorage.setItem(OPEN_KEY, open ? 'open' : 'closed');
   } catch {
@@ -56,7 +58,7 @@ function remember(open: boolean): void {
 const days = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 
 /** A database time as "6 days ago", the exact time on hover. */
-const When: FC<{ at: string; before?: string }> = ({ at, before }) => {
+export const When: FC<{ at: string; before?: string }> = ({ at, before }) => {
   const date = parseDbTimestamp(at);
   const ago = Math.round((date.getTime() - Date.now()) / 86_400_000);
   return <span title={date.toLocaleString()}>{`${before ?? ''}${days.format(ago, 'day')}`}</span>;
@@ -96,7 +98,7 @@ const Editable: FC<{ label: string; value: string; onSave: (value: string) => Pr
   );
 };
 
-const Item: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+export const Item: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
   <>
     <dt className="text-xs text-text-secondary">{label}</dt>
     <dd className="m-0 min-w-0 break-words text-xs text-text">{children}</dd>
@@ -107,6 +109,8 @@ interface DetailsProps {
   model: GgufModel;
   detail: ModelDetailState;
   loaded: boolean;
+  /** The loaded server's llama-server port: the endpoint's own business, shown for reading its log by hand. */
+  port?: number;
   onUpdateModel: Update;
   /** A saved field or tag may change the launch: read it again. */
   onChanged: () => void;
@@ -115,7 +119,7 @@ interface DetailsProps {
   reveal: number;
 }
 
-export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel, onChanged, verification, reveal }) => {
+export const Details: FC<DetailsProps> = ({ model, detail, loaded, port, onUpdateModel, onChanged, verification, reveal }) => {
   const { showToast } = useToastContext();
   const [open, setOpen] = useState(remembered);
   const source = useRef<HTMLDivElement>(null);
@@ -222,6 +226,7 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
           <ReasoningSupport support={d?.reasoningEffortSupport} isRunning={loaded} onRecheck={() => void detail.reload()} isRechecking={detail.isLoading} />
         </Item>
         {speed != null && <Item label="Measured speed">{`${speed.toFixed(1)} tok/s`}</Item>}
+        {port !== undefined && <Item label="llama-server">{`port ${port}, internal`}</Item>}
       </dl>
       {metadata.length > 0 && (
         <details className="group/raw mt-sm">

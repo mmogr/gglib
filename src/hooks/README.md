@@ -70,7 +70,6 @@ Custom React hooks for gglib GUI functionality.
 | [`useClickOutside.ts`](useClickOutside.ts) | Click outside detection for dropdowns |
 | [`useFileDropGuard.ts`](useFileDropGuard.ts) | Refuses a file dragged or dropped where nothing takes it, so the desktop window never opens it in place of the app |
 | [`useMetricHistory.ts`](useMetricHistory.ts) | Ring buffer of samples, either as-is or as the per-second rate of a cumulative counter |
-| [`usePanelResize.ts`](usePanelResize.ts) | Draggable split with min/max bounds, optionally persisted to `localStorage` |
 | [`useToastTimer.ts`](useToastTimer.ts) | Toast auto-dismiss countdown with pause and resume |
 
 ### Runtime Hook

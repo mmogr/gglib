@@ -13,7 +13,7 @@
  */
 
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router';
 
 import { useServers } from '../hooks/useServers';
 import { useModel } from '../services/modelRegistry';
@@ -30,7 +30,7 @@ export const CHAT_LOADING = (
   </div>
 );
 
-function LocalChat({ modelId, view }: { modelId: number; view: 'chat' | 'console' }) {
+function LocalChat({ modelId }: { modelId: number }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { servers, stopServer } = useServers();
@@ -54,7 +54,6 @@ function LocalChat({ modelId, view }: { modelId: number; view: 'chat' | 'console
       serverPort={port}
       modelId={modelId}
       modelName={server?.modelName ?? handoff?.modelName ?? inLibrary?.name ?? `Model #${modelId}`}
-      initialView={view}
       conversationId={handoff?.conversationId}
       draft={handoff?.draft}
       startingModel={startingModel}
@@ -67,13 +66,11 @@ function LocalChat({ modelId, view }: { modelId: number; view: 'chat' | 'console
 
 export function ChatRoute() {
   const { modelId: raw } = useParams();
-  const [search] = useSearchParams();
   const modelId = /^\d+$/.test(raw ?? '') ? Number(raw) : null;
   if (modelId === null) return <Navigate to={paths.library()} replace />;
-  const view = search.get('view') === 'console' ? 'console' : 'chat';
   return (
     <Suspense fallback={CHAT_LOADING}>
-      <LocalChat key={modelId} modelId={modelId} view={view} />
+      <LocalChat key={modelId} modelId={modelId} />
     </Suspense>
   );
 }

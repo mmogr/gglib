@@ -16,7 +16,7 @@ import { parseDbTimestamp } from '../../../src/utils/dbTimestamp';
 import { buildLoadedMessage } from '../../../src/hooks/useChatPersistence/buildLoadedMessage';
 import { buildThreadMessages } from '../../../src/hooks/useChatPersistence/buildThreadMessages';
 import ConversationListPanel from '../../../src/components/ConversationListPanel/ConversationListPanel';
-import { ModelMetadataGrid } from '../../../src/components/ModelInspectorPanel/components/ModelMetadataGrid';
+import { FarDetails } from '../../../src/inspector/far/FarDetails';
 import { Details } from '../../../src/inspector/local/Details';
 import type { ModelDetailState } from '../../../src/inspector/local/useModelDetail';
 import type { Verification, VerifyStatus } from '../../../src/inspector/local/useVerification';
@@ -119,16 +119,17 @@ describe('every place a database time is shown', () => {
     });
   });
 
-  it("a model's download and update-check times", () => {
-    const detail = {
-      metadata: {},
-      downloadDate: SAVED,
-      lastUpdateCheck: SAVED,
-    } as unknown as ModelDetail;
-    render(<ModelMetadataGrid model={guiModel()} detail={detail} />);
+  it("the paired machine's model: downloaded, exact on hover", () => {
+    localStorage.setItem('gglib.inspector.details', 'open');
+    const detail = { id: 3, paramCountB: 8, metadata: {}, tags: [], downloadDate: SAVED } as unknown as ModelDetail;
+    render(
+      <ToastProvider>
+        <FarDetails id={3} detail={detail} />
+      </ToastProvider>,
+    );
 
-    const shown = new Date(INSTANT).toLocaleString();
-    expect(screen.getAllByText(shown)).toHaveLength(2);
+    expect(screen.getByText(/^downloaded /)).toHaveAttribute('title', new Date(INSTANT).toLocaleString());
+    localStorage.removeItem('gglib.inspector.details');
   });
 
   /** A verification in `status`, its actions inert. */

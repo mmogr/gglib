@@ -17,13 +17,13 @@ download is its row's own text. The queue is `services/downloadsRegistry`;
 the library is `services/modelRegistry`; the loaded models are
 `services/serverRegistry`, and what each is doing `services/dashboardRegistry`.
 
-Interim, named with the PR that ends it: the inspector is today's
-(`components/ModelInspectorPanel/`, with the Hugging Face preview) until
-its redesign (B2).
+The inspector beside it is `inspector/Inspector`, whose subject the
+address names; a Hugging Face repo picked in the group opens at
+`/get/:owner/:name`, its summary handed to the address.
 
 | File | Role |
 |------|------|
-| `LibraryPlace.tsx` | The layout route over `/library`, `/models/:id` and `/far/:id`: the main column (the add-a-file row, the rows, the hint row and the Hugging Face group) and the inspector's one subject, wired with the download queue, `?add=` (focus the search, add a file), `?serve=1` and the chat a started server opens |
+| `LibraryPlace.tsx` | The layout route over `/library`, `/models/:id` (and its `/log`), `/far/:id` and `/get/:owner/:name`: the main column (the add-a-file row, the rows, the hint row and the Hugging Face group) and the inspector, wired with `?add=` (focus the search, add a file), a Hugging Face pick's address, and the chat a started server opens |
 | `LibraryHeader.tsx` | "Library", `Sort ▾` (Name, Recently added, Size, Measured speed; Ascending, Descending), `+ ▾` (Find on Hugging Face, Add a GGUF file…, Add a tool server…), and the one search field, Enter included |
 | `LibraryRows.tsx` | The groups in order, each a listbox, the paired machine's headed by its name and reach; the empty, failed and loading states |
 | `Group.tsx` | A group of rows under its 12 px label, and the one line said in place of rows |
@@ -33,7 +33,7 @@ its redesign (B2).
 | `EngineBanner.tsx` | The line above the groups when llama.cpp is missing or older than the pinned release, a model running on it or not, with Install or Update run through the daemon's install stream, its refusal shown as it came, and the status read again once it completes |
 | `engineInstall.ts` | The banner's state for as long as the window is open: "Not now", and the install it started with its progress and how it ended, so leaving the library loses neither |
 | `AddFileRow.tsx` | Add a GGUF file: a typed path and Add (the desktop fills it from the native picker), the daemon's refusal under it |
-| `Menu.tsx` | A button that opens a short menu of actions or ticked choices (the inspector's ⋯ too, its icon alone, with danger items); closes on a pick, a click outside or Escape |
+| `Menu.tsx` | A button that opens a short menu of actions or ticked choices (the inspector's and the log's ⋯ too, its icon alone, with danger items); closes on a pick, a click outside or Escape |
 | `groups.ts` | Pure: the groups, the search's matching (every word must match), the sorts, and a model's facts (the row's line and the inspector's summary) |
 | `ModelListSkeleton.tsx` | Six still grey two-line rows before the library's first read |
 

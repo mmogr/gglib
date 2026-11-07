@@ -1,7 +1,7 @@
 # Screenshots
 
 The GUI pictures in `docs/assets/` (`gui-library.png`, `gui-chat.png`,
-`gui-console.png`, `tray-dashboard.png`) are taken by `shot.mjs` here, so
+`tray-dashboard.png`) are taken by `shot.mjs` here, so
 they are pictures of gglib as it is rather than as it once was. Nothing
 here runs in CI; run it when the GUI changes, and commit the result.
 
@@ -35,7 +35,7 @@ curl -s -X POST -H "Authorization: Bearer $(cat $GGLIB_DATA_DIR/data/daemon_toke
 URL=$(gglib web --no-open 2>&1 | grep -o 'http://[^ ]*')   # the link carries the daemon token
 ```
 
-The chat and console shots need a model loaded and a conversation held, so
+The chat shot needs a model loaded and a conversation held, so
 send a few turns through the chat page first. A title the model generates
 can be renamed in the sidebar before the shot. The pictures show whatever
 paths the copy prints, your models folder among them.
@@ -45,7 +45,6 @@ paths the copy prints, your models folder among them.
 ```bash
 node shot.mjs "$URL" ../assets/gui-library.png steps/library.json
 node shot.mjs "$URL" ../assets/gui-chat.png    steps/chat.json
-node shot.mjs "$URL" ../assets/gui-console.png steps/console.json
 W=360 H=560 node shot.mjs "${URL/\/#/\/tray.html#}" ../assets/tray-dashboard.png
 ```
 

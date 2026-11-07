@@ -1,6 +1,7 @@
 //! `gglib model download <repo> --list-quants`: the repository's variants
 //! as the daemon lists them for the GUI's table, one line each with its
-//! size, its shards, whether it fits this machine, and what it is.
+//! size, its shards, whether it fits this machine, what it is, and ★ on
+//! the one a download without `-q` takes.
 //!
 //! The listing is `DownloadOps::get_model_quantizations`, the call
 //! `GET /api/hf/quantizations/{repo}` answers with, so the terminal and
@@ -77,6 +78,9 @@ pub(super) fn quant_listing(listing: &HfQuantizationsResponse) -> String {
         }
         if let Some(word) = &variant.fit_word {
             let _ = write!(out, " \u{2014} {word}");
+        }
+        if variant.picked {
+            out.push_str(" \u{2605} gglib's pick");
         }
         let _ = writeln!(out, "{}", role_mark(variant));
     }

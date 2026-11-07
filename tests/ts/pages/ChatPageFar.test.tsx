@@ -192,7 +192,6 @@ describe('ChatPage, the far machine’s chats', () => {
     }
     expect(screen.queryByRole('button', { name: /Rename conversation/ })).not.toBeInTheDocument();
     expect(screen.queryByText('System prompt')).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /console/i })).not.toBeInTheDocument();
     expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 

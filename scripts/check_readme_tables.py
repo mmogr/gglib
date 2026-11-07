@@ -119,8 +119,8 @@ def is_documented(name: str, rows: set[str], prose: str) -> bool:
     """A table row is the usual way; a code span in the prose also counts.
 
     `src/pages/README.md` is why the second half exists: it names
-    `chatTabs.tsx` in a sentence explaining that it is a supporting piece and
-    deliberately *not* a routed page. Demanding a row would have moved it into
+    `useChatConversations.ts` in a sentence explaining that it is a supporting
+    piece and deliberately *not* a routed page. Demanding a row would have moved it into
     a table of pages it does not belong in — making the document less accurate
     to satisfy the check.
     """

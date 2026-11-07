@@ -5,8 +5,8 @@
  * and `--max-observation-steps` flags.
  *
  * One store for the whole client, not per conversation. Stored in
- * localStorage (`gglib.chat.agentOverrides`, following the
- * `usePanelResize` key convention) rather than server settings: these are
+ * localStorage (`gglib.chat.agentOverrides`, following the `gglib.<place>.<what>`
+ * key convention) rather than server settings: these are
  * request-scoped knobs on `AgentRequestConfig`, not persisted server state.
  * The runtime reads them fresh at send time via `readStoredAgentOverrides`,
  * so the popover UI and the request path cannot drift within a session.

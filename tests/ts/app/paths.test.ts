@@ -21,12 +21,19 @@ describe('paths', () => {
     expect(paths.model(7)).toBe('/models/7');
     expect(paths.far(3)).toBe('/far/3');
     expect(paths.chat(7)).toBe('/chat/7');
-    expect(paths.chat(7, 'console')).toBe('/chat/7?view=console');
+    expect(paths.log(7)).toBe('/models/7/log');
+    expect(paths.hf('owner/Qwen3-8B-GGUF')).toBe('/get/owner/Qwen3-8B-GGUF');
     expect(paths.farChat(3)).toBe('/chat/far/3');
     expect(paths.benchmarks([9, 11])).toBe('/diagnostics/benchmarks?models=9,11');
     expect(paths.benchmarks()).toBe('/diagnostics/benchmarks');
 
-    expect(inspectorSubject({ pathname: '/models/7' })).toEqual({ kind: 'model', id: 7 });
+    expect(inspectorSubject({ pathname: '/models/7' })).toEqual({ kind: 'model', id: 7, log: false });
+    expect(inspectorSubject({ pathname: '/models/7/log' })).toEqual({ kind: 'model', id: 7, log: true });
+    expect(inspectorSubject({ pathname: '/models/7/other' })).toBeNull();
+    expect(inspectorSubject({ pathname: '/get/owner/Qwen3-8B-GGUF' })).toEqual({ kind: 'hf', repo: 'owner/Qwen3-8B-GGUF' });
+    expect(inspectorSubject({ pathname: paths.hf('o w/n%') })).toEqual({ kind: 'hf', repo: 'o w/n%' });
+    expect(inspectorSubject({ pathname: '/get/owner' })).toBeNull();
+    expect(inspectorSubject({ pathname: '/get/owner/name/more' })).toBeNull();
     expect(inspectorSubject({ pathname: '/far/3' })).toEqual({ kind: 'far', id: 3 });
     expect(inspectorSubject({ pathname: '/library' })).toBeNull();
     expect(inspectorSubject({ pathname: '/chat/7' })).toBeNull();
@@ -35,6 +42,8 @@ describe('paths', () => {
 
   it("menuModelId is the inspector's model or the open chat's, and nothing elsewhere", () => {
     expect(menuModelId({ pathname: '/models/7' })).toBe(7);
+    expect(menuModelId({ pathname: '/models/7/log' })).toBe(7);
+    expect(menuModelId({ pathname: '/get/owner/name' })).toBeNull();
     expect(menuModelId({ pathname: '/chat/7' })).toBe(7);
     expect(menuModelId({ pathname: '/chat/far/3' })).toBeNull();
     expect(menuModelId({ pathname: '/far/3' })).toBeNull();

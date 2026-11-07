@@ -1,6 +1,5 @@
 import { useState, useEffect, useId, useRef } from 'react';
-import { usePanelResize } from '../hooks/usePanelResize';
-import { type ChatPageTabId, ChatPageControls } from './chatTabs';
+import { X } from 'lucide-react';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import {
   ConversationListPanel,
@@ -12,11 +11,8 @@ import { ACTIVITY_POLL_MS } from '../components/ConversationListPanel/useConvers
 import { useChatConversations } from './useChatConversations';
 import { useConversationActions } from './useConversationActions';
 import { ChatMessagesPanel, type ModelChoice } from '../components/ChatMessagesPanel';
-import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
-import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI } from '../components/ToolUI';
 import { NewConversationModal } from '../components/NewConversationModal';
-import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
 import { useChatModelFacts } from '../hooks/useChatModelFacts';
@@ -24,6 +20,8 @@ import { useImageInput } from '../hooks/useImageInput';
 import { useThinkingSwitch } from '../hooks/useThinkingSwitch';
 import { useDrawSwitch } from '../hooks/useDrawSwitch';
 import { useChatFolder } from '../hooks/useChatFolder';
+import { Button } from '../components/ui/Button';
+import { Icon } from '../components/ui/Icon';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { cn } from '../utils/cn';
@@ -41,20 +39,17 @@ const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 /**
  * Whose model is answering.
  *
- * The local arm is a server started here: a port to talk to, a model id the
- * registry knows, a console to read. The paired arm is a model of the
- * machine on the other end of the tunnel, by that machine and its id there —
- * the daemon supplies its port and key per turn, so neither exists on this
- * side, and a union rather than optional numbers is what stops the console
- * and the health subscription being handed placeholders they would report
- * as a dead server. A session's machine is fixed: the picker, which moves a
+ * The local arm is a server started here: a port to talk to and a model id
+ * the registry knows (its log is the model's inspector's, at
+ * `/models/:id/log`). The paired arm is a model of the machine on the other
+ * end of the tunnel, by that machine and its id there — the daemon supplies
+ * its port and key per turn, so neither exists on this side, and a union
+ * rather than optional numbers is what stops the health subscription being
+ * handed placeholders it would report as a dead server. A session's machine is fixed: the picker, which moves a
  * chat between this machine's models, is not offered on the paired arm.
  */
 type ChatPageProps = {
   modelName: string;
-  contextLength?: number;
-  serverStartTime?: number; // Unix timestamp in seconds
-  initialView?: 'chat' | 'console'; // Which view to show initially
   conversationId?: number | null; // The conversation to open with, e.g. after a model switch
   draft?: ChatDraft; // Unsent text and images to put back in the composer, e.g. after a model switch
   startingModel?: string | null; // The model a switch is starting, which locks the picker
@@ -76,16 +71,10 @@ type ChatPageProps = {
 );
 
 export default function ChatPage(props: ChatPageProps) {
-  // Destructured for the body, but `props` is kept: the checker can narrow
-  // `props.paired` and correlate the port and id with it, and cannot do that
-  // for locals it has already separated.
   const {
     serverPort,
     modelId,
     modelName,
-    contextLength,
-    serverStartTime,
-    initialView = 'chat',
     conversationId = null,
     draft,
     startingModel = null,
@@ -95,9 +84,6 @@ export default function ChatPage(props: ChatPageProps) {
     onClose,
   } = props;
   const pairedChat = paired !== undefined;
-  // Tab state
-  const [activeTab, setActiveTab] = useState<ChatPageTabId>(initialView);
-  
   const [conversationSearch, setConversationSearch] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
   // The list, from this machine or the one it is joined to; a far chat is
@@ -125,9 +111,6 @@ export default function ChatPage(props: ChatPageProps) {
     listFold.unfold();
     setTimeout(() => searchInputRef.current?.focus(), 0);
   };
-
-  // Panel width for resize (the console view)
-  const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = usePanelResize({ initial: 35, min: 20, max: 50, storageKey: 'gglib.chat.split' });
 
   // Toast notifications
   const { showToast } = useToastContext();
@@ -265,7 +248,6 @@ export default function ChatPage(props: ChatPageProps) {
       // Select the new conversation
       setActiveConversationId(newId);
       setIsNewConversationModalOpen(false);
-      setActiveTab('chat');
       
       // Reconcile with server ordering in background
       void syncConversations({ preferredId: newId, silent: true });
@@ -282,8 +264,6 @@ export default function ChatPage(props: ChatPageProps) {
         {/* Tool UI Components - render tool calls in chat messages */}
         <GenericToolUI />
         
-        {/* The rail, the list and the notebook's head stay in both views; the
-            head's margin switches the body between the thread and the console. */}
         <div className="flex flex-1 min-h-0">
           <ConversationRail
             onNewConversation={handleNewConversation}
@@ -296,7 +276,7 @@ export default function ChatPage(props: ChatPageProps) {
             running={countOf(activity.running)}
             unread={countOf(activity.unread)}
             source={source}
-            onSource={(next) => { setActiveTab('chat'); switchSource(next); }}
+            onSource={switchSource}
           />
           <div id={listId} hidden={!listFold.open} className={cn('w-[280px] shrink-0 flex flex-col min-h-0 border-r border-border-light', !listFold.open && 'hidden')}>
             <ConversationListPanel
@@ -359,35 +339,12 @@ export default function ChatPage(props: ChatPageProps) {
               draw={draw}
               previews={previews}
               headMargin={
-                <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={pairedChat || far} onClose={onClose} />
+                // Close leaves the chat; its model stays loaded.
+                <Button variant="dangerGhost" size="sm" onClick={onClose} title="Close chat" leftIcon={<Icon icon={X} size={14} />}>
+                  Close
+                </Button>
               }
-              headOnly={activeTab === 'console'}
             />
-            {/* Console - always mounted, hidden when not active. Absent
-                entirely for a paired chat: the process it reports on is on the
-                other machine, so there is no id, port or log to hand it. */}
-            {!props.paired && !far && (
-              <TwoPanelLayout
-                ref={activeTab === 'console' ? layoutRef : undefined}
-                isHidden={activeTab !== 'console'}
-                className="flex-1 min-h-0 border-t border-border-light"
-                leftWidth={leftPanelWidth}
-                onResizeStart={handlePointerDown}
-                onKeyboardResize={handleKeyboardResize}
-                leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
-                left={
-                  <ConsoleInfoPanel
-                    modelId={props.modelId}
-                    modelName={modelName}
-                    serverPort={props.serverPort}
-                    contextLength={contextLength}
-                    startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
-                    onUnload={onUnloadModel}
-                  />
-                }
-                right={<ConsoleLogPanel serverPort={props.serverPort} />}
-              />
-            )}
           </div>
         </div>
       </AssistantRuntimeProvider>

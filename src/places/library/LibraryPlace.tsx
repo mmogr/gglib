@@ -1,15 +1,14 @@
 /**
  * The library, and the inspector beside it while it has a subject.
  *
- * The layout route over `/library`, `/models/:id` and `/far/:id`: the
- * selection is the address, so picking a row navigates and the place stays
- * mounted. The main column is the library's rows, then what the one search
- * found on Hugging Face (`hf/`). The inspector holds one subject: a model
- * of this machine's or the paired one's (by address), or a Hugging Face
- * repo (picked here; any address with a subject drops it). A model of this
- * machine's is `inspector/Inspector`; the paired machine's model and the
- * Hugging Face preview are the old ones until I4 (`FarModelInspector`,
- * `HfInspector`, with the download queue for its Download buttons).
+ * The layout route over `/library`, `/models/:id` (and its `/log`),
+ * `/far/:id` and `/get/:owner/:name`: the selection is the address, so
+ * picking a row navigates and the place stays mounted. The main column is
+ * the library's rows, then what the one search found on Hugging Face
+ * (`hf/`). The inspector (`inspector/Inspector`) holds the one subject the
+ * address names: a model of this machine's or its log, the paired
+ * machine's model, or a Hugging Face repo; a repo picked here hands its
+ * summary to the address it opens, so it is not read twice.
  * The inspector reads `?serve=1` itself (its Load with options sheet), and
  * a server it started for a chat opens that chat. `?add=browse` focuses the
  * search; `?add=file` opens the native picker on the desktop and the typed
@@ -18,9 +17,8 @@
  * @module places/library/LibraryPlace
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { FarModelInspector, HfInspector } from '../../components/ModelInspectorPanel';
 import { Inspector } from '../../inspector/Inspector';
 import { Button } from '../../components/ui/Button';
 import { useToastContext } from '../../contexts/ToastContext';
@@ -29,11 +27,10 @@ import { useServers, type ServerViewModel } from '../../hooks/useServers';
 import { HANDED, setChatHandoff } from '../../app/chatHandoff';
 import { inspectorSubject, libraryIntent, paths, settingsAt } from '../../app/paths';
 import { useDownloads } from '../../services/downloadsRegistry';
+import type { HfPickState } from '../../inspector/hf/HfInspector';
 import { removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
-import { useModel } from '../../services/modelRegistry';
 import { isDesktop, pickGgufFile } from '../../services/platform';
 import type { HfModelSummary } from '../../types';
-import type { ModelRef } from '../../types/generated/ModelRef';
 import { formatError } from '../../utils/errors';
 import { AddFileRow, addGgufFile } from './AddFileRow';
 import { EngineBanner } from './EngineBanner';
@@ -51,38 +48,25 @@ export default function LibraryPlace() {
   const { snapshot: downloadQueue } = useDownloads();
   const paired = usePairedModels();
   const [sort, setSort] = useState<LibrarySort>(DEFAULT_SORT);
-  const [selectedHfModel, setSelectedHfModel] = useState<HfModelSummary | null>(null);
   // The add-a-file row: closed, open to type a path, or the picked path that failed.
   const [adding, setAdding] = useState<{ path: string; error: string } | 'typed' | null>(null);
   const field = useRef<HTMLInputElement>(null);
 
   const subject = inspectorSubject(location);
   const selectedModelId = subject?.kind === 'model' ? subject.id : null;
-  const selectedModel = useModel(selectedModelId);
-  // A far pick holds only while the paired rows are that machine's.
-  const farPick: ModelRef | null = useMemo(
-    () => (subject?.kind === 'far' && paired.group ? { machine: paired.group.machine, id: subject.id } : null),
-    [subject?.kind, subject?.id, paired.group],
-  );
   const intent = libraryIntent(location.search);
-  const subjectKey = subject && `${subject.kind}:${subject.id}`;
+  const subjectKey = subject && (subject.kind === 'hf' ? `hf:${subject.repo}` : `${subject.kind}:${subject.id}`);
 
   const pickHf = useCallback(
-    (model: HfModelSummary) => {
-      if (subjectKey !== null) navigate(paths.library());
-      setSelectedHfModel(model);
-    },
-    [subjectKey, navigate],
+    (model: HfModelSummary) => navigate(paths.hf(model.id), { state: { hf: model } satisfies HfPickState }),
+    [navigate],
   );
   const search = useLibrarySearch(pickHf);
   const { cancelOpen } = search;
 
-  // An address with a subject is the inspector's one subject: it drops the
-  // Hugging Face pick, and a repo still being read.
+  // A new subject drops a repo still being read.
   useEffect(() => {
-    if (subjectKey === null) return;
-    setSelectedHfModel(null);
-    cancelOpen();
+    if (subjectKey !== null) cancelOpen();
   }, [subjectKey, cancelOpen]);
 
   // `?add=` acts once, then leaves the address.
@@ -122,8 +106,6 @@ export default function LibraryPlace() {
     navigate(paths.chat(server.modelId), { state: HANDED });
   };
 
-  const inspecting = selectedModelId !== null || farPick !== null || selectedHfModel !== null;
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <section aria-label="Library" className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -160,29 +142,19 @@ export default function LibraryPlace() {
               {`Search Hugging Face for '${search.query.trim()}' ↵`}
             </Button>
           )}
-          <HfGroup search={search} pickedId={selectedHfModel?.id ?? null} onPick={pickHf} queueFull={downloadQueue?.full ?? false} />
+          <HfGroup search={search} pickedId={subject?.kind === 'hf' ? subject.repo : null} onPick={pickHf} queueFull={downloadQueue?.full ?? false} />
         </div>
       </section>
 
-      {inspecting && (
-        <aside aria-label="Inspector" className="flex w-[380px] shrink-0 flex-col overflow-y-auto bg-surface">
-          {farPick ? (
-            <FarModelInspector model={farPick} paired={paired} onChat={(far) => navigate(paths.farChat(far.id))} />
-          ) : selectedHfModel ? (
-            <HfInspector model={selectedHfModel} downloadQueue={downloadQueue} />
-          ) : (
-            <Inspector
-              model={selectedModel}
-              servers={servers}
-              onServerStarted={handleServerStarted}
-              onStopServer={stopServer}
-              onRemoveModel={removeModel}
-              onUpdateModel={updateModel}
-              onOpenSystemSettings={() => navigate(settingsAt(location, 'system'), { replace: true })}
-            />
-          )}
-        </aside>
-      )}
+      <Inspector
+        paired={paired}
+        servers={servers}
+        onServerStarted={handleServerStarted}
+        onStopServer={stopServer}
+        onRemoveModel={removeModel}
+        onUpdateModel={updateModel}
+        onOpenSystemSettings={() => navigate(settingsAt(location, 'system'), { replace: true })}
+      />
     </div>
   );
 }

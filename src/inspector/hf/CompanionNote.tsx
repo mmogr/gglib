@@ -1,9 +1,7 @@
 import { FC } from 'react';
-import { Palette } from 'lucide-react';
 import type { HfImagePreview } from '../../types';
 import { componentRoleLabel, imageFamilyLabel } from '../../utils/imageFamily';
-import { formatBytes } from '../../utils/format';
-import { Icon } from '../ui/Icon';
+import { formatSize } from '../../utils/format';
 
 interface CompanionNoteProps {
   /** The daemon's reading of the repository as an image model, with the companions its download fetches */
@@ -27,13 +25,8 @@ export const CompanionNote: FC<CompanionNoteProps> = ({ image }) => {
   const family = imageFamilyLabel(image.family);
 
   return (
-    <div data-testid="companion-note" className="flex flex-col gap-sm px-base py-md border border-border rounded-lg bg-surface">
-      <div className="flex flex-wrap items-center gap-sm text-sm text-text">
-        <span className="text-text-secondary" aria-hidden>
-          <Icon icon={Palette} size={14} />
-        </span>
-        <span>An image model of the {family} family.</span>
-      </div>
+    <div data-testid="companion-note" className="flex flex-col gap-xs">
+      <p className="m-0 text-xs text-text">An image model of the {family} family.</p>
       {image.companions.length === 0 ? (
         <p className="m-0 text-xs leading-relaxed text-text-secondary">Its weights file is all it needs.</p>
       ) : (
@@ -51,7 +44,7 @@ export const CompanionNote: FC<CompanionNoteProps> = ({ image }) => {
                   {fileName(companion.file_path)}
                 </span>
                 <span className="text-text-muted break-all">{companion.repo}</span>
-                <span className="text-text-secondary tabular-nums">{formatBytes(companion.size_bytes)}</span>
+                <span className="text-text-secondary tabular-nums">{formatSize(companion.size_bytes)}</span>
                 {companion.present && <span className="text-text-muted">already here</span>}
               </li>
             ))}
@@ -59,7 +52,7 @@ export const CompanionNote: FC<CompanionNoteProps> = ({ image }) => {
           <p data-testid="companion-total" className="m-0 text-xs leading-relaxed text-text-secondary">
             {image.fetch_bytes === 0
               ? 'Every one is already here, so the download fetches the weights alone.'
-              : `Beside the weights, the download fetches ${formatBytes(image.fetch_bytes)}.`}
+              : `Beside the weights, the download fetches ${formatSize(image.fetch_bytes)}.`}
           </p>
         </>
       )}

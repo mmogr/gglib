@@ -38,4 +38,10 @@ fit: VariantFit | null,
  * `fit` in the words the CLI prints: "fits with 32K", "too big",
  * "unknown: …". `None` with `fit`.
  */
-fit_word: string | null, };
+fit_word: string | null, 
+/**
+ * Whether it is the variant `gglib model download <repo>` takes when
+ * none is asked for, as the picker chooses from the heads this listing
+ * read (no further header is read for it). At most one is.
+ */
+picked: boolean, };
