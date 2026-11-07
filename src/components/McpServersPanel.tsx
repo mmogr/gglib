@@ -29,7 +29,7 @@ import {
   hasServerError,
   getServerErrorMessage,
 } from '../utils/mcp';
-import { AllowRemoteCheckbox } from './remote/AllowRemoteCheckbox';
+import { AllowRemoteCheckbox } from './mcp/AllowRemoteCheckbox';
 
 const statusRow = "inline-flex items-center gap-xs text-xs text-text-muted";
 const statusDot = "w-1.5 h-1.5 rounded-full";

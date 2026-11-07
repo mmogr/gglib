@@ -233,6 +233,9 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
             path: 'idle',
             away_for_s: null,
           },
+          // The reach word follows the connection, as the daemon derives
+          // it: here at once, not when the read lands.
+          reach: 'connected',
           // The name held is the last status read's, which on a join to
           // another machine is the one this join replaced. Like the
           // connection, the name is left to the read that follows.
@@ -243,7 +246,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
     case 'remote_disconnected':
       set({
         ...prev,
-        status: { ...status, connected: null },
+        status: { ...status, connected: null, reach: 'disconnected' },
       });
       break;
     // The port stays bound either way; these only change what is said
@@ -253,7 +256,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       if (status.connected) {
         set({
           ...prev,
-          status: { ...status, connected: { ...status.connected, away_for_s: 0 } },
+          status: { ...status, connected: { ...status.connected, away_for_s: 0 }, reach: 'away' },
         });
       }
       break;
@@ -261,7 +264,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       if (status.connected) {
         set({
           ...prev,
-          status: { ...status, connected: { ...status.connected, away_for_s: null } },
+          status: { ...status, connected: { ...status.connected, away_for_s: null }, reach: 'connected' },
         });
       }
       break;
