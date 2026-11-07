@@ -27,8 +27,9 @@ page.on('pageerror', (e) => console.error('pageerror', e.message));
 
 await page.goto(url, { waitUntil: 'load', timeout: 30000 });
 // The dashboard holds an event stream open, so Chrome's network-idle never
-// comes; wait for the page to have rendered something instead.
-await page.waitForFunction(() => document.body.innerText.length > 200, { timeout: 30000 });
+// comes; wait for the page to have rendered something instead. The tray
+// panel holds little text, so its steps file waits for what it shows.
+await page.waitForFunction(() => document.body.innerText.trim().length > 0, { timeout: 30000 });
 await new Promise((r) => setTimeout(r, 1500));
 
 for (const s of steps) {

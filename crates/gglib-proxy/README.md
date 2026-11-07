@@ -28,7 +28,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
 6. **Acts on looping conversations** — by default it forwards them with a note telling the model what it has repeated, and ends the run if the model repeats again after that; set to refuse, it aborts them before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
-7. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
+7. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the GUI's Endpoint place and Diagnostics › Live (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
 

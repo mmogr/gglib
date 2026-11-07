@@ -12,8 +12,9 @@ which is native Rust and reaches this module only when
 environment, but `PythonEnvironment::prepare` is reachable only from
 `ensure_fast_helper_ready`, which in turn is only called by an explicit opt-in:
 `gglib config fast-downloads enable`, the offer `make setup` and `gglib up`
-make, or the GUI setup wizard. A download never provisions anything; if the
-environment is absent, the native path runs instead. Putting a Python toolchain
+make, or Faster downloads in the GUI's setup or Settings › Engines. A
+download never provisions anything; if the environment is absent, the native
+path runs instead. Putting a Python toolchain
 in the critical path of a first download is the failure mode this arrangement
 exists to prevent.
 

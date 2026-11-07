@@ -148,8 +148,8 @@ the same auto-generated namespace; they carry no launch-flag effect today.
 Image input is not a tag. A model in this library reads images exactly when
 it is linked to a projector, the second GGUF llama-server loads with
 `--mmproj`: the link is `models.projector_path`, set with `gglib model update
-<model> --projector <path>` or the Projector row of the model inspector, and
-cleared with `--no-projector` or the row's "None". A download from a
+<model> --projector <path>` or the Images row of the model inspector, and
+cleared with `--no-projector` or the row's "None (text only)". A download from a
 repository that has projectors fetches one with the model and links it.
 `gglib model list` shows it in its `Images` column and `gglib model inspect`
 on its `Projector` line
@@ -243,7 +243,7 @@ it touches do not all behave alike:
 | `quantization`, `context_length`, expert counts | Replaced only when newly detected; a stored value is never emptied |
 | `name`, parameter count, `architecture` | Untouched — a name you chose yourself survives |
 
-This is a CLI-only workflow. The GUI's *Add Model* and `POST /api/models` have
+This is a CLI-only workflow. The GUI's *Add a GGUF file…* and `POST /api/models` have
 no equivalent — adding a file already in the library is a `409` there, with no
 way to ask for the overwrite.
 

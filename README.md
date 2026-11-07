@@ -77,7 +77,7 @@ source are under [Install](#install).
 ## A library
 
 <p align="center">
-  <img src="docs/assets/gui-library.png" alt="The library in the desktop app, with one model's metadata and resolved sampling open" width="900">
+  <img src="docs/assets/gui-library.png" alt="The library in the desktop app, with one model open in the inspector: the command gglib would launch it with, and how it runs" width="900">
 </p>
 
 Every GGUF you own in one place, with what gglib read from it: size,
@@ -89,10 +89,12 @@ search and browse the hub, verify hashes, and upgrade a model when its
 repository publishes a newer file. A download that comes with a projector
 links it, so the model can read images from day one.
 
-The inspector on the right is the control staying in your hands: each
-sampling value, the layer it came from (request, profile, this model, your
-global default, or the recipe the model's author published), and a form to
-override any of them. [Sampling →](docs/sampling.md)
+The inspector on the right is the control staying in your hands: How it
+runs shows the command gglib would launch the model with, then one row per
+decision, whose choice it was on hover, and Change on the ones you can set.
+The Sampling row says the layer its values came from (a profile, this model,
+your global default, or the recipe the model's author published), and its
+Change is a form to override any of them. [Sampling →](docs/sampling.md)
 
 ## One endpoint
 
@@ -139,13 +141,14 @@ order of how often it matters:
   [Details →](docs/clients.md#images)
 
 <p align="center">
-  <img src="docs/assets/gui-chat.png" alt="A chat in the desktop app, with each reply's timing" width="800">
+  <img src="docs/assets/gui-chat.png" alt="A chat in the desktop app: the reply folds its thinking and tool calls, and its figure line gives its time, speed and tokens reused" width="800">
 </p>
 
-The chat page is the quickest way to try a model, and it shows what every
-reply cost: thinking time, tokens read, how many came from cache, and
-generation speed. Tools come from MCP servers you add; a folder you choose
-for a chat is readable by its file tools, read-only, and nothing outside it is.
+The chat page is the quickest way to try a model, and every reply shows
+what it cost: thinking time in its fold, then its time, generation speed and how
+many tokens came from cache, with the tokens read on hover. Tools come from
+MCP servers you add; a folder you choose for a chat is readable by its file
+tools, read-only, and nothing outside it is.
 
 ## Every device
 
@@ -168,19 +171,20 @@ The connection is direct and end-to-end encrypted, from
 [modelpipe](https://github.com/mmogr/modelpipe): no port forwarding, no VPN,
 no account, no relay that can read a request. The code is single-use and
 dies in two minutes; the tunnel enforces the same API key the proxy does.
-On the laptop, the chat page lists the desktop's conversations beside its
-own and carries them on live. [Details →](docs/remote.md)
+On the laptop, the sidebar lists the desktop's chats under its name, below
+this machine's, and carries them on live. [Details →](docs/remote.md)
 
 On an iPhone or iPad, [ggchat](https://github.com/mmogr/ggchat) scans the
 same QR code and talks to the same endpoint; it is a native iPhone and Mac
 app.
 
 The desktop app doubles as an always-on host: `--proxy-autostart`,
-`--close-to-tray` and `--start-at-login` keep the endpoint up without a
-terminal window, and the tray shows what it is doing.
+`--close-to-tray` and `--start-at-login` (Settings › General in the app) keep
+the endpoint up without a terminal window, and the tray shows the endpoint,
+what is loaded, and your devices.
 
 <p align="center">
-  <img src="docs/assets/tray-dashboard.png" alt="The tray dashboard during a reply" height="420">
+  <img src="docs/assets/tray-dashboard.png" alt="The tray popover while a loaded model answers a request" height="420">
 </p>
 
 ## Day to day
