@@ -1,10 +1,10 @@
 import type { FC } from 'react';
 import { Loader2 } from 'lucide-react';
 
-import { Icon } from '../ui/Icon';
-import { formatBytes, formatDuration, formatRate } from '../../utils/format';
-import type { LlamaProgressEvent } from '../../types/setup';
-import { installPhaseLabel } from '../../types/setup';
+import { Icon } from './ui/Icon';
+import { formatBytes, formatDuration, formatRate } from '../utils/format';
+import type { LlamaProgressEvent } from '../types/setup';
+import { installPhaseLabel } from '../types/setup';
 
 /**
  * Live rendering of a pre-built install: llama.cpp's, or the image runtime's

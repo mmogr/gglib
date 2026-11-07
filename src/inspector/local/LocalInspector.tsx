@@ -24,7 +24,7 @@ import { MoreHorizontal, X } from 'lucide-react';
 import { openChatOn } from '../../app/openChat';
 import { inspectorClosed, libraryIntent, paths, withoutParam } from '../../app/paths';
 import { CopyValue } from '../../components/CopyValue';
-import { InstallProgress } from '../../components/SetupWizard/InstallProgress';
+import { InstallProgress } from '../../components/InstallProgress';
 import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';

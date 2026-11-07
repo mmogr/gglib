@@ -15,7 +15,6 @@ vi.mock('../../../src/places/endpoint/EndpointPlace', () => ({ default: () => <m
 vi.mock('../../../src/app/BenchmarkRoute', () => ({ BenchmarkRoute: () => <main aria-label="Benchmarks" /> }));
 vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
 vi.mock('../../../src/components/SettingsModal', () => ({ default: () => null }));
-vi.mock('../../../src/components/SetupWizard', () => ({ default: () => null }));
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   syncMenuStateSilent: vi.fn(),

@@ -7,7 +7,8 @@
  * `renderApp` mounts the routes under the providers the layout gives them,
  * without the sidebar and the dialogs the layout draws over every place;
  * `renderShell` mounts them inside the shell, sidebar and all, for a test of
- * the sidebar itself; a test of the dialogs renders `App`. The router each
+ * the sidebar itself; `renderGated` mounts them behind the setup gate, as
+ * the layout does; a test of the dialogs renders `App`. The router each
  * makes is the app's, so `app/menuBridge` and anything else that navigates
  * from outside React reaches it.
  */
@@ -17,6 +18,7 @@ import { Outlet, RouterProvider } from 'react-router';
 import { render } from '@testing-library/react';
 
 import { createAppRouter, type AppRouter } from '../../../src/app/router';
+import { SetupGate } from '../../../src/app/SetupGate';
 import { Shell } from '../../../src/app/Shell';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
@@ -78,4 +80,20 @@ function ShellLayout() {
 /** Render the shell at `path`: the sidebar beside the place the address names. */
 export function renderShell(path: string): RenderedApp {
   return rendered(createAppRouter(<ShellLayout />, [path]));
+}
+
+/** The routes behind the setup gate, as the layout puts them. */
+function GatedLayout() {
+  return (
+    <PlaceProviders>
+      <SetupGate>
+        <Outlet />
+      </SetupGate>
+    </PlaceProviders>
+  );
+}
+
+/** Render the place at `path` behind the setup gate: setup while the daemon says it is not done. */
+export function renderGated(path: string): RenderedApp {
+  return rendered(createAppRouter(<GatedLayout />, [path]));
 }

@@ -19,7 +19,7 @@ import { Banner } from '../ui/Banner';
 import { Icon } from '../ui/Icon';
 import { Stack } from '../primitives';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
-import { InstallProgress } from '../SetupWizard/InstallProgress';
+import { InstallProgress } from '../InstallProgress';
 import { ENGINE_PRODUCT } from '../../types/setup';
 import type { EngineStatus, RuntimeKind } from '../../types/setup';
 import { LabelledValue } from './LabelledValue';
