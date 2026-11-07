@@ -49,9 +49,11 @@ const STAYS = 'A chat stays on its machine. Start a new chat to use this model.'
  * machine's models says its state after its name, in `RESIDENCY_WORDS`
  * ("Qwen3-4B · Not loaded"), so a pick that must load first says so: a
  * running one's word is the proxy's live dashboard's (`useResidency`), else
- * Loaded. While the endpoint is pinned (`ProxyStatus.pinned_model`, a name)
- * the daemon refuses to start any other model, so the others are greyed
- * and one line over the groups names the pin. Choosing a model
+ * Loaded. The chat's own model is ticked where it is: under Loaded while it
+ * runs, else first under On this Mac. While the endpoint is pinned
+ * (`ProxyStatus.pinned_model`, a name) the daemon refuses to start any
+ * other model, so the others are greyed, each with the pin as its reason
+ * ("Pinned · only <model>"). Choosing a model
  * here hands it to the page, which moves the chat there, starting the model
  * first if it is not running; meanwhile the picker is locked and says so.
  * A chat's machine is fixed, so a paired machine's model opens a new chat
@@ -109,29 +111,25 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   /** "<name> · <state>": the state the dashboard gives a running model, else Loaded; Not loaded when nothing runs it. */
   const stated = (id: number, name: string) =>
     `${name} · ${RESIDENCY_WORDS[runningIds.has(id) ? (residency.get(id) ?? 'loaded') : 'not_loaded']}`;
-  /** A model the pinned endpoint will not start: any but the pinned one. */
-  const refused = (name: string) => pinnedModel !== null && name !== pinnedModel;
-  const choice = (id: number, name: string): MenuItem => ({
-    label: stated(id, name),
-    checked: false,
-    disabled: refused(name),
-    onPick: () => void pick({ modelId: id, modelName: name }),
-  });
-  const loaded: MenuItem[] = [
-    ...(runningIds.has(modelId) ? [] : [{ label: stated(modelId, modelName), checked: true, onPick: () => {} }]),
-    ...servers.map((s) =>
-      s.modelId === modelId ? { label: stated(s.modelId, s.modelName), checked: true, onPick: () => {} } : choice(s.modelId, s.modelName),
-    ),
+  /** Why the pinned endpoint will not start a model, or `undefined` for one it will (the pinned one, or any while unpinned). */
+  const refusal = (name: string) =>
+    pinnedModel !== null && name !== pinnedModel ? `${ENDPOINT_WORDS.pinned} · only ${pinnedModel}` : undefined;
+  const choice = (id: number, name: string): MenuItem => {
+    const why = refusal(name);
+    return { label: stated(id, name), checked: false, disabled: why !== undefined, title: why, onPick: () => void pick({ modelId: id, modelName: name }) };
+  };
+  /** The chat's own model, ticked: under Loaded while it runs, else first under On this Mac. */
+  const own: MenuItem = { label: stated(modelId, modelName), checked: true, onPick: () => {} };
+  const loaded: MenuItem[] = servers.map((s) => (s.modelId === modelId ? own : choice(s.modelId, s.modelName)));
+  const here: MenuItem[] = [
+    ...(runningIds.has(modelId) ? [] : [own]),
+    ...models.filter((m) => m.id !== modelId && !runningIds.has(m.id)).map((m) => choice(m.id, m.name)),
   ];
-  const idle = models.filter((m) => m.id !== modelId && !runningIds.has(m.id));
   const far = paired.group?.models ?? [];
 
   const items: MenuItem[] = [
-    ...(pinnedModel !== null ? [{ label: `${ENDPOINT_WORDS.pinned} · only ${pinnedModel}`, note: true }] : []),
-    { label: RESIDENCY_WORDS.loaded, heading: true },
-    ...loaded,
-    ...(idle.length > 0 ? [{ label: 'On this Mac', heading: true }] : []),
-    ...idle.map((m) => choice(m.id, m.name)),
+    ...(loaded.length > 0 ? [{ label: RESIDENCY_WORDS.loaded, heading: true }, ...loaded] : []),
+    ...(here.length > 0 ? [{ label: 'On this Mac', heading: true }, ...here] : []),
     ...(far.length > 0 ? [{ label: `On ${paired.name}`, heading: true }] : []),
     ...far.map((m) => ({
       label: m.id,

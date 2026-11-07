@@ -9,6 +9,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { CopyValue } from '../../../src/components/CopyValue';
+import { appLogger } from '../../../src/services/platform';
 
 describe('CopyValue', () => {
   it('is named by its label and copies the whole value, then says so', async () => {
@@ -53,13 +54,19 @@ describe('CopyValue', () => {
       expect(screen.queryByText('Copied')).not.toBeInTheDocument();
     });
 
-    it('is not said when the copy failed', async () => {
+    it('is not said when the copy failed, which is logged', async () => {
       const user = userEvent.setup();
-      vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('clipboard refused'));
-      render(<CopyValue value="x" label="Copy x" />);
-      await user.click(screen.getByRole('button', { name: 'Copy x' }));
-      await act(async () => {});
-      expect(screen.queryByText('Copied')).not.toBeInTheDocument();
+      const complaints = vi.spyOn(appLogger, 'error').mockImplementation(() => {});
+      const refused = new Error('clipboard refused');
+      vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(refused);
+      try {
+        render(<CopyValue value="x" label="Copy x" />);
+        await user.click(screen.getByRole('button', { name: 'Copy x' }));
+        await waitFor(() => expect(complaints).toHaveBeenCalledWith('component.app', 'Failed to copy to clipboard', { error: refused }));
+        expect(screen.queryByText('Copied')).not.toBeInTheDocument();
+      } finally {
+        complaints.mockRestore();
+      }
     });
   });
 

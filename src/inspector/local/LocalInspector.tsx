@@ -36,7 +36,7 @@ import { useEngineInstall } from '../../places/library/engineInstall';
 import { modelFacts } from '../../places/library/groups';
 import { Menu, type MenuItem } from '../../components/ui/Menu';
 import { refreshModels } from '../../services/modelEvents';
-import { openUrl } from '../../services/platform';
+import { appLogger, openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
 import type { GgufModel } from '../../types';
 import { formatError, loadFailed } from '../../utils/errors';
@@ -166,7 +166,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
       onPick: () => void retag.handleRetag(true),
       title: 'Derives the detected tags again from the GGUF, dropping those it no longer finds, hand-added ones included.',
     },
-    { label: 'Copy path', onPick: () => void navigator.clipboard.writeText(model.filePath).then(showPathCopied), gapBefore: true },
+    { label: 'Copy path', onPick: () => void navigator.clipboard.writeText(model.filePath).then(showPathCopied, (error: unknown) => appLogger.error('component.model', 'Failed to copy the path', { error })), gapBefore: true },
     ...(repo ? [{ label: 'Open on Hugging Face', onPick: () => void openUrl(repo) }] : []),
     { label: 'Benchmark…', onPick: () => navigate(paths.benchmarks([model.id])), gapBefore: true },
     { label: 'Remove from library…', onPick: () => void remove(), gapBefore: true, danger: true },

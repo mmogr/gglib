@@ -114,9 +114,9 @@ describe('ChatPlace, model picker', () => {
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     await waitFor(() => expect(modelPicker()).toHaveTextContent('Qwen3.8-27B'));
 
-    expect(await pickerGroup(user, 'On this Mac')).toEqual(['gemma-3-12b · Not loaded']);
-    // The chat's own model is listed first, saying that nothing runs it.
-    expect(await pickerGroup(user, 'Loaded')).toEqual(['Qwen3.8-27B · Not loaded', 'llama-3.2-3b · Loaded']);
+    // The chat's own model, which nothing runs, is first under On this Mac, not under Loaded.
+    expect(await pickerGroup(user, 'On this Mac')).toEqual(['Qwen3.8-27B · Not loaded', 'gemma-3-12b · Not loaded']);
+    expect(await pickerGroup(user, 'Loaded')).toEqual(['llama-3.2-3b · Loaded']);
     expect(screen.getByRole('menuitemradio', { name: 'Qwen3.8-27B · Not loaded' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('menuitemradio', { name: 'llama-3.2-3b · Loaded' })).toHaveAttribute('aria-checked', 'false');
   });
@@ -132,10 +132,10 @@ describe('ChatPlace, model picker', () => {
         admission: { slots: [{ model_id: 8, launch: { state: 'working', context_size: 8192, weights_bytes: 1, quantization: null, narration: null, flag_line: '' } }] },
       }),
     );
-    expect(await pickerGroup(user, 'Loaded')).toEqual(['Qwen3.8-27B · Not loaded', 'llama-3.2-3b · Working']);
+    expect(await pickerGroup(user, 'Loaded')).toEqual(['llama-3.2-3b · Working']);
   });
 
-  it('while the endpoint is pinned, greys every model but the pinned one and names the pin once', async () => {
+  it('while the endpoint is pinned, greys every model but the pinned one, the pin its reason', async () => {
     const user = userEvent.setup();
     act(() =>
       applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b' }),
@@ -143,9 +143,13 @@ describe('ChatPlace, model picker', () => {
     renderPage();
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     await pickerGroup(user, 'Loaded');
-    expect(screen.getAllByText('Pinned · only llama-3.2-3b')).toHaveLength(1);
-    expect(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' })).toBeDisabled();
-    expect(screen.getByRole('menuitemradio', { name: 'llama-3.2-3b · Loaded' })).toBeEnabled();
+    const gemma = screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' });
+    expect(gemma).toBeDisabled();
+    // Said under it and to a reader, in Rust's state word and the pinned name.
+    expect(gemma).toHaveAccessibleDescription('Pinned · only llama-3.2-3b');
+    const llama = screen.getByRole('menuitemradio', { name: 'llama-3.2-3b · Loaded' });
+    expect(llama).toBeEnabled();
+    expect(llama).not.toHaveAttribute('aria-describedby');
     await user.click(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' }));
     expect(onSwitchModel).not.toHaveBeenCalled();
   });
@@ -157,6 +161,7 @@ describe('ChatPlace, model picker', () => {
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     await pickerGroup(user, 'Loaded');
     expect(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' })).toBeEnabled();
+    expect(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' })).not.toHaveAttribute('aria-describedby');
     expect(screen.queryByText(/^Pinned/)).not.toBeInTheDocument();
   });
 
@@ -290,6 +295,19 @@ describe('ChatPlace, model picker', () => {
       expect(desk).toBeDisabled();
       expect(desk).toHaveAccessibleDescription('A chat stays on its machine. Start a new chat to use this model.');
       expect(onOpenFar).not.toHaveBeenCalled();
+    });
+
+    it('are never greyed by this machine\'s pinned endpoint, which does not serve them', async () => {
+      const user = userEvent.setup();
+      joinDesk();
+      act(() =>
+        applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b' }),
+      );
+      renderOn(null);
+      await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(async () => expect(await pickerGroup(user, 'On desk')).toEqual(['Llama-3.3-70B']));
+      expect(screen.getByRole('menuitemradio', { name: 'gemma-3-12b · Not loaded' })).toBeDisabled();
+      expect(screen.getByRole('menuitem', { name: 'Llama-3.3-70B' })).toBeEnabled();
     });
 
     it('are not there with no machine joined', async () => {

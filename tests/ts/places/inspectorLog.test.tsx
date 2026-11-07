@@ -72,6 +72,7 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({ default: () => <div data-
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { getServerLogs } from '../../../src/services/platform/serverLogs';
+import { appLogger } from '../../../src/services/platform';
 import { renderApp } from './harness';
 import { guiModel } from '../fixtures/model';
 
@@ -127,6 +128,23 @@ describe('the log, in the inspector', () => {
 
     await userEvent.setup().click(within(inspector()).getByRole('button', { name: 'Back to Gemma-3-4B-It' }));
     expect(at()).toBe('/models/9');
+  });
+
+  it('a copy of the log that failed says no Copied, and is logged', async () => {
+    serve();
+    renderAt('/models/9/log');
+    const user = userEvent.setup();
+    const log = await screen.findByRole('log', { name: 'Server output' });
+    await waitFor(() => expect(log).toHaveTextContent('main: build 4321'));
+    const complaints = vi.spyOn(appLogger, 'error').mockImplementation(() => {});
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('clipboard refused'));
+    try {
+      await user.click(within(inspector()).getByRole('button', { name: 'Copy the log' }));
+      await waitFor(() => expect(complaints).toHaveBeenCalledWith('hook.server', 'Failed to copy logs', expect.anything()));
+      expect(within(inspector()).queryByText('Copied')).not.toBeInTheDocument();
+    } finally {
+      complaints.mockRestore();
+    }
   });
 
   it('switches between Following and Paused, copies every line, and clears the view', async () => {
