@@ -1,55 +1,29 @@
 /**
- * Settings › Tools: the tool servers, whether MCP clients may draw, the
- * agent limits under one disclosure, and the title prompt. Each setting
- * saves on change.
+ * Settings › Tools: the tool servers and + Add a server, whether MCP
+ * clients may draw, the agent limits under one disclosure, the title
+ * prompt, and a footnote to what MCP is. Each setting saves on change.
  *
- * Interim until S2 (`feat(gui)/settings-tools`): the tool servers are
- * today's `McpServersPanel` with its add and edit dialog, over one list
- * (ST-8), read when the section opens. "This device" is the chat's
- * per-device limits panel (`AgentLimitsSection`), kept in this browser.
+ * The tool servers are read once here and handed down, one list for the
+ * rows and the sheet alike (ST-8). "This device" is the chat's per-device
+ * limits (`AgentLimitsSection`), kept in this browser.
  *
  * @module places/settings/ToolsSection
  */
 
-import { useState, type FC } from 'react';
-import { AddMcpServerModal } from '../../components/AddMcpServerModal';
-import { McpServersPanel } from '../../components/McpServersPanel';
+import type { FC } from 'react';
 import { AgentLimitsSection } from '../../components/AgentLimitsSection';
 import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../constants/settingsDefaults';
 import { useMcpServers } from '../../hooks/useMcpServers';
-import { DEFAULT_TITLE_GENERATION_PROMPT, type McpServerInfo } from '../../services/transport';
+import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../services/transport';
 import { Disclosure } from './Disclosure';
 import { NumberSetting, TextSetting, ToggleSetting } from './fields';
+import { ToolServers } from './tools/ToolServers';
 
-/** The tool servers, and the dialog that adds or edits one (until S2). */
-const ToolServers: FC = () => {
+export const ToolsSection: FC = () => {
   const mcp = useMcpServers();
-  const { addServer, updateServer } = mcp;
-  // `null` closed; `'new'` adding; else the server being edited.
-  const [sheet, setSheet] = useState<McpServerInfo | 'new' | null>(null);
-
   return (
     <>
-      <McpServersPanel mcp={mcp} onAddServer={() => setSheet('new')} onEditServer={setSheet} />
-      {sheet !== null && (
-        <AddMcpServerModal
-          isOpen
-          editingServer={sheet === 'new' ? undefined : sheet}
-          onClose={() => setSheet(null)}
-          onSave={async (data) => {
-            if (sheet === 'new') await addServer(data);
-            else await updateServer(sheet.server.id, data);
-            setSheet(null);
-          }}
-        />
-      )}
-    </>
-  );
-};
-
-export const ToolsSection: FC = () => (
-    <>
-      <ToolServers />
+      <ToolServers mcp={mcp} />
 
       <ToggleSetting k="mcpDrawing" id="mcp-drawing-input" label="Let MCP clients draw">
         Offers clients of the endpoint&apos;s <code>/mcp</code> gglib&apos;s drawing tool. Off unless you
@@ -86,5 +60,15 @@ export const ToolsSection: FC = () => (
         placeholder={DEFAULT_TITLE_GENERATION_PROMPT}
         description="What a chat's title is generated from. Empty uses the built-in prompt shown."
       />
+
+      <a
+        href="https://modelcontextprotocol.io/introduction"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="self-start text-xs text-text-secondary underline underline-offset-2 hover:text-text"
+      >
+        Learn more about MCP
+      </a>
     </>
-);
+  );
+};

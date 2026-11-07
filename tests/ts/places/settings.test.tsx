@@ -6,9 +6,8 @@
  * writing back what was stored, nothing written for a value already stored;
  * a refused write said under its field with what was typed kept; the API
  * key's Show, Copy, Replace (asked first), Clear and Undo; the restart
- * notes; the interim Tools hosting today's panel; and Engines' rows over
- * the system checks (the rows and About are `settingsEngines` and
- * `serviceDown`).
+ * notes; and Engines' rows (the rows and About are `settingsEngines` and
+ * `serviceDown`). Tools has its own file, `settingsTools.test.tsx`.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -31,7 +30,6 @@ vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <mai
 
 import { daemon, holdWrites, resetDaemon, transport, writes } from './settingsDaemon';
 import { renderApp } from './harness';
-import { mcpServer, mcpServerInfo } from '../fixtures/mcp';
 
 const SECTIONS = ['General', 'Endpoint', 'Models', 'Tools', 'Engines', 'About'];
 const heading = () => screen.getByRole('heading', { level: 2 });
@@ -344,30 +342,6 @@ describe('the API key', () => {
 });
 
 describe('the interim sections', () => {
-  it('Tools hosts the tool servers, read when it opens, and lists one added without a Refresh (ST-8)', async () => {
-    daemon.servers.push(mcpServerInfo({ server: mcpServer({ id: 7, name: 'from-the-cli' }) }));
-    renderApp('/settings/tools');
-    const user = userEvent.setup();
-    expect(await screen.findByText('from-the-cli')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /add server/i }));
-    await user.type(screen.getByPlaceholderText('My MCP Server'), 'files');
-    await user.type(screen.getByPlaceholderText('npx, python3, node'), 'cat');
-    await user.click(screen.getByRole('button', { name: /^add server$/i }));
-    expect(await screen.findByText('files')).toBeInTheDocument();
-  });
-
-  it('Tools holds the agent limits, this device\'s among them, under one disclosure', async () => {
-    renderApp('/settings/tools');
-    const user = userEvent.setup();
-    const limits = await screen.findByRole('button', { name: 'Agent limits' });
-    expect(screen.queryByLabelText('Max tool rounds')).not.toBeInTheDocument();
-    await user.click(limits);
-    expect(screen.getByLabelText('Max tool rounds')).toBeInTheDocument();
-    expect(screen.getByLabelText('Max stuck steps')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'This device' })).getByText('applies to all chats on this device')).toBeInTheDocument();
-  });
-
   it('Engines holds a row for each engine and Faster downloads', () => {
     renderApp('/settings/engines');
     expect(screen.getByText('engine row: llama')).toBeInTheDocument();
