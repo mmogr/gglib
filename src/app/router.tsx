@@ -7,7 +7,8 @@
  * `/library`, `/models/:id` (and its `/log`), `/far/:id` and
  * `/get/:owner/:name`, so picking a row changes the address without
  * remounting the page. `/endpoint` is the endpoint place, its inspector
- * named by `?inspect=`.
+ * named by `?inspect=`. `/settings/:section` is the settings place, and
+ * `/settings` its General section.
  *
  * The router instance is module-scoped so the native menu can navigate from
  * outside React (`app/menuBridge`). It is created after `takeDaemonToken()`
@@ -24,6 +25,7 @@ import { createBrowserRouter, createMemoryRouter, Navigate, type RouteObject } f
 import EndpointPlace from '../places/endpoint/EndpointPlace';
 import LibraryPlace from '../places/library/LibraryPlace';
 import DevicesPlace from '../places/devices/DevicesPlace';
+import SettingsPlace from '../places/settings/SettingsPlace';
 import { takeDaemonToken } from '../services/transport/api/daemonToken';
 import { BenchmarkRoute } from './BenchmarkRoute';
 import { ChatRoute } from './ChatRoute';
@@ -41,6 +43,8 @@ export const routes: RouteObject[] = [
   // `/chat/new` too: one route, so the address a first send replaces keeps the page.
   { path: 'chat/:id', element: <ChatRoute /> },
   { path: 'devices', element: <DevicesPlace /> },
+  { path: 'settings', element: <Navigate to={paths.settings()} replace /> },
+  { path: 'settings/:section', element: <SettingsPlace /> },
   { path: 'diagnostics/benchmarks', element: <BenchmarkRoute /> },
   { path: '*', element: <Navigate to={paths.library()} replace /> },
 ];

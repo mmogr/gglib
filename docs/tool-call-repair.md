@@ -141,7 +141,8 @@ All four must hold. Anything else forwards unchanged.
    `GGLIB_DISABLE_GRAMMAR` and `GGLIB_DISABLE_AGENTIC_SAMPLING`).
 
    Settable as `gglib config settings set --tool-call-repair false`, or from
-   Settings → Advanced in the app. Turn it off to measure what a model
+   Settings › Endpoint › What gglib does to requests › Repair broken tool
+   calls in the app. Turn it off to measure what a model
    actually produces: with repair on, a model that packages tool calls badly
    looks like a model that does not, because the proxy fixes it before the
    client sees it — which is the right default for using one and the wrong

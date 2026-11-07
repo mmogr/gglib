@@ -4,7 +4,7 @@
  * Displays a list of configured MCP servers with controls to
  * start/stop, add, edit, and remove servers.
  *
- * The list is the one `SettingsModal` adds and edits through, handed in as
+ * The list is the one Settings › Tools adds and edits through, handed in as
  * `mcp`, never a second `useMcpServers()`: two copies meant a save refreshed
  * the dialog's and left this one stale, and an Edit from it then sent a
  * variable the server no longer kept.

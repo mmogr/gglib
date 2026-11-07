@@ -63,7 +63,7 @@ export interface FormCapabilities {
  *
  * Same `-description` convention as `SettingField`'s `settingDescriptionId`,
  * spelled out here rather than imported: this form is a top-level component
- * and has no business depending on the settings modal's internals.
+ * and has no business depending on the settings place's internals.
  */
 const paramId = (field: SamplingParamKey) => `inference-param-${field}`;
 

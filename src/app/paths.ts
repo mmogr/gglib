@@ -14,7 +14,9 @@
 
 import type { Location } from 'react-router';
 
-export type SettingsSection = 'general' | 'profiles' | 'mcp' | 'system';
+/** The settings place's sections, in the order its list shows them. */
+export const SETTINGS_SECTIONS = ['general', 'endpoint', 'models', 'tools', 'engines', 'about'] as const;
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export const paths = {
   /** The library with nothing picked. */
@@ -50,6 +52,8 @@ export const paths = {
   serve: (id: number) => `/models/${id}?serve=1`,
   /** The devices: sharing this Mac, the paired devices, using another machine. */
   devices: () => '/devices',
+  /** The settings place, open on `section`. */
+  settings: (section: SettingsSection = 'general') => `/settings/${section}`,
   /** The benchmarks, with `modelIds` picked to run. */
   benchmarks: (modelIds: number[] = []) =>
     modelIds.length > 0 ? `/diagnostics/benchmarks?models=${modelIds.join(',')}` : '/diagnostics/benchmarks',
@@ -110,28 +114,12 @@ export function inspectorSubject(location: Pick<Location, 'pathname'> & Partial<
   return null;
 }
 
-/**
- * The settings dialog, open on `section`, over the place at `location`: a
- * search parameter, not a path, because a dialog is drawn over a place and
- * the place stays. (Settings becomes a place of its own with its redesign.)
- */
-export function settingsAt(location: Pick<Location, 'pathname' | 'search'>, section: SettingsSection): string {
-  const params = new URLSearchParams(location.search);
-  params.set('settings', section);
-  return `${location.pathname}?${params.toString()}`;
-}
-
 /** The address at `location` without its search parameter `name`, the rest kept. */
 export function withoutParam(location: Pick<Location, 'pathname' | 'search'>, name: string): string {
   const params = new URLSearchParams(location.search);
   params.delete(name);
   const search = params.toString();
   return search ? `${location.pathname}?${search}` : location.pathname;
-}
-
-/** The place at `location` with the settings dialog closed. */
-export function withoutSettings(location: Pick<Location, 'pathname' | 'search'>): string {
-  return withoutParam(location, 'settings');
 }
 
 /**
@@ -142,12 +130,9 @@ export function inspectorClosed(location: Pick<Location, 'pathname' | 'search'>)
   return location.pathname === paths.endpoint() ? withoutParam(location, 'inspect') : paths.library();
 }
 
-const SETTINGS_SECTIONS: readonly SettingsSection[] = ['general', 'profiles', 'mcp', 'system'];
-
-/** The settings section the address opens the dialog on, or `null` with it closed. */
-export function settingsSection(location: Pick<Location, 'search'>): SettingsSection | null {
-  const section = new URLSearchParams(location.search).get('settings');
-  return SETTINGS_SECTIONS.find((s) => s === section) ?? null;
+/** The settings section a `/settings/:section` segment names, or `null` for one that names none. */
+export function settingsSection(segment: string | undefined): SettingsSection | null {
+  return SETTINGS_SECTIONS.find((s) => s === segment) ?? null;
 }
 
 /**

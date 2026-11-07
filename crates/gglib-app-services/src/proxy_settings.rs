@@ -52,8 +52,13 @@ mod tests {
 
     /// Each stored answer reaches the config: the address, the hosts, the
     /// cache with its default folder and its budget.
+    ///
+    /// The data root is this process's own before either read of the slot
+    /// folder: another test in this binary isolating it between the two
+    /// reads would move it from the user's folder to the test one.
     #[test]
     fn each_stored_answer_reaches_the_config() {
+        gglib_core::paths::isolate_data_root();
         let settings = Settings {
             proxy_host: Some("0.0.0.0".to_owned()),
             proxy_port: Some(8123),

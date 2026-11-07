@@ -65,7 +65,7 @@ describe('the profile editor keeps what a starter profile sets', () => {
       // Resolved against this file, not the cwd, for the reason `rustSource`
       // states: an IDE runner invoked elsewhere would ENOENT instead of
       // failing with something it can explain.
-      resolve(import.meta.dirname, '../../../src/components/SettingsModal/InferenceProfileEditor.tsx'),
+      resolve(import.meta.dirname, '../../../src/places/settings/InferenceProfileEditor.tsx'),
       'utf8',
     );
 

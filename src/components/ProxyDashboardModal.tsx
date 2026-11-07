@@ -7,9 +7,9 @@
  * context-usage donuts), backed by the one stream `dashboardRegistry` keeps
  * open for this endpoint.
  *
- * Opened by the endpoint place's Live numbers (and Recent's All ›), following
- * the same self-contained `{isOpen, onClose}` Modal pattern as `SettingsModal`
- * — the dashboard is proxy-wide, not tied to a specific selected model.
+ * Opened by the endpoint place's Live numbers (and Recent's All ›) as a
+ * self-contained `{isOpen, onClose}` Modal — the dashboard is proxy-wide,
+ * not tied to a specific selected model.
  *
  * Connection and slot rendering lives in `components/proxy/` because the tray
  * popover shows the same figures; this file owns only the modal chrome and the

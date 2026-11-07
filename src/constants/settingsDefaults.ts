@@ -1,5 +1,5 @@
 /**
- * Default values and accepted ranges for the numeric fields in the settings modal.
+ * Default values and accepted ranges for the numeric fields in the settings place.
  *
  * The authoritative values live in Rust — `Settings::with_defaults()` in
  * `crates/gglib-core/src/settings.rs`, and the bounds `validate_settings()`
@@ -22,7 +22,8 @@
 /** The range a numeric settings input accepts, shared by both spec shapes. */
 interface NumericBounds {
   readonly min: string;
-  readonly max: string;
+  /** Absent where the backend has no ceiling and the field sets none. */
+  readonly max?: string;
 }
 
 /**
@@ -135,4 +136,19 @@ export const MAX_STAGNATION_STEPS: NumericSettingSpec = {
   default: '5',
   min: '1',
   max: '100',
+};
+
+/**
+ * The on-disk prompt cache's budget in GiB.
+ *
+ * Rust: unset in `Settings::with_defaults()`, at least `MIN_CACHE_DISK_GB` in
+ * `validate_settings`, and no ceiling. Unset, it is sized from free disk.
+ */
+export const PROXY_CACHE_DISK_GB: NumericSettingSpec = {
+  default: null,
+  unset: {
+    placeholder: 'auto',
+    hint: 'Left empty, it is sized from free disk.',
+  },
+  min: '1',
 };
