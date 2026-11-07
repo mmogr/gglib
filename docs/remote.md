@@ -211,11 +211,11 @@ the next `enable`, which brings the same one back. With no daemon running,
 `disable` switches remote access off in settings instead, so the next start
 does not put the tunnel back, and says so.
 
-The desktop's GUI has the same controls in the **Remote** popover beside the
-proxy control, with the ticket and code shown once and cleared when a device
-pairs or the code runs out. Its MCP checklist, shown whether remote access is
-on or off, sets the same flag `allow-remote` does, as does Devices may use it
-in an opened tool server row under Settings › Tools.
+The desktop's GUI has the same controls in its **Devices** place: Share with
+my devices, Invite a device, whose sheet shows the ticket and code with a QR
+code until a device joins or the code runs out, and Stop sharing. Devices may
+use it, in an opened tool server row under Settings › Tools, sets the same
+flag `allow-remote` does, and the Devices place lists the servers it shares.
 
 ### A key per device
 
@@ -303,9 +303,10 @@ answering, with `502 tunnel_unavailable`, and the tunnel keeps dialling — for
 as long as the connection is up, with a backoff, and with a nudge to rebind
 its socket — a minute apart at the closest, and further apart when a dial
 takes longer — in case this laptop changed network while suspended.
-After thirty seconds of that, `gglib remote status` and the popover say
-**away** and for how long, rather than "connected" over nothing; when the
-desktop answers, they say so. Nothing needs typing at either end. Only
+After thirty seconds of that, `gglib remote status` says **away** and for
+how long, and the Devices place *Away since* the time it went, rather than
+"connected" over nothing; when the desktop answers, they say so. Nothing
+needs typing at either end. Only
 `gglib remote disconnect`, or this daemon stopping, ends the connection.
 
 **The laptop keeps an endpoint key for each desktop it joins**, so the desktop
@@ -471,25 +472,24 @@ and [ADR 0028](adr/0028-remote-is-declared-on-each-command-that-reaches-the-pair
 have the reasoning.
 
 **The GUI's library** lists the desktop's models after this machine's, in a
-group headed by the desktop's name and whether it is reached right now. Each
-row carries a badge with that name, so a model both machines have is two rows
-that cannot be confused, and the library's search matches them as it matches
-this machine's. The filters are this machine's library's (its tags, sizes and
-quantisations, applied by this daemon), so while one is on the desktop's
-group is set aside with a note saying so. The rows are read through this machine's daemon,
+group headed *On desk*, by the desktop's name, and whether it is reached right
+now, so a model both machines have is two rows that cannot be confused, and
+the library's search matches them as it matches this machine's. The rows are
+read through this machine's daemon,
 which adds the key, while the desktop is connected and answering: again when
 it comes back, on each new connection, and when the window regains focus.
-While it is away, or a read fails, the last rows stay, marked *away* or
-*stale*, as they are while a new connection has not yet said which machine
-answered; a disconnection clears them. A read that is slow or fails never
+While it is away, or a read fails, the last rows stay, the heading saying
+*Away* while it is, as they stay while a new connection has not yet said which
+machine answered; a disconnection clears them. A read that is slow or fails never
 holds up or empties this machine's rows.
 
 Picking a desktop row opens its inspector instead of this machine's: what the
 desktop stores about the model, without the paths of its file and its
 projector on its disk, and only what `--remote` allows on a model there —
-*Chat* and *Load*. Nothing that changes it (edit, tags, delete, Start or Stop here) is offered, and the
-native menu's Start, Stop and Remove have nothing selected while a desktop
-row is, so they cannot act on a model here that shares its number. A model
+*Chat* and *Load*. Nothing that changes it (edits, tags, removing it, or
+loading or unloading it here) is offered, and the native Model menu's Load,
+Unload and Remove from Library… have nothing selected while a desktop row is,
+so they cannot act on a model here that shares its number. A model
 the desktop is serving says *Loaded on desk*, in place of *Load on desk*,
 which has the desktop load it now so the first turn does not wait, and reads
 it again when it lands. While the desktop is away both buttons are disabled
@@ -500,27 +500,29 @@ flag is this machine's.
 
 *Chat* opens a chat with the desktop's model: the conversation is this
 machine's, the agent loop runs here, and each turn is sent to the desktop by
-the model's id there, so no other model of its name answers. The head reads
-`qwen3 on desk`; there is no log here (it belongs to a process on the
-desktop) and no model picker, because a chat's machine is fixed. The conversation is made for that model, and every run
+the model's id there, so no other model of its name answers. The composer
+names the model as text, `qwen3 on desk`; there is no log here (it belongs to
+a process on the desktop) and no model picker, because a chat's machine is
+fixed. The conversation is made for that model, and every run
 keeps it on the conversation by its machine, so a paired device's turn on it
 is refused rather than answered by a model here, and `gglib chat --continue`
-goes back to the desktop. The list beside it holds the desktop's chats and
-those that have not run yet, and a chat with a model here lists only this
-machine's: a run on another machine than its chat's is refused, `409
-conflict`. Pair with a different desktop and a chat, a pick or
+goes back to the desktop. A new chat's model picker lists the desktop's
+models too, and picking one opens a chat on it; a saved chat with a model here
+lists them greyed, with why: a run on another machine than its chat's is
+refused, `409 conflict`. Pair with a different desktop and a chat, a pick or
 a row held for the first one is dropped, because its ids name other models
-on the second. Closing the chat leaves the desktop's model and the tunnel
-up, as closing a local chat leaves its model loaded.
+on the second. Leaving the chat leaves the desktop's model and the tunnel
+up, as leaving a local chat leaves its model loaded.
 
-**The desktop's own chats** are on the chat page too, once joined: *desk's
-chats*, by the desktop's name, at the foot of the rail, lists, opens and
+**The desktop's own chats** are in the sidebar too, once joined: *On desk*,
+by the desktop's name, at the foot of Chats, lists, opens and
 carries on the desktop's chats live through this machine's daemon, which adds
 the key, and the desktop runs and saves each reply, so nothing of them is kept
 here but their "New" marks. A chat there is started, renamed, edited or
-deleted only on the desktop, and the margin names the device behind each turn.
+deleted only on the desktop, and a question not sent from here says above it
+where it came from.
 One thing of such a chat can be changed from here: its Thinking choice, by the
-switch in the composer's margin, which the next message sent carries to the
+composer's Thinking switch, which the next message sent carries to the
 desktop ([Thinking](clients.md#thinking)). The switch is there only when the
 desktop lists the chat's model as one that thinks, so a desktop whose gglib
 predates the choice shows none and is never sent the key.
@@ -706,8 +708,9 @@ gglib proxy stop        # then start it again on loopback — the default host
 `gglib config settings set --proxy-api-key ""` is *not* it; a blank would read
 as "authentication is on" while accepting `Bearer ` from anyone, so it is
 refused with `Proxy API key cannot be blank — clear it instead to disable
-authentication`. In the desktop app's settings, the API key's Clear control,
-saved, does what `unset` does; a box left empty keeps the key.
+authentication`. In the desktop app, the API key's Clear under
+Settings › Endpoint does what `unset` does; its Replace writes nothing while
+the box is empty, so the key is kept.
 
 The order is the part that surprises people, because it is the opposite of the
 intuition. What matters is the proxy *rebinding*: the token it demands is

@@ -115,7 +115,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/config/profiles/install-templates` | Add the starter profiles; a stored profile of the same name is kept and named in `kept` |
 | `GET` | `/api/config/system/models-directory` | The models directory |
 | `PUT` | `/api/config/system/models-directory` | Change the models directory |
-| `GET` | `/api/config/system/setup-status` | The first-run wizard's setup status |
+| `GET` | `/api/config/system/setup-status` | The status the GUI's first-run setup shows |
 | `GET` | `/api/config/system/engines/{kind}` | An engine's status, `kind` `llama` or `stable_diffusion`: what is installed, its pin, what an install would download, and the model running on it |
 | `POST` | `/api/config/system/engines/{kind}/install` | Install or update the engine's pinned download, progress over SSE; refused while a model runs on it |
 | `POST` | `/api/config/system/engines/{kind}/uninstall` | Remove what the install put in the engine's folder; 409 while a model runs on it |

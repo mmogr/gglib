@@ -48,8 +48,8 @@ Current application settings:
 ## `settings`
 
 Context size, ports, the download queue, the agent loop's limits, and the
-switches the desktop app offers (`--proxy-autostart`, `--close-to-tray`,
-`--start-at-login`).
+switches the desktop app offers under Settings › General
+(`--proxy-autostart`, `--close-to-tray`, `--start-at-login`).
 
 ```bash
 gglib config settings set --default-context-size 131072
@@ -147,7 +147,7 @@ Binary version: version: 0.7.0-dev (build 11669, commit 620d2225c)
   acceleration this machine offers and whether a source build is ready to
   run.
 - Neither engine is installed or removed while the daemon that serves this
-  data root runs a model on it, as the desktop app's Settings refuses too.
+  data root runs a model on it, as Settings › Engines in the app refuses too.
   With no such daemon running nothing serves one, since only a daemon
   launches them.
 - `gglib serve` and `gglib up` offer the install when an engine is missing,

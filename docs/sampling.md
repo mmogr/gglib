@@ -60,7 +60,7 @@ sets none. So for `temperature` (`general.sampling.temp`), `top_p`, `top_k`,
 default is per-model, not per-build. `presence_penalty` and `dry_multiplier`
 have no GGUF key and remain the build's.
 
-The proxy dashboard's Sampling Readback panel names which of the two supplied
+The Sampling readback section of Diagnostics › Live names which of the two supplied
 each value on the running model — and, separately, whether gglib is *overriding*
 what the model published. Those are different questions: `/props` reporting a
 value as model-supplied says the build's own default is unobservable for that
@@ -171,10 +171,10 @@ that chat. Pass `--reasoning-budget-tokens 0` to stop the question's
 thinking, and switch the chat it saved with
 `gglib chat --continue <id> --thinking off`.
 
-On the chat page the choice is the **Thinking** switch in the composer's
-margin, drawn only for a model that thinks: one tagged `reasoning` here, or
+On the chat page the choice is the **Thinking** switch in the composer,
+drawn only for a model that thinks: one tagged `reasoning` here, or
 one a paired machine lists with the `reasoning` capability. It shows what the
-chat remembers, reading "Thinking off" while the chat is switched off, and a
+chat remembers, switched off while the chat is, and a
 click is said by the next message sent and not again once gglib has accepted
 that message. The page applies no rule of its own between the
 switch and the agent limits' budget: each is sent as it is set, and the rule
@@ -229,9 +229,11 @@ only on a measured `no`, and replaced there by a sentence saying gglib will
 remove the level — a control that vanished silently would read as a feature
 gglib does not have. On `unknown` the control is offered with a caption saying
 the template has not been observed and that the level will be sent as given;
-the model inspector carries the same fact as a line of its own, with a
-re-measurement beside it (re-read while the model runs, "start the model to
-check" while it does not) and deliberately **no** manual override — the answer
+the model inspector's Details carry the same fact as a line of their own,
+Reasoning effort, with a Re-check beside it while the model runs (while it
+does not, an unobserved model's line says the answer is known after its
+first load) and
+deliberately **no** manual override — the answer
 comes from the renderer executing the template, and a stored opinion that
 outranked it would be the defect this whole mechanism exists to remove. The
 global settings surface has no model in scope, so it hides nothing and names

@@ -1,1 +1,1 @@
-[{"clickText":"Five largest files, in bash"},{"sleep":6000}]
+[{"clickText":"Connection leak in export orders function"},{"sleep":5000},{"click":"[aria-label=\"Message\"]"},{"sleep":1000}]
