@@ -269,7 +269,9 @@ describe('the Load palette', () => {
 
     expect(option('Qwen3-4B')).toHaveTextContent(FIT_WORDS);
     expect(option('Qwen3-4B')).not.toHaveTextContent('Unloads');
-    expect(option('Gemma-3-4B-It')).toHaveTextContent(`${FIT_WORDS} ${UNLOAD_WORDS}`);
+    // The unload first, clear of the ellipsis, and the whole line on hover.
+    expect(option('Gemma-3-4B-It')).toHaveTextContent(`${UNLOAD_WORDS} ${FIT_WORDS}`);
+    expect(within(option('Gemma-3-4B-It')).getByTitle(`${UNLOAD_WORDS} ${FIT_WORDS}`)).toBeInTheDocument();
     expect(option('Flux-Schnell')).toHaveTextContent('Unloads Flux-Dev first: one image model is loaded at a time.');
     expect(option('Flux-Schnell')).not.toHaveTextContent('context');
   });

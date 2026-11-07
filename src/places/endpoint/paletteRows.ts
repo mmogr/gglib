@@ -41,12 +41,16 @@ export function localChoices(models: readonly GgufModel[], loaded: ReadonlySet<n
 export const localAside = (model: GgufModel): string =>
   [model.quantization, model.sizeBytes > 0 && formatSize(model.sizeBytes)].filter(Boolean).join(' · ');
 
-/** A local row's second line, from its read: the fit, then the unload; `null` while reading or with nothing to say. */
+/**
+ * A local row's second line, from its read: the unload first (the fact that
+ * changes what loading does, kept clear of the ellipsis), then the fit;
+ * `null` while reading or with nothing to say.
+ */
 export function fitLine(read: FitRead): string | null {
   if (read === undefined) return null;
   if (read === 'failed') return FIT_UNKNOWN;
   const unloads = read.plan.unloads;
-  return [fitSentence(read.plan.fit), unloads && unloadSentence(unloads)].filter(Boolean).join(' ') || null;
+  return [unloads && unloadSentence(unloads), fitSentence(read.plan.fit)].filter(Boolean).join(' ') || null;
 }
 
 /** The paired machine's rows, and why none of them loads there now (`null` when they do). */

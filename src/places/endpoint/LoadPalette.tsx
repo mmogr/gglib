@@ -155,7 +155,11 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
     >
       <span className="flex min-w-0 flex-1 flex-col gap-xs">
         <span className={cn('truncate text-sm', blocked ? 'text-text-secondary' : 'text-text')}>{name}</span>
-        {line && <span className="truncate text-xs text-text-secondary">{line}</span>}
+        {line && (
+          <span className="truncate text-xs text-text-secondary" title={line}>
+            {line}
+          </span>
+        )}
       </span>
       {aside && <span className="shrink-0 text-xs text-text-secondary tabular-nums">{aside}</span>}
     </div>
