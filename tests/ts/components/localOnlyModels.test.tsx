@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ComponentProps } from 'react';
 
-import type BenchmarkPage from '../../../src/pages/BenchmarkPage';
+import type BenchmarkPage from '../../../src/places/diagnostics/benchmarks/BenchmarkPage';
 import type { imageChoices } from '../../../src/places/settings/ModelsSection';
 import type { GgufModel } from '../../../src/types';
 import { farEntry } from '../fixtures/fakeFarDaemon';

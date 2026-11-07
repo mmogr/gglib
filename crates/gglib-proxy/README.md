@@ -989,7 +989,7 @@ GET /v1/proxy/status/stream  (SSE, hydrate-then-stream)
 Both endpoints return the same [`DashboardSnapshot`](src/dashboard.rs) shape
 — the single, unified data contract consumed by both `gglib proxy dashboard`
 (CLI, `crates/gglib-cli/src/handlers/proxy_dashboard/`) and the web GUI's
-Proxy Dashboard modal (`src/components/ProxyDashboardModal.tsx`).
+Diagnostics › Live (`src/places/diagnostics/live/`).
 
 - `GET /v1/proxy/status` returns one snapshot, computed on demand.
 - `GET /v1/proxy/status/stream` is a Server-Sent Events stream: the first
@@ -1327,7 +1327,7 @@ curl -N http://localhost:8080/v1/proxy/status/stream
 
 - **CLI**: `gglib proxy dashboard [--host HOST] [--port PORT]` — see
   [`gglib-cli`](../gglib-cli/README.md#proxy-dashboard).
-- **Web GUI**: Live numbers on the endpoint place's ⋯ or its Activity
-  (`src/places/endpoint/`), which opens `ProxyDashboardModal` —
+- **Web GUI**: Diagnostics › Live (`src/places/diagnostics/live/`), which
+  the endpoint place's ⋯ Live numbers and its Activity open —
   a native browser `EventSource` connected directly to the proxy's own
   port, independent of the app's own backend.

@@ -14,7 +14,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-li
 
 import type { AgenticEvalConfig, CompareConfig, TuneConfig } from '../../../src/types/benchmark';
 
-vi.mock('../../../src/components/Benchmark/Tune/TuneConfigForm', () => ({
+vi.mock('../../../src/places/diagnostics/benchmarks/Tune/TuneConfigForm', () => ({
   // The real form is disabled while a run is going; this one can start a
   // second run over the first, which is what aborts the first.
   TuneConfigForm: ({ onSubmit }: { onSubmit: (config: TuneConfig, applyBest: boolean) => void }) => (
@@ -23,7 +23,7 @@ vi.mock('../../../src/components/Benchmark/Tune/TuneConfigForm', () => ({
     </button>
   ),
 }));
-vi.mock('../../../src/components/Benchmark/Agentic/AgenticConfigForm', () => ({
+vi.mock('../../../src/places/diagnostics/benchmarks/Agentic/AgenticConfigForm', () => ({
   AgenticConfigForm: ({ onSubmit, onStop }: { onSubmit: (config: AgenticEvalConfig) => void; onStop: () => void }) => (
     <>
       <button type="button" onClick={() => onSubmit({ model_id: 1 } as AgenticEvalConfig)}>
@@ -35,13 +35,13 @@ vi.mock('../../../src/components/Benchmark/Agentic/AgenticConfigForm', () => ({
     </>
   ),
 }));
-vi.mock('../../../src/components/Benchmark/Agentic/AgenticHistoryList', () => ({
+vi.mock('../../../src/places/diagnostics/benchmarks/Agentic/AgenticHistoryList', () => ({
   AgenticHistoryList: () => null,
 }));
 
-import { AgenticTab } from '../../../src/components/Benchmark/Agentic/AgenticTab';
-import { TuneTab } from '../../../src/components/Benchmark/Tune/TuneTab';
-import { usePerfCompareRun } from '../../../src/components/Benchmark/usePerfCompareRun';
+import { AgenticTab } from '../../../src/places/diagnostics/benchmarks/Agentic/AgenticTab';
+import { TuneTab } from '../../../src/places/diagnostics/benchmarks/Tune/TuneTab';
+import { usePerfCompareRun } from '../../../src/places/diagnostics/benchmarks/usePerfCompareRun';
 import { setApiSession } from '../../../src/services/transport/api/client';
 
 /** The signal of each request made, in order. */

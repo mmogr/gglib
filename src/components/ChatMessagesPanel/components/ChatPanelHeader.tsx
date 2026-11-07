@@ -1,8 +1,7 @@
 import { FC, ReactNode } from 'react';
 import { Input } from '../../ui/Input';
 import { StatusMark } from '../../status/StatusMark';
-import { Menu, type MenuItem } from '../../../places/library/Menu';
-import { TurnRow } from './TurnRow';
+import { Menu, type MenuItem } from '../../ui/Menu';
 
 interface ChatPanelHeaderProps {
   title: string;
@@ -71,42 +70,36 @@ export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
     { label: 'Delete…', onPick: onDeleteConversation, danger: true, gapBefore: true },
   ];
   return (
-    <TurnRow
-      className="border-t-0 pt-0"
-      who={null}
-      body={
-        <div className="flex flex-col gap-sm">
-          <div className="flex flex-wrap items-center gap-sm min-w-0">
-            {isRenaming ? (
-              <Input
-                aria-label="Conversation title"
-                className={`${TITLE} bg-background border border-border rounded-sm py-xs px-sm text-text min-w-[150px]`}
-                value={titleDraft}
-                autoFocus
-                onChange={(e) => onChangeTitleDraft(e.target.value)}
-                onBlur={onCommitRename}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onCommitRename();
-                  else if (e.key === 'Escape') onCancelRename();
-                }}
-              />
-            ) : readOnly ? (
-              <h2 className={`${TITLE} m-0 min-w-0 break-words`}>{title}</h2>
-            ) : (
-              <h2 className="m-0 min-w-0">
-                <Menu
-                  label={<span className={`${TITLE} text-text break-words text-left`}>{title}</span>}
-                  items={items}
-                  align="start"
-                  className="h-auto px-0 hover:bg-transparent"
-                />
-              </h2>
-            )}
-            {isGeneratingTitle && <StatusMark kind="changing" label="Generating title…" />}
-          </div>
-          {children}
-        </div>
-      }
-    />
+    <div data-head className="flex flex-col gap-sm">
+      <div className="flex flex-wrap items-center gap-sm min-w-0">
+        {isRenaming ? (
+          <Input
+            aria-label="Conversation title"
+            className={`${TITLE} bg-background border border-border rounded-sm py-xs px-sm text-text min-w-[150px]`}
+            value={titleDraft}
+            autoFocus
+            onChange={(e) => onChangeTitleDraft(e.target.value)}
+            onBlur={onCommitRename}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onCommitRename();
+              else if (e.key === 'Escape') onCancelRename();
+            }}
+          />
+        ) : readOnly ? (
+          <h2 className={`${TITLE} m-0 min-w-0 break-words`}>{title}</h2>
+        ) : (
+          <h2 className="m-0 min-w-0">
+            <Menu
+              label={<span className={`${TITLE} text-text break-words text-left`}>{title}</span>}
+              items={items}
+              align="start"
+              className="h-auto px-0 hover:bg-transparent"
+            />
+          </h2>
+        )}
+        {isGeneratingTitle && <StatusMark kind="changing" label="Generating title…" />}
+      </div>
+      {children}
+    </div>
   );
 };

@@ -38,7 +38,7 @@ function updateOf(setup: SetupStatus): LlamaUpdate | null {
 /**
  * Whether llama.cpp is installed on the daemon's machine, whether a prebuilt
  * binary exists for it, and the update to offer. Read from the daemon's
- * setup-status route, the one the setup wizard reads, so the desktop app and
+ * setup-status route, the one setup reads, so the desktop app and
  * a browser tab are told the same thing.
  */
 export function useLlamaStatus() {

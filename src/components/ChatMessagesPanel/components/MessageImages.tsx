@@ -1,69 +1,33 @@
-import { FC, useContext, useState } from 'react';
+import { FC, useContext, useRef, useState } from 'react';
 import { MessagePrimitive, useAttachment, useMessage } from '@assistant-ui/react';
 import { Button } from '../../ui/Button';
-import { Modal } from '../../ui/Modal';
 import type { ImageAttachment } from '../../../hooks/useGglibRuntime/imageAttachments';
 import type { ToolImage } from '../../../types/messages';
 import { useImageUrl, type ShownImage } from '../hooks/useImageUrl';
 import { MessageActionsContext } from './MessageActionsContext';
-import { PictureEditor } from './PictureEditor';
+import { PictureSheet } from './PictureSheet';
 
 /**
  * One image in the thread: read from the chat's store (this machine's, or
  * the far machine's for a far chat) with the page's credential, shown
- * small, and enlarged in a dialog when clicked. `size` names it to the
- * reader. A picture the drawing tool made (`drawn`) can be fixed or drawn
- * again from the dialog, where the chat allows it.
+ * small, and opened in the picture sheet when clicked. `size` names it to
+ * the reader. A picture the drawing tool made (`drawn`) is fixed or drawn
+ * again in the sheet, where the chat allows it; any other is viewed.
  */
 const EnlargeableImage: FC<{ image: ShownImage; size: string; drawn?: ToolImage }> = ({ image, size, drawn }) => {
   const actions = useContext(MessageActionsContext);
   const source = actions?.source ?? 'this';
   const { url, failed } = useImageUrl(image, source);
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const thumbnail = useRef<HTMLButtonElement>(null);
   if (failed) return <span className="text-xs text-text-muted">The image could not be read.</span>;
   if (!url) return <span role="status" className="block h-[120px] w-[160px] rounded-base bg-surface" aria-label="Loading image" />;
-  const pictures = drawn?.prompt ? actions?.pictures : undefined;
   return (
     <>
-      <Button variant="ghost" className="h-auto p-0 rounded-base overflow-hidden" onClick={() => setOpen(true)} aria-label={`Enlarge image, ${size}`}>
+      <Button ref={thumbnail} variant="ghost" className="h-auto p-0 rounded-base overflow-hidden" onClick={() => setOpen(true)} aria-label={`Enlarge image, ${size}`}>
         <img src={url} alt={`Image, ${size}`} className="block max-h-[200px] max-w-[320px] object-contain" />
       </Button>
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title="Image"
-        description={size}
-        size="lg"
-        footer={
-          pictures && (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setOpen(false);
-                setEditing(true);
-              }}
-            >
-              Fix or redo…
-            </Button>
-          )
-        }
-      >
-        <img src={url} alt={`Image, ${size}`} className="block max-h-[70vh] max-w-full mx-auto object-contain" />
-      </Modal>
-      {pictures && drawn?.prompt && editing && (
-        <PictureEditor
-          open
-          onClose={() => setEditing(false)}
-          picture={drawn.image}
-          url={url}
-          prompt={drawn.prompt}
-          conversationId={pictures.conversationId}
-          models={pictures.models}
-          picked={pictures.picked}
-          onKept={pictures.onKept}
-        />
-      )}
+      {open && <PictureSheet url={url} size={size} drawn={drawn} pictures={actions?.pictures} from={thumbnail} onClose={() => setOpen(false)} />}
     </>
   );
 };

@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { AgenticReport } from '../../../src/components/Benchmark/Agentic/AgenticReport';
+import { AgenticReport } from '../../../src/places/diagnostics/benchmarks/Agentic/AgenticReport';
 import type { AgenticEvalReport, ArmScores, GeneratedOutput } from '../../../src/types/benchmark';
 import { agenticReport, armScores } from '../fixtures/agentic';
 

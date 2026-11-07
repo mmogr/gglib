@@ -33,7 +33,6 @@ address names; a Hugging Face repo picked in the group opens at
 | `EngineBanner.tsx` | The line above the groups when llama.cpp is missing or older than the pinned release, a model running on it or not, with Install or Update run through the daemon's install stream, its refusal shown as it came, and the status read again once it completes |
 | `engineInstall.ts` | The banner's state for as long as the window is open: "Not now", and the install it started with its progress and how it ended, so leaving the library loses neither |
 | `AddFileRow.tsx` | Add a GGUF file: a typed path and Add (the desktop fills it from the native picker), the daemon's refusal under it |
-| `Menu.tsx` | A button that opens a short menu of actions or ticked choices (the inspector's and the log's ⋯ too, its icon alone, with danger items); closes on a pick, a click outside or Escape |
 | `groups.ts` | Pure: the groups, the search's matching (every word must match), the sorts, and a model's facts (the row's line and the inspector's summary) |
 | `ModelListSkeleton.tsx` | Six still grey two-line rows before the library's first read |
 

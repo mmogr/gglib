@@ -22,9 +22,7 @@ vi.mock('../../../src/services/transport/api/settings', async () => {
   const { transport } = await import('./settingsDaemon');
   return { getSettings: transport.getSettings, updateSettings: transport.updateSettings, installProfileTemplates: vi.fn() };
 });
-vi.mock('../../../src/services/transport/api/proxy', () => ({ getLoopGuardTrips: vi.fn(async () => []) }));
 vi.mock('../../../src/places/settings/EngineCard', () => ({ EngineCard: ({ kind }: { kind: string }) => <p>engine card: {kind}</p> }));
-vi.mock('../../../src/places/settings/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => <p>system checks</p> }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
 import { daemon, holdWrites, resetDaemon, transport, writes } from './settingsDaemon';
@@ -366,11 +364,10 @@ describe('the interim sections', () => {
     expect(within(screen.getByRole('region', { name: 'This device' })).getByText('applies to all chats on this device')).toBeInTheDocument();
   });
 
-  it('Engines hosts an engine card for each engine and the system checks', () => {
+  it('Engines hosts an engine card for each engine', () => {
     renderApp('/settings/engines');
     expect(screen.getByText('engine card: llama')).toBeInTheDocument();
     expect(screen.getByText('engine card: stable_diffusion')).toBeInTheDocument();
-    expect(screen.getByText('system checks')).toBeInTheDocument();
   });
 
   it('About shows the build and stops the daemon only when asked', async () => {

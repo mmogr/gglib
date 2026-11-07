@@ -1,28 +1,34 @@
-import { FC, useContext } from 'react';
-import { ComposerPrimitive } from '@assistant-ui/react';
-import { Brain, CircleOff, ImagePlus } from 'lucide-react';
+import { FC, useContext, useState } from 'react';
+import { ComposerPrimitive, useThread, type ThreadState } from '@assistant-ui/react';
+import { ArrowUp, Square, X } from 'lucide-react';
 import { Button } from '../../ui/Button';
-import { Chip } from '../../ui/Chip';
 import { Icon } from '../../ui/Icon';
-import { ToolsPopover } from '../../ToolsPopover';
-import { ToolSupportIndicator } from '../../ToolSupportIndicator';
-import { getToolRegistry } from '../../../services/tools';
+import { IconButton } from '../../ui/IconButton';
+import { StatusMark } from '../../status/StatusMark';
+import { REACH_WORDS, RESIDENCY_WORDS } from '../../status/words';
+import { useRemoteState } from '../../../services/remoteRegistry';
+import { useToastContext } from '../../../contexts/ToastContext';
+import { awaySince } from '../../../places/devices/devices';
+import { cn } from '../../../utils/cn';
+import { formatError } from '../../../utils/errors';
 import type { ThinkingSwitch } from '../../../hooks/useThinkingSwitch';
 import type { DrawSwitch } from '../../../hooks/useDrawSwitch';
 import type { ChatFolder } from '../../../hooks/useChatFolder';
+import { useModelLoadWait } from '../hooks/useModelLoadWait';
 import { FolderChip } from './FolderChip';
-import { TurnRow } from './TurnRow';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
-import { AttachImageButton, ComposerImages, ImageInputContext } from './ComposerImages';
+import { ComposerImages, ImageInputContext } from './ComposerImages';
 import { ContextRing } from './ContextRing';
-import { ImageModelMenu } from './ImageModelMenu';
+import { ModelGoneLine, type ModelGone } from './ModelGoneLine';
+import { PlusMenu } from './PlusMenu';
+import { DRAW_ARMED } from './composerMenus';
 
 interface ComposerFooterProps {
   isServerConnected: boolean;
   /** Whether the assistant is currently producing a response. */
   isThreadRunning: boolean;
   onStopGeneration: () => void;
-  /** The model the next send goes to, as the page names it. */
+  /** The model the next send goes to, by its bare name; empty for a far chat, whose machine picks it. */
   modelName: string;
   /** Its registry id; absent for a chat with another machine. */
   modelId?: number;
@@ -39,45 +45,103 @@ interface ComposerFooterProps {
   toolFormat?: string | null;
   /** The chat's Thinking switch; drawn only where it says it is shown. */
   thinking?: ThinkingSwitch;
-  /** The chat's folder, where its file tools read; drawn only where it says it is shown. */
+  /** The chat's folder, where its file tools read. */
   folder?: ChatFolder;
-  /** The Draw button; drawn wherever one is given, greyed where a message cannot draw. */
+  /** The Draw switch, which `[+]` › Draw a picture presses. */
   draw?: DrawSwitch;
+  /** A far chat: one of the paired machine's own. */
+  far?: boolean;
+  /** Whether the chat is a saved conversation (its turns may still be loading), not a new one. */
+  saved?: boolean;
+  /** The paired machine the chat's model is on (a paired or a far chat), for the away line. */
+  deskName?: string;
+  /** This machine's model is no longer loaded: the composer is replaced by a line that says so. */
+  modelGone?: ModelGone | null;
+  /** Open the model's inspector, where its log is (Show <model>). */
+  onShowModel?: () => void;
+  /** Open the model's log (a crash's Show log). */
+  onShowLog?: () => void;
+  /** Open a new chat on the paired machine's model `id`. */
+  onOpenFar?: (id: number) => void;
 }
 
+/** Whether the thread has no turns yet: a new chat's placeholder names the model. */
+const isEmpty = (thread: ThreadState) => thread.messages.length === 0;
+
+/** The Thinking toggle's titles: what a click does from the next message. */
 const THINKING_ON = 'Thinking is on for this chat. Click to switch it off from the next message.';
 const THINKING_OFF = 'Thinking is off for this chat. Click to switch it back on from the next message.';
-const DRAW_ARMED = 'The next message draws an image. Click to send it without drawing.';
 
-/** What pressing Draw would do, naming the image model when its machine did. */
-function drawOffer(model: string | undefined): string {
-  return `Let the next message draw an image${model ? ` with ${model}` : ''}. It applies to that message only.`;
-}
+/**
+ * Thinking, as a labelled toggle: a switch named Thinking, neutral whichever
+ * way it is, its track saying which.
+ */
+const ThinkingToggle: FC<{ thinking: ThinkingSwitch }> = ({ thinking }) => (
+  <Button
+    type="button"
+    variant="ghost"
+    size="sm"
+    role="switch"
+    aria-checked={thinking.on}
+    onClick={thinking.toggle}
+    title={thinking.on ? THINKING_ON : THINKING_OFF}
+    className="font-normal"
+    leftIcon={<Track on={thinking.on} />}
+  >
+    Thinking
+  </Button>
+);
 
-/** The Draw button's title: why it is greyed, or what it does as it stands. */
-function drawTitle(draw: DrawSwitch): string | undefined {
-  if (!draw.available) return draw.reason;
-  return draw.armed ? DRAW_ARMED : drawOffer(draw.model);
+/** The switch's track and knob: which way it is, beside its label. */
+const Track: FC<{ on: boolean }> = ({ on }) => (
+  <span
+    aria-hidden
+    className={cn(
+      'relative inline-block h-3 w-[22px] shrink-0 rounded-full transition-colors duration-150',
+      on ? 'bg-text-secondary' : 'bg-surface-elevated',
+    )}
+  >
+    <span
+      className={cn(
+        'absolute top-[2px] h-2 w-2 rounded-full transition-[left] duration-150',
+        on ? 'left-[12px] bg-background' : 'left-[2px] bg-text-muted',
+      )}
+    />
+  </span>
+);
+
+/** `Draw ×`: the next message draws; × sends it without. */
+const DrawChip: FC<{ draw: DrawSwitch }> = ({ draw }) => (
+  <span className="inline-flex items-center rounded-base bg-surface-elevated pl-sm text-xs text-text-secondary" title={DRAW_ARMED}>
+    Draw
+    <IconButton type="button" label="Don't draw" size="sm" variant="ghost" className="text-current" onClick={draw.toggle}>
+      <Icon icon={X} size={12} />
+    </IconButton>
+  </span>
+);
+
+/** The paired machine's away line, from the remote registry alone (CH-9); null while it is reached. */
+function useAwayLine(deskName: string | undefined): string | null {
+  const { status } = useRemoteState();
+  const awayFor = status?.connected?.away_for_s;
+  if (deskName === undefined || awayFor == null) return null;
+  return `${deskName} is ${REACH_WORDS.away.toLowerCase()} since ${awaySince(awayFor)}. Your message will wait.`;
 }
 
 /**
- * The composer, on the notebook's grid: the model (a picker, on this
- * machine), the tools, the context ring, the Thinking switch and the Draw
- * button in the margin; in the body, the images attached, then the attach
- * button, the text box and Stop or Send. An image is attached by the button,
- * a paste or a drop, each only where the model takes images, as
- * `ImageInputContext` says.
- * The switch is a button, pressed while the chat thinks and there only for
- * a model that does; it changes what the next send says, never a reply
- * already being written. Its name is "Thinking" either way; switched off it
- * reads "Thinking off" beside another icon, so which way it is never rests
- * on its colours alone. Draw is a button too, pressed for the next message
- * alone and reading "Draw on" while it is; where a message cannot draw it is
- * greyed, and its title says why. Beside it, where the machine that draws
- * has two or more image models, is the menu that picks one for the chat
- * (`ImageModelMenu`). Beside Thinking is the chat's folder (`FolderChip`),
- * where one is offered; a chat with a folder has tools configured, so the
- * tool support badge speaks of it as of an enabled tool.
+ * The composer: the images attached, as tiles above the text; the text box;
+ * then one row of `[+]`, the chips that are set (the chat's folder, Draw),
+ * the Thinking toggle for a model that thinks, the context ring once there
+ * is a reading, the model, and Send, which becomes Stop while a reply is
+ * written. An image is attached from `[+]`, a paste or a drop, each only
+ * where the model takes images, as `ImageInputContext` says.
+ *
+ * The model is a picker on this machine's chat and plain text on one with
+ * the paired machine ("<model> on desk", "desk picks the model"); while
+ * that machine is away it reads "desk is away since 14:02. Your message
+ * will wait." and Send is disabled. While the newest reply waits for its
+ * model to load it reads "Loading <model>… 12 s". Where this machine's
+ * model is gone, the whole composer is one line that says so (`ModelGoneLine`).
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
   isServerConnected,
@@ -86,7 +150,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   modelName,
   modelId,
   onPickModel,
-  startingModel,
+  startingModel = null,
   onUnloadModel,
   quantization,
   supportsToolCalls,
@@ -94,100 +158,111 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   thinking,
   folder,
   draw,
+  far = false,
+  saved = false,
+  deskName,
+  modelGone = null,
+  onShowModel,
+  onShowLog,
+  onOpenFar,
 }) => {
   const imageInput = useContext(ImageInputContext);
-  const hasFolder = Boolean(folder?.path);
+  const { showToast } = useToastContext();
+  const empty = useThread({ optional: true, selector: isEmpty }) ?? true;
+  const [typingFolder, setTypingFolder] = useState(false);
+  const away = useAwayLine(deskName);
+  const loadWait = useModelLoadWait();
+
+  if (modelGone !== null) {
+    const loadAgain =
+      onPickModel && modelId !== undefined
+        ? () =>
+            void onPickModel({ modelId, modelName }).catch((error: unknown) =>
+              showToast(`Could not start ${modelName}: ${formatError(error)}`, 'error'),
+            )
+        : undefined;
+    return (
+      <div className="mx-auto w-full max-w-[728px] shrink-0 px-lg pb-lg">
+        <ModelGoneLine gone={modelGone} modelName={modelName} starting={startingModel} onLoadAgain={loadAgain} onShowLog={onShowLog} />
+      </div>
+    );
+  }
+
+  // The model as the picker names it: on the paired machine, it says so.
+  const named = far ? `${deskName} picks the model` : deskName !== undefined ? `${modelName} on ${deskName}` : modelName;
+  const model = away ? (
+    <span role="status" className="flex min-w-0 items-center gap-xs px-sm text-sm text-text-secondary">
+      <StatusMark kind="away" />
+      <span className="truncate">{away}</span>
+    </span>
+  ) : loadWait !== null ? (
+    <span role="status" className="flex items-center gap-xs px-sm text-sm text-text-secondary tabular-nums">
+      <StatusMark kind="changing" />
+      {RESIDENCY_WORDS.loading} {far ? 'the model' : modelName}… {loadWait} s
+    </span>
+  ) : (
+    <ModelPicker
+      modelId={modelId}
+      modelName={named}
+      quantization={quantization}
+      onPick={onPickModel}
+      starting={startingModel}
+      onUnload={isServerConnected ? onUnloadModel : undefined}
+      onShow={onShowModel}
+      onOpenFar={saved ? undefined : onOpenFar}
+    />
+  );
+
+  const sendable = isServerConnected && away === null;
+  // An empty thread asks (a new chat, or a saved one with no turns, as Start
+  // over leaves it); one with turns replies. The composer mounts only once a
+  // saved chat's turns are read, so "empty" is known here.
+  const placeholder = empty && !far ? `Ask ${modelName} anything` : 'Reply…';
+
   return (
-    <div className="@container shrink-0 mx-auto w-full max-w-[1000px] px-lg">
-      <TurnRow
-        className="border-t-0 pt-md pb-lg"
-        who={
-          <ModelPicker
-            modelId={modelId}
-            modelName={modelName}
-            quantization={quantization}
-            onPick={onPickModel}
-            starting={startingModel}
-            onUnload={isServerConnected ? onUnloadModel : undefined}
+    <div className="mx-auto w-full max-w-[728px] shrink-0 px-lg pb-lg pt-md">
+      <ComposerPrimitive.AttachmentDropzone asChild disabled={!imageInput.offered || !isServerConnected}>
+        <ComposerPrimitive.Root className="flex flex-col gap-sm rounded-lg bg-background-input p-sm data-[dragging=true]:bg-surface-elevated">
+          <ComposerImages />
+          <ComposerPrimitive.Input
+            aria-label="Message"
+            addAttachmentOnPaste={imageInput.offered}
+            submitOnEnter={sendable}
+            className="max-h-[150px] min-h-[40px] resize-none bg-transparent px-sm py-xs text-base text-text outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-50"
+            placeholder={placeholder}
+            disabled={!isServerConnected}
           />
-        }
-        made={
-          <div className="flex flex-wrap items-center justify-end gap-sm">
-            <ToolSupportIndicator
-              supports={supportsToolCalls ?? null}
-              hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0 || hasFolder}
+          <div className="flex items-center gap-xs">
+            <PlusMenu
+              connected={isServerConnected}
+              far={far}
+              modelId={modelId}
+              supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
+              folder={folder}
+              onTypeFolder={setTypingFolder}
+              draw={draw}
             />
-            <ToolsPopover opensUpward align="left" modelId={modelId} />
+            {folder && <FolderChip folder={folder} typing={typingFolder} setTyping={setTypingFolder} />}
+            {draw?.armed && <DrawChip draw={draw} />}
+            {thinking?.shown && <ThinkingToggle thinking={thinking} />}
+            <span className="flex-1" />
             <ContextRing />
-            {thinking?.shown && (
-              <Chip
-                leftIcon={<Icon icon={thinking.on ? Brain : CircleOff} size={12} />}
-                selected={thinking.on}
-                onClick={thinking.toggle}
-                title={thinking.on ? THINKING_ON : THINKING_OFF}
-              >
-                Thinking{!thinking.on && <span aria-hidden="true"> off</span>}
-              </Chip>
+            {model}
+            {isThreadRunning ? (
+              <Button type="button" variant="primary" size="sm" onClick={onStopGeneration} leftIcon={<Icon icon={Square} size={12} />}>
+                Stop
+              </Button>
+            ) : (
+              <ComposerPrimitive.Send asChild>
+                <IconButton label="Send" variant="primary" size="sm" disabled={!sendable}>
+                  <Icon icon={ArrowUp} size={16} />
+                </IconButton>
+              </ComposerPrimitive.Send>
             )}
-            {folder?.shown && <FolderChip folder={folder} />}
-            {draw && (
-              <Chip
-                leftIcon={<Icon icon={ImagePlus} size={12} />}
-                selected={draw.armed}
-                onClick={draw.toggle}
-                disabled={!draw.available}
-                title={drawTitle(draw)}
-              >
-                Draw{draw.armed && <span aria-hidden="true"> on</span>}
-              </Chip>
-            )}
-            {draw && <ImageModelMenu draw={draw} />}
           </div>
-        }
-        body={
-          <ComposerPrimitive.AttachmentDropzone asChild disabled={!imageInput.offered || !isServerConnected}>
-            <ComposerPrimitive.Root className="flex flex-col gap-sm py-sm pr-sm pl-base border border-border rounded-lg bg-background-input focus-within:border-border-focus data-[dragging=true]:border-border-focus">
-              <ComposerImages />
-              <div className="flex gap-sm items-end">
-                <AttachImageButton disabled={!isServerConnected} />
-                <ComposerPrimitive.Input
-                  aria-label="Message"
-                  addAttachmentOnPaste={imageInput.offered}
-                  className="flex-1 py-xs bg-transparent text-text text-sm placeholder:text-text-disabled resize-none min-h-[40px] max-h-[150px] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                  placeholder={
-                    isServerConnected
-                      ? 'Type your message. Shift + Enter for newline'
-                      : 'Server not connected'
-                  }
-                  disabled={!isServerConnected}
-                />
-                <div className="flex gap-sm shrink-0">
-                  {isThreadRunning && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={onStopGeneration}
-                      title="Stop generation"
-                    >
-                      Stop
-                    </Button>
-                  )}
-                  <ComposerPrimitive.Send asChild>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={!isServerConnected}
-                    >
-                      Send ↵
-                    </Button>
-                  </ComposerPrimitive.Send>
-                </div>
-              </div>
-            </ComposerPrimitive.Root>
-          </ComposerPrimitive.AttachmentDropzone>
-        }
-      />
+        </ComposerPrimitive.Root>
+      </ComposerPrimitive.AttachmentDropzone>
     </div>
   );
 };

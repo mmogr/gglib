@@ -1,6 +1,6 @@
 /**
  * Tokens written per second of writing: a request's on the Endpoint page's
- * Recent and in a loaded model's inspector, a reply's in a chat's margin.
+ * Recent and in a loaded model's inspector, a reply's on its figure line.
  *
  * Nothing in Rust computes this rate for a request: the proxy records the
  * tokens a turn generated and the milliseconds between its first and last

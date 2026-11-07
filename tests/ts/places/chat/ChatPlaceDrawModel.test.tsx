@@ -1,17 +1,16 @@
 /**
- * Choosing the image model on the chat page: the menu beside the composer's
- * Draw button.
+ * Choosing the image model on the chat page: `[+]` › Draw a picture ▸.
  *
- * It is there only where the machine that draws lists two or more image
+ * It is a submenu only where the machine that draws lists two or more image
  * models, and not at all for a machine whose answer has no list. It lists
  * the machine's default rule, then each model in the machine's order with
  * its family and whether it is loaded; one that lacks a file cannot be
- * chosen and says what it lacks. A pick sends nothing: it presses Draw, and
- * the run the next message starts says `draw` and `image_model`. The chat
- * keeps the pick: every later run that says `draw` says it again, and a run
- * without Draw says neither. A pick the machine answers it cannot draw with
- * greys the button with that machine's reason and is never sent; the menu
- * stays, and another pick, or the default, draws.
+ * chosen and says what it lacks. A pick sends nothing: it sets Draw (the
+ * `Draw ×` chip), and the run the next message starts says `draw` and
+ * `image_model`. The chat keeps the pick: every later run that says `draw`
+ * says it again, and a run without Draw says neither. A pick the machine
+ * answers it cannot draw with unsets Draw, says that machine's reason and is
+ * never sent; the submenu stays, and another pick, or the default, draws.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -22,7 +21,7 @@ import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRe
 import type { DrawingAvailability } from '../../../../src/types/generated/DrawingAvailability';
 import type { ImageModelRow } from '../../../../src/types/generated/ImageModelRow';
 import type { RunInfo } from '../../../../src/types/generated/RunInfo';
-import { agentRun, chatTransport, conversation, wrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, plusItem, plusSubmenu, wrapper, type ChatFixture } from './chatPlaceHarness';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../../src/services/transport', async () => {
@@ -103,16 +102,31 @@ function pageTransport() {
 }
 
 const stub = () => transport.current as ReturnType<typeof pageTransport>;
-const drawButton = () => screen.getByRole('button', { name: 'Draw' });
-const menu = () => screen.getByRole('combobox', { name: 'Image model' });
-const noMenu = () => expect(screen.queryByRole('combobox', { name: 'Image model' })).not.toBeInTheDocument();
+/** `[+]` › Draw a picture, the menu opened for it. */
+const drawItem = () => plusItem('Draw a picture');
+/** The `Draw ×` chip's ×, there only while the next message draws. */
+const unDraw = () => screen.queryByRole('button', { name: "Don't draw" });
+/** The image models' submenu, opened. */
+const menu = (user: User) => plusSubmenu(user, 'Draw a picture');
+/** Its choices, by name, and which one is ticked. */
+async function choices(user: User): Promise<{ names: string[]; ticked: string | undefined }> {
+  const items = within(await menu(user)).getAllByRole('menuitemradio');
+  return {
+    names: items.map((item) => item.textContent ?? ''),
+    ticked: items.find((item) => item.getAttribute('aria-checked') === 'true')?.textContent ?? undefined,
+  };
+}
+const noMenu = () => expect(drawItem()).not.toHaveAttribute('aria-haspopup');
+/** Leave the menu, as a person does. */
+const close = (user: User) => user.keyboard('{Escape}');
 /** The image model each availability question asked about, in order. */
 const askedAbout = () => stub().drawingAvailability.mock.calls.map(([, chat]) => chat?.imageModel ?? null);
 
 async function renderPage() {
   render(<ChatPlace modelName="Qwen3.8-27B" modelId={7} serverPort={4321} conversationId={fixture.conversations[0]?.id ?? null} />, { wrapper });
   await waitFor(() => expect(screen.queryByText('Loading messages…')).not.toBeInTheDocument());
-  await waitFor(() => expect(drawButton()).not.toHaveAttribute('title', 'Checking whether a message here can draw.'));
+  await waitFor(() => expect(drawItem()).not.toHaveAttribute('title', 'Checking whether a message here can draw.'));
+  await close(userEvent.setup());
 }
 
 /** Send `text`, wait for its run to be started, and end that run with a reply saved. */
@@ -130,10 +144,11 @@ async function ask(user: User, text: string) {
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument());
 }
 
-/** Pick `name` in the menu, and wait for the machine's answer about it. */
+/** Pick `name` in the submenu, and wait for the machine's answer about it. */
 async function pick(user: User, name: string | RegExp) {
-  await user.selectOptions(menu(), within(menu()).getByRole('option', { name }));
-  await waitFor(() => expect(drawButton()).not.toHaveAttribute('title', 'Checking whether a message here can draw.'));
+  await user.click(within(await menu(user)).getByRole('menuitemradio', { name }));
+  await waitFor(() => expect(drawItem()).not.toHaveAttribute('title', 'Checking whether a message here can draw.'));
+  await close(user);
 }
 
 beforeEach(() => {
@@ -145,39 +160,38 @@ beforeEach(() => {
   transport.current = pageTransport();
 });
 
-describe('ChatPlace, the image model menu', () => {
-  it('is not there with no image model, with one, or for a machine whose answer has no list', async () => {
+describe('ChatPlace, Draw a picture ▸', () => {
+  it('is not a submenu with no image model, with one, or for a machine whose answer has no list', async () => {
     for (const listed of [[], [FLUX], undefined]) {
       models = listed;
       const { unmount } = render(<ChatPlace modelName="Qwen3.8-27B" modelId={7} serverPort={4321} conversationId={fixture.conversations[0]?.id ?? null} />, { wrapper });
-      await waitFor(() => expect(drawButton()).toBeEnabled());
+      await waitFor(() => expect(drawItem()).toBeEnabled());
       noMenu();
-      expect(drawButton()).toHaveAttribute(
+      expect(drawItem()).toHaveAttribute(
         'title',
-        'Let the next message draw an image with flux-schnell. It applies to that message only.',
+        'Let the next message draw a picture with flux-schnell. It applies to that message only.',
       );
       unmount();
     }
   });
 
   it('lists the default rule, then each model as the machine orders them, with its family and whether it is loaded', async () => {
+    const user = userEvent.setup();
     await renderPage();
 
-    const options = within(menu()).getAllByRole('option') as HTMLOptionElement[];
-    expect(options.map((option) => option.textContent)).toEqual([
-      'Default (flux-schnell)',
-      'qwen-image-q8 · Qwen-Image 2.1',
-      'flux-schnell · Flux.1 · loaded',
-      'sdxl-base · SDXL · incomplete',
-    ]);
-    expect(menu()).toHaveValue('default');
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'false');
+    expect(drawItem()).toHaveAttribute('aria-haspopup', 'menu');
+    expect(await choices(user)).toEqual({
+      names: ['Default (flux-schnell)', 'qwen-image-q8 · Qwen-Image 2.1', 'flux-schnell · Flux.1 · loaded', 'sdxl-base · SDXL · incomplete'],
+      ticked: 'Default (flux-schnell)',
+    });
+    expect(unDraw()).not.toBeInTheDocument();
   });
 
   it('a model that lacks a file cannot be chosen, and says what it lacks', async () => {
+    const user = userEvent.setup();
     await renderPage();
 
-    const [, qwen, flux, sdxl] = within(menu()).getAllByRole('option') as HTMLOptionElement[];
+    const [, qwen, flux, sdxl] = within(await menu(user)).getAllByRole('menuitemradio');
     expect(sdxl).toBeDisabled();
     expect(sdxl).toHaveAttribute('title', 'Missing: VAE, CLIP-L');
     expect(qwen).toBeEnabled();
@@ -185,14 +199,15 @@ describe('ChatPlace, the image model menu', () => {
     expect(flux).toBeEnabled();
   });
 
-  it('a pick sends nothing and presses Draw; the run that message starts says draw and the model', async () => {
+  it('a pick sends nothing and sets Draw; the run that message starts says draw and the model', async () => {
     const user = userEvent.setup();
     await renderPage();
 
     await pick(user, /^qwen-image-q8/);
     expect(started).toEqual([]);
-    expect(menu()).toHaveValue('7');
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'true');
+    expect((await choices(user)).ticked).toMatch(/^qwen-image-q8/);
+    await close(user);
+    expect(unDraw()).toBeInTheDocument();
     expect(askedAbout().at(-1)).toBe(7);
 
     await ask(user, 'draw a lighthouse');
@@ -205,18 +220,18 @@ describe('ChatPlace, the image model menu', () => {
     await renderPage();
     await pick(user, /^qwen-image-q8/);
     await ask(user, 'draw a lighthouse');
-    await waitFor(() => expect(drawButton()).toHaveAttribute('aria-pressed', 'false'));
+    await waitFor(() => expect(unDraw()).not.toBeInTheDocument());
 
     await ask(user, 'thanks');
     expect(Object.keys(started[1])).not.toContain('draw');
     expect(Object.keys(started[1])).not.toContain('image_model');
-    expect(menu()).toHaveValue('7');
-    expect(drawButton()).toHaveAttribute(
+    expect(drawItem()).toHaveAttribute(
       'title',
-      'Let the next message draw an image with qwen-image-q8. It applies to that message only.',
+      'Let the next message draw a picture with qwen-image-q8. It applies to that message only.',
     );
+    expect((await choices(user)).ticked).toMatch(/^qwen-image-q8/);
 
-    await user.click(drawButton());
+    await pick(user, /^qwen-image-q8/);
     await ask(user, 'and one at dawn');
     expect(started[2].draw).toBe(true);
     expect(started[2].image_model).toBe(7);
@@ -227,16 +242,17 @@ describe('ChatPlace, the image model menu', () => {
     await renderPage();
     await pick(user, /^qwen-image-q8/);
     await pick(user, /^Default/);
-    expect(menu()).toHaveValue('default');
+    expect((await choices(user)).ticked).toMatch(/^Default/);
+    await close(user);
     expect(askedAbout().at(-1)).toBeNull();
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'true');
+    expect(unDraw()).toBeInTheDocument();
 
     await ask(user, 'draw a lighthouse');
     expect(started[0].draw).toBe(true);
     expect(Object.keys(started[0])).not.toContain('image_model');
   });
 
-  it('a pick the machine cannot draw with greys the button with its reason and is never sent; the menu stays, and another pick draws', async () => {
+  it('a pick the machine cannot draw with unsets Draw, says its reason and is never sent; the submenu stays, and another pick draws', async () => {
     const user = userEvent.setup();
     await renderPage();
     // The model leaves the machine after the list was read.
@@ -245,12 +261,15 @@ describe('ChatPlace, the image model menu', () => {
 
     // Asked about, refused, and shown as chosen still.
     expect(askedAbout().at(-1)).toBe(7);
-    await waitFor(() => expect(drawButton()).toBeDisabled());
-    expect(drawButton()).toHaveAttribute('title', 'the image model chosen (id 7) is no longer on this machine; choose another');
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'false');
-    expect(menu()).toBeEnabled();
-    expect(menu()).toHaveValue('7');
-    expect(within(menu()).getByRole('option', { name: 'Model 7 (no longer listed)' })).toBeInTheDocument();
+    const REASON = 'The image model chosen (id 7) is no longer on this machine; choose another';
+    await waitFor(() => expect(drawItem()).toHaveAttribute('title', REASON));
+    expect(drawItem()).toBeEnabled();
+    await close(user);
+    expect(unDraw()).not.toBeInTheDocument();
+    const open = await menu(user);
+    expect(within(open).getByText(REASON)).toBeInTheDocument();
+    expect(within(open).getByRole('menuitemradio', { name: 'Model 7 (no longer listed)' })).toHaveAttribute('aria-checked', 'true');
+    await close(user);
 
     await ask(user, 'draw it anyway');
     const refused = started.at(-1)!;
@@ -258,8 +277,8 @@ describe('ChatPlace, the image model menu', () => {
     expect(Object.keys(refused)).not.toContain('image_model');
 
     await pick(user, /^flux-schnell/);
-    expect(drawButton()).toBeEnabled();
-    expect(drawButton()).toHaveAttribute('aria-pressed', 'true');
+    expect(drawItem()).toBeEnabled();
+    expect(unDraw()).toBeInTheDocument();
     await ask(user, 'draw a lighthouse');
     expect(started.at(-1)!.draw).toBe(true);
     expect(started.at(-1)!.image_model).toBe(3);
@@ -272,18 +291,16 @@ describe('ChatPlace, the image model menu', () => {
     models = [FLUX];
     await pick(user, /^qwen-image-q8/);
 
-    await waitFor(() => expect(drawButton()).toBeDisabled());
-    expect(drawButton()).toHaveAttribute('title', 'the image model chosen (id 7) is no longer on this machine; choose another');
-    const options = within(menu()).getAllByRole('option') as HTMLOptionElement[];
-    expect(options.map((option) => option.textContent)).toEqual([
-      'Default (flux-schnell)',
-      'Model 7 (no longer listed)',
-      'flux-schnell · Flux.1 · loaded',
-    ]);
-    expect(menu()).toHaveValue('7');
+    await waitFor(() => expect(drawItem()).toHaveAttribute('title', 'The image model chosen (id 7) is no longer on this machine; choose another'));
+    await close(user);
+    expect(await choices(user)).toEqual({
+      names: ['Default (flux-schnell)', 'Model 7 (no longer listed)', 'flux-schnell · Flux.1 · loaded'],
+      ticked: 'Model 7 (no longer listed)',
+    });
+    await close(user);
 
     await pick(user, /^Default/);
-    expect(drawButton()).toBeEnabled();
+    expect(drawItem()).toBeEnabled();
     expect(askedAbout().at(-1)).toBeNull();
     // Nothing chosen and one model: there is nothing to choose again.
     noMenu();

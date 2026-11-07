@@ -3,8 +3,6 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import type { ToolResultRenderer } from '../types';
 
-const SUMMARY_MAX_LENGTH = 80;
-
 /**
  * Collapsible JSON viewer for arbitrary data.
  */
@@ -62,16 +60,6 @@ export const JsonViewer: React.FC<{
   );
 };
 
-function safeJsonSummary(data: unknown): string {
-  try {
-    const raw = JSON.stringify(data);
-    if (raw === undefined) return '(result)';
-    return raw.length > SUMMARY_MAX_LENGTH ? `${raw.substring(0, SUMMARY_MAX_LENGTH)}…` : raw;
-  } catch {
-    return '(result)';
-  }
-}
-
 /**
  * Fallback renderer: renders any tool result as pretty-printed JSON.
  * Used for all tools that don't register a custom renderer.
@@ -79,8 +67,5 @@ function safeJsonSummary(data: unknown): string {
 export const fallbackRenderer: ToolResultRenderer = {
   renderResult(data) {
     return <JsonViewer data={data} defaultExpanded />;
-  },
-  renderSummary(data) {
-    return safeJsonSummary(data);
   },
 };

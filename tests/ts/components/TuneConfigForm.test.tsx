@@ -21,7 +21,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { TuneConfigForm } from '../../../src/components/Benchmark/Tune/TuneConfigForm';
+import { TuneConfigForm } from '../../../src/places/diagnostics/benchmarks/Tune/TuneConfigForm';
 import { guiModel } from '../fixtures/model';
 
 const model = guiModel({

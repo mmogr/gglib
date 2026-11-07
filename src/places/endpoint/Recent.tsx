@@ -1,8 +1,8 @@
 /**
  * Recent: the last five requests, newest first: when, which model, the
  * tokens it wrote and how fast, and what gglib did to it in the proxy's
- * words. Not drawn before the first request. All › opens the live numbers
- * (the dashboard dialog, until Diagnostics › Live).
+ * words. Not drawn before the first request. All › opens Diagnostics ›
+ * Live, which lists every request the proxy keeps.
  *
  * @module places/endpoint/Recent
  */
