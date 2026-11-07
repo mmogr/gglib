@@ -285,6 +285,7 @@ pub(crate) mod library_changes;
 mod remote;
 mod repair;
 pub(crate) mod runs;
+mod settings;
 pub(crate) mod wire;
 
 pub(crate) use library_changes::LibraryChanges;

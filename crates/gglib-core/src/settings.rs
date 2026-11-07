@@ -47,6 +47,9 @@ pub const DEFAULT_DAEMON_PORT: u16 = 9887;
 /// Default base port for llama-server instance allocation.
 pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
 
+/// How many downloads may wait when `max_download_queue_size` is unset.
+pub const DEFAULT_DOWNLOAD_QUEUE_SIZE: u32 = 10;
+
 /// The loopback port `gglib remote join` tries first for the paired
 /// machine.
 ///
@@ -350,7 +353,7 @@ impl Settings {
             default_context_size: None,
             proxy_port: Some(DEFAULT_PROXY_PORT),
             llama_base_port: Some(DEFAULT_LLAMA_BASE_PORT),
-            max_download_queue_size: Some(10),
+            max_download_queue_size: Some(DEFAULT_DOWNLOAD_QUEUE_SIZE),
             #[allow(clippy::cast_possible_truncation)] // compile-time constants, always < u32::MAX
             max_tool_iterations: Some(crate::domain::agent::DEFAULT_MAX_ITERATIONS as u32),
             #[allow(clippy::cast_possible_truncation)]
@@ -387,6 +390,16 @@ impl Settings {
         match self.proxy_port {
             Some(port) => port,
             None => DEFAULT_PROXY_PORT,
+        }
+    }
+
+    /// How many downloads may wait: the setting, else
+    /// [`DEFAULT_DOWNLOAD_QUEUE_SIZE`].
+    #[must_use]
+    pub const fn effective_max_download_queue_size(&self) -> u32 {
+        match self.max_download_queue_size {
+            Some(size) => size,
+            None => DEFAULT_DOWNLOAD_QUEUE_SIZE,
         }
     }
 

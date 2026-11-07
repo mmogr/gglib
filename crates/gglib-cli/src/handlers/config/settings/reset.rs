@@ -32,6 +32,13 @@ pub(super) async fn handle_reset(ctx: &CliContext, yes: bool) -> Result<()> {
     for line in unreadable_lines(&reset) {
         eprintln!("{line}");
     }
+    // The download queue size is a preference, so the reset put it back too.
+    if let Ok(settings) = ctx.app.settings().get().await
+        && let Some(warning) =
+            super::queue_size::tell_daemon(ctx, settings.max_download_queue_size).await
+    {
+        eprintln!("{warning}");
+    }
     Ok(())
 }
 

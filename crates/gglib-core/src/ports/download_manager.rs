@@ -31,7 +31,8 @@ pub struct DownloadManagerConfig {
     /// directory as it starts, and what resolved as the manager was built is
     /// not kept.
     pub models_directory: Option<PathBuf>,
-    /// Maximum queue size.
+    /// How many downloads may wait. The bootstrap reads the stored
+    /// `max_download_queue_size` into it as the manager is built.
     pub max_queue_size: u32,
     /// `HuggingFace` authentication token (for private repos).
     pub hf_token: Option<String>,
@@ -41,7 +42,7 @@ impl Default for DownloadManagerConfig {
     fn default() -> Self {
         Self {
             models_directory: None,
-            max_queue_size: 10,
+            max_queue_size: crate::settings::DEFAULT_DOWNLOAD_QUEUE_SIZE,
             hf_token: None,
         }
     }

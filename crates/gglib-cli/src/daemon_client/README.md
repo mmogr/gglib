@@ -39,7 +39,9 @@ ends, so a reply sent to a llama-server port waits for an image render. The
 gate's URL is fixed when it is made. No daemon, or one that does not answer,
 gives a turn that holds nothing, said once; no render turn is granted here.
 
-`repair.rs` holds the call that has the daemon repair a model.
+`repair.rs` holds the call that has the daemon repair a model, and
+`settings.rs` the one that sends it a download queue size a command
+stored, through the settings route the app writes with.
 `images.rs` is `ImageGenerator`, core's image generation port over the
 daemon's `POST /api/images/generations` with `stream: true`, or over the
 paired machine's `/v1/images/generations` through `FarProxy` for `gglib

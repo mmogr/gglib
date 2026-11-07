@@ -33,8 +33,10 @@ async fn a_repair_leaves_a_running_download() {
         weights: vec![hub_file(WEIGHTS, 7, "w-oid")],
         ..FakeHub::default()
     };
+    let repos = CoreFactory::build_repos(pool.clone());
     let built = wire(
         pool,
+        repos,
         Arc::new(hub),
         gguf_parser,
         DownloadManagerConfig {

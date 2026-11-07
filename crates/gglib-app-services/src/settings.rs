@@ -117,8 +117,14 @@ impl SettingsOps {
 
         let settings = self.deps.core.settings().update(update).await?;
 
-        if let Some(Some(queue_size)) = request.max_download_queue_size {
-            let _ = self.deps.downloads.set_max_queue_size(queue_size).await;
+        // The running download manager holds the size it was built with. A
+        // write that names the field, setting it or clearing it, hands the
+        // manager the size now stored.
+        if request.max_download_queue_size.is_some() {
+            let size = settings.effective_max_download_queue_size();
+            if let Err(e) = self.deps.downloads.set_max_queue_size(size).await {
+                tracing::warn!("the download queue keeps its size, not the stored {size}: {e}");
+            }
         }
 
         Ok(settings.into())

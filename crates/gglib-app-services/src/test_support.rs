@@ -159,7 +159,8 @@ impl DownloadManagerPort for MockDownloadManager {
         Ok(self.reorder_position)
     }
 
-    async fn set_max_queue_size(&self, _size: u32) -> Result<(), DownloadError> {
+    async fn set_max_queue_size(&self, size: u32) -> Result<(), DownloadError> {
+        self.record(format!("set_max_queue_size {size}"));
         Ok(())
     }
 }
