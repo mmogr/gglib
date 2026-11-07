@@ -6,7 +6,8 @@
  * command line; Load sending nothing typed; Chat loading first; Unload
  * asking the daemon; Change saving one field and the row then reading
  * `set by you · Reset`; the loaded model's state and How it ran; Details
- * remembered; ⋯ Remove, Verify and Load with options; llama.cpp missing.
+ * remembered; ⋯ Remove, Verify and Load with options (the sheet's own
+ * tests are `loadOptions.test.tsx`); llama.cpp missing.
  *
  * The transport is a fake; a serve goes through the real API call and
  * mapper to a fake `post`, so the body is the JSON a load sends.
@@ -330,7 +331,7 @@ describe('the inspector, a model on this machine', () => {
     await waitFor(() => expect(at()).toBe('/library'));
   });
 
-  it('opens the verification dialog from Verify files, and the Serve dialog from Load with options…', async () => {
+  it('opens the verification dialog from Verify files, and the Load with options sheet from Load with options…', async () => {
     renderInspector();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'More' }));
@@ -339,7 +340,7 @@ describe('the inspector, a model on this machine', () => {
 
     await user.click(screen.getByRole('button', { name: 'More' }));
     await user.click(screen.getByRole('menuitem', { name: 'Load with options…' }));
-    expect(await screen.findByRole('dialog', { name: /start model server/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Load with options' })).toBeInTheDocument();
   });
 
   it('installs llama.cpp in place of Load when it is missing, then loads', async () => {

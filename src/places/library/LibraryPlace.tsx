@@ -10,8 +10,8 @@
  * machine's is `inspector/Inspector`; the paired machine's model and the
  * Hugging Face preview are the old ones until I4 (`FarModelInspector`,
  * `HfInspector`, with the download queue for its Download buttons).
- * `?serve=1` opens the inspector's Serve dialog once it can, and a server
- * it started for a chat opens that chat. `?add=browse` focuses the
+ * The inspector reads `?serve=1` itself (its Load with options sheet), and
+ * a server it started for a chat opens that chat. `?add=browse` focuses the
  * search; `?add=file` opens the native picker on the desktop and the typed
  * path on the web. With nothing picked the rows take the width.
  *
@@ -55,8 +55,6 @@ export default function LibraryPlace() {
   // The add-a-file row: closed, open to type a path, or the picked path that failed.
   const [adding, setAdding] = useState<{ path: string; error: string } | 'typed' | null>(null);
   const field = useRef<HTMLInputElement>(null);
-  // The inspector's Serve dialog opener, state so an intent can wait for it.
-  const [openServeModal, setOpenServeModal] = useState<(() => void) | null>(null);
 
   const subject = inspectorSubject(location);
   const selectedModelId = subject?.kind === 'model' ? subject.id : null;
@@ -103,15 +101,6 @@ export default function LibraryPlace() {
         .catch(() => setAdding('typed'));
   }, [intent.add, location.key, location.pathname, navigate]);
 
-  // `?serve=1` opens the picked model's Serve dialog once, when the inspector
-  // has an opener (a cold load waits for it), then leaves the address.
-  useEffect(() => {
-    if (!intent.serve) return;
-    if (openServeModal === null && selectedModelId !== null) return;
-    openServeModal?.();
-    void navigate(location.pathname, { replace: true });
-  }, [intent.serve, openServeModal, selectedModelId, location.pathname, navigate]);
-
   const pickLocal = useCallback((id: number) => navigate(paths.model(id)), [navigate]);
   const pickFar = useCallback((id: number) => navigate(paths.far(id)), [navigate]);
   const removeModel = useCallback(
@@ -121,7 +110,6 @@ export default function LibraryPlace() {
     },
     [selectedModelId, navigate],
   );
-  const registerServeOpener = useCallback((opener: () => void) => setOpenServeModal(() => opener), []);
   const unload = useCallback(
     (id: number) => void stopServer(id).catch((err) => showToast(formatError(err), 'error')),
     [stopServer, showToast],
@@ -190,7 +178,6 @@ export default function LibraryPlace() {
               onStopServer={stopServer}
               onRemoveModel={removeModel}
               onUpdateModel={updateModel}
-              onRegisterServeModalOpener={registerServeOpener}
               onOpenSystemSettings={() => navigate(settingsAt(location, 'system'), { replace: true })}
             />
           )}

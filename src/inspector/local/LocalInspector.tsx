@@ -4,23 +4,21 @@
  * Load and Chat (Chat and Unload once loaded, with its state); the Model ID
  * to use it by; How it runs (How it ran once loaded); and Details, closed.
  *
- * Until the Load with options sheet (I2) the ⋯ menu's Load with options…
- * and Load and pin open the Serve dialog, which `?serve=1` and the native
- * menu's Serve reach through `onRegisterServeModalOpener`; until verify
- * results move into Details (I3) Verify files and Check for updates open
- * the verification dialog.
+ * The ⋯ menu's Load with options… and Load and pin, a launch-line token's
+ * Change for this model…, and `?serve=1` (the native menu's Serve) open
+ * the Load with options sheet in the inspector's place; the address is
+ * read here, acted on once, and stripped. Until verify results move into
+ * Details (I3) Verify files and Check for updates open the verification
+ * dialog.
  *
  * @module inspector/local/LocalInspector
  */
 
-import { useCallback, useEffect, useState, type FC } from 'react';
-import { useNavigate } from 'react-router';
+import { useCallback, useEffect, useRef, useState, type FC } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { MoreHorizontal, X } from 'lucide-react';
-import { paths } from '../../app/paths';
+import { libraryIntent, paths } from '../../app/paths';
 import { CopyValue } from '../../components/CopyValue';
-import { ServeModal } from '../../components/ModelInspectorPanel/components/ServeModal';
-import { useServeModal } from '../../components/ModelInspectorPanel/hooks/useServeModal';
-import { useServerActions } from '../../components/ModelInspectorPanel/hooks/useServerActions';
 import { InstallProgress } from '../../components/SetupWizard/InstallProgress';
 import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
 import { RESIDENCY_WORDS } from '../../components/status/words';
@@ -41,6 +39,7 @@ import { getTransport } from '../../services/transport';
 import type { GgufModel } from '../../types';
 import { formatError } from '../../utils/errors';
 import { getHuggingFaceUrl } from '../../utils/format';
+import { LoadOptionsSheet, type SheetOpen } from '../LoadOptionsSheet';
 import type { Update } from './Change';
 import { Details } from './Details';
 import { HowItRuns } from './HowItRuns';
@@ -61,8 +60,6 @@ export interface LocalInspectorProps {
   /** Remove the model from the library (its file stays); rejects with the daemon's refusal. */
   onRemoveModel: (id: number) => Promise<void>;
   onUpdateModel: Update;
-  /** Hand the place the Serve dialog's opener, for `?serve=1` and the native menu. */
-  onRegisterServeModalOpener?: (opener: () => void) => void;
   /** Open Settings where the image runtime is installed. */
   onOpenSystemSettings?: () => void;
 }
@@ -76,13 +73,15 @@ const DETAIL_CALLS = {
 };
 
 export const LocalInspector: FC<LocalInspectorProps> = (props) => {
-  const { model, servers, onServerStarted, onStopServer, onRemoveModel, onUpdateModel, onRegisterServeModalOpener, onOpenSystemSettings } = props;
+  const { model, servers, onServerStarted, onStopServer, onRemoveModel, onUpdateModel, onOpenSystemSettings } = props;
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToastContext();
   const { confirm } = useConfirmContext();
   const { settings } = useSettings();
   const [profile, setProfile] = useState<string | null>(null);
   const [verify, setVerify] = useState<'verify' | 'update' | null>(null);
+  const [sheet, setSheet] = useState<SheetOpen | null>(null);
 
   const draws = model.imageFamily !== undefined;
   const loaded = servers.some((s) => s.modelId === model.id);
@@ -103,30 +102,18 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
   }, [reloadDetail, reloadExplain]);
   const retag = useRetagModel({ modelId: model.id, reload: afterRetag, showToast, confirm });
 
-  const serve = useServeModal(model.id);
   const tagged = (tag: string) => detail.tags.some((t) => t.toLowerCase() === tag);
-  const { handleStartServer } = useServerActions({
-    model,
-    customContext: serve.customContext,
-    customPort: serve.customPort,
-    jinjaOverride: serve.jinjaOverride,
-    hasAgentTag: tagged('agent'),
-    mtpNMaxOverride: serve.mtpNMaxOverride,
-    mtpPMinOverride: serve.mtpPMinOverride,
-    inferenceParams: serve.inferenceParams,
-    pinProxy: serve.pinProxy,
-    onServerStarted,
-    onLlamaServerNotInstalled: () => load.markLlamaMissing(),
-    setIsServing: serve.setIsServing,
-    closeServeModal: serve.closeServeModal,
-  });
-  const { openServeModal, setPinProxy } = serve;
-  useEffect(() => onRegisterServeModalOpener?.(openServeModal), [onRegisterServeModalOpener, openServeModal]);
 
-  const openSheet = (pin: boolean) => {
-    openServeModal();
-    setPinProxy(pin);
-  };
+  // `?serve=1` (the native menu's Serve) opens the sheet once, then leaves the address.
+  const served = useRef<string | null>(null);
+  const serveAsked = libraryIntent(location.search).serve;
+  useEffect(() => {
+    if (!serveAsked || served.current === location.key) return;
+    served.current = location.key;
+    setSheet({ pin: false, origin: 'menu' });
+    void navigate(location.pathname, { replace: true });
+  }, [serveAsked, location.key, location.pathname, navigate]);
+
   const changed = () => {
     void explain.reload();
     void detail.reload();
@@ -146,8 +133,8 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
   };
 
   const items: MenuItem[] = [
-    { label: 'Load with options…', onPick: () => openSheet(false) },
-    { label: 'Load and pin', onPick: () => openSheet(true) },
+    { label: 'Load with options…', onPick: () => setSheet({ pin: false, origin: 'menu' }) },
+    { label: 'Load and pin', onPick: () => setSheet({ pin: true, origin: 'menu' }) },
     { label: 'Verify files', onPick: () => setVerify('verify'), gapBefore: true },
     ...(model.hfRepoId ? [{ label: 'Check for updates', onPick: () => setVerify('update') }] : []),
     {
@@ -169,6 +156,22 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
 
   const fit = loaded ? null : fitSentence(explain.explanation?.plan.fit ?? null);
   const installing = load.needsLlama && install.installing;
+
+  if (sheet)
+    return (
+      <LoadOptionsSheet
+        {...sheet}
+        model={model}
+        detail={detail.modelDetail?.id === model.id ? detail.modelDetail : null}
+        explanation={explain.explanation}
+        mtpHeads={tagged('mtp')}
+        basePort={settings?.llamaBasePort ?? null}
+        load={load}
+        onUpdateModel={onUpdateModel}
+        onSaved={changed}
+        onClose={() => setSheet(null)}
+      />
+    );
 
   return (
     <div className="flex flex-col gap-lg p-md">
@@ -250,46 +253,11 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
         onProfile={setProfile}
         onUpdateModel={onUpdateModel}
         onChanged={changed}
+        onChangeToken={(focus) => setSheet({ pin: false, focus, origin: 'line' })}
       />
 
       <Details model={model} detail={detail} loaded={loaded} onUpdateModel={onUpdateModel} onChanged={() => void explain.reload()} />
 
-      {serve.showServeModal && (
-        <ServeModal
-          model={model}
-          settings={settings}
-          customContext={serve.customContext}
-          customPort={serve.customPort}
-          jinjaOverride={serve.jinjaOverride}
-          isServing={serve.isServing}
-          hasAgentTag={tagged('agent')}
-          hasMtpTag={tagged('mtp')}
-          mtpNMaxOverride={serve.mtpNMaxOverride}
-          mtpPMinOverride={serve.mtpPMinOverride}
-          inferenceParams={serve.inferenceParams}
-          reasoningEffortSupport={detail.modelDetail?.reasoningEffortSupport}
-          pinProxy={serve.pinProxy}
-          onPinProxyChange={setPinProxy}
-          onContextChange={serve.setCustomContext}
-          onPortChange={serve.setCustomPort}
-          onJinjaChange={serve.setJinjaOverride}
-          onJinjaReset={() => serve.setJinjaOverride(null)}
-          onMtpNMaxChange={serve.setMtpNMaxOverride}
-          onMtpPMinChange={serve.setMtpPMinOverride}
-          onInferenceParamsChange={serve.setInferenceParams}
-          onClose={serve.closeServeModal}
-          onStart={handleStartServer}
-          components={detail.modelDetail?.components}
-          onOpenSystemSettings={
-            onOpenSystemSettings
-              ? () => {
-                  serve.closeServeModal();
-                  onOpenSystemSettings();
-                }
-              : undefined
-          }
-        />
-      )}
       <VerificationModal modelId={model.id} modelName={model.name} open={verify !== null} onClose={() => setVerify(null)} mode={verify ?? 'verify'} />
     </div>
   );

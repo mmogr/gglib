@@ -12,9 +12,20 @@ Every fact and word it shows is the daemon's, arranged here: the launch
 from `GET /api/models/:id/explain`, a loaded model's launch from the server
 list, state words from `components/status/words`.
 
+Words of the Load with options sheet with no Rust twin: its title and
+field labels ("Context", "Jinja", "Speculative", "MTP", "Draft tokens",
+"Min probability", "Port", "Auto (from N)"), "Pin the endpoint to this
+model" and its line, "This load only" and its line, the sentences that stop
+a load, "Didn't save:", "Didn't load:", "Didn't install:", "Change for this
+model…", and the image runtime's two sentences.
+
 | File | Role |
 |------|------|
 | `Inspector.tsx` | The subject switch: a model on this machine, a fresh inspector per model, or one line when the library does not hold it |
+| `LoadOptionsSheet.tsx` | Load with options, in the inspector's place: Context, Jinja, Speculative, the sampling form, ▸ Port, Pin the endpoint, This load only (unchecked saves the typed values as the model's own first); each field showing what it would otherwise use and whose choice that is; a failed save or load stays in the sheet |
+| `loadOptions.ts` | Pure: what was typed, the launch request of only those values, the per-model patch of only those fields, and what stops a load |
+| `Speculative.tsx` | The sheet's MTP on or off, draft tokens and min probability over the plan's `mtp` arguments, and Reset |
+| `ImageParts.tsx` | The sheet's Parts line for an image model: family, files (a missing one named), and the image runtime, installed in place when missing |
 
 | Directory | Contents |
 |-----------|----------|

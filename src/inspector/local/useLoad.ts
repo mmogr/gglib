@@ -14,6 +14,12 @@
  * for it once the install completes. A failed load or unload is one line,
  * in the daemon's words, saying which it was.
  *
+ * `loadWith` is the Load with options sheet's start: the request the sheet
+ * built from what was typed (`inspector/loadOptions`), after the pin when
+ * asked (`POST /api/proxy/start-pinned`, which loads nothing itself), and
+ * no chat. It answers the daemon's words when it fails, for the sheet to
+ * keep; a refusal for want of llama.cpp also turns Load into its install.
+ *
  * @module inspector/local/useLoad
  */
 
@@ -23,7 +29,8 @@ import type { ServerViewModel } from '../../hooks/useServers';
 import { installLlama, useEngineInstall } from '../../places/library/engineInstall';
 import { getTransport } from '../../services/transport';
 import { TransportError } from '../../services/transport/errors';
-import type { GgufModel } from '../../types';
+import { toStartServerRequest } from '../../services/transport/mappers';
+import type { GgufModel, ServeConfig } from '../../types';
 import { formatError } from '../../utils/errors';
 
 type Then = 'load' | 'chat';
@@ -39,8 +46,8 @@ export interface LoadState {
   /** Load, then open the chat on the new server. */
   loadForChat: () => void;
   unload: () => void;
-  /** A start elsewhere (the Serve dialog) was refused for want of llama.cpp. */
-  markLlamaMissing: () => void;
+  /** Load with what the sheet built, pinned first when `pin`; the daemon's words when it fails, else `null`. */
+  loadWith: (config: ServeConfig, pin: boolean) => Promise<string | null>;
 }
 
 export function useLoad(
@@ -91,6 +98,21 @@ export function useLoad(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [install.completed]);
 
+  const loadWith = async (config: ServeConfig, pin: boolean): Promise<string | null> => {
+    setError(null);
+    setBusy('load');
+    try {
+      if (pin) await getTransport().startPinnedProxy({ model_id: model.id, options: toStartServerRequest(config) });
+      await getTransport().serveModel(config);
+      return null;
+    } catch (err) {
+      if (TransportError.hasCode(err, 'LLAMA_SERVER_NOT_INSTALLED')) setRefused(true);
+      return formatError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const unload = async () => {
     setError(null);
     setBusy('unload');
@@ -110,6 +132,6 @@ export function useLoad(
     load: () => go('load'),
     loadForChat: () => go('chat'),
     unload: () => void unload(),
-    markLlamaMissing: () => setRefused(true),
+    loadWith,
   };
 }

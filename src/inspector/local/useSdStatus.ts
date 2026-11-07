@@ -10,7 +10,7 @@ export interface SdStatusState {
 }
 
 /**
- * The image runtime's status, read once when `enabled`: the serve modal asks
+ * The image runtime's status, read once when `enabled`: the inspector asks
  * it for an image model only, to say whether `sd-server` is there to load it.
  */
 export function useSdStatus(enabled: boolean): SdStatusState {

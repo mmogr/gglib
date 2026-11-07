@@ -17,6 +17,7 @@ import { Select } from '../../components/ui/Select';
 import type { GgufModel, InferenceProfile, LaunchExplanation, ModelDetail } from '../../types';
 import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import { caveats, describePublished } from '../../utils/samplingProvenance';
+import type { SheetField } from '../loadOptions';
 import { CHANGEABLE, Change, reset, type Update } from './Change';
 import { LaunchLine } from './LaunchLine';
 import { Row } from './Row';
@@ -51,6 +52,8 @@ interface HowItRunsProps {
   onUpdateModel: Update;
   /** A change was saved: read the explanation again. */
   onChanged: () => void;
+  /** A launch-line token's Change for this model…: open the sheet on its field. */
+  onChangeToken?: (field: SheetField) => void;
 }
 
 const Caption: FC<{ title: string; aside: string }> = ({ title, aside }) => (
@@ -61,7 +64,7 @@ const Caption: FC<{ title: string; aside: string }> = ({ title, aside }) => (
 );
 
 export const HowItRuns: FC<HowItRunsProps> = (props) => {
-  const { model, detail, explanation, failed, narration, profiles, profile, onProfile, onUpdateModel, onChanged } = props;
+  const { model, detail, explanation, failed, narration, profiles, profile, onProfile, onUpdateModel, onChanged, onChangeToken } = props;
   const [changing, setChanging] = useState<string | null>(null);
   const sampling = explanation?.sampling ?? null;
   const plan = explanation?.plan ?? null;
@@ -155,7 +158,7 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
   return (
     <section aria-label="How it runs" className="flex flex-col gap-xs">
       <Caption title="How it runs" aside={chosenBy(plan.args)} />
-      <LaunchLine plan={plan} />
+      <LaunchLine plan={plan} onChange={onChangeToken} />
       <dl className="m-0">
         {rows.map((row) => (
           <Row

@@ -26,7 +26,8 @@ export type Update = (id: number, updates: ModelUpdates) => Promise<void>;
 /** The rows Change can turn into a control, by decision key. */
 export const CHANGEABLE: ReadonlySet<string> = new Set(['ctx', 'images', 'parts', 'sampling', 'reasoning', 'templates', 'mtp']);
 
-const stored = (model: GgufModel): ServerConfig => model.serverDefaults ?? { contextLength: null };
+/** The model's stored launch defaults, or none. */
+export const stored = (model: GgufModel): ServerConfig => model.serverDefaults ?? { contextLength: null };
 
 /** `inferenceDefaults` with `keys` cleared. */
 function without(model: GgufModel, keys: readonly string[]): SparseInferenceConfig {

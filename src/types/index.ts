@@ -331,7 +331,7 @@ export type { ComponentChoices } from './generated/ComponentChoices';
  * It used to be a hand-kept *subset*, and the subset had drifted: nine
  * `InferenceConfig` fields — `frequencyPenalty`, the two dynatemp knobs,
  * `topNSigma`, the four DRY knobs and `seed` — were absent. Eight of those
- * nine have a control on the serve modal, so a parameter the form rendered
+ * nine have a control on the Load with options sheet, so a parameter the form rendered
  * was one the launch silently discarded; `seed` has no control anywhere and
  * was simply unreachable. Extending the generated shape is what stops that
  * recurring: a field added in Rust arrives here without an edit.

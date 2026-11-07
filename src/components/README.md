@@ -54,9 +54,9 @@ A chat is its own address, with tab switching:
 - **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and tells its caller, which says "copied" where it lives
 
 ### Model Management
-- **`ModelInspectorPanel/`**: What is left of the old inspector: the Serve dialog (until I2), the paired machine's model and the Hugging Face preview (until I4)
+- **`ModelInspectorPanel/`**: What is left of the old inspector: the paired machine's model and the Hugging Face preview (until I4)
 - **`VisionChip.tsx`**: The neutral "Vision" chip on a paired machine's model that reads images, in its inspector's header
-- **`SamplingForm/`**: The sampling form: Settings' global defaults, the Serve dialog's per-launch values, and (compact) the inspector's Sampling and Reasoning rows
+- **`SamplingForm/`**: The sampling form: Settings' global defaults, the Load with options sheet's per-launch values, and (compact) the inspector's Sampling and Reasoning rows
 
 ### Chat Interface
 - **`ChatMessagesPanel/`**: Message display with markdown rendering and composer
