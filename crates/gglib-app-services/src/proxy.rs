@@ -48,7 +48,7 @@ pub struct ProxyOps {
     pub(crate) supervisor: Arc<ProxySupervisor>,
     model_repo: Arc<dyn ModelRepository>,
     mcp: Arc<McpService>,
-    core: Arc<AppCore>,
+    pub(crate) core: Arc<AppCore>,
     runtime: Arc<dyn ModelRuntimePort>,
     /// The daemon's shutdown token, once there is a daemon.
     ///
@@ -156,10 +156,10 @@ impl ProxyOps {
     }
 
     /// Whether a request to the running proxy must carry the API key right
-    /// now: the rule the tunnel and the run door apply
+    /// now: the rule the tunnel and the door apply
     /// ([`crate::remote::key::enforced`]), so the status says what the proxy
-    /// does. The key it was started with, else the stored `proxy_api_key`,
-    /// which a proxy started open picks up once one is stored.
+    /// does. A key it was started with or one stored since, which a proxy
+    /// started open picks up once one is stored.
     ///
     /// `None` when the settings cannot be read: a proxy started open may
     /// then be enforcing a stored key this cannot see, and a guess of
@@ -403,7 +403,7 @@ impl ProxyOps {
         match self.supervisor.status().await {
             ProxyStatus::Running { address } => Ok(gglib_core::access::endpoint_base_url(address)),
             ProxyStatus::Stopped | ProxyStatus::Crashed => Err(GuiError::ValidationFailed(
-                "the endpoint is off: turn it on first (`gglib proxy`, or Turn on)".to_owned(),
+                crate::proxy_door::ENDPOINT_OFF.to_owned(),
             )),
         }
     }

@@ -10,12 +10,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::domain::runs::RunError;
+use gglib_runtime::Door;
 use serde_json::Value;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
 
-use super::door::{Door, ProxyDoor};
+use super::door::ProxyDoor;
 
 /// The head of a streamed 200.
 pub(super) const STREAM_HEAD: &str =
@@ -99,7 +100,11 @@ pub(super) struct FixedDoor(pub(super) Option<(SocketAddr, Option<String>)>);
 #[async_trait]
 impl ProxyDoor for FixedDoor {
     async fn open(&self) -> Result<Option<Door>, RunError> {
-        Ok(self.0.clone().map(|(addr, key)| Door { addr, key }))
+        Ok(self.0.clone().map(|(addr, key)| Door {
+            root_url: format!("http://{addr}"),
+            key,
+            name: None,
+        }))
     }
 }
 

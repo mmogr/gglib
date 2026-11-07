@@ -37,8 +37,9 @@ runs/
                     `gglib_core::sse::DataFrames` cuts the reply into those
                     payloads, holding no more of one event than the log
                     could take
-  door.rs         — where that proxy is and the key it wants, by the
-                    tunnel's rule in `remote/key.rs`; never minted
+  door.rs         — where that proxy is and the key it wants, as
+                    `ProxyOps::door` opens it (`proxy_door.rs`); never
+                    minted, never started
 ```
 
 # Privacy

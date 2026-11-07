@@ -6,7 +6,7 @@
 use serde_json::{Value, json};
 
 use super::super::images::ImageUrls;
-use super::super::{FarMachine, LlmCompletionAdapter};
+use super::super::{Door, LlmCompletionAdapter};
 use super::{limit_turn, reasoning_turn_tokens};
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
@@ -88,12 +88,13 @@ fn a_thinking_budget_gets_room_for_the_answer_past_it() {
 /// that machine's own `max_tokens`, or its recipe's, applies there.
 #[test]
 fn a_turn_for_another_machine_is_not_limited() {
-    let far = FarMachine {
-        key: "far-key".to_owned(),
-        name: "desk".to_owned(),
+    let far = Door {
+        root_url: String::new(),
+        key: Some("far-key".to_owned()),
+        name: Some("desk".to_owned()),
     };
-    let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
-        .with_far_machine(Some(far));
+    let adapter =
+        LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned())).with_door(Some(far));
     let body = sent_by(adapter, Some(thinking(16_384)), true);
     assert!(body.get("max_tokens").is_none(), "{body}");
 }

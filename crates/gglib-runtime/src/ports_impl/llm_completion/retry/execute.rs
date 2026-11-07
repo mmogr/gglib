@@ -23,7 +23,7 @@ use gglib_core::retry::{RetryDecision, RetryPolicy, decide, jitter_unit};
 use reqwest::{Client, Response};
 use serde_json::Value;
 
-use super::super::FarMachine;
+use super::super::Door;
 use super::classify::{Failure, classify};
 
 /// POST `body` to `url`, retrying transient upstream failures per `policy`.
@@ -32,13 +32,14 @@ use super::classify::{Failure, classify};
 /// stream. `observer`, when present, is notified of each backoff and of the
 /// final give-up so a waiting user can be told what is happening.
 ///
-/// `far_machine` is `Some` only when `url` is the tunnel's loopback port: it
-/// supplies the bearer that port demands, and it is the only thing here that
-/// knows a refusal came from another machine — see [`terminal`].
+/// `door` is `Some` only when `url` is a gglib endpoint's (today the
+/// tunnel's loopback port): it supplies the bearer that endpoint demands, and
+/// it is the only thing here that knows whose endpoint refused — see
+/// [`terminal`].
 pub(crate) async fn send_with_retry(
     client: &Client,
     url: &str,
-    far_machine: Option<&FarMachine>,
+    door: Option<&Door>,
     body: &Value,
     send_timeout: Duration,
     policy: &RetryPolicy,
@@ -53,7 +54,7 @@ pub(crate) async fn send_with_retry(
         let response = send_once(
             client,
             url,
-            far_machine.map(|f| f.key.as_str()),
+            door.and_then(|d| d.key.as_deref()),
             body,
             send_timeout,
         )
@@ -72,7 +73,7 @@ pub(crate) async fn send_with_retry(
             ..
         } = &failure
         else {
-            return Err(terminal(&failure, far_machine));
+            return Err(terminal(&failure, door));
         };
 
         let elapsed = started.elapsed();
@@ -117,32 +118,33 @@ pub(crate) async fn send_with_retry(
 /// Turn a failure nothing will be retried after into the error the caller
 /// reports.
 ///
-/// The far machine gets first refusal on explaining it, because only this
-/// point knows both halves: the classifier has the upstream's `code` but not
-/// who sent it, and the surface that chose the upstream knows who but is long
+/// The door gets first refusal on explaining it, because only this point
+/// knows both halves: the classifier has the upstream's `code` but not who
+/// sent it, and the surface that chose the upstream knows who but is long
 /// past the request by the time an answer comes back. The classifier's own
 /// rendering is the fallback, so every failure this cannot improve on reads
 /// exactly as it did before.
 ///
 /// Two conditions gate the swap and both are load-bearing. `invalid_api_key`
-/// from *this* machine's proxy means a local key is wrong, so the sentence may
-/// only win where there is a far machine at all — that is the `Option`. And a
-/// far machine can fail for reasons its key is innocent of, so the code has to
-/// agree as well — that is [`FarMachine::refusal`]. The sentence carries no
-/// status and no upstream wording, so the rendered reason is written to the
-/// log here rather than left to the caller, which would otherwise never see
-/// what the upstream actually said.
-fn terminal(failure: &Failure, far_machine: Option<&FarMachine>) -> anyhow::Error {
-    let explained = far_machine.and_then(|far| Some((far, far.refusal(failure.code())?)));
+/// means a key was refused, and which sentence is right depends on whose
+/// endpoint refused it, so the sentence may only win where a door was dialled
+/// at all — that is the `Option`; a paired machine's door names the machine,
+/// this machine's names none. And an endpoint can fail for reasons its key is
+/// innocent of, so the code has to agree as well — that is
+/// [`Door::refusal`]. The sentence carries no status and no upstream wording,
+/// so the rendered reason is written to the log here rather than left to the
+/// caller, which would otherwise never see what the upstream actually said.
+fn terminal(failure: &Failure, door: Option<&Door>) -> anyhow::Error {
+    let explained = door.and_then(|door| Some((door, door.refusal(failure.code())?)));
     match explained {
-        Some((far, message)) => {
+        Some((door, message)) => {
             // The name is not a credential — `gglib remote status` and the
             // CLI's pre-turn banner both print it — so a log reader gets the
             // same name the user is being shown.
             tracing::warn!(
-                machine = %far.name,
+                machine = door.name.as_deref().unwrap_or("this machine"),
                 reason = %failure.reason(),
-                "the far machine refused the stored key"
+                "the endpoint refused the key it was dialled with"
             );
             anyhow!(message)
         }

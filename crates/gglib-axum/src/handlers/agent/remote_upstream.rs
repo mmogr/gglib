@@ -17,7 +17,7 @@ use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::{AdmissionLease, ModelRuntimePort};
 use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
-use gglib_runtime::FarMachine;
+use gglib_runtime::Door;
 
 use super::AgentChatRequest;
 use crate::handlers::remote::far_error;
@@ -27,9 +27,9 @@ use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppSta
 pub(super) struct Upstream {
     /// `http://127.0.0.1:<port>`, without the `/v1`.
     pub base_url: String,
-    /// The far machine on the far path — its key and the name it is
-    /// shown by; nothing locally.
-    pub far_machine: Option<FarMachine>,
+    /// The far machine's door on the far path — its key and the name it
+    /// is shown by; nothing locally.
+    pub door: Option<Door>,
     /// Locally, the context of the model the port serves, with the context
     /// it was launched with once a run holds it ([`hold_model`]);
     /// passthrough for the far machine, whose proxy resolves.
@@ -160,7 +160,7 @@ pub(super) async fn local(
     };
     Ok(Upstream {
         base_url: format!("http://127.0.0.1:{}", req.port),
-        far_machine: None,
+        door: None,
         model_context,
         layers,
         model: req.model.clone(),
@@ -266,7 +266,7 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
         // built from holds both: the request that fails on a rotated key
         // comes back to the adapter, which by then has no way to ask who was
         // asked.
-        far_machine: Some(far.far_machine()),
+        door: Some(far.door()),
         // Nothing of that machine's row is known here but what its lookup
         // answered. Whether the model reads images is, and decides one
         // thing: whether it is shown the most recent drawn picture.

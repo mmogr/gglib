@@ -207,7 +207,7 @@ pub(crate) async fn compose(
         // in it (#1091).
         None,
         Some(params.retry_policy),
-        upstream.far_machine,
+        upstream.door,
         ctx.app.attachments().store(),
         LoopGeneration {
             gate: generation_gate(ctx, params, banner.quiet).await,

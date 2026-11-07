@@ -15,7 +15,7 @@ use gglib_core::retry::RetryPolicy;
 use gglib_core::secret::held;
 use reqwest::Client;
 
-use super::{DEFAULT_SEND_TIMEOUT_SECS, FarMachine, LlmCompletionAdapter, SamplingObserver};
+use super::{DEFAULT_SEND_TIMEOUT_SECS, Door, LlmCompletionAdapter, SamplingObserver};
 
 fn completions_url(base_url: &str) -> String {
     format!("{}/v1/chat/completions", base_url.trim_end_matches('/'))
@@ -57,7 +57,7 @@ impl LlmCompletionAdapter {
             url: completions_url(&base_url.into()),
             model: model.unwrap_or_default(),
             client,
-            far_machine: None,
+            door: None,
             attachments: None,
             sampling: None,
             // No stored layer, and the ceiling on: a caller with no settings
@@ -81,22 +81,26 @@ impl LlmCompletionAdapter {
         }
     }
 
-    /// Point this adapter at another machine, with the key that machine
-    /// demands and the name it is known by.
+    /// Send through `door`, a gglib endpoint, with the key it demands and,
+    /// for a paired machine, the name it is known by.
     ///
-    /// Sends `Authorization: Bearer <key>` on every request, and lets a
-    /// refusal from that machine be reported as such. `None` (the default)
-    /// sends no header and reports refusals as the classifier renders them,
-    /// which is right for a llama-server on loopback.
+    /// Sends `Authorization: Bearer <key>` on every request that has a key,
+    /// and lets a refused key be reported in the door's words
+    /// ([`Door::refusal`]). `None` (the default) sends no header and reports
+    /// refusals as the classifier renders them, which is right for a
+    /// llama-server on loopback.
     ///
-    /// A blank key is dropped along with the identity it arrived with, which
-    /// is `with_bearer`'s old behaviour kept intact: an empty
-    /// `Authorization: Bearer ` header is worse than no header at all. Both
-    /// resolvers already filter a blank key before building one of these, so
-    /// this is a floor rather than a path anything reaches.
+    /// A blank key is never sent: an empty `Authorization: Bearer ` header is
+    /// worse than no header at all. A paired machine's door with no key is
+    /// dropped along with the identity it arrived with, as `with_bearer`
+    /// always did; both resolvers already filter a blank key before building
+    /// one, so that is a floor rather than a path anything reaches.
     #[must_use]
-    pub fn with_far_machine(mut self, far_machine: Option<FarMachine>) -> Self {
-        self.far_machine = far_machine.filter(|f| held(Some(&f.key)).is_some());
+    pub fn with_door(mut self, door: Option<Door>) -> Self {
+        self.door = door.and_then(|mut door| {
+            door.key = door.key.filter(|key| held(Some(key)).is_some());
+            (door.key.is_some() || !door.is_far()).then_some(door)
+        });
         self
     }
 
@@ -213,8 +217,8 @@ impl LlmCompletionAdapter {
     ///
     /// Every chat on this machine's models passes the daemon's gate, so a
     /// reply waits for an image render rather than sharing the GPU with it.
-    /// A send to another machine ([`with_far_machine`](Self::with_far_machine))
-    /// takes no turn whatever is set here. `None` (the default) waits on
+    /// A send through a door ([`with_door`](Self::with_door)) takes no turn
+    /// whatever is set here. `None` (the default) waits on
     /// nothing.
     #[must_use]
     pub fn with_generation_gate(mut self, gate: Option<Arc<dyn GenerationGate>>) -> Self {
@@ -248,9 +252,8 @@ impl LlmCompletionAdapter {
     /// Give each request that leaves the ladder with no `max_tokens` a
     /// turn's limit (16384 tokens, 32768 for a `reasoning`-tagged model, or
     /// more for a thinking budget: see `turn_limit`), so a turn the model
-    /// never ends stops. A send to another machine
-    /// ([`with_far_machine`](Self::with_far_machine)) is never limited: that
-    /// machine's own settings apply.
+    /// never ends stops. A send through a door ([`with_door`](Self::with_door))
+    /// is never limited: the settings of the machine behind it apply.
     /// For the agent loop's turns; off (the default) sends what the ladder
     /// resolved and nothing more, as a benchmark arm needs.
     #[must_use]

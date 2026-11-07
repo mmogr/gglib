@@ -220,10 +220,9 @@ async fn cancelling_a_run_drops_its_connection_to_the_proxy() {
 
 #[tokio::test]
 async fn a_proxy_that_is_not_running_fails_the_run_and_is_not_started() {
-    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    let (_, proxy) = crate::test_support::test_core_and_proxy().await;
     let runs = registry_on(Arc::new(LocalProxy {
         proxy: Arc::clone(&proxy),
-        core,
     }));
     runs.create(LOCAL, "r1", request()).unwrap();
 

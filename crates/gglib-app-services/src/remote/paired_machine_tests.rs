@@ -200,5 +200,5 @@ async fn the_credentials_carry_the_name_the_record_holds() {
     assert_eq!(credentials.name.as_deref(), Some("desk"));
     let far = FarProxy::new("http://127.0.0.1:9/v1", &credentials).unwrap();
     assert_eq!(far.shown_name(), "desk");
-    assert_eq!(far.far_machine().name, "desk");
+    assert_eq!(far.door().name.as_deref(), Some("desk"));
 }

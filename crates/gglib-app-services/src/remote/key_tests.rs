@@ -24,18 +24,28 @@ fn a_pinned_flag_key_wins_and_is_marked_pinned() {
     );
 }
 
+/// A proxy that resolved its key from settings, or minted one, tracks the
+/// stored key: after a rotation it demands the rotated key, so that is the
+/// one the tunnel hands on. With nothing stored it keeps the key it started
+/// with.
 #[test]
-fn a_key_the_proxy_resolved_from_settings_is_used_and_tracks() {
+fn a_key_the_proxy_resolved_from_settings_follows_a_rotation() {
     for source in [
         ApiKeySource::Settings,
         ApiKeySource::Generated,
         ApiKeySource::GeneratedUnsaved,
     ] {
-        let decision = decide(Some(("running".to_owned(), source)), Some("stored"));
         assert_eq!(
-            decision,
+            decide(Some(("k-start".to_owned(), source)), Some("k-rotated")),
             KeyDecision::Use {
-                key: "running".to_owned(),
+                key: "k-rotated".to_owned(),
+                pinned: false
+            }
+        );
+        assert_eq!(
+            decide(Some(("k-start".to_owned(), source)), None),
+            KeyDecision::Use {
+                key: "k-start".to_owned(),
                 pinned: false
             }
         );

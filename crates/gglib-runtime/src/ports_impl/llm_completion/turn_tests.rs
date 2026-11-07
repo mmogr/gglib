@@ -21,7 +21,7 @@ use tokio::io::AsyncWriteExt as _;
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
 
-use super::super::{FarMachine, LlmCompletionAdapter};
+use super::super::{Door, LlmCompletionAdapter};
 use crate::process::AdmissionQueue;
 
 /// No test here should take anywhere near this long.
@@ -283,12 +283,13 @@ async fn a_failed_send_ends_its_turn() {
 async fn a_send_to_another_machine_takes_no_turn() {
     let llama = Llama::start(1).await;
     let gate = Arc::new(Counting::default());
-    let far = FarMachine {
-        key: "far-key".to_owned(),
-        name: "desk".to_owned(),
+    let far = Door {
+        root_url: String::new(),
+        key: Some("far-key".to_owned()),
+        name: Some("desk".to_owned()),
     };
-    let adapter = adapter(&llama.base, Arc::clone(&gate) as Arc<dyn GenerationGate>)
-        .with_far_machine(Some(far));
+    let adapter =
+        adapter(&llama.base, Arc::clone(&gate) as Arc<dyn GenerationGate>).with_door(Some(far));
 
     let reply = adapter.chat_stream(&hi(), &[]).await.expect("served");
     assert!(tokio::time::timeout(PATIENCE, reply.count()).await.unwrap() > 0);

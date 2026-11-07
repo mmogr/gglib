@@ -10,20 +10,21 @@ use std::time::Duration;
 use gglib_core::retry::RetryPolicy;
 use reqwest::Client;
 
-use super::super::FarMachine;
+use super::super::Door;
 use super::send_with_retry;
 use super::test_server::{TestServer, sse};
 
 /// The key only ever reaches the wire as a far machine's, so that is the only
 /// way to put one there.
-fn machine_holding(key: &str) -> FarMachine {
-    FarMachine {
-        key: key.to_owned(),
-        name: "desk".to_owned(),
+fn machine_holding(key: &str) -> Door {
+    Door {
+        root_url: String::new(),
+        key: Some(key.to_owned()),
+        name: Some("desk".to_owned()),
     }
 }
 
-async fn send(server: &TestServer, far: Option<&FarMachine>) {
+async fn send(server: &TestServer, far: Option<&Door>) {
     let url = format!("{}/v1/chat/completions", server.base_url);
     send_with_retry(
         &Client::new(),

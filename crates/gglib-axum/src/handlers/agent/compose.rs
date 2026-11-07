@@ -282,7 +282,7 @@ pub(super) async fn prepare_over(
         Some(retry_observer),
         sampling,
         upstream.layers,
-        upstream.far_machine,
+        upstream.door,
         state.core.attachments().store(),
         // A reply on this machine's model waits for an image render, and
         // says so through the retry notice; a far one takes no turn here.

@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use gglib_core::domain::{Machine, UNNAMED_PAIRED};
-use gglib_runtime::FarMachine;
+use gglib_runtime::Door;
 
 use super::paired_machine::FarCredentials;
 use crate::error::GuiError;
@@ -186,27 +186,23 @@ impl FarProxy {
     }
 
     /// What a person reads when this machine answers a request with 401: it
-    /// is not admitting the key it issued this device. Deliberately not "its
-    /// key has changed": the device stopped being trusted, or a rotation
-    /// there has not reached the tunnel yet, and the remedy is the same.
+    /// is not admitting the key it issued this device. The far door's
+    /// sentence ([`Door::key_refused`]), so a chat turn's refusal and every
+    /// other request's read the same.
     #[must_use]
     pub fn key_refused(&self) -> String {
-        format!(
-            "{} is not admitting this device's key — it has either stopped trusting this \
-             device, or a key rotation there is still reaching the tunnel, which clears itself \
-             within a few seconds. If waiting does not fix it, pair again with a fresh `gglib \
-             remote invite` there",
-            self.shown_name()
-        )
+        self.door().key_refused()
     }
 
-    /// The key and the name the completion adapter carries, so a refusal of
-    /// the key names the machine that refused it.
+    /// This machine as a door: its root, the key it issued this device and
+    /// the name it is shown by, so a refusal of the key names the machine
+    /// that refused it.
     #[must_use]
-    pub fn far_machine(&self) -> FarMachine {
-        FarMachine {
-            key: self.key.clone(),
-            name: self.shown_name().to_owned(),
+    pub fn door(&self) -> Door {
+        Door {
+            root_url: self.server_root(),
+            key: Some(self.key.clone()),
+            name: Some(self.shown_name().to_owned()),
         }
     }
 

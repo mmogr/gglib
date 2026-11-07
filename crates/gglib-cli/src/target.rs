@@ -25,7 +25,7 @@ use std::sync::LazyLock;
 use anyhow::{Result, bail};
 use gglib_core::domain::{Model, ModelAction};
 use gglib_core::request_pipeline::{self, ModelContext};
-use gglib_runtime::FarMachine;
+use gglib_runtime::Door;
 
 use crate::bootstrap::CliContext;
 use crate::commands::{ChatCommand, Commands, DaemonCommand, ProxyCommand};
@@ -223,7 +223,7 @@ impl Target {
                 let port = upstream::resolve_port(ctx, params, banner).await?;
                 Ok(Upstream {
                     base_url: format!("http://127.0.0.1:{port}"),
-                    far_machine: None,
+                    door: None,
                 })
             }
             Self::Remote => remote_upstream(ctx, params.turn.as_ref(), banner).await,
@@ -265,9 +265,9 @@ impl Target {
 pub(crate) struct Upstream {
     /// `http://127.0.0.1:<port>`, without the `/v1` — the adapter adds it.
     pub base_url: String,
-    /// The far machine on the remote path — its key and the name it is
-    /// shown by; nothing for a local server.
-    pub far_machine: Option<FarMachine>,
+    /// The far machine's door on the remote path — its key and the name it
+    /// is shown by; nothing for a local server.
+    pub door: Option<Door>,
 }
 
 #[cfg(test)]

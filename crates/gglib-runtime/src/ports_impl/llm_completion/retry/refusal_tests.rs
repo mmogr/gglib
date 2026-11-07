@@ -16,7 +16,7 @@ use std::time::Duration;
 use gglib_core::retry::RetryPolicy;
 use reqwest::Client;
 
-use super::super::FarMachine;
+use super::super::Door;
 use super::send_with_retry;
 use super::test_server::{
     TestServer, edge_backend_unreachable_body, edge_invalid_api_key_body, json,
@@ -27,15 +27,16 @@ use super::test_server::{
 /// just shown the user.
 const NAME: &str = "desk";
 
-fn paired_machine() -> FarMachine {
-    FarMachine {
-        key: "the-key-stored-at-pairing".to_owned(),
-        name: NAME.to_owned(),
+fn paired_machine() -> Door {
+    Door {
+        root_url: String::new(),
+        key: Some("the-key-stored-at-pairing".to_owned()),
+        name: Some(NAME.to_owned()),
     }
 }
 
 /// Serve one refusal and return the message its caller ends up with.
-async fn refused(status: u16, reason: &str, body: &str, far: Option<&FarMachine>) -> String {
+async fn refused(status: u16, reason: &str, body: &str, far: Option<&Door>) -> String {
     let server = TestServer::start(vec![json(status, reason, body)]).await;
     send_with_retry(
         &Client::new(),
@@ -96,6 +97,26 @@ async fn this_proxys_own_refused_key_is_left_as_the_classifier_rendered_it() {
         "401 Unauthorized invalid_request_error (invalid_api_key): Missing or invalid API key. \
          Send it as 'Authorization: Bearer <key>'.",
         "with no far machine there is nobody to name and nothing to re-pair"
+    );
+}
+
+/// The same refusal through this machine's own door: the door was dialled
+/// with the key its endpoint demands, so the sentence names no machine and
+/// sends nobody to re-pair; it says to send again once a changed key has
+/// reached the endpoint.
+#[tokio::test]
+async fn this_machines_door_says_its_own_sentence_for_a_refused_key() {
+    let local = Door {
+        root_url: String::new(),
+        key: Some("this-machines-key".to_owned()),
+        name: None,
+    };
+    let message = refused(401, "Unauthorized", &proxy_invalid_key_body(), Some(&local)).await;
+
+    assert_eq!(
+        message,
+        "this machine's endpoint did not admit its own key — the key was changed a moment ago, \
+         and the endpoint takes up to 5 seconds to pick up a new one. Send again in a few seconds"
     );
 }
 

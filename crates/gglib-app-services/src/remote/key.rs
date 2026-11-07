@@ -39,14 +39,13 @@ pub(super) enum KeyDecision {
 
 /// Decide the key, in the order ADR 0012 gives.
 ///
-/// 1. What the running proxy demands, when it demands something. A key from
+/// 1. What the running proxy demands ([`demanded`]). A key from
 ///    `--api-key`/`GGLIB_API_KEY` is pinned: it never appears in settings,
 ///    and handing the tunnel the stored value would give it a credential
-///    the proxy refuses.
-/// 2. The stored `proxy_api_key`, when the proxy has not (yet) resolved one
-///    — it will, within a cache window, because the tracking policy reads
-///    the same setting.
-/// 3. A fresh key, to be persisted. This is the loopback default, where
+///    the proxy refuses. Otherwise the stored `proxy_api_key`, which the
+///    proxy's tracking policy reads (within a cache window) even when it
+///    started with another key or none; otherwise the key it started with.
+/// 2. A fresh key, to be persisted. This is the loopback default, where
 ///    nothing minted a key because nothing was reachable. Enabling the
 ///    tunnel is exactly the moment that stops being true.
 pub(super) fn decide(
@@ -77,18 +76,21 @@ pub(crate) fn demanded(
         .or_else(|| effective.map(|(key, _)| key))
 }
 
-/// Steps 1 and 2 of [`decide`]: the key the local proxy demands or is about
-/// to, and whether it is pinned; `None` when nothing is enforced. Never
-/// mints, so a caller that only needs to present the key (a run posting to
-/// the proxy) uses this rather than `decide`.
+/// Step 1 of [`decide`]: the key the local proxy demands or is about to
+/// ([`demanded`]), and whether it is pinned; `None` when nothing is
+/// enforced. Never mints, so a caller that only needs to know whether a key
+/// is wanted uses this rather than `decide`.
+///
+/// It is `demanded` and nothing else, so the tunnel and every client on this
+/// machine present the one key the bearer policy admits. Preferring the key
+/// the proxy started with would hand out a key the policy stops admitting one
+/// cache window after a rotation.
 pub(crate) fn enforced(
     effective: Option<(String, ApiKeySource)>,
     stored: Option<&str>,
 ) -> Option<(String, bool)> {
-    if let Some((key, source)) = effective {
-        return Some((key, source == ApiKeySource::Flag));
-    }
-    held(stored).map(|stored| (stored.trim().to_owned(), false))
+    let pinned = matches!(effective, Some((_, ApiKeySource::Flag)));
+    demanded(effective, stored).map(|key| (key, pinned))
 }
 
 /// The key this tunnel will enforce, and the write it may still owe.

@@ -24,6 +24,7 @@ mod models_projector;
 mod models_upgrade;
 mod proxy;
 pub mod proxy_clients;
+mod proxy_door;
 mod proxy_guard;
 mod proxy_port;
 pub mod proxy_prove;
@@ -51,6 +52,7 @@ pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;
 pub use proxy_clients::{ClientFacts, ClientRecipe, ClientRecipes, RecipeLine, recipes};
+pub use proxy_door::DoorClosed;
 pub use proxy_prove::{ProofOutcome, ProofRefusal};
 pub use proxy_settings::proxy_config_from_settings;
 pub use remote::{

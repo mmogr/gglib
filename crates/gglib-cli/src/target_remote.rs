@@ -126,6 +126,6 @@ pub(super) async fn remote_upstream(
         // The banner above has just named this machine to the user; the key
         // carries that name onward so a later refusal of it can name the same
         // machine, which by then nothing downstream could look up.
-        far_machine: Some(proxy.far_machine()),
+        door: Some(proxy.door()),
     })
 }

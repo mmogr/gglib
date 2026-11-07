@@ -1,27 +1,18 @@
 //! Where a chat run posts, and the key it presents.
 //!
-//! The daemon's own proxy, reached where `gglib_core::access::reachable_at`
-//! says (a wildcard bind on loopback). The key follows the tunnel's
-//! rule, shared from `remote::key`: what the running proxy demands, else the
-//! stored `proxy_api_key`, which a proxy started with no key picks up once
-//! one is stored. A run never mints a key.
+//! The daemon's own endpoint, as [`ProxyOps::door`] opens it: reached where
+//! `gglib_core::access::reachable_at` says (a wildcard bind on loopback),
+//! with the key its bearer policy demands now (`remote::key::demanded`). A
+//! run never mints a key and never starts the endpoint.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::domain::runs::RunError;
-use gglib_core::services::AppCore;
-use gglib_runtime::proxy::ProxyStatus;
+use gglib_runtime::Door;
 
+use crate::DoorClosed;
 use crate::proxy::ProxyOps;
-use crate::remote::key::enforced;
-
-/// A running proxy: where it listens and the key it wants.
-pub(crate) struct Door {
-    pub(crate) addr: SocketAddr,
-    pub(crate) key: Option<String>,
-}
 
 /// Finds the proxy a chat run posts to.
 #[async_trait]
@@ -33,28 +24,18 @@ pub(crate) trait ProxyDoor: Send + Sync {
 /// The daemon's own proxy.
 pub(crate) struct LocalProxy {
     pub(crate) proxy: Arc<ProxyOps>,
-    pub(crate) core: Arc<AppCore>,
 }
 
 #[async_trait]
 impl ProxyDoor for LocalProxy {
     async fn open(&self) -> Result<Option<Door>, RunError> {
-        let ProxyStatus::Running { address } = self.proxy.status().await else {
-            return Ok(None);
-        };
-        Ok(Some(Door {
-            addr: address,
-            key: bearer(&self.proxy, &self.core).await?,
-        }))
+        match self.proxy.door().await {
+            Ok(door) => Ok(Some(door)),
+            Err(DoorClosed::Off) => Ok(None),
+            Err(DoorClosed::Unreadable(_)) => Err(RunError {
+                code: "internal_error".to_owned(),
+                message: "The daemon could not read its settings.".to_owned(),
+            }),
+        }
     }
-}
-
-/// The key a request to the local proxy must carry, or `None` when it
-/// demands none.
-pub(crate) async fn bearer(proxy: &ProxyOps, core: &AppCore) -> Result<Option<String>, RunError> {
-    let settings = core.settings().get().await.map_err(|_| RunError {
-        code: "internal_error".to_owned(),
-        message: "The daemon could not read its settings.".to_owned(),
-    })?;
-    Ok(enforced(proxy.effective_api_key(), settings.proxy_api_key.as_deref()).map(|(key, _)| key))
 }

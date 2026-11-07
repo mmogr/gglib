@@ -60,6 +60,7 @@ This crate is a **Shared Facade** — sitting between adapters and infrastructur
 - **`remote/`** — `RemoteOps`: the remote tunnel, both sides (ADR 0012): enabling it, joining another machine, and the devices paired with this one
 - **`runs/`** — `RunRegistry`: a run, one reply the daemon owns from start to end, held in memory and served through `RunsPort`
 - **`proxy.rs`** — `ProxyOps` OpenAI-compatible proxy lifecycle management
+- **`proxy_door.rs`** — `ProxyOps::door`, this machine's endpoint as a `Door`: its root where a client here reaches it and the key its bearer policy demands now, or `DoorClosed` when it is off; a paired machine's door comes from `remote/`
 - **`residency_events.rs`** — `ResidencyEvents`, the daemon's `ResidencyObserver`: `server_started` and `server_stopped` for every load and unload, whoever caused it, and the health watch between them
 - **`launch_explain.rs`** — `LaunchExplanationDto`, what `gglib model explain` prints and `GET /api/models/{id}/explain` serves: the launch the runtime plans, and the sampling
 - **`servers.rs`** — `ServerOps` model server lifecycle management (a stop names the model, in whichever slot it sits; the load and the unload are announced by the runtime, not here)
@@ -141,3 +142,4 @@ handwritten mock structs in `src/test_support.rs` (no external mocking framework
 | `residency_events.rs` | 6 — a load sends `server_started` with id, name and port; an unload sends `server_stopped` by the name it was loaded with; an unload never loaded sends nothing; a model loaded twice keeps one watch and ends the other; an image model is watched as sd-server until its unload; a check in flight at the unload sends nothing after `server_stopped` |
 | `setup_engines.rs` | 15 — each engine's status from its parts (CPU warning, no download, the record, llama.cpp's validation, a source build, wire shape with its kind), the running image model, the model running on each engine, removal refused while one runs and not for a chat model, the removal itself refused with nothing removed (either engine), an install refused while a model runs on its engine, and an install over a source build left to the terminal |
 | `proxy.rs` | 3 — the saved proxy port, a port another process holds, and a started proxy serving the runs it was handed |
+| `proxy_door.rs` | 5 — off is `DoorClosed::Off`; a wildcard bind is dialled on loopback with the key it minted; a concrete bind is dialled where it is; a key stored after an open start is carried; and after a rotation the door's key is the one the endpoint admits |

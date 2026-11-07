@@ -227,7 +227,7 @@ const TRAINED: u64 = 262_144;
 fn upstream(local_model: Option<(u16, i64)>) -> Upstream {
     Upstream {
         base_url: "http://127.0.0.1:19555".to_owned(),
-        far_machine: None,
+        door: None,
         model_context: ModelContext {
             context_length: Some(TRAINED),
             ..ModelContext::passthrough()
