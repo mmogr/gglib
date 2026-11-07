@@ -131,6 +131,15 @@ pub enum UnloadReason {
     OneImageModel,
 }
 
+impl UnloadReason {
+    /// Every reason, in declaration order.
+    pub const ALL: [Self; 3] = [
+        Self::WouldNotFitBeside,
+        Self::SecondSlotFull,
+        Self::OneImageModel,
+    ];
+}
+
 /// The model a launch would unload first, and why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]

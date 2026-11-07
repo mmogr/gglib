@@ -19,7 +19,7 @@ import { openUrl } from '../../services/platform';
 import type { ModelDetailDto } from '../../types/generated/ModelDetailDto';
 import { formatParamCount, getHuggingFaceUrl } from '../../utils/format';
 import { Item, When, remember, remembered } from '../local/Details';
-import { tokens } from '../local/rows';
+import { tokens } from '../../readings/launchFit';
 
 export const FarDetails: FC<{ id: number; detail: ModelDetailDto }> = ({ id, detail: d }) => {
   const { showToast } = useToastContext();

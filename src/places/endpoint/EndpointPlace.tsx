@@ -129,7 +129,7 @@ export default function EndpointPlace() {
         <div className="min-h-0 flex-1 overflow-y-auto pb-md">
           <Header facts={facts} actions={actions} onTest={() => void actions.test(facts.pinnedModel !== null ? null : modelId)} />
           {up && snapshot && (
-            <Loaded snapshot={snapshot} inspected={inspected} onUnload={unload} onPin={(id) => void actions.serve(id)} pinning={actions.busy !== null} />
+            <Loaded snapshot={snapshot} inspected={inspected} paired={paired} onUnload={unload} onPin={(id) => void actions.serve(id)} pinning={actions.busy !== null} />
           )}
           {up && (
             <Serves loaded={loaded} library={chatModels} pinnedModel={facts.pinnedModel} disabled={actions.busy !== null} onServe={(id) => void actions.serve(id)} />

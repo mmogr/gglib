@@ -1,0 +1,23 @@
+[
+  {
+    "unload": {
+      "model": "Qwen3-30B-A3B",
+      "reason": "would_not_fit_beside"
+    },
+    "sentence": "Unloads Qwen3-30B-A3B first: it would not fit beside it."
+  },
+  {
+    "unload": {
+      "model": "Qwen3-30B-A3B",
+      "reason": "second_slot_full"
+    },
+    "sentence": "Unloads Qwen3-30B-A3B first: the second slot is taken."
+  },
+  {
+    "unload": {
+      "model": "Qwen3-30B-A3B",
+      "reason": "one_image_model"
+    },
+    "sentence": "Unloads Qwen3-30B-A3B first: one image model is loaded at a time."
+  }
+]

@@ -47,7 +47,7 @@ import { LogLink } from './LogLink';
 import type { Update } from './Change';
 import { Details } from './Details';
 import { HowItRuns } from './HowItRuns';
-import { fitSentence } from './rows';
+import { fitSentence } from '../../readings/launchFit';
 import { useExplain } from './useExplain';
 import { useLaunchFacts } from './useLaunchFacts';
 import { useLoad } from './useLoad';

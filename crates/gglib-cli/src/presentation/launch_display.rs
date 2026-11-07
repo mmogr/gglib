@@ -9,11 +9,13 @@
 //!
 //! The tests also record `contracts/models/launch_line.json`: a few plans
 //! beside the command line `LaunchPlan::command_line` makes of each, which
-//! the GUI's launch line is held to.
+//! the GUI's launch line is held to; and `contracts/models/unload_reason.json`:
+//! the unload sentence for every reason, which the GUI's Load palette is
+//! held to.
 
 use std::fmt::Write as _;
 
-use gglib_core::domain::{ContextFit, LaunchPlan, UnloadReason};
+use gglib_core::domain::{ContextFit, LaunchPlan, Unload, UnloadReason};
 
 /// Width of the flag column: `--spec-draft-n-max` and `--reasoning-format`
 /// are 18 characters, and the column keeps one space after them.
@@ -54,13 +56,22 @@ pub(crate) fn launch_text(name: &str, id: i64, plan: &LaunchPlan) -> String {
 /// or room beside what is).
 #[must_use]
 pub(crate) fn displacement_text(plan: &LaunchPlan) -> Option<String> {
-    let unload = plan.unloads.as_ref()?;
+    plan.unloads
+        .as_ref()
+        .map(|unload| format!("  {}", unload_sentence(unload)))
+}
+
+/// The sentence for a model a launch unloads first, and why. The GUI's
+/// Load palette says the same words, held to them by
+/// `contracts/models/unload_reason.json`.
+#[must_use]
+pub(crate) fn unload_sentence(unload: &Unload) -> String {
     let because = match unload.reason {
         UnloadReason::WouldNotFitBeside => "it would not fit beside it",
         UnloadReason::SecondSlotFull => "the second slot is taken",
         UnloadReason::OneImageModel => "one image model is loaded at a time",
     };
-    Some(format!("  Unloads {} first: {because}.", unload.model))
+    format!("Unloads {} first: {because}.", unload.model)
 }
 
 /// One string per argument: the flag, its value, and `← source: reason`.
@@ -131,7 +142,7 @@ fn gib(v: Option<u64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::{ChoiceSource, LaunchArg, LaunchNarration, Unload};
+    use gglib_core::domain::{ChoiceSource, LaunchArg, LaunchNarration};
     use gglib_core::server_config::ContextSizeSource;
 
     fn arg(flag: &str, value: Option<&str>, source: ChoiceSource, reason: &str) -> LaunchArg {
@@ -358,6 +369,47 @@ mod tests {
         assert!(
             have == want,
             "contracts/models/launch_line.json is stale; rerun with GGLIB_RECORD_CONTRACTS=1\n{want}"
+        );
+    }
+
+    /// One row of `contracts/models/unload_reason.json`: a reason, the
+    /// model it names, and the sentence the CLI prints for them.
+    #[derive(serde::Serialize)]
+    struct RecordedUnload {
+        unload: Unload,
+        sentence: String,
+    }
+
+    /// The checked-in file is the unload sentence for every reason, in
+    /// declaration order. Run with `GGLIB_RECORD_CONTRACTS=1` to rewrite it
+    /// after a deliberate change.
+    #[test]
+    fn the_checked_in_unload_sentences_are_the_clis() {
+        let recorded: Vec<RecordedUnload> = UnloadReason::ALL
+            .into_iter()
+            .map(|reason| {
+                let unload = Unload {
+                    model: "Qwen3-30B-A3B".to_owned(),
+                    reason,
+                };
+                RecordedUnload {
+                    sentence: unload_sentence(&unload),
+                    unload,
+                }
+            })
+            .collect();
+        let mut want = serde_json::to_string_pretty(&recorded).expect("serialise");
+        want.push('\n');
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/models/unload_reason.json");
+        if std::env::var_os("GGLIB_RECORD_CONTRACTS").is_some() {
+            std::fs::write(&path, &want).expect("write unload_reason.json");
+        }
+        let have =
+            std::fs::read_to_string(&path).expect("read contracts/models/unload_reason.json");
+        assert!(
+            have == want,
+            "contracts/models/unload_reason.json is stale; rerun with GGLIB_RECORD_CONTRACTS=1\n{want}"
         );
     }
 }
