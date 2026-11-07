@@ -226,7 +226,7 @@ describe('verify and update results, in Details › Source', () => {
     await user.click(screen.getByRole('button', { name: 'Re-download them' }));
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Re-download' }));
     await waitFor(() => expect(posts('/models/9/repair')).toEqual([['/api/models/9/repair', { shards: [1, 2] }]]));
-    expect(await screen.findByText(/Downloading on the queue/)).toBeInTheDocument();
+    expect(await screen.findByText('Sent to the download queue.')).toBeInTheDocument();
   });
 
   it('counts a missing file as damaged and one with no hash as not, and one file is "it"', async () => {
@@ -333,7 +333,7 @@ describe('verify and update results, in Details › Source', () => {
     await user.click(screen.getByRole('button', { name: 'Re-download at latest…' }));
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Re-download' }));
     await waitFor(() => expect(posts('/models/9/upgrade')).toHaveLength(1));
-    expect(await screen.findByText(/Downloading on the queue/)).toBeInTheDocument();
+    expect(await screen.findByText('Sent to the download queue.')).toBeInTheDocument();
   });
 
   it('downloads the changed files after asking, naming them by index', async () => {
@@ -411,8 +411,99 @@ describe('verify and update results, in Details › Source', () => {
     expect(screen.queryByRole('menuitem', { name: 'Check for updates' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('menuitem', { name: 'Verify files' }));
     expect(posts('/models/11/verify')).toHaveLength(1);
-    // No repository, and still a Source line for the check to write.
-    run.answer(report([shard(0, { type: 'no_oid' })], 'unverifiable'));
-    expect(await screen.findByText('Unverifiable: no file has a hash to check against')).toBeInTheDocument();
+    // No repository, and still a Source line for the check to write: here the daemon's refusal, as it words it.
+    run.refuse(new TransportError('INTERNAL', 'Failed to start verification: No model files found for verification'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to start verification: No model files found for verification');
+  });
+
+  it('says nothing was compared when no file has a hash, though the daemon calls that healthy', async () => {
+    const run = pendingVerify();
+    renderInspector();
+    const user = await pick('Verify files');
+    // `verify_model_integrity` counts a file with no hash with the healthy ones.
+    run.answer(report([shard(0, { type: 'no_oid' }), shard(1, { type: 'no_oid' })], 'healthy'));
+
+    expect(await screen.findByText('No file has a hash to check against')).toBeInTheDocument();
+    expect(screen.queryByText('Files intact')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'intact' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Re-download/ })).not.toBeInTheDocument();
+    await user.click(screen.getByText('2 files'));
+    const rows = within(screen.getByRole('list', { name: 'Files checked' })).getAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent(/No OID available$/);
+  });
+
+  it('marks the files-checked time intact only after a check that compared a file', async () => {
+    const run = pendingVerify();
+    renderInspector();
+    await pick('Verify files');
+    run.answer(report([shard(0, { type: 'healthy' }), shard(1, { type: 'no_oid' })], 'healthy'));
+    expect(await screen.findByText('Files intact')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'intact' })).toBeInTheDocument();
+  });
+
+  it('sends one check when Verify files is picked twice', async () => {
+    pendingVerify();
+    renderInspector();
+    await pick('Verify files');
+    await pick('Verify files');
+    expect(await screen.findByText('Checking files…')).toBeInTheDocument();
+    expect(posts('/verify')).toHaveLength(1);
+  });
+
+  it("says a refused re-download in the daemon's words", async () => {
+    const run = pendingVerify();
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/verify')) return daemon.verify!();
+      if (path.endsWith('/repair')) throw new TransportError('INTERNAL', 'Failed to list unsloth/gemma-3-4b-it-GGUF\'s variants: offline');
+      return null;
+    });
+    renderInspector();
+    const user = await pick('Verify files');
+    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy'));
+    await user.click(await screen.findByRole('button', { name: 'Re-download it' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Re-download' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent("Failed to list unsloth/gemma-3-4b-it-GGUF's variants: offline");
+  });
+
+  it('keeps a check started while a re-download was being queued, over the queue\'s answer', async () => {
+    const run = pendingVerify();
+    let queued: (v: unknown) => void = () => {};
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/verify')) return daemon.verify!();
+      if (path.endsWith('/repair')) return new Promise((resolve) => (queued = resolve));
+      return null;
+    });
+    renderInspector();
+    const user = await pick('Verify files');
+    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy'));
+    await user.click(await screen.findByRole('button', { name: 'Re-download it' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Re-download' }));
+    await waitFor(() => expect(posts('/repair')).toHaveLength(1));
+
+    pendingVerify();
+    await pick('Verify files');
+    expect(await screen.findByText('Checking files…')).toBeInTheDocument();
+    await act(async () => queued({ id: 'dl-1', files: [] }));
+    expect(screen.getByText('Checking files…')).toBeInTheDocument();
+    expect(screen.queryByText('Sent to the download queue.')).not.toBeInTheDocument();
+  });
+
+  it('brings Details › Source into view once Details is open', async () => {
+    // Whether the fold was open, and what was brought into view, at each scroll.
+    const seen: { open: boolean; text: string }[] = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      seen.push({ open: this.closest('details')?.hasAttribute('open') ?? false, text: this.textContent ?? '' });
+    };
+    try {
+      pendingVerify();
+      renderInspector();
+      await pick('Verify files');
+      await waitFor(() => expect(seen).toHaveLength(1));
+      expect(seen[0].open).toBe(true);
+      expect(seen[0].text).toContain('Checking files…');
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
   });
 });

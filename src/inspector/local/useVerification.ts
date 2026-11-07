@@ -111,6 +111,16 @@ export function damagedFiles(report: VerificationReport) {
   return report.shards.filter((s) => s.health.type === 'corrupt' || s.health.type === 'missing');
 }
 
+/**
+ * What a file check found, read from its files and not `overall_health`:
+ * the daemon counts a file with no hash as healthy, so a model none of
+ * whose files has one comes back `healthy` with nothing compared.
+ */
+export function checkVerdict(report: VerificationReport): 'damaged' | 'nothing_compared' | 'intact' {
+  if (damagedFiles(report).length > 0) return 'damaged';
+  return report.shards.some((s) => s.health.type === 'healthy') ? 'intact' : 'nothing_compared';
+}
+
 export interface Verification {
   status: VerifyStatus;
   /** A repair or re-download being asked or queued. */
@@ -135,14 +145,22 @@ export function useVerification(modelId: number, modelName: string): Verificatio
   const verify = useCallback(() => void runVerify(modelId), [modelId]);
   const checkUpdates = useCallback(() => void runCheck(modelId), [modelId]);
 
-  /** Hand `start` to the queue once asked; its refusal is the line's, with Retry asking `retry` again. */
+  /**
+   * Hand `start` to the queue once asked; its refusal is the line's, with
+   * Retry asking `retry` again. Its answer is written only while no check
+   * started since overtook it.
+   */
   const queue = async (asked: boolean, retry: 'verify' | 'update', start: () => Promise<boolean>) => {
     if (!asked) return;
+    const run = runs.get(modelId);
+    const settle = (next: VerifyStatus) => {
+      if (runs.get(modelId) === run) put(modelId, next);
+    };
     setBusyFor(modelId);
     try {
-      if (await start()) put(modelId, { kind: 'queued' });
+      if (await start()) settle({ kind: 'queued' });
     } catch (err) {
-      put(modelId, { kind: 'failed', message: formatError(err), retry });
+      settle({ kind: 'failed', message: formatError(err), retry });
     } finally {
       setBusyFor(null);
     }

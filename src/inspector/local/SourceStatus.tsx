@@ -17,7 +17,7 @@ import { Icon } from '../../components/ui/Icon';
 import type { VerificationReport } from '../../services/transport';
 import type { ShardHealth } from '../../types/generated/ShardHealth';
 import type { VerifiedFileKind } from '../../types/generated/VerifiedFileKind';
-import { damagedFiles, type Verification } from './useVerification';
+import { checkVerdict, damagedFiles, type Verification } from './useVerification';
 
 /** A file named by what it is, as `VerifiedFileKind::label` names it: a shard counted over the weights alone, from 1. */
 const fileLabel = (kind: VerifiedFileKind): string => {
@@ -82,10 +82,11 @@ const FileList: FC<{ report: VerificationReport }> = ({ report }) => (
 
 const Verified: FC<{ v: Verification; report: VerificationReport }> = ({ v, report }) => {
   const damaged = damagedFiles(report).length;
+  const verdict = checkVerdict(report);
   return (
     <>
-      {report.overall_health === 'healthy' && <Good>Files intact</Good>}
-      {report.overall_health === 'unhealthy' && (
+      {verdict === 'intact' && <Good>Files intact</Good>}
+      {verdict === 'damaged' && (
         <Line>
           <StatusMark kind="attention" word={`${plural(damaged, 'file', 'files')} damaged`} className="text-xs text-text" />
           <Action onClick={() => void v.repairDamaged(report)} disabled={v.busy}>
@@ -93,9 +94,7 @@ const Verified: FC<{ v: Verification; report: VerificationReport }> = ({ v, repo
           </Action>
         </Line>
       )}
-      {report.overall_health === 'unverifiable' && (
-        <StatusMark kind="attention" word="Unverifiable: no file has a hash to check against" className="text-xs text-text" />
-      )}
+      {verdict === 'nothing_compared' && <StatusMark kind="attention" word="No file has a hash to check against" className="text-xs text-text" />}
       <FileList report={report} />
     </>
   );
@@ -168,7 +167,7 @@ export const SourceStatus: FC<{ v: Verification }> = ({ v }) => {
     case 'checked':
       return <Checked v={v} status={status} />;
     case 'queued':
-      return <span>Downloading on the queue; the library shows its progress.</span>;
+      return <span>Sent to the download queue.</span>;
     case 'failed':
       return (
         <Line>

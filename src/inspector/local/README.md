@@ -33,8 +33,10 @@ override field and `+ flag` wait for a Rust surface that sets any flag.
 Hugging Face) start the check at once and open Details on Source, where
 its line is: the file the daemon is hashing, with a bar; then `✓ Files
 intact`, `▲ N files damaged [Re-download them]` with every file's health
-in a list opened from the line, or Unverifiable; for updates, up to date,
-or a newer revision with Download changed files and Re-download at latest…;
+in a list opened from the line, or, when no file has a hash, that nothing
+was compared (the daemon calls that healthy, so the line reads the files);
+for updates, up to date, or a newer revision with Download changed files
+and Re-download at latest…;
 a refusal in the daemon's words with Retry. Each repair and re-download asks
 first, then runs on the download queue. The status is the model's, kept
 across leaving it and never shown on another; a file check answered here
@@ -46,12 +48,11 @@ you", "Auto", "On", "Off", "Applies at next load.", "Didn't load:",
 "Didn't unload:", "Drawing needs
 stable-diffusion.cpp.", and the verification line's "Checking files…",
 "Checking … N%", "Files intact", "N files damaged", "Re-download it/them",
-"Unverifiable: no file has a hash to check against", "Checking for
+"No file has a hash to check against", "Checking for
 updates…", "Up to date", "A newer revision exists (may be README only)",
 "A newer revision exists: N files changed", "No revision is recorded for
 this model, so there is nothing to compare.", "Download changed files",
-"Re-download at latest…", "Downloading on the queue; the library shows its
-progress.", "Retry", and the confirms' words (kept from the verification
+"Re-download at latest…", "Sent to the download queue.", "Retry", and the confirms' words (kept from the verification
 dialog). The per-file health words are those `gglib model verify
 --per-shard` prints, which no Rust function returns.
 

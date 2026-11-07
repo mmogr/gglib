@@ -33,7 +33,7 @@ import { tokens } from './rows';
 import { SourceStatus } from './SourceStatus';
 import { Tags } from './Tags';
 import type { ModelDetailState } from './useModelDetail';
-import type { Verification } from './useVerification';
+import { checkVerdict, type Verification } from './useVerification';
 
 const OPEN_KEY = 'gglib.inspector.details';
 
@@ -125,9 +125,12 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
   }, [reveal]);
   useEffect(() => {
     if (!open || reveal === shown.current) return;
-    shown.current = reveal;
-    // jsdom has no scrollIntoView.
-    source.current?.scrollIntoView?.({ block: 'nearest' });
+    // After the opened fold is laid out; centred, so the line has room to grow. jsdom has no scrollIntoView.
+    const frame = requestAnimationFrame(() => {
+      shown.current = reveal;
+      source.current?.scrollIntoView?.({ block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [open, reveal]);
   const d: ModelDetail | null = detail.modelDetail?.id === model.id ? detail.modelDetail : null;
   // The daemon stores no time for a file check, so one answered here is the time it names; the stored time otherwise.
@@ -184,7 +187,7 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
               {d?.downloadDate && <When at={d.downloadDate} before="downloaded " />}
               {(d?.revision || d?.downloadDate) && checkedAt && ' · '}
               {checkedAt && <When at={checkedAt} before="files checked " />}
-              {report?.overall_health === 'healthy' && (
+              {report && checkVerdict(report) === 'intact' && (
                 <Icon icon={Check} size={12} className="ml-xs align-middle text-success" role="img" aria-hidden={false} aria-label="intact" />
               )}
             </span>

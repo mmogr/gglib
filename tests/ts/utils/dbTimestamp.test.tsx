@@ -180,7 +180,8 @@ describe('every place a database time is shown', () => {
       removeTag: vi.fn(async () => {}),
       isLoading: false,
     } satisfies ModelDetailState;
-    const report = { model_id: 3, overall_health: 'healthy' as const, shards: [], verified_at: SAVED };
+    const file = { index: 0, kind: { kind: 'shard' as const, number: 1, of: 1 }, file_path: 'a.gguf', health: { type: 'healthy' as const } };
+    const report = { model_id: 3, overall_health: 'healthy' as const, shards: [file], verified_at: SAVED };
     render(
       <ToastProvider>
         <Details model={model} detail={detail} loaded={false} onUpdateModel={vi.fn(async () => {})} onChanged={vi.fn()} verification={verification({ kind: 'verified', report })} reveal={0} />
