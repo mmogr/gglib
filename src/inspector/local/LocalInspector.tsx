@@ -7,9 +7,9 @@
  * The ⋯ menu's Load with options… and Load and pin, a launch-line token's
  * Change for this model…, and `?serve=1` (the native menu's Serve) open
  * the Load with options sheet in the inspector's place; the address is
- * read here, acted on once, and stripped. Until verify results move into
- * Details (I3) Verify files and Check for updates open the verification
- * dialog.
+ * read here, acted on once, and stripped. Verify files and Check for
+ * updates (offered for a model from Hugging Face) start the check at once
+ * and open Details on Source, where its line is.
  *
  * @module inspector/local/LocalInspector
  */
@@ -24,7 +24,6 @@ import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
 import { RESIDENCY_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
-import { VerificationModal } from '../../components/VerificationModal';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useSettings } from '../../hooks/useSettings';
@@ -51,6 +50,7 @@ import { useLoad } from './useLoad';
 import { useModelDetail } from './useModelDetail';
 import { useRetagModel } from './useRetagModel';
 import { useSdStatus } from './useSdStatus';
+import { useVerification } from './useVerification';
 
 export interface LocalInspectorProps {
   model: GgufModel;
@@ -81,7 +81,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
   const { confirm } = useConfirmContext();
   const { settings } = useSettings();
   const [profile, setProfile] = useState<string | null>(null);
-  const [verify, setVerify] = useState<'verify' | 'update' | null>(null);
+  const [reveal, setReveal] = useState(0);
   const [sheet, setSheet] = useState<SheetOpen | null>(null);
 
   const draws = model.imageFamily !== undefined;
@@ -104,6 +104,12 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
     void reloadExplain();
   }, [reloadDetail, reloadExplain]);
   const retag = useRetagModel({ modelId: model.id, reload: afterRetag, showToast, confirm });
+  const verification = useVerification(model.id, model.name);
+  /** Start a check, then open Details on Source, where its line is. */
+  const inSource = (start: () => void) => () => {
+    start();
+    setReveal((n) => n + 1);
+  };
 
   const tagged = (tag: string) => detail.tags.some((t) => t.toLowerCase() === tag);
 
@@ -138,8 +144,8 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
   const items: MenuItem[] = [
     { label: 'Load with options…', onPick: () => setSheet({ pin: false, origin: 'menu' }) },
     { label: 'Load and pin', onPick: () => setSheet({ pin: true, origin: 'menu' }) },
-    { label: 'Verify files', onPick: () => setVerify('verify'), gapBefore: true },
-    ...(model.hfRepoId ? [{ label: 'Check for updates', onPick: () => setVerify('update') }] : []),
+    { label: 'Verify files', onPick: inSource(verification.verify), gapBefore: true },
+    ...(model.hfRepoId ? [{ label: 'Check for updates', onPick: inSource(verification.checkUpdates) }] : []),
     {
       label: 'Re-detect tags',
       onPick: () => void retag.handleRetag(false),
@@ -261,9 +267,15 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
         onChangeToken={(focus) => setSheet({ pin: false, focus, origin: 'line' })}
       />
 
-      <Details model={model} detail={detail} loaded={loaded} onUpdateModel={onUpdateModel} onChanged={() => void explain.reload()} />
-
-      <VerificationModal modelId={model.id} modelName={model.name} open={verify !== null} onClose={() => setVerify(null)} mode={verify ?? 'verify'} />
+      <Details
+        model={model}
+        detail={detail}
+        loaded={loaded}
+        onUpdateModel={onUpdateModel}
+        onChanged={() => void explain.reload()}
+        verification={verification}
+        reveal={reveal}
+      />
     </div>
   );
 };

@@ -19,6 +19,7 @@ import ConversationListPanel from '../../../src/components/ConversationListPanel
 import { ModelMetadataGrid } from '../../../src/components/ModelInspectorPanel/components/ModelMetadataGrid';
 import { Details } from '../../../src/inspector/local/Details';
 import type { ModelDetailState } from '../../../src/inspector/local/useModelDetail';
+import type { Verification, VerifyStatus } from '../../../src/inspector/local/useVerification';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
 import type { ChatMessage, ConversationSummary } from '../../../src/services/transport';
 import type { ModelDetail } from '../../../src/types';
@@ -130,6 +131,17 @@ describe('every place a database time is shown', () => {
     expect(screen.getAllByText(shown)).toHaveLength(2);
   });
 
+  /** A verification in `status`, its actions inert. */
+  const verification = (status: VerifyStatus = { kind: 'idle' }): Verification => ({
+    status,
+    busy: false,
+    verify: vi.fn(),
+    checkUpdates: vi.fn(),
+    repairDamaged: vi.fn(async () => {}),
+    downloadChanged: vi.fn(async () => {}),
+    redownloadLatest: vi.fn(async () => {}),
+  });
+
   it("the inspector's Details: downloaded and files checked, exact on hover", () => {
     localStorage.setItem('gglib.inspector.details', 'open');
     const model = guiModel({ id: 3, hfRepoId: 'owner/repo' });
@@ -145,13 +157,38 @@ describe('every place a database time is shown', () => {
     } satisfies ModelDetailState;
     render(
       <ToastProvider>
-        <Details model={model} detail={detail} loaded={false} onUpdateModel={vi.fn(async () => {})} onChanged={vi.fn()} />
+        <Details model={model} detail={detail} loaded={false} onUpdateModel={vi.fn(async () => {})} onChanged={vi.fn()} verification={verification()} reveal={0} />
       </ToastProvider>,
     );
 
     const shown = new Date(INSTANT).toLocaleString();
     expect(screen.getByText(/^downloaded /)).toHaveAttribute('title', shown);
     expect(screen.getByText(/^files checked /)).toHaveAttribute('title', shown);
+    localStorage.removeItem('gglib.inspector.details');
+  });
+
+  it("the inspector's Details: a file check's own time, read as UTC, in place of the stored one", () => {
+    localStorage.setItem('gglib.inspector.details', 'open');
+    const model = guiModel({ id: 3, hfRepoId: 'owner/repo' });
+    const detail = {
+      modelDetail: { id: 3, metadata: {}, tags: [], lastUpdateCheck: '2026-01-01 00:00:00' } as unknown as ModelDetail,
+      tags: [],
+      newTagInput: '',
+      setNewTagInput: vi.fn(),
+      reload: vi.fn(async () => {}),
+      addTag: vi.fn(async () => {}),
+      removeTag: vi.fn(async () => {}),
+      isLoading: false,
+    } satisfies ModelDetailState;
+    const report = { model_id: 3, overall_health: 'healthy' as const, shards: [], verified_at: SAVED };
+    render(
+      <ToastProvider>
+        <Details model={model} detail={detail} loaded={false} onUpdateModel={vi.fn(async () => {})} onChanged={vi.fn()} verification={verification({ kind: 'verified', report })} reveal={0} />
+      </ToastProvider>,
+    );
+
+    expect(screen.getByText(/^files checked /)).toHaveAttribute('title', new Date(INSTANT).toLocaleString());
+    expect(screen.getByRole('img', { name: 'intact' })).toBeInTheDocument();
     localStorage.removeItem('gglib.inspector.details');
   });
 });
