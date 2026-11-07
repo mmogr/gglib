@@ -31,7 +31,10 @@ vi.mock('../../../src/services/downloadsEvents', () => ({
   cleanupDownloadEvents: vi.fn(),
   onDownloadEndings: vi.fn(() => () => {}),
 }));
-vi.mock('../../../src/services/transport', () => ({ getTransport: () => ({ getSettings: async () => ({}) }) }));
+// The daemon answers the window's reachability poll, so the shell is drawn, not the service-not-running screen.
+vi.mock('../../../src/services/transport', () => ({
+  getTransport: () => ({ getSettings: async () => ({}), getProxyStatus: async () => ({}) }),
+}));
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getSetupStatus: async () => ({ setupCompleted: true }),
 }));

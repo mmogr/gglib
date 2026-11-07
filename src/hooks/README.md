@@ -61,7 +61,7 @@ Custom React hooks for gglib GUI functionality.
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |
 | [`useToolSupportCache.ts`](useToolSupportCache.ts) | Whether a HuggingFace model supports tool calling, cached in memory and shared across components |
-| [`useDaemonReachable.ts`](useDaemonReachable.ts) | Whether the daemon answers at all — the state the tray popover used to confuse with a stopped proxy |
+| [`useDaemonReachable.ts`](useDaemonReachable.ts) | Whether the daemon answers at all — the state the tray popover used to confuse with a stopped proxy; the window's `ServiceGate` reads it too |
 | [`useProxyKey.ts`](useProxyKey.ts) | The proxy's API key, revealed each time a surface that presents it opens (ADR 0027): the dashboard stream, the tray panel's stream and Clear Cache |
 
 ### Utility Hooks

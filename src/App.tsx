@@ -11,6 +11,7 @@ import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { startMenuBridge } from "./app/menuBridge";
 import { createAppRouter } from "./app/router";
 import { Shell } from "./app/Shell";
+import { ServiceGate } from "./app/ServiceDown";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
@@ -65,7 +66,10 @@ export function AppContent() {
   return (
     <SettingsProvider showToast={showToast}>
       <>
-        <Shell />
+        {/* The shell while the daemon answers; the service-not-running screen while it does not. */}
+        <ServiceGate>
+          <Shell />
+        </ServiceGate>
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </>
     </SettingsProvider>

@@ -6,7 +6,9 @@
  * writing back what was stored, nothing written for a value already stored;
  * a refused write said under its field with what was typed kept; the API
  * key's Show, Copy, Replace (asked first), Clear and Undo; the restart
- * notes; and the interim Tools, Engines and About hosting today's panels.
+ * notes; the interim Tools hosting today's panel; and Engines' rows over
+ * the system checks (the rows and About are `settingsEngines` and
+ * `serviceDown`).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -23,7 +25,8 @@ vi.mock('../../../src/services/transport/api/settings', async () => {
   return { getSettings: transport.getSettings, updateSettings: transport.updateSettings, installProfileTemplates: vi.fn() };
 });
 vi.mock('../../../src/services/transport/api/proxy', () => ({ getLoopGuardTrips: vi.fn(async () => []) }));
-vi.mock('../../../src/places/settings/EngineCard', () => ({ EngineCard: ({ kind }: { kind: string }) => <p>engine card: {kind}</p> }));
+vi.mock('../../../src/places/settings/EngineRow', () => ({ EngineRow: ({ kind }: { kind: string }) => <p>engine row: {kind}</p> }));
+vi.mock('../../../src/places/settings/FasterDownloads', () => ({ FasterDownloads: () => <p>faster downloads</p> }));
 vi.mock('../../../src/places/settings/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => <p>system checks</p> }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
@@ -47,8 +50,8 @@ describe('the address', () => {
     ['endpoint', 'Endpoint', 'Port'],
     ['models', 'Models', 'Download queue size'],
     ['tools', 'Tools', 'Let MCP clients draw'],
-    ['engines', 'Engines', 'engine card: llama'],
-    ['about', 'About', 'Stop the daemon'],
+    ['engines', 'Engines', 'engine row: llama'],
+    ['about', 'About', 'Stop gglib…'],
   ])('/settings/%s opens %s', async (section, name, inside) => {
     renderApp(`/settings/${section}`);
     expect(heading()).toHaveTextContent(name);
@@ -366,23 +369,11 @@ describe('the interim sections', () => {
     expect(within(screen.getByRole('region', { name: 'This device' })).getByText('applies to all chats on this device')).toBeInTheDocument();
   });
 
-  it('Engines hosts an engine card for each engine and the system checks', () => {
+  it('Engines holds a row for each engine, Faster downloads, and the system checks', () => {
     renderApp('/settings/engines');
-    expect(screen.getByText('engine card: llama')).toBeInTheDocument();
-    expect(screen.getByText('engine card: stable_diffusion')).toBeInTheDocument();
+    expect(screen.getByText('engine row: llama')).toBeInTheDocument();
+    expect(screen.getByText('engine row: stable_diffusion')).toBeInTheDocument();
+    expect(screen.getByText('faster downloads')).toBeInTheDocument();
     expect(screen.getByText('system checks')).toBeInTheDocument();
-  });
-
-  it('About shows the build and stops the daemon only when asked', async () => {
-    renderApp('/settings/about');
-    const user = userEvent.setup();
-    expect(await screen.findByText('0.31.0 (abc1234)')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Stop the daemon' }));
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
-    expect(transport.shutdownDaemon).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Stop the daemon' }));
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stop' }));
-    await waitFor(() => expect(transport.shutdownDaemon).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Shutdown requested. This interface will stop responding.')).toBeInTheDocument();
   });
 });

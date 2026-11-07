@@ -39,10 +39,9 @@ Interim sections, each until the PR that replaces it:
 - **Tools** hosts today's `McpServersPanel` and its add and edit dialog over
   one list (ST-8) until S2 (`feat(gui)/settings-tools`); "This device" is
   the chat's per-device `AgentLimitsSection`.
-- **Engines** hosts today's `EngineCard`s until S3
-  (`feat(gui)/settings-engines-about`), and the system checks
-  (`DiagnosticsPanel`) until G1 (`feat(gui)/diagnostics-place`).
-- **About** shows the build and today's Stop the daemon until S3.
+- **Engines** keeps the system checks (`DiagnosticsPanel`) at its foot
+  until G1 (`feat(gui)/diagnostics-place`); their Download accelerator
+  repeats Faster downloads until then.
 - The loop guard's trips (`LoopGuardTripsPanel`) sit under Stop runaway
   loops until G1 moves them to Diagnostics › Live.
 
@@ -53,8 +52,8 @@ Interim sections, each until the PR that replaces it:
 | `EndpointSection.tsx` | Port, the API key, Bind address (the endpoint's), Allowed hosts (`hostsText`/`hostsFrom`), the prompt cache on disk and its budget, Model servers start at; What gglib does to requests: Repair broken tool calls, Stop runaway loops (with its trips), Cap sampling on agent runs, Let clients set sampling |
 | `ModelsSection.tsx` | The models folder, Download queue size, Context for models without their own, Model for gglib q, Image model for drawing (`imageChoices`), Sampling defaults, Profiles |
 | `ToolsSection.tsx` | The tool servers (interim), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, This device), Title prompt with Reset |
-| `EnginesSection.tsx` | An engine card for llama.cpp and for stable-diffusion.cpp, then the system checks (interim) |
-| `AboutSection.tsx` | The build, and Stop the daemon asked first, then "Shutdown requested" (interim) |
+| `EnginesSection.tsx` | A row for llama.cpp and for stable-diffusion.cpp, Faster downloads, then the system checks (interim) |
+| `AboutSection.tsx` | The build, Documentation (the native Help menu's address), and Stop gglib… asked first, then held as Stopping gglib… until the window's service-not-running screen takes over (`app/ServiceDown`); a refusal in the daemon's words |
 | `useFieldSave.ts` | One field's write: `useUndoableWrite` (nothing for the value stored, Undo for `UNDO_MS`, the refusal kept), `useSettingSave` (`{ [key]: value }` through the provider), `sameValue` |
 | `fields.tsx` | The fields that save themselves: `TextSetting` (a box, or a text area, with Reset where asked), `NumberSetting` (its spec's default, hint and range), `ToggleSetting` (its polarity and what it writes), `ChoiceSetting`; `useStored` reads a setting back under the name it writes |
 | `SettingField.tsx` | A field's label, control, hint row (`settingDescriptionId` for `aria-describedby`), restart note and save line |
@@ -66,14 +65,16 @@ Interim sections, each until the PR that replaces it:
 | `InferenceProfileEditor.tsx` | One profile's form, its fields unchanged (ST-5): name (checked as the server checks it), description, the sixteen numbers left blank to fall through, reasoning effort, Show in the model picker |
 | `Disclosure.tsx` | A ▸ line opening what it holds in place, closed when the section opens |
 | `notes.ts` | When a change takes effect, for the fields read when the endpoint turns on, when gglib starts, or when the desktop app starts, and the key's own |
-| `EngineCard.tsx` | One engine's card: what is installed and how, where it stands against its pin, install or update with progress, the CPU build's warning, the source build's command, a removal that waits for a running model (ST-11) |
-| `pinStanding.ts` | Where an engine's install stands against its pinned release, in the card's words, and whether to offer the update or send a source build to the terminal |
+| `EngineRow.tsx` | One engine's row: the release, the download or acceleration, prebuilt or built from source, and its state in one line; Install, Update to the pin… (asked first), ⋯ Reinstall (over a download only) and Remove… (asked first), every one disabled while a model runs on it with which to stop (ST-11); the CPU build's warning where an install is offered, a source build's command, the install's progress and how it ended; ▸ Details |
+| `EngineDetails.tsx` | An engine row's Details: the install record (release or built from, download or acceleration, date), the binary and what it reports, the model serving on it, where it stands against its pin; only what the status has |
+| `FasterDownloads.tsx` | `gglib config fast-downloads`: Off with Set up, On with ⋯ Turn off, each read back from the setup status; with no Python, the command that builds it with ⧉ and no Set up; a failure in the daemon's words |
+| `pinStanding.ts` | Where an engine's install stands against its pinned release, in the row's words, and whether to offer the update or send a source build to the terminal |
 | `DiagnosticsPanel.tsx` | `gglib config check-deps`, `paths` and `fast-downloads status` as one panel |
 | `useDiagnostics.ts` | State for the system checks |
 | `LoopGuardTripsPanel.tsx` | `gglib proxy trips`: per day and model, what the loop guard scanned and what it acted on |
 | `useLoopGuardTrips.ts` | The trips' one read when the panel opens, and a reload |
-| `BuildInfo.tsx` | The daemon's own build, read from `/api/version` |
-| `LabelledValue.tsx` | A label and its value, for the read-only rows of the cards and checks |
+| `BuildInfo.tsx` | The daemon's own build, read from `/api/version`: "gglib <display>", and "Working tree modified since this build" when its fingerprint is dirty |
+| `LabelledValue.tsx` | A label and its value, for an engine's Details |
 
 ## Words this folder says that Rust does not
 
@@ -96,6 +97,23 @@ library)"; "Sampling defaults", "None set", "Change…", "Save", "Cancel" and
 the form's caption; "Profiles", its sentence, "No profiles yet. Add one, or
 install the starter profiles.", "in model picker", "Edit", "More for
 <name>", "Delete…" and "Delete the profile "<name>"?", "Add profile", "Edit
-<name>"; the Title prompt's "Reset".
+<name>"; the Title prompt's "Reset". Engines: an engine's state
+"Installed", "Installed, not working", "Not installed" (no Rust state word;
+the CLI's `Status:` words), "prebuilt" / "built from source", "Pinned to
+<release>", "Install", "Update to <release>…" with "Update <product> to
+<release>?" and its sentence, "More for <product>", "Reinstall",
+"Remove…" with "Remove <product>?" and its sentence, "Stop <model>
+first.", "<product> <release> is installed.", "Removed <paths>." / "Nothing
+to remove: …", "Reading <product>…", "Details", the Details labels
+(Install record, "none, installed outside gglib", Release / Built from,
+Download / Acceleration, Downloaded / Built, Binary, Binary reports,
+Serving), `pinStanding`'s sentences, the source build's two sentences;
+"Faster downloads", its sentence, "On" / "Off" (no Rust state word),
+"Set up", "Setting up. This can take a minute.", "More for Faster
+downloads", "Turn off", "It needs Python 3.10 or newer. Once that is
+installed:", "Copy the command", "Copied the command.". About: "gglib
+<version>", "Working tree modified since this build", "Documentation",
+"Stop gglib…", "Stopping gglib…", "Stop gglib?" with its sentence and
+"Stop".
 
 <!-- module-docs:end -->
