@@ -11,6 +11,7 @@
 //! resolution and the forward pipeline. It authenticates with the key the
 //! endpoint demands and never returns it.
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -31,9 +32,10 @@ pub const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ProofOutcome {
-    /// The model the answer names, which is the one that answered. A
-    /// pinned endpoint refuses every other model, so a proof of one asks
-    /// for the pin.
+    /// The model that answered, by the Model ID a client sends for it when
+    /// the answer names a library model's file (llama-server names a model
+    /// by its file), else as the answer named it. A pinned endpoint refuses
+    /// every other model, so a proof of one asks for the pin.
     pub answered_by: String,
     /// The id the request named.
     pub asked_for: String,
@@ -108,6 +110,36 @@ pub async fn prove(
         asked_for: model.to_owned(),
         elapsed_ms: u64::try_from(begun.elapsed().as_millis()).unwrap_or(u64::MAX),
     })
+}
+
+/// The answer's model as a client names it.
+///
+/// llama-server names the model in its answer by the file it was started
+/// with, so a proof answered through the endpoint reads as a path. An answer
+/// that is one of `library`'s files (each given with the Model ID a client
+/// sends for it) is said as that Model ID; anything else is kept as it came.
+#[must_use]
+pub fn named_as_listed<'a>(
+    answered_by: &str,
+    library: impl IntoIterator<Item = (&'a Path, &'a str)>,
+) -> String {
+    library
+        .into_iter()
+        .find(|(file, _)| Path::new(answered_by) == *file)
+        .map_or_else(|| answered_by.to_owned(), |(_, id)| id.to_owned())
+}
+
+/// [`named_as_listed`] over the library: each model's file beside the
+/// Model ID a client sends for it.
+pub(crate) fn named_by_library(answered_by: &str, models: &[gglib_core::Model]) -> String {
+    let ids = crate::models::openai_ids(models);
+    named_as_listed(
+        answered_by,
+        models.iter().filter_map(|m| {
+            ids.get(&m.id)
+                .map(|id| (m.file_path.as_path(), id.as_str()))
+        }),
+    )
 }
 
 /// Poll `/health` until the listener answers, or `bind_timeout` passes.

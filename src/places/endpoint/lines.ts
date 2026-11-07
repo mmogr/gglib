@@ -5,8 +5,9 @@
  *
  * Every fact is the proxy's (`DashboardSnapshot`): a resident's state and
  * its flag line, an active request's prompt progress, the queue, the
- * second slot's headroom, what gglib did to a request in the proxy's own
- * words (`Intervention.word`), the counters. State words are
+ * second slot's room in the daemon's own sentence (`secondary_slot.detail`),
+ * what gglib did to a request in the proxy's own words
+ * (`Intervention.word`), the counters. State words are
  * `components/status/words.ts`'s. The sentences around them are this
  * place's own, listed in its README.
  *
@@ -17,7 +18,7 @@ import { RESIDENCY_WORDS } from '../../components/status/words';
 import { rateWords, requestRate } from '../../readings/throughput';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 import type { ResidencyState } from '../../types/generated/ResidencyState';
-import { formatCount, formatDuration, formatMemorySize } from '../../utils/format';
+import { formatCount } from '../../utils/format';
 
 /** One loaded model as its row says it. */
 export interface LoadedRow {
@@ -61,18 +62,28 @@ export function loadedRows(snapshot: DashboardSnapshot | null): LoadedRow[] {
   });
 }
 
+/** A wait in whole seconds as `gglib proxy dashboard` says it: "4s", "1m 5s". */
+function waitWords(ms: number): string {
+  const secs = Math.floor(ms / 1000);
+  return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}
+
 /** One line per model with requests queued for a slot: who, how many, how long the oldest has waited. */
 export function queuedLines(snapshot: DashboardSnapshot | null): string[] {
   return (snapshot?.admission.queued ?? []).map(
     (q) =>
-      `${q.model_name} ${RESIDENCY_WORDS.waiting.toLowerCase()} for a slot · ${q.waiting} ${q.waiting === 1 ? 'request' : 'requests'} · ${formatDuration(q.oldest_wait_ms / 1000)}`,
+      `${q.model_name} ${RESIDENCY_WORDS.waiting.toLowerCase()} for a slot · ${q.waiting} ${q.waiting === 1 ? 'request' : 'requests'} · ${waitWords(q.oldest_wait_ms)}`,
   );
 }
 
-/** "Room for one more, about 9.0 GiB" while the second slot is free and its headroom known; else `null`. */
+/**
+ * The daemon's sentence for the room a second model has ("Room for one
+ * more, about 9.0 GiB."), while the second slot is free and its headroom
+ * known; else `null`.
+ */
 export function roomLine(snapshot: DashboardSnapshot | null): string | null {
-  const headroom = snapshot?.admission.secondary_slot.headroom_bytes;
-  return headroom == null ? null : `Room for one more, about ${formatMemorySize(headroom)}`;
+  const slot = snapshot?.admission.secondary_slot;
+  return slot?.headroom_bytes == null ? null : slot.detail;
 }
 
 /** One recent request as Recent says it. */
@@ -102,7 +113,10 @@ export function recentRows(snapshot: DashboardSnapshot | null): RecentRow[] {
         key: `${r.recorded_at_secs}-${i}`,
         time: new Date(r.recorded_at_secs * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         model: r.model_name,
-        figures: [r.completion_tokens != null ? `${formatCount(r.completion_tokens)} tokens` : null, rate !== null ? rateWords(rate) : null]
+        figures: [
+          r.completion_tokens != null ? `${formatCount(r.completion_tokens)} ${r.completion_tokens === 1 ? 'token' : 'tokens'}` : null,
+          rate !== null ? rateWords(rate) : null,
+        ]
           .filter(Boolean)
           .join(' · '),
         done: r.interventions.map((i) => i.word).join(' · '),

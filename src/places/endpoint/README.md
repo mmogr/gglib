@@ -10,7 +10,7 @@ names a model (`app/paths` `inspectorSubject`; × drops only `inspect`).
 
 Every fact is the daemon's: the endpoint's state, address, key rule and pin
 from `services/proxyRegistry`; the residents, their flag lines, the queue,
-the second slot's headroom, the requests in flight and recorded, and what
+the second slot's room in the daemon's sentence (`secondary_slot.detail`), the requests in flight and recorded, and what
 gglib did to each (`Intervention.word`, the words `gglib proxy dashboard`
 prints) from the one dashboard stream (`places/library/useResidency`
 `useEndpointDashboard`); the recipes and the proof from
@@ -39,7 +39,7 @@ your models while it's off. Loaded models stay in memory.", "Start when
 gglib launches", "Copy", "Test it", "Turn on", "Turn off", "Unpin", "Show",
 "Hide", "Endpoint address copied", "Nothing loaded. An app loads a model by
 asking for it by name, or load one now.", "Load a model…", "<model> waiting
-for a slot · N requests · 4s", "Room for one more, about 9.0 GiB", the row
+for a slot · N requests · 4s", "Testing…", the row
 ⋯'s "Chat with it", "Change launch options…", "Pin the endpoint to it",
 "Show log", "Unload"; "Serves", "Every model", "Only <model>"; "Apps on this
 Mac · N requests now" / "· no requests now", "No app has used it yet.",
@@ -48,8 +48,16 @@ is `readings/throughput`'s, which no Rust computes); Activity's "Prompt cache
 71% reused", "N tool calls repaired", "N loop-guard trips", "N client
 sampling fields ignored", "Nothing to report yet.", "Clear prompt cache",
 "Live numbers ›", "All ›"; and ⋯'s "Live numbers", "Endpoint settings…".
-Durations are `formatDuration`'s ("4s", "4m 10s"), where the CLI prints
-"4s" and "4m 10s" too but from its own function.
+The queue's wait is whole seconds, rounded down, as `gglib proxy dashboard`
+prints it ("4s", "1m 5s"); the inspector's "loaded 4m 10s" is
+`formatDuration`'s.
+
+Connect a client's Model ID starts at the inspected model, else the pinned
+one, else the last loaded, else the default model setting, else the
+library's smallest chat model, so Test it never asks the endpoint to load
+the biggest. ⋯ Live numbers and Clear prompt cache are offered only while
+they can act (the endpoint up; Clear also its key revealed), and a row's
+⋯ Pin waits while a pin change is on its way.
 
 | File | Role |
 |------|------|

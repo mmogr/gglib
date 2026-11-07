@@ -13,8 +13,12 @@
  * Endpoint settings… (General, where the endpoint's fields are today).
  *
  * Connect a client's Model ID starts at the inspected model, else the
- * pinned one, else the last loaded, else the library's first; Test it asks
- * for that model, or for the pin when the endpoint is pinned.
+ * pinned one, else the last loaded, else the default model (the setting
+ * `gglib q` uses), else the library's smallest chat model, so Test it
+ * never asks the endpoint to load the biggest one; Test it asks for that
+ * model, or for the pin when the endpoint is pinned. Live numbers and
+ * Clear prompt cache are offered only while they can act: the endpoint
+ * up, and for Clear its key revealed.
  *
  * @module places/endpoint/EndpointPlace
  */
@@ -28,6 +32,7 @@ import { ConnectClient } from '../../components/ConnectClient';
 import { ProxyDashboardModal } from '../../components/ProxyDashboardModal';
 import { Icon } from '../../components/ui/Icon';
 import { useToastContext } from '../../contexts/ToastContext';
+import { useSettings } from '../../hooks/useSettings';
 import { usePairedModels } from '../../hooks/usePairedModels';
 import { useServers, type ServerViewModel } from '../../hooks/useServers';
 import { Inspector } from '../../inspector/Inspector';
@@ -58,6 +63,7 @@ export default function EndpointPlace() {
   const { servers, stopServer } = useServers();
   const paired = usePairedModels();
   const { status: remote } = useRemoteState();
+  const { settings } = useSettings();
   const [picked, setPicked] = useState<number | null>(null);
   const [live, setLive] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -71,8 +77,13 @@ export default function EndpointPlace() {
   const chatModels = models.filter((m) => m.imageFamily === undefined);
   const pinnedId = chatModels.find((m) => m.name === facts.pinnedModel)?.id ?? null;
   const lastLoaded = [...slots].sort((a, b) => a.resident_for_secs - b.resident_for_secs)[0]?.model_id ?? null;
-  const modelId = picked ?? inspected ?? pinnedId ?? lastLoaded ?? chatModels[0]?.id ?? null;
+  const settled = chatModels.find((m) => m.id === settings?.defaultModelId)?.id ?? null;
+  const smallest = [...chatModels].sort((a, b) => a.sizeBytes - b.sizeBytes)[0]?.id ?? null;
+  const modelId = picked ?? inspected ?? pinnedId ?? lastLoaded ?? settled ?? smallest;
   const up = facts.state === 'on' || facts.state === 'pinned';
+  const canLive = up && dash.port !== null;
+  // A dialog asked for while it could not open does not open later by itself.
+  if (live && !canLive) setLive(false);
 
   const unload = (id: number) => void stopServer(id).catch((err) => showToast(formatError(err), 'error'));
   // Clear presents the proxy's key, so it waits for the reveal.
@@ -109,8 +120,8 @@ export default function EndpointPlace() {
             name="More"
             label={<Icon icon={MoreHorizontal} size={14} />}
             items={[
-              { label: 'Live numbers', onPick: () => setLive(true) },
-              { label: 'Clear prompt cache', onPick: () => void clear() },
+              { label: 'Live numbers', onPick: () => setLive(true), disabled: !canLive },
+              { label: 'Clear prompt cache', onPick: () => void clear(), disabled: !canClear },
               { label: 'Endpoint settings…', onPick: () => navigate(settingsAt(location, 'general'), { replace: true }), gapBefore: true },
             ]}
           />
@@ -118,7 +129,7 @@ export default function EndpointPlace() {
         <div className="min-h-0 flex-1 overflow-y-auto pb-md">
           <Header facts={facts} actions={actions} onTest={() => void actions.test(facts.pinnedModel !== null ? null : modelId)} />
           {up && snapshot && (
-            <Loaded snapshot={snapshot} inspected={inspected} onUnload={unload} onPin={(id) => void actions.serve(id)} />
+            <Loaded snapshot={snapshot} inspected={inspected} onUnload={unload} onPin={(id) => void actions.serve(id)} pinning={actions.busy !== null} />
           )}
           {up && (
             <Serves loaded={loaded} library={chatModels} pinnedModel={facts.pinnedModel} disabled={actions.busy !== null} onServe={(id) => void actions.serve(id)} />

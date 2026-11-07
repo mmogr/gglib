@@ -318,3 +318,25 @@ async fn an_image_model_is_refused_before_any_request() {
     }
     proxy.stop().await.expect("stop");
 }
+
+/// llama-server names the model in its answer by the file it was started
+/// with; the proof says it as the Model ID of the library model that file
+/// belongs to, and keeps an answer that is no library file as it came.
+#[test]
+fn an_answer_naming_a_library_file_is_said_as_its_model_id() {
+    let qwen = std::path::PathBuf::from("/Users/m/models/Qwen3-4B-Instruct-2507-Q8_0.gguf");
+    let gemma = std::path::PathBuf::from("/Users/m/models/gemma-3-4b-it-Q4_K_M.gguf");
+    let library = [
+        (gemma.as_path(), "Gemma-3-4B-It"),
+        (qwen.as_path(), "Qwen3-4B-Instruct-2507"),
+    ];
+    assert_eq!(
+        named_as_listed("/Users/m/models/Qwen3-4B-Instruct-2507-Q8_0.gguf", library),
+        "Qwen3-4B-Instruct-2507"
+    );
+    assert_eq!(
+        named_as_listed("/elsewhere/other.gguf", library),
+        "/elsewhere/other.gguf"
+    );
+    assert_eq!(named_as_listed("qwen3-8b", library), "qwen3-8b");
+}

@@ -5,9 +5,10 @@
  */
 export type ProofOutcome = { 
 /**
- * The model the answer names, which is the one that answered. A
- * pinned endpoint refuses every other model, so a proof of one asks
- * for the pin.
+ * The model that answered, by the Model ID a client sends for it when
+ * the answer names a library model's file (llama-server names a model
+ * by its file), else as the answer named it. A pinned endpoint refuses
+ * every other model, so a proof of one asks for the pin.
  */
 answered_by: string, 
 /**

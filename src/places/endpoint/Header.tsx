@@ -8,6 +8,9 @@
  * revealed only when asked, EP-5). Off: `○ Off`, Turn on, what being off
  * means, and Start when gglib launches (the stored setting). Starting: ◌.
  *
+ * Test it says "Testing…" at once (a proof waits while the model loads),
+ * then who answered or why not.
+ *
  * A failed start or stop is said in the daemon's words (EP-1), whether it
  * names a port in use, llama.cpp missing or anything else: nothing here
  * detects those. Shared on your network is not said: the status reaches a
@@ -16,7 +19,7 @@
  * @module places/endpoint/Header
  */
 
-import type { FC } from 'react';
+import { useState, type FC } from 'react';
 import { KeyReveal } from '../../components/ConnectClient';
 import { StatusMark, type MarkKind } from '../../components/status/StatusMark';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../../components/status/words';
@@ -41,6 +44,7 @@ interface HeaderProps {
 export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
   const { showToast } = useToastContext();
   const { settings, save } = useSettings();
+  const [saveError, setSaveError] = useState<string | null>(null);
   const state: EndpointState = actions.busy === 'on' || actions.busy === 'serve' ? 'starting' : facts.state;
   const up = state === 'on' || state === 'pinned';
 
@@ -105,8 +109,17 @@ export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
             label="Start when gglib launches"
             checked={settings?.proxyAutostart === true}
             disabled={settings === null}
-            onChange={(e) => void save({ proxyAutostart: e.target.checked }).catch(() => {})}
+            onChange={(e) => {
+              setSaveError(null);
+              void save({ proxyAutostart: e.target.checked }).catch((err: unknown) => setSaveError(formatError(err)));
+            }}
           />
+          {saveError !== null && (
+            <p role="alert" className="m-0 flex items-baseline gap-xs text-xs text-text">
+              <StatusMark kind="failed" label="Failed" />
+              {saveError}
+            </p>
+          )}
         </div>
       )}
 
@@ -114,6 +127,12 @@ export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
         <p role="alert" className="m-0 flex items-baseline gap-xs pl-lg text-xs text-text">
           <StatusMark kind="failed" label="Failed" />
           {actions.error}
+        </p>
+      )}
+      {actions.testing && (
+        <p role="status" className="m-0 flex items-baseline gap-xs pl-lg text-xs text-text-secondary">
+          <StatusMark kind="changing" label="Testing" />
+          Testing…
         </p>
       )}
       {actions.proof !== null && (

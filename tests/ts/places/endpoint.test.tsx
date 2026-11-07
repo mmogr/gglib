@@ -34,6 +34,7 @@ const transport = vi.hoisted(() => ({
   revealSecret: vi.fn(async (): Promise<string | null> => null),
   updateSettings: vi.fn(async (u: Record<string, unknown>) => u),
 }));
+const settingsAnswer = vi.hoisted(() => ({ value: { proxyAutostart: false } as Record<string, unknown> }));
 const dashboard = vi.hoisted(() => ({
   send: null as ((s: unknown) => void) | null,
   clear: vi.fn(async (_h: string, _p: number, _k?: string | null) => ({ status: 'ok', message: 'Prompt cache cleared' })),
@@ -45,7 +46,7 @@ vi.mock('../../../src/services/transport', async () => {
     ...actual,
     getTransport: () => ({
       ...transport,
-      getSettings: vi.fn(async () => ({ proxyAutostart: false })),
+      getSettings: vi.fn(async () => settingsAnswer.value),
       subscribe: vi.fn(() => () => {}),
       onEventStreamOpen: vi.fn(() => () => {}),
     }),
@@ -75,7 +76,9 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
 vi.mock('../../../src/components/ProxyDashboardModal', () => ({
   ProxyDashboardModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div role="dialog" aria-label="Live numbers" /> : null),
 }));
-vi.mock('../../../src/pages/ChatPage', () => ({ default: () => <div data-testid="chat-page" /> }));
+vi.mock('../../../src/pages/ChatPage', () => ({
+  default: ({ serverPort }: { serverPort?: number }) => <div data-testid="chat-page" data-port={serverPort} />,
+}));
 
 import { ENDPOINT_WORDS, KEY_WORDS, RESIDENCY_WORDS } from '../../../src/components/status/words';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
@@ -122,6 +125,7 @@ describe('the endpoint place', () => {
     transport.revealSecret.mockImplementation(async () => null);
     transport.getProxyClients.mockImplementation(async () => null);
     dashboard.clear.mockClear();
+    settingsAnswer.value = { proxyAutostart: false };
     resetRemoteState();
   });
   afterEach(() => {
@@ -149,6 +153,15 @@ describe('the endpoint place', () => {
       expect(box).not.toBeChecked();
       await user.click(box);
       await waitFor(() => expect(transport.updateSettings).toHaveBeenCalledWith({ proxyAutostart: true }));
+    });
+
+    it('a failed save of Start when gglib launches says the daemon\'s message', async () => {
+      transport.updateSettings.mockRejectedValueOnce(new Error('settings are read-only'));
+      const { user } = renderEndpoint(DOWN);
+      const box = await screen.findByRole('checkbox', { name: 'Start when gglib launches' });
+      await waitFor(() => expect(box).toBeEnabled());
+      await user.click(box);
+      await waitFor(() => expect(alert()).toHaveTextContent(/^settings are read-only$/));
     });
 
     it('a failed start says the daemon\'s message as it said it', async () => {
@@ -219,11 +232,17 @@ describe('the endpoint place', () => {
             residentSlot(2, 'Gemma-3-4B-It', { state: 'working', launch: { ...residentSlot(2, 'x').launch!, state: 'working' } }),
           ],
           {
-            queued: [{ model_name: 'Llama-3.2-3B', waiting: 2, oldest_wait_ms: 4_000 }],
-            secondary_slot: { state: 'available', detail: '', headroom_bytes: 9 * 1024 ** 3 },
+            // 4.9 s: whole seconds, rounded down, as `gglib proxy dashboard` says it.
+            queued: [{ model_name: 'Llama-3.2-3B', waiting: 2, oldest_wait_ms: 4_900 }],
+            // The daemon's own sentence (`SecondarySlotStatus::available_with`).
+            secondary_slot: { state: 'available', detail: 'Room for one more, about 9.0 GiB.', headroom_bytes: 9 * 1024 ** 3 },
           },
         ),
-        active_connections: [activeConnection({ model_name: 'Gemma-3-4B-It', phase: 'processing_prompt', prompt_processed: 61, prompt_total: 100 })],
+        active_connections: [
+          activeConnection({ model_name: 'Gemma-3-4B-It', phase: 'processing_prompt', prompt_processed: 61, prompt_total: 100 }),
+          // Generating keeps its prompt's totals (`mark_generating` moves only the phase): not a reading.
+          activeConnection({ id: 'conn-2', model_name: 'Qwen3-4B', phase: 'generating', prompt_processed: 100, prompt_total: 100 }),
+        ],
       });
 
       expect(loadedRow('Qwen3-4B')).toHaveTextContent('Q4_K_M · 32K · q8 KV · 2.5 GB');
@@ -232,12 +251,12 @@ describe('the endpoint place', () => {
       expect(within(loadedRow('Gemma-3-4B-It')).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '61');
       expect(within(loadedRow('Qwen3-4B')).queryByRole('progressbar')).not.toBeInTheDocument();
       expect(screen.getByText('Llama-3.2-3B waiting for a slot · 2 requests · 4s')).toBeInTheDocument();
-      expect(screen.getByText('Room for one more, about 9.0 GiB')).toBeInTheDocument();
+      expect(screen.getByText('Room for one more, about 9.0 GiB.')).toBeInTheDocument();
     });
 
     it('says no room when the second slot has no headroom to say', async () => {
       renderEndpoint();
-      await frame(admitted([residentSlot(1, 'Qwen3-4B')]));
+      await frame(admitted([residentSlot(1, 'Qwen3-4B')], { secondary_slot: { state: 'no_headroom', detail: 'Room for one more, but not now.' } }));
       expect(loadedRow('Qwen3-4B')).toBeInTheDocument();
       expect(screen.queryByText(/^Room for one more/)).not.toBeInTheDocument();
     });
@@ -288,12 +307,26 @@ describe('the endpoint place', () => {
       expect(at()).toBe('/models/1/log');
     });
 
-    it('Chat with it opens a chat on the model', async () => {
+    it('Chat with it opens a chat on the model, handed the slot\'s port before the server list has heard of it', async () => {
       const { user, at } = renderEndpoint();
-      await frame(admitted([residentSlot(1, 'Qwen3-4B')]));
+      await frame(admitted([residentSlot(1, 'Qwen3-4B', { port: 9431 })]));
       await user.click(within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'More for Qwen3-4B' }));
       await user.click(screen.getByRole('menuitem', { name: 'Chat with it' }));
       expect(at()).toBe('/chat/1');
+      expect(await screen.findByTestId('chat-page')).toHaveAttribute('data-port', '9431');
+    });
+
+    it('Pin waits while a pin change is on its way', async () => {
+      let stopped = () => {};
+      transport.stopProxy.mockImplementationOnce(() => new Promise<void>((resolve) => (stopped = resolve)));
+      const { user } = renderEndpoint();
+      await frame(admitted([residentSlot(1, 'Qwen3-4B')]));
+      const more = () => within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'More for Qwen3-4B' });
+      await user.click(more());
+      await user.click(screen.getByRole('menuitem', { name: 'Pin the endpoint to it' }));
+      await user.click(more());
+      expect(screen.getByRole('menuitem', { name: 'Pin the endpoint to it' })).toBeDisabled();
+      await act(async () => stopped());
     });
   });
 
@@ -318,6 +351,37 @@ describe('the endpoint place', () => {
       await user.selectOptions(serves, 'Every model');
       await waitFor(() => expect(transport.startProxy).toHaveBeenCalledWith({}));
       expect(transport.stopProxy.mock.invocationCallOrder[0]).toBeLessThan(transport.startProxy.mock.invocationCallOrder[0]);
+    });
+  });
+
+  describe('pin and unpin restart the endpoint', () => {
+    it('starts pinned only once the stop has landed', async () => {
+      let stopped = () => {};
+      transport.stopProxy.mockImplementationOnce(() => new Promise<void>((resolve) => (stopped = resolve)));
+      const { user } = renderEndpoint();
+      await frame();
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Serves' }), 'Only Qwen3-4B');
+      expect(transport.stopProxy).toHaveBeenCalledTimes(1);
+      expect(transport.startPinnedProxy).not.toHaveBeenCalled();
+
+      await act(async () => stopped());
+      await waitFor(() => expect(transport.startPinnedProxy).toHaveBeenCalledWith({ model_id: 1 }));
+    });
+
+    it('a pinned start that fails after the stop says the daemon\'s message as it said it', async () => {
+      transport.startPinnedProxy.mockRejectedValueOnce(new Error('Qwen3-4B is not a chat model'));
+      const { user } = renderEndpoint();
+      await frame();
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Serves' }), 'Only Qwen3-4B');
+      await waitFor(() => expect(alert()).toHaveTextContent(/^Qwen3-4B is not a chat model$/));
+    });
+
+    it('an unpin whose start fails after the stop says the daemon\'s message as it said it', async () => {
+      transport.startProxy.mockRejectedValueOnce(new Error('port 8080 is in use'));
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
+      await user.click(screen.getByRole('button', { name: 'Unpin' }));
+      await waitFor(() => expect(alert()).toHaveTextContent(/^port 8080 is in use$/));
+      expect(transport.stopProxy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -349,6 +413,71 @@ describe('the endpoint place', () => {
       expect(within(webui).getByText('gglib')).toBeInTheDocument();
     });
 
+    it('names the pinned model before the last loaded one', async () => {
+      renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Gemma-3-4B-It' });
+      await frame(admitted([residentSlot(1, 'Qwen3-4B')]));
+      await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(2));
+    });
+
+    it('with nothing loaded, names the default model, else the smallest, never the first', async () => {
+      const big = guiModel({ id: 3, name: 'Qwen3.8-27B', sizeBytes: 29 * 1024 ** 3 });
+      const small = guiModel({ id: 4, name: 'Qwen3-0.6B', sizeBytes: 1024 ** 3 });
+      const mid = guiModel({ id: 5, name: 'Gemma-3-4B', sizeBytes: 3 * 1024 ** 3 });
+      const open = async (defaultModelId: number | null) => {
+        settingsAnswer.value = { proxyAutostart: false, defaultModelId };
+        transport.getProxyClients.mockClear();
+        library.models = [big, small, mid];
+        act(() => applyProxyStatus(UP));
+        initModelEvents();
+        const view = renderApp('/endpoint');
+        await frame();
+        return view;
+      };
+      const first = await open(5);
+      await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(5));
+      first.unmount();
+      cleanupModelEvents();
+
+      await open(null);
+      await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(4));
+    });
+
+    it('drops an answer for a model no longer picked', async () => {
+      let late: (v: unknown) => void = () => {};
+      transport.getProxyClients.mockImplementation((id) =>
+        id === 2 ? new Promise((resolve) => (late = resolve)) : Promise.resolve(answer('Qwen3-4B', 1)),
+      );
+      const { user } = renderEndpoint(UP, '/endpoint?inspect=model:2');
+      const connect = screen.getByRole('region', { name: 'Connect a client' });
+      await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(2));
+      await within(connect).findByRole('option', { name: 'Qwen3-4B' });
+      await user.selectOptions(within(connect).getByRole('combobox', { name: 'Model to connect with' }), 'Qwen3-4B');
+      expect(await within(connect).findByText('Qwen3-4B', { selector: 'code' })).toBeInTheDocument();
+
+      await act(async () => late(answer('Gemma-3-4B-It', 2)));
+      expect(within(connect).getByText('Qwen3-4B', { selector: 'code' })).toBeInTheDocument();
+      expect(within(connect).queryByText('Gemma-3-4B-It', { selector: 'code' })).not.toBeInTheDocument();
+    });
+
+    it("drops the last model's recipes as soon as another is picked", async () => {
+      transport.getProxyClients.mockImplementation((id) => (id === 2 ? Promise.resolve(answer('Gemma-3-4B-It', 2)) : new Promise(() => {})));
+      const { user } = renderEndpoint(UP, '/endpoint?inspect=model:2');
+      const connect = screen.getByRole('region', { name: 'Connect a client' });
+      expect(await within(connect).findByText('Gemma-3-4B-It', { selector: 'code' })).toBeInTheDocument();
+      await user.selectOptions(within(connect).getByRole('combobox', { name: 'Model to connect with' }), 'Qwen3-4B');
+      // Qwen's answer has not come: its Model ID is the library's, and Gemma's recipes are gone.
+      expect(within(connect).getByText('Qwen3-4B', { selector: 'code' })).toBeInTheDocument();
+      expect(within(connect).queryByText('Gemma-3-4B-It', { selector: 'code' })).not.toBeInTheDocument();
+      expect(within(connect).queryByRole('group', { name: 'Open WebUI' })).not.toBeInTheDocument();
+    });
+
+    it("says why the recipes could not be read, in the daemon's words", async () => {
+      transport.getProxyClients.mockRejectedValue(new Error('the endpoint is off'));
+      renderEndpoint(UP, '/endpoint?inspect=model:1');
+      const connect = screen.getByRole('region', { name: 'Connect a client' });
+      expect(await within(connect).findByText('the endpoint is off')).toBeInTheDocument();
+    });
+
     it('with a key required, a key line names the stored secret, never a key', async () => {
       transport.getProxyClients.mockImplementation(async () => answer('Qwen3-4B', 1, 'required'));
       renderEndpoint({ ...UP, key: 'required' }, '/endpoint?inspect=model:1');
@@ -367,6 +496,13 @@ describe('the endpoint place', () => {
       await user.click(screen.getByRole('button', { name: 'Test it' }));
       expect(transport.proveProxy).toHaveBeenCalledWith(1);
       expect(await screen.findByRole('status')).toHaveTextContent('answered in 1.4s by Qwen3-4B');
+    });
+
+    it('says Testing… at once, while the proof waits for the model to load', async () => {
+      transport.proveProxy.mockImplementationOnce(() => new Promise(() => {}));
+      const { user } = renderEndpoint(UP, '/endpoint?inspect=model:1');
+      await user.click(screen.getByRole('button', { name: 'Test it' }));
+      expect(screen.getByRole('status')).toHaveTextContent(/^Testing…$/);
     });
 
     it('says why the first request did not complete, in the daemon\'s words', async () => {
@@ -416,7 +552,9 @@ describe('the endpoint place', () => {
       const at = (n: number) => 1_800_000_000 + n * 60;
       await frame({
         recent_requests: [
-          ...[0, 1, 2, 3, 4, 5].map((n) => recentRequest({ model_name: `m${n}`, recorded_at_secs: at(n) })),
+          ...[0, 1, 2, 3].map((n) => recentRequest({ model_name: `m${n}`, recorded_at_secs: at(n) })),
+          recentRequest({ model_name: 'm4', recorded_at_secs: at(4), completion_tokens: 1, generation_ms: 0 }),
+          recentRequest({ model_name: 'm5', recorded_at_secs: at(5) }),
           recentRequest({
             model_name: 'Qwen3-4B',
             recorded_at_secs: at(6),
@@ -433,7 +571,10 @@ describe('the endpoint place', () => {
       expect(rows.map((r) => r.children[1].textContent)).toEqual(['Qwen3-4B', 'm5', 'm4', 'm3', 'm2']);
       expect(rows[0]).toHaveTextContent('812 tokens · 34 t/s');
       expect(rows[0]).toHaveTextContent('Repaired a tool call · Trimmed 4 old messages');
-      expect(rows[1].textContent).not.toMatch(/tokens|t\/s/);
+      expect(rows[1].textContent).not.toMatch(/token|t\/s/);
+      // One token, written in no time: singular, and no rate.
+      expect(rows[2]).toHaveTextContent(/1 token(?!s)/);
+      expect(rows[2].textContent).not.toMatch(/t\/s/);
 
       await user.click(screen.getByRole('button', { name: 'All ›' }));
       expect(screen.getByRole('dialog', { name: 'Live numbers' })).toBeInTheDocument();
@@ -478,8 +619,26 @@ describe('the endpoint place', () => {
       // The dashboard waits for the key too, so Activity is not drawn; ⋯ is.
       expect(screen.queryByRole('group', { name: 'Activity' })).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'More' }));
-      await user.click(screen.getByRole('menuitem', { name: 'Clear prompt cache' }));
+      expect(screen.getByRole('menuitem', { name: 'Clear prompt cache' })).toBeDisabled();
       expect(dashboard.clear).not.toHaveBeenCalled();
+    });
+
+    it('while off, ⋯ offers neither Live numbers nor Clear, and a dialog never opens by itself later', async () => {
+      const { user } = renderEndpoint();
+      await frame();
+      await user.click(screen.getByRole('button', { name: 'More' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Live numbers' }));
+      expect(screen.getByRole('dialog', { name: 'Live numbers' })).toBeInTheDocument();
+
+      act(() => applyProxyStatus(DOWN));
+      expect(screen.queryByRole('dialog', { name: 'Live numbers' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'More' }));
+      expect(screen.getByRole('menuitem', { name: 'Live numbers' })).toBeDisabled();
+      expect(screen.getByRole('menuitem', { name: 'Clear prompt cache' })).toBeDisabled();
+
+      act(() => applyProxyStatus(UP));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Turn off' })).toBeInTheDocument());
+      expect(screen.queryByRole('dialog', { name: 'Live numbers' })).not.toBeInTheDocument();
     });
 
     it.each([
@@ -531,13 +690,16 @@ describe('the endpoint place', () => {
       renderEndpoint(UP, '/endpoint?inspect=model:1');
       await frame({
         ...admitted([residentSlot(1, 'Qwen3-4B', { resident_for_secs: 250, launch: { ...residentSlot(1, 'x').launch!, state: 'working' } })]),
+        // Oldest first, as the proxy sends them: the newest with a rate is said.
         recent_requests: [
           recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000 }),
+          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 50, generation_ms: 1_000 }),
           recentRequest({ model_name: 'Gemma-3-4B-It', completion_tokens: 10, generation_ms: 1_000 }),
+          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 1, generation_ms: 0 }),
         ],
       });
       const inspector = screen.getByRole('complementary', { name: 'Inspector' });
-      expect(within(inspector).getByText(`${RESIDENCY_WORDS.working} · 34 t/s · loaded 4m 10s`)).toBeInTheDocument();
+      expect(within(inspector).getByText(`${RESIDENCY_WORDS.working} · 50 t/s · loaded 4m 10s`)).toBeInTheDocument();
     });
   });
 });

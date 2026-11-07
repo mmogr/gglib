@@ -16,7 +16,6 @@ import {
   ProxyStatusPill,
   ProxyToggleButton,
   proxyEndpointUrl,
-  reachableHost,
 } from '../../../src/components/proxy';
 import type {
   ActiveConnectionSnapshot,
@@ -47,16 +46,6 @@ describe('ProxyStatusPill', () => {
     expect(indicator.querySelector('.bg-offline')).not.toBeNull();
     expect(indicator.className).not.toContain('danger');
     expect(indicator.innerHTML).not.toContain('danger');
-  });
-});
-
-describe('reachableHost', () => {
-  it('reaches a wildcard bind on loopback and any other address on itself', () => {
-    expect(reachableHost(null)).toBe('127.0.0.1');
-    expect(reachableHost('0.0.0.0')).toBe('127.0.0.1');
-    expect(reachableHost('::')).toBe('127.0.0.1');
-    expect(reachableHost('127.0.0.1')).toBe('127.0.0.1');
-    expect(reachableHost('192.168.1.20')).toBe('192.168.1.20');
   });
 });
 

@@ -35,9 +35,11 @@ interface LoadedProps {
   inspected: number | null;
   onUnload: (modelId: number) => void;
   onPin: (modelId: number) => void;
+  /** A pin change is on its way: Pin waits for it. */
+  pinning: boolean;
 }
 
-const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapshot' | 'inspected'>> = ({ row, selected, onUnload, onPin }) => {
+const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapshot' | 'inspected'>> = ({ row, selected, onUnload, onPin, pinning }) => {
   const navigate = useNavigate();
   const inspect = () => navigate(paths.endpointInspect(row.modelId));
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -59,7 +61,7 @@ const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapsho
       onClick={inspect}
       onKeyDown={onKeyDown}
       className={cn(
-        'group relative flex min-h-[52px] cursor-pointer items-center gap-md rounded-base px-md py-sm outline-none',
+        'group relative mx-sm flex min-h-[52px] cursor-pointer items-center gap-md rounded-base px-sm py-sm outline-none',
         'hover:bg-background-hover focus-visible:bg-background-hover',
         selected && 'bg-surface-hover hover:bg-surface-hover',
       )}
@@ -93,7 +95,7 @@ const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapsho
           items={[
             { label: 'Chat with it', onPick: chat },
             { label: 'Change launch options…', onPick: () => navigate(paths.endpointServe(row.modelId)) },
-            { label: 'Pin the endpoint to it', onPick: () => onPin(row.modelId) },
+            { label: 'Pin the endpoint to it', onPick: () => onPin(row.modelId), disabled: pinning },
             { label: 'Show log', onPick: () => navigate(paths.log(row.modelId)), gapBefore: true },
             { label: 'Unload', onPick: unload, gapBefore: true, danger: true },
           ]}
@@ -103,7 +105,7 @@ const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapsho
   );
 };
 
-export const Loaded: FC<LoadedProps> = ({ snapshot, inspected, onUnload, onPin }) => {
+export const Loaded: FC<LoadedProps> = ({ snapshot, inspected, onUnload, onPin, pinning }) => {
   const navigate = useNavigate();
   const rows = loadedRows(snapshot);
   const room = roomLine(snapshot);
@@ -114,7 +116,7 @@ export const Loaded: FC<LoadedProps> = ({ snapshot, inspected, onUnload, onPin }
       ) : (
         <div role="listbox" aria-label="Loaded models">
           {rows.map((row) => (
-            <Row key={row.modelId} row={row} selected={row.modelId === inspected} onUnload={onUnload} onPin={onPin} />
+            <Row key={row.modelId} row={row} selected={row.modelId === inspected} onUnload={onUnload} onPin={onPin} pinning={pinning} />
           ))}
         </div>
       )}
