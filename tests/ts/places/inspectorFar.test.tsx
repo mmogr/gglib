@@ -3,9 +3,11 @@
  * machine and its reach in the remote status's own word, the summary its
  * row carries, Load and Chat only as that machine lists them and disabled
  * while it is away (saying why) or its rows could not be read, a failed
- * read as one line with Retry, Load reading the model again until
- * "● Loaded on desk", a Load's wait and failure kept to the model it was
- * pressed for, and Details with what that machine stores and no path.
+ * read as one line with Retry, Load reading the model and the machine's
+ * rows again until "● Loaded on desk", a Load's wait and failure kept to
+ * the model it was pressed for, "sees images" only for a row listed with
+ * vision, and Details with what that machine stores (a ref whole, no
+ * revision when none) and no path.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -18,6 +20,8 @@ const far = vi.hoisted(() => ({
   failReads: 0,
   listFails: false,
   load: null as null | (() => Promise<unknown>),
+  capabilities: ['vision'] as string[] | undefined,
+  revision: { kind: 'sha', value: 'a'.repeat(40), short: 'aaaaaaa' } as unknown,
 }));
 const transport = vi.hoisted(() => ({
   listModels: vi.fn(async () => []),
@@ -83,11 +87,13 @@ describe('the inspector, a model on the paired machine', () => {
     far.actions = ['list', 'detail', 'chat', 'load'];
     far.failReads = 0;
     far.listFails = false;
+    far.capabilities = ['vision'];
+    far.revision = { kind: 'sha', value: 'a'.repeat(40), short: 'aaaaaaa' };
     serving.clear();
     for (const mock of Object.values(transport)) mock.mockClear();
     transport.listPairedModels.mockImplementation(async () => {
       if (far.listFails) throw new Error('tunnel dropped');
-      const group = pairedModels([farEntry('qwen3', 3, { quantization: 'Q4_K_M', capabilities: ['vision'] }), farEntry('llama', 4)]);
+      const group = pairedModels([farEntry('qwen3', 3, { quantization: 'Q4_K_M', capabilities: far.capabilities }), farEntry('llama', 4)]);
       return { ...group, actions: far.actions as ModelAction[] };
     });
     transport.getPairedModel.mockImplementation(async (id: number) => {
@@ -95,7 +101,7 @@ describe('the inspector, a model on the paired machine', () => {
         far.failReads -= 1;
         throw new Error('no such model');
       }
-      return { detail: farDetail(id, id === 3 ? 'qwen3' : 'llama', { hfRepoId: 'Qwen/Qwen3-8B-GGUF', isServing: serving.has(id), bitsPerWeight: 4.85, revision: { kind: 'sha', value: 'a'.repeat(40), short: 'aaaaaaa' } }) };
+      return { detail: farDetail(id, id === 3 ? 'qwen3' : 'llama', { hfRepoId: 'Qwen/Qwen3-8B-GGUF', isServing: serving.has(id), bitsPerWeight: 4.85, revision: far.revision as never }) };
     });
     transport.loadPairedModel.mockImplementation(async (id: number) => {
       if (far.load) return far.load();
@@ -128,6 +134,27 @@ describe('the inspector, a model on the paired machine', () => {
 
     act(() => applyRemoteStatus(AWAY));
     expect(within(inspector()).getByText('Away')).toBeInTheDocument();
+  });
+
+  it.each([[undefined], [['embeddings']]])('says nothing of images for a row that machine lists with capabilities %j', async (capabilities) => {
+    far.capabilities = capabilities;
+    renderFar();
+    expect(await within(inspector()).findByText('Q4_K_M · qwen3 - 8B parameters, Q4_K_M')).toBeInTheDocument();
+    expect(within(inspector()).queryByText(/sees images/)).not.toBeInTheDocument();
+  });
+
+  it('shows a ref whole, never cut to a sha, and no revision when none was recorded', async () => {
+    far.revision = { kind: 'ref', value: 'main', short: 'main' };
+    const view = renderFar();
+    expect(await within(inspector()).findByText('main')).toHaveAttribute('title', 'main');
+    view.unmount();
+    cleanupModelEvents();
+
+    far.revision = undefined;
+    renderFar();
+    await within(inspector()).findByText('Qwen/Qwen3-8B-GGUF');
+    expect(within(inspector()).queryByText('aaaaaaa')).not.toBeInTheDocument();
+    expect(within(inspector()).queryByText('main')).not.toBeInTheDocument();
   });
 
   it('offers only the actions that machine lists', async () => {
@@ -177,11 +204,15 @@ describe('the inspector, a model on the paired machine', () => {
   it('Load loads it there, reads it again, then says Loaded on desk and offers Chat, not Load', async () => {
     renderFar();
     const user = userEvent.setup();
-    await user.click(await within(inspector()).findByRole('button', { name: 'Load on desk' }));
+    const load = await within(inspector()).findByRole('button', { name: 'Load on desk' });
+    const listedBefore = transport.listPairedModels.mock.calls.length;
+    await user.click(load);
 
     expect(await within(inspector()).findByText('Loaded on desk')).toBeInTheDocument();
     expect(transport.loadPairedModel).toHaveBeenCalledWith(3);
     expect(transport.getPairedModel).toHaveBeenCalledTimes(2);
+    // The machine's rows are read again too.
+    expect(transport.listPairedModels.mock.calls.length).toBeGreaterThan(listedBefore);
     expect(within(inspector()).queryByRole('button', { name: 'Load on desk' })).not.toBeInTheDocument();
     await user.click(within(inspector()).getByRole('button', { name: 'Chat' }));
     expect(await screen.findByTestId('chat-page')).toHaveTextContent('Chatting with');

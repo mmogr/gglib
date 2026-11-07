@@ -178,8 +178,8 @@ $ gglib model unload 3
 Hugging Face. `search <query>` and `browse` (popular repositories) find a
 model; `download <repo>` fetches it, `-q <QUANT>` picks a quantization, and
 `--list-quants` lists the ones a repository offers, each with whether it
-fits this machine, judged as a download without `-q` picks one (the same
-listing the GUI's table shows).
+fits this machine, judged as a download without `-q` picks one, and ★ on
+the one it would take (the same listing the GUI's table shows).
 
 <!-- snippet: model-search -->
 ```console

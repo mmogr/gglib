@@ -23,7 +23,7 @@ import { FarInspector } from './far/FarInspector';
 import { HfInspector } from './hf/HfInspector';
 import { LocalInspector, type LocalInspectorProps } from './local/LocalInspector';
 import { LogInspector } from './log/LogInspector';
-import { MAX_WIDTH, MIN_WIDTH, useInspectorWidth } from './useInspectorWidth';
+import { MIN_WIDTH, useInspectorWidth } from './useInspectorWidth';
 
 export type InspectorProps = Omit<LocalInspectorProps, 'model'> & {
   /** The paired machine's rows, for its model. */
@@ -34,7 +34,7 @@ export const Inspector: FC<InspectorProps> = ({ paired, ...local }) => {
   const subject = inspectorSubject(useLocation());
   const { loading } = useModelLibrary();
   const model = useModel(subject?.kind === 'model' ? subject.id : null);
-  const { width, edge } = useInspectorWidth(subject?.kind === 'model' && subject.log);
+  const { width, max, edge } = useInspectorWidth(subject?.kind === 'model' && subject.log);
   if (subject === null) return null;
 
   let body;
@@ -52,7 +52,7 @@ export const Inspector: FC<InspectorProps> = ({ paired, ...local }) => {
         aria-label="Inspector width"
         aria-valuenow={width}
         aria-valuemin={MIN_WIDTH}
-        aria-valuemax={MAX_WIDTH}
+        aria-valuemax={max}
         tabIndex={0}
         className="absolute inset-y-0 left-0 z-20 w-1 cursor-col-resize touch-none hover:bg-border focus-visible:bg-border focus-visible:outline-none"
         {...edge}

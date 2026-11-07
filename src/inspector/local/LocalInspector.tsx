@@ -42,6 +42,7 @@ import { formatError } from '../../utils/errors';
 import { getHuggingFaceUrl } from '../../utils/format';
 import { componentRoleLabel } from '../../utils/imageFamily';
 import { LoadOptionsSheet, type SheetOpen } from '../LoadOptionsSheet';
+import type { LogFrom } from '../log/LogInspector';
 import { LogLink } from './LogLink';
 import type { Update } from './Change';
 import { Details } from './Details';
@@ -247,7 +248,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
               <StatusMark kind="failed" label="Failed" />
               {`${load.error.action === 'unload' ? "Didn't unload" : "Didn't load"}: ${load.error.message}`}
               {load.error.action === 'load' && (
-                <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => navigate(paths.log(model.id))}>
+                <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => navigate(paths.log(model.id), { state: { failedLoad: true } satisfies LogFrom })}>
                   Show log
                 </Button>
               )}
@@ -282,6 +283,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
         model={model}
         detail={detail}
         loaded={loaded}
+        port={port}
         onUpdateModel={onUpdateModel}
         onChanged={() => void explain.reload()}
         verification={verification}

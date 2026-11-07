@@ -21,6 +21,7 @@ fn variant(label: &str, role: GgufFileRole, size_bytes: u64) -> HfQuantization {
         projector: None,
         fit: None,
         fit_word: None,
+        picked: false,
     }
 }
 
@@ -53,10 +54,11 @@ fn listing(quantizations: Vec<HfQuantization>) -> HfQuantizationsResponse {
 }
 
 #[test]
-fn each_model_is_listed_with_its_size_shards_and_fit_in_the_daemons_words() {
+fn each_model_is_listed_with_its_size_shards_fit_and_the_pick_in_the_daemons_words() {
     let mut sharded = model("Q8_0", 4096 * MIB, VariantFit::Tight { ctx: 4096 });
     sharded.is_sharded = true;
     sharded.shard_count = Some(2);
+    sharded.picked = true;
     let text = quant_listing(&listing(vec![
         model("Q4_K_M", 1536 * MIB, VariantFit::Fits { ctx: Some(32_768) }),
         sharded,
@@ -73,7 +75,7 @@ fn each_model_is_listed_with_its_size_shards_and_fit_in_the_daemons_words() {
         text,
         "✓ Found 3 variants:\n\
          \x20 Q4_K_M (1536.0 MiB) — fits with 32K\n\
-         \x20 Q8_0 (4096.0 MiB) (2 shards) — tight at 4K\n\
+         \x20 Q8_0 (4096.0 MiB) (2 shards) — tight at 4K ★ gglib's pick\n\
          \x20 F16 (16384.0 MiB) — unknown: this machine's memory could not be read\n\
          \n\
          To download a specific variant, use:\n\

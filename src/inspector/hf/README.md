@@ -13,9 +13,12 @@ this model (the Hub's description, counts and tags), closed.
 one row per variant: its label, its size (its files on hover) and the
 daemon's fit verdict in its own words (`fit_word`), always shown. The size
 and the fit are the weights alone, judged as `gglib model download` picks a
-variant. One row is selected, the largest variant that fits to begin with
-(else the smallest), and only it carries `[■ Download]`, which queues that
-variant. A draft or helper (`role: Sidecar`, its header's word) is dimmed,
+variant. gglib's pick carries ★: the variant `gglib model download <repo>`
+takes without `-q`, which the daemon marks (`picked`, from `pick_variant`
+over the heads the listing read; the CLI's `--list-quants` marks it too).
+It is selected to begin with and scrolled into view; only the selected row
+carries `[■ Download]`, which queues that variant. Sizes are the library's
+(`formatSize`, two decimals). A draft or helper (`role: Sidecar`, its header's word) is dimmed,
 "not a model on its own", and cannot be selected; a projector is no row.
 While the daemon says the queue is full, Download is disabled and one line
 says why. A repo with no model variant says "This repo has no GGUF files."
@@ -24,7 +27,7 @@ The summary comes with the pick that opened the repo (the navigation's
 state), or is read by the address on a reload; the listing and the tool
 reading are read once per repo.
 
-Words with no Rust twin: "Pick a size", "Quant", "Size", "Fit", "not a model
+Words with no Rust twin: "Pick a size", "Quant", "Size", "Fit", "gglib's pick" (the CLI prints the same), "not a model
 on its own", "Brings <file> (<size>) for images", "The download queue is
 full; Download waits for room.", "This repo has no GGUF files.", "Reading
 the repo's files…", "About this model", "<N>% confident", and the companion

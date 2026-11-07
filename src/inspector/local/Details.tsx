@@ -7,8 +7,9 @@
  * updates open Details and bring Source into view), the name and quant label (click
  * to edit, one field per save), architecture, trained context, tags,
  * abilities, whether the template reads reasoning effort, measured speed
- * when a benchmark exists, and the raw GGUF metadata. A `dl` with a fixed
- * label column.
+ * when a benchmark exists, the loaded server's llama-server port ("port
+ * 9001, internal": clients use the endpoint), and the raw GGUF metadata.
+ * A `dl` with a fixed label column.
  *
  * @module inspector/local/Details
  */
@@ -108,6 +109,8 @@ interface DetailsProps {
   model: GgufModel;
   detail: ModelDetailState;
   loaded: boolean;
+  /** The loaded server's llama-server port: the endpoint's own business, shown for reading its log by hand. */
+  port?: number;
   onUpdateModel: Update;
   /** A saved field or tag may change the launch: read it again. */
   onChanged: () => void;
@@ -116,7 +119,7 @@ interface DetailsProps {
   reveal: number;
 }
 
-export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel, onChanged, verification, reveal }) => {
+export const Details: FC<DetailsProps> = ({ model, detail, loaded, port, onUpdateModel, onChanged, verification, reveal }) => {
   const { showToast } = useToastContext();
   const [open, setOpen] = useState(remembered);
   const source = useRef<HTMLDivElement>(null);
@@ -223,6 +226,7 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, onUpdateModel
           <ReasoningSupport support={d?.reasoningEffortSupport} isRunning={loaded} onRecheck={() => void detail.reload()} isRechecking={detail.isLoading} />
         </Item>
         {speed != null && <Item label="Measured speed">{`${speed.toFixed(1)} tok/s`}</Item>}
+        {port !== undefined && <Item label="llama-server">{`port ${port}, internal`}</Item>}
       </dl>
       {metadata.length > 0 && (
         <details className="group/raw mt-sm">

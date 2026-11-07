@@ -41,11 +41,9 @@ The window is a sidebar (`src/sidebar/`) beside the place the address names
 is the library's rows, with the inspector beside them while it has a subject:
 
 1. **Library rows** (left): every model, one search, add new models
-2. **Inspector** (right, `src/inspector/`): how a model runs, Load, Chat, Details
+2. **Inspector** (right, `src/inspector/`): one subject the address names: a model here (how it runs, Load, Chat, Details), its log, the paired machine's model, or a Hugging Face repo
 
-A chat is its own address, with tab switching:
-1. **Chat View**: Conversation List (left) + Messages Panel (right)
-2. **Console View**: the same conversation rail and notebook head, with Server Info Panel (left) + Live Logs (right) below
+A chat is its own address: the conversation list (left) and the messages panel (right). A model's log is its inspector's (`/models/:id/log`), not a view of the chat.
 
 ## Core Components
 

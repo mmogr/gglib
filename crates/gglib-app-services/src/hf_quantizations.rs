@@ -1,7 +1,10 @@
 //! A repository's variants as the `HuggingFace` browser shows them.
 
-use gglib_core::domain::{HeadMetadata, MissingInput, VariantFit};
-use gglib_core::download::{GgufFileRole, MemoryFit};
+use async_trait::async_trait;
+use gglib_core::domain::{GgufMetadata, HeadMetadata, MissingInput, VariantFit};
+use gglib_core::download::{
+    Contender, FitJudge, GgufFileRole, HeadFacts, MemoryFit, VariantReader, pick_variant,
+};
 use gglib_core::ports::HfQuantInfo;
 use gglib_core::ports::huggingface::largest_projector;
 
@@ -50,10 +53,67 @@ pub(crate) fn quantizations_response(
                     fit,
                     role: q.role.unwrap_or_default(),
                     label: q.label,
+                    picked: false,
                 }
             })
             .collect(),
     }
+}
+
+/// The heads a listing read, as the picker reads a repository: a head is
+/// all it has of each variant, so a whole header is that head's pairs.
+struct ListedHeads<'a> {
+    heads: Vec<Option<&'a HeadMetadata>>,
+    is_image: bool,
+}
+
+#[async_trait]
+impl VariantReader for ListedHeads<'_> {
+    async fn head(&self, index: usize) -> Option<HeadFacts> {
+        let head = (*self.heads.get(index)?)?;
+        Some(HeadFacts {
+            head: head.clone(),
+            image: self.is_image,
+        })
+    }
+
+    async fn header(&self, index: usize) -> Option<GgufMetadata> {
+        self.heads
+            .get(index)
+            .copied()
+            .flatten()
+            .map(|h| h.metadata.clone())
+    }
+}
+
+/// The index in `quants` of the variant `gglib model download` would take,
+/// chosen by `pick_variant` over the heads already read, against
+/// `budget_bytes`; `None` for a repository with no weights.
+pub(crate) async fn listed_pick(
+    quants: &[(HfQuantInfo, Option<HeadMetadata>)],
+    is_image: bool,
+    budget_bytes: Option<u64>,
+) -> Option<usize> {
+    let contenders: Vec<Contender> = quants
+        .iter()
+        .map(|(q, _)| Contender {
+            size: q.total_size,
+            role: q.role,
+        })
+        .collect();
+    let reader = ListedHeads {
+        heads: quants.iter().map(|(_, head)| head.as_ref()).collect(),
+        is_image,
+    };
+    let judge = budget_bytes.map(|budget_bytes| MemoryFit { budget_bytes });
+    pick_variant(
+        &contenders,
+        &reader,
+        judge.as_ref().map(|j| j as &dyn FitJudge),
+    )
+    .await
+    .ok()
+    .map(|pick| pick.index)
 }
 
 /// Whether a model whose weights take `weights_bytes` fits in
@@ -308,6 +368,36 @@ mod tests {
         );
     }
 
+    /// The listing marks the variant the download would take: the largest
+    /// quantized one that fits, not a larger full-precision one; the
+    /// smallest with no budget; none in a repository of helpers alone.
+    #[tokio::test]
+    async fn the_pick_is_the_downloads_from_the_heads_read() {
+        let typed = |file_type: u32| {
+            let mut head = shaped_head(true);
+            head.metadata.file_type = Some(gglib_core::domain::FileType(file_type));
+            // A 64 KiB head stops inside the tokenizer: the picker takes its
+            // pairs for the header, and reads nothing more.
+            head.complete = false;
+            Some(head)
+        };
+        let listed = vec![
+            (quant("Q4_K_M", 1, 4 << 30), typed(15)),
+            (quant("Q8_0", 1, 7 << 30), typed(7)),
+            (quant("BF16", 1, 8 << 30), typed(32)),
+            (quant("F32", 1, 64 << 30), typed(0)),
+        ];
+        assert_eq!(listed_pick(&listed, false, Some(32 << 30)).await, Some(1));
+        assert_eq!(listed_pick(&listed, false, None).await, Some(0));
+
+        let mut helper = quant("MTP", 1, 1 << 30);
+        helper.role = Some(GgufFileRole::Sidecar);
+        assert_eq!(
+            listed_pick(&[(helper, None)], false, Some(32 << 30)).await,
+            None
+        );
+    }
+
     /// An image model is judged by its files alone, with no context to
     /// serve at, whether or not its companions could be looked up.
     #[test]
@@ -372,5 +462,9 @@ mod tests {
                 size_bytes: 7
             })
         );
+        // The route marks the picker's one choice, a model's weights.
+        let picked: Vec<_> = listed.quantizations.iter().filter(|q| q.picked).collect();
+        assert_eq!(picked.len(), 1);
+        assert_eq!(picked[0].role, GgufFileRole::Weights);
     }
 }

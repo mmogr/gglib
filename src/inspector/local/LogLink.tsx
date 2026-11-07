@@ -1,6 +1,7 @@
 /**
- * `▸ Log` on a loaded model's inspector: the server's last line, in
- * tertiary mono, and a click opens the Log subject (`/models/:id/log`).
+ * `▸ Log` on a loaded model's inspector: the label opens the Log subject
+ * (`/models/:id/log`), and the server's last line follows it in tertiary
+ * mono, cut with an ellipsis at the inspector's edge (whole on hover).
  *
  * @module inspector/local/LogLink
  */
@@ -20,15 +21,21 @@ export const LogLink: FC<{ modelId: number; port: number }> = ({ modelId, port }
   const tail = logs.at(-1);
   const last = tail && Anser.ansiToText(tail.line).trim();
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => navigate(paths.log(modelId))}
-      className="h-auto min-w-0 justify-start gap-xs p-0 text-left text-xs font-normal"
-    >
-      <Icon icon={ChevronRight} size={12} />
-      <span className="shrink-0 font-semibold text-text">Log</span>
-      {last && <span className="min-w-0 truncate font-mono text-text-muted">{last}</span>}
-    </Button>
+    <div role="group" aria-label="Log" className="flex min-w-0 items-center gap-sm text-xs">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-auto shrink-0 gap-xs p-0 text-xs"
+        leftIcon={<Icon icon={ChevronRight} size={12} />}
+        onClick={() => navigate(paths.log(modelId))}
+      >
+        Log
+      </Button>
+      {last && (
+        <span className="min-w-0 flex-1 truncate font-mono text-text-muted" title={last}>
+          {last}
+        </span>
+      )}
+    </div>
   );
 };

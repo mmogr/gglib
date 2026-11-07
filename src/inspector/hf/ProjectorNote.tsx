@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import { HfQuantization } from '../../types';
-import { formatBytes } from '../../utils/format';
+import { formatSize } from '../../utils/format';
 
 /**
  * The projector a download of the selected quantization brings, in one
@@ -14,7 +14,7 @@ export const ProjectorNote: FC<{ quantization: HfQuantization }> = ({ quantizati
   if (!projector) return null;
 
   const fileName = projector.file_path.split('/').pop() || projector.file_path;
-  const size = formatBytes(projector.size_bytes);
+  const size = formatSize(projector.size_bytes);
   return (
     <p
       data-testid="projector-note"

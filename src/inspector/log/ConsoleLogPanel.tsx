@@ -16,11 +16,16 @@ export function sinceFirst(ms: number): string {
   return `${Math.floor(t / 60_000)}:${String(seconds).padStart(2, '0')}.${String(t % 1000).padStart(3, '0')}`;
 }
 
+/** llama.cpp's own stamp at the start of a line: `0.00.046.817`. */
+const STAMPED = /^\d+\.\d{2}\.\d{3}\.\d{3}\s/;
+
 /**
  * Renders a single log line with ANSI color support, after its time since
- * the first line shown.
+ * the first line shown, unless llama.cpp stamped the line itself: one
+ * time per line.
  */
 const LogLine: FC<{ entry: ServerLogEntry; first: number }> = ({ entry, first }) => {
+  const stamped = STAMPED.test(Anser.ansiToText(entry.line));
   // Parse ANSI codes and convert to HTML
   const html = Anser.ansiToHtml(Anser.escapeForHtml(entry.line), {
     use_classes: true,
@@ -28,7 +33,7 @@ const LogLine: FC<{ entry: ServerLogEntry; first: number }> = ({ entry, first })
 
   return (
     <div className="console-log-line flex gap-sm">
-      <span className="shrink-0 select-none text-text-muted tabular-nums">{sinceFirst(entry.timestamp - first)}</span>
+      {!stamped && <span className="shrink-0 select-none text-text-muted tabular-nums">{sinceFirst(entry.timestamp - first)}</span>}
       <span className="min-w-0" dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );
@@ -64,7 +69,8 @@ interface ConsoleLogPanelProps extends Omit<LogHeaderProps, 'controls'> {
 /**
  * The live llama-server output of one port, with ANSI color support. It
  * follows new output until paused (by the switch, or by scrolling away from
- * the end); Following again jumps to the end. ⧉ copies every line, and
+ * the end, which the switch then says; back at the end, it follows again);
+ * Following jumps to the end. ⧉ copies every line, and
  * ⋯ Clear view empties the view (the daemon keeps the log).
  */
 const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort, ...header }) => {
@@ -73,33 +79,36 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort, ...header }) =>
   });
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const isUserScrollingRef = useRef(false);
+  // Paused by scrolling away from the end, not by the switch.
+  const pausedByScroll = useRef(false);
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
-    if (isAutoScroll && scrollContainerRef.current && !isUserScrollingRef.current) {
+    if (isAutoScroll && scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [logs, isAutoScroll]);
 
-  // Detect user scroll to disable auto-scroll temporarily
+  // Scrolling away from the end pauses, and the switch says Paused;
+  // scrolling back to it follows again, unless the switch paused it.
   const handleScroll = useCallback(() => {
     if (!scrollContainerRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
 
-    // If user scrolled away from bottom, pause auto-scroll
     if (!isAtBottom && isAutoScroll) {
-      isUserScrollingRef.current = true;
-    } else if (isAtBottom) {
-      isUserScrollingRef.current = false;
+      pausedByScroll.current = true;
+      setIsAutoScroll(false);
+    } else if (isAtBottom && pausedByScroll.current) {
+      pausedByScroll.current = false;
+      setIsAutoScroll(true);
     }
-  }, [isAutoScroll]);
+  }, [isAutoScroll, setIsAutoScroll]);
 
   const follow = useCallback((on: boolean) => {
     setIsAutoScroll(on);
-    isUserScrollingRef.current = false;
+    pausedByScroll.current = false;
 
     // If enabling auto-scroll, jump to bottom
     if (on && scrollContainerRef.current) {

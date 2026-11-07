@@ -133,6 +133,10 @@ pub struct HfQuantization {
     /// `fit` in the words the CLI prints: "fits with 32K", "too big",
     /// "unknown: …". `None` with `fit`.
     pub fit_word: Option<String>,
+    /// Whether it is the variant `gglib model download <repo>` takes when
+    /// none is asked for, as the picker chooses from the heads this listing
+    /// read (no further header is read for it). At most one is.
+    pub picked: bool,
 }
 
 /// A projector file of a `HuggingFace` repository.

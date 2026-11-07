@@ -66,8 +66,8 @@ dialog). The per-file health words are those `gglib model verify
 | `LaunchLine.tsx` | The launch line in mono, each argument a button opening a note with its reason and source, and Change for this model… where the sheet holds its decision; a token the person chose underlined |
 | `commandLine.ts` | Pure: `commandLine`, `argText` and `shellToken`, the command line as `LaunchPlan::command_line` writes it |
 | `rows.ts` | Pure: the decision labels, the rows of a plan, a row's value and hover, the caption, the fit sentence and Context note, the Sampling and Reasoning lines, and whether the person set them |
-| `Details.tsx` | Details ▸: file, source (with the verification line and the last file check), name and quant label (click to edit), architecture, trained context, tags, abilities, reasoning support, measured speed, raw GGUF metadata; open or closed remembered per viewer (the far model's Details share its fold, `Item` and `When`) |
-| `LogLink.tsx` | `▸ Log` on a loaded model: the server's last line in tertiary mono, opening `/models/:id/log` |
+| `Details.tsx` | Details ▸: file, source (with the verification line and the last file check), name and quant label (click to edit), architecture, trained context, tags, abilities, reasoning support, measured speed, the loaded server's llama-server port ("port 9001, internal"), raw GGUF metadata; open or closed remembered per viewer (the far model's Details share its fold, `Item` and `When`) |
+| `LogLink.tsx` | `▸ Log` on a loaded model: the label opens `/models/:id/log`, the server's last line follows it in tertiary mono, cut with an ellipsis |
 | `SourceStatus.tsx` | The line under Source a file check or update check writes: progress and bar, the answer and its action, the file list opened from it, a refusal with Retry |
 | `useVerification.ts` | Each model's file check and update check, held per model outside the inspector: the `verification` stream's progress, the daemon's answers, a later run overtaking an earlier, and the confirmed repair, changed-files download and re-download |
 | `Tags.tsx` | The tags as chips with ×, and a field that adds one |
