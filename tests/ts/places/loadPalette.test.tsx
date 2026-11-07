@@ -4,27 +4,32 @@
  * (or a click) with the model's id and nothing typed, opens Load with
  * options on ⌥⏎, offers no model already loaded, says each row's fit and
  * unload from its explanation, reads those lazily (the highlighted row
- * first, at most three at once, once per open, an answer to a closed open
- * dropped), says "fit unknown" for a failed read, offers the joined
- * machine's models where they may load, and closes on Esc with focus back
- * on its button. The unload sentence is pinned to the CLI by
+ * first, then the six rows the scroll has reached, at most three at once
+ * across opens, once per open, an answer to a closed open dropped), says
+ * "fit unknown" for a failed read, keeps its highlight on a row as rows come
+ * and go, offers the joined machine's models where they may load (and says
+ * why not: away, not read, no Load), and closes on Esc with focus back on
+ * its button, or on a click outside. The unload sentence is pinned to the CLI by
  * `contracts/unloadReason.test.ts`.
  *
  * The transport is a fake; each explain read waits until the test answers it.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
-const far = vi.hoisted(() => ({ group: null as unknown }));
+const far = vi.hoisted(() => ({ group: null as unknown, fails: false }));
 const transport = vi.hoisted(() => ({
   listModels: vi.fn(async () => library.models),
   listServers: vi.fn(async () => [] as unknown[]),
   getDownloadQueue: vi.fn(async () => null),
-  listPairedModels: vi.fn(async () => far.group),
+  listPairedModels: vi.fn(async () => {
+    if (far.fails) throw new Error('tunnel dropped');
+    return far.group;
+  }),
   loadPairedModel: vi.fn(async (_id: number) => ({})),
   getModelDetail: vi.fn(async () => null),
   serveModel: vi.fn(async (_c: unknown) => ({ port: 9001 })),
@@ -113,17 +118,21 @@ const fitting = (plan: Partial<LaunchPlan> = {}) => launchExplanation(samplingEx
 const FIT_WORDS = 'Fits this Mac with 32K context, of 128K trained.';
 const UNLOAD_WORDS = 'Unloads Qwen3-30B-A3B first: it would not fit beside it.';
 
+/** Play a dashboard frame in which the models `loaded` names are resident. */
+const residents = (loaded: number[]) =>
+  act(() =>
+    dashboard.send?.(
+      dashboardSnapshot({ admission: { ...dashboardSnapshot().admission, slots: loaded.map((id) => residentSlot(id, `Model ${id}`)) } }),
+    ),
+  );
+
 async function renderPalette(models: GgufModel[], loaded: number[] = []) {
   library.models = models;
   act(() => applyProxyStatus(UP));
   initModelEvents();
   const view = { ...renderApp('/endpoint'), user: userEvent.setup() };
   await waitFor(() => expect(dashboard.send).not.toBeNull());
-  act(() =>
-    dashboard.send?.(
-      dashboardSnapshot({ admission: { ...dashboardSnapshot().admission, slots: loaded.map((id) => residentSlot(id, `Model ${id}`)) } }),
-    ),
-  );
+  residents(loaded);
   // The library has been read: the palette offers what it lists.
   await waitFor(() => expect(transport.listModels).toHaveBeenCalled());
   await act(async () => {});
@@ -151,6 +160,9 @@ describe('the Load palette', () => {
     explain.auto = null;
     explain.reads = 0;
     far.group = null;
+    far.fails = false;
+    transport.listModels.mockImplementation(async () => library.models);
+    transport.loadPairedModel.mockImplementation(async () => ({}));
     resetRemoteState();
   });
   afterEach(() => {
@@ -275,6 +287,55 @@ describe('the Load palette', () => {
     expect(option('Gemma-3-4B-It')).toHaveTextContent('fit unknown');
   });
 
+  describe('the highlight', () => {
+    it('typing puts it back on the first row', async () => {
+      const { user } = await renderPalette([QWEN, GEMMA, LLAMA]);
+      await user.click(button());
+      await user.keyboard('{End}4b');
+      expect(options()).toHaveLength(2);
+      expect(highlighted()).toBe(option('Qwen3-4B'));
+    });
+
+    it('stays on its model when a row above it goes', async () => {
+      const { user } = await renderPalette([QWEN, GEMMA, LLAMA]);
+      await user.click(button());
+      await user.keyboard('{ArrowDown}');
+      residents([1]);
+      expect(options()).toHaveLength(2);
+      expect(highlighted()).toBe(option('Gemma-3-4B-It'));
+    });
+
+    it('when an app loads the highlighted model, the row now in its place takes it, and ⏎ acts on that row', async () => {
+      const { user } = await renderPalette([QWEN, GEMMA, LLAMA]);
+      await user.click(button());
+      await user.keyboard('{End}');
+      residents([3]);
+      expect(options()).toHaveLength(2);
+      expect(highlighted()).toBe(option('Gemma-3-4B-It'));
+
+      await user.keyboard('{Enter}');
+      expect(transport.serveModel.mock.calls[0][0]).toStrictEqual({ id: 2 });
+    });
+  });
+
+  it('closes on a click outside it', async () => {
+    const { user } = await renderPalette([QWEN]);
+    await user.click(button());
+    await user.click(screen.getByRole('heading', { name: 'Endpoint' }));
+    expect(screen.queryByRole('dialog', { name: 'Load a model' })).not.toBeInTheDocument();
+  });
+
+  it("says nothing of an empty library before the library's first read answers", async () => {
+    let answerList: (models: unknown[]) => void = () => {};
+    transport.listModels.mockImplementation(() => new Promise((resolve) => (answerList = resolve)));
+    const { user } = await renderPalette([]);
+    await user.click(button());
+    expect(within(palette()).queryByText('No models on this Mac.')).not.toBeInTheDocument();
+
+    await act(async () => answerList([]));
+    expect(await within(palette()).findByText('No models on this Mac.')).toBeInTheDocument();
+  });
+
   describe('reads', () => {
     const MANY = Array.from({ length: 8 }, (_, i) => model(i + 1, `Model-${String.fromCharCode(65 + i)}`));
 
@@ -301,6 +362,39 @@ describe('the Load palette', () => {
       await user.keyboard('{ArrowDown}{ArrowUp}{ArrowDown}');
       expect(explain.reads).toBe(2);
       expect(option('Qwen3-4B')).toHaveTextContent(FIT_WORDS);
+    });
+
+    it('reads the six rows the scroll has reached, after the highlighted row, and none past them', async () => {
+      const TWELVE = Array.from({ length: 12 }, (_, i) => model(i + 1, `Row-${String.fromCharCode(65 + i)}`));
+      const { user } = await renderPalette(TWELVE);
+      await user.click(button());
+      await waitFor(() => expect(askedFor()).toEqual([1, 2, 3]));
+
+      const list = within(palette()).getByRole('listbox', { name: 'Models to load' });
+      list.scrollTop = 52 * 4;
+      fireEvent.scroll(list);
+      for (const id of [1, 2, 3]) await answer(id, fitting());
+      await waitFor(() => expect(askedFor()).toEqual([5, 6, 7]));
+      for (const id of [5, 6, 7]) await answer(id, fitting());
+      await waitFor(() => expect(askedFor()).toEqual([8, 9, 10]));
+      for (const id of [8, 9, 10]) await answer(id, fitting());
+      await act(async () => {});
+      expect(askedFor()).toEqual([]);
+      expect(explain.reads).toBe(9);
+    });
+
+    it('counts the reads a closed open left out: a quick close and reopen keeps three in flight', async () => {
+      const { user } = await renderPalette(MANY);
+      await user.click(button());
+      await waitFor(() => expect(askedFor()).toEqual([1, 2, 3]));
+      await user.keyboard('{Escape}');
+      await user.click(button());
+      await act(async () => {});
+      expect(askedFor()).toEqual([1, 2, 3]);
+
+      await answer(1, fitting({ unloads: { model: 'Qwen3-30B-A3B', reason: 'would_not_fit_beside' } }));
+      await waitFor(() => expect(askedFor()).toEqual([2, 3, 1]));
+      expect(option('Model-A')).not.toHaveTextContent('Unloads');
     });
 
     it('drops an answer that lands after its palette closed, and reads again in the next open', async () => {
@@ -343,6 +437,68 @@ describe('the Load palette', () => {
       await user.keyboard('{End}{Enter}');
       await waitFor(() => expect(transport.loadPairedModel).toHaveBeenCalledWith(7));
       expect(transport.serveModel).not.toHaveBeenCalled();
+    });
+
+    it("where that machine is away, its rows say so and neither ⏎ nor ⌥⏎ loads", async () => {
+      joined();
+      const { user } = await renderPalette([QWEN]);
+      await waitFor(() => expect(transport.listPairedModels).toHaveBeenCalled());
+      act(() => applyRemoteStatus({ ...DESK, reach: 'away', connected: { ...DESK.connected!, away_for_s: 30 } }));
+      await user.click(button());
+      const row = await within(palette()).findByRole('option', { name: /qwen3-32b/ });
+      expect(row).toHaveAttribute('aria-disabled', 'true');
+      expect(row).toHaveTextContent('desk is away; Load waits until it is back.');
+
+      await user.keyboard('{End}{Enter}{Alt>}{Enter}{/Alt}');
+      expect(transport.loadPairedModel).not.toHaveBeenCalled();
+    });
+
+    it('⌥⏎ on a row that may load there does nothing: there is no Load with options for it', async () => {
+      joined();
+      const { user } = await renderPalette([QWEN]);
+      await waitFor(() => expect(transport.listPairedModels).toHaveBeenCalled());
+      await user.click(button());
+      await within(palette()).findByRole('group', { name: 'On desk' });
+      await user.keyboard('{End}{Alt>}{Enter}{/Alt}');
+      expect(transport.loadPairedModel).not.toHaveBeenCalled();
+      expect(transport.serveModel).not.toHaveBeenCalled();
+    });
+
+    it("after a load there it reads that machine's rows again; a failed re-read says they could not be read", async () => {
+      joined();
+      const { user } = await renderPalette([QWEN]);
+      await waitFor(() => expect(transport.listPairedModels).toHaveBeenCalled());
+      const before = transport.listPairedModels.mock.calls.length;
+      far.fails = true;
+      await user.click(button());
+      await within(palette()).findByRole('group', { name: 'On desk' });
+      await user.keyboard('{End}{Enter}');
+      await waitFor(() => expect(transport.listPairedModels.mock.calls.length).toBeGreaterThan(before));
+
+      await user.click(button());
+      const row = await within(palette()).findByRole('option', { name: /qwen3-32b/ });
+      expect(row).toHaveTextContent("desk's models could not be read just now.");
+      expect(row).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it("a failed load there is one toast in that machine's words", async () => {
+      joined();
+      transport.loadPairedModel.mockRejectedValueOnce(new Error('desk refused: out of memory'));
+      const { user } = await renderPalette([QWEN]);
+      await waitFor(() => expect(transport.listPairedModels).toHaveBeenCalled());
+      await user.click(button());
+      await within(palette()).findByRole('group', { name: 'On desk' });
+      await user.keyboard('{End}{Enter}');
+      await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't load: desk refused: out of memory"));
+    });
+
+    it("with every model here loaded, says so above the joined machine's rows", async () => {
+      joined();
+      const { user } = await renderPalette([QWEN], [1]);
+      await waitFor(() => expect(transport.listPairedModels).toHaveBeenCalled());
+      await user.click(button());
+      await within(palette()).findByRole('group', { name: 'On desk' });
+      expect(within(palette()).getByText('Every model on this Mac is loaded.')).toBeInTheDocument();
     });
 
     it('where that machine does not offer Load, its rows say so and ⏎ does nothing', async () => {

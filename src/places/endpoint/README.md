@@ -26,8 +26,9 @@ unload sentence (pinned by `contracts/unloadReason.test.ts`); the
 joined machine's models follow as On <machine>, loadable there as the far
 inspector allows. There is no route that explains many models, so each
 row is read on its own (`GET /api/models/:id/explain`), the highlighted
-row first, then the first rows of the list (the rows a list of six shows,
-by its scroll), three at a time. ⏎ loads with the model's id alone (IN-7);
+row first, then the six rows the scroll has reached (rows are a fixed
+52 px, so a fit line landing moves nothing), three at a time across opens.
+The highlight is held by model, so rows coming and going do not move it. ⏎ loads with the model's id alone (IN-7);
 ⌥⏎ opens Load with options. No shortcut opens it: ⌘L is the browser's
 address bar in `gglib web`.
 
@@ -84,7 +85,7 @@ they can act (the endpoint up; Clear also its key revealed), and a row's
 | `Loaded.tsx` | The resident rows (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯), the queue's lines, the room line, the empty sentence and Load a model… (the palette) |
 | `LoadPalette.tsx` | Load a model…: the filter, this machine's models not loaded with quant, size and fit, On <machine>, ↑ ↓ Home End, ⏎ loads with nothing typed, ⌥⏎ opens Load with options, Esc gives focus back |
 | `paletteRows.ts` | Pure: the palette's rows (not loaded, matching the filter as the library's search does), a row's quant and size, its fit line from its explanation, and the paired machine's rows with why they cannot load there |
-| `useFitReads.ts` | The palette's explain reads: the highlighted row first, then the rows in view, three at most in flight, kept for one open, an answer to a closed open dropped |
+| `useFitReads.ts` | The palette's explain reads: the highlighted row first, then the rows in view, three at most in flight across opens, kept for one open, an answer to a closed open dropped |
 | `Serves.tsx` | Serves ▾: Every model, the loaded models, the library's other chat models; the pin chosen by its name |
 | `UsingIt.tsx` | Requests in flight from apps on this machine, one line per joined device in the daemon's words, or the empty sentence with Connect a client |
 | `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what gglib did; All ›; not drawn when empty |

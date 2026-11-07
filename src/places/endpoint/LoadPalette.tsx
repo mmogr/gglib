@@ -7,7 +7,9 @@
  * and size and one line of fit (`paletteRows`, the reads `useFitReads`
  * makes), then the joined machine's models as On <machine>. ↑ ↓ Home End
  * move the highlight (the field keeps focus, `aria-activedescendant` names
- * the row); ⏎ or a click loads it as the inspector's one-click Load does,
+ * the row), which stays on its model while rows come and go, and falls to
+ * the row now in its place when its own goes (an app loaded it); typing
+ * puts it back on the first row; ⏎ or a click loads it as the inspector's one-click Load does,
  * the model's id and nothing typed (IN-7), and closes the palette, the
  * Loaded rows then saying Loading from the dashboard; ⌥⏎ opens Load with
  * options for it instead (`paths.endpointServe`). A far row loads on that
@@ -34,7 +36,11 @@ import { formatError } from '../../utils/errors';
 import { farChoices, fitLine, localAside, localChoices } from './paletteRows';
 import { useFitReads } from './useFitReads';
 
-/** A row's height, and how many rows the list shows: the rows in view are read after the highlighted one. */
+/**
+ * A row's height, fixed so its fit line landing moves nothing, and how many
+ * rows the list shows: the rows in view, read after the highlighted one, are
+ * the six from the one the scroll has reached.
+ */
 const ROW_PX = 52;
 const IN_VIEW = 6;
 
@@ -47,13 +53,17 @@ interface LoadPaletteProps {
 /** One row of the list, this machine's or the paired machine's. */
 type Choice = { kind: 'local'; id: number } | { kind: 'far'; id: number };
 
+const keyOf = (c: Choice) => `${c.kind}-${c.id}`;
+const TOP = { key: null, at: 0 };
+
 export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
   const navigate = useNavigate();
   const { showToast } = useToastContext();
-  const { models } = useModelLibrary();
+  const { models, loading } = useModelLibrary();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
+  // The highlighted row by its key, and where it was, for when it goes.
+  const [active, setActive] = useState<{ key: string | null; at: number }>(TOP);
   const [first, setFirst] = useState(0);
   const wrap = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -65,9 +75,10 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
     ...local.map((m) => ({ kind: 'local' as const, id: m.id })),
     ...(far?.models ?? []).map((m) => ({ kind: 'far' as const, id: m.gglib_id })),
   ];
-  const current = Math.min(active, choices.length - 1);
+  const held = choices.findIndex((c) => keyOf(c) === active.key);
+  const current = held >= 0 ? held : Math.min(active.at, choices.length - 1);
   const highlighted = choices[current] ?? null;
-  const optionId = (c: Choice) => `${listId}-${c.kind}-${c.id}`;
+  const optionId = (c: Choice) => `${listId}-${keyOf(c)}`;
 
   const inView = local.slice(first, first + IN_VIEW).map((m) => m.id);
   const wanted = highlighted?.kind === 'local' ? [highlighted.id, ...inView] : inView;
@@ -76,7 +87,7 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
   const show = () => {
     fit.begin();
     setQuery('');
-    setActive(0);
+    setActive(TOP);
     setFirst(0);
     setOpen(true);
   };
@@ -109,7 +120,8 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
     else getTransport().serveModel({ id: choice.id }).catch(failed);
   };
 
-  const move = (to: number) => setActive(Math.max(0, Math.min(choices.length - 1, to)));
+  const point = (at: number) => setActive({ key: choices[at] ? keyOf(choices[at]) : null, at });
+  const move = (to: number) => point(Math.max(0, Math.min(choices.length - 1, to)));
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     const keys: Record<string, () => void> = {
       ArrowDown: () => move(current + 1),
@@ -133,10 +145,10 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
       aria-selected={index === current}
       aria-disabled={blocked || undefined}
       onMouseDown={(e) => e.preventDefault()}
-      onMouseMove={() => index !== current && setActive(index)}
+      onMouseMove={() => index !== current && point(index)}
       onClick={() => choose(choice, false)}
       className={cn(
-        'flex min-h-[52px] items-center gap-md rounded-base px-md py-sm',
+        'flex h-[52px] shrink-0 items-center gap-md rounded-base px-md py-xs',
         blocked ? 'cursor-default' : 'cursor-pointer',
         index === current && 'bg-surface-hover',
       )}
@@ -173,10 +185,13 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
-              setActive(0);
+              setActive(TOP);
             }}
             onKeyDown={onKeyDown}
           />
+          {loading || query.trim() || local.length > 0 ? null : (
+            <p className="m-0 px-md py-xs text-xs text-text-secondary">{models.length === 0 ? 'No models on this Mac.' : 'Every model on this Mac is loaded.'}</p>
+          )}
           <div
             id={listId}
             role="listbox"
@@ -195,9 +210,7 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
               </div>
             )}
           </div>
-          {choices.length === 0 && (
-            <p className="m-0 px-md py-xs text-xs text-text-secondary">{query.trim() ? 'No model matches.' : models.length === 0 ? 'No models on this Mac.' : 'Every model on this Mac is loaded.'}</p>
-          )}
+          {query.trim() && choices.length === 0 && <p className="m-0 px-md py-xs text-xs text-text-secondary">No model matches.</p>}
           <p className="m-0 border-t border-border px-md pt-xs text-xs text-text-muted">⏎ Load · ⌥⏎ Load with options…</p>
         </div>
       )}
