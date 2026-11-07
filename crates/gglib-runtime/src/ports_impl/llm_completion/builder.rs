@@ -90,6 +90,12 @@ impl LlmCompletionAdapter {
     /// refusals as the classifier renders them, which is right for a
     /// llama-server on loopback.
     ///
+    /// A send through a door is proxied: the endpoint shapes the request and
+    /// parses the model's dialect, so the adapter does neither, and takes no
+    /// generation turn. It still reads the images the messages name, writes
+    /// the first call's `tool_choice`, and, for this machine's endpoint, the
+    /// turn's limit.
+    ///
     /// A blank key is never sent: an empty `Authorization: Bearer ` header is
     /// worse than no header at all. A paired machine's door with no key is
     /// dropped along with the identity it arrived with, as `with_bearer`
@@ -252,8 +258,10 @@ impl LlmCompletionAdapter {
     /// Give each request that leaves the ladder with no `max_tokens` a
     /// turn's limit (16384 tokens, 32768 for a `reasoning`-tagged model, or
     /// more for a thinking budget: see `turn_limit`), so a turn the model
-    /// never ends stops. A send through a door ([`with_door`](Self::with_door))
-    /// is never limited: the settings of the machine behind it apply.
+    /// never ends stops. A send through a paired machine's door
+    /// ([`with_door`](Self::with_door)) is never limited: the settings of the
+    /// machine behind it apply. One through this machine's endpoint is: the
+    /// endpoint takes it as a client's own budget.
     /// For the agent loop's turns; off (the default) sends what the ladder
     /// resolved and nothing more, as a benchmark arm needs.
     #[must_use]

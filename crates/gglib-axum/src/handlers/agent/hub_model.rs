@@ -173,8 +173,12 @@ fn serving(running: &[ServerInfo], id: i64) -> Option<u16> {
 /// running, as `/v1/models/{name}/load` does. A running server is matched by
 /// the id `model` resolves to, and a load is asked for by that id, so a
 /// second model of the same name is neither found nor loaded in its place.
-/// `loading` is told before a load is asked for, which may take minutes or
-/// wait behind an image render.
+/// `loading` is told, with the catalogue's name for the model, before a
+/// load is asked for, which may take minutes or wait behind an image render.
+///
+/// The load's lease is dropped once it is in: the turn's requests go
+/// through this machine's endpoint, which admits each of them, so nothing
+/// here keeps the model resident between them.
 ///
 /// # Errors
 ///
@@ -186,20 +190,14 @@ pub(super) async fn on_model(
     mut chat: AgentChatRequest,
     loading: &Loading,
 ) -> Result<AgentChatRequest, HttpError> {
-    let id = state
-        .core
-        .models()
-        .get(model)
-        .await
-        .ok()
-        .flatten()
-        .map(|m| m.id);
+    let found = state.core.models().get(model).await.ok().flatten();
+    let id = found.as_ref().map(|m| m.id);
     let servers = state.servers.list_servers().await;
     if let Some(port) = id.and_then(|id| serving(&servers, id)) {
         chat.port = port;
         return Ok(chat);
     }
-    loading.waiting();
+    loading.waiting(found.as_ref().map_or(model, |m| m.name.as_str()));
     let model = id.map_or_else(|| model.to_owned(), |id| id.to_string());
     let default_ctx = state
         .core

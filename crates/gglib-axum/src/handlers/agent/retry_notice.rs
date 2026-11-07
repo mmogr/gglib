@@ -79,6 +79,8 @@ impl RetryObserver for RetryNotice {
             step: wait.step,
             total: wait.total,
             position: u32::try_from(wait.position).unwrap_or(u32::MAX),
+            model: None,
+            elapsed_ms: None,
         });
     }
 }

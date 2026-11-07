@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use gglib_core::ProxyAccessConfig;
-use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use gglib_mcp::McpService;
@@ -68,14 +67,9 @@ pub struct ServeConfig {
     /// `/v1/proxy/status` still answers and the stream still opens with the
     /// current snapshot, but nothing follows it.
     pub dashboard: bool,
-    /// Agent-path prompt-cache reuse store, owned by the supervisor so it can
-    /// also be shared with the embedded axum server (GUI chat) and outlives a
-    /// single proxy run. Exposed on the dashboard as `agent_usage`, alongside
-    /// the proxied figure.
-    pub agent_metrics: Arc<CacheMetricsStore>,
     /// What this run reports to that outlives it — the per-model defect
-    /// counters and the loop guard's log — supervisor-owned for the same
-    /// reason as `agent_metrics`.
+    /// counters and the loop guard's log — supervisor-owned, so they outlive
+    /// a single proxy run.
     pub observers: ProxyObservers,
     /// Who may reach this endpoint: the CORS policy, the optional bearer
     /// token, and the Host allowlist. Carries the `CorsConfig` rather than

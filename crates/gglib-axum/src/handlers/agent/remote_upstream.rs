@@ -1,5 +1,7 @@
-//! Which upstream `POST /api/agent/chat` drives: a llama-server this daemon
-//! started, or a model of the machine on the other end of the remote tunnel.
+//! Which upstream an agent loop drives: this machine's endpoint, for a turn
+//! on one of this machine's chats or a device's ([`through_endpoint`]); a
+//! llama-server this daemon started, for `POST /api/agent/chat`; or a model of
+//! the machine on the other end of the remote tunnel.
 //!
 //! One decision, taken before anything else in the handler, because the two
 //! cases differ in every input the adapter takes: the local case validates
@@ -12,10 +14,11 @@
 //! far proxy runs its own pipeline over its own models.
 
 use gglib_app_services::FarProxy;
+use gglib_app_services::GuiError;
 use gglib_app_services::transcript::MadeBy;
 use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::{Machine, ModelRef};
-use gglib_core::ports::{AdmissionLease, ModelRuntimePort};
+use gglib_core::ports::ModelRuntimePort;
 use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use gglib_runtime::Door;
 
@@ -25,14 +28,15 @@ use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppSta
 
 /// Where the completion adapter points, and with what.
 pub(super) struct Upstream {
-    /// `http://127.0.0.1:<port>`, without the `/v1`.
+    /// The root the loop posts to, without the `/v1`: the door's, or
+    /// `http://127.0.0.1:<port>` for a llama-server.
     pub base_url: String,
-    /// The far machine's door on the far path — its key and the name it
-    /// is shown by; nothing locally.
+    /// The endpoint the turn goes through: this machine's ([`endpoint`]), or
+    /// the far machine's on the far path, with its key and the name it is
+    /// shown by; none for a llama-server.
     pub door: Option<Door>,
-    /// Locally, the context of the model the port serves, with the context
-    /// it was launched with once a run holds it ([`hold_model`]);
-    /// passthrough for the far machine, whose proxy resolves.
+    /// Locally, the context of the model the port serves; passthrough for
+    /// the far machine, whose proxy resolves.
     pub model_context: ModelContext,
     /// The stored sampling layers beneath what the request names. Locally,
     /// this machine's global defaults and its agentic sampling switch, and
@@ -41,9 +45,10 @@ pub(super) struct Upstream {
     pub layers: SamplingLayers,
     /// What goes in the body's `model` field.
     ///
-    /// Locally `None` is the ordinary case and means "whatever llama-server
-    /// loaded". On the far path it is always the model's id there, so the
-    /// far proxy serves the model that was picked and no other of its name.
+    /// On a llama-server's port `None` is the ordinary case and means
+    /// "whatever llama-server loaded". Through an endpoint it is always the
+    /// model's id there, so the endpoint serves the model that was picked
+    /// and no other of its name.
     pub model: Option<String>,
     /// The model name this run's guard decisions are counted under (#1091).
     ///
@@ -176,34 +181,6 @@ pub(super) async fn local(
     })
 }
 
-/// A local run's hold on the model it resolved, which its loop talks to past
-/// the proxy's queue: while held, no proxy request swaps or recycles it. A
-/// remote run holds nothing here; the far proxy admits each of its requests.
-///
-/// # Errors
-///
-/// `unavailable` (503) when that model is no longer the one on its port: a
-/// swap came between resolving it and holding it.
-pub(super) fn hold(
-    runtime: &dyn ModelRuntimePort,
-    local_model: Option<(u16, i64)>,
-) -> Result<Option<AdmissionLease>, HttpError> {
-    let Some((port, model_id)) = local_model else {
-        return Ok(None);
-    };
-    let held = u32::try_from(model_id)
-        .ok()
-        .and_then(|id| runtime.hold(port, id));
-    held.map(Some).ok_or_else(|| HttpError::Coded {
-        status: axum::http::StatusCode::SERVICE_UNAVAILABLE,
-        code: "unavailable",
-        message: format!(
-            "the model on port {port} was stopped or swapped while the run was prepared; \
-             try again"
-        ),
-    })
-}
-
 /// The context the model a local run drives was launched with: the primary
 /// slot's, when the model in it is the run's own, by its port and its id.
 ///
@@ -220,32 +197,70 @@ async fn launched_context(
     same.then_some(running.effective_ctx)
 }
 
-/// Take a run's [`hold`] on its model, then read the context that model was
-/// launched with onto the run: the size its turns report, and the budget its
-/// conversation is trimmed to.
-///
-/// In that order: until the model is held a proxy request may relaunch it at
-/// another context, and a size read before the hold could be the old one.
-/// And before the loop is composed, which takes the budget from
-/// `model_context`. Without this the budget was the catalogue's
-/// `context_length`, the model's trained ceiling, and a long chat on a
-/// smaller launched context was refused by llama-server (#1272). A size this
-/// cannot read leaves the catalogue's.
+/// This machine's endpoint, as a turn on one of its models dials it: turned
+/// on first when it is off, as starting a model turns it on.
 ///
 /// # Errors
 ///
-/// Whatever [`hold`] refuses.
-pub(super) async fn hold_model(
-    runtime: &dyn ModelRuntimePort,
-    upstream: &mut Upstream,
-) -> Result<Option<AdmissionLease>, HttpError> {
-    let held = hold(runtime, upstream.local_model)?;
-    let launched = launched_context(runtime, upstream.local_model).await;
-    upstream.made_by.context_size = launched;
-    if launched.is_some() {
-        upstream.model_context.context_length = launched;
-    }
-    Ok(held)
+/// `conflict` (409) with the endpoint's own reason when it cannot be turned
+/// on (its port held by another process); `invalid_request` (400) naming
+/// that it is off, should it stop between the two; `internal_error` (500)
+/// when the settings that hold its key cannot be read.
+pub(super) async fn this_machines_door(state: &AppState) -> Result<Door, HttpError> {
+    state.proxy.ensure_running().await?;
+    state
+        .proxy
+        .door()
+        .await
+        .map_err(|closed| HttpError::from(GuiError::from(closed)))
+}
+
+/// A turn on this machine's model `server` serves, through this machine's
+/// endpoint `door`, as any client sends one: to the door's root with its
+/// key, naming the model by its catalogue id, which the endpoint resolves
+/// before any name. The endpoint shapes the request, so the stored sampling
+/// layers go unused; the model's context is kept for what the turn still
+/// reads of it here: whether it sees images, and its class, for the turn's
+/// limit. The turns report the context the model was launched with, read
+/// once it is loaded (#1272). The endpoint trims to the context it serves.
+///
+/// No hold is taken: the endpoint admits each request, and its lease is the
+/// turn's. Between two requests the model can be swapped out, and the next
+/// request loads it again.
+///
+/// # Errors
+///
+/// What [`local`] refuses.
+pub(super) async fn endpoint(
+    state: &AppState,
+    req: &AgentChatRequest,
+    server: ServerInfo,
+    door: Door,
+) -> Result<Upstream, HttpError> {
+    let id = server.model_id;
+    let mut upstream = local(state, req, server).await?;
+    upstream.made_by.context_size =
+        launched_context(state.runtime.as_ref(), upstream.local_model).await;
+    upstream.base_url.clone_from(&door.root_url);
+    upstream.model = Some(id.to_string());
+    upstream.door = Some(door);
+    Ok(upstream)
+}
+
+/// [`endpoint`] for a turn whose model is now served on `req.port`: found
+/// there, or loaded there by the turn.
+///
+/// # Errors
+///
+/// What `validate_port` refuses (the model gone from its port), then
+/// [`this_machines_door`]'s and [`endpoint`]'s.
+pub(super) async fn through_endpoint(
+    state: &AppState,
+    req: &AgentChatRequest,
+) -> Result<Upstream, HttpError> {
+    let server = validate_port(state, req.port).await?;
+    let door = this_machines_door(state).await?;
+    endpoint(state, req, server, door).await
 }
 
 /// A far request's upstream: the far proxy's root through the tunnel, the
@@ -308,6 +323,9 @@ async fn quantization_of(state: &AppState, model_id: i64) -> Option<String> {
     model.quant_label().map(str::to_owned)
 }
 
+#[cfg(test)]
+#[path = "remote_upstream_endpoint_tests.rs"]
+mod endpoint_tests;
 #[cfg(test)]
 #[path = "remote_upstream_tests.rs"]
 mod tests;

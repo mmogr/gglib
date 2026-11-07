@@ -143,6 +143,8 @@ mod tests {
             step,
             total,
             position: 1,
+            model: None,
+            elapsed_ms: None,
         };
         assert_eq!(
             progress_line(&wait(WaitingFor::ImageRender, 3, 20)).as_deref(),

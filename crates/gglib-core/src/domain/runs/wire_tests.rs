@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::{RunError, RunFrames, RunInfo, RunKind, RunList, RunStatus};
-use crate::domain::agent::{AgentEvent, ToolCall, ToolResult, rows_from_frames};
+use crate::domain::agent::{AgentEvent, ToolCall, ToolResult, WaitingFor, rows_from_frames};
 use crate::domain::attachment::{AttachmentId, AttachmentInfo};
 use crate::domain::chat::MessageRole;
 
@@ -24,6 +24,9 @@ struct Recorded {
     /// carry them. `AgentEvent` is written, never read, so each is kept as
     /// its JSON.
     tool_reply: Vec<Value>,
+    /// A turn's wait for its model to load, as it is said again a second
+    /// in: the model by the catalogue's name, and how long it has taken.
+    model_load: Value,
     list: RunList,
 }
 
@@ -140,6 +143,15 @@ fn recorded() -> Recorded {
             .iter()
             .map(|event| serde_json::to_value(event).unwrap())
             .collect(),
+        model_load: serde_json::to_value(AgentEvent::Waiting {
+            reason: WaitingFor::ModelLoad,
+            step: 0,
+            total: 0,
+            position: 0,
+            model: Some("Qwen3-4B".to_owned()),
+            elapsed_ms: Some(1_000),
+        })
+        .unwrap(),
         list,
     }
 }

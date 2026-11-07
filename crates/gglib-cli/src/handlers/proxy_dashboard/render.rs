@@ -136,13 +136,6 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
         Some(cache) => out.push_str(&render_cache_section(cache, term_width)),
     }
 
-    // A separate population from the proxied figure above: GUI-chat
-    // runs talk to llama-server directly, so their reuse profile is nothing
-    // like a user's conversation and must not be averaged into it.
-    out.push('\n');
-    out.push_str("Agent cache (GUI chat)\n");
-    out.push_str(&render_usage_rows(&snapshot.agent_usage));
-
     out.push('\n');
     out.push_str(&render_defects_section(&snapshot.per_model_defects));
 

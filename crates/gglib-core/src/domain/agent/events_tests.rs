@@ -204,6 +204,8 @@ fn waiting_serialises_its_reason() {
         step: 3,
         total: 20,
         position: 1,
+        model: None,
+        elapsed_ms: None,
     };
     assert_eq!(
         serde_json::to_string(&evt).unwrap(),
@@ -214,8 +216,13 @@ fn waiting_serialises_its_reason() {
         step: 0,
         total: 0,
         position: 0,
+        model: Some("Qwen3-4B".to_owned()),
+        elapsed_ms: Some(12_000),
     };
-    assert_eq!(serde_json::to_value(&load).unwrap()["reason"], "model_load");
+    assert_eq!(
+        serde_json::to_string(&load).unwrap(),
+        r#"{"type":"waiting","reason":"model_load","step":0,"total":0,"position":0,"model":"Qwen3-4B","elapsed_ms":12000}"#
+    );
 }
 
 /// An agent run's frames while it draws: a wait, the call, its progress
@@ -247,6 +254,8 @@ fn drawing_frames() -> Vec<AgentEvent> {
             step: 12,
             total: 20,
             position: 1,
+            model: None,
+            elapsed_ms: None,
         },
         AgentEvent::ToolCallStart {
             tool_call: ToolCall {

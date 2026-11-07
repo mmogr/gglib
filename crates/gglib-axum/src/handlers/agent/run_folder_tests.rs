@@ -3,20 +3,19 @@
 //! written, and where gglib's own file tools are offered, by which root.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 use gglib_core::domain::chat::{ConversationSettings, NewConversation};
 use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::RunsPort as _;
 use serde_json::{Value, json};
 
-use super::compose::{context_tests::LaunchedAt, take_permit};
+use super::compose::take_permit;
 use super::hub_turn::{Plan, plan, start_local};
 use super::launch::launch;
 use super::run_fixture::{
     End, LOCAL, device, finished_reply, prepared, qwen, saved, settled, state,
 };
-use super::turn_fixture::{TOOL, hi, model, sent_by_device, sent_in};
+use super::turn_fixture::{TOOL, hi, model, sent_in, sent_through_endpoint};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -260,15 +259,12 @@ async fn two_runs_at_once_name_their_own_folders() {
 
 /// A paired device's turn on a chat that remembers a folder, planned and
 /// prepared as a device's is (`hub_turn::plan`, whose folder for it is none,
-/// then the hold `late_on` takes once its model is found), is offered none of the file
-/// tools, even with every tool open to it, while this machine's turn on the same
-/// chat reads that folder.
+/// then through this machine's endpoint, as `late_on` sends it once its
+/// model is loaded), is offered none of the file tools, even with every tool
+/// open to it, while this machine's turn on the same chat reads that folder.
 #[tokio::test]
 async fn a_devices_turn_on_a_chat_with_a_folder_is_offered_no_file_tool() {
-    let (_dir, mut state) = state().await;
-    // Holding the model a turn asks for, as `late_on` takes it.
-    Arc::get_mut(&mut state).expect("not yet shared").runtime =
-        Arc::new(LaunchedAt(4_096, Mutex::new(None)));
+    let (_dir, state) = state().await;
     let model_id = model(&state, |_| {}).await;
     let place = tempfile::tempdir().unwrap();
     let folder = shown(&canonical(place.path()));
@@ -289,7 +285,7 @@ async fn a_devices_turn_on_a_chat_with_a_folder_is_offered_no_file_tool() {
     // Every tool, as no device's turn is given: what keeps the file tools
     // out is the folder, not the filter.
     phone.tool_filter = None;
-    let device = sent_by_device(&state, model_id, phone).await;
+    let device = sent_through_endpoint(&state, model_id, phone).await;
     let names: Vec<&str> = device["tools"]
         .as_array()
         .expect("the turn is offered tools")

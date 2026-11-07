@@ -66,7 +66,9 @@ pub struct LoopGeneration {
 ///
 /// # Parameters
 ///
-/// * `base_url` — `http://127.0.0.1:{port}` pointing at the llama-server.
+/// * `base_url` — the root the loop posts to: this machine's endpoint (its
+///   `door`'s `root_url`), a paired machine's through the tunnel, or a
+///   llama-server's `http://127.0.0.1:{port}`.
 /// * `http_client` — shared `reqwest::Client` (connection-pooled).
 /// * `model` — optional model-name override forwarded to llama-server.
 /// * `model_context` — resolved per-model facts from
@@ -81,17 +83,11 @@ pub struct LoopGeneration {
 ///   file tools read: `Some(folder)` offers them with descriptions that name
 ///   it, and `None` leaves them out. External MCP servers are told nothing
 ///   of it (ADR 0023).
-/// * `usage_sink` — `Some(sink)` reports each response's token usage (e.g. the
-///   proxy process's agent-path cache store, for GUI chat); `None` when there
-///   is nothing to report to.
 /// * `guard` — where the loop reports every decision its guard takes, and the
-///   model name to count those decisions under (#1091). Not an `Option`, and
-///   deliberately: this function has one caller, `POST /api/agent/chat`, which
-///   runs in the same process as the embedded proxy and can always reach its
-///   ledger, so "the wiring reports nothing" is a mistake the compiler can
-///   refuse rather than one a test has to catch. A caller that genuinely has
-///   nowhere to report — the CLI, which runs out of process — wants
-///   [`compose_agent_loop_with_sampling`], whose own parameter is optional.
+///   model name to count those decisions under (#1091). `None` for a loop
+///   whose turns go through this machine's endpoint: the endpoint's own loop
+///   guard sees every request and counts them, and a second count here would
+///   count each trip twice.
 /// * `retry_observer` — `Some(observer)` surfaces upstream retries to a live
 ///   consumer, so a user waiting on a contended model is told why. `None` when
 ///   there is no stream to notify.
@@ -107,12 +103,15 @@ pub struct LoopGeneration {
 ///   goes whether a turn with tools gets the agentic temperature ceiling:
 ///   the settings' switch for a run on this machine's model, and on for one
 ///   on a paired machine's.
-/// * `door` — `Some(door)` when `base_url` is the remote tunnel's loopback
-///   port, which is another machine's proxy (ADR 0012): it carries both the
-///   key that port demands, since the listener there injects none, and the
-///   name of whose port it is, so a refusal of that key can say which machine
-///   refused it. `None` for a llama-server on loopback, which demands nothing
-///   and is not another machine.
+/// * `door` — `Some(door)` when `base_url` is a gglib endpoint: this
+///   machine's own, which a chat turn dials as any client does, or the remote
+///   tunnel's loopback port, which is another machine's proxy (ADR 0012). It
+///   carries the key the endpoint demands and, for another machine, the name
+///   of whose port it is, so a refusal of that key can say which machine
+///   refused it. A send through it is proxied: the endpoint shapes it,
+///   parses the model's dialect and takes its generation turn. `None` for a
+///   llama-server on loopback, which demands nothing and is not another
+///   machine.
 /// * `attachments` — where the images a message names by id are read from,
 ///   just before each request is sent, and where the images an MCP tool
 ///   returns are stored.
@@ -133,8 +132,7 @@ pub fn compose_agent_loop(
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
-    usage_sink: Option<Arc<dyn UsageSink>>,
-    guard: AgentGuardReporter,
+    guard: Option<AgentGuardReporter>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
     sampling: Option<InferenceConfig>,
     layers: SamplingLayers,
@@ -155,8 +153,10 @@ pub fn compose_agent_loop(
         // A run's request names no sampler parameter the ladder could pass
         // over, so nobody is waiting to hear how it resolved.
         None,
-        usage_sink,
-        Some(guard),
+        // Nothing to tally: the endpoint counts a proxied turn's usage, and
+        // a loop on llama-server's port reports to nobody.
+        None,
+        guard,
         retry_observer,
         // The GUI has no per-turn retry override; the environment defaults apply.
         None,

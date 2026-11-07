@@ -33,7 +33,7 @@ logs folder).
 
 Words with no Rust twin: the tab names "Live", "Logs", "Benchmarks",
 "System"; "Diagnostics"; Live's section names "Requests", "Loaded and
-queue", "Launch decisions", "Prompt cache", "Agent cache", "Sampling
+queue", "Launch decisions", "Prompt cache", "Sampling
 readback", "Per-model signals", "Tune activity", "Slots", "Loop-guard
 trips"; "<n> since the endpoint turned on", "Clear", "Prompt cache cleared"
 (when the proxy's answer has no message), "Nothing yet: <names>.", "In

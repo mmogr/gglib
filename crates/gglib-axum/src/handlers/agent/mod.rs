@@ -131,6 +131,8 @@ fn sse_event(event: &AgentEvent) -> Option<Event> {
 }
 
 #[cfg(test)]
+mod endpoint_fixture;
+#[cfg(test)]
 mod image_model_tests;
 #[cfg(test)]
 #[path = "run_answer_tests.rs"]
@@ -146,9 +148,6 @@ pub(in crate::handlers) mod run_fixture;
 #[cfg(test)]
 #[path = "run_folder_tests.rs"]
 mod run_folder_tests;
-#[cfg(test)]
-#[path = "run_hold_tests.rs"]
-mod run_hold_tests;
 #[cfg(test)]
 #[path = "run_machine_tests.rs"]
 mod run_machine_tests;

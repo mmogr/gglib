@@ -50,7 +50,7 @@ pub use hub_chats::HubChats;
 pub use launch_explain::LaunchExplanationDto;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
-pub use proxy::ProxyOps;
+pub use proxy::{ProxyDeps, ProxyOps};
 pub use proxy_clients::{ClientFacts, ClientRecipe, ClientRecipes, RecipeLine, recipes};
 pub use proxy_door::DoorClosed;
 pub use proxy_prove::{ProofOutcome, ProofRefusal};
@@ -66,7 +66,7 @@ pub use sampling_explain::{
     ParamProvenanceDto, ProvenanceKindDto, PublishedDefaultDto, PublishedStateDto,
     SamplingExplanationDto, SamplingLayerDto, SuppressedEffortDto,
 };
-pub use servers::ServerOps;
+pub use servers::{ServerDeps, ServerOps};
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};
 pub use settings::{SettingsOps, models_directory_info};
 pub use setup::{EngineInstall, EngineStatus, GpuInfoDto, SetupDeps, SetupOps, SetupStatus};

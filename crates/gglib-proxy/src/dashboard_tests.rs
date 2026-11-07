@@ -13,7 +13,6 @@ fn empty_state() -> Arc<DashboardState> {
         Arc::new(UpstreamHealth::new()),
         Arc::new(CacheStatusCache::new()),
         Arc::new(CacheMetricsStore::new()),
-        Arc::new(CacheMetricsStore::new()),
         Arc::new(gglib_core::ports::NoopModelRuntime),
         Arc::new(SamplingAuditStore::new()),
     ))
@@ -32,7 +31,6 @@ fn build_aggregates_empty_stores() {
         &metrics,
         &upstream_health,
         &CacheStatusCache::new(),
-        &CacheMetricsStore::new(),
         &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
@@ -82,7 +80,6 @@ fn build_reflects_active_connection_and_metrics() {
         &upstream_health,
         &CacheStatusCache::new(),
         &CacheMetricsStore::new(),
-        &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
         &SamplingAuditStore::new(),
@@ -108,7 +105,6 @@ fn build_reports_available_slots() {
         &metrics,
         &upstream_health,
         &CacheStatusCache::new(),
-        &CacheMetricsStore::new(),
         &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
@@ -142,7 +138,6 @@ fn snapshot_is_serializable_regardless_of_slots_state() {
             &metrics,
             &upstream_health,
             &CacheStatusCache::new(),
-            &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
@@ -412,7 +407,6 @@ fn snapshot_surfaces_the_recorded_launch_narration() {
             &upstream_health,
             &CacheStatusCache::new(),
             &CacheMetricsStore::new(),
-            &CacheMetricsStore::new(),
             launch,
             None,
             &SamplingAuditStore::new(),
@@ -446,7 +440,6 @@ fn snapshot_surfaces_the_recorded_cache_status() {
         &upstream_health,
         &cache,
         &cache_metrics,
-        &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
         &SamplingAuditStore::new(),
@@ -465,7 +458,6 @@ fn snapshot_surfaces_the_recorded_cache_status() {
         &upstream_health,
         &cache,
         &cache_metrics,
-        &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
         &SamplingAuditStore::new(),
@@ -502,7 +494,6 @@ fn snapshot_reads_usage_live_rather_than_from_the_cached_config() {
             &upstream_health,
             &cache,
             cm,
-            &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
             &SamplingAuditStore::new(),
@@ -530,39 +521,13 @@ fn snapshot_reads_usage_live_rather_than_from_the_cached_config() {
     );
 }
 
-/// The agent population is reported alongside the proxied one and never
-/// merged into it — and it surfaces even before any proxied request has
-/// resolved a model (so `cache` is still `None`).
+/// Chat turns go through the endpoint, so their prompt-cache reuse is in
+/// the one proxied figure: the snapshot carries no second, agent-path one.
 #[test]
-fn agent_usage_is_a_separate_population_from_the_proxied_figure() {
-    let connections = ActiveConnectionsRegistry::new();
-    let slots = SlotsCache::new();
-    let metrics = ContextMetricsStore::new();
-    let upstream_health = UpstreamHealth::new();
-    let cache = CacheStatusCache::new();
-    let proxied = CacheMetricsStore::new();
-    let agent = CacheMetricsStore::new();
+fn the_snapshot_has_one_cache_figure() {
+    let snapshot = empty_state().snapshot();
+    let body = serde_json::to_value(&snapshot).expect("the snapshot serialises");
 
-    // Only the agent store records — e.g. an agent turn with no proxied
-    // traffic and no model config resolved yet.
-    agent.record(8_000, Some(7_600));
-
-    let snap = DashboardSnapshot::build(
-        &connections,
-        &slots,
-        &metrics,
-        &upstream_health,
-        &cache,
-        &proxied,
-        &agent,
-        &LaunchNarrationCache::new(),
-        None,
-        &SamplingAuditStore::new(),
-    );
-
-    assert_eq!(snap.agent_usage.reporting_requests, 1);
-    assert_eq!(snap.agent_usage.cached_tokens, 7_600);
-    assert_eq!(snap.agent_usage.last_prompt_tokens, Some(8_000));
-    // Proxied config never resolved, yet agent_usage still surfaced.
-    assert_eq!(snap.cache, None);
+    assert!(body.get("agent_usage").is_none(), "{body}");
+    assert!(body.get("cache").is_some(), "{body}");
 }

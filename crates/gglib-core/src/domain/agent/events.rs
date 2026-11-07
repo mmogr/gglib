@@ -125,6 +125,16 @@ pub enum AgentEvent {
         total: u32,
         /// This wait's place in line, 1 being next; 0 when not in a line.
         position: u32,
+        /// The name of the model being loaded, as the catalogue shows it;
+        /// absent from a wait for an image render.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+        /// How long the load has taken so far, in milliseconds. A load's
+        /// wait is sent again each second with this figure, so a client that
+        /// joins part-way can say "Loading Qwen3-4B… 12 s"; absent from a
+        /// wait for an image render.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        elapsed_ms: Option<u64>,
     },
 
     /// One full LLM→tool-execution cycle has completed.

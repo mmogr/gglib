@@ -14,7 +14,6 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use common::setup_test_pool;
-use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::device_budget::DeviceReading;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
 use gglib_core::services::CatalogPortImpl;
@@ -114,7 +113,6 @@ impl Phone {
             disk_budget: DiskBudget::Auto,
             host: HostFacts::none(),
             dashboard: false,
-            agent_metrics: Arc::new(CacheMetricsStore::new()),
             observers: ProxyObservers::default(),
             access: ProxyAccessConfig {
                 api_key: Some(KEY.to_owned()),
