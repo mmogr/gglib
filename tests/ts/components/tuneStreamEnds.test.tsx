@@ -17,7 +17,7 @@ import '@testing-library/jest-dom';
 
 import type { BenchmarkEvent, TuneConfig } from '../../../src/types/benchmark';
 
-vi.mock('../../../src/components/Benchmark/Tune/TuneConfigForm', () => ({
+vi.mock('../../../src/places/diagnostics/benchmarks/Tune/TuneConfigForm', () => ({
   // The real form's fields are beside the point; what it shares with this one
   // is that it cannot start a run while `disabled`.
   TuneConfigForm: ({
@@ -38,7 +38,7 @@ vi.mock('../../../src/components/Benchmark/Tune/TuneConfigForm', () => ({
   ),
 }));
 
-import { TuneTab } from '../../../src/components/Benchmark/Tune/TuneTab';
+import { TuneTab } from '../../../src/places/diagnostics/benchmarks/Tune/TuneTab';
 import { setApiSession } from '../../../src/services/transport/api/client';
 
 const STREAM_ENDED = 'The tune stream ended without completing.';

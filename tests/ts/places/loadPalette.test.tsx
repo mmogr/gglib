@@ -83,7 +83,6 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
   },
   clearProxyCache: vi.fn(),
 }));
-vi.mock('../../../src/components/ProxyDashboardModal', () => ({ ProxyDashboardModal: () => null }));
 
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { applyProxyStatus, resetProxyState } from '../../../src/services/proxyRegistry';

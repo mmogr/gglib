@@ -25,7 +25,7 @@ import { Banner } from '../../components/ui/Banner';
 import { Icon } from "../../components/ui/Icon";
 import { Modal } from "../../components/ui/Modal";
 import { useConfirmContext } from "../../contexts/ConfirmContext";
-import { Menu } from "../library/Menu";
+import { Menu } from "../../components/ui/Menu";
 import { InferenceProfileEditor } from "./InferenceProfileEditor";
 import { formatError } from "../../utils/errors";
 

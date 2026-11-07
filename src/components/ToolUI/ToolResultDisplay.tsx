@@ -1,119 +1,40 @@
 import React from 'react';
-import { Button } from '../ui/Button';
-import { Check, ChevronDown, ChevronRight, Clipboard } from 'lucide-react';
 import type { ToolResultRenderer } from '../../services/tools/types';
-import { Icon } from '../ui/Icon';
-import { cn } from '../../utils/cn';
 import { getToolRegistry } from '../../services/tools/registry';
 import { fallbackRenderer } from '../../services/tools/renderers';
 
 export interface ToolResultDisplayProps {
   toolName: string;
   result: unknown;
-  toolCallId?: string;
 }
 
-function safeRenderSummary(renderer: ToolResultRenderer, result: unknown, toolName: string): string {
+/** A tool's result drawn by its registered renderer, by the generic one where it has none or that one throws. */
+function renderResult(toolName: string, result: unknown): React.ReactNode {
+  const renderer: ToolResultRenderer = getToolRegistry().getRenderer(toolName) ?? fallbackRenderer;
   try {
-    return renderer.renderSummary?.(result, toolName) ?? fallbackRenderer.renderSummary!(result, toolName);
+    return renderer.renderResult(result, toolName);
   } catch {
-    try {
-      return fallbackRenderer.renderSummary!(result, toolName);
-    } catch {
-      return toolName;
-    }
+    return fallbackRenderer.renderResult(result, toolName);
+  }
+}
+
+/** A tool's result as text to copy: its JSON, or the value itself where it has none. */
+export function resultText(result: unknown): string {
+  try {
+    return JSON.stringify(result, null, 2) ?? String(result);
+  } catch {
+    return String(result);
   }
 }
 
 /**
- * Collapsible card for displaying a single tool result.
- * Dispatches to the registered ToolResultRenderer for the tool,
- * falling back to the generic JSON renderer if none is registered or
- * if the renderer throws.
- *
- * This is the single source of truth for result rendering across
- * GenericToolUI (inline chat bubble) and ToolDetailsModal.
+ * A tool call's result: the renderer the registry holds for its tool, or
+ * the generic one, which draws JSON, Markdown or a sortable table by the
+ * result's shape (every MCP result goes through it). The one place a result
+ * is drawn; the call's row in a reply's fold holds it.
  */
-export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, result, toolCallId: _toolCallId }) => {
-  const [isExpanded, setIsExpanded] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
-
-  const { summary, body } = React.useMemo(() => {
-    // React owns the memoization. If the parent passes unstable result references, it will re-render.
-    const renderer = getToolRegistry().getRenderer(toolName) ?? fallbackRenderer;
-    const computedSummary = safeRenderSummary(renderer, result, toolName);
-    const computedBody = (() => {
-      try {
-        return renderer.renderResult(result, toolName);
-      } catch {
-        return fallbackRenderer.renderResult(result, toolName);
-      }
-    })();
-    return { summary: computedSummary, body: computedBody };
-  }, [toolName, result]);
-
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const text = (() => {
-      try {
-        return JSON.stringify(result, null, 2) ?? String(result);
-      } catch {
-        return String(result);
-      }
-    })();
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
-  };
-
-  return (
-    <div className="border border-border rounded-lg bg-background overflow-hidden my-2 text-sm">
-      {/* Header — always visible, toggles body */}
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="w-full justify-start gap-2 px-3 rounded-none h-auto py-2"
-        onClick={() => setIsExpanded((prev) => !prev)}
-        aria-expanded={isExpanded}
-      >
-        <span className="shrink-0 text-text-secondary" aria-hidden>
-          <Icon icon={isExpanded ? ChevronDown : ChevronRight} size={14} />
-        </span>
-
-        <span className="flex-1 truncate font-mono text-xs text-text-secondary">
-          {summary}
-        </span>
-
-        {/* Copy button — stopPropagation prevents accordion toggle */}
-        <span
-          role="button"
-          tabIndex={0}
-          aria-label="Copy result as JSON"
-          className={cn(
-            'shrink-0 inline-flex items-center justify-center w-6 h-6 rounded transition-colors duration-150',
-            'text-text-muted hover:text-text hover:bg-background-tertiary',
-            copied && 'text-success',
-          )}
-          onClick={handleCopy}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              handleCopy(e as unknown as React.MouseEvent);
-            }
-          }}
-        >
-          <Icon icon={copied ? Check : Clipboard} size={13} />
-        </span>
-      </Button>
-
-      {/* Body — visible when expanded */}
-      {isExpanded && (
-        <div className="px-3 py-2 border-t border-border overflow-x-auto max-h-[400px] overflow-y-auto">
-          {body}
-        </div>
-      )}
-    </div>
-  );
+export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, result }) => {
+  // React owns the memoization. If the parent passes unstable result references, it will re-render.
+  const body = React.useMemo(() => renderResult(toolName, result), [toolName, result]);
+  return <div className="overflow-x-auto max-h-[400px] overflow-y-auto text-xs">{body}</div>;
 };

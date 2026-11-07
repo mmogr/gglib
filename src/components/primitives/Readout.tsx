@@ -12,7 +12,7 @@ interface ReadoutProps {
   /** Colors the value only — labels and units always stay quiet. */
   intent?: ReadoutIntent;
   size?: ReadoutSize;
-  /** Slot for a Sparkline (or other trend mark) rendered under the value. */
+  /** Slot for a trend mark (a progress bar, say) rendered under the value. */
   trend?: React.ReactNode;
   align?: 'start' | 'center' | 'end';
   className?: string;
@@ -41,8 +41,8 @@ const sizeClasses: Record<ReadoutSize, string> = {
  * Readout - the single treatment for a live metric.
  *
  * Values wear mono + tabular figures so columns of telemetry align. Per the
- * design contracts every live metric renders through a Readout, and a
- * Sparkline never appears without one — pass it through `trend`.
+ * design contracts every live metric renders through a Readout; a trend
+ * mark beside it goes through `trend`.
  */
 export const Readout: React.FC<ReadoutProps> = ({
   label,

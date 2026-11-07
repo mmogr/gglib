@@ -148,9 +148,7 @@ const SNAPSHOT: DashboardSnapshot = {
   slots_available: false,
   slots: [],
   // The poller's own default. `dashboard.rs` can emit only `null`
-  // (slots available), the `--no-slots` line, or the poller's reason — the
-  // 'Slot metrics unavailable.' string is the GUI's `??` fallback in
-  // `ProxyMetricsGrid`, never something the proxy sends.
+  // (slots available), the `--no-slots` line, or the poller's reason.
   slots_status: 'no /slots poll has completed yet',
   recent_requests: [],
   total_requests: 0,

@@ -4,7 +4,7 @@ import '@testing-library/jest-dom';
 import {
   DroppedClientFields,
   ProxyReasoningRows,
-} from '../../../src/components/ProxyReasoningRows';
+} from '../../../src/places/diagnostics/live/ProxyReasoningRows';
 import type {
   SamplingEffortSupport,
   SamplingReasoningReadback,

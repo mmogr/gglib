@@ -12,7 +12,7 @@ import '@testing-library/jest-dom';
 
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 vi.mock('../../../src/places/endpoint/EndpointPlace', () => ({ default: () => <main aria-label="Endpoint" /> }));
-vi.mock('../../../src/app/BenchmarkRoute', () => ({ BenchmarkRoute: () => <main aria-label="Benchmarks" /> }));
+vi.mock('../../../src/places/diagnostics/DiagnosticsPlace', () => ({ default: () => <main aria-label="Diagnostics" /> }));
 vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -57,7 +57,7 @@ describe('App', () => {
 
     await act(() => appRouter().navigate('/diagnostics/benchmarks'));
 
-    expect(await screen.findByRole('main', { name: 'Benchmarks' })).toBeInTheDocument();
+    expect(await screen.findByRole('main', { name: 'Diagnostics' })).toBeInTheDocument();
   });
 
   it('refuses a file dropped anywhere nothing takes it, and leaves any other drag alone', async () => {

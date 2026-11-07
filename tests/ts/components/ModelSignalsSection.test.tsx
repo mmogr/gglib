@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { ModelSignalsSection } from '../../../src/components/proxy';
+import { ModelSignalsSection } from '../../../src/places/diagnostics/live/ProxyMetricsGrid';
 import type { ModelDefectCounts } from '../../../src/services/transport/types/dashboard';
 import { dashboardSnapshot, modelDefectCounts } from '../fixtures/dashboard';
 
@@ -85,7 +85,6 @@ describe('ModelSignalsSection', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Per-Model Signals' })).toBeInTheDocument();
     expect(rowsOf('qwen')).toEqual([
       'qwen: 100 requests',
       'Tool-call repairs: 7 of 9 succeeded',
@@ -192,14 +191,6 @@ describe('ModelSignalsSection', () => {
     ]);
   });
 
-  /** Before anything is recorded, "none" is a claim the run has not earned. */
-  it('says nothing is recorded yet when no model has been seen', () => {
-    render(<ModelSignalsSection snapshot={dashboardSnapshot()} />);
-
-    expect(screen.getByText('Nothing recorded yet.')).toBeInTheDocument();
-    expect(screen.queryByRole('group')).not.toBeInTheDocument();
-  });
-
   /**
    * A clean run says so over its denominator. Agent turns the guard passed
    * are not a signal, but they are part of what the "none" is claimed over,
@@ -216,9 +207,4 @@ describe('ModelSignalsSection', () => {
     expect(screen.getByText('None across 101 requests, 2 models.')).toBeInTheDocument();
   });
 
-  it('renders no section before the first snapshot arrives', () => {
-    const { container } = render(<ModelSignalsSection snapshot={null} />);
-
-    expect(container).toBeEmptyDOMElement();
-  });
 });

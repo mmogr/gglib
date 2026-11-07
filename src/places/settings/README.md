@@ -40,11 +40,10 @@ Interim sections, each until the PR that replaces it:
   one list (ST-8) until S2 (`feat(gui)/settings-tools`); "This device" is
   the chat's per-device `AgentLimitsSection`.
 - **Engines** hosts today's `EngineCard`s until S3
-  (`feat(gui)/settings-engines-about`), and the system checks
-  (`DiagnosticsPanel`) until G1 (`feat(gui)/diagnostics-place`).
+  (`feat(gui)/settings-engines-about`); the system checks are Diagnostics ›
+  System's.
 - **About** shows the build and today's Stop the daemon until S3.
-- The loop guard's trips (`LoopGuardTripsPanel`) sit under Stop runaway
-  loops until G1 moves them to Diagnostics › Live.
+- The loop guard's trips are on Diagnostics › Live.
 
 | File | Role |
 |------|------|
@@ -68,10 +67,6 @@ Interim sections, each until the PR that replaces it:
 | `notes.ts` | When a change takes effect, for the fields read when the endpoint turns on, when gglib starts, or when the desktop app starts, and the key's own |
 | `EngineCard.tsx` | One engine's card: what is installed and how, where it stands against its pin, install or update with progress, the CPU build's warning, the source build's command, a removal that waits for a running model (ST-11) |
 | `pinStanding.ts` | Where an engine's install stands against its pinned release, in the card's words, and whether to offer the update or send a source build to the terminal |
-| `DiagnosticsPanel.tsx` | `gglib config check-deps`, `paths` and `fast-downloads status` as one panel |
-| `useDiagnostics.ts` | State for the system checks |
-| `LoopGuardTripsPanel.tsx` | `gglib proxy trips`: per day and model, what the loop guard scanned and what it acted on |
-| `useLoopGuardTrips.ts` | The trips' one read when the panel opens, and a reload |
 | `BuildInfo.tsx` | The daemon's own build, read from `/api/version` |
 | `LabelledValue.tsx` | A label and its value, for the read-only rows of the cards and checks |
 

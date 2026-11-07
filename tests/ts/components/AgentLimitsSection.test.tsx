@@ -21,7 +21,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
-import { AgentLimitsSection } from '../../../src/components/ToolsPopover/AgentLimitsSection';
+import { AgentLimitsSection } from '../../../src/components/AgentLimitsSection';
 import {
   TOOL_TIMEOUT_MS_FLOOR,
   TOOL_TIMEOUT_MS_CEILING,
