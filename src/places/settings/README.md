@@ -39,11 +39,6 @@ Interim sections, each until the PR that replaces it:
 - **Tools** hosts today's `McpServersPanel` and its add and edit dialog over
   one list (ST-8) until S2 (`feat(gui)/settings-tools`); "This device" is
   the chat's per-device `AgentLimitsSection`.
-- **Engines** keeps the system checks (`DiagnosticsPanel`) at its foot
-  until G1 (`feat(gui)/diagnostics-place`); their Download accelerator
-  repeats Faster downloads until then.
-- The loop guard's trips (`LoopGuardTripsPanel`) sit under Stop runaway
-  loops until G1 moves them to Diagnostics › Live.
 
 | File | Role |
 |------|------|
@@ -69,10 +64,6 @@ Interim sections, each until the PR that replaces it:
 | `EngineDetails.tsx` | An engine row's Details: the install record (release or built from, download or acceleration, date), the binary and what it reports, the model serving on it, where it stands against its pin; only what the status has |
 | `FasterDownloads.tsx` | `gglib config fast-downloads`: Off with Set up, On with ⋯ Turn off, each read back from the setup status; with no Python, the command that builds it with ⧉ and no Set up; a failure in the daemon's words |
 | `pinStanding.ts` | Where an engine's install stands against its pinned release, in the row's words, and whether to offer the update or send a source build to the terminal |
-| `DiagnosticsPanel.tsx` | `gglib config check-deps`, `paths` and `fast-downloads status` as one panel |
-| `useDiagnostics.ts` | State for the system checks |
-| `LoopGuardTripsPanel.tsx` | `gglib proxy trips`: per day and model, what the loop guard scanned and what it acted on |
-| `useLoopGuardTrips.ts` | The trips' one read when the panel opens, and a reload |
 | `BuildInfo.tsx` | The daemon's own build, read from `/api/version`: "gglib <display>", and "Working tree modified since this build" when its fingerprint is dirty |
 | `LabelledValue.tsx` | A label and its value, for an engine's Details |
 

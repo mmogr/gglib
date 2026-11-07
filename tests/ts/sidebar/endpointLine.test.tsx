@@ -13,7 +13,6 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
-vi.mock('../../../src/components/ProxyDashboardModal', () => ({ ProxyDashboardModal: () => null }));
 vi.mock('../../../src/services/transport', () => ({
   getTransport: () => ({ revealSecret: async () => null, getSettings: async () => ({}) }),
 }));

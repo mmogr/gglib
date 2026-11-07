@@ -67,7 +67,7 @@ not because it belongs here.
 | File | Description |
 |------|-------------|
 | `serverRegistry.ts` | External store for server lifecycle state. Uses `useSyncExternalStore` for reactive React integration. A snapshot (the list read) replaces the running set: a server it leaves out is stopped |
-| `serverEvents.ts` | Subscribes to the daemon's SSE stream and ingests server lifecycle events into the registry; says whether the list's read has landed (`useServerListHeard`), and reads it again on request (`refreshServers`) |
+| `serverEvents.ts` | Subscribes to the daemon's SSE stream and ingests server lifecycle events into the registry; says whether the list's read has landed (`useServerListHeard`; a read that failed or that an event overtook is tried again, waiting longer each time), and reads it again on request (`refreshServers`) |
 | `serverEvents.normalize.ts` | Two named readers, one per producer: `normalizeServerEventFromAppEvent` for the camelCase `AppEvent` frames on `/api/events`, `normalizeServerSnapshotFromList` for the snake_case `GET /api/servers` list. Neither accepts the other's spelling |
 | `proxyRegistry.ts` | External store for proxy state, the `serverRegistry.ts` analogue |
 | `proxyEvents.ts` | Subscribes to proxy lifecycle events and ingests them into `proxyRegistry` |

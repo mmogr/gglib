@@ -5,7 +5,9 @@
  * whose first send makes the conversation.
  *
  * Leaving it keeps the model loaded (the endpoint serves it to every
- * client); Unload is the picker's, beside the model's name.
+ * client); Unload <model> is in the composer's model picker ▾. A model
+ * unloaded or crashed while the chat is open replaces the composer with a
+ * line that says so, with no banner and no toast.
  *
  * @module places/chat/ChatPlace
  */
@@ -14,7 +16,6 @@ import { useState, useEffect, useRef } from 'react';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { useConversationActions } from './useConversationActions';
 import { ChatMessagesPanel, type ModelChoice } from '../../components/ChatMessagesPanel';
-import { GenericToolUI } from '../../components/ToolUI';
 import { useGglibRuntime } from '../../hooks/useGglibRuntime';
 import { useSettings } from '../../hooks/useSettings';
 import { useChatModelFacts } from '../../hooks/useChatModelFacts';
@@ -57,12 +58,18 @@ export type ChatPlaceProps = {
   // draft) that `context` reads when the switch lands; local only.
   onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: ChatDraft }) => Promise<void>;
   // Unload the model, which every client of the proxy loses with it; the
-  // chat stays open, read-only. Local only.
+  // chat stays open, its composer saying so. Local only.
   onUnloadModel?: () => Promise<void>;
   /** The open conversation is now `id`: the first send made it, a branch, or Start over. The address follows. */
   onOpened?: (id: number) => void;
   /** The open conversation was deleted. */
   onDeleted?: () => void;
+  /** Open the model's inspector, where its log is; local only. */
+  onShowModel?: () => void;
+  /** Open the model's log, after a crash; local only. */
+  onShowLog?: () => void;
+  /** Open a new chat on the paired machine's model, by its id there; local only. */
+  onOpenFar?: (id: number) => void;
 } & (
   | { paired?: undefined; desk?: undefined; serverPort: number; modelId: number }
   | {
@@ -93,6 +100,9 @@ export default function ChatPlace(props: ChatPlaceProps) {
     onUnloadModel,
     onOpened,
     onDeleted,
+    onShowModel,
+    onShowLog,
+    onOpenFar,
     paired,
     desk,
   } = props;
@@ -202,29 +212,13 @@ export default function ChatPlace(props: ChatPlaceProps) {
   const serverState = useServerState(modelId ?? -1);
   const isServerRunning =
     pairedChat || far || (serverState?.status !== 'stopped' && serverState?.status !== 'crashed');
-
-  // Track previous status for transition-only toast
-  const prevStatusRef = useRef(serverState?.status);
-
-  // Show toast only on status transition to stopped/crashed (not on remount).
-  // Never for a paired chat: whatever this machine's registry is reporting,
-  // it is not the model answering, and saying the chat is read-only when it
-  // is not is worse than saying nothing.
-  useEffect(() => {
-    const prev = prevStatusRef.current;
-    const next = serverState?.status;
-
-    if (!pairedChat && !far && prev !== next && (next === 'stopped' || next === 'crashed')) {
-      showToast(
-        next === 'crashed'
-          ? 'Server crashed. Chat is now read-only.'
-          : 'Server stopped. Chat is now read-only.',
-        'warning'
-      );
-    }
-
-    prevStatusRef.current = next;
-  }, [pairedChat, far, serverState?.status, showToast]);
+  // A model gone mid-chat replaces the composer with a line that says so: no
+  // banner and no toast. Never for a paired or far chat, which this
+  // registry knows nothing of.
+  const modelGone = pairedChat || far ? null
+    : serverState?.status === 'crashed' ? 'crashed'
+      : serverState?.status === 'stopped' ? 'unloaded'
+        : null;
 
   // An error belongs to the conversation it happened in.
   useEffect(() => setChatError(null), [activeConversationId]);
@@ -237,8 +231,6 @@ export default function ChatPlace(props: ChatPlaceProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-background">
       <AssistantRuntimeProvider runtime={runtime}>
-        {/* Tool UI Components - render tool calls in chat messages */}
-        <GenericToolUI />
         <ChatMessagesPanel
           key={activeConversationId ?? 'none'}
           activeConversation={activeConversation}
@@ -260,7 +252,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
           endedRun={endedRun}
           supportsToolCalls={far ? null : supportsToolCalls}
           toolFormat={far ? null : toolFormat}
-          modelName={desk ? `${desk.machineName} picks the model` : paired ? `${modelName} on ${paired.machineName}` : modelName}
+          modelName={modelName}
           modelId={far ? undefined : modelId}
           source={source}
           onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({
@@ -279,6 +271,11 @@ export default function ChatPlace(props: ChatPlaceProps) {
           branching={far ? undefined : branching}
           draw={draw}
           previews={previews}
+          deskName={paired?.machineName ?? desk?.machineName}
+          modelGone={modelGone}
+          onShowModel={onShowModel}
+          onShowLog={onShowLog}
+          onOpenFar={onOpenFar}
         />
       </AssistantRuntimeProvider>
     </div>

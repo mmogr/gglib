@@ -319,12 +319,8 @@ value, quiet unit suffix, label in `text-xs text-text-muted`. Intent colors
 the value only — labels and units always stay quiet, and warning/danger
 intents never appear without the label naming the metric.
 
-Exactly **one sparkline style app-wide**: `primitives/Sparkline` with its
-defaults (currentColor stroke, 2px terminus dot, faint `stroke-border`
-baseline) — no per-screen variants; only width/height flex with context.
-A sparkline never appears without an adjacent current-value Readout.
-Percentage series pin the domain (`min={0} max={100}`) so lines show real
-movement, not autoscaled noise.
+There are no sparklines: a data mark in Diagnostics is a secondary-grey
+bar with its numbers beside it.
 
 Usage-meter severity thresholds (donut, KV readouts) are **70 warning /
 90 danger**; below 70 meters wear `primary` — green is reserved for

@@ -8,7 +8,8 @@
  * `/get/:owner/:name`, so picking a row changes the address without
  * remounting the page. `/endpoint` is the endpoint place, its inspector
  * named by `?inspect=`. `/settings/:section` is the settings place, and
- * `/settings` its General section.
+ * `/settings` its General section. `/diagnostics/:tab` is the diagnostics
+ * place, and `/diagnostics` its Live tab.
  *
  * The router instance is module-scoped so the native menu can navigate from
  * outside React (`app/menuBridge`). It is created after `takeDaemonToken()`
@@ -26,8 +27,8 @@ import EndpointPlace from '../places/endpoint/EndpointPlace';
 import LibraryPlace from '../places/library/LibraryPlace';
 import DevicesPlace from '../places/devices/DevicesPlace';
 import SettingsPlace from '../places/settings/SettingsPlace';
+import DiagnosticsPlace from '../places/diagnostics/DiagnosticsPlace';
 import { takeDaemonToken } from '../services/transport/api/daemonToken';
-import { BenchmarkRoute } from './BenchmarkRoute';
 import { ChatRoute } from './ChatRoute';
 import { FarChatRoute } from './FarChatRoute';
 import { paths } from './paths';
@@ -45,7 +46,8 @@ export const routes: RouteObject[] = [
   { path: 'devices', element: <DevicesPlace /> },
   { path: 'settings', element: <Navigate to={paths.settings()} replace /> },
   { path: 'settings/:section', element: <SettingsPlace /> },
-  { path: 'diagnostics/benchmarks', element: <BenchmarkRoute /> },
+  { path: 'diagnostics', element: <Navigate to={paths.diagnostics()} replace /> },
+  { path: 'diagnostics/:tab', element: <DiagnosticsPlace /> },
   { path: '*', element: <Navigate to={paths.library()} replace /> },
 ];
 

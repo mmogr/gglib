@@ -25,7 +25,7 @@ import { StatusMark } from '../../components/status/StatusMark';
 import { useToastContext } from '../../contexts/ToastContext';
 import { disableFastDownloads, enableFastDownloads, getSetupStatus } from '../../services/transport/api/setup';
 import { formatError } from '../../utils/errors';
-import { Menu } from '../library/Menu';
+import { Menu } from '../../components/ui/Menu';
 
 /** The command that builds the accelerator from a terminal (`gglib config fast-downloads enable`). */
 const ENABLE_COMMAND = 'gglib config fast-downloads enable';

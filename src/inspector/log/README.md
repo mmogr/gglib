@@ -34,7 +34,7 @@ port for it."
 | File | Role |
 |------|------|
 | `LogInspector.tsx` | The subject: the port from the server registry (the last known after a stop or crash, unless another model now serves it), or the sentence for a port given away, a failed start with no port, or a model not loaded |
-| `ConsoleLogPanel.tsx` | The header (`LogHeader`) and the log: ANSI parsing (Anser), the time before each line, following, copy and Clear view |
+| `ConsoleLogPanel.tsx` | The header (`LogHeader`; ‹ and × only when given, so Diagnostics › Logs draws it without them) and the log: ANSI parsing (Anser), the time before each line, following, copy and Clear view |
 | `ConsoleLogPanel.css` | Terminal appearance and the ANSI colour classes |
 
 <!-- module-docs:end -->

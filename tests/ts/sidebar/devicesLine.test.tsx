@@ -23,7 +23,6 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/transport')>()),
   getTransport: () => transport,
 }));
-vi.mock('../../../src/components/ProxyDashboardModal', () => ({ ProxyDashboardModal: () => null }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
 import { devicesSaying } from '../../../src/sidebar/DevicesLine';

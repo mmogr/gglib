@@ -10,8 +10,6 @@ import type { GglibMessage } from '../../../types/messages';
 import type { BranchPoint } from '../../../types/generated/BranchPoint';
 import { cn } from '../../../utils/cn';
 import { BranchingContext } from './BranchingContext';
-import { TurnRow } from './TurnRow';
-import { TurnWho } from './TurnMargin';
 
 /** How an option is listed: its line, or what stands in for one. */
 function optionLine(option: BranchPoint['options'][number]): string {
@@ -49,7 +47,7 @@ export const BranchSwitcher: FC<{ point: BranchPoint; open: (cid: number) => voi
       <Button
         variant="ghost"
         size="sm"
-        className="px-1 font-mono tabular-nums"
+        className="px-1 text-xs tabular-nums"
         aria-label={`Branch ${index + 1} of ${options.length}`}
         aria-expanded={listOpen}
         aria-controls={listOpen ? listId : undefined}
@@ -90,7 +88,7 @@ export const BranchSwitcher: FC<{ point: BranchPoint; open: (cid: number) => voi
   );
 };
 
-/** The switcher of the branch point a turn starts, in its margin; nothing where it starts none. */
+/** The switcher of the branch point a turn starts, in its foot; nothing where it starts none. */
 export const TurnBranches: FC = () => {
   const branching = useContext(BranchingContext);
   const message = useMessage();
@@ -100,22 +98,17 @@ export const TurnBranches: FC = () => {
 };
 
 /**
- * The row after a chat's last message where other branches of its family
- * go on: its switcher, the open chat's option being "Nothing here yet".
+ * The 12 px line after a chat's last message where other branches of its
+ * family go on: its switcher, the open chat's option being "Nothing here yet".
  */
 export const BranchEnd: FC = () => {
   const branching = useContext(BranchingContext);
   const point = branching?.points.find((p) => p.message_id === null);
   if (!point || !branching) return null;
   return (
-    <TurnRow
-      who={<TurnWho name="Other branches" />}
-      body={
-        <div className="flex flex-wrap items-center gap-md">
-          <p className="m-0 text-text-muted">Other branches go on from here.</p>
-          <BranchSwitcher point={point} open={branching.open} />
-        </div>
-      }
-    />
+    <div className="flex flex-wrap items-center gap-md text-xs text-text-muted">
+      <p className="m-0">Other branches go on from here.</p>
+      <BranchSwitcher point={point} open={branching.open} />
+    </div>
   );
 };

@@ -7,16 +7,18 @@
  * `renderApp` mounts the routes under the providers the layout gives them,
  * without the sidebar and the dialogs the layout draws over every place;
  * `renderShell` mounts them inside the shell, sidebar and all, for a test of
- * the sidebar itself; a test of the dialogs renders `App`. The router each
+ * the sidebar itself; `renderGated` mounts them behind the setup gate, as
+ * the layout does, under StrictMode; a test of the dialogs renders `App`. The router each
  * makes is the app's, so `app/menuBridge` and anything else that navigates
  * from outside React reaches it.
  */
 
-import type { ReactNode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import { Outlet, RouterProvider } from 'react-router';
 import { render } from '@testing-library/react';
 
 import { createAppRouter, type AppRouter } from '../../../src/app/router';
+import { SetupGate } from '../../../src/app/SetupGate';
 import { Shell } from '../../../src/app/Shell';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
@@ -56,8 +58,9 @@ export interface RenderedApp extends ReturnType<typeof render> {
   at: () => string;
 }
 
-function rendered(router: AppRouter): RenderedApp {
-  const view = render(<RouterProvider router={router} />);
+function rendered(router: AppRouter, strict = false): RenderedApp {
+  const provider = <RouterProvider router={router} />;
+  const view = render(strict ? <StrictMode>{provider}</StrictMode> : provider);
   return { ...view, router, at: () => `${router.state.location.pathname}${router.state.location.search}` };
 }
 
@@ -78,4 +81,24 @@ function ShellLayout() {
 /** Render the shell at `path`: the sidebar beside the place the address names. */
 export function renderShell(path: string): RenderedApp {
   return rendered(createAppRouter(<ShellLayout />, [path]));
+}
+
+/** The routes behind the setup gate, as the layout puts them. */
+function GatedLayout() {
+  return (
+    <PlaceProviders>
+      <SetupGate>
+        <Outlet />
+      </SetupGate>
+    </PlaceProviders>
+  );
+}
+
+/**
+ * Render the place at `path` behind the setup gate: setup while the daemon
+ * says it is not done. Under StrictMode, as `main.tsx` renders the app in
+ * development, so an effect that cannot run twice fails here.
+ */
+export function renderGated(path: string): RenderedApp {
+  return rendered(createAppRouter(<GatedLayout />, [path]), true);
 }

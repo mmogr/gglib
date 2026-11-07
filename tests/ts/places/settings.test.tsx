@@ -27,7 +27,6 @@ vi.mock('../../../src/services/transport/api/settings', async () => {
 vi.mock('../../../src/services/transport/api/proxy', () => ({ getLoopGuardTrips: vi.fn(async () => []) }));
 vi.mock('../../../src/places/settings/EngineRow', () => ({ EngineRow: ({ kind }: { kind: string }) => <p>engine row: {kind}</p> }));
 vi.mock('../../../src/places/settings/FasterDownloads', () => ({ FasterDownloads: () => <p>faster downloads</p> }));
-vi.mock('../../../src/places/settings/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => <p>system checks</p> }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
 import { daemon, holdWrites, resetDaemon, transport, writes } from './settingsDaemon';
@@ -369,11 +368,10 @@ describe('the interim sections', () => {
     expect(within(screen.getByRole('region', { name: 'This device' })).getByText('applies to all chats on this device')).toBeInTheDocument();
   });
 
-  it('Engines holds a row for each engine, Faster downloads, and the system checks', () => {
+  it('Engines holds a row for each engine and Faster downloads', () => {
     renderApp('/settings/engines');
     expect(screen.getByText('engine row: llama')).toBeInTheDocument();
     expect(screen.getByText('engine row: stable_diffusion')).toBeInTheDocument();
     expect(screen.getByText('faster downloads')).toBeInTheDocument();
-    expect(screen.getByText('system checks')).toBeInTheDocument();
   });
 });

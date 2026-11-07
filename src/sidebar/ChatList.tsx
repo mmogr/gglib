@@ -27,7 +27,7 @@ import { Input } from '../components/ui/Input';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { confirmDeleteChat } from '../places/chat/useConversationActions';
-import { Menu } from '../places/library/Menu';
+import { Menu } from '../components/ui/Menu';
 import { modelOf, refreshChats, renameChat, resetChats, useChats } from '../services/chatRegistry';
 import { pairedName, useRemoteState } from '../services/remoteRegistry';
 import type { ConversationSummary } from '../services/transport';

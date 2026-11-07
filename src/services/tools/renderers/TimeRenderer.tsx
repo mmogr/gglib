@@ -50,16 +50,4 @@ export const timeRenderer: ToolResultRenderer = {
       </div>
     );
   },
-
-  renderSummary(data) {
-    const resolved: unknown = typeof data === 'string' ? (() => {
-      try { return JSON.parse(data); } catch { return data; }
-    })() : data;
-    try {
-      const time = (resolved as Record<string, unknown>)?.time;
-      return time !== undefined ? String(time) : '(unknown)';
-    } catch {
-      return '(unknown)';
-    }
-  },
 };

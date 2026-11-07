@@ -20,9 +20,8 @@ folder's own until the places that own them say them.
 
 The endpoint line opens the endpoint place (`places/endpoint`) and the
 devices line the devices place (`places/devices`), and Settings the settings
-place on General (`places/settings`), raised while it is open. Interim homes,
-each named with the PR that removes it: Diagnostics opens the benchmarks
-(→ G1).
+place on General (`places/settings`), and Diagnostics the diagnostics
+place on Live (`places/diagnostics`), each raised while it is open.
 
 The chats' own words, not the daemon's: Chats, Filter chats, New chat,
 "No chats yet.", "No matching chats", "The chats couldn't be read.",

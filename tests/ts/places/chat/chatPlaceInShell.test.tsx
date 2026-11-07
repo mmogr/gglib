@@ -17,11 +17,11 @@ vi.mock('../../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('../../../../src/services/transport');
   return { ...actual, getTransport: () => transport.current };
 });
-vi.mock('../../../../src/components/ProxyDashboardModal', () => ({ ProxyDashboardModal: () => null }));
 vi.mock('../../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
 import { resetChats } from '../../../../src/services/chatRegistry';
 import { ingestServerEvent } from '../../../../src/services/serverRegistry';
+import { cleanupServerEvents, forgetServerList, initServerEvents } from '../../../../src/services/serverEvents';
 import { renderShell } from '../harness';
 
 let fixture: ChatFixture;
@@ -48,10 +48,17 @@ beforeEach(() => {
     getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null })),
     getRemoteStatus: vi.fn(async () => null),
     revealSecret: vi.fn(async () => null),
+    // The list the app's server bridge reads before a chat decides what serves it.
+    listServers: vi.fn(async () => [
+      { model_id: 41, model_name: 'qwen3-8b', pid: 1, port: 5041, started_at: Math.floor(Date.now() / 1000), runtime: 'llama' },
+    ]),
   };
   act(() => ingestServerEvent({ type: 'running', modelId: '41', port: 5041, updatedAt: Date.now(), modelName: 'qwen3-8b' }));
+  forgetServerList();
+  initServerEvents();
 });
 afterEach(() => {
+  cleanupServerEvents();
   act(() => ingestServerEvent({ type: 'stopped', modelId: '41', port: 5041, updatedAt: Date.now() + 1 }));
 });
 
@@ -72,8 +79,8 @@ describe('a chat in the window', () => {
 
     await waitFor(() => expect(app.at()).toBe('/chat/1'), SLOW);
     expect(app.router.state.historyAction).toBe('REPLACE');
-    const row = await within(chats).findByRole('button', { name: 'New Chat' }, SLOW);
-    expect(row).toHaveAttribute('aria-current', 'page');
+    // The row comes with the list, its mark with the address: each waited for.
+    await waitFor(() => expect(within(chats).getByRole('button', { name: 'New Chat' })).toHaveAttribute('aria-current', 'page'), SLOW);
     expect(await screen.findByText('Five largest files?', {}, SLOW)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^Library/ }));

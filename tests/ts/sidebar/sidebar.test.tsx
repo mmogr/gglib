@@ -1,7 +1,7 @@
 /**
  * The sidebar on every screen: its rows go through `app/paths`, the open
  * row is read from the address, Library counts the library, Settings opens
- * the settings place, and Diagnostics opens the benchmarks. Under 720 px
+ * the settings place, and Diagnostics opens the diagnostics place on Live. Under 720 px
  * the sidebar is a drawer. Its chats are `chatList.test.tsx`'s.
  */
 
@@ -26,9 +26,8 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/transport')>()),
   getTransport: () => transport,
 }));
-vi.mock('../../../src/components/ProxyDashboardModal', () => ({ ProxyDashboardModal: () => null }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
-vi.mock('../../../src/app/BenchmarkRoute', () => ({ BenchmarkRoute: () => <main aria-label="Benchmarks" /> }));
+vi.mock('../../../src/places/diagnostics/DiagnosticsPlace', () => ({ default: () => <main aria-label="Diagnostics" /> }));
 
 import { resetChats } from '../../../src/services/chatRegistry';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
@@ -52,7 +51,7 @@ describe('the sidebar', () => {
     expect(row('Library')).toHaveAttribute('aria-current', 'page');
 
     await app.router.navigate('/diagnostics/benchmarks');
-    await screen.findByRole('main', { name: 'Benchmarks' });
+    await screen.findByRole('main', { name: 'Diagnostics' });
     expect(row('Diagnostics')).toHaveAttribute('aria-current', 'page');
     expect(row('Library')).not.toHaveAttribute('aria-current');
   });
@@ -66,7 +65,7 @@ describe('the sidebar', () => {
     expect(app.at()).toBe('/library');
   });
 
-  it('Settings opens the settings place on General, marked current there; Diagnostics opens the benchmarks', async () => {
+  it('Settings opens the settings place on General, marked current there; Diagnostics opens Live, marked current there', async () => {
     const app = renderShell('/library');
     const user = userEvent.setup();
     expect(row('Settings')).not.toHaveAttribute('aria-current');
@@ -77,7 +76,9 @@ describe('the sidebar', () => {
     expect(row('Library')).not.toHaveAttribute('aria-current');
 
     await user.click(row('Diagnostics'));
-    await waitFor(() => expect(app.at()).toBe('/diagnostics/benchmarks'));
+    await waitFor(() => expect(app.at()).toBe('/diagnostics/live'));
+    expect(row('Diagnostics')).toHaveAttribute('aria-current', 'page');
+    expect(row('Settings')).not.toHaveAttribute('aria-current');
   });
 
   describe('under 720 px, the sidebar is a drawer', () => {
@@ -97,7 +98,7 @@ describe('the sidebar', () => {
     it('closes on a move to another place', async () => {
       const { app, user } = await opened();
       await user.click(screen.getAllByRole('button', { name: 'Diagnostics' })[1]);
-      await waitFor(() => expect(app.at()).toBe('/diagnostics/benchmarks'));
+      await waitFor(() => expect(app.at()).toBe('/diagnostics/live'));
       await gone();
     });
 

@@ -86,7 +86,6 @@ vi.mock('../../../src/services/transport/api/settings', () => ({
   updateSettings: vi.fn(),
   installProfileTemplates: vi.fn(),
 }));
-vi.mock('../../../src/places/settings/DiagnosticsPanel', () => ({ DiagnosticsPanel: () => <p>system checks</p> }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
 const ENGINES = {
@@ -509,10 +508,6 @@ describe('the engine rows', () => {
     expect(fake.uninstalled).toEqual([]);
   });
 
-  it('keeps the system checks at the foot', async () => {
-    renderApp('/settings/engines');
-    expect(await screen.findByText('system checks')).toBeInTheDocument();
-  });
 });
 
 describe('Faster downloads', () => {
