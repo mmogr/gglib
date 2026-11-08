@@ -253,15 +253,16 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
               <StatusMark kind="failed" label="Failed" />
               {loadFailed(load.error.message, load.error.action)}
               {load.error.action === 'load' && (
-                <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => navigate(paths.log(model.id), { state: { failedLoad: true } satisfies LogFrom })}>
+                <Button variant="link" size="sm" className="text-xs font-normal" onClick={() => navigate(paths.log(model.id), { state: { failedLoad: true } satisfies LogFrom })}>
                   Show log
                 </Button>
               )}
             </p>
           )}
           {model.openaiId !== null && (
-            <p className="m-0 flex items-center gap-xs text-xs text-text-secondary">
-              Model ID <code className="font-mono text-text">{model.openaiId}</code>
+            <p className="m-0 flex items-start gap-xs text-xs text-text-secondary">
+              <span className="shrink-0 whitespace-nowrap pt-1.5">Model ID</span>
+              <code className="min-w-0 pt-1.5 font-mono text-text [overflow-wrap:anywhere]">{model.openaiId}</code>
               <CopyValue value={model.openaiId} label="Copy the Model ID" />
             </p>
           )}

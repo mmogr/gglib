@@ -34,6 +34,8 @@ import { useSettings } from '../../hooks/useSettings';
 import { usePairedModels } from '../../hooks/usePairedModels';
 import { useServers, type ServerViewModel } from '../../hooks/useServers';
 import { Inspector } from '../../inspector/Inspector';
+import { BESIDE_INSPECTOR } from '../../inspector/useInspectorWidth';
+import { cn } from '../../utils/cn';
 import { removeModel as removeLibraryModel, updateModel } from '../../services/modelEvents';
 import { useModelLibrary } from '../../services/modelRegistry';
 import { useEndpointFacts, useProxyState } from '../../services/proxyRegistry';
@@ -115,7 +117,7 @@ export default function EndpointPlace() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <section aria-label="Endpoint" className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <section aria-label="Endpoint" className={cn('flex flex-1 flex-col overflow-hidden', BESIDE_INSPECTOR)}>
         <div className="flex shrink-0 items-center gap-sm px-md pb-sm pt-md">
           <h2 className="m-0 flex-1 text-base font-semibold text-text">Endpoint</h2>
           <Menu
