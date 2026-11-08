@@ -19,6 +19,7 @@ import type { AttachmentInfo } from '../../../types/generated/AttachmentInfo';
 import type { ChatChange } from '../../../types/generated/ChatChange';
 import type { ChatChanged } from '../../../types/generated/ChatChanged';
 import type { ChatTitleRequest } from '../../../types/generated/ChatTitleRequest';
+import type { ConversationSettingsPatch } from '../../../types/generated/ConversationSettingsPatch';
 import type { CreateConversationRequest } from '../../../types/generated/CreateConversationRequest';
 import type { KeepPicture } from '../../../types/generated/KeepPicture';
 import type { UpdateConversationRequest } from '../../../types/generated/UpdateConversationRequest';
@@ -69,6 +70,21 @@ export async function updateConversationSystemPrompt(
 ): Promise<void> {
   // No `title` key: the daemon leaves a field it is not sent as it is.
   const body: Partial<UpdateConversationRequest> = { system_prompt: systemPrompt };
+  await put<void>(`/api/conversations/${id}`, body);
+}
+
+/**
+ * Change a conversation's model, tools or tool limits: only the settings in
+ * `settings` change, each to what it says, and a `null` model or limit is
+ * cleared; the daemon refuses a limit outside a run's bounds, and a model on
+ * another machine than the one a chat with saved messages ran on.
+ */
+export async function updateConversationSettings(
+  id: ConversationId,
+  settings: ConversationSettingsPatch
+): Promise<void> {
+  // A null title, and no `system_prompt` key: the daemon leaves both as they are.
+  const body: UpdateConversationRequest = { title: null, settings };
   await put<void>(`/api/conversations/${id}`, body);
 }
 

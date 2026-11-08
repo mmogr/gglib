@@ -17,6 +17,7 @@ vi.mock('../../../../src/services/platform', () => ({
 }));
 
 import {
+  updateConversationSettings,
   updateConversationSystemPrompt,
   updateConversationTitle,
 } from '../../../../src/services/transport/api/chat';
@@ -216,6 +217,36 @@ describe('what a typed request body sends', () => {
   it("setting a conversation's system prompt sends it", async () => {
     expect((await sent(() => updateConversationSystemPrompt(5, 'Be brief.'))).body).toStrictEqual({
       system_prompt: 'Be brief.',
+    });
+  });
+
+  it("changing a conversation's settings sends only those under `settings`, a null title, and no `system_prompt` key", async () => {
+    const model = { machine: { kind: 'paired' as const, fingerprint: '0a1b2c3d4e5f' }, id: 3 };
+    expect(await sent(() => updateConversationSettings(5, { model, max_parallel: 2 }))).toStrictEqual({
+      method: 'PUT',
+      path: '/api/conversations/5',
+      body: {
+        title: null,
+        settings: {
+          model: { machine: { kind: 'paired', fingerprint: '0a1b2c3d4e5f' }, id: 3 },
+          max_parallel: 2,
+        },
+      },
+    });
+  });
+
+  it("switching a conversation's tools off sends that alone", async () => {
+    expect((await sent(() => updateConversationSettings(5, { no_tools: true }))).body).toStrictEqual({
+      title: null,
+      settings: { no_tools: true },
+    });
+  });
+
+  it("clearing a conversation's model and limits sends each as a null", async () => {
+    const cleared = { model: null, max_parallel: null, tool_timeout_ms: null };
+    expect((await sent(() => updateConversationSettings(5, cleared))).body).toStrictEqual({
+      title: null,
+      settings: { model: null, max_parallel: null, tool_timeout_ms: null },
     });
   });
 

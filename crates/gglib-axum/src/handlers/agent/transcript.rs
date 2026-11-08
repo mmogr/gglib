@@ -3,15 +3,15 @@
 //! The user's message is saved once the run is accepted. When the request
 //! names a row to replace (an edit, or a regenerate), that row and every
 //! later row are deleted in the same transaction, so a refused run, or one
-//! that never got as far, changes nothing. A conversation's machine is fixed:
-//! a run on another machine than the one it ran on is refused before its
-//! message is saved. Once the message is saved, the run names its model on
-//! the conversation by its machine, so the chat's next turn, from either
-//! door, runs on it, or is refused for being the paired machine's. A turn
-//! that said a Thinking choice has the conversation remember it then too.
-//! The reply
-//! is saved when the run ends, all rows or none, with how long each turn
-//! thought: from its first reasoning event to its last, as they were logged.
+//! that never got as far, changes nothing. A conversation's machine is fixed
+//! once it has a saved message: a run on another machine than the one it ran
+//! on is refused before its message is saved. Once the message is saved, the
+//! run names its model on the conversation by its machine, so the chat's next
+//! turn, from either door, runs on it, or is refused for being the paired
+//! machine's. A turn that said a Thinking choice has the conversation
+//! remember it then too. The reply is saved when the run ends, all rows or
+//! none, with how long each turn thought: from its first reasoning event to
+//! its last, as they were logged.
 //!
 //! The message, the reply and the Thinking choice are written by
 //! `gglib_app_services::transcript`, which the CLI's chat saves through too.
@@ -40,10 +40,13 @@ fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
     }
 }
 
-/// Refuse a run on `ran_on` in `conversation_id` when the conversation ran
+/// Refuse a run on `ran_on` in `conversation_id`, or a model of `ran_on`
+/// set on it (`PUT /api/conversations/{id}`), when the conversation ran
 /// on another machine, as [`Conversation::machine`] reads it: the one its
 /// stored model names, or this one when it stores only a `model_id`. One
-/// that names no model takes the run's. Paired machines are told apart by
+/// that names no model takes the run's, and so does one with no saved
+/// message: it has not run anywhere yet, and the model it names was only
+/// chosen. Paired machines are told apart by
 /// fingerprint, so a chat of a machine this one has since replaced is
 /// refused as well, rather than sent to whatever has its id on the new one.
 ///
@@ -53,7 +56,7 @@ fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
 ///
 /// `conflict` (409) for a run on another machine; `internal_error` when the
 /// conversation cannot be read.
-pub(super) async fn keep_machine(
+pub(crate) async fn keep_machine(
     core: &AppCore,
     conversation_id: i64,
     ran_on: &Machine,
@@ -72,6 +75,22 @@ pub(super) async fn keep_machine(
     let Some(conversation) = conversation else {
         return Ok(());
     };
+    if conversation
+        .machine()
+        .is_some_and(|stored| stored != *ran_on)
+    {
+        let count = core.chat_history().get_message_count(conversation_id).await;
+        let count = count.map_err(|_| {
+            coded(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "the conversation could not be read",
+            )
+        })?;
+        if count == 0 {
+            return Ok(());
+        }
+    }
     let refusal = match (conversation.machine(), ran_on) {
         (None, _) => return Ok(()),
         (Some(stored), ran_on) if stored == *ran_on => return Ok(()),
@@ -87,6 +106,46 @@ pub(super) async fn keep_machine(
         }
     };
     Err(coded(StatusCode::CONFLICT, "conflict", refusal))
+}
+
+/// Refuse to clear the model of a chat that has run: clearing would forget
+/// the machine it ran on, and [`keep_machine`] would then let it continue on
+/// another. A chat with no saved message, or none stored, clears freely.
+///
+/// # Errors
+///
+/// `conflict` for a chat that has run, and `internal_error` for a read that
+/// failed.
+pub(crate) async fn keep_a_model(core: &AppCore, conversation_id: i64) -> Result<(), HttpError> {
+    let unread = || {
+        coded(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "the conversation could not be read",
+        )
+    };
+    let history = core.chat_history();
+    let conversation = history
+        .get_conversation(conversation_id)
+        .await
+        .map_err(|_| unread())?;
+    if conversation.is_none_or(|c| c.machine().is_none()) {
+        return Ok(());
+    }
+    if history
+        .get_message_count(conversation_id)
+        .await
+        .map_err(|_| unread())?
+        == 0
+    {
+        return Ok(());
+    }
+    Err(coded(
+        StatusCode::CONFLICT,
+        "conflict",
+        "this chat has run, so it keeps a model on the machine it ran on: choose another \
+         model there rather than none",
+    ))
 }
 
 /// Save the request's last message, when it is the user's, to

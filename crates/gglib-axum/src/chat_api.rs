@@ -7,16 +7,20 @@
 //! Chat handlers use the unified `AppState` from `routes.rs` and access
 //! `core` and `gui` services through it.
 
+use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 
 use crate::chat_changes;
 use crate::error::HttpError;
+use crate::handlers::agent::{keep_a_model, keep_machine};
 use crate::handlers::chat_title;
 use crate::state::AppState;
 use gglib_core::domain::chat::{Conversation, ConversationSettings, NewConversation};
+use gglib_core::domain::{ConversationSettingsPatch, Machine, ModelRef};
 use gglib_core::ports::chat_history::ChatHistoryError;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,6 +46,10 @@ pub(crate) struct CreateConversationRequest {
 /// JSON `null` (clear the system prompt) is distinguished from an omitted
 /// key (leave unchanged) — without it, `PUT /api/conversations/:id` with
 /// `{"system_prompt": null}` silently no-ops instead of clearing the prompt.
+///
+/// `settings` changes the settings its runs read, each one sent and no
+/// other: its model, its tools and its tool limits. Left out, or `null`, it
+/// changes none.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct UpdateConversationRequest {
@@ -54,6 +62,9 @@ pub(crate) struct UpdateConversationRequest {
                   a string sets it, and double_option deserializes exactly that"
     )]
     pub system_prompt: Option<Option<String>>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<ConversationSettingsPatch>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,19 +172,62 @@ pub(crate) async fn get_conversation(
     Ok(Json(conversation))
 }
 
-/// Update a conversation.
+/// Update a conversation: its title, its system prompt, and the settings
+/// its runs read, in one write of what was sent. A limit outside a run's
+/// bounds, and a model of this machine its catalogue does not hold, are a
+/// 400; a model of another machine than the one the conversation ran on is
+/// refused as a run on it is. A body that cannot be read, a setting the
+/// patch does not name among them, is a 400 coded `invalid_request`. A
+/// refused update changes nothing.
 /// PUT /api/conversations/:id
 pub(crate) async fn update_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
-    Json(req): Json<UpdateConversationRequest>,
+    req: Result<Json<UpdateConversationRequest>, JsonRejection>,
 ) -> Result<(), HttpError> {
+    let Json(req) = req.map_err(|e| HttpError::Coded {
+        status: StatusCode::BAD_REQUEST,
+        code: "invalid_request",
+        message: e.body_text(),
+    })?;
+    let patch = req.settings.unwrap_or_default();
+    if let Some(reason) = patch.refusal() {
+        return Err(HttpError::BadRequest(reason));
+    }
+    let model = patch.model.clone().flatten();
+    let model_name = match &model {
+        Some(model) => model_name(&state, model).await?,
+        None => None,
+    };
+    match &patch.model {
+        Some(Some(model)) => keep_machine(&state.core, id, &model.machine).await?,
+        Some(None) => keep_a_model(&state.core, id).await?,
+        None => {}
+    }
     state
         .core
         .chat_history()
-        .update_conversation(id, req.title, req.system_prompt)
+        .update_conversation(id, req.title, req.system_prompt, patch, model_name)
         .await?;
     Ok(())
+}
+
+/// The name `model` goes by: a model of this machine's catalogue, by its
+/// name there; none for the paired machine's, whose name is not read here
+/// (its next run names it).
+///
+/// # Errors
+///
+/// A 400 for a model of this machine the catalogue does not hold.
+async fn model_name(state: &AppState, model: &ModelRef) -> Result<Option<String>, HttpError> {
+    if model.machine != Machine::Local {
+        return Ok(None);
+    }
+    let held = state.core.models().get_by_id(model.id).await?;
+    let held = held.ok_or_else(|| {
+        HttpError::BadRequest(format!("no model has id {} on this machine", model.id))
+    })?;
+    Ok(Some(held.name))
 }
 
 /// Delete a conversation and all its messages; refused while a reply to it

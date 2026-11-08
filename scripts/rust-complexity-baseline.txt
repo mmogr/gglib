@@ -50,6 +50,7 @@ crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 357
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 319
 crates/gglib-axum/src/handlers/proxy/wire_tests.rs 435
 crates/gglib-axum/src/routes.rs 467
+crates/gglib-axum/tests/conversation_settings_route.rs 445
 crates/gglib-axum/tests/integration_routes.rs 1066
 crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320
@@ -151,7 +152,7 @@ crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 740
 crates/gglib-core/src/services/app_core.rs 350
 crates/gglib-core/src/services/catalog/port_tests.rs 354
-crates/gglib-core/src/services/chat_history.rs 342
+crates/gglib-core/src/services/chat_history.rs 365
 crates/gglib-core/src/services/drawing.rs 349
 crates/gglib-core/src/services/drawing_tests.rs 347
 crates/gglib-core/src/services/model_components_tests.rs 792
