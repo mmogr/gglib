@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.31.0-rc.8](https://github.com/mmogr/gglib/compare/v0.31.0-rc.7...v0.31.0-rc.8) (2026-11-08)
+
+
+### What it stopped getting wrong
+
+* **chats:** a model is found by its id, and one this machine does not hold says so ([#1841](https://github.com/mmogr/gglib/issues/1841)) ([1b44152](https://github.com/mmogr/gglib/commit/1b44152d44edfad14d5a21187bcde03fb9233594))
+* **gui:** no more overlapping text in the inspector, a library that fits a narrow window, and no wordmark under the Mac window buttons ([#1840](https://github.com/mmogr/gglib/issues/1840)) ([30697f7](https://github.com/mmogr/gglib/commit/30697f7663edce03720f8bff8ef0eb16af7ea08e))
+
 ## [0.31.0-rc.7](https://github.com/mmogr/gglib/compare/v0.31.0-rc.6...v0.31.0-rc.7) (2026-11-08)
 
 
