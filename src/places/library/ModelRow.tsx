@@ -46,8 +46,8 @@ export const ModelRow: FC<ModelRowProps> = ({ name, facts, accessory, actions, s
       onKeyDown={onKeyDown}
       className={cn(
         'group relative flex min-h-[52px] cursor-pointer items-center gap-md rounded-base px-md py-sm outline-none',
-        'hover:bg-background-hover focus-visible:bg-background-hover',
-        selected && 'bg-surface-hover hover:bg-surface-hover',
+        'hover:bg-background-hover focus-visible:bg-background-hover focus-within:bg-background-hover',
+        selected && 'bg-surface-hover hover:bg-surface-hover focus-within:bg-surface-hover',
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col">
@@ -56,7 +56,8 @@ export const ModelRow: FC<ModelRowProps> = ({ name, facts, accessory, actions, s
       </div>
       {accessory && <span className="shrink-0 group-hover:invisible group-focus-within:invisible">{accessory}</span>}
       {actions && (
-        <span className="absolute right-sm top-1/2 flex -translate-y-1/2 items-center gap-xs opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+        // Over the row's end on the row's own colour, faded in from the left, so a long name ends under it rather than through it.
+        <span className="absolute right-sm top-1/2 flex -translate-y-1/2 items-center gap-xs bg-inherit pl-sm opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 before:absolute before:inset-y-0 before:right-full before:w-md before:bg-inherit before:[mask-image:linear-gradient(to_right,transparent,black)]">
           {actions}
         </span>
       )}
