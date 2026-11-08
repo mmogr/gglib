@@ -264,6 +264,34 @@ describe('ChatPlace, the thread', () => {
     expect(screen.getByText('Looking at the plist.')).toBeVisible();
   });
 
+  it('ends "Thinking…" once the reply writes its text, while the reply still arrives', async () => {
+    secondQuestion();
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    fixture.frames.r1 = [
+      { type: 'reasoning_delta', content: 'Looking at the plist.' },
+      { type: 'text_delta', content: 'It restarts it.' },
+    ];
+    renderLocal();
+
+    await screen.findByText('It restarts it.');
+    expect(screen.queryByRole('button', { name: /^Thinking…/ })).not.toBeInTheDocument();
+    // The saved exchange's fold, then this reply's, no longer live.
+    expect(screen.getAllByRole('button', { name: /^Thought/ })).toHaveLength(2);
+  });
+
+  it('draws no fold for a reply of text alone', async () => {
+    fixture.rows[1] = [
+      savedExchange()[0],
+      { id: 12, conversation_id: 1, role: 'assistant', content: ANSWER, created_at: '2026-09-01T09:13:00Z' },
+    ];
+    renderLocal();
+    await screen.findByText(ANSWER);
+    expect(screen.queryByRole('button', { name: /^Thinking…|^Thought|tool call/ })).not.toBeInTheDocument();
+    const turn = screen.getByText(ANSWER).closest('[data-turn="reply"]') as HTMLElement;
+    // Nothing above the text: the turn's first control is its action line's Copy.
+    expect(within(turn).getAllByRole('button')[0]).toHaveTextContent(/^Copy/);
+  });
+
   it('shows a reply arriving as how far its prompt has been read, with a bar', async () => {
     fixture.runs = [agentRun('r1', 1, 'in_progress')];
     fixture.frames.r1 = [{ type: 'prompt_progress', processed: 1240, total: 3420, cached: 2100, time_ms: 900 }];

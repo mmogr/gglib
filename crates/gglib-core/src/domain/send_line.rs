@@ -1,7 +1,8 @@
 //! The line above a chat's composer when a send has more to do than be
 //! answered.
 //!
-//! Its model is out of memory, or the endpoint is off. One line, worded here
+//! Its model is out of memory, the endpoint is off, or the endpoint is pinned
+//! to another model and refuses the send. One line, worded here
 //! once; the GUI's builder is held to these words by
 //! `contracts/vocabulary/send_line.json`, which this module's tests write.
 //!
@@ -38,7 +39,12 @@ impl ModelAbsence {
 /// - either, with the endpoint off: `… · sending turns the endpoint on and
 ///   loads it` (`… loads it again`);
 /// - resident, with the endpoint off: `The endpoint is Off · sending turns
-///   it on`.
+///   it on`;
+/// - the endpoint pinned (`pinned`, the name of the model it is pinned to)
+///   to another model, whatever `model`'s state: `The endpoint is Pinned to
+///   Qwen3-8B and cannot serve Qwen3-4B · sending is refused`, since a
+///   pinned endpoint refuses every other model (`pinned_model_mismatch`).
+///   Pinned to `model` itself, a send loads it as on any endpoint.
 ///
 /// `None` when the model is resident and the endpoint is not off: a send is
 /// answered, with nothing to say first.
@@ -47,7 +53,14 @@ pub fn send_line(
     model: &str,
     absence: Option<ModelAbsence>,
     endpoint: EndpointState,
+    pinned: Option<&str>,
 ) -> Option<String> {
+    if let Some(pin) = pinned.filter(|pin| endpoint == EndpointState::Pinned && *pin != model) {
+        return Some(format!(
+            "The endpoint is {} to {pin} and cannot serve {model} · sending is refused",
+            EndpointState::Pinned.word()
+        ));
+    }
     let off = endpoint == EndpointState::Off;
     let Some(absence) = absence else {
         return off.then(|| {

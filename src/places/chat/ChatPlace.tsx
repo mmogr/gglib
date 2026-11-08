@@ -219,7 +219,8 @@ export default function ChatPlace(props: ChatPlaceProps) {
 
   // What a send does first, as one line over the live composer: load the
   // model when the server registry says it is not running, again when it
-  // crashed; turn the endpoint on when it is off. Said only once each has
+  // crashed; turn the endpoint on when it is off; refused where it is
+  // pinned to another model. Said only once each has
   // been read: before the server list lands an absent server is not yet
   // "not loaded", and before the endpoint's status lands it is not yet off.
   // Never for a paired or far chat: these registries know only this
@@ -232,8 +233,9 @@ export default function ChatPlace(props: ChatPlaceProps) {
   const resident = status === 'running' || status === 'stopping';
   const absence: ModelAbsence | null =
     !local || !serversHeard || resident ? null : status === 'crashed' ? 'crashed' : 'not_loaded';
-  const endpoint = local && proxy.status !== null ? endpointFacts(proxy).state : 'on';
-  const line = sendLine(modelName, absence, endpoint);
+  // A pin is compared by name, as the picker compares models.
+  const facts = local && proxy.status !== null ? endpointFacts(proxy) : null;
+  const line = sendLine(modelName, absence, facts?.state ?? 'on', facts?.pinnedModel ?? null);
   const sendNote = line === null ? null : { line, crashed: absence === 'crashed' };
 
   // An error belongs to the conversation it happened in.

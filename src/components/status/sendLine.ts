@@ -4,7 +4,8 @@
  * `gglib_core::domain::send_line`'s, held to
  * `contracts/vocabulary/send_line.json` by
  * `tests/ts/contracts/sendLine.test.ts` for every absence and endpoint
- * state. Nothing locks: a send loads the model and turns the endpoint on.
+ * state. Nothing locks: a send loads the model and turns the endpoint on,
+ * and an endpoint pinned to another model refuses it, which the line says.
  *
  * @module components/status/sendLine
  */
@@ -27,9 +28,19 @@ const AGAIN: Readonly<Record<ModelAbsence, string>> = {
 
 /**
  * The line for `model`, by the name the catalogue shows; `null` when the
- * model is resident and the endpoint is not off.
+ * model is resident and the endpoint is not off. `pinned` is the model a
+ * pinned endpoint is pinned to: pinned to another, it refuses the send,
+ * whatever `model` is doing.
  */
-export function sendLine(model: string, absence: ModelAbsence | null, endpoint: EndpointState): string | null {
+export function sendLine(
+  model: string,
+  absence: ModelAbsence | null,
+  endpoint: EndpointState,
+  pinned: string | null,
+): string | null {
+  if (endpoint === 'pinned' && pinned !== null && pinned !== model) {
+    return `The endpoint is ${ENDPOINT_WORDS.pinned} to ${pinned} and cannot serve ${model} · sending is refused`;
+  }
   const off = endpoint === 'off';
   if (absence === null) return off ? `The endpoint is ${ENDPOINT_WORDS.off} · sending turns it on` : null;
   const does = off ? `sending turns the endpoint on and loads it${AGAIN[absence]}` : `sending loads it${AGAIN[absence]}`;

@@ -265,13 +265,8 @@ export function applyWaiting(
   messageId: string,
   event: AgentWaitingEvent,
 ): void {
-  const waiting = {
-    reason: event.reason,
-    step: event.step,
-    total: event.total,
-    position: event.position,
-    ...(typeof event.said === 'string' && { said: event.said }),
-  };
+  const { reason, step, total, position, said } = event;
+  const waiting = { reason, step, total, position, ...(typeof said === 'string' && { said }) };
   setMessages(prev =>
     prev.map(m => {
       if (m.id !== messageId) return m;

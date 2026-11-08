@@ -74,8 +74,8 @@ function renderLocal(modelId: number) {
   );
 }
 
-/** The server registry says model `id` is up, that it was unloaded, or that it crashed. */
-const event = (type: 'running' | 'stopped' | 'crashed', id: number) =>
+/** The server registry says model `id` is up, is being unloaded, was unloaded, or crashed. */
+const event = (type: 'running' | 'stopping' | 'stopped' | 'crashed', id: number) =>
   act(() => ingestServerEvent({ type, modelId: String(id), port: 4321, updatedAt: (clock += 1e6), modelName: 'qwen3' }));
 
 /** Open the picker ▾ and return its item `name`. */
@@ -92,7 +92,7 @@ async function head() {
 
 /** The line above the composer, by its words. */
 const lineSaying = (words: string) => screen.findByText(words, { selector: '[role="status"] > span' });
-const NO_LINE = /isn't loaded|stopped unexpectedly|endpoint is Off/;
+const NO_LINE = /isn't loaded|stopped unexpectedly|endpoint is (Off|Pinned)/;
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -188,6 +188,8 @@ describe('ChatPlace, leaving and Unload', () => {
     expect(line).toHaveTextContent('qwen3 stopped unexpectedly · sending loads it again·Show log');
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
     expect(within(line).getAllByRole('button').map((b) => b.textContent)).toEqual(['Show log']);
+    // Marked failed, in the danger colour: the crash is a shape plus words.
+    expect(line.querySelector('.text-danger svg')).not.toBeNull();
     expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
 
     await user.click(within(line).getByRole('button', { name: 'Show log' }));
@@ -206,6 +208,33 @@ describe('ChatPlace, leaving and Unload', () => {
     expect(await lineSaying("qwen3 isn't loaded · sending turns the endpoint on and loads it")).toBeInTheDocument();
 
     act(() => applyProxyStatus(ON));
+    expect(await lineSaying("qwen3 isn't loaded · sending loads it")).toBeInTheDocument();
+    // Not loaded is not a crash: no mark.
+    expect(screen.getByText("qwen3 isn't loaded · sending loads it").closest('[role="status"]')?.querySelector('.text-danger')).toBeNull();
+  });
+
+  it('with the endpoint pinned to another model, the line says a send is refused; pinned to this one, that a send loads it', async () => {
+    renderLocal(26);
+    await head();
+    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'Qwen3-8B' }));
+    expect(await lineSaying('The endpoint is Pinned to Qwen3-8B and cannot serve qwen3 · sending is refused')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+
+    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'qwen3' }));
+    expect(await lineSaying("qwen3 isn't loaded · sending loads it")).toBeInTheDocument();
+  });
+
+  it('a model being unloaded is still loaded until it has gone', async () => {
+    renderLocal(27);
+    await head();
+    event('running', 27);
+    await waitFor(() => expect(screen.queryByText(NO_LINE)).not.toBeInTheDocument());
+
+    event('stopping', 27);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(NO_LINE)).not.toBeInTheDocument();
+
+    event('stopped', 27);
     expect(await lineSaying("qwen3 isn't loaded · sending loads it")).toBeInTheDocument();
   });
 
