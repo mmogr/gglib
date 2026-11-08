@@ -123,7 +123,7 @@ describe('ChatPlace, leaving and Unload', () => {
 
   it('Load it again that fails says why, in the sentence every load failure is said in', async () => {
     const user = userEvent.setup();
-    onSwitchModel.mockRejectedValueOnce(new Error('out of memory'));
+    onLoadModel.mockRejectedValueOnce(new Error('out of memory'));
     renderLocal(19);
     await head();
     act(() => ingestServerEvent({ type: 'stopped', modelId: '19', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
