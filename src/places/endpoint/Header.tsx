@@ -25,6 +25,7 @@ import { StatusMark, type MarkKind } from '../../components/status/StatusMark';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
+import { Copied, useCopied } from '../../components/CopyValue';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useSettings } from '../../hooks/useSettings';
 import type { EndpointFacts } from '../../services/proxyRegistry';
@@ -48,10 +49,11 @@ export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
   const state: EndpointState = actions.busy === 'on' || actions.busy === 'serve' ? 'starting' : facts.state;
   const up = state === 'on' || state === 'pinned';
 
+  const [urlCopied, showUrlCopied] = useCopied();
   const copy = (url: string) =>
     void navigator.clipboard
       .writeText(url)
-      .then(() => showToast('Endpoint address copied', 'success'))
+      .then(showUrlCopied)
       .catch((err: unknown) => showToast(formatError(err), 'error'));
 
   return (
@@ -63,6 +65,7 @@ export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
             <span className="min-w-0 flex-1 truncate font-mono text-lg text-text" title={facts.baseUrl}>
               {facts.baseUrl}
             </span>
+            <Copied shown={urlCopied} />
             <Button onClick={() => copy(facts.baseUrl ?? '')}>Copy</Button>
           </>
         )}

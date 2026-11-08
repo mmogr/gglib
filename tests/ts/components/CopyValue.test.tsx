@@ -13,14 +13,13 @@ import { appLogger } from '../../../src/services/platform';
 
 describe('CopyValue', () => {
   it('is named by its label and copies the whole value, then says so', async () => {
-    const onCopied = vi.fn();
     // `userEvent.setup()` gives the page a clipboard a test can read back.
     const user = userEvent.setup();
-    render(<CopyValue value="http://127.0.0.1:8080/v1" label="Copy the endpoint address" onCopied={onCopied} />);
+    render(<CopyValue value="http://127.0.0.1:8080/v1" label="Copy the endpoint address" />);
     await user.click(screen.getByRole('button', { name: 'Copy the endpoint address' }));
 
     expect(await navigator.clipboard.readText()).toBe('http://127.0.0.1:8080/v1');
-    await waitFor(() => expect(onCopied).toHaveBeenCalledWith('http://127.0.0.1:8080/v1'));
+    expect(await screen.findByRole('status')).toHaveTextContent('Copied');
   });
 
   describe('Copied', () => {
@@ -48,6 +47,9 @@ describe('CopyValue', () => {
       await screen.findByText('Copied');
       act(() => vi.advanceTimersByTime(700));
       await user.click(screen.getByRole('button', { name: 'Copy the Model ID' }));
+      // The clipboard's promise resolves on a later tick: let the second copy land
+      // before the clock moves, or a loaded machine counts from the first.
+      await act(async () => {});
       act(() => vi.advanceTimersByTime(700));
       expect(screen.getByText('Copied')).toBeInTheDocument();
       act(() => vi.advanceTimersByTime(400));

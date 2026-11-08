@@ -31,7 +31,6 @@ import { useRequestBlink } from '../components/status/useRequestBlink';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../components/status/words';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
-import { useToastContext } from '../contexts/ToastContext';
 import { useEndpointDashboard } from '../places/library/useResidency';
 import { useEndpointFacts, type EndpointFacts } from '../services/proxyRegistry';
 import { useAllServerStates } from '../services/serverRegistry';
@@ -65,7 +64,6 @@ export function EndpointLine({ current = false }: { current?: boolean }) {
   const blinking = useRequestBlink(useEndpointDashboard().snapshot?.total_requests ?? null);
   const loaded = useAllServerStates().filter((s) => s.status === 'running').length;
   const navigate = useNavigate();
-  const { showToast } = useToastContext();
 
   const word = ENDPOINT_WORDS[facts.state];
   const keyRequired = facts.key === 'required';
@@ -100,11 +98,7 @@ export function EndpointLine({ current = false }: { current?: boolean }) {
             <span className="font-mono text-xs text-text-secondary truncate" title={facts.baseUrl}>
               {shownAddress(facts.baseUrl)}
             </span>
-            <CopyValue
-              value={facts.baseUrl}
-              label="Copy the endpoint address"
-              onCopied={() => showToast('Endpoint address copied', 'success')}
-            />
+            <CopyValue value={facts.baseUrl} label="Copy the endpoint address" />
           </div>
         )}
         <span className="text-xs text-text-muted">{secondLine(facts, loaded)}</span>

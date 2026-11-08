@@ -5,8 +5,8 @@
  * has no toast host).
  *
  * `CopyValue` is one button, one value, and the word beside it once the
- * value is there (a copy that failed says nothing there, and is logged);
- * `onCopied` is for a caller with more to do. `useCopied`
+ * value is there (a copy that failed says nothing there, and is logged).
+ * `useCopied`
  * and `Copied` are the same word for a copy that is not a ⧉ (the tray's
  * Copy key, a secret's Copy). The accessible name says what is copied, so a
  * reader hears "Copy the endpoint address", not "button", and the word is a
@@ -49,21 +49,16 @@ interface CopyValueProps {
   value: string;
   /** The button's name: "Copy the endpoint address". */
   label: string;
-  /** Called after `value` reaches the clipboard. */
-  onCopied?: (value: string) => void;
   className?: string;
 }
 
-export const CopyValue: FC<CopyValueProps> = ({ value, label, onCopied, className }) => {
+export const CopyValue: FC<CopyValueProps> = ({ value, label, className }) => {
   const [copied, showCopied] = useCopied();
   const copy = (event: MouseEvent) => {
     // A copy inside a row that navigates must not also navigate.
     event.stopPropagation();
     navigator.clipboard.writeText(value).then(
-      () => {
-        showCopied();
-        onCopied?.(value);
-      },
+      showCopied,
       // Nothing is said beside it: "Copied" would be untrue.
       (error: unknown) => appLogger.error('component.app', 'Failed to copy to clipboard', { error }),
     );
