@@ -95,7 +95,7 @@ const CODES: &[ErrorCode] = &[
     // The proxy's own refusals: `ErrorResponse`'s constructors.
     row("model_loading", UNAVAILABLE, Some(503), "The model is still loading; retry shortly."),
     row("admission_timeout", UNAVAILABLE, Some(503), "The request waited its limit for the model without being admitted; retry shortly."),
-    row("model_not_found", INVALID, None, "No model with that id or name is in the catalog: a 404. A run or turn that says draw and names an image_model no longer in the catalog is refused with this code as a 400."),
+    row("model_not_found", INVALID, None, "No model with that id or name is in the catalog: a 404. A run or turn that says draw and names an image_model no longer in the catalog is refused with this code as a 400. A turn whose chat names a model this machine does not hold ends failed with it, the message naming the model."),
     row("profile_not_found", INVALID, Some(404), "No model has that name, and its :suffix names no inference profile."),
     row("not_an_embedding_model", INVALID, Some(400), "An embeddings request named a model not tagged embedding."),
     row("embedding_model_cannot_chat", INVALID, Some(400), "A chat request named an embedding model."),

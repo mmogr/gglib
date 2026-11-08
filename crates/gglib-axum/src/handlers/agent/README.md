@@ -246,9 +246,10 @@ prompt, then every row but a system one; then the message), the limits from the
 conversation's settings (an iteration limit they do not name is this
 machine's stored one), the tools `device_tools` offers it, never gglib's
 own file tools, and the reply runs on the chat's model
-(`hub_model`: its own, its settings', its last reply's, the one running on
-the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the
-device's scope saved to the chat.
+(`hub_model`: the id its settings store, the one it was made with, the one
+running on the hub (the one started last, of several), or the hub's default,
+and never a name, so a renamed model still answers), loaded first when it is
+not running, as an agent run in the device's scope saved to the chat.
 
 `device_tools` says what a device's run is offered. Its floor is the image
 tool for a turn that says `draw: true` (the device's Draw button), named
@@ -336,9 +337,10 @@ turn's rows (`launch::begin_writes`, which the page's run calls at its
 reservation) are the run's own work. A cold load, or a load queued behind an
 image render, is then a `waiting` event (`model_load`) in the run's log, not
 a `PUT` that hangs past the bound a device or the tunnel gives it. What is
-refused once the run exists ends it `failed` with the code the `PUT`
-answered before (`model_unavailable`, `unavailable`, `conflict`), and no row
-is written: the turn's writes begin only once the loop is ready, and a run
-whose writes never began saves no reply.
+refused once the run exists ends it `failed`: `model_not_found`, naming
+the model, when this machine does not hold it, and otherwise the code the
+`PUT` answered before (`model_unavailable`, `unavailable`, `conflict`). No
+row is written: the turn's writes begin only once the loop is ready, and a
+run whose writes never began saves no reply.
 
 <!-- module-docs:end -->

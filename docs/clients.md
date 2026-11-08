@@ -221,9 +221,9 @@ device opens switched off there and the reverse. Once the message that
 carries a click is accepted the page says nothing more of it: the switch
 shows what the chat remembers when it is next read, so a change made since on
 another device is shown, and the page's next message does not undo it. A far
-chat's model is the one its settings name (`model_name`), else its last
-reply's, looked up in that machine's model list, so a chat that has never run
-shows no switch until its first reply.
+chat's model is the one its settings record by id (`model`), found in that
+machine's model list by its `gglib_id`, so a model renamed there keeps its
+switch, and a chat that has never run shows none until its first reply.
 
 ## Context reading
 

@@ -18,7 +18,7 @@
       "code": "model_not_found",
       "type": "invalid_request_error",
       "status": null,
-      "meaning": "No model with that id or name is in the catalog: a 404. A run or turn that says draw and names an image_model no longer in the catalog is refused with this code as a 400."
+      "meaning": "No model with that id or name is in the catalog: a 404. A run or turn that says draw and names an image_model no longer in the catalog is refused with this code as a 400. A turn whose chat names a model this machine does not hold ends failed with it, the message naming the model."
     },
     {
       "code": "profile_not_found",

@@ -5,10 +5,10 @@
  * Shown only where the chat's model thinks, by one rule (`thinks`): this
  * machine's model by its catalogue entry; the paired machine's by the row
  * that machine lists for it; a far chat's by the row that machine lists for
- * the model its settings record, else under the name the chat last ran on
- * (its settings' `model_name`, else its last reply's). A model that is not known gets no switch, and so does every
- * model of a machine whose gglib predates the choice, which lists none as
- * thinking: the key it would refuse is never sent to it.
+ * the id its settings record (`settings.model`), never by a name, so a model
+ * renamed since keeps its switch. A model that is not known gets no switch,
+ * and so does every model of a machine whose gglib predates the choice,
+ * which lists none as thinking: the key it would refuse is never sent to it.
  *
  * The switch shows what gglib remembers of the chat (`settings.thinking`)
  * until it is clicked. From then it shows the choice made here, and a send
@@ -36,7 +36,6 @@ import type { HubChatOpen } from '../types/generated/HubChatOpen';
 import type { ModelInfo } from '../types/generated/ModelInfo';
 import type { ModelRef } from '../types/generated/ModelRef';
 import type { Thinking } from '../types/generated/Thinking';
-import { turnMadeFromMetadata } from '../utils/messages/turnMade';
 import { thinks } from '../utils/thinks';
 import { usePairedModels } from './usePairedModels';
 
@@ -118,36 +117,13 @@ function settle(choices: Choices, source: ChatSource, chats: readonly Rememberin
 }
 
 /**
- * The far machine's row for a far chat's model: by the catalogue id the chat
- * records, else by the name it ran on. Two models of one name are listed as
- * `name@…`, and a bare name is the lowest of them, as that machine resolves
- * it. Profile variants are not the model's own row.
+ * The far machine's row for a far chat's model: the one of the catalogue id
+ * the chat records. Profile variants are not the model's own row.
  */
 function farModelRow(models: readonly ModelInfo[], open: HubChatOpen): ModelInfo | undefined {
-  const bases = models.filter((m) => m.profile === undefined);
   const ref = open.conversation.settings?.model;
-  if (ref?.machine.kind === 'local') return bases.find((m) => m.gglib_id === ref.id);
-  const name = farModelName(open);
-  if (name === undefined) return undefined;
-  const exact = bases.find((m) => m.id === name);
-  if (exact) return exact;
-  const twins = bases.filter((m) => {
-    const at = m.id.lastIndexOf('@');
-    return at > 0 && m.id.slice(0, at) === name;
-  });
-  return twins.sort((a, b) => a.gglib_id - b.gglib_id)[0];
-}
-
-/** The name a far chat's model goes by: the one it last ran on, else its last reply's. */
-function farModelName(open: HubChatOpen): string | undefined {
-  const ranOn = open.conversation.settings?.model_name;
-  if (ranOn) return ranOn;
-  for (let i = open.messages.length - 1; i >= 0; i--) {
-    const row = open.messages[i];
-    const name = row.role === 'assistant' ? turnMadeFromMetadata(row.metadata)?.modelName : undefined;
-    if (name) return name;
-  }
-  return undefined;
+  if (ref?.machine.kind !== 'local') return undefined;
+  return models.find((m) => m.profile === undefined && m.gglib_id === ref.id);
 }
 
 export function useThinkingSwitch(chat: ThinkingSwitchChat): ThinkingSwitch {

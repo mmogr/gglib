@@ -10,14 +10,10 @@ use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::RunsPort as _;
 use gglib_core::request_pipeline::MAX_IMAGE_BYTES;
 
-use super::hub_turn_tests::{chat, device, failed_with, refused};
+use super::hub_turn_tests::{CHAT_MODEL, chat, device, failed_with, refused};
 use super::{plan, start};
 use crate::handlers::agent::image_gate::image_gate_tests::{model, uploaded};
 use crate::handlers::agent::run_fixture::{saved, state};
-
-/// The model the chat fixture's last reply was made by, so the one its
-/// next turn runs on.
-const CHAT_MODEL: &str = "qwen3-8b";
 
 fn image_turn(conversation_id: i64, content: &str, image: &AttachmentId) -> HubTurn {
     HubTurn {

@@ -891,7 +891,8 @@ of their own ([Context reading](clients.md#context-reading)).
 The `PUT` answers as soon as the run is made, before the chat's model is
 loaded. A model that has to load, or wait behind an image render, shows as a
 `waiting` event in the run, and a model that cannot be loaded ends the run
-`failed` with `model_unavailable` rather than refusing the `PUT`; a client
+`failed` with `model_unavailable` rather than refusing the `PUT`, or with
+`model_not_found`, naming it, when the hub does not hold it; a client
 shows a run's error code as it would the `PUT`'s. Such a run has written
 nothing to the chat.
 

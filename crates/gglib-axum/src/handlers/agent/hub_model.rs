@@ -4,12 +4,13 @@
 //!
 //! A chat that stored its model ([`ConversationSettings::model`]) names it
 //! by its machine and its id there. One that ran here is run by that id, so
-//! a second model of the same name cannot answer it. One stored as the
-//! paired machine's runs there on this machine's own turn ([`paired`]); a
-//! paired device's turn on it is refused once the chat has a saved message,
-//! and before that the model was only chosen, so the turn runs on this
-//! machine's as a chat that names none does. Either way the hub never
-//! resolves the other machine's model as a name in its own catalogue.
+//! a renamed model still answers it and a second model of the same name
+//! cannot. A name is a label, and is never looked up ([`model_for`]). One
+//! stored as the paired machine's runs there on this machine's own turn
+//! ([`paired`]); a paired device's turn on it is refused once the chat has a
+//! saved message, and before that the model was only chosen, so the turn
+//! runs on this machine's as a chat that names none does. Either way the hub
+//! never resolves the other machine's model as a name in its own catalogue.
 //!
 //! [`ConversationSettings::model`]: gglib_core::domain::chat::ConversationSettings::model
 
@@ -18,10 +19,9 @@ use std::cmp::Reverse;
 use axum::http::StatusCode;
 
 use gglib_app_services::types::ServerInfo;
-use gglib_core::domain::agent::MADE_KEYS;
 use gglib_core::domain::chat::{Conversation, Message};
 use gglib_core::domain::{Machine, ModelCapabilities, ModelRef, RuntimeKind};
-use gglib_core::ports::{Admission, LaunchOverrides, RunScope};
+use gglib_core::ports::{Admission, LaunchOverrides, ModelRuntimeError, RunScope};
 
 use super::AgentChatRequest;
 use super::launch::Loading;
@@ -79,11 +79,11 @@ pub(super) async fn turn_model(
     Ok(model)
 }
 
-/// The chat's model, as an identifier the hub's catalogue resolves: the one
-/// its settings store by id, the one it was made with, the one its settings
-/// name, the one that made its last reply, the one running on the hub, or
-/// the hub's default, in that order. A model known by its id is given by
-/// its id.
+/// The chat's model, as an id in the hub's catalogue: the one its settings
+/// store, the one it was made with, the one running on the hub, or the hub's
+/// default, in that order. The name its settings or its last reply give is
+/// never looked up, so a model renamed since still answers, and a chat that
+/// names only a name runs as one that names no model.
 ///
 /// A chat with no saved message that stored the paired machine's model has
 /// run nowhere yet: it takes the one running here, or the hub's default,
@@ -109,9 +109,6 @@ pub(super) async fn choose(
     rows: &[Message],
     running: &[ServerInfo],
 ) -> Result<String, HttpError> {
-    // Chosen on the paired machine before the chat had run: nothing of it
-    // names a model here.
-    let mut chosen_there = false;
     if let Some(model) = conversation
         .settings
         .as_ref()
@@ -119,7 +116,9 @@ pub(super) async fn choose(
     {
         match &model.machine {
             Machine::Local => return Ok(model.id.to_string()),
-            Machine::Paired { .. } if rows.is_empty() => chosen_there = true,
+            // Chosen on the paired machine before the chat had run: nothing
+            // of it names a model here.
+            Machine::Paired { .. } if rows.is_empty() => {}
             Machine::Paired { .. } => return Err(ran_elsewhere()),
         }
     }
@@ -129,20 +128,6 @@ pub(super) async fn choose(
     };
     if let Some(id) = catalogued(conversation.model_id).await {
         return Ok(id);
-    }
-    let named = conversation
-        .settings
-        .as_ref()
-        .and_then(|s| s.model_name.clone())
-        .or_else(|| {
-            rows.iter().rev().find_map(|row| {
-                let name = row.metadata.as_ref()?.get(MADE_KEYS.model)?.as_str()?;
-                Some(name.to_owned())
-            })
-        })
-        .filter(|name| !name.trim().is_empty() && !chosen_there);
-    if let Some(name) = named {
-        return Ok(name);
     }
     if let Some(id) = latest(running) {
         return Ok(id);
@@ -190,6 +175,11 @@ fn serving(running: &[ServerInfo], id: i64) -> Option<u16> {
 /// second model of the same name is neither found nor loaded in its place.
 /// `loading` is told before a load is asked for, which may take minutes or
 /// wait behind an image render.
+///
+/// # Errors
+///
+/// `model_not_found` (404), naming `model`, when this machine has no such
+/// model, and `model_unavailable` (503) when it has one it cannot load.
 pub(super) async fn on_model(
     state: &AppState,
     model: &str,
@@ -222,13 +212,20 @@ pub(super) async fn on_model(
         .runtime
         .admit(&model, None, default_ctx, LaunchOverrides::default())
         .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "a turn could not load its chat's model");
-            coded(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "model_unavailable",
-                "the chat's model could not be loaded on the hub",
-            )
+        .map_err(|e| match e {
+            ModelRuntimeError::ModelNotFound(model) => coded(
+                StatusCode::NOT_FOUND,
+                "model_not_found",
+                format!("no model named {model} on this machine"),
+            ),
+            e => {
+                tracing::warn!(error = %e, "a turn could not load its chat's model");
+                coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "model_unavailable",
+                    "the chat's model could not be loaded on the hub",
+                )
+            }
         })?;
     chat.port = Admission::into_target(admission).port;
     Ok(chat)

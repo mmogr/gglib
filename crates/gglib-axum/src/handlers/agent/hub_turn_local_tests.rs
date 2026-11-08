@@ -222,17 +222,17 @@ async fn no_tool_for_a_chat_with_tools_off_or_a_model_that_calls_none() {
     assert_eq!(local_filter(&state, silent, plain).await, Some(Vec::new()));
 }
 
-/// A model the catalogue does not hold is given its tools, as the page
-/// gives one whose capability it does not know.
+/// A model the catalogue no longer holds, deleted since its chat stored it,
+/// is given its tools, as the page gives one whose capability it does not know.
 #[tokio::test]
 async fn a_model_the_catalogue_does_not_hold_is_offered_every_tool() {
     let (_dir, state) = state().await;
-    // Named only by its last reply: `qwen3-8b` is in no catalogue here.
-    let id = chat(&state, None).await;
-    let planned = plan(&state, &LOCAL, turn(id, "second"), None)
-        .await
-        .unwrap();
-    assert_eq!(planned.model, "qwen3-8b");
+    let gone = model(&state, |m| m.capabilities = ModelCapabilities::empty()).await;
+    let id = chat_on(&state, here(gone), ConversationSettings::default()).await;
+    state.core.models().delete(gone).await.unwrap();
+    let planned = plan(&state, &LOCAL, turn(id, "second"), None).await;
+    let planned = planned.unwrap();
+    assert_eq!(planned.model, gone.to_string());
     assert_eq!(planned.chat.tool_filter, None);
 }
 

@@ -71,6 +71,9 @@ function reply(id: number, metadata?: Record<string, unknown>): Message {
   return { id, conversation_id: 1, role: 'assistant', content: 'Answered.', created_at: '', ...(metadata && { metadata }) };
 }
 
+/** What a far chat that ran on that machine's model `id` records: the id, and the name it was shown under. */
+const ranOn = (id: number, name = 'thinker'): ConversationSettings => ({ model_name: name, model: { machine: { kind: 'local' }, id } });
+
 /** A chat on this machine's model, which thinks unless said otherwise. */
 const local = (chat: Partial<ThinkingSwitchChat> = {}): ThinkingSwitchChat => ({
   conversationId: 1,
@@ -157,52 +160,31 @@ describe('useThinkingSwitch, where it is shown', () => {
     expect(hook.result.current.shown).toBe(false);
   });
 
-  it("judges a far chat by the row listed under the name the chat last ran on, else its last reply's", async () => {
+  it('judges a far chat by the row of the id it records, whatever name it or its replies give', async () => {
     daemons.entries = [farEntry('thinker', 5, { capabilities: ['reasoning'] }), farEntry('plain', 6)];
     join();
     const far = (farOpen: HubChatOpen) => local({ far: true, conversations: [], thinks: false, farOpen });
 
-    const hook = mount(far(farChat(1, { model_name: 'thinker' }, [reply(2, { modelName: 'plain' })])));
+    const hook = mount(far(farChat(1, ranOn(5, 'plain'), [reply(2, { modelName: 'plain' })])));
     await waitFor(() => expect(hook.result.current.shown).toBe(true));
-    // Its settings name the model before any reply does.
-    hook.rerender(far(farChat(1, { model_name: 'plain' }, [reply(2, { modelName: 'thinker' })])));
+    hook.rerender(far(farChat(1, ranOn(6, 'thinker'), [reply(2, { modelName: 'thinker' })])));
     expect(hook.result.current.shown).toBe(false);
-
-    // With no model in its settings, the newest reply that names one decides.
-    hook.rerender(far(farChat(1, undefined, [reply(2, { modelName: 'plain' }), reply(3, { modelName: 'thinker' }), reply(4)])));
-    expect(hook.result.current.shown).toBe(true);
-    hook.rerender(far(farChat(1, undefined, [reply(2, { modelName: 'thinker' }), reply(3, { modelName: 'plain' })])));
-    expect(hook.result.current.shown).toBe(false);
-    // A turn of the user's names no model, whatever its row carries.
-    hook.rerender(far(farChat(1, undefined, [reply(2, { modelName: 'plain' }), { ...reply(3, { modelName: 'thinker' }), role: 'user' }])));
+    // A name is never looked up: with no id recorded, there is no switch.
+    hook.rerender(far(farChat(1, { model_name: 'thinker' }, [reply(2, { modelName: 'thinker' })])));
     expect(hook.result.current.shown).toBe(false);
   });
 
-  it('judges a far chat on one of two models of one name by the id it records, else as that machine reads the bare name', async () => {
+  it('judges a far chat on one of two models of one name by the id it records', async () => {
     daemons.entries = [
       farEntry('qwen', 7, { id: 'qwen@Q6_K' }),
       farEntry('qwen', 4, { id: 'qwen@Q4_K_M', capabilities: ['reasoning'] }),
     ];
     join();
     const far = (farOpen: HubChatOpen) => local({ far: true, conversations: [], thinks: false, farOpen });
-    const on = (id: number): ConversationSettings => ({ model_name: 'qwen', model: { machine: { kind: 'local' }, id } });
 
-    const hook = mount(far(farChat(1, on(4))));
+    const hook = mount(far(farChat(1, ranOn(4, 'qwen'))));
     await waitFor(() => expect(hook.result.current.shown).toBe(true));
-    hook.rerender(far(farChat(1, on(7))));
-    expect(hook.result.current.shown).toBe(false);
-    // With no id recorded, the bare name is the lowest of the two, as the far machine resolves it.
-    hook.rerender(far(farChat(1, { model_name: 'qwen' })));
-    expect(hook.result.current.shown).toBe(true);
-  });
-
-  it('takes no model whose id only looks like a longer name for a twin', async () => {
-    daemons.entries = [farEntry('qwenx', 3, { id: 'qwenx', capabilities: ['reasoning'] })];
-    join();
-    const far = (farOpen: HubChatOpen) => local({ far: true, conversations: [], thinks: false, farOpen });
-
-    const hook = mount(far(farChat(1, { model_name: 'qwen' })));
-    await new Promise((r) => setTimeout(r, 50));
+    hook.rerender(far(farChat(1, ranOn(7, 'qwen'))));
     expect(hook.result.current.shown).toBe(false);
   });
 
@@ -210,26 +192,26 @@ describe('useThinkingSwitch, where it is shown', () => {
     daemons.entries = [farEntry('thinker', 5, { capabilities: ['reasoning'] })];
     join();
     const far = (farOpen: HubChatOpen | null) => local({ far: true, conversations: [], thinks: true, farOpen });
-    const hook = mount(far(farChat(1, { model_name: 'thinker' })));
+    const hook = mount(far(farChat(1, ranOn(5))));
     await waitFor(() => expect(hook.result.current.shown).toBe(true));
 
     hook.rerender(far(farChat(1)));
     expect(hook.result.current.shown).toBe(false);
-    hook.rerender(far(farChat(1, { model_name: 'gone' })));
+    hook.rerender(far(farChat(1, ranOn(9, 'gone'))));
     expect(hook.result.current.shown).toBe(false);
     hook.rerender(far(null));
     expect(hook.result.current.shown).toBe(false);
     // Another chat's reading says nothing of the one open.
-    hook.rerender(far(farChat(9, { model_name: 'thinker' })));
+    hook.rerender(far(farChat(9, ranOn(5))));
     expect(hook.result.current.shown).toBe(false);
-    hook.rerender(far(farChat(1, { model_name: 'thinker' })));
+    hook.rerender(far(farChat(1, ranOn(5))));
     expect(hook.result.current.shown).toBe(true);
   });
 
   it('shows nothing for a far chat on a machine whose gglib lists no model as thinking, and says nothing to it', async () => {
     daemons.entries = [farEntry('thinker', 5, { capabilities: ['reasoning'] })];
     join();
-    const hook = mount(local({ far: true, conversations: [], thinks: true, farOpen: farChat(1, { model_name: 'thinker' }) }));
+    const hook = mount(local({ far: true, conversations: [], thinks: true, farOpen: farChat(1, ranOn(5)) }));
     await waitFor(() => expect(hook.result.current.shown).toBe(true));
     act(() => hook.result.current.toggle());
     expect(hook.result.current.forSend()?.said).toBe('off');
@@ -258,7 +240,7 @@ describe('useThinkingSwitch, what it shows and says', () => {
   it('opens a far chat as its machine remembers it', async () => {
     daemons.entries = [farEntry('thinker', 5, { capabilities: ['reasoning'] })];
     join();
-    const off = mount(local({ far: true, conversations: [], farOpen: farChat(1, { model_name: 'thinker', thinking: 'off' }) }));
+    const off = mount(local({ far: true, conversations: [], farOpen: farChat(1, { ...ranOn(5), thinking: 'off' }) }));
     await waitFor(() => expect(off.result.current.shown).toBe(true));
     expect(off.result.current.on).toBe(false);
     expect(off.result.current.forSend()).toBeUndefined();
@@ -373,7 +355,7 @@ describe('useThinkingSwitch, what it shows and says', () => {
     join();
     // Chat 1 here remembers nothing; chat 1 there remembers Off.
     const here = local();
-    const there = local({ far: true, conversations: [], farOpen: farChat(1, { model_name: 'thinker', thinking: 'off' }) });
+    const there = local({ far: true, conversations: [], farOpen: farChat(1, { ...ranOn(5), thinking: 'off' }) });
     const hook = mount(here);
     act(() => hook.result.current.toggle());
     expect(hook.result.current.forSend()?.said).toBe('off');
@@ -401,21 +383,21 @@ describe('useThinkingSwitch, what it shows and says', () => {
     daemons.entries = [farEntry('thinker', 5, { capabilities: ['reasoning'] })];
     join();
     const far = (settings: ConversationSettings) => local({ far: true, conversations: [], farOpen: farChat(1, settings) });
-    const hook = mount(far({ model_name: 'thinker' }));
+    const hook = mount(far(ranOn(5)));
     await waitFor(() => expect(hook.result.current.shown).toBe(true));
     act(() => hook.result.current.toggle());
     expect(hook.result.current.forSend()?.said).toBe('off');
 
     // Read again after a send that machine refused: nothing changed there.
-    hook.rerender(far({ model_name: 'thinker' }));
+    hook.rerender(far(ranOn(5)));
     expect(hook.result.current.forSend()?.said).toBe('off');
 
-    hook.rerender(far({ model_name: 'thinker', thinking: 'off' }));
+    hook.rerender(far({ ...ranOn(5), thinking: 'off' }));
     expect(hook.result.current.on).toBe(false);
     expect(hook.result.current.forSend()).toBeUndefined();
 
     // That choice is over: switched back on from a phone, the chat shows on, and nothing is said against it.
-    hook.rerender(far({ model_name: 'thinker' }));
+    hook.rerender(far(ranOn(5)));
     expect(hook.result.current.on).toBe(true);
     expect(hook.result.current.forSend()).toBeUndefined();
   });
@@ -479,7 +461,7 @@ describe('useThinkingSwitch, how a choice ends', () => {
       daemons.entries = [farEntry('thinker', 5, { capabilities: ['reasoning'] })];
       join();
       const far = (conversationId: number, farOpen: HubChatOpen) => local({ far: true, conversations: [], conversationId, farOpen });
-      const hook = mount(far(1, farChat(1, { model_name: 'thinker', ...remembers })));
+      const hook = mount(far(1, farChat(1, { ...ranOn(5), ...remembers })));
       await waitFor(() => expect(hook.result.current.shown).toBe(true));
       const before = hook.result.current.on;
       expect(before).toBe(said === 'off');
@@ -491,14 +473,14 @@ describe('useThinkingSwitch, how a choice ends', () => {
 
       // Another far chat is opened while the reply is written: the reading
       // after that reply is never made. A phone's turn switches chat 1 back.
-      const other = farChat(2, { model_name: 'thinker' });
+      const other = farChat(2, ranOn(5));
       hook.rerender(far(2, other));
       expect(hook.result.current.on).toBe(true);
       // Chat 1 is opened again: nothing shows until its machine answers.
       hook.rerender(far(1, other));
       expect(hook.result.current.shown).toBe(false);
       expect(hook.result.current.forSend()).toBeUndefined();
-      hook.rerender(far(1, farChat(1, { model_name: 'thinker', ...remembers })));
+      hook.rerender(far(1, farChat(1, { ...ranOn(5), ...remembers })));
       expect(hook.result.current.shown).toBe(true);
       expect(hook.result.current.on).toBe(before);
       expect(hook.result.current.forSend()).toBeUndefined();

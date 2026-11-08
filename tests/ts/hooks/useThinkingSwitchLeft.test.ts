@@ -46,6 +46,9 @@ function farChat(id: number, settings?: ConversationSettings): HubChatOpen {
   };
 }
 
+/** What a far chat records once it ran on that machine's model 5, which thinks. */
+const thinker: ConversationSettings = { model_name: 'thinker', model: { machine: { kind: 'local' }, id: 5 } };
+
 const far = (conversationId: number, farOpen: HubChatOpen | null): ThinkingSwitchChat => ({
   conversationId,
   conversations: [],
@@ -59,7 +62,7 @@ describe('useThinkingSwitch, a turn accepted after its chat was left', () => {
     daemons.entries = [farEntry('thinker', 5, { capabilities: ['reasoning'] })];
     act(() => applyRemoteStatus({ ...IDLE_STATUS, connected, paired_name: 'desk' }));
     const hook = renderHook((props: ThinkingSwitchChat) => useThinkingSwitch(props), {
-      initialProps: far(1, farChat(1, { model_name: 'thinker' })),
+      initialProps: far(1, farChat(1, thinker)),
     });
     await waitFor(() => expect(hook.result.current.shown).toBe(true));
     act(() => hook.result.current.toggle());
@@ -67,7 +70,7 @@ describe('useThinkingSwitch, a turn accepted after its chat was left', () => {
     expect(sending?.said).toBe('off');
 
     // The second chat is opened and answered before the first chat's turn is.
-    const second = farChat(2, { model_name: 'thinker' });
+    const second = farChat(2, thinker);
     hook.rerender(far(2, second));
     act(() => sending?.accepted());
     expect(hook.result.current.on).toBe(true);
@@ -79,12 +82,12 @@ describe('useThinkingSwitch, a turn accepted after its chat was left', () => {
     expect(hook.result.current.forSend()).toBeUndefined();
 
     // Read as remembering nothing (another device switched it back on).
-    hook.rerender(far(1, farChat(1, { model_name: 'thinker' })));
+    hook.rerender(far(1, farChat(1, thinker)));
     expect(hook.result.current.on).toBe(true);
     expect(hook.result.current.forSend()).toBeUndefined();
 
     // Read as remembering Off (nobody else touched it): off, and nothing said.
-    hook.rerender(far(1, farChat(1, { model_name: 'thinker', thinking: 'off' })));
+    hook.rerender(far(1, farChat(1, { ...thinker, thinking: 'off' })));
     expect(hook.result.current.on).toBe(false);
     expect(hook.result.current.forSend()).toBeUndefined();
   });
