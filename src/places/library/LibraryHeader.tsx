@@ -39,7 +39,7 @@ export const LibraryHeader: FC<LibraryHeaderProps> = ({ sort, onSort, query, onQ
   return (
     <div className="flex shrink-0 flex-col gap-sm px-md pb-sm pt-md">
       <div className="flex items-center gap-sm">
-        <h2 className="m-0 flex-1 text-base font-semibold text-text">Library</h2>
+        <h2 className="m-0 min-w-0 flex-1 truncate text-base font-semibold text-text">Library</h2>
         <Menu
           label="Sort"
           items={[

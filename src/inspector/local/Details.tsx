@@ -14,7 +14,7 @@
  * @module inspector/local/Details
  */
 
-import { useEffect, useRef, useState, type FC, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { Check, ChevronRight, ExternalLink } from 'lucide-react';
 import { CopyValue } from '../../components/CopyValue';
 import { Button } from '../../components/ui/Button';
@@ -75,7 +75,7 @@ const Editable: FC<{ label: string; value: string; onSave: (value: string) => Pr
       <Button
         variant="link"
         size="sm"
-        className={cn('h-auto justify-start p-0 text-left text-xs font-normal', action ? 'text-text-secondary' : 'text-text')}
+        className={cn('text-xs font-normal', action ? 'text-text-secondary' : 'text-text')}
         onClick={() => setDraft(value)}
         aria-label={`Change ${label}`}
       >
@@ -98,9 +98,22 @@ const Editable: FC<{ label: string; value: string; onSave: (value: string) => Pr
   );
 };
 
-export const Item: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+/** A GGUF key with a line break allowed after each dot, so a long one wraps at its parts, and copies whole. */
+const dotted = (key: string): ReactNode =>
+  key.split('.').map((part, i, parts) => (
+    <Fragment key={i}>
+      {part}
+      {i < parts.length - 1 && (
+        <>
+          .<wbr />
+        </>
+      )}
+    </Fragment>
+  ));
+
+export const Item: FC<{ label: ReactNode; children: ReactNode }> = ({ label, children }) => (
   <>
-    <dt className="text-xs text-text-secondary">{label}</dt>
+    <dt className="min-w-0 break-words text-xs text-text-secondary">{label}</dt>
     <dd className="m-0 min-w-0 break-words text-xs text-text">{children}</dd>
   </>
 );
@@ -236,7 +249,7 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, port, onUpdat
           </summary>
           <dl className="mt-xs grid max-h-64 grid-cols-[minmax(0,45%)_1fr] gap-x-md gap-y-xs overflow-y-auto">
             {metadata.map(([key, value]) => (
-              <Item key={key} label={key}>
+              <Item key={key} label={dotted(key)}>
                 <span className="font-mono">{value}</span>
               </Item>
             ))}

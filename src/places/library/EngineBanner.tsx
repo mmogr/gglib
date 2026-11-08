@@ -50,8 +50,11 @@ export const EngineBanner: FC = () => {
   return (
     <div role="status" aria-label="llama.cpp" className="mx-md mb-sm flex flex-col gap-sm rounded-base bg-surface-elevated px-md py-sm">
       <div className="flex flex-wrap items-center gap-sm text-sm text-text">
-        <StatusMark kind="attention" label="Attention" />
-        <span className="min-w-0 flex-1">{sentence}</span>
+        {/* The mark and its sentence wrap as one, 12rem before they give way, so a narrow column puts the buttons under them, not one word a line. */}
+        <span className="flex min-w-0 flex-1 basis-48 items-center gap-sm">
+          <StatusMark kind="attention" label="Attention" />
+          <span className="min-w-0">{sentence}</span>
+        </span>
         {canRun && !installing && (
           <Button size="sm" variant="secondary" onClick={installLlama}>
             {update ? 'Update' : 'Install'}

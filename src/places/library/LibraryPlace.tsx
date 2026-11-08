@@ -20,6 +20,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Inspector } from '../../inspector/Inspector';
+import { BESIDE_INSPECTOR } from '../../inspector/useInspectorWidth';
+import { cn } from '../../utils/cn';
 import { Button } from '../../components/ui/Button';
 import { useToastContext } from '../../contexts/ToastContext';
 import { usePairedModels } from '../../hooks/usePairedModels';
@@ -107,7 +109,7 @@ export default function LibraryPlace() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <section aria-label="Library" className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <section aria-label="Library" className={cn('flex flex-1 flex-col overflow-hidden', BESIDE_INSPECTOR)}>
         <LibraryHeader
           sort={sort}
           onSort={setSort}

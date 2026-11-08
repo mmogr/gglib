@@ -33,7 +33,7 @@ export const Speculative: FC<SpeculativeProps> = ({ typed, args, disabled, onCha
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-text">Speculative</span>
         {touched && (
-          <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => onChange({ mtp: null, nMax: '', pMin: '' })}>
+          <Button variant="link" size="sm" className="text-xs font-normal" onClick={() => onChange({ mtp: null, nMax: '', pMin: '' })}>
             Reset
           </Button>
         )}

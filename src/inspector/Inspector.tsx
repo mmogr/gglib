@@ -45,7 +45,8 @@ export const Inspector: FC<InspectorProps> = ({ paired, ...local }) => {
   else body = !loading ? <p className="m-0 p-md text-xs text-text-secondary">This model is not in the library.</p> : null;
 
   return (
-    <aside aria-label="Inspector" className="relative flex shrink-0 flex-col bg-surface" style={{ width }}>
+    // Shrinks, down to MIN_WIDTH, before the place beside it goes under its own minimum.
+    <aside aria-label="Inspector" className="relative flex shrink flex-col bg-surface" style={{ width, minWidth: MIN_WIDTH }}>
       <div
         role="separator"
         aria-orientation="vertical"

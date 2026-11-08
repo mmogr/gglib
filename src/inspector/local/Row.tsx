@@ -13,7 +13,7 @@ import { Button } from '../../components/ui/Button';
 import { cn } from '../../utils/cn';
 
 /** A text button set in a line of text: no height or padding of its own. */
-const INLINE = 'h-auto p-0 align-baseline text-xs font-normal leading-5';
+const INLINE = 'align-baseline text-xs font-normal leading-5';
 
 interface RowProps {
   label: string;

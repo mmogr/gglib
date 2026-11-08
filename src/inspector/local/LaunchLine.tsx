@@ -63,7 +63,7 @@ export const LaunchLine: FC<LaunchLineProps> = ({ plan, onChange }) => {
             <Button
               variant="link"
               size="sm"
-              className="h-auto p-0 text-xs font-normal"
+              className="text-xs font-normal"
               onClick={() => onChange(picked.decision as SheetField)}
             >
               Change for this model…
