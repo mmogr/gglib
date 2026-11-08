@@ -75,7 +75,7 @@ const Editable: FC<{ label: string; value: string; onSave: (value: string) => Pr
       <Button
         variant="link"
         size="sm"
-        className={cn('h-auto justify-start p-0 text-left text-xs font-normal', action ? 'text-text-secondary' : 'text-text')}
+        className={cn('text-xs font-normal', action ? 'text-text-secondary' : 'text-text')}
         onClick={() => setDraft(value)}
         aria-label={`Change ${label}`}
       >

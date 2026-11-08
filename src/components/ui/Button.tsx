@@ -30,14 +30,23 @@ const variantStyles: Record<ButtonVariant, string> = {
   danger: "bg-danger text-text-inverse hover:bg-danger-hover",
   // Demoted destructive action — reveals intent on hover without spending red at rest.
   dangerGhost: "bg-transparent text-text-muted hover:text-danger hover:bg-danger-subtle",
-  // Inline text link — no background, no border.
-  link: "bg-transparent text-primary h-auto p-0 underline underline-offset-2 hover:text-text-secondary",
+  // Inline text link — no background, no border, and no box of its own:
+  // it takes only its size's text size (`linkSizeStyles`), so a link that
+  // wraps grows with its text and its lines start where the text does.
+  link: "justify-start bg-transparent text-left text-primary underline underline-offset-2 hover:text-text-secondary",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
   sm: "h-7 px-2.5 text-xs",
   md: "h-8 px-3 text-sm",
   lg: "h-10 px-4 text-sm",
+};
+
+/** A link's size is its text size alone: a height or padding would box it in. */
+const linkSizeStyles: Record<ButtonSize, string> = {
+  sm: "text-xs",
+  md: "text-sm",
+  lg: "text-sm",
 };
 
 const iconOnlySizeStyles: Record<ButtonSize, string> = {
@@ -92,7 +101,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           baseStyles,
           variantStyles[variant],
-          iconOnly ? iconOnlySizeStyles[size] : sizeStyles[size],
+          variant === "link" ? linkSizeStyles[size] : iconOnly ? iconOnlySizeStyles[size] : sizeStyles[size],
           fullWidth && "w-full",
           className,
         )}

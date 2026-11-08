@@ -46,7 +46,7 @@ export const SystemPromptLine: FC<SystemPromptLineProps> = ({ conversation, edit
       <p className="m-0 flex items-center gap-xs text-xs text-text-muted">
         <span>Custom system prompt</span>
         <span aria-hidden>·</span>
-        <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal text-text-secondary" onClick={onEdit} title={systemPrompt}>
+        <Button variant="link" size="sm" className="text-xs font-normal text-text-secondary" onClick={onEdit} title={systemPrompt}>
           Edit
         </Button>
       </p>

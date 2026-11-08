@@ -253,7 +253,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
               <StatusMark kind="failed" label="Failed" />
               {loadFailed(load.error.message, load.error.action)}
               {load.error.action === 'load' && (
-                <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => navigate(paths.log(model.id), { state: { failedLoad: true } satisfies LogFrom })}>
+                <Button variant="link" size="sm" className="text-xs font-normal" onClick={() => navigate(paths.log(model.id), { state: { failedLoad: true } satisfies LogFrom })}>
                   Show log
                 </Button>
               )}

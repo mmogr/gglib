@@ -42,7 +42,7 @@ const HEALTH_WORDS: Readonly<Record<ShardHealth['type'], string>> = {
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 const Action: FC<{ onClick: () => void; disabled?: boolean; children: ReactNode }> = ({ onClick, disabled, children }) => (
-  <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={onClick} disabled={disabled}>
+  <Button variant="link" size="sm" className="text-xs font-normal" onClick={onClick} disabled={disabled}>
     {children}
   </Button>
 );
