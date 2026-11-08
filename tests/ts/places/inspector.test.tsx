@@ -200,7 +200,7 @@ describe('the inspector, a model on this machine', () => {
     expect(note).toHaveTextContent('chosen by you');
   });
 
-  it('⧉ beside the launch line copies the whole command as one shell line, then says Copied for 1.5 s', async () => {
+  it('⧉ beside the launch line copies the whole command as one shell line, then says Copied for one second', async () => {
     const recorded = JSON.parse(rust('contracts/models/launch_line.json')) as { plan: LaunchPlan; line: string }[];
     explain.answer = launchExplanation(samplingExplanation(), { ...recorded[1].plan, fit: chatPlan().fit });
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -214,9 +214,9 @@ describe('the inspector, a model on this machine', () => {
           " --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e",
       );
       expect(await screen.findByText('Copied')).toBeInTheDocument();
-      act(() => vi.advanceTimersByTime(1300));
+      act(() => vi.advanceTimersByTime(900));
       expect(screen.getByText('Copied')).toBeInTheDocument();
-      act(() => vi.advanceTimersByTime(300));
+      act(() => vi.advanceTimersByTime(200));
       expect(screen.queryByText('Copied')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();

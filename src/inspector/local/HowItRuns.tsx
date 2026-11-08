@@ -13,13 +13,14 @@
  */
 
 import { useState, type FC } from 'react';
+import { CopyValue } from '../../components/CopyValue';
 import { Select } from '../../components/ui/Select';
 import type { GgufModel, InferenceProfile, LaunchExplanation, ModelDetail } from '../../types';
 import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import { caveats, describePublished } from '../../utils/samplingProvenance';
 import type { SheetField } from '../loadOptions';
 import { CHANGEABLE, Change, reset, type Update } from './Change';
-import { CopyCommand } from './CopyCommand';
+import { commandLine } from './commandLine';
 import { LaunchLine } from './LaunchLine';
 import { Row } from './Row';
 import {
@@ -163,7 +164,7 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
         <div className="min-w-0 flex-1">
           <LaunchLine plan={plan} onChange={onChangeToken} />
         </div>
-        <CopyCommand plan={plan} />
+        <CopyValue value={commandLine(plan)} label="Copy as command" />
       </div>
       <dl className="m-0">
         {rows.map((row) => (

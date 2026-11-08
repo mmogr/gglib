@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
@@ -263,11 +263,22 @@ describe('the one search', () => {
     expect(at()).toBe('/get/owner/a');
     transport.getHfQuantizations.mockClear();
 
-    await user.keyboard('{ArrowDown}{ArrowDown}');
-    expect(document.activeElement).toBe(screen.getByRole('option', { name: /owner\/c/ }));
-    // The address waits for the run to end.
-    expect(at()).toBe('/get/owner/a');
-    await waitFor(() => expect(at()).toBe('/get/owner/c'));
+    // Fake timers and synchronous keys: on a loaded machine the run's 150 ms
+    // could pass between two real keys, and the address move before it is read.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowDown' });
+      fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowDown' });
+      expect(document.activeElement).toBe(screen.getByRole('option', { name: /owner\/c/ }));
+      // The address waits for the run to end.
+      act(() => vi.advanceTimersByTime(140));
+      expect(at()).toBe('/get/owner/a');
+      await act(async () => vi.advanceTimersByTime(20));
+      expect(at()).toBe('/get/owner/c');
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() => expect(transport.getHfQuantizations).toHaveBeenCalled());
     expect(transport.getHfQuantizations.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['owner/c']);
 
     await act(() => router.navigate(-1));

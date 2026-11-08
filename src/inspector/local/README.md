@@ -71,7 +71,6 @@ dialog). The per-file health words are those `gglib model verify
 | `Row.tsx` | One row: label, value with why on hover, `set by you · Reset`, and Change, or the control in its place |
 | `Change.tsx` | Each row's control (Context field, Templates and Speculative selects, Images and Parts file menus, the compact sampling form) and each row's Reset, saving one field of the update |
 | `LaunchLine.tsx` | The launch line in mono, each argument a button opening a note with its reason and source, and Change for this model… where the sheet holds its decision; a token the person chose underlined |
-| `CopyCommand.tsx` | ⧉ beside the launch line: `commandLine` on the clipboard, then "Copied" for 1.5 s (the tray's pattern, until one shared inline Copied) |
 | `commandLine.ts` | Pure: `commandLine`, `argText` and `shellToken`, the command line as `LaunchPlan::command_line` writes it |
 | `rows.ts` | Pure: the decision labels, the rows of a plan, a row's value and hover, the caption, the Context note, the Sampling and Reasoning lines, and whether the person set them |
 | `Details.tsx` | Details ▸: file, source (with the verification line and the last file check), name and quant label (click to edit), architecture, trained context, tags, abilities, reasoning support, measured speed, the loaded server's llama-server port ("port 9001, internal"), raw GGUF metadata; open or closed remembered per viewer (the far model's Details share its fold, `Item` and `When`) |
