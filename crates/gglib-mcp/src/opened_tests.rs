@@ -147,6 +147,7 @@ async fn a_server_that_fails_to_start_is_skipped_and_the_rest_offered() {
 
 /// This machine's run starts every enabled server it may use, at once: one
 /// that cannot start is skipped and the rest still start.
+#[cfg(unix)]
 #[tokio::test]
 async fn a_run_here_starts_the_rest_when_one_cannot_start() {
     let (service, _) = service();
