@@ -16,7 +16,10 @@ from them, so no icon can drift from another:
   bundler stops at a directory there; a `.car` is a file the others skip.
 - `icon.icns`, `icon.ico`, the PNGs, the Windows Store logos and the iOS and
   Android sets, all from `tauri icon`: the same art inside the rounded square
-  Apple's pre-26 template uses, which Windows and Linux show as it is.
+  Apple's pre-26 template uses, which Windows and Linux show as it is. At 48 px
+  and below the wordmark is a smudge, so those sizes (the `.ico`'s small
+  entries, the `.icns`'s 16 and 32 px, `32x32.png` and the two small Store
+  logos) are redrawn without it: the database and bubble alone, larger.
 - `tray-idle.png` and `tray-active.png`: the bubble with the llama cut out of
   it, and the same with the dot that says a model is loaded. Black on clear,
   which macOS needs for a template image; the app tints them on Windows and
@@ -52,6 +55,8 @@ BUBBLE = (
 BUBBLE_BODY = 'x="476" y="150" width="424" height="414" rx="64"'  # the bubble without its tail
 LLAMA_MATRIX = "matrix(0.034 0 0 -0.034 494.8 585.68)"  # shapes.json frame -> canvas
 HERO = "translate(512,392) scale(0.9) translate(-520,-380)"  # database + bubble, clear of the edge
+HERO_SMALL = "translate(512,512) scale(1.12) translate(-530,-362)"  # the same, centred and larger
+SMALL = (16, 24, 30, 32, 44, 48)  # px drawn without the wordmark
 WORD_SCALE = 0.74
 
 DEFS = """
@@ -90,17 +95,19 @@ def svg(body: str, size: int = 1024, defs: str = DEFS) -> str:
     )
 
 
-def background() -> str:
+def background(band: bool = True) -> str:
+    sky = '<rect width="1024" height="1024" fill="url(#sky)"/><rect width="1024" height="1024" fill="url(#sheen)"/>'
+    if not band:
+        return sky
     return (
-        '<rect width="1024" height="1024" fill="url(#sky)"/>'
-        '<rect width="1024" height="1024" fill="url(#sheen)"/>'
-        f'<rect y="{BAND_Y}" width="1024" height="{1024 - BAND_Y}" fill="url(#cream)"/>'
+        sky
+        + f'<rect y="{BAND_Y}" width="1024" height="{1024 - BAND_Y}" fill="url(#cream)"/>'
         f'<rect y="{BAND_Y}" width="1024" height="3" fill="#ffffff" opacity="0.9"/>'
         f'<rect y="{BAND_Y - 14}" width="1024" height="14" fill="#123c80" opacity="0.10" filter="url(#tight)"/>'
     )
 
 
-def database() -> str:
+def database(hero: str = HERO) -> str:
     left, right = DB_CX - DB_RX, DB_CX + DB_RX
     out = (
         f'<ellipse cx="{DB_CX + 14}" cy="{DB_TOPS[-1] + DB_H + 30}" rx="{DB_RX}" ry="{DB_RY}" '
@@ -116,7 +123,7 @@ def database() -> str:
             f'<ellipse cx="{DB_CX}" cy="{cy}" rx="{DB_RX - 3}" ry="{DB_RY - 3}" fill="none" '
             'stroke="#ffffff" stroke-width="5" stroke-opacity="0.9"/>'
         )
-    return f'<g transform="{HERO}">{out}</g>'
+    return f'<g transform="{hero}">{out}</g>'
 
 
 def llama(fill: str) -> str:
@@ -128,9 +135,9 @@ def llama(fill: str) -> str:
     )
 
 
-def bubble() -> str:
+def bubble(hero: str = HERO) -> str:
     return (
-        f'<g transform="{HERO}">'
+        f'<g transform="{hero}">'
         f'<path d="{BUBBLE}" fill="#0d3a85" opacity="0.35" filter="url(#soft)" transform="translate(10,22)"/>'
         f'<path d="{BUBBLE}" fill="url(#bubble)"/>'
         f'<path d="{BUBBLE}" fill="none" stroke="#ffffff" stroke-width="4"/>'
@@ -150,13 +157,18 @@ def wordmark() -> str:
 LAYERS = {"background": background, "database": database, "bubble": bubble, "wordmark": wordmark}
 
 
-def framed() -> str:
+def framed(small: bool = False) -> str:
     """The whole icon in the rounded square of Apple's pre-26 template.
 
     824 of 1024 with a soft drop shadow: what macOS before 26 expects, and a
-    shape Windows and Linux show as it is.
+    shape Windows and Linux show as it is. `small` leaves out the band and the
+    wordmark and draws the database and bubble larger, for the sizes where
+    the name could not be read.
     """
-    art = "".join(layer() for layer in LAYERS.values())
+    if small:
+        art = background(band=False) + database(HERO_SMALL) + bubble(HERO_SMALL)
+    else:
+        art = "".join(layer() for layer in LAYERS.values())
     frame = 'x="100" y="100" width="824" height="824" rx="185"'
     return svg(
         f'<rect {frame} fill="#000" opacity="0.3" filter="url(#drop)" transform="translate(0,10)"/>'
@@ -249,10 +261,10 @@ def compile_car(bundle: pathlib.Path, work: pathlib.Path) -> None:
     keep_unless_changed(ICONS / "Assets.car", out / "Assets.car", car_reading)
 
 
-# Neither actool nor tauri icon writes the same bytes twice: a catalog carries
-# a timestamp and a fresh UUID in each flattened rendition's name, and an icns
-# lists its images in no fixed order. So a file is replaced only when what it
-# holds changed, and a run with no shape changed leaves the tree clean.
+# actool never writes the same bytes twice: a catalog carries a timestamp and
+# a fresh UUID in each flattened rendition's name. An icns is compared by its
+# images, in any order. So a file is replaced only when what it holds changed,
+# and a run with no shape changed leaves the tree clean.
 
 
 def keep_unless_changed(dest: pathlib.Path, new: pathlib.Path, reading) -> None:
@@ -280,13 +292,58 @@ def car_reading(path: pathlib.Path) -> list:
 
 def icns_reading(path: pathlib.Path) -> list:
     """An icns's images, in a fixed order."""
+    return sorted(icns_chunks(path))
+
+
+def icns_chunks(path: pathlib.Path) -> list:
     data = path.read_bytes()
     chunks, at = [], 8
     while at < len(data):
-        kind, size = struct.unpack(">4sI", data[at:at + 8])
+        _, size = struct.unpack(">4sI", data[at:at + 8])
         chunks.append(data[at:at + size])
         at += size
-    return sorted(chunks)
+    return chunks
+
+
+# --- the small sizes, without the wordmark -----------------------------------
+
+def icns_from(small: dict, work: pathlib.Path) -> pathlib.Path:
+    """The icns, written by iconutil: the small drawing at 16 and 32 px, the
+    whole icon from 64 up.
+
+    iconutil and not tauri icon's, because only Apple's encoder writes the 16
+    and 32 px slots (ic04, ic05) in the form macOS reads.
+    """
+    full = {px: render(framed(), px, work) for px in (64, 128, 256, 512, 1024)}
+    iconset = work / "gglib.iconset"
+    iconset.mkdir()
+    for name, png in {
+        "icon_16x16.png": small[16], "icon_16x16@2x.png": small[32],
+        "icon_32x32.png": small[32], "icon_32x32@2x.png": full[64],
+        "icon_128x128.png": full[128], "icon_128x128@2x.png": full[256],
+        "icon_256x256.png": full[256], "icon_256x256@2x.png": full[512],
+        "icon_512x512.png": full[512], "icon_512x512@2x.png": full[1024],
+    }.items():
+        (iconset / name).write_bytes(png)
+    out = work / "gglib.icns"
+    run("iconutil", "--convert", "icns", str(iconset), "--output", str(out))
+    return out
+
+
+def ico_with_small(path: pathlib.Path, small: dict) -> None:
+    """The ico with each entry the small drawing has a size for replaced by it."""
+    data = path.read_bytes()
+    count = struct.unpack("<HHH", data[:6])[2]
+    images = []
+    for i in range(count):
+        w, h, colors, res, planes, bpp, size, off = struct.unpack("<BBBBHHII", data[6 + 16 * i:22 + 16 * i])
+        images.append((w, h, colors, res, planes, bpp, small.get(w or 256, data[off:off + size])))
+    table, body = b"", b""
+    first = 6 + 16 * len(images)
+    for w, h, colors, res, planes, bpp, png in images:
+        table += struct.pack("<BBBBHHII", w, h, colors, res, planes, bpp, len(png), first + len(body))
+        body += png
+    path.write_bytes(struct.pack("<HHH", 0, 1, len(images)) + table + body)
 
 
 def run(*cmd: str) -> None:
@@ -310,12 +367,21 @@ def main() -> None:
         master = work / "gglib.svg"
         master.write_text(framed())
         icns = ICONS / "icon.icns"
-        kept = work / "kept.icns"
-        if icns.exists():
-            kept.write_bytes(icns.read_bytes())
+        before = icns.read_bytes() if icns.exists() else None
         run("npx", "--no-install", "tauri", "icon", str(master), "--output", str(ICONS))
-        if kept.exists() and icns_reading(kept) == icns_reading(icns):
-            icns.write_bytes(kept.read_bytes())
+        # tauri icon's icns is replaced by iconutil's below; put the committed
+        # one back so it is kept when nothing in it changed.
+        if before is None:
+            icns.unlink()
+        else:
+            icns.write_bytes(before)
+
+        small = {px: render(framed(small=True), px, work) for px in SMALL}
+        (ICONS / "32x32.png").write_bytes(small[32])
+        (ICONS / "Square30x30Logo.png").write_bytes(small[30])
+        (ICONS / "Square44x44Logo.png").write_bytes(small[44])
+        ico_with_small(ICONS / "icon.ico", small)
+        keep_unless_changed(icns, icns_from(small, work), icns_reading)
 
 
 if __name__ == "__main__":
