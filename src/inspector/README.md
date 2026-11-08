@@ -9,7 +9,9 @@ machine's model (`/far/:id`, `far/`) or a Hugging Face repo
 (`/get/:owner/:name`, `hf/`). Its left edge drags its width between 320
 and 720 px, remembered per viewer; the log opens at 60% of the window,
 bounded by the window alone (at least 320 px, 400 px left for the rest),
-and leaving it returns to the remembered width.
+and leaving it returns to the remembered width. In a narrow window it
+shrinks, down to 320 px, before the place beside it goes under 240 px;
+narrower still, the place gives way.
 
 Every fact and word it shows is the daemon's, arranged here: the launch
 from `GET /api/models/:id/explain`, a loaded model's launch from the server

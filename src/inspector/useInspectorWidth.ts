@@ -7,7 +7,10 @@
  * remembered width.
  *
  * The edge also takes the arrow keys, 16 px a press. A viewer without
- * storage gets the 380 px default each time.
+ * storage gets the 380 px default each time. This is the width asked for:
+ * in a narrow window the inspector shrinks, down to `MIN_WIDTH`, before
+ * the place beside it goes under 240 px (`BESIDE_INSPECTOR`); narrower
+ * still, the place gives way and the inspector keeps its 320.
  *
  * @module inspector/useInspectorWidth
  */
@@ -15,6 +18,11 @@
 import { useCallback, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
 export const MIN_WIDTH = 320;
+/**
+ * The minimum of a place beside the inspector: 240 px while the window has
+ * room for both, giving way below that so the inspector is never clipped.
+ */
+export const BESIDE_INSPECTOR = 'min-w-[min(15rem,calc(100%_-_320px))]';
 const MAX_WIDTH = 720;
 const DEFAULT_WIDTH = 380;
 const STEP = 16;
