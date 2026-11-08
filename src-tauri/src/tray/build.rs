@@ -129,7 +129,8 @@ fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
         .icon(icon::for_state(initial_visual.state)?)
         // macOS recolours template images for light and dark menu bars. The
         // icons are pure black with the glyph carried by alpha, which is what
-        // that mode expects.
+        // that mode expects. Windows ignores the flag; `for_state` has
+        // already tinted the glyph there.
         .icon_as_template(true)
         .tooltip(&initial_visual.status)
         .menu(&menu)

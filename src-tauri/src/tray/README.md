@@ -229,11 +229,16 @@ pure black with the glyph carried entirely by the alpha channel, which is what
 `icon_as_template` expects; a coloured icon would render as a dark smudge on a
 dark menu bar.
 
+Windows and Linux recolour nothing: they show the icon's own pixels, and black
+all but vanishes on a dark taskbar or panel. So there `icon::for_state` hands
+over the same glyph in the app icon's blue, which reads on light and dark bars
+alike. It is the same file recoloured, not a second asset.
+
 That is also why there are two files for three states. The outline icon is the
 bubble with its alpha scaled down, derived at runtime in `icon` rather than
 shipped: it is the same glyph, so a third asset could only drift from it, and
 because the shape lives entirely in the alpha channel, fading that channel is
 exactly "draw the same thing fainter" on all three platforms — the same
-reasoning that keeps the ARGB byte swap dependency-free.
+reasoning that keeps the ARGB byte swap and the tint dependency-free.
 
 <!-- module-docs:end -->
