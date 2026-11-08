@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use gglib_core::domain::hub_chats::HubTurn;
-use gglib_core::domain::{Machine, ModelRef};
+use gglib_core::domain::{Machine, ModelRef, NewModel};
 use gglib_core::ports::RunsPort as _;
 use serde_json::json;
 
@@ -18,6 +18,7 @@ pub(super) use crate::handlers::agent::run_fixture::device;
 use crate::handlers::agent::run_fixture::{
     End, finished_reply, meta, paced, prepared, saved, saving, settled, state,
 };
+use crate::handlers::agent::turn_fixture;
 use crate::state::AppState;
 
 pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
@@ -32,16 +33,34 @@ pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
     }
 }
 
-/// A chat with a system prompt, one question and its reply, made by
-/// `qwen3-8b`.
+/// The model the chat fixture runs on, and whose name its reply gives.
+pub(super) const CHAT_MODEL: &str = "qwen3-8b";
+
+/// A chat with a system prompt, one question and its reply, on this
+/// machine's `qwen3-8b` by its id unless `settings` store another model.
+/// That model calls tools, unless the test catalogued its own first.
 pub(super) async fn chat(state: &AppState, settings: Option<ConversationSettings>) -> i64 {
+    let mut settings = settings.unwrap_or_default();
+    if settings.model.is_none() {
+        let found = state.core.models().get(CHAT_MODEL).await.unwrap();
+        let id = if let Some(model) = found {
+            model.id
+        } else {
+            let at = |m: &mut NewModel| {
+                CHAT_MODEL.clone_into(&mut m.name);
+                m.file_path = format!("/models/{CHAT_MODEL}.gguf").into();
+            };
+            turn_fixture::model(state, at).await
+        };
+        settings.model = stored_model(id).model;
+    }
     let history = state.core.chat_history();
     let id = history
         .create_conversation(NewConversation {
             title: "t".to_owned(),
             model_id: None,
             system_prompt: Some("  Be brief.  ".to_owned()),
-            settings,
+            settings: Some(settings),
         })
         .await
         .unwrap();
@@ -50,7 +69,7 @@ pub(super) async fn chat(state: &AppState, settings: Option<ConversationSettings
         (
             MessageRole::Assistant,
             "answer",
-            Some(json!({ "modelName": "qwen3-8b" })),
+            Some(json!({ "modelName": CHAT_MODEL })),
         ),
     ] {
         history

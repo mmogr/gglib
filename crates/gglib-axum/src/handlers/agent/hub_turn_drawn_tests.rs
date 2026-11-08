@@ -10,15 +10,12 @@ use gglib_core::domain::chat::{MessageRole, NewMessage};
 use gglib_core::request_pipeline::{DRAW_TOOL_NAME, DRAWN_NOTE, DRAWN_PICTURE_LINE};
 use serde_json::{Value, json};
 
-use super::hub_turn_tests::{chat, device, turn};
+use super::hub_turn_tests::{CHAT_MODEL, chat, device, turn};
 use super::plan;
 use crate::handlers::agent::image_gate::image_gate_tests::{model, uploaded};
 use crate::handlers::agent::run_fixture::{saved, state};
 use crate::handlers::agent::turn_fixture::{self, REPLY};
 use crate::state::AppState;
-
-/// The model the chat fixture's last reply was made by.
-const CHAT_MODEL: &str = "qwen3-8b";
 
 const DREW: &str = "Drew 1 image, 1x1 PNG, with flux in 9 s; the user can see it, you cannot.";
 

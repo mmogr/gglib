@@ -1,6 +1,6 @@
-//! The model a device's turn runs on: the one its chat stored, by id and
-//! never on another machine; when it names none, the one running on the
-//! hub, before the hub's default.
+//! The model a device's turn runs on: the one its chat stored, by id, never
+//! by a name and never on another machine; when it stored none, the one
+//! running on the hub, before the hub's default.
 
 use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::chat::{
@@ -102,38 +102,36 @@ async fn nothing_running_and_no_default_says_to_start_a_model() {
     }
 }
 
-/// The chat's own model, its settings' and its last reply's each come
-/// before the one running.
+/// A name is a label and is never looked up: a chat that stored no id and
+/// names a model only by a name, in its settings or its last reply, of a
+/// model here or of none, runs as one that names no model.
 #[tokio::test]
-async fn what_the_chat_names_wins_over_what_is_running() {
+async fn a_chat_that_names_its_model_only_by_a_name_runs_on_the_one_running() {
     let (_dir, state) = state().await;
-    let running = [server(9, "running-7b", 9000, 10)];
+    registered(&state, "replied-model").await;
     let (mut conversation, _) = bare(&state).await;
-    let reply = Message {
-        id: 1,
-        conversation_id: conversation.id,
-        origin_id: None,
-        role: MessageRole::Assistant,
-        content: "answer".to_owned(),
-        created_at: String::new(),
-        metadata: Some(serde_json::json!({ "modelName": "replied-model" })),
-        images: Vec::new(),
-    };
-    let rows = [reply];
-    let model = choose(&state, &conversation, &rows, &running).await;
-    assert_eq!(model.unwrap(), "replied-model", "its last reply's");
-
     conversation.settings = Some(ConversationSettings {
-        model_name: Some("set-model".to_owned()),
+        model_name: Some("renamed-since".to_owned()),
         ..ConversationSettings::default()
     });
-    let model = choose(&state, &conversation, &rows, &running).await;
-    assert_eq!(model.unwrap(), "set-model", "its settings'");
+    let mut reply = first_message(conversation.id);
+    reply.role = MessageRole::Assistant;
+    reply.metadata = Some(serde_json::json!({ "modelName": "replied-model" }));
+    let running = [server(9, "running-7b", 9000, 10)];
+    let model = choose(&state, &conversation, &[reply], &running).await;
+    assert_eq!(model.unwrap(), "9");
+}
 
-    let own = registered(&state, "own-model").await;
-    conversation.model_id = Some(own);
+/// The model the chat was made with comes before the one running, by its id.
+#[tokio::test]
+async fn what_the_chat_stores_by_id_wins_over_what_is_running() {
+    let (_dir, state) = state().await;
+    let (mut conversation, rows) = bare(&state).await;
+    let made = registered(&state, "made-with").await;
+    conversation.model_id = Some(made);
+    let running = [server(9, "running-7b", 9000, 10)];
     let model = choose(&state, &conversation, &rows, &running).await;
-    assert_eq!(model.unwrap(), own.to_string(), "its own, by id");
+    assert_eq!(model.unwrap(), made.to_string());
 }
 
 /// The hub's default only when nothing runs.

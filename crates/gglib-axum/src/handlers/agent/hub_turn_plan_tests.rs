@@ -4,7 +4,7 @@
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewMessage};
 
-use super::hub_turn_tests::{chat, device, turn};
+use super::hub_turn_tests::{CHAT_MODEL, chat, device, turn};
 use super::plan;
 use crate::handlers::agent::device_tools::Asked;
 use crate::handlers::agent::hub_model::model_for;
@@ -44,7 +44,8 @@ async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
     .map(|m| serde_json::to_string(m).unwrap())
     .collect();
     assert_eq!(wire, want);
-    assert_eq!(plan.model, "qwen3-8b", "the model of the last reply");
+    let held = state.core.models().get(CHAT_MODEL).await.unwrap().unwrap();
+    assert_eq!(plan.model, held.id.to_string(), "the chat's, by its id");
     assert!(plan.chat.config.is_none());
     assert_eq!(
         plan.chat.tool_filter,
@@ -260,28 +261,38 @@ async fn a_saved_system_row_is_left_out_of_the_history() {
     assert!(matches!(systems[0], AgentMessage::System { content } if content == "Be brief."));
 }
 
+/// A chat's model is the id it stored, so a rename since changes nothing;
+/// one that stored none runs on the model it was made with, by its id,
+/// whatever name its last reply gives.
 #[tokio::test]
-async fn the_chats_own_model_comes_before_the_one_it_last_used() {
+async fn the_chats_model_is_its_id_whatever_it_is_named() {
     let (_dir, state) = state().await;
+    let id = chat(&state, None).await;
+    let history = state.core.chat_history();
+    let mut conversation = history.get_conversation(id).await.unwrap().unwrap();
+    let rows = history.get_messages(id).await.unwrap();
+    let models = state.core.models();
+    let mut held = models.get(CHAT_MODEL).await.unwrap().unwrap();
+    "Qwen3.8 27B".clone_into(&mut held.name);
+    models.update(&held).await.unwrap();
+    assert_eq!(
+        model_for(&state, &conversation, &rows).await.unwrap(),
+        held.id.to_string(),
+        "renamed since"
+    );
+
     let model = gglib_core::domain::NewModel::new(
         "catalogued".to_owned(),
         std::path::PathBuf::from("/models/c.gguf"),
         7.0,
         chrono::Utc::now(),
     );
-    let model_id = state.core.models().add(model).await.unwrap().id;
-    let id = chat(&state, None).await;
-    let history = state.core.chat_history();
-    let mut conversation = history.get_conversation(id).await.unwrap().unwrap();
-    let rows = history.get_messages(id).await.unwrap();
-    assert_eq!(
-        model_for(&state, &conversation, &rows).await.unwrap(),
-        "qwen3-8b"
-    );
+    let model_id = models.add(model).await.unwrap().id;
+    conversation.settings = None;
     conversation.model_id = Some(model_id);
     assert_eq!(
         model_for(&state, &conversation, &rows).await.unwrap(),
         model_id.to_string(),
-        "the catalogued model, by its id"
+        "the one it was made with, by its id"
     );
 }

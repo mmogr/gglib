@@ -246,9 +246,10 @@ prompt, then every row but a system one; then the message), the limits from the
 conversation's settings (an iteration limit they do not name is this
 machine's stored one), the tools `device_tools` offers it, never gglib's
 own file tools, and the reply runs on the chat's model
-(`hub_model`: its own, its settings', its last reply's, the one running on
-the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the
-device's scope saved to the chat.
+(`hub_model`: the id its settings store, the one it was made with, the one
+running on the hub (the one started last, of several), or the hub's default,
+and never a name, so a renamed model still answers), loaded first when it is
+not running, as an agent run in the device's scope saved to the chat.
 
 `device_tools` says what a device's run is offered. Its floor is the image
 tool for a turn that says `draw: true` (the device's Draw button), named
