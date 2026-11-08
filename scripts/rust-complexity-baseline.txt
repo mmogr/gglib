@@ -218,7 +218,7 @@ crates/gglib-mcp/src/builtin/mod.rs 414
 crates/gglib-mcp/src/client.rs 620
 crates/gglib-mcp/src/client_tests.rs 458
 crates/gglib-mcp/src/manager.rs 315
-crates/gglib-mcp/src/opened_tests.rs 505
+crates/gglib-mcp/src/opened_tests.rs 506
 crates/gglib-mcp/src/service.rs 847
 crates/gglib-mcp/src/service_tests.rs 742
 crates/gglib-proxy/src/audit_records.rs 313
