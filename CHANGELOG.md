@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.31.0-rc.7](https://github.com/mmogr/gglib/compare/v0.31.0-rc.6...v0.31.0-rc.7) (2026-11-08)
+
+
+### What gglib now does
+
+* **agent:** the turn handler serves this machine's chats too ([#1835](https://github.com/mmogr/gglib/issues/1835)) ([d056e59](https://github.com/mmogr/gglib/commit/d056e59d5ba52f36cd5484e7d6c5aade0eeb38f4))
+* **app-services:** local and paired chat dial one door ([#1825](https://github.com/mmogr/gglib/issues/1825)) ([a3c6cd1](https://github.com/mmogr/gglib/commit/a3c6cd14fd1e0acdfe8be1ddbfddfadd621d3ac2))
+* **chats:** a conversation's model, tools and limits can be set over HTTP ([#1827](https://github.com/mmogr/gglib/issues/1827)) ([b6f1a0b](https://github.com/mmogr/gglib/commit/b6f1a0bc5fe6f6e45b82df1d897265903c670c20))
+* **gui:** a redrawn app icon that macOS 26 shows full size, and a tray icon from it ([#1837](https://github.com/mmogr/gglib/issues/1837)) ([9449d55](https://github.com/mmogr/gglib/commit/9449d55548022c297b564af5b83de6b26b4da9fe))
+* **gui:** one way to say a load failed or a copy worked, and the picker says what is loaded ([#1836](https://github.com/mmogr/gglib/issues/1836)) ([cd69255](https://github.com/mmogr/gglib/commit/cd69255e7fb01d4cd976537b38d6c26c1fad981c))
+* **gui:** the endpoint dot blinks per request, and Diagnostics opens on Live from the menu too ([#1824](https://github.com/mmogr/gglib/issues/1824)) ([dc14362](https://github.com/mmogr/gglib/commit/dc143629d98ffea09ad87b80b84e8aa062b31236))
+
 ## [0.31.0-rc.6](https://github.com/mmogr/gglib/compare/v0.31.0-rc.5...v0.31.0-rc.6) (2026-11-07)
 
 
