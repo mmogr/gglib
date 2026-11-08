@@ -173,11 +173,11 @@ fn refusal(error: HttpError) -> TurnRefused {
 ///
 /// The run is reserved before its model is found or loaded, so the `PUT`
 /// answers at once and a cold load is the run's `waiting` event, not a
-/// hanging request. What is refused after that ends the run `failed` with
-/// the code this door answered before, having written nothing:
-/// `model_unavailable` when the model cannot be loaded, and whatever the
-/// daemon's own door refuses the same run with (`unavailable`, `conflict`),
-/// the paired machine's refusals included on this machine's turn on its model.
+/// hanging request. What is refused after that ends the run `failed`,
+/// having written nothing: `model_not_found`, naming the model, when this
+/// machine does not hold it; `model_unavailable` when it cannot load it; what
+/// the daemon's own door refuses (`unavailable`, `conflict`); and, on this
+/// machine's turn on the paired machine's model, what that machine refuses.
 pub(super) async fn start(
     state: &AppState,
     scope: RunScope,

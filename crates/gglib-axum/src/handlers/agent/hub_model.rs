@@ -21,7 +21,7 @@ use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::agent::MADE_KEYS;
 use gglib_core::domain::chat::{Conversation, Message};
 use gglib_core::domain::{Machine, ModelCapabilities, ModelRef, RuntimeKind};
-use gglib_core::ports::{Admission, LaunchOverrides, RunScope};
+use gglib_core::ports::{Admission, LaunchOverrides, ModelRuntimeError, RunScope};
 
 use super::AgentChatRequest;
 use super::launch::Loading;
@@ -190,6 +190,11 @@ fn serving(running: &[ServerInfo], id: i64) -> Option<u16> {
 /// second model of the same name is neither found nor loaded in its place.
 /// `loading` is told before a load is asked for, which may take minutes or
 /// wait behind an image render.
+///
+/// # Errors
+///
+/// `model_not_found` (404), naming `model`, when this machine has no such
+/// model, and `model_unavailable` (503) when it has one it cannot load.
 pub(super) async fn on_model(
     state: &AppState,
     model: &str,
@@ -222,13 +227,20 @@ pub(super) async fn on_model(
         .runtime
         .admit(&model, None, default_ctx, LaunchOverrides::default())
         .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "a turn could not load its chat's model");
-            coded(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "model_unavailable",
-                "the chat's model could not be loaded on the hub",
-            )
+        .map_err(|e| match e {
+            ModelRuntimeError::ModelNotFound(model) => coded(
+                StatusCode::NOT_FOUND,
+                "model_not_found",
+                format!("no model named {model} on this machine"),
+            ),
+            e => {
+                tracing::warn!(error = %e, "a turn could not load its chat's model");
+                coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "model_unavailable",
+                    "the chat's model could not be loaded on the hub",
+                )
+            }
         })?;
     chat.port = Admission::into_target(admission).port;
     Ok(chat)

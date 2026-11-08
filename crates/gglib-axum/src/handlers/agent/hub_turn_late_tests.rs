@@ -1,6 +1,6 @@
 //! A device's turn exists before its model loads: the `PUT` answers at once,
 //! the run says it is waiting, and what is refused after the run exists ends
-//! it `failed` with the code the `PUT` used to answer, with no row written.
+//! it `failed`, with no row written.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,9 +11,10 @@ use gglib_core::domain::runs::RunStatus;
 use gglib_core::ports::{RunEvent, RunsPort as _};
 use tokio::sync::Notify;
 
-use super::hub_turn_tests::{chat, device, failed_with, turn};
+use super::hub_turn_tests::{chat, device, failed_with, stored_model, turn};
 use super::{begin, plan, start};
 use crate::handlers::agent::compose::take_permit;
+use crate::handlers::agent::image_gate::image_gate_tests::model;
 use crate::handlers::agent::launch::LatePrepare;
 use crate::handlers::agent::run::coded;
 use crate::handlers::agent::run_fixture::{
@@ -40,38 +41,42 @@ async fn frames(state: &AppState, name: &str, id: &str) -> Vec<String> {
 }
 
 /// A model that cannot be loaded no longer refuses the `PUT`: the run is
-/// made, says it waits for the load, and ends `failed` with
-/// `model_unavailable`. Nothing was written, the chat is free again, and so
-/// is the slot.
+/// made, says it waits for the load, and ends `failed`, `model_not_found`
+/// naming a model deleted since the chat stored it, and `model_unavailable`
+/// for one that is here and cannot load. Nothing was written, the chat is
+/// free again, and so is the slot.
 #[tokio::test]
 async fn a_load_that_fails_ends_the_run_failed_and_writes_nothing() {
     let (_dir, state) = state().await;
-    let id = chat(&state, None).await;
+    // Catalogued, with no file: the load fails past the catalogue.
+    model(&state, "qwen3-8b", false).await;
+    let deleted = model(&state, "deleted", false).await;
+    let gone = chat(&state, Some(stored_model(deleted))).await;
+    state.core.models().delete(deleted).await.unwrap();
+    let missing = format!("no model named {deleted} on this machine");
+    let cases = [
+        (gone, "model_not_found", missing.as_str()),
+        (
+            chat(&state, None).await,
+            "model_unavailable",
+            "the chat's model could not be loaded on the hub",
+        ),
+    ];
+    for (run, (id, code, message)) in ["d1", "d2"].into_iter().zip(cases) {
+        let created = start(&state, device("phone"), run, turn(id, "second"), None)
+            .await
+            .unwrap();
 
-    let created = start(&state, device("phone"), "d1", turn(id, "second"), None)
-        .await
-        .unwrap();
-
-    assert!(created.created);
-    assert_eq!(created.info.conversation_id, Some(id));
-    assert_eq!(
-        failed_with(&state, "phone", "d1").await,
-        "model_unavailable"
-    );
-    let run = state
-        .runs
-        .existing(&device("phone"), "d1")
-        .unwrap()
-        .unwrap();
-    let error = run.error.unwrap();
-    assert_eq!(
-        error.message,
-        "the chat's model could not be loaded on the hub"
-    );
-    assert_eq!(frames(&state, "phone", "d1").await, ["waiting"]);
-    assert_eq!(saved(&state, id).await.len(), 2, "no row was written");
-    assert_eq!(state.agent_semaphore.available_permits(), 1);
-    assert!(state.runs.live_on(id).is_none(), "the chat is free again");
+        assert!(created.created);
+        assert_eq!(created.info.conversation_id, Some(id));
+        assert_eq!(failed_with(&state, "phone", run).await, code);
+        let run_info = state.runs.existing(&device("phone"), run).unwrap();
+        assert_eq!(run_info.unwrap().error.unwrap().message, message);
+        assert_eq!(frames(&state, "phone", run).await, ["waiting"]);
+        assert_eq!(saved(&state, id).await.len(), 2, "no row was written");
+        assert_eq!(state.agent_semaphore.available_permits(), 1);
+        assert!(state.runs.live_on(id).is_none(), "the chat is free again");
+    }
 }
 
 /// A late step that waits for its model, as a cold load does, until
@@ -204,7 +209,6 @@ async fn a_refusal_after_the_run_exists_is_its_error_and_writes_no_row() {
 /// no reply: a turn that would run on another machine than its chat's.
 #[tokio::test]
 async fn a_refused_first_write_saves_no_reply() {
-    use gglib_core::domain::chat::ConversationSettings;
     use gglib_core::domain::{Machine, ModelRef};
 
     use crate::handlers::agent::launch::ready;
@@ -212,14 +216,7 @@ async fn a_refused_first_write_saves_no_reply() {
 
     let (_dir, state) = state().await;
     let model = crate::handlers::agent::turn_fixture::model(&state, |_| {}).await;
-    let here = ConversationSettings {
-        model: Some(ModelRef {
-            machine: Machine::Local,
-            id: model,
-        }),
-        ..ConversationSettings::default()
-    };
-    let id = chat(&state, Some(here)).await;
+    let id = chat(&state, Some(stored_model(model))).await;
     let (mut p, _) = prepared(finished_reply(), End::Finish);
     p.far_model = Some(ModelRef {
         machine: Machine::Paired {

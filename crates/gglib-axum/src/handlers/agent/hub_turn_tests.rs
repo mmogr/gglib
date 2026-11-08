@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use gglib_core::domain::hub_chats::HubTurn;
+use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::RunsPort as _;
 use serde_json::json;
 
@@ -64,6 +65,17 @@ pub(super) async fn chat(state: &AppState, settings: Option<ConversationSettings
             .unwrap();
     }
     id
+}
+
+/// Settings that store this machine's model `id` as the chat's.
+pub(super) fn stored_model(id: i64) -> ConversationSettings {
+    ConversationSettings {
+        model: Some(ModelRef {
+            machine: Machine::Local,
+            id,
+        }),
+        ..ConversationSettings::default()
+    }
 }
 
 /// The code `device`'s run `id` ended `failed` with, once every run has

@@ -106,8 +106,9 @@ impl From<bool> for ChatQuery {
 /// # Errors
 ///
 /// What [`read`] refuses; `agent_busy` (429); and the runs' own. What is
-/// refused once the run exists ends it `failed` (`model_unavailable`), as a
-/// hub turn's.
+/// refused once the run exists ends it `failed` (`model_not_found` for a
+/// model this machine does not hold, `model_unavailable` for one it cannot
+/// load), as a hub turn's.
 pub(super) async fn start(
     state: &AppState,
     device: &str,
@@ -224,7 +225,7 @@ fn thinking_off(body: &Value) -> bool {
 /// `named` as an identifier this catalogue resolves: itself, or, for a
 /// `{model}:{profile}` name the proxy lists, the model before the suffix
 /// when only that is in the catalogue. A name the catalogue does not hold
-/// is kept, and its load says so.
+/// is kept, and its load fails the run `model_not_found`, naming it.
 async fn catalogued(state: &AppState, named: &str) -> String {
     let models = state.core.models();
     if models.get(named).await.ok().flatten().is_some() {
