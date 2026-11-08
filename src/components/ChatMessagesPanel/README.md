@@ -25,7 +25,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │                             │     │           └── TurnFoot: time on hover, FigureLine, TurnActions, BranchSwitcher
     │                             │     ├── BranchEnd           ← where other branches go on past the last message
     │                             │     └── Unanswered          ← the failed run's line, or Retry under a question nothing answers
-    │                             └── ComposerFooter      ← tiles, input; [+] menu, chips, Thinking, ring, model ▾, Send / Stop; or ModelGoneLine
+    │                             └── ComposerFooter      ← SendNoteLine; tiles, input; [+] menu, chips, Thinking, ring, model ▾, Send / Stop
 ```
 
 A far chat (`source="far"`, the machine this one is joined to) is read and carried on but not changed here: the head shows its title alone, and its turns offer Copy alone. A question names the paired device behind it when its row does ("Other machine" for one typed at the far machine), and names no one when it was sent from here.
@@ -55,8 +55,8 @@ State words come from `components/status/words.ts`; figures and their words from
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptLine`, `ChatStatusBanners`, `ComposerFooter` with `PlusMenu`, `ModelPicker`, `ModelGoneLine`) and message rendering (`MessageBubbles`, `ThinkingBlock`, `ToolCallRow`, `TurnFoot`, `TurnActions`, `ReplyArrival`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `MessageActionsContext`), and the picture sheet (`PictureSheet`, `SheetFrame`, `PictureWork`, `PictureBrush`) |
+| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptLine`, `ChatStatusBanners`, `ComposerFooter` with `PlusMenu`, `ModelPicker`, `SendNoteLine`) and message rendering (`MessageBubbles`, `ThinkingBlock`, `ToolCallRow`, `TurnFoot`, `TurnActions`, `ReplyArrival`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `MessageActionsContext`), and the picture sheet (`PictureSheet`, `SheetFrame`, `PictureWork`, `PictureBrush`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders; `RunPreviewsContext` — the run's preview frames, reaching a reply beside its message and never in it |
-| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading`, `useModelLoadWait`, `usePictureRedraw`, `usePictureKeeping` |
+| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading`, `usePictureRedraw`, `usePictureKeeping` |
 
 <!-- module-docs:end -->

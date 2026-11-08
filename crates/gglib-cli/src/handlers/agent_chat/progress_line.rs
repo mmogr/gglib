@@ -136,10 +136,11 @@ mod tests {
             position: 1,
             model: model.map(str::to_owned),
             elapsed_ms,
+            said: None,
         };
         assert_eq!(
             progress_line(&wait(WaitingFor::ImageRender, 3, 20, None, None)).as_deref(),
-            Some("waiting for an image render, step 3 of 20")
+            Some("Waiting for an image render, step 3 of 20")
         );
         assert_eq!(
             progress_line(&wait(

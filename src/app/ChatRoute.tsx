@@ -15,7 +15,8 @@
  * a send loads it, and the run says so while it waits. The port it answers
  * on, the server registry's or the handoff's, names it for a title only.
  * Once open, the chat keeps the last port it had: a model unloaded or
- * crashed while it is open leaves it open, its composer saying so. The
+ * crashed while it is open leaves it open, its composer live, and the next
+ * send loads it again. The
  * fallback is not decided before the server list's and the library's first
  * reads land: a cold load renders before the registries are filled.
  * A chat on the paired machine's model is `PairedChat`. One route serves
@@ -100,12 +101,12 @@ function LocalChat({ modelId, conversationId, handoff, onOpened, onDeleted }: Lo
   const navigate = useNavigate();
   const { servers, stopServer } = useServers();
   const server = servers.find((s) => s.modelId === modelId);
-  const { switchTo, loadAgain, startingModel } = useChatSwitch();
+  const { switchTo } = useChatSwitch();
   const inLibrary = useModel(modelId);
   const handed = handoff?.modelId === modelId ? handoff : null;
 
   // The port last served on is kept, for a title: a model unloaded or
-  // crashed mid-chat keeps the chat open, its composer saying so. A chat
+  // crashed mid-chat keeps the chat open, and a send loads it again. A chat
   // opened on a model nothing serves opens all the same; a send loads it.
   const live = server?.port ?? handed?.port;
   const [held, setHeld] = useState(live);
@@ -120,9 +121,7 @@ function LocalChat({ modelId, conversationId, handoff, onOpened, onDeleted }: Lo
       modelName={modelName}
       conversationId={conversationId}
       draft={handed?.draft}
-      startingModel={startingModel}
       onSwitchModel={switchTo}
-      onLoadModel={() => loadAgain({ modelId, modelName })}
       onUnloadModel={() => stopServer(modelId)}
       onOpened={onOpened}
       onDeleted={onDeleted}

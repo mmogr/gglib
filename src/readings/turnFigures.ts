@@ -137,47 +137,32 @@ export function modelShown(facts: ReplyFacts, previous: string | null | undefine
 }
 
 /**
- * What a reply with no token yet is waiting for, as its events so far say.
- * Once a token comes the fold and the text say what it is doing.
+ * What a reply with no token yet is doing, where the daemon has not said
+ * it in words. Once a token comes the fold and the text say what it is
+ * doing.
  */
-export type ArrivingPhase =
-  | 'Waiting for the model'
-  | 'Queued behind an image render'
-  | 'Waiting for the model to load'
-  | 'Reading the prompt'
-  | 'Starting the reply';
+export type ArrivingPhase = 'Waiting for the model' | 'Reading the prompt' | 'Starting the reply';
 
 /**
+ * The arrival line's words. A wait is the daemon's own sentence, verbatim
+ * ("Loading Qwen3-4B… 12 s", "Waiting for an image render, step 3 of 20"),
+ * and one from a daemon too old to word it says only that the reply waits.
  * A wait is said only until the model reads the prompt: a prompt reading
  * that comes after it takes it off the turn, so one still there is the
  * newer of the two.
  */
-export function arrivingPhase(parts: { prompt?: PromptReading; waiting?: TurnWaiting }): ArrivingPhase {
-  if (parts.waiting) {
-    return parts.waiting.reason === 'image_render' ? 'Queued behind an image render' : 'Waiting for the model to load';
-  }
+export function arrivingPhase(parts: { prompt?: PromptReading; waiting?: TurnWaiting }): string {
+  if (parts.waiting) return parts.waiting.said ?? 'Waiting for the model';
   if (parts.prompt && parts.prompt.processed < parts.prompt.total) return 'Reading the prompt';
   if (parts.prompt) return 'Starting the reply';
   return 'Waiting for the model';
 }
 
 /**
- * How far the render a reply is queued behind has got, and the reply's
- * place in line when it is not next: each only when the wait says it.
- */
-export function waitingLines(waiting: TurnWaiting): string[] {
-  if (waiting.reason !== 'image_render') return [];
-  const lines: string[] = [];
-  if (waiting.total > 0) lines.push(`step ${waiting.step} of ${waiting.total}`);
-  if (waiting.position > 1) lines.push(`${waiting.position} in line`);
-  return lines;
-}
-
-/**
  * The arrival line's figures after its phase: how far the prompt is read
  * while it is read, how much was read once it is, and what the cache gave.
  */
-export function promptLines(prompt: PromptReading, phase: ArrivingPhase): string[] {
+export function promptLines(prompt: PromptReading, phase: string): string[] {
   return [
     phase === 'Reading the prompt'
       ? `${formatCount(prompt.processed)} of ${formatCount(prompt.total)} tokens read`

@@ -1,0 +1,74 @@
+[
+  {
+    "model": "Qwen3-4B",
+    "absence": null,
+    "endpoint": "on",
+    "line": null
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": null,
+    "endpoint": "off",
+    "line": "The endpoint is Off · sending turns it on"
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": null,
+    "endpoint": "pinned",
+    "line": null
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": null,
+    "endpoint": "starting",
+    "line": null
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": "not_loaded",
+    "endpoint": "on",
+    "line": "Qwen3-4B isn't loaded · sending loads it"
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": "not_loaded",
+    "endpoint": "off",
+    "line": "Qwen3-4B isn't loaded · sending turns the endpoint on and loads it"
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": "not_loaded",
+    "endpoint": "pinned",
+    "line": "Qwen3-4B isn't loaded · sending loads it"
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": "not_loaded",
+    "endpoint": "starting",
+    "line": "Qwen3-4B isn't loaded · sending loads it"
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": "crashed",
+    "endpoint": "on",
+    "line": "Qwen3-4B stopped unexpectedly · sending loads it again"
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": "crashed",
+    "endpoint": "off",
+    "line": "Qwen3-4B stopped unexpectedly · sending turns the endpoint on and loads it again"
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": "crashed",
+    "endpoint": "pinned",
+    "line": "Qwen3-4B stopped unexpectedly · sending loads it again"
+  },
+  {
+    "model": "Qwen3-4B",
+    "absence": "crashed",
+    "endpoint": "starting",
+    "line": "Qwen3-4B stopped unexpectedly · sending loads it again"
+  }
+]

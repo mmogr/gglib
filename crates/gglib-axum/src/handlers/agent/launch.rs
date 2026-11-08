@@ -19,7 +19,7 @@ use tokio::time::{Duration, Instant, MissedTickBehavior};
 use gglib_app_services::transcript::{FrameTimes, remember_folder, remember_thinking};
 use gglib_app_services::{Reservation, RunEnded, RunLog, RunSpec};
 use gglib_core::domain::Machine;
-use gglib_core::domain::agent::{AgentEvent, WaitingFor};
+use gglib_core::domain::agent::AgentEvent;
 use gglib_core::domain::runs::{RunError, RunKind};
 use gglib_core::domain::thinking::Remember;
 use gglib_core::ports::{Created, RunScope};
@@ -360,14 +360,7 @@ impl Turn {
 /// Log that the run waits for `model` to load, which began at `since`.
 fn say_waiting(log: &RunLog, times: &FrameTimes, model: &str, since: Instant) {
     let elapsed = u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX);
-    let waiting = AgentEvent::Waiting {
-        reason: WaitingFor::ModelLoad,
-        step: 0,
-        total: 0,
-        position: 0,
-        model: Some(model.to_owned()),
-        elapsed_ms: Some(elapsed),
-    };
+    let waiting = AgentEvent::model_load_wait(model, elapsed);
     if log.append(frame(&waiting)).is_ok() {
         times.logged();
     }

@@ -101,8 +101,17 @@
     "model": "Qwen3-4B",
     "position": 0,
     "reason": "model_load",
+    "said": "Loading Qwen3-4B… 1 s",
     "step": 0,
     "total": 0,
+    "type": "waiting"
+  },
+  "image_render": {
+    "position": 2,
+    "reason": "image_render",
+    "said": "Waiting for an image render, step 3 of 20, 2 in line",
+    "step": 3,
+    "total": 20,
     "type": "waiting"
   },
   "list": {

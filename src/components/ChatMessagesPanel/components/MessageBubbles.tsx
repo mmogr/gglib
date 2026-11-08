@@ -1,4 +1,4 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useContext, useMemo, useRef } from 'react';
 import { ComposerPrimitive, MessagePrimitive, useMessage, useThread } from '@assistant-ui/react';
 import ThinkingBlock from './ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
@@ -61,34 +61,112 @@ function previousModel(messages: readonly TurnLike[], id: string): string | null
   return undefined;
 }
 
+interface SegmentLike extends TurnLike {
+  content: unknown;
+}
+
+const partsOf = (message: { content: unknown }): readonly unknown[] =>
+  Array.isArray(message.content) ? message.content : NO_PARTS;
+
+/**
+ * The messages of the reply message `id` begins: it and the replies that
+ * follow it with no question between, one per round of tool calls, each
+ * its own message (a run's rounds, and their saved rows). Empty where `id`
+ * goes on a reply that an earlier message begins, which draws its fold;
+ * `null` where the thread does not hold `id`.
+ */
+function replySegments<T extends TurnLike>(messages: readonly T[], id: string): readonly T[] | null {
+  const at = messages.findIndex((m) => m.id === id);
+  if (at < 0) return null;
+  if (at > 0 && messages[at - 1].role === 'assistant') return [];
+  let end = at + 1;
+  while (end < messages.length && messages[end].role === 'assistant') end += 1;
+  return messages.slice(at, end);
+}
+
+/**
+ * The messages of the reply `message` begins, the same array for as long
+ * as none of them changes: a bubble draws again when its reply does, not
+ * on every token of another. A message the thread does not hold yet (its
+ * rows swapped in for the run's) is its own reply.
+ */
+function useReplySegments(message: SegmentLike): readonly SegmentLike[] {
+  const held = useRef<readonly SegmentLike[]>([]);
+  return useThread((thread) => {
+    const next = replySegments(thread.messages, message.id) ?? [message];
+    const last = held.current;
+    if (next.length === last.length && next.every((m, i) => m === last[i])) return last;
+    held.current = next;
+    return next;
+  });
+}
+
+/**
+ * A reply's fold, over every message of it: the reasoning of each, one row
+ * per tool call of each, and each one's thinking time. Live while the one
+ * being written thinks; open while any of it arrives.
+ */
+const ReplyFold: React.FC<{ segments: readonly SegmentLike[]; streamingId: string | null | undefined }> = ({
+  segments,
+  streamingId,
+}) => {
+  const previews = useRunPreviews();
+  const parts = useMemo(() => segments.flatMap(partsOf), [segments]);
+  const rows = useMemo(() => toolCallRows(parts), [parts]);
+  // Each message's reasoning its own paragraphs.
+  const thinking = segments.map((s) => extractReasoningText(partsOf(s))).filter(Boolean).join('\n\n');
+  if (!thinking && rows.length === 0) return null;
+  const streaming = segments.find((s) => s.id === streamingId);
+  const live = !!streaming && !!extractReasoningText(partsOf(streaming)) && !textOf(streaming.content);
+  return (
+    <ThinkingBlock
+      segments={segments.map((s) => ({ messageId: s.id, durationSeconds: customOf(s)?.thinkingDurationSeconds ?? null }))}
+      thinking={thinking}
+      isStreaming={live}
+      defaultExpanded={!!streaming}
+      toolCalls={rows.length}
+    >
+      {rows.length > 0 && (
+        <ul aria-label="Tool calls" className="m-0 p-0 list-none flex flex-col gap-sm">
+          {rows.map((row) => (
+            <ToolCallRow key={row.id} row={row} preview={previews.get(row.id)} />
+          ))}
+        </ul>
+      )}
+    </ThinkingBlock>
+  );
+};
+
 /**
  * A reply: plain 16 px text in the reading column. Above it, its model's
  * name where the reply before was another model's; while no token has come,
  * the arrival line; then the fold with its reasoning and one row per tool
- * call. Under it, the images its tools made, always shown and never in the
- * fold, then its foot: the figure line and the action line, always on the
- * newest reply and on hover or focus elsewhere, its time on hover, and the
- * branch switcher where the chat's branches part. A tool still running
- * shows, in its row, how far it has got and the picture it is making,
- * which is the run's and never the message's.
+ * call. A reply whose rounds of tool calls came as messages of their own
+ * draws one fold, on its first message, over all of them; each message
+ * then shows its own text. Under it, the images its tools made, always
+ * shown and never in the fold, then its foot: the figure line and the
+ * action line, always on the newest reply and on hover or focus elsewhere,
+ * its time on hover, and the branch switcher where the chat's branches
+ * part. A tool still running shows, in its row, how far it has got and the
+ * picture it is making, which is the run's and never the message's.
  */
 export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
   const timing = useThinkingTiming();
-  const previews = useRunPreviews();
   const { shown, handlers } = useTurnReveal();
   const latest = useThread((thread) => latestReplyId(thread.messages)) === message.id;
   const previous = useThread((thread) => previousModel(thread.messages, message.id));
+  const segments = useReplySegments(message);
 
-  const contentArray: readonly unknown[] = Array.isArray(message.content) ? message.content : NO_PARTS;
+  const contentArray = partsOf(message);
   const thinkingText = extractReasoningText(contentArray);
   const contentText = textOf(message.content);
   const facts = replyFacts(message);
   const rows = useMemo(() => toolCallRows(contentArray), [contentArray]);
   const model = modelShown(facts, previous);
 
-  const isStreaming = timing?.currentStreamingAssistantMessageId === message.id;
-  const isCurrentlyThinking = isStreaming && !!thinkingText && !contentText;
+  const streamingId = timing?.currentStreamingAssistantMessageId;
+  const isStreaming = streamingId === message.id;
   const hasFold = !!thinkingText || rows.length > 0;
   const arriving = isStreaming && !hasFold && !contentText;
 
@@ -96,31 +174,9 @@ export const AssistantMessageBubble: React.FC = () => {
     <MessagePrimitive.Root data-turn="reply" className="flex flex-col gap-sm" {...handlers}>
       {model && <p className="m-0 text-xs text-text-muted">{model}</p>}
       {arriving && (
-        <ReplyArrival
-          phase={arrivingPhase({ prompt: facts.prompt, waiting: facts.waiting })}
-          prompt={facts.prompt}
-          waiting={facts.waiting}
-        />
+        <ReplyArrival phase={arrivingPhase({ prompt: facts.prompt, waiting: facts.waiting })} prompt={facts.prompt} />
       )}
-      {hasFold && (
-        <ThinkingBlock
-          messageId={message.id}
-          segmentIndex={0}
-          thinking={thinkingText ?? ''}
-          durationSeconds={facts.thinkingSeconds ?? null}
-          isStreaming={isCurrentlyThinking}
-          defaultExpanded={isStreaming}
-          toolCalls={rows.length}
-        >
-          {rows.length > 0 && (
-            <ul aria-label="Tool calls" className="m-0 p-0 list-none flex flex-col gap-sm">
-              {rows.map((row) => (
-                <ToolCallRow key={row.id} row={row} preview={previews.get(row.id)} />
-              ))}
-            </ul>
-          )}
-        </ThinkingBlock>
-      )}
+      {segments.length > 0 && <ReplyFold segments={segments} streamingId={streamingId} />}
       {/* While the reply arrives, each tool call that settles is said, once,
           politely: one span per call, so the region announces only additions. */}
       {isStreaming && rows.length > 0 && (
