@@ -12,17 +12,25 @@ use crate::daemon::DaemonSnapshot;
 /// Identifier the tray registers under.
 pub(super) const TRAY_ID: &str = "gglib";
 
-/// How much of the ring's opacity the outline icon keeps.
+/// How much of the bubble's opacity the outline icon keeps.
 const OUTLINE_OPACITY_PERCENT: u16 = 35;
+
+/// The colour the glyph is drawn in where the system does not recolour it:
+/// the app icon's blue.
+///
+/// macOS recolours a template image for its menu bar. Windows and Linux show
+/// the icon's own pixels, and the black glyph all but disappears on a dark
+/// taskbar or panel, Windows 11's default and GNOME's top bar among them. The
+/// blue reads on a light bar and a dark one.
+const TINT: [u8; 3] = [0x3d, 0x8b, 0xe0];
 
 /// What the tray icon is saying: the endpoint, and whether anything is
 /// loaded behind it.
 ///
-/// The spec draws an outline, a solid disc and a solid disc with a dot. Only
-/// two glyphs ship — the ring (`tray-idle.png`) and the ring with a dot
-/// (`tray-active.png`) — so until a solid asset exists, the ring faded stands
-/// for the outline and the plain ring for the solid disc. Three icons, told
-/// apart, none animated.
+/// Two glyphs ship, drawn by `scripts/icons/build.py` from the app icon's
+/// speech bubble: the bubble with the llama cut out of it (`tray-idle.png`)
+/// and the same with a dot (`tray-active.png`). The outline is the bubble
+/// faded. Three icons, told apart, none animated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TrayState {
     /// gglib is not running, or its endpoint is off: clients cannot connect.
@@ -33,19 +41,19 @@ pub(super) enum TrayState {
     SolidDot,
 }
 
-/// The ring: the endpoint on, nothing loaded.
+/// The bubble: the endpoint on, nothing loaded.
 pub(super) fn idle_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-idle.png"))
 }
 
-/// The ring with a dot: the endpoint on, something loaded.
+/// The bubble with a dot: the endpoint on, something loaded.
 pub(super) fn active_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
 }
 
-/// The ring, faded: no endpoint to connect to.
+/// The bubble, faded: no endpoint to connect to.
 ///
-/// Derived from the ring rather than shipped as a third asset. It is the
+/// Derived from the bubble rather than shipped as a third asset. It is the
 /// same glyph, so a separate file could only drift from it, and fading needs
 /// no image dependency — the same reasoning as the ARGB byte swap in
 /// [`super::linux`]. Both icons carry their glyph entirely in the alpha
@@ -77,13 +85,35 @@ const fn fade(alpha: u8) -> u8 {
     }
 }
 
-/// The icon for a state, already decoded.
+/// The icon for a state, already decoded, in this platform's colour.
 pub(super) fn for_state(state: TrayState) -> tauri::Result<Image<'static>> {
-    match state {
+    let glyph = match state {
         TrayState::Outline => outline_icon(),
         TrayState::Solid => idle_icon(),
         TrayState::SolidDot => active_icon(),
-    }
+    }?;
+
+    Ok(if cfg!(target_os = "macos") {
+        glyph
+    } else {
+        tinted(&glyph)
+    })
+}
+
+/// The same glyph in [`TINT`].
+///
+/// The shape is entirely in the alpha channel, so replacing the colour and
+/// keeping alpha redraws it exactly, with no image dependency, as
+/// [`outline_icon`] fades it.
+fn tinted(glyph: &Image<'_>) -> Image<'static> {
+    let [r, g, b] = TINT;
+    let rgba = glyph
+        .rgba()
+        .chunks_exact(4)
+        .flat_map(|px| [r, g, b, px[3]])
+        .collect();
+
+    Image::new_owned(rgba, glyph.width(), glyph.height())
 }
 
 /// How the tray should look for a given daemon state.
@@ -260,25 +290,69 @@ mod tests {
     }
 
     /// The outline icon is derived at runtime, so it has to actually come out
-    /// the same shape as the ring it is derived from.
+    /// the same shape as the bubble it is derived from.
     #[test]
-    fn the_outline_icon_is_the_ring_dimmed() {
-        let ring = idle_icon().expect("ring icon decodes");
+    fn the_outline_icon_is_the_bubble_dimmed() {
+        let bubble = idle_icon().expect("bubble icon decodes");
         let outline = outline_icon().expect("outline icon derives");
 
-        assert_eq!(outline.width(), ring.width());
-        assert_eq!(outline.height(), ring.height());
+        assert_eq!(outline.width(), bubble.width());
+        assert_eq!(outline.height(), bubble.height());
 
-        let brightest_ring = ring.rgba().chunks_exact(4).map(|px| px[3]).max();
+        let brightest_bubble = bubble.rgba().chunks_exact(4).map(|px| px[3]).max();
         let brightest_outline = outline.rgba().chunks_exact(4).map(|px| px[3]).max();
         assert!(
-            brightest_outline < brightest_ring,
-            "the outline icon must be fainter than the ring"
+            brightest_outline < brightest_bubble,
+            "the outline icon must be fainter than the bubble"
         );
         assert!(
             brightest_outline > Some(0),
             "but still visible, or there is no icon to click"
         );
+    }
+
+    /// Tinting changes the colour and nothing else: every pixel keeps its
+    /// alpha, so the shape is the glyph's, and every visible one is the blue.
+    #[test]
+    fn the_tint_keeps_the_shape_and_takes_the_blue() {
+        let glyph = active_icon().expect("icon decodes");
+        let tinted = tinted(&glyph);
+
+        assert_eq!(
+            (tinted.width(), tinted.height()),
+            (glyph.width(), glyph.height())
+        );
+        for (before, after) in glyph
+            .rgba()
+            .chunks_exact(4)
+            .zip(tinted.rgba().chunks_exact(4))
+        {
+            assert_eq!(after[3], before[3], "alpha is the shape and must not move");
+            assert_eq!(after[..3], TINT, "every pixel takes the tint");
+        }
+        assert!(
+            glyph.rgba().chunks_exact(4).any(|px| px[..3] != TINT),
+            "the shipped glyph is not already the tint, or this test proves nothing"
+        );
+    }
+
+    /// macOS gets the black template it recolours itself; everywhere else the
+    /// glyph comes tinted, or it vanishes on a dark bar.
+    #[test]
+    fn the_glyph_is_tinted_only_where_the_system_does_not_recolour_it() {
+        let shown = for_state(TrayState::Solid).expect("icon");
+        let visible = shown
+            .rgba()
+            .chunks_exact(4)
+            .find(|px| px[3] == u8::MAX)
+            .expect("the glyph has opaque pixels");
+
+        let expected = if cfg!(target_os = "macos") {
+            [0, 0, 0]
+        } else {
+            TINT
+        };
+        assert_eq!(visible[..3], expected);
     }
 
     /// Three states, three different images.

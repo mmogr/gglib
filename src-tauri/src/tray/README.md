@@ -23,11 +23,10 @@ lit permanently and mean nothing.
 A model loaded with the endpoint off draws the outline — no client can reach
 it — and the status line says it is loaded. Nothing animates at rest.
 
-Two glyphs ship, the ring and the ring with a dot, and no solid one yet. So the
-ring faded (derived at runtime, see the end of this page) stands for the
-outline, the plain ring for the solid disc and the ring with a dot for the
-solid disc with a dot: three icons, told apart, until a solid asset replaces
-the middle one.
+The glyph is the app icon's speech bubble with the llama cut out of it, drawn
+with the app icon by `scripts/icons/build.py` (`make icons`). Two files ship,
+the bubble and the bubble with a dot; the outline is the bubble faded (derived
+at runtime, see the end of this page).
 
 The tooltip and the menu's status line are one sentence from the same snapshot:
 "gglib · endpoint on · Qwen3-4B loaded", "gglib · endpoint off", "gglib ·
@@ -54,7 +53,7 @@ never send a left click; elsewhere the click opens the panel.
 - `build` — the `muda` backend (macOS, Windows)
 - `linux` — the `StatusNotifierItem` backend (Linux)
 - `window` — showing and hiding the panel and the main window
-- `placement` — where the panel appears; the only module that branches on platform
+- `placement` — where the panel appears, which is different on each platform
 - `layer_shell` — Linux-only Wayland placement, loaded at runtime
 
 ## Where the state comes from
@@ -230,11 +229,16 @@ pure black with the glyph carried entirely by the alpha channel, which is what
 `icon_as_template` expects; a coloured icon would render as a dark smudge on a
 dark menu bar.
 
+Windows and Linux recolour nothing: they show the icon's own pixels, and black
+all but vanishes on a dark taskbar or panel. So there `icon::for_state` hands
+over the same glyph in the app icon's blue, which reads on light and dark bars
+alike. It is the same file recoloured, not a second asset.
+
 That is also why there are two files for three states. The outline icon is the
-ring with its alpha scaled down, derived at runtime in `icon` rather than
+bubble with its alpha scaled down, derived at runtime in `icon` rather than
 shipped: it is the same glyph, so a third asset could only drift from it, and
 because the shape lives entirely in the alpha channel, fading that channel is
 exactly "draw the same thing fainter" on all three platforms — the same
-reasoning that keeps the ARGB byte swap dependency-free.
+reasoning that keeps the ARGB byte swap and the tint dependency-free.
 
 <!-- module-docs:end -->

@@ -51,8 +51,12 @@
     "externalBin": [],
     "icon": [
       "icons/icon.icns",
+      "icons/Assets.car",
       "icons/icon.ico",
-      "icons/icon.png"
+      "icons/icon.png",
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png"
     ],
     "resources": [],
     "shortDescription": "Desktop app for gglib, a local model runtime for llama.cpp",
