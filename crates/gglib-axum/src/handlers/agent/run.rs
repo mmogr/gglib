@@ -230,7 +230,7 @@ pub(super) async fn plan(
 /// a folder here, or, in a conversation, whose canonical path is not UTF-8
 /// and so cannot be remembered; `folder_missing` (409) for a remembered one that no longer
 /// resolves to a folder. Either is refused before anything is written.
-fn settle_folder(
+pub(super) fn settle_folder(
     said: Option<&str>,
     conversation_id: Option<i64>,
     saved: Option<&str>,

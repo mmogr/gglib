@@ -2728,6 +2728,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "chrono-tz",
+ "futures-util",
  "gglib-build-info",
  "gglib-core",
  "serde",

@@ -6,21 +6,18 @@ use std::time::Duration;
 
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use gglib_core::domain::hub_chats::HubTurn;
-use gglib_core::ports::{RunScope, RunsPort as _};
+use gglib_core::ports::RunsPort as _;
 use serde_json::json;
 
 use super::{plan, start};
 use crate::error::HttpError;
 use crate::handlers::agent::compose::take_permit;
 use crate::handlers::agent::launch::{launch, ready};
+pub(super) use crate::handlers::agent::run_fixture::device;
 use crate::handlers::agent::run_fixture::{
     End, finished_reply, meta, paced, prepared, saved, saving, settled, state,
 };
 use crate::state::AppState;
-
-pub(super) fn device(name: &str) -> RunScope {
-    RunScope::Device(name.to_owned())
-}
 
 pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
     HubTurn {
@@ -93,7 +90,7 @@ async fn an_empty_message_is_400_and_writes_nothing() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
     for content in ["", "  \n "] {
-        let refusal = refused(start(&state, "phone", "d1", turn(id, content)).await);
+        let refusal = refused(start(&state, device("phone"), "d1", turn(id, content), None).await);
         assert_eq!(refusal, (400, "invalid_request"));
     }
     assert_eq!(saved(&state, id).await.len(), 2);
@@ -103,7 +100,7 @@ async fn an_empty_message_is_400_and_writes_nothing() {
 #[tokio::test]
 async fn a_missing_chat_is_404() {
     let (_dir, state) = state().await;
-    let refusal = refused(start(&state, "phone", "d1", turn(4242, "hi")).await);
+    let refusal = refused(start(&state, device("phone"), "d1", turn(4242, "hi"), None).await);
     assert_eq!(refusal, (404, "conversation_not_found"));
 }
 
@@ -119,7 +116,7 @@ async fn a_chat_that_names_no_model_is_refused_before_anything_runs() {
         })
         .await
         .unwrap();
-    let refusal = refused(start(&state, "phone", "d1", turn(id, "hi")).await);
+    let refusal = refused(start(&state, device("phone"), "d1", turn(id, "hi"), None).await);
     assert_eq!(refusal, (422, "no_model"));
     assert!(saved(&state, id).await.is_empty());
 }
@@ -130,12 +127,14 @@ async fn a_chat_that_names_no_model_is_refused_before_anything_runs() {
 async fn a_device_turn_saves_its_message_and_the_reply() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
+    let plan = plan(&state, &device("phone"), turn(id, "second"), None)
+        .await
+        .unwrap();
     let (mut p, _) = prepared(finished_reply(), End::Finish);
     p.messages = plan.chat.messages;
     let created = super::begin(
         &state,
-        "phone",
+        device("phone"),
         "d1",
         "qwen".to_owned(),
         plan.transcript,
@@ -185,7 +184,7 @@ async fn a_second_turn_on_a_chat_with_a_live_reply_is_409() {
     .await
     .unwrap();
 
-    let refusal = refused(start(&state, "laptop", "d2", turn(id, "again")).await);
+    let refusal = refused(start(&state, device("laptop"), "d2", turn(id, "again"), None).await);
     assert_eq!(refusal, (409, "conflict"));
     let rows = saved(&state, id).await;
     assert!(rows.iter().all(|r| r.content != "again"), "nothing written");
@@ -208,11 +207,11 @@ async fn a_repeated_id_answers_with_the_devices_run() {
     )
     .await
     .unwrap();
-    let again = start(&state, "phone", "d1", turn(id, "again"))
+    let again = start(&state, device("phone"), "d1", turn(id, "again"), None)
         .await
         .unwrap();
     assert!(!again.created);
-    let taken = refused(start(&state, "laptop", "d1", turn(id, "again")).await);
+    let taken = refused(start(&state, device("laptop"), "d1", turn(id, "again"), None).await);
     assert_eq!(taken, (409, "conflict"));
     state.runs.shutdown();
 }

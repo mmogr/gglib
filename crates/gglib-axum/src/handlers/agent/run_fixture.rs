@@ -19,6 +19,11 @@ use crate::state::AppState;
 
 pub(super) const LOCAL: RunScope = RunScope::Local;
 
+/// Paired device `name`'s scope.
+pub(in crate::handlers) fn device(name: &str) -> RunScope {
+    RunScope::Device(name.to_owned())
+}
+
 pub(super) enum End {
     Finish,
     Fail,

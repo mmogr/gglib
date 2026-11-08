@@ -10,7 +10,7 @@ use gglib_core::domain::chat::{MessageRole, NewMessage};
 use gglib_core::request_pipeline::{DRAW_TOOL_NAME, DRAWN_NOTE, DRAWN_PICTURE_LINE};
 use serde_json::{Value, json};
 
-use super::hub_turn_tests::{chat, turn};
+use super::hub_turn_tests::{chat, device, turn};
 use super::plan;
 use crate::handlers::agent::image_gate::image_gate_tests::{model, uploaded};
 use crate::handlers::agent::run_fixture::{saved, state};
@@ -74,7 +74,13 @@ async fn next_message(sees: bool) -> (Value, Vec<String>, Vec<String>) {
     };
     let before: Vec<String> = rows(saved(&state, id).await);
 
-    let planned = plan(&state, turn(id, "what is in the corner?")).await;
+    let planned = plan(
+        &state,
+        &device("phone"),
+        turn(id, "what is in the corner?"),
+        None,
+    )
+    .await;
     let planned = planned.unwrap_or_else(|e| panic!("the turn was refused: {e}"));
     let carried = planned.chat.messages.iter().any(|message| {
         matches!(message, AgentMessage::Tool { images, .. } if images == std::slice::from_ref(&picture))

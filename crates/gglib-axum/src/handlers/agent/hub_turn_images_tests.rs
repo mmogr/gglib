@@ -42,7 +42,7 @@ async fn a_hub_turn_with_an_image_is_refused_before_the_model_is_loaded() {
     let id = chat(&state, None).await;
 
     let turn = image_turn(id, "what is this?", &image);
-    let refusal = refused(start(&state, "phone", "d1", turn).await);
+    let refusal = refused(start(&state, device("phone"), "d1", turn, None).await);
 
     assert_eq!(refusal, (400, "model_cannot_read_images"));
     assert_eq!(saved(&state, id).await.len(), 2);
@@ -59,7 +59,9 @@ async fn a_hub_turn_with_an_image_goes_on_to_load_a_model_that_can_see() {
     let id = chat(&state, None).await;
 
     let turn = image_turn(id, "what is this?", &image);
-    let created = start(&state, "phone", "d1", turn).await.unwrap();
+    let created = start(&state, device("phone"), "d1", turn, None)
+        .await
+        .unwrap();
 
     assert!(created.created, "the turn passed the image's gate");
     assert_eq!(
@@ -94,7 +96,7 @@ async fn a_hub_turn_counts_the_images_of_the_saved_rows() {
         draw: false,
         image_model: None,
     };
-    let refusal = refused(plan(&state, turn).await);
+    let refusal = refused(plan(&state, &device("phone"), turn, None).await);
 
     assert_eq!(refusal, (400, "model_cannot_read_images"));
 }
@@ -109,7 +111,9 @@ async fn a_hub_turn_is_text_or_an_image() {
     let id = chat(&state, None).await;
 
     for text in ["", "  \n "] {
-        let plan = plan(&state, image_turn(id, text, &image)).await.unwrap();
+        let plan = plan(&state, &device("phone"), image_turn(id, text, &image), None)
+            .await
+            .unwrap();
         let last = plan.chat.messages.last().unwrap();
         let AgentMessage::User { content, images } = last else {
             panic!("the turn is the user's");
@@ -130,7 +134,7 @@ async fn a_hub_turn_is_text_or_an_image() {
         image_model: None,
     };
     assert_eq!(
-        refused(plan(&state, neither).await),
+        refused(plan(&state, &device("phone"), neither, None).await),
         (400, "invalid_request")
     );
 }
@@ -145,7 +149,7 @@ async fn a_hub_turn_naming_an_image_never_uploaded_is_refused_before_the_load() 
     let never = AttachmentId::of(b"never uploaded");
 
     let turn = image_turn(id, "what is this?", &never);
-    let refusal = refused(start(&state, "phone", "d1", turn).await);
+    let refusal = refused(start(&state, device("phone"), "d1", turn, None).await);
 
     assert_eq!(refusal, (400, "attachment_not_found"));
     assert_eq!(saved(&state, id).await.len(), 2);
@@ -193,14 +197,16 @@ async fn a_hub_turn_whose_images_and_the_historys_are_over_16_mib_is_refused_bef
 
     let mut over = image_turn(id, "and these?", &big);
     over.images.push(small);
-    let refusal = refused(start(&state, "phone", "d1", over).await);
+    let refusal = refused(start(&state, device("phone"), "d1", over, None).await);
 
     assert_eq!(refusal, (400, "request_images_too_large"));
     assert_eq!(saved(&state, id).await.len(), 3);
     assert!(state.runs.list(&device("phone")).runs.is_empty());
 
     let at = image_turn(id, "and this?", &big);
-    start(&state, "phone", "d1", at).await.unwrap();
+    start(&state, device("phone"), "d1", at, None)
+        .await
+        .unwrap();
     assert_eq!(
         failed_with(&state, "phone", "d1").await,
         "model_unavailable"

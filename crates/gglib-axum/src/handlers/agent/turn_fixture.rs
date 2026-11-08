@@ -16,10 +16,10 @@ use gglib_core::settings::SettingsUpdate;
 use serde_json::{Value, json};
 
 use super::compose::{Prepared, held_over, prepare_over};
-use super::hub_turn::held_for_device;
 use crate::handlers::agent::AgentChatRequest;
 use crate::handlers::agent::dto::AgentRunRequest;
 use crate::handlers::agent::remote_upstream::local;
+use crate::handlers::agent::run_fixture::device;
 use crate::handlers::remote::fake_far::far;
 use crate::state::AppState;
 
@@ -66,11 +66,10 @@ pub(super) async fn turn(
 enum Prep {
     /// As `prepare_over` prepares it, with this folder.
     Over(Option<PathBuf>),
-    /// As `prepare_held` prepares a run: its model held on `state.runtime`
-    /// before the loop is composed.
+    /// As `prepare_held` prepares a run, and `hub_turn::late_on` a device's
+    /// turn: its model held on `state.runtime` before the loop is composed,
+    /// with no folder.
     Held,
-    /// As a device's turn is, by `hub_turn::held_for_device`.
-    Device,
 }
 
 /// [`turn`], prepared as `prep` says.
@@ -99,7 +98,6 @@ async fn turn_as(
     let prepared = match prep {
         Prep::Over(folder) => prepare_over(state, chat, upstream, folder).await,
         Prep::Held => held_over(state, chat, upstream, None).await.unwrap(),
-        Prep::Device => held_for_device(state, chat, upstream).await.unwrap(),
     };
     let Prepared {
         agent_loop,
@@ -150,7 +148,7 @@ pub(super) async fn sent_by_device(
     model_id: i64,
     chat: AgentChatRequest,
 ) -> Value {
-    sent_as(state, model_id, chat, Prep::Device).await
+    sent_as(state, model_id, chat, Prep::Held).await
 }
 
 /// [`sent`], for a run whose folder is `folder`.
@@ -274,7 +272,10 @@ pub(super) async fn phone(state: &AppState, model_id: i64) -> AgentChatRequest {
         })
         .await
         .unwrap();
-    super::hub_turn::plan(state, hi(id)).await.unwrap().chat
+    super::hub_turn::plan(state, &device("phone"), hi(id), None)
+        .await
+        .unwrap()
+        .chat
 }
 
 /// A paired device's turn on chat `conversation_id` that says "hi".

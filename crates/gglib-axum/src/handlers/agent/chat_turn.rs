@@ -137,6 +137,8 @@ pub(super) async fn start(
         model,
         chat,
         Asked::of_phone(drawing.draw, servers),
+        // A phone-kept chat has no folder here.
+        None,
     );
     // Saved to no chat: the phone keeps this conversation.
     let transcript = Transcript {

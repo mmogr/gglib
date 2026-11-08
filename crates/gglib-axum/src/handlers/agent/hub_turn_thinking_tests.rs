@@ -32,7 +32,7 @@ fn saying(conversation_id: i64, thinking: Thinking) -> HubTurn {
 /// Read `turn` against its chat and run it to its end as the phone's run
 /// `id`: the thinking budget it ran with.
 async fn run(state: &AppState, id: &str, turn: HubTurn) -> Option<i32> {
-    let plan = plan(state, turn).await.unwrap();
+    let plan = plan(state, &device("phone"), turn, None).await.unwrap();
     let budget = plan.chat.reasoning_budget_tokens;
     let (mut p, _) = prepared(finished_reply(), End::Finish);
     p.messages = plan.chat.messages;
@@ -40,7 +40,7 @@ async fn run(state: &AppState, id: &str, turn: HubTurn) -> Option<i32> {
     let model = "qwen".to_owned();
     begin(
         state,
-        "phone",
+        device("phone"),
         id,
         model,
         plan.transcript,
@@ -115,17 +115,17 @@ async fn a_refused_turn_remembers_nothing() {
         thinking: Some(Thinking::Off),
         ..turn(id, " ")
     };
-    let refusal = refused(start(&state, "phone", "d1", empty).await);
+    let refusal = refused(start(&state, device("phone"), "d1", empty, None).await);
     assert_eq!(refusal, (400, "invalid_request"));
 
     let slot = take_permit(&state).expect("the one slot");
     let off = saying(id, Thinking::Off);
-    let refusal = refused(start(&state, "phone", "d2", off.clone()).await);
+    let refusal = refused(start(&state, device("phone"), "d2", off.clone(), None).await);
     assert_eq!(refusal, (429, "agent_busy"));
     drop(slot);
 
     hang(&state, "d3", saving(id)).await;
-    let refusal = refused(start(&state, "laptop", "d4", off).await);
+    let refusal = refused(start(&state, device("laptop"), "d4", off, None).await);
     assert_eq!(refusal, (409, "conflict"));
 
     assert_eq!(remembered(&state, id).await, None);
@@ -146,7 +146,14 @@ async fn a_repeated_run_id_writes_nothing_again() {
     hang(&state, "d1", off).await;
     assert_eq!(remembered(&state, id).await, Some(Thinking::Off));
 
-    let again = start(&state, "phone", "d1", saying(id, Thinking::Default)).await;
+    let again = start(
+        &state,
+        device("phone"),
+        "d1",
+        saying(id, Thinking::Default),
+        None,
+    )
+    .await;
     assert!(!again.unwrap().created);
     let forget = Transcript {
         remember: Some(None),

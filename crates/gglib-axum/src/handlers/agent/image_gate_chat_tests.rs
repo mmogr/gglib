@@ -19,7 +19,7 @@ use gglib_core::ports::{
 
 use super::super::hub_turn::start;
 use super::super::remote_upstream::local;
-use super::super::run_fixture::saved;
+use super::super::run_fixture::{device, saved};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -135,7 +135,8 @@ async fn a_hub_turn_on_a_chat_whose_model_draws_is_refused_before_admit() {
         .await
         .unwrap();
 
-    let (status, code, message) = coded(start(&state, "phone", "d1", turn(id, "hi")).await);
+    let (status, code, message) =
+        coded(start(&state, device("phone"), "d1", turn(id, "hi"), None).await);
 
     assert_eq!((status, code), (400, "image_model_cannot_chat"));
     assert!(message.contains("'flux'"), "{message}");

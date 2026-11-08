@@ -13,6 +13,13 @@
 //! ready, not the `PUT` that made it, and the one place a device's run
 //! starts a server: an id the run names that is not open is dropped there,
 //! so what the run names only ever narrows what is open (ADR 0026).
+//!
+//! This machine's own run reads the tools of every server that is running,
+//! so [`McpService::start_enabled`] starts the enabled servers it may use
+//! first, in its own late work too: an enabled lazy server is then offered
+//! as an open one is to a device.
+
+use std::collections::BTreeSet;
 
 use gglib_core::{DeviceServers, McpServer, McpServerStatus, McpServerType, McpServiceError};
 use tracing::warn;
@@ -175,6 +182,35 @@ impl McpService {
             }
         }
         offered
+    }
+
+    /// Start each enabled server this machine's own run may use that is not
+    /// running: every one, or with `only` those whose ids it names. They
+    /// start at once, so a server that hangs costs the run its own wait, not
+    /// one added to every other's. An SSE server, which gglib cannot run, is
+    /// left alone without a word. A server that cannot be started is skipped
+    /// with one warning that names it and says why, as
+    /// [`Self::opened_tools`] skips one; nothing here fails the run, which is
+    /// then offered fewer tools.
+    pub async fn start_enabled(&self, only: Option<&BTreeSet<i64>>) {
+        let servers = match self.list_servers().await {
+            Ok(servers) => servers,
+            Err(e) => {
+                warn!(error = %e, "could not read the MCP servers a run on this machine uses");
+                return;
+            }
+        };
+        let chosen = servers.iter().filter(|server| {
+            server.enabled
+                && server.server_type != McpServerType::Sse
+                && only.is_none_or(|ids| ids.contains(&server.id))
+        });
+        let starts = chosen.map(|server| async move {
+            if let Err(why) = self.started(server).await {
+                warn!(server = %server.name, reason = %why, "an enabled MCP server is not running; it offers no tool");
+            }
+        });
+        futures_util::future::join_all(starts).await;
     }
 
     /// `server` running, started as a tool call would start it when it is

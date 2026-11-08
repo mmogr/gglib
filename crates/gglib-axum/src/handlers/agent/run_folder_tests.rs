@@ -15,7 +15,7 @@ use super::compose::{context_tests::LaunchedAt, take_permit};
 use super::dto::AgentRunRequest;
 use super::launch::{Transcript, launch};
 use super::run::{create_run, plan};
-use super::run_fixture::{End, LOCAL, finished_reply, prepared, saved, settled, state};
+use super::run_fixture::{End, LOCAL, device, finished_reply, prepared, saved, settled, state};
 use super::turn_fixture::{TOOL, hi, model, sent_by_device, sent_in};
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -253,14 +253,14 @@ async fn two_runs_at_once_name_their_own_folders() {
 }
 
 /// A paired device's turn on a chat that remembers a folder, planned and
-/// prepared as a device's is (`hub_turn::plan`, then `held_for_device`, the
-/// step of `late_on` after its model is found), is offered none of the file
+/// prepared as a device's is (`hub_turn::plan`, whose folder for it is none,
+/// then the hold `late_on` takes once its model is found), is offered none of the file
 /// tools, even with every tool open to it, while the page's run on the same
 /// chat reads that folder.
 #[tokio::test]
 async fn a_devices_turn_on_a_chat_with_a_folder_is_offered_no_file_tool() {
     let (_dir, mut state) = state().await;
-    // Holding the model a turn asks for, as `held_for_device` takes it.
+    // Holding the model a turn asks for, as `late_on` takes it.
     Arc::get_mut(&mut state).expect("not yet shared").runtime =
         Arc::new(LaunchedAt(4_096, Mutex::new(None)));
     let model_id = model(&state, |_| {}).await;
@@ -276,7 +276,10 @@ async fn a_devices_turn_on_a_chat_with_a_folder_is_offered_no_file_tool() {
     };
     let id = chat_with(&state, settings).await;
 
-    let mut phone = super::hub_turn::plan(&state, hi(id)).await.unwrap().chat;
+    let mut phone = super::hub_turn::plan(&state, &device("phone"), hi(id), None)
+        .await
+        .unwrap()
+        .chat;
     // Every tool, as no device's turn is given: what keeps the file tools
     // out is the folder, not the filter.
     phone.tool_filter = None;

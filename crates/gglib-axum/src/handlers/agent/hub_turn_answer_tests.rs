@@ -6,7 +6,7 @@ use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::{MessageRole, NewMessage};
 use gglib_core::domain::hub_chats::HubTurn;
 
-use super::hub_turn_tests::{chat, turn};
+use super::hub_turn_tests::{chat, device, turn};
 use super::plan;
 use crate::error::HttpError;
 use crate::handlers::agent::run_fixture::state;
@@ -22,7 +22,7 @@ fn answering(id: i64) -> HubTurn {
 
 /// The code a refused plan is answered with.
 async fn refused(state: &AppState, turn: HubTurn) -> &'static str {
-    match plan(state, turn).await {
+    match plan(state, &device("phone"), turn, None).await {
         Err(HttpError::Coded { code, .. }) => code,
         Err(other) => panic!("refused without a code: {other}"),
         Ok(_) => panic!("planned"),
@@ -42,7 +42,9 @@ async fn an_answer_runs_from_the_saved_question_and_adds_no_message() {
     };
     state.core.chat_history().save_message(asked).await.unwrap();
 
-    let plan = plan(&state, answering(id)).await.unwrap();
+    let plan = plan(&state, &device("phone"), answering(id), None)
+        .await
+        .unwrap();
 
     let last = plan.chat.messages.last().unwrap();
     assert!(matches!(last, AgentMessage::User { content, .. } if content == "second"));

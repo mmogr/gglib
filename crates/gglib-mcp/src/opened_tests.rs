@@ -145,6 +145,27 @@ async fn a_server_that_fails_to_start_is_skipped_and_the_rest_offered() {
     service.shutdown().await;
 }
 
+/// This machine's run starts every enabled server it may use, at once: one
+/// that cannot start is skipped and the rest still start.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_run_here_starts_the_rest_when_one_cannot_start() {
+    let (service, _) = service();
+    opened(&service, stdio("ghost", "gglib-no-such-command")).await;
+    let tavily = opened(&service, stand_in("tavily")).await;
+    let exa = opened(&service, stand_in("exa")).await;
+    assert!(
+        !running(&service, tavily.id).await,
+        "nothing runs before the run asks"
+    );
+
+    service.start_enabled(None).await;
+
+    assert!(running(&service, tavily.id).await);
+    assert!(running(&service, exa.id).await);
+    service.shutdown().await;
+}
+
 /// A server stamped invalid when it was added, its working folder missing
 /// then, is skipped as that verdict says, though the folder exists now and
 /// it would start; the server opened after it is still offered.

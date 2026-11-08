@@ -10,7 +10,7 @@ use gglib_core::domain::agent::{
 use gglib_core::domain::chat::ConversationSettings;
 use serde_json::{Value, json};
 
-use super::hub_turn_tests::{chat, turn};
+use super::hub_turn_tests::{chat, device, turn};
 use super::plan;
 use crate::handlers::agent::compose::config_for;
 use crate::handlers::agent::dto::{AgentRequestConfig, AgentRunRequest};
@@ -74,7 +74,11 @@ async fn config_of(state: &AppState, turn_at: Turn) -> AgentConfig {
     let named = match turn_at {
         Turn::Device { saved } => {
             let id = chat_saving(state, saved).await;
-            plan(state, turn(id, "second")).await.unwrap().chat.config
+            plan(state, &device("phone"), turn(id, "second"), None)
+                .await
+                .unwrap()
+                .chat
+                .config
         }
         Turn::Page { names, saved } => {
             let id = chat_saving(state, saved).await;

@@ -22,7 +22,7 @@ use super::AgentChatRequest;
 use super::chat_turn::{self, ChatQuery, Drawing};
 use super::dto::AgentRunRequest;
 use super::run::create_run;
-use super::run_fixture::{saved, state};
+use super::run_fixture::{device, saved, state};
 use super::turn_fixture::{DRAWS, model, turn};
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -177,7 +177,14 @@ async fn at_every_door(
 
     let page = refused(create_run(state, "r1", page_run(page_chat, &said)).await);
     let device = refused(
-        super::hub_turn::start(state, "phone", "d1", hub_turn(hub, draw, image_model)).await,
+        super::hub_turn::start(
+            state,
+            device("phone"),
+            "d1",
+            hub_turn(hub, draw, image_model),
+            None,
+        )
+        .await,
     );
     // Drawn with no server named: `tools=none&draw=true`.
     let query = ChatQuery {
@@ -272,7 +279,10 @@ async fn read_at_each_door(
         serde_json::from_value(page_run(hub_chat(state, served).await, &said)).unwrap();
     let page = super::run::plan(state, page).await.unwrap().0;
     let hub = hub_turn(hub_chat(state, served).await, true, image_model);
-    let device = super::hub_turn::plan(state, hub).await.unwrap().chat;
+    let device = super::hub_turn::plan(state, &device("phone"), hub, None)
+        .await
+        .unwrap()
+        .chat;
     let drawing = Drawing {
         draw: true,
         image_model,

@@ -20,8 +20,8 @@ use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use super::remote_upstream::{Upstream, hold, hold_model, local};
 use super::run::PROGRESS_EVERY;
 use super::run_fixture::{
-    End, LOCAL, conversation, finished_reply, logged, meta, paced, prepared, reply, saved, saving,
-    settled, start, state,
+    End, LOCAL, conversation, device, finished_reply, logged, meta, paced, prepared, reply, saved,
+    saving, settled, start, state,
 };
 use crate::error::HttpError;
 
@@ -341,7 +341,7 @@ async fn a_hub_chats_turn_saves_its_models_launched_context() {
     let late = super::launch::ready(p);
     super::hub_turn::begin(
         &state,
-        "phone",
+        device("phone"),
         "d1",
         "qwen".to_owned(),
         saving(id),

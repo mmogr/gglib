@@ -1,8 +1,9 @@
-//! A paired device's turn on one of the hub's chats: the proxy's
-//! `PUT /v1/runs/{id}?kind=agent`, run here because the agent loop is
-//! composed here.
+//! A turn on one of this machine's chats: a paired device's, at the proxy's
+//! `PUT /v1/runs/{id}?kind=agent`, or this machine's own, in its own scope
+//! ([`RunScope::Local`]). Both run here because the agent loop is composed
+//! here, and both go through [`start`].
 //!
-//! The device sends only its message, with any image named by the id its
+//! The turn sends only its message, with any image named by the id its
 //! upload answered, or, after a change that leaves the chat ending in a
 //! question (ADR 0017), no message and `answer_saved`, and the reply
 //! answers that question. The hub rebuilds the history from its
@@ -11,17 +12,31 @@
 //! with the limits the conversation's settings name (`prepare` takes an
 //! iteration limit they do not name from this machine's settings, as it
 //! does for the page), and with thinking off
-//! when the turn says so or the chat remembers it (`thinking`). It calls no
-//! MCP tool but those of the servers open to devices (ADR 0025), narrowed by
-//! the tools the chat's settings name (`device_tools`), the image tool with
-//! `draw`, and never gglib's own file tools: a device's turn has no
-//! folder. The reply runs on the chat's
-//! model, loaded as `/v1/models/{name}/load` loads it when it is not
-//! running, as an agent run in the device's scope, saved to the chat.
+//! when the turn says so or the chat remembers it (`thinking`). The reply
+//! runs on the chat's model, loaded as `/v1/models/{name}/load` loads it
+//! when it is not running, as an agent run in the turn's scope, saved to
+//! the chat.
+//!
+//! The scopes differ in three things only:
+//!
+//! - **Model.** A chat that stored the paired machine's model runs there on
+//!   this machine's own turn, through the tunnel; a device's turn on it is
+//!   refused once the chat has run (`hub_model`).
+//! - **Tools.** A device's turn calls no MCP tool but those of the servers
+//!   open to devices (ADR 0025), narrowed by the tools the chat's settings
+//!   name, and the image tool with `draw` (`device_tools`). This machine's
+//!   own turn is offered every tool here, narrowed by the same list, and
+//!   none when the chat turned them off or the catalogue says its model
+//!   calls none (`Asked::of_local`).
+//! - **Folder.** This machine's own turn may say the chat's folder, settled
+//!   as the page's run settles it (`run::settle_folder`), and gglib's file
+//!   tools read there. A device's turn never has one, whatever its chat
+//!   remembers (ADR 0023), and is refused one it says.
 //!
 //! Nothing here logs or returns the message, a row or a title: only ids.
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
@@ -40,13 +55,13 @@ use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
 use super::chat_turn::{ChatQuery, Drawing};
-use super::compose::{Prepared, held_over, refuse_unavailable_drawing, take_permit};
+use super::compose::{held_over, refuse_unavailable_drawing, take_permit};
 use super::device_tools::{self, Asked};
 use super::dto::AgentRequestConfig;
-use super::hub_model::{model_for, on_model};
+use super::hub_model::{calls_tools, on_model, paired, turn_model};
 use super::launch::{LatePrepare, Transcript, launch_turn};
-use super::remote_upstream::{self, Upstream};
-use super::run::{coded, with_code};
+use super::remote_upstream;
+use super::run::{coded, settle_folder, with_code};
 use crate::bootstrap::AxumContext;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -83,7 +98,9 @@ impl AgentRunStarter for HubTurns {
         let Some(state) = self.0.upgrade() else {
             return Err(refusal(RunsError::ShuttingDown.into()));
         };
-        start(&state, device, id, turn).await.map_err(refusal)
+        let scope = RunScope::Device(device.to_owned());
+        // A device's turn says no folder: `HubTurn` has no key for one.
+        start(&state, scope, id, turn, None).await.map_err(refusal)
     }
 
     async fn start_chat(
@@ -128,20 +145,25 @@ fn refusal(error: HttpError) -> TurnRefused {
     }
 }
 
-/// Start `device`'s turn under `id`, or answer with its run that has the id.
+/// Start a turn in `scope` under `id`, or answer with its run that has the
+/// id. `folder` is what this machine's own turn says of its chat's folder,
+/// as the page's run says it (`""` forgets it, and none keeps the one the
+/// chat remembers); a device's turn says none.
 ///
 /// # Errors
 ///
 /// `invalid_request` (400) for a message with neither text nor an image, or
-/// a turn that answers the saved question and carries one; `nothing_to_answer`
+/// a turn that answers the saved question and carries one, or a device's
+/// turn that says a folder; `folder_unusable` (400) and `folder_missing`
+/// (409) for this machine's, as the page's run has them; `nothing_to_answer`
 /// (409) for such a turn on a chat that ends in no question;
 /// `attachment_not_found` (400) for an image the turn or the chat's history
 /// names that is not stored; `request_images_too_large` (400) when they are
 /// over 16 MiB together;
 /// `model_cannot_read_images` (400); `image_model_cannot_chat` (400) when
 /// the chat's model draws images; `conversation_not_found` (404);
-/// `conflict` (409) while the chat has a live reply, or for a chat that ran
-/// on the machine this one is paired with; `no_model`
+/// `conflict` (409) while the chat has a live reply, or, on a device's turn,
+/// for a chat that ran on the machine this one is paired with; `no_model`
 /// (422) when nothing names the chat's model and nothing runs on the hub;
 /// `drawing_unavailable` (400) for a turn sent with Draw pressed that the
 /// hub cannot draw for, `invalid_request` (400) for an `image_model`
@@ -154,21 +176,22 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// hanging request. What is refused after that ends the run `failed` with
 /// the code this door answered before, having written nothing:
 /// `model_unavailable` when the model cannot be loaded, and whatever the
-/// daemon's own door refuses the same run with (`unavailable`, `conflict`).
+/// daemon's own door refuses the same run with (`unavailable`, `conflict`),
+/// the paired machine's refusals included on this machine's turn on its model.
 pub(super) async fn start(
     state: &AppState,
-    device: &str,
+    scope: RunScope,
     id: &str,
     turn: HubTurn,
+    folder: Option<String>,
 ) -> Result<Created, HttpError> {
-    let scope = RunScope::Device(device.to_owned());
     if let Some(info) = state.runs.existing(&scope, id)? {
         return Ok(Created {
             info,
             created: false,
         });
     }
-    let plan = plan(state, turn).await?;
+    let plan = plan(state, &scope, turn, folder).await?;
     let permit = take_permit(state).ok_or_else(|| {
         coded(
             StatusCode::TOO_MANY_REQUESTS,
@@ -183,51 +206,50 @@ pub(super) async fn start(
         chat,
         transcript,
         asked,
+        folder,
     } = plan;
-    let shown = shown_model(state, &model).await;
-    let late = late_on(Arc::clone(state), model, chat, asked);
-    begin(state, device, id, shown, transcript, late, permit)
+    // The paired machine's model is listed by the name the chat has for it:
+    // this machine's catalogue does not hold it.
+    let shown = if chat.far.is_some() {
+        model.clone()
+    } else {
+        shown_model(state, &model).await
+    };
+    let late = late_on(Arc::clone(state), model, chat, asked, folder);
+    begin(state, scope, id, shown, transcript, late, permit)
 }
 
 /// What a run on `model` does once it exists: find the model on its port
-/// or load it, settle the tools it is offered as `asked` (starting an MCP
-/// server open to devices that is not running), then hold the model and
-/// compose `chat`'s loop ([`held_for_device`]).
+/// or load it, unless it is the paired machine's (`chat.far`), settle the
+/// tools it is offered as `asked` (starting an MCP server open to devices
+/// that is not running, for a device's run), then hold the model and
+/// compose `chat`'s loop with gglib's file tools reading `folder`. A
+/// device's run has none: a folder is this machine's choice, and a device's
+/// turn reaches no tool of this machine's but the image tool its Draw asks
+/// for and the tools of the servers open to devices (ADR 0025), which name
+/// no file tool.
 pub(super) fn late_on(
     state: AppState,
     model: String,
     chat: AgentChatRequest,
     asked: Asked,
+    folder: Option<PathBuf>,
 ) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
-            let chat = on_model(&state, &model, chat, &loading).await?;
+            let chat = if chat.far.is_some() {
+                chat
+            } else {
+                on_model(&state, &model, chat, &loading).await?
+            };
             let chat = device_tools::settle(&state, chat, &asked).await;
             let upstream = remote_upstream::resolve(&state, &chat).await;
             let upstream = upstream.map_err(with_code)?;
-            held_for_device(&state, chat, upstream)
+            held_over(&state, chat, upstream, folder)
                 .await
                 .map_err(with_code)
         })
     })
-}
-
-/// A device's turn once its model is found on `upstream`: the model held
-/// and the loop composed with no folder, whatever folder its chat
-/// remembers. A folder is this machine's page's choice, and a device's turn
-/// reaches no tool of this machine's but the image tool its Draw asks for
-/// and the tools of the servers open to devices (ADR 0025), which name no
-/// file tool.
-///
-/// # Errors
-///
-/// Whatever the hold refuses.
-pub(super) async fn held_for_device(
-    state: &AppState,
-    chat: AgentChatRequest,
-    upstream: Upstream,
-) -> Result<Prepared, HttpError> {
-    held_over(state, chat, upstream, None).await
 }
 
 /// The name a run on `model` is listed under: the catalogue's name for it,
@@ -237,41 +259,61 @@ pub(super) async fn shown_model(state: &AppState, model: &str) -> String {
     found.map_or_else(|| model.to_owned(), |m| m.name)
 }
 
-/// Start `device`'s run `id` on `model`, reserved in the device's scope
-/// before `late` finds or loads the model and composes the loop. The run
+/// Start the run `id` on `model`, reserved in `scope` before `late` finds
+/// or loads the model and composes the loop. The run
 /// then holds its model and is saved as `transcript` says: its message and
 /// reply to the chat, which then remembers what the turn said of thinking.
 /// What `late`, the hold or the first write refuses ends the run `failed`
 /// with that code, with nothing written.
 pub(super) fn begin(
     state: &AppState,
-    device: &str,
+    scope: RunScope,
     id: &str,
     model: String,
     transcript: Transcript,
     late: LatePrepare,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
-    let scope = RunScope::Device(device.to_owned());
     let run = (RunKind::Agent, model);
     launch_turn(state, id, scope, run, transcript, late, permit)
 }
 
 /// A turn read against the hub's record: the model it runs on, the chat
 /// request the page would send, less the port, and where the run is saved,
-/// with what the chat is to remember of thinking once it starts, and what
-/// it asks of this machine's tools, settled once the run starts.
+/// with what the chat is to remember of thinking and of its folder once it
+/// starts, what it asks of this machine's tools, settled once the run
+/// starts, and the folder gglib's file tools read in.
 pub(super) struct Plan {
+    /// This machine's model, as its catalogue resolves it; or, when
+    /// `chat.far` names the paired machine's, the name the chat has for it.
     pub(super) model: String,
     pub(super) chat: AgentChatRequest,
     pub(super) transcript: Transcript,
     pub(super) asked: Asked,
+    /// A canonical path, on this machine's own turn only.
+    pub(super) folder: Option<PathBuf>,
 }
 
-/// Read `turn` against the chat it names. Its tool filter is the floor
-/// (`Asked::floor`) until the run starts and the servers open to devices
-/// are read: nothing is started for a `PUT` that is then refused.
-pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpError> {
+/// Read `turn` in `scope` against the chat it names, with the `folder` it
+/// says ([`start`]). A device's tool filter is the floor (`Asked::floor`)
+/// until the run starts and the servers open to devices are read: nothing
+/// is started for a `PUT` that is then refused. This machine's is final
+/// here (`Asked::planned`).
+pub(super) async fn plan(
+    state: &AppState,
+    scope: &RunScope,
+    turn: HubTurn,
+    folder: Option<String>,
+) -> Result<Plan, HttpError> {
+    let local = scope.device().is_none();
+    if !local && folder.is_some() {
+        return Err(coded(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "a paired device's turn has no folder: gglib's file tools read only in this \
+             machine's own",
+        ));
+    }
     let said = !turn.content.trim().is_empty() || !turn.images.is_empty();
     if turn.answer_saved == said {
         let why = if said {
@@ -307,10 +349,17 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     if turn.answer_saved {
         branching::answerable(&rows).map_err(ChangeError::from)?;
     }
-    let model = model_for(state, &conversation, &rows).await?;
-    // Once the chat's model is known, before `on_model` would load it: a
-    // model that draws is served by sd-server, which cannot chat.
-    super::image_gate::chats_named(state, &model).await?;
+    let far = paired(scope, &conversation);
+    let model = turn_model(state, far.as_ref(), &conversation, &rows).await?;
+    let settings = conversation.settings.clone().unwrap_or_default();
+    // Before the run is reserved, as the page's run has it: a folder the turn
+    // says that is no folder here, or the one the chat remembers that is gone.
+    let (folder, remember_folder) = if local {
+        let saved = settings.folder.as_deref();
+        settle_folder(folder.as_deref(), Some(id), saved)?
+    } else {
+        (None, None)
+    };
     // The prompt comes from the conversation, as the page takes it. A turn
     // that answers the question already saved adds none (ADR 0017).
     let mut messages = saved_history(conversation.system_prompt.as_deref(), &rows);
@@ -324,17 +373,25 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     // not stored, images over the cap together, and a model that cannot
     // read them.
     state.core.attachments().check_request(&messages).await?;
-    super::image_gate::named(state, &model, &messages).await?;
-    let settings = conversation.settings.unwrap_or_default();
-    // A device's turn has no budget of its own: off, or the model's default.
+    if far.is_none() {
+        super::image_gate::named(state, &model, &messages).await?;
+    }
+    // A turn has no budget of its own: off, or the model's default.
     let thinking = thinking::settle(turn.thinking, settings.thinking, None);
-    let asked = Asked::of_chat(&settings, turn.draw);
+    let asked = if local {
+        // The paired machine's catalogue says what its model calls; the
+        // request pipeline there strips tools from one that calls none.
+        let calls = far.is_some() || calls_tools(state, &model).await;
+        Asked::of_local(&settings, turn.draw, calls)
+    } else {
+        Asked::of_chat(&settings, turn.draw)
+    };
     let chat = AgentChatRequest {
         port: 0,
-        far: None,
+        far,
         messages,
         config: config_of(&settings),
-        tool_filter: Some(asked.floor()),
+        tool_filter: asked.planned(),
         model: None,
         reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
@@ -349,13 +406,14 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         conversation_id: Some(id),
         answer_saved: turn.answer_saved,
         remember: thinking.remember,
-        remember_folder: None,
+        remember_folder,
     };
     Ok(Plan {
         model,
         chat,
         transcript,
         asked,
+        folder,
     })
 }
 
@@ -391,6 +449,9 @@ mod hub_turn_late_tests;
 #[cfg(test)]
 #[path = "hub_turn_limits_tests.rs"]
 mod hub_turn_limits_tests;
+#[cfg(test)]
+#[path = "hub_turn_local_tests.rs"]
+mod hub_turn_local_tests;
 #[cfg(test)]
 #[path = "hub_turn_plan_tests.rs"]
 mod hub_turn_plan_tests;
