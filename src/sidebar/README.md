@@ -32,7 +32,7 @@ Delete…, Chat title, Loading chats.
 
 | File | Role |
 |------|------|
-| `Sidebar.tsx` | The column: the strip the traffic lights sit on, Library with its count, the endpoint and devices lines, the chats, the foot; `placeOf(pathname)` says which row the address belongs to |
+| `Sidebar.tsx` | The column: the strip atop (`TitleStrip`: the traffic lights' alone in the Mac app, "gglib" elsewhere), Library with its count, the endpoint and devices lines, the chats, the foot; `placeOf(pathname)` says which row the address belongs to |
 | `ChatList.tsx` | "Chats ⌕ +" over the recent chats, title only, newest first, the open one marked; a running reply's arc, an unseen reply in bold; ⋯ Rename · Delete… (asked first); ⌕ a filter field; + an empty chat at once; the joined machine's own chats as an "On <machine>" group at the foot; "No chats yet." / "No matching chats"; a `role="status"` skeleton while read |
 | `useConversationActivity.ts` | Running (a live agent run, from `GET /api/runs`, polled every 3 s while the sidebar is drawn) and New (a reply that ended while another chat was open); New marks are kept in this browser as conversation id → end time, read before each write and followed across tabs, and dropped only when a list the daemon just sent lacks the conversation and the mark predates asking for it; the far machine's runs and marks are its own (`gglib.chat.unread.far`), so its ids never meet this machine's |
 | `EndpointLine.tsx` | `● Endpoint On`, the address with ⧉ (which copies and goes nowhere), and the second line (`secondLine`: how many loaded, nothing yet, only the pinned model, off); the dot blinks once per served request (`components/status/useRequestBlink`); a click opens `/endpoint`, raised while it is open |

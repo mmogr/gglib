@@ -2,11 +2,13 @@
  * The sidebar on every screen: its rows go through `app/paths`, the open
  * row is read from the address, Library counts the library, Settings opens
  * the settings place, and Diagnostics opens the diagnostics place on Live. Under 720 px
- * the sidebar is a drawer. Its chats are `chatList.test.tsx`'s.
+ * the sidebar is a drawer. The strip atop says "gglib", except in the Mac
+ * app, where it is the traffic lights' alone. Its chats are
+ * `chatList.test.tsx`'s.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { guiModel } from '../fixtures/model';
@@ -32,7 +34,7 @@ vi.mock('../../../src/places/diagnostics/DiagnosticsPlace', () => ({ default: ()
 import { resetChats } from '../../../src/services/chatRegistry';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { renderShell } from '../places/harness';
-import { placeOf } from '../../../src/sidebar/Sidebar';
+import { TitleStrip, placeOf } from '../../../src/sidebar/Sidebar';
 
 const row = (name: string) => screen.getByRole('button', { name });
 
@@ -147,5 +149,18 @@ describe('placeOf', () => {
     expect(placeOf('/chat/far/3')).toBe('chats');
     expect(placeOf('/diagnostics/benchmarks')).toBe('diagnostics');
     expect(placeOf('/')).toBeNull();
+  });
+});
+
+describe('the strip atop the sidebar', () => {
+  it('is the traffic lights’ alone in the Mac app: no wordmark under them, and it still drags the window', () => {
+    const { container } = render(<TitleStrip mac />);
+    expect(screen.queryByText('gglib')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-tauri-drag-region]')).toHaveClass('h-[52px]');
+  });
+
+  it('says gglib everywhere else', () => {
+    render(<TitleStrip mac={false} />);
+    expect(screen.getByText('gglib')).toBeInTheDocument();
   });
 });

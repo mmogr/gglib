@@ -1,8 +1,8 @@
 /**
  * The sidebar: what gglib is, in the pitch's order.
  *
- * "gglib" atop, over the strip the traffic lights sit on; then Library with
- * how many models it holds, the endpoint line (two lines tall, the
+ * "gglib" atop, except in the Mac app, where that strip is the traffic
+ * lights' alone (`TitleStrip`); then Library with how many models it holds, the endpoint line (two lines tall, the
  * signature), Devices; the chats under all three (`ChatList`, which scrolls
  * while the rest stays); Settings and Diagnostics pinned at the foot,
  * Diagnostics in tertiary text. The place that is open is the address, so
@@ -14,7 +14,7 @@
  */
 
 import { useLocation, useNavigate } from 'react-router';
-import type { ReactNode } from 'react';
+import type { FC, ReactNode } from 'react';
 import { Button } from '../components/ui/Button';
 import { paths } from '../app/paths';
 import { isDesktop } from '../services/platform';
@@ -39,11 +39,24 @@ export function placeOf(pathname: string): SidebarPlace {
   return null;
 }
 
-/**
- * On a macOS desktop the window has no title bar and the traffic lights sit
- * over this strip, so it is taller there and drags the window.
- */
 const MAC_DESKTOP = isDesktop() && /Mac/i.test(navigator.platform);
+
+/**
+ * The strip atop the sidebar, which drags the window. On a macOS desktop the
+ * window has no title bar and the traffic lights sit on this strip, so it is
+ * taller there and holds nothing else: the menu bar already names gglib, and
+ * a wordmark under the lights crowds them. Elsewhere it holds "gglib".
+ */
+export const TitleStrip: FC<{ mac: boolean }> = ({ mac }) =>
+  mac ? (
+    <div data-tauri-drag-region className="h-[52px] shrink-0" />
+  ) : (
+    <div data-tauri-drag-region className="flex h-[40px] shrink-0 items-end px-base pb-sm">
+      <span data-tauri-drag-region className="text-sm font-semibold text-text select-none">
+        gglib
+      </span>
+    </div>
+  );
 
 interface RowProps {
   current: boolean;
@@ -80,14 +93,7 @@ export function Sidebar() {
 
   return (
     <nav aria-label="gglib" className="flex h-full flex-col">
-      <div
-        data-tauri-drag-region
-        className={cn('flex items-end px-base pb-sm shrink-0', MAC_DESKTOP ? 'h-[52px]' : 'h-[40px]')}
-      >
-        <span data-tauri-drag-region className="text-sm font-semibold text-text select-none">
-          gglib
-        </span>
-      </div>
+      <TitleStrip mac={MAC_DESKTOP} />
 
       <div className="flex flex-col gap-xs px-sm">
         <Row current={place === 'library'} onClick={() => navigate(paths.library())}>
