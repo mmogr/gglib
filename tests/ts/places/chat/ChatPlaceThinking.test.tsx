@@ -131,6 +131,9 @@ function connect() {
 
 const farRef: ModelRef = { machine: { kind: 'paired', fingerprint: FAR_FINGERPRINT }, id: 3 };
 
+/** A far chat's settings once it ran on that machine's `qwen3-8b` (id 5 there), as that machine records them. */
+const RAN_THERE: ConversationSettings = { model_name: 'qwen3-8b', model: { machine: { kind: 'local' }, id: 5 } };
+
 function renderLocal() {
   return render(<ChatPlace modelName="Qwen3.8-27B" modelId={7} serverPort={4321} conversationId={fixture.conversations[0]?.id ?? null} />, { wrapper });
 }
@@ -184,7 +187,7 @@ beforeEach(() => {
   resetRemoteState();
   started = [];
   nextRow = 100;
-  farSettings = { model_name: 'qwen3-8b' };
+  farSettings = { ...RAN_THERE };
   farRows = [
     { id: 40, conversation_id: 1, role: 'user', content: 'Why did the build break?', created_at: '2026-09-30T09:12:31Z' },
     { id: 41, conversation_id: 1, role: 'assistant', content: 'A dependency moved.', created_at: '2026-09-30T09:13:07Z', metadata: { modelName: 'qwen3-8b' } },
@@ -653,7 +656,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
 
   it('opens not pressed on a chat that machine remembers as Off, and a click back says default once', async () => {
     const user = userEvent.setup();
-    farSettings = { model_name: 'qwen3-8b', thinking: 'off' };
+    farSettings = { ...RAN_THERE, thinking: 'off' };
     await openFar();
     expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(chip()).toHaveAttribute('title', OFF_TITLE);
@@ -671,7 +674,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
    * their reader leaves.
    */
   function twoFarChats(first: ConversationSettings) {
-    const settings: Record<number, ConversationSettings> = { 1: first, 2: { model_name: 'qwen3-8b' } };
+    const settings: Record<number, ConversationSettings> = { 1: first, 2: { ...RAN_THERE } };
     const titles: Record<number, string> = { 1: 'Why the build broke', 2: 'Second far chat' };
     stub().listFarChats.mockImplementation(async () => [
       { id: 1, title: titles[1], updated_at: '2026-09-30 09:13:07' },
@@ -707,7 +710,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
     'a chat switched %s here and left while its reply is written opens as a phone has since left it, and the next turn says nothing',
     async (_, said, remembers, pressed, switched) => {
       const user = userEvent.setup();
-      const first: ConversationSettings = { model_name: 'qwen3-8b', ...(remembers && { thinking: remembers }) };
+      const first: ConversationSettings = { ...RAN_THERE, ...(remembers && { thinking: remembers }) };
       const there = twoFarChats({ ...first });
       await openFar();
       await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', pressed));
@@ -747,10 +750,10 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
     },
   );
 
-  it("is shown by the last reply's model for a chat whose settings name none", async () => {
-    farSettings = undefined;
+  it("draws none for a chat whose settings record no model id, whatever its last reply names", async () => {
+    farSettings = { model_name: 'qwen3-8b' };
     await openFar();
-    expect(chip()).toHaveAttribute('aria-checked', 'true');
+    expect(chip()).not.toBeInTheDocument();
   });
 
   it('draws none for a far chat that has never run, and one appears with its first reply', async () => {
@@ -762,7 +765,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
 
     // Its first turn runs there: that machine now says which model it ran on.
     stub().addFarTurn.mockImplementationOnce(async (id: number, runId: string, content: string) => {
-      farSettings = { model_name: 'qwen3-8b' };
+      farSettings = { ...RAN_THERE };
       farRows = [...farRows, { id: nextRow++, conversation_id: id, role: 'user', content, created_at: '2026-09-30T09:20:00Z' }];
       return agentRun(runId, id, 'queued');
     });
@@ -772,7 +775,7 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
 
   it('draws none where that machine lists no model as thinking, and its turns say nothing of it', async () => {
     const user = userEvent.setup();
-    farSettings = { model_name: 'qwen3-8b', thinking: 'off' };
+    farSettings = { ...RAN_THERE, thinking: 'off' };
     farModels = [farEntry('qwen3-8b', 5, { capabilities: ['vision'] })];
     await openFar();
     expect(chip()).not.toBeInTheDocument();
