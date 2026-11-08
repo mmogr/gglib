@@ -62,18 +62,21 @@ desktop rotated its `proxy_api_key` — got `401 Unauthorized invalid_api_key:
 invalid or missing bearer token`, which names no machine and offers no remedy.
 
 So the classified failure carries the upstream's own `code` out beside the
-rendered reason, and the far machine — passed in by whichever surface chose
-the remote upstream, and the only thing here that knows one was involved — is
-offered the chance to say something better before the reason is used. Today
-that is only `invalid_api_key`, which becomes a sentence naming the machine by
-the name every remote surface shows it by, saying it is not admitting this
-device's key, and pointing at a fresh `gglib remote invite` on it.
+rendered reason, and the door — the gglib endpoint dialled, passed in by
+whichever surface chose it, and the only thing here that knows whose endpoint
+it is — is offered the chance to say something better before the reason is
+used. Today that is only `invalid_api_key`. A paired machine's door makes it a
+sentence naming the machine by the name every remote surface shows it by,
+saying it is not admitting this device's key, and pointing at a fresh `gglib
+remote invite` on it; this machine's door makes it a sentence that names no
+pairing and says to send again once a changed key has reached the endpoint.
 
 Both halves of that condition are load-bearing. The code alone is not enough:
 gglib's own proxy answers a bad key with the same `invalid_api_key`, and
 telling someone to re-pair a machine that is not in the picture is worse than
-saying nothing. Being remote alone is not enough either: a far machine whose
-model server is down fails terminally too, and its key is fine. The rendered
+saying nothing, so with no door the classifier's rendering stands. Being
+remote alone is not enough either: a far machine whose model server is down
+fails terminally too, and its key is fine. The rendered
 sentence carries no status and none of the upstream's own wording, so the
 rendered reason is written to the log at that point rather than left to the
 caller.

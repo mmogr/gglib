@@ -10,7 +10,6 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::StreamExt as _;
-use gglib_core::access::reachable_at;
 use gglib_core::domain::runs::RunError;
 use gglib_core::sse::DataFrames;
 use gglib_proxy::models::ErrorResponse;
@@ -77,7 +76,7 @@ impl RunExecutor for ChatExecutor {
             fields.insert("stream".to_owned(), Value::Bool(true));
             fields.insert("return_progress".to_owned(), Value::Bool(true));
         }
-        let url = format!("http://{}/v1/chat/completions", reachable_at(door.addr));
+        let url = format!("{}/v1/chat/completions", door.root_url);
         let mut request = self.client.post(url).json(&body);
         if let Some(key) = &door.key {
             request = request.bearer_auth(key);

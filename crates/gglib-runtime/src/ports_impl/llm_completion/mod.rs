@@ -18,7 +18,7 @@ use gglib_core::{
 };
 
 mod body;
-mod far_machine;
+mod door;
 mod images;
 mod retry;
 mod stream;
@@ -26,7 +26,7 @@ mod turn;
 mod turn_limit;
 mod writing_time;
 
-pub use far_machine::FarMachine;
+pub use door::Door;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
@@ -56,17 +56,17 @@ pub struct LlmCompletionAdapter {
     /// by model name.
     model: String,
     client: Client,
-    /// The other machine this turn is going to, when it is going to one.
+    /// The gglib endpoint this turn is going through, when it is going
+    /// through one: in this release only a paired machine's.
     ///
     /// `None` for a llama-server on loopback, which asks for nothing and has
     /// no name. Set for the remote tunnel's loopback port (ADR 0012), which
     /// is the far machine's proxy and demands its key; the listener there
     /// does not inject one, so this side has to. Its identity rides along
     /// with the key because a refusal from that machine has to name it —
-    /// see [`FarMachine`]. Never logged and absent from every `Debug` the
-    /// adapter takes part in: the struct derives none, and neither does that
-    /// one.
-    far_machine: Option<FarMachine>,
+    /// see [`Door`]. Never logged: the adapter derives no `Debug`, and the
+    /// door's own `Debug` leaves the key out.
+    door: Option<Door>,
     /// Where the images a message names by id are read from (`images.rs`).
     /// `None` for a caller whose messages carry none.
     attachments: Option<Arc<dyn AttachmentStore>>,
@@ -276,9 +276,9 @@ impl LlmCompletionAdapter {
         if let Some(observe) = &self.sampling_observer {
             observe(&report.sampling);
         }
-        // Not on a send to another machine: its proxy resolves that
-        // machine's settings, and a limit from here would outrank them.
-        if self.limit_turns && self.far_machine.is_none() {
+        // Not through a door (today only a paired machine's): its proxy
+        // resolves that machine's settings, and a limit here would outrank them.
+        if self.limit_turns && self.door.is_none() {
             let reasoning = capability_tags::is_reasoning(&self.model_context.tags);
             turn_limit::limit_turn(&mut body, reasoning);
         }
@@ -341,13 +341,13 @@ impl LlmCompletionAdapter {
 
         // A send to this machine's llama-server waits for its generation
         // turn first, outside the send timer and the policy's deadline: an
-        // image render can hold the GPU for longer than either. A send to
-        // another machine takes none here; that machine's proxy counts it.
+        // image render can hold the GPU for longer than either. A send through
+        // a door (today only a paired machine's) takes none: that proxy counts it.
         // A failed send below drops the turn at once.
         let gate = self
             .generation_gate
             .as_ref()
-            .filter(|_| self.far_machine.is_none());
+            .filter(|_| self.door.is_none());
         let turn = turn::take(gate, self.retry_observer.as_ref()).await?;
 
         // Each attempt's connect + first-byte phase is bounded by the send
@@ -362,7 +362,7 @@ impl LlmCompletionAdapter {
         let response = retry::send_with_retry(
             &self.client,
             &self.url,
-            self.far_machine.as_ref(),
+            self.door.as_ref(),
             &body,
             std::time::Duration::from_secs(self.send_timeout_secs),
             &self.retry_policy,

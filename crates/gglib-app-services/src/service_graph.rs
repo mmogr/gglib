@@ -241,10 +241,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         device_keys_path,
     ));
 
-    let runs = Arc::new(crate::runs::chat_registry(
-        Arc::clone(&proxy),
-        Arc::clone(&core),
-    ));
+    let runs = Arc::new(crate::runs::chat_registry(Arc::clone(&proxy)));
     proxy.bind_runs(&(Arc::clone(&runs) as Arc<dyn RunsPort>));
     proxy.bind_images(Arc::clone(&images));
     proxy.bind_chats(Arc::new(crate::HubChats::new(Arc::clone(&core), &runs)));

@@ -13,7 +13,7 @@ use gglib_core::retry::RetryPolicy;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
-use super::super::{FarMachine, LlmCompletionAdapter};
+use super::super::{Door, LlmCompletionAdapter};
 
 /// A store holding one image's bytes.
 struct One(AttachmentId, AttachmentBlob);
@@ -73,12 +73,13 @@ async fn a_turn_for_the_paired_machines_model_sends_data_urls_not_ids() {
     let store: Arc<dyn AttachmentStore> = Arc::new(One(id.clone(), blob));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
-    let far = FarMachine {
-        key: "far-key".to_owned(),
-        name: "desk".to_owned(),
+    let far = Door {
+        root_url: String::new(),
+        key: Some("far-key".to_owned()),
+        name: Some("desk".to_owned()),
     };
     let adapter = LlmCompletionAdapter::new(base, None)
-        .with_far_machine(Some(far))
+        .with_door(Some(far))
         .with_attachments(Some(store))
         .with_retry_policy(RetryPolicy {
             max_attempts: 1,

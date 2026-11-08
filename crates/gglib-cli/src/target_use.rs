@@ -90,7 +90,7 @@ impl Target {
                         proxy.base_url()
                     )
                 })?;
-                Ok(("127.0.0.1".to_owned(), port, Some(proxy.far_machine().key)))
+                Ok(("127.0.0.1".to_owned(), port, proxy.door().key))
             }
         }
     }

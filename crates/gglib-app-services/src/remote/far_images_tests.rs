@@ -85,7 +85,11 @@ async fn no_model_is_sent_when_none_was_named() {
 #[test]
 fn a_refused_key_names_the_machine_and_says_how_to_pair_again() {
     let far = FarProxy::new("http://127.0.0.1:9/v1", &credentials()).unwrap();
-    let text = far.key_refused();
-    assert!(text.starts_with(far.shown_name()), "{text}");
-    assert!(text.contains("gglib remote invite"), "{text}");
+    assert_eq!(
+        far.key_refused(),
+        "the paired machine is not admitting this device's key — it has either stopped trusting \
+         this device, or a key rotation there is still reaching the tunnel, which clears itself \
+         within a few seconds. If waiting does not fix it, pair again with a fresh `gglib \
+         remote invite` there"
+    );
 }

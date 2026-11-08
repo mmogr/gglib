@@ -46,7 +46,7 @@ use gglib_mcp::{
 };
 use reqwest::Client;
 
-use crate::{FarMachine, LlmCompletionAdapter, SamplingObserver};
+use crate::{Door, LlmCompletionAdapter, SamplingObserver};
 
 /// What a loop needs to share the GPU with image generation.
 #[derive(Debug, Clone, Default)]
@@ -107,18 +107,18 @@ pub struct LoopGeneration {
 ///   goes whether a turn with tools gets the agentic temperature ceiling:
 ///   the settings' switch for a run on this machine's model, and on for one
 ///   on a paired machine's.
-/// * `far_machine` — `Some(machine)` when `base_url` is the remote tunnel's
-///   loopback port, which is another machine's proxy (ADR 0012): it carries
-///   both the key that port demands, since the listener there injects none,
-///   and the fingerprint that names whose port it is, so a refusal of that key
-///   can say which machine refused it. `None` for a llama-server on loopback,
-///   which demands nothing and is not another machine.
+/// * `door` — `Some(door)` when `base_url` is the remote tunnel's loopback
+///   port, which is another machine's proxy (ADR 0012): it carries both the
+///   key that port demands, since the listener there injects none, and the
+///   name of whose port it is, so a refusal of that key can say which machine
+///   refused it. `None` for a llama-server on loopback, which demands nothing
+///   and is not another machine.
 /// * `attachments` — where the images a message names by id are read from,
 ///   just before each request is sent, and where the images an MCP tool
 ///   returns are stored.
 /// * `generation` — the daemon's generation gate, so a reply on this
 ///   machine's model waits for an image render rather than sharing the GPU
-///   with it. A send to `far_machine` takes no turn. With it, the drawing
+///   with it. A send through `door` takes no turn. With it, the drawing
 ///   tool, offered only while its arm says so.
 #[expect(
     clippy::implicit_hasher,
@@ -138,7 +138,7 @@ pub fn compose_agent_loop(
     retry_observer: Option<Arc<dyn RetryObserver>>,
     sampling: Option<InferenceConfig>,
     layers: SamplingLayers,
-    far_machine: Option<FarMachine>,
+    door: Option<Door>,
     attachments: Arc<dyn AttachmentStore>,
     generation: LoopGeneration,
 ) -> Arc<dyn AgentLoopPort> {
@@ -160,7 +160,7 @@ pub fn compose_agent_loop(
         retry_observer,
         // The GUI has no per-turn retry override; the environment defaults apply.
         None,
-        far_machine,
+        door,
         attachments,
         generation,
     )
@@ -206,7 +206,7 @@ pub fn compose_agent_loop_with_sampling(
     usage_sink: Option<Arc<dyn UsageSink>>,
     guard: Option<AgentGuardReporter>,
     retry_policy: Option<RetryPolicy>,
-    far_machine: Option<FarMachine>,
+    door: Option<Door>,
     attachments: Arc<dyn AttachmentStore>,
     generation: LoopGeneration,
 ) -> Arc<dyn AgentLoopPort> {
@@ -227,7 +227,7 @@ pub fn compose_agent_loop_with_sampling(
         // consumer to notify — retries surface through the loop's own output.
         None,
         retry_policy,
-        far_machine,
+        door,
         attachments,
         generation,
     )
@@ -249,14 +249,14 @@ fn compose_agent_loop_inner(
     guard: Option<AgentGuardReporter>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
     retry_policy: Option<RetryPolicy>,
-    far_machine: Option<FarMachine>,
+    door: Option<Door>,
     attachments: Arc<dyn AttachmentStore>,
     generation: LoopGeneration,
 ) -> Arc<dyn AgentLoopPort> {
     let images = Arc::new(AttachmentService::new(Arc::clone(&attachments)));
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
-            .with_far_machine(far_machine)
+            .with_door(door)
             .with_attachments(Some(attachments))
             .with_sampling(sampling)
             .with_layers(layers)

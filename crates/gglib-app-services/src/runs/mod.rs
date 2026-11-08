@@ -16,8 +16,6 @@ pub use registry::RunRegistry;
 
 use std::sync::Arc;
 
-use gglib_core::services::AppCore;
-
 use crate::proxy::ProxyOps;
 
 /// Milliseconds since the Unix epoch. An argument, so tests drive time.
@@ -33,8 +31,8 @@ fn system_clock() -> Clock {
 }
 
 /// The daemon's registry: chat runs through its own proxy, on the wall clock.
-pub(crate) fn chat_registry(proxy: Arc<ProxyOps>, core: Arc<AppCore>) -> RunRegistry {
-    let door = Arc::new(door::LocalProxy { proxy, core });
+pub(crate) fn chat_registry(proxy: Arc<ProxyOps>) -> RunRegistry {
+    let door = Arc::new(door::LocalProxy { proxy });
     let executor = Arc::new(chat::ChatExecutor::new(door));
     RunRegistry::new(executor, system_clock())
 }
@@ -51,9 +49,6 @@ mod chat_tests;
 #[cfg(test)]
 #[path = "conversation_tests.rs"]
 mod conversation_tests;
-#[cfg(test)]
-#[path = "door_tests.rs"]
-mod door_tests;
 #[cfg(test)]
 #[path = "end_tests.rs"]
 mod end_tests;

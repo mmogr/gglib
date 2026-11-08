@@ -46,7 +46,14 @@ fn it_names_its_machine_and_its_root() {
     assert_eq!(far.base_url(), NOWHERE);
     assert_eq!(far.port(), Some(9));
     assert_eq!(far.shown_name(), gglib_core::domain::UNNAMED_PAIRED);
-    assert_eq!(far.far_machine().name, gglib_core::domain::UNNAMED_PAIRED);
+    let door = far.door();
+    assert_eq!(
+        door.name.as_deref(),
+        Some(gglib_core::domain::UNNAMED_PAIRED)
+    );
+    // The adapter appends `/v1` itself, so the door is the root.
+    assert_eq!(door.root_url, "http://127.0.0.1:9");
+    assert_eq!(door.key.as_deref(), Some("sk-the-key"));
 }
 
 /// A model picked from one paired machine's list is sent to that machine
