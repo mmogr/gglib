@@ -1,7 +1,7 @@
 # Every target here is a command, not a file. The previous list named 15 of
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
-.PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
+.PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri icons \
         test test-helper check ios-check phone-llama engine-llama-test engine-llama-clippy \
         fmt lint doc doc-check readmes dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
@@ -147,6 +147,11 @@ web_ui/index.html:
 # Build everything (Rust + Web UI)
 build-all: build-gui build ## Build Rust CLI and web UI
 	@echo "✓ Built Rust CLI and Web UI"
+
+# Every app and tray icon is drawn by one script, which writes them all; its
+# header says what each file is for. Run it after changing a shape.
+icons: ## Redraw every app and tray icon from scripts/icons (macOS, Xcode 26)
+	./scripts/icons/build.py
 
 ##@ Rust checks
 

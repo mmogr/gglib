@@ -12,17 +12,16 @@ use crate::daemon::DaemonSnapshot;
 /// Identifier the tray registers under.
 pub(super) const TRAY_ID: &str = "gglib";
 
-/// How much of the ring's opacity the outline icon keeps.
+/// How much of the bubble's opacity the outline icon keeps.
 const OUTLINE_OPACITY_PERCENT: u16 = 35;
 
 /// What the tray icon is saying: the endpoint, and whether anything is
 /// loaded behind it.
 ///
-/// The spec draws an outline, a solid disc and a solid disc with a dot. Only
-/// two glyphs ship — the ring (`tray-idle.png`) and the ring with a dot
-/// (`tray-active.png`) — so until a solid asset exists, the ring faded stands
-/// for the outline and the plain ring for the solid disc. Three icons, told
-/// apart, none animated.
+/// Two glyphs ship, drawn by `scripts/icons/build.py` from the app icon's
+/// speech bubble: the bubble with the llama cut out of it (`tray-idle.png`)
+/// and the same with a dot (`tray-active.png`). The outline is the bubble
+/// faded. Three icons, told apart, none animated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TrayState {
     /// gglib is not running, or its endpoint is off: clients cannot connect.
@@ -33,19 +32,19 @@ pub(super) enum TrayState {
     SolidDot,
 }
 
-/// The ring: the endpoint on, nothing loaded.
+/// The bubble: the endpoint on, nothing loaded.
 pub(super) fn idle_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-idle.png"))
 }
 
-/// The ring with a dot: the endpoint on, something loaded.
+/// The bubble with a dot: the endpoint on, something loaded.
 pub(super) fn active_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
 }
 
-/// The ring, faded: no endpoint to connect to.
+/// The bubble, faded: no endpoint to connect to.
 ///
-/// Derived from the ring rather than shipped as a third asset. It is the
+/// Derived from the bubble rather than shipped as a third asset. It is the
 /// same glyph, so a separate file could only drift from it, and fading needs
 /// no image dependency — the same reasoning as the ARGB byte swap in
 /// [`super::linux`]. Both icons carry their glyph entirely in the alpha
@@ -260,20 +259,20 @@ mod tests {
     }
 
     /// The outline icon is derived at runtime, so it has to actually come out
-    /// the same shape as the ring it is derived from.
+    /// the same shape as the bubble it is derived from.
     #[test]
-    fn the_outline_icon_is_the_ring_dimmed() {
-        let ring = idle_icon().expect("ring icon decodes");
+    fn the_outline_icon_is_the_bubble_dimmed() {
+        let bubble = idle_icon().expect("bubble icon decodes");
         let outline = outline_icon().expect("outline icon derives");
 
-        assert_eq!(outline.width(), ring.width());
-        assert_eq!(outline.height(), ring.height());
+        assert_eq!(outline.width(), bubble.width());
+        assert_eq!(outline.height(), bubble.height());
 
-        let brightest_ring = ring.rgba().chunks_exact(4).map(|px| px[3]).max();
+        let brightest_bubble = bubble.rgba().chunks_exact(4).map(|px| px[3]).max();
         let brightest_outline = outline.rgba().chunks_exact(4).map(|px| px[3]).max();
         assert!(
-            brightest_outline < brightest_ring,
-            "the outline icon must be fainter than the ring"
+            brightest_outline < brightest_bubble,
+            "the outline icon must be fainter than the bubble"
         );
         assert!(
             brightest_outline > Some(0),
