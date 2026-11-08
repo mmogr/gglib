@@ -334,5 +334,7 @@ describe('This Mac', () => {
     await user.click(invite());
     await user.click(await screen.findByRole('button', { name: 'Copy the pairing string' }));
     expect(await navigator.clipboard.readText()).toBe(`${TICKET}-119284`);
+    expect(await screen.findByText('Copied')).toBeInTheDocument();
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
   });
 });

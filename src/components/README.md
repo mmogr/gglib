@@ -47,7 +47,7 @@ A chat is its own address: the conversation list (left) and the messages panel (
 ## Core Components
 
 ### Layout & Navigation
-- **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and tells its caller, which says "copied" where it lives
+- **`CopyValue.tsx`**: The ⧉ that puts one value on the clipboard and says "Copied" beside itself for one second (`COPIED_MS`), the one way a copy says it worked, never a toast; `useCopied` and `Copied` say the same word beside a copy that is not a ⧉. "Copied" is a GUI word with no Rust twin
 
 ### Model Management
 - **`SamplingForm/`**: The sampling form: Settings' global defaults, the Load with options sheet's per-launch values, and (compact) the inspector's Sampling and Reasoning rows

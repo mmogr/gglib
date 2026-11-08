@@ -10,7 +10,7 @@ import { useRemoteState } from '../../../services/remoteRegistry';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { awaySince } from '../../../places/devices/devices';
 import { cn } from '../../../utils/cn';
-import { formatError } from '../../../utils/errors';
+import { loadFailed } from '../../../utils/errors';
 import type { ThinkingSwitch } from '../../../hooks/useThinkingSwitch';
 import type { DrawSwitch } from '../../../hooks/useDrawSwitch';
 import type { ChatFolder } from '../../../hooks/useChatFolder';
@@ -178,7 +178,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
       onPickModel && modelId !== undefined
         ? () =>
             void onPickModel({ modelId, modelName }).catch((error: unknown) =>
-              showToast(`Could not start ${modelName}: ${formatError(error)}`, 'error'),
+              showToast(loadFailed(error), 'error'),
             )
         : undefined;
     return (

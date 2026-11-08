@@ -77,8 +77,8 @@ key stops being required when the endpoint next turns on."; "Saved." / "Undo"; "
 settings: <the daemon's words>"; "What gglib does to requests", "Agent
 limits", "This device", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
 request is answered with a 400."; the API key's "Set", "Replace", "Clear",
-"Cancel", "The new key", "none", the Show/Hide/Copy labels, "Copied the API
-key." and its failures, "Replace the API key?" with "Clients that send the
+"Cancel", "The new key", "none", the Show/Hide/Copy labels, "Copied" beside
+Copy (`components/CopyValue`) and the copy's failures, "Replace the API key?" with "Clients that send the
 old key are refused within a few seconds.", and "The key in use
 could not be read, so it was left as it is: <the daemon's words>"; the
 models folder's "Change…", "Reset", its sources' sentences, "exists" /
@@ -102,7 +102,7 @@ Serving), `pinStanding`'s sentences, the source build's two sentences;
 "Faster downloads", its sentence, "On" / "Off" (no Rust state word),
 "Set up", "Setting up. This can take a minute.", "More for Faster
 downloads", "Turn off", "It needs Python 3.10 or newer. Once that is
-installed:", "Copy the command", "Copied the command.". About: "gglib
+installed:", "Copy the command", "Copied" beside it. About: "gglib
 <version>", "Working tree modified since this build", "Documentation",
 "Stop gglib…", "Stopping gglib…", "Stop gglib?" with its sentence and
 "Stop".

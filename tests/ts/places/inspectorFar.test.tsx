@@ -218,6 +218,15 @@ describe('the inspector, a model on the paired machine', () => {
     expect(await screen.findByTestId('chat-page')).toHaveTextContent('Chatting with');
   });
 
+  it("a Load there that fails says why, in the daemon's words", async () => {
+    far.load = async () => {
+      throw new Error('out of memory');
+    };
+    renderFar();
+    await userEvent.setup().click(await within(inspector()).findByRole('button', { name: 'Load on desk' }));
+    expect(await within(inspector()).findByRole('alert')).toHaveTextContent("Didn't load: out of memory");
+  });
+
   it("shows another model picked during a Load neither that Load's wait nor its failure", async () => {
     let fail: () => void = () => {};
     far.load = () => new Promise((_, reject) => (fail = () => reject(new Error('out of memory'))));

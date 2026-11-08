@@ -20,7 +20,6 @@ import { CopyValue } from '../../components/CopyValue';
 import { InstallProgress } from '../../components/InstallProgress';
 import { StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
-import { useToastContext } from '../../contexts/ToastContext';
 import { ENGINE_PRODUCT } from '../../types/setup';
 import type { EngineStatus } from '../../types/setup';
 import { Item, Problem, Step } from './Step';
@@ -31,12 +30,11 @@ const SKIPPED = 'skipped — chat works without it';
 
 /** The command a terminal builds `status`'s engine with, with ⧉. */
 const Command: FC<{ status: EngineStatus }> = ({ status }) => {
-  const { showToast } = useToastContext();
   const command = buildCommand(status);
   return (
     <span className="inline-flex items-center gap-xs">
       <code className="font-mono text-text">{command}</code>
-      <CopyValue value={command} label="Copy the command" onCopied={() => showToast('Command copied', 'success')} />
+      <CopyValue value={command} label="Copy the command" />
     </span>
   );
 };

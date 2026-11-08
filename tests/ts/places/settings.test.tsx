@@ -278,6 +278,8 @@ describe('the API key', () => {
     expect(box('API key')).toHaveValue('••••••••');
     await user.click(screen.getByRole('button', { name: 'Copy the API key' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('sk-held'));
+    expect(await screen.findByText('Copied')).toBeInTheDocument();
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
     expect(writes()).toEqual([]);
   });
 

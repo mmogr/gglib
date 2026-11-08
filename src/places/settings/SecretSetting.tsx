@@ -14,6 +14,7 @@
 import { useCallback, useState, type FC } from 'react';
 import { Copy, Eye, EyeOff } from 'lucide-react';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
+import { Copied, useCopied } from '../../components/CopyValue';
 import { useToastContext } from '../../contexts/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
@@ -43,6 +44,7 @@ export const SecretSetting: FC<{ note: string }> = ({ note }) => {
   const [typing, setTyping] = useState<string | null>(null);
   const [shown, setShown] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [copied, showCopied] = useCopied();
 
   /** Write `next` over the stored key, which is read first for Undo. */
   const replaceWith = async (next: string | null) => {
@@ -85,7 +87,7 @@ export const SecretSetting: FC<{ note: string }> = ({ note }) => {
   };
   const copy = () => {
     copySecret(PROXY_API_KEY)
-      .then(() => showToast(`Copied the ${LABEL}.`, 'success'))
+      .then(showCopied)
       .catch((err) => showToast(`Could not copy the ${LABEL}: ${formatError(err)}`, 'error'));
   };
 
@@ -130,6 +132,7 @@ export const SecretSetting: FC<{ note: string }> = ({ note }) => {
           <IconButton label={shown === null ? `Show the ${LABEL}` : `Hide the ${LABEL}`} size="sm" onClick={toggleShown}>
             <Icon icon={shown === null ? Eye : EyeOff} size={14} />
           </IconButton>
+          <Copied shown={copied} />
           <IconButton label={`Copy the ${LABEL}`} size="sm" onClick={copy}>
             <Icon icon={Copy} size={14} />
           </IconButton>

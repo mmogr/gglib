@@ -227,7 +227,7 @@ describe('ChatPlace, the composer', () => {
     await screen.findByText('It restarts the job whenever it exits.');
     const picker = screen.getByRole('button', { name: 'Model: Qwen3.8-27B' });
     await user.click(picker);
-    await user.click(screen.getByRole('menuitemradio', { name: 'Qwen3.8-27B' }));
+    await user.click(screen.getByRole('menuitemradio', { name: /^Qwen3\.8-27B · / }));
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(picker).toHaveFocus();
   });

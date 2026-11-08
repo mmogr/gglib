@@ -204,7 +204,9 @@ describe('the endpoint place', () => {
 
       await user.click(screen.getByRole('button', { name: 'Copy' }));
       expect(await navigator.clipboard.readText()).toBe('http://127.0.0.1:8080/v1');
-      await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('Endpoint address copied'));
+      // Said beside the control, never as a toast: a copy is not a background outcome.
+      expect(await screen.findByText('Copied')).toBeInTheDocument();
+      expect(screen.getByTestId('toasts')).not.toHaveTextContent('copied');
 
       await user.click(screen.getByRole('button', { name: 'Turn off' }));
       expect(transport.stopProxy).toHaveBeenCalledTimes(1);

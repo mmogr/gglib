@@ -32,3 +32,13 @@ export function formatError(err: unknown): string {
     return String(err);
   }
 }
+
+/**
+ * The one sentence a load or an unload that failed is said in, on every
+ * surface: "Didn't load: <reason>", the reason the daemon's own words as
+ * they came (EP-1), never rephrased. `reason` is a thrown value or the
+ * message already read from one.
+ */
+export function loadFailed(reason: unknown, action: 'load' | 'unload' = 'load'): string {
+  return `${action === 'unload' ? "Didn't unload" : "Didn't load"}: ${formatError(reason)}`;
+}

@@ -14,6 +14,7 @@
  */
 
 import { useState, type FC } from 'react';
+import { Copied, useCopied } from '../../components/CopyValue';
 import { StatusMark, type MarkKind } from '../../components/status/StatusMark';
 import { ENDPOINT_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
@@ -52,6 +53,7 @@ export const EndpointStep: FC<EndpointStepProps> = ({
 }) => {
   useAdvance(alreadyDone, advance);
   const { showToast } = useToastContext();
+  const [copied, showCopied] = useCopied();
   const { settings, save } = useSettings();
   const [saveError, setSaveError] = useState<string | null>(null);
   const state: EndpointState = actions.busy === 'on' ? 'starting' : facts.state;
@@ -60,7 +62,7 @@ export const EndpointStep: FC<EndpointStepProps> = ({
   const copy = (url: string) =>
     void navigator.clipboard
       .writeText(url)
-      .then(() => showToast('Endpoint address copied', 'success'))
+      .then(showCopied)
       .catch((err: unknown) => showToast(formatError(err), 'error'));
 
   return (
@@ -74,6 +76,7 @@ export const EndpointStep: FC<EndpointStepProps> = ({
             <Button variant="ghost" size="sm" onClick={() => copy(facts.baseUrl ?? '')}>
               Copy
             </Button>
+            <Copied shown={copied} />
           </>
         )}
       </div>

@@ -17,7 +17,6 @@ import { QRCodeSVG } from 'qrcode.react';
 import { CopyValue } from '../../components/CopyValue';
 import { StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
-import { useToastContext } from '../../contexts/ToastContext';
 import { useRemoteState } from '../../services/remoteRegistry';
 import type { PairingOffer } from '../../services/remoteOffer';
 import { clock, codeGroups, qrPayload } from './devices';
@@ -78,9 +77,7 @@ export const PairingSheet: FC<PairingSheetProps> = ({ onNewCode, offering }) => 
 
 /** The code while it is live: the QR, the code, the join string, the time left. */
 const LiveCode: FC<{ offer: PairingOffer }> = ({ offer }) => {
-  const { showToast } = useToastContext();
   const left = useSecondsLeft(offer.expiresAt) ?? 0;
-  const copied = () => showToast('Copied.', 'success');
 
   return (
     <div className={SHEET} style={{ transformOrigin: 'top right' }} aria-label="Pairing code" role="region">
@@ -105,12 +102,12 @@ const LiveCode: FC<{ offer: PairingOffer }> = ({ offer }) => {
           <div className="flex items-center gap-sm">
             <span className="text-xs text-text-secondary">Code</span>
             <span className="text-[22px] tabular-nums text-text">{codeGroups(offer.code)}</span>
-            <CopyValue value={offer.code} label="Copy the code" onCopied={copied} />
+            <CopyValue value={offer.code} label="Copy the code" />
           </div>
           <div className="flex items-start gap-sm">
             <span className="shrink-0 text-xs text-text-secondary">On a computer:</span>
             <code className="min-w-0 flex-1 break-all font-mono text-xs text-text">gglib remote join {offer.pairing}</code>
-            <CopyValue value={offer.pairing} label="Copy the pairing string" onCopied={copied} />
+            <CopyValue value={offer.pairing} label="Copy the pairing string" />
           </div>
           {offer.device && <span className="text-xs text-text-secondary">This code pairs {offer.device}.</span>}
           <span className="text-xs text-text-secondary">

@@ -168,7 +168,7 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, port, onUpdat
         <Item label="File">
           <span className="flex items-start gap-xs">
             <span className="min-w-0 flex-1 break-all text-left font-mono">{model.filePath}</span>
-            <CopyValue value={model.filePath} label="Copy the path" onCopied={() => showToast('Copied the path', 'success')} />
+            <CopyValue value={model.filePath} label="Copy the path" />
           </span>
           <span className="flex items-baseline gap-sm text-text-secondary">
             {model.sizeBytes > 0 && formatSize(model.sizeBytes)}

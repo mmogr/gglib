@@ -23,7 +23,6 @@ import { Icon } from '../../components/ui/Icon';
 import { Input } from '../../components/ui/Input';
 import { REVEAL_COMMAND } from '../../constants/secrets';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
-import { useToastContext } from '../../contexts/ToastContext';
 import { refreshRemoteStatus } from '../../services/remoteEvents';
 import { pairedName } from '../../services/remoteRegistry';
 import { getTransport } from '../../services/transport';
@@ -38,7 +37,6 @@ const LINE = 'm-0 flex flex-wrap items-center gap-sm text-sm text-text-secondary
 
 export const JoinBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ status, actions }) => {
   const { confirm } = useConfirmContext();
-  const { showToast } = useToastContext();
   const [pairing, setPairing] = useState('');
   // Which action is out, so "Reaching it…" stands in for the button pressed.
   const [busy, setBusy] = useState<'join' | 'reconnect' | 'other' | null>(null);
@@ -109,7 +107,7 @@ export const JoinBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ 
           )}
           <p className={LINE}>
             <code className="font-mono text-xs text-text">{connected.base_url}</code>
-            <CopyValue value={connected.base_url} label="Copy the address" onCopied={() => showToast('Copied.', 'success')} />
+            <CopyValue value={connected.base_url} label="Copy the address" />
           </p>
           <p className={LINE}>
             Clients need this device&apos;s key:
@@ -117,7 +115,6 @@ export const JoinBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ 
             <CopyValue
               value={REVEAL_COMMAND.remote_pairing_key}
               label="Copy the command that prints the key"
-              onCopied={() => showToast('Copied.', 'success')}
             />
           </p>
           <p className={LINE}>{name}&apos;s models are in your Library.</p>

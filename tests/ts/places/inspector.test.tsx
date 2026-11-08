@@ -88,6 +88,7 @@ import { cleanupModelEvents, initModelEvents } from '../../../src/services/model
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { resetEngineInstall } from '../../../src/places/library/engineInstall';
 import { RESIDENCY_WORDS } from '../../../src/components/status/words';
+import { appLogger } from '../../../src/services/platform';
 import { REASONING_KEYS, SAMPLING_KEYS } from '../../../src/inspector/local/rows';
 import type { LaunchPlan } from '../../../src/types/generated/LaunchPlan';
 import { renderApp } from './harness';
@@ -331,6 +332,40 @@ describe('the inspector, a model on this machine', () => {
     await user.click(within(confirm).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(transport.removeModel).toHaveBeenCalledWith(9));
     await waitFor(() => expect(at()).toBe('/library'));
+  });
+
+  it('says Copied beside what copied, for one second, and raises no toast', async () => {
+    renderInspector();
+    const user = userEvent.setup();
+    const head = (await screen.findByRole('heading', { name: 'Gemma-3-4B-It' })).parentElement as HTMLElement;
+    await user.click(within(head).getByRole('button', { name: 'Copy the Model ID Gemma-3-4B-It' }));
+    expect(await navigator.clipboard.readText()).toBe('Gemma-3-4B-It');
+    expect(await within(head).findByRole('status')).toHaveTextContent('Copied');
+    await waitFor(() => expect(within(head).queryByText('Copied')).not.toBeInTheDocument(), { timeout: 2000 });
+
+    // ⋯ › Copy path closes its menu, so the word is said beside ⋯.
+    await user.click(within(head).getByRole('button', { name: 'More' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Copy path' }));
+    expect(await navigator.clipboard.readText()).toBe('/models/test.gguf');
+    expect(await within(head).findByRole('status')).toHaveTextContent('Copied');
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
+  });
+
+  it('⋯ › Copy path that failed says no Copied, and is logged', async () => {
+    renderInspector();
+    const user = userEvent.setup();
+    const head = (await screen.findByRole('heading', { name: 'Gemma-3-4B-It' })).parentElement as HTMLElement;
+    const complaints = vi.spyOn(appLogger, 'error').mockImplementation(() => {});
+    const refused = new Error('clipboard refused');
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(refused);
+    try {
+      await user.click(within(head).getByRole('button', { name: 'More' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Copy path' }));
+      await waitFor(() => expect(complaints).toHaveBeenCalledWith('component.model', 'Failed to copy the path', { error: refused }));
+      expect(within(head).queryByText('Copied')).not.toBeInTheDocument();
+    } finally {
+      complaints.mockRestore();
+    }
   });
 
   it('opens the Load with options sheet from Load with options…', async () => {

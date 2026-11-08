@@ -451,7 +451,7 @@ describe('ChatPlace, images over a model switch', () => {
     await waitFor(() => expect(within(strip()).getByText(/~475 tokens/)).toBeInTheDocument());
     await user.type(box, 'half a thought');
 
-    await pickModel(user, 'llama-3.2-3b');
+    await pickModel(user, 'llama-3.2-3b · Loaded');
     const { draft } = onSwitchModel.mock.calls[0][1]();
     expect(draft).toEqual({ text: 'half a thought', images: [shot] });
     first.unmount();

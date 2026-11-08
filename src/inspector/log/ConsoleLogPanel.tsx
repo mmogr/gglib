@@ -2,6 +2,7 @@ import { FC, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import Anser from 'anser';
 import { ChevronLeft, Copy, Monitor, MoreHorizontal, X } from 'lucide-react';
 import { useServerLogs, ServerLogEntry } from '../../hooks/useServerLogs';
+import { Copied, useCopied } from '../../components/CopyValue';
 import { Icon } from '../../components/ui/Icon';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/primitives';
@@ -76,13 +77,14 @@ interface ConsoleLogPanelProps extends Omit<LogHeaderProps, 'controls'> {
  * The live llama-server output of one port, with ANSI color support. It
  * follows new output until paused (by the switch, or by scrolling away from
  * the end, which the switch then says; back at the end, it follows again);
- * Following jumps to the end. ⧉ copies every line, and
- * ⋯ Clear view empties the view (the daemon keeps the log).
+ * Following jumps to the end. ⧉ copies every line and says Copied beside
+ * itself, and ⋯ Clear view empties the view (the daemon keeps the log).
  */
 const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort, ...header }) => {
   const { logs, clearLogs, isAutoScroll, setIsAutoScroll, copyAllLogs } = useServerLogs({
     serverPort,
   });
+  const [copied, showCopied] = useCopied();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   // Paused by scrolling away from the end, not by the switch.
@@ -142,7 +144,15 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort, ...header }) =>
         <span aria-hidden className="text-xs text-text-muted">·</span>
         {word(false, 'Paused')}
       </span>
-      <Button variant="ghost" size="sm" iconOnly aria-label="Copy the log" title="Copy the log" onClick={copyAllLogs}>
+      <Copied shown={copied} />
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
+        aria-label="Copy the log"
+        title="Copy the log"
+        onClick={() => void copyAllLogs().then((done) => done && showCopied())}
+      >
         <Icon icon={Copy} size={14} />
       </Button>
       <Menu iconOnly name="More" label={<Icon icon={MoreHorizontal} size={14} />} items={[{ label: 'Clear view', onPick: clearLogs }]} />

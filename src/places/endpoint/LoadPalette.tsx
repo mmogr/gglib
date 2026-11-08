@@ -32,7 +32,7 @@ import type { PairedModelsState } from '../../hooks/usePairedModels';
 import { useModelLibrary } from '../../services/modelRegistry';
 import { getTransport } from '../../services/transport';
 import { cn } from '../../utils/cn';
-import { formatError } from '../../utils/errors';
+import { loadFailed } from '../../utils/errors';
 import { farChoices, fitLine, localAside, localChoices } from './paletteRows';
 import { useFitReads } from './useFitReads';
 
@@ -104,7 +104,7 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlighted?.kind, highlighted?.id]);
 
-  const failed = (err: unknown) => showToast(`Didn't load: ${formatError(err)}`, 'error');
+  const failed = (err: unknown) => showToast(loadFailed(err), 'error');
   const choose = (choice: Choice | null, withOptions: boolean) => {
     if (!choice) return;
     if (choice.kind === 'far') {

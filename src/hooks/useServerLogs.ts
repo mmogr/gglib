@@ -19,7 +19,8 @@ interface UseServerLogsReturn {
   clearLogs: () => void;
   isAutoScroll: boolean;
   setIsAutoScroll: (value: boolean) => void;
-  copyAllLogs: () => void;
+  /** Copy every line; `true` once on the clipboard, `false` (logged) when the copy failed. */
+  copyAllLogs: () => Promise<boolean>;
 }
 
 const DEFAULT_MAX_LINES = 5000;
@@ -61,9 +62,13 @@ export function useServerLogs(options: UseServerLogsOptions): UseServerLogsRetur
 
   const copyAllLogs = useCallback(() => {
     const text = logsRef.current.map(entry => entry.line).join('\n');
-    navigator.clipboard.writeText(text).catch(err => {
-      appLogger.error('hook.server', 'Failed to copy logs', { error: err });
-    });
+    return navigator.clipboard.writeText(text).then(
+      () => true,
+      (err: unknown) => {
+        appLogger.error('hook.server', 'Failed to copy logs', { error: err });
+        return false;
+      },
+    );
   }, []);
 
   // Fetch initial logs on mount

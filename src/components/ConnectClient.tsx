@@ -17,7 +17,6 @@ import { useEffect, useState, type FC } from 'react';
 import { KEY_WORDS } from './status/words';
 import { CopyValue } from './CopyValue';
 import { Button } from './ui/Button';
-import { useToastContext } from '../contexts/ToastContext';
 import { useProxyKey } from '../hooks/useProxyKey';
 import { recipesShown } from '../readings/connect';
 import { getTransport } from '../services/transport';
@@ -30,13 +29,12 @@ import { formatError } from '../utils/errors';
 export const KeyReveal: FC = () => {
   const [shown, setShown] = useState(false);
   const key = useProxyKey(shown);
-  const { showToast } = useToastContext();
   return (
     <>
       {shown && key && (
         <>
           <code className="font-mono text-text">{key}</code>
-          <CopyValue value={key} label="Copy the key" onCopied={() => showToast('Key copied', 'success')} />
+          <CopyValue value={key} label="Copy the key" />
         </>
       )}
       <Button variant="link" size="sm" className="text-xs font-normal" onClick={() => setShown((s) => !s)}>
@@ -64,7 +62,6 @@ const Line: FC<{ label: string; children: React.ReactNode }> = ({ label, childre
 );
 
 export const ConnectClient: FC<ConnectClientProps> = ({ baseUrl, keyState, models, modelId, onModel }) => {
-  const { showToast } = useToastContext();
   const [answer, setAnswer] = useState<{ for: number; recipes: ClientRecipes } | { for: number; failed: string } | null>(null);
 
   useEffect(() => {
@@ -82,14 +79,13 @@ export const ConnectClient: FC<ConnectClientProps> = ({ baseUrl, keyState, model
   const held = answer !== null && answer.for === modelId ? answer : null;
   const recipes = held && 'recipes' in held ? held.recipes : null;
   const shownId = recipes?.model_id ?? models.find((m) => m.id === modelId)?.openaiId ?? null;
-  const copied = (what: string) => () => showToast(`Copied ${what}`, 'success');
 
   return (
     <section aria-label="Connect a client" className="flex flex-col gap-sm px-md pb-md">
       <h3 className="m-0 text-xs font-semibold text-text-secondary">Connect a client</h3>
       <Line label="Base URL">
         <code className="truncate font-mono text-text">{baseUrl}</code>
-        <CopyValue value={baseUrl} label="Copy the base URL" onCopied={copied('the base URL')} />
+        <CopyValue value={baseUrl} label="Copy the base URL" />
       </Line>
       <Line label="API key">
         {keyState === 'required' ? (
@@ -105,7 +101,7 @@ export const ConnectClient: FC<ConnectClientProps> = ({ baseUrl, keyState, model
         {shownId !== null && (
           <>
             <code className="truncate font-mono text-text">{shownId}</code>
-            <CopyValue value={shownId} label="Copy the Model ID" onCopied={copied(shownId)} />
+            <CopyValue value={shownId} label="Copy the Model ID" />
           </>
         )}
         <select
@@ -135,7 +131,7 @@ export const ConnectClient: FC<ConnectClientProps> = ({ baseUrl, keyState, model
                 {recipe.lines.map((line) => (
                   <Line key={line.label} label={line.label}>
                     <code className="truncate font-mono text-text">{line.value}</code>
-                    <CopyValue value={line.value} label={`Copy ${recipe.client} ${line.label}`} onCopied={copied(line.label)} />
+                    <CopyValue value={line.value} label={`Copy ${recipe.client} ${line.label}`} />
                   </Line>
                 ))}
               </div>

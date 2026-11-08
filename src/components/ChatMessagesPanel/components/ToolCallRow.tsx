@@ -8,6 +8,7 @@ import { ToolRunProgress, type ToolCallRow as Row } from '../../ToolExecutionPro
 import type { PreviewFrame } from '../../../hooks/useGglibRuntime/runPreviews';
 import { secondsWords } from '../../../readings/turnFigures';
 import { cn } from '../../../utils/cn';
+import { useCopied } from '../../CopyValue';
 
 const LABEL = 'text-xs font-semibold text-text-muted';
 /** A 12 px text button: no box. */
@@ -24,9 +25,9 @@ function stateWords(row: Row): string | null {
   return row.durationMs !== undefined ? secondsWords(row.durationMs / 1000) : null;
 }
 
-/** Copy `value` as JSON, then "Copied" for two seconds. */
+/** Copy `value` as JSON, then "Copied" for a second, as every copy says it (`useCopied`, its timer cleared on unmount). */
 const CopyJson: FC<{ value: unknown; name: string }> = ({ value, name }) => {
-  const [copied, setCopied] = useState(false);
+  const [copied, showCopied] = useCopied();
   return (
     <Button
       variant="ghost"
@@ -34,10 +35,7 @@ const CopyJson: FC<{ value: unknown; name: string }> = ({ value, name }) => {
       className={TEXT_BUTTON}
       aria-label={name}
       onClick={() => {
-        navigator.clipboard.writeText(resultText(value)).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        }).catch(() => {});
+        navigator.clipboard.writeText(resultText(value)).then(showCopied).catch(() => {});
       }}
     >
       {copied ? 'Copied' : 'Copy'}

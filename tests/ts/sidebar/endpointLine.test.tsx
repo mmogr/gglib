@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
@@ -124,7 +124,9 @@ describe('the endpoint line', () => {
     await user.click(screen.getByRole('button', { name: /copy the endpoint address/i }));
 
     expect(await navigator.clipboard.readText()).toBe('http://192.168.1.20:8080/v1');
-    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent('Endpoint address copied'));
+    // Said beside the control, never as a toast: a copy is not a background outcome.
+    expect(await screen.findByText('Copied')).toBeInTheDocument();
+    expect(screen.getByTestId('toasts')).not.toHaveTextContent('copied');
     // The copy went nowhere.
     expect(app.at()).toBe('/library');
   });

@@ -39,7 +39,7 @@ import {
 import { safeStopServer } from '../services/server/safeActions';
 import { isServerRunning } from '../services/serverRegistry';
 import { getTransport } from '../services/transport';
-import { formatError } from '../utils/errors';
+import { formatError, loadFailed } from '../utils/errors';
 import { confirm } from './confirm';
 import { inspectorClosed, inspectorSubject, menuModelId, paths } from './paths';
 import { appRouter } from './router';
@@ -103,7 +103,7 @@ async function loadSelected(notify: Notify): Promise<void> {
   try {
     await getTransport().serveModel({ id: selected });
   } catch (error) {
-    notify(`Didn't load: ${formatError(error)}`, 'error');
+    notify(loadFailed(error), 'error');
     return;
   }
   syncMenuStateSilent();

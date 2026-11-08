@@ -400,6 +400,17 @@ describe('setup', () => {
     expect(await within(region).findByText(proofAnswered(PROOF))).toBeInTheDocument();
   });
 
+  it('Copy puts the address on the clipboard and says Copied beside it', async () => {
+    const { user } = start();
+    await reach(user, 'Endpoint');
+    const region = await step('Endpoint');
+    await within(region).findByText(UP.base_url!);
+    await user.click(within(region).getByRole('button', { name: 'Copy' }));
+    expect(await navigator.clipboard.readText()).toBe(UP.base_url);
+    expect(await within(region).findByRole('status')).toHaveTextContent('Copied');
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
+  });
+
   it('saves Start the endpoint when gglib launches by its wire name', async () => {
     const { user } = start();
     await reach(user, 'Endpoint');
