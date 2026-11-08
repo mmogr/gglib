@@ -77,8 +77,8 @@ const PLACES: Readonly<Record<MenuPlace, () => string | Promise<string>>> = {
   chat: latestChat,
   'new-chat': () => paths.newChat(),
   settings: () => paths.settings(),
-  // The sidebar's Diagnostics row goes here too.
-  diagnostics: () => paths.benchmarks(),
+  // On Live, where the sidebar's Diagnostics row goes too.
+  diagnostics: () => paths.diagnostics(),
   'get-models': () => paths.libraryAdd('browse'),
   'add-file': () => paths.libraryAdd('add'),
   'connect-client': () => paths.endpointConnect(),
@@ -103,7 +103,7 @@ async function loadSelected(notify: Notify): Promise<void> {
   try {
     await getTransport().serveModel({ id: selected });
   } catch (error) {
-    notify(`Could not load ${nameOf(selected)}: ${formatError(error)}`, 'error');
+    notify(`Didn't load: ${formatError(error)}`, 'error');
     return;
   }
   syncMenuStateSilent();

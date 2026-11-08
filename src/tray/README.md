@@ -15,8 +15,8 @@ the
 endpoint's state word, reached address, key rule and pin from
 `services/proxyRegistry`; the residents and their words from the one
 dashboard stream (`places/library/useResidency` `useEndpointDashboard`,
-rows by `places/endpoint/lines` `loadedRows`), or the running servers from
-`services/serverRegistry` while the stream is idle, once the list's read
+rows by `places/endpoint/lines` `residentRows`), or the running servers from
+`services/serverRegistry` while the stream is idle (the same function), once the list's read
 has landed (`serverEvents` `useServerListHeard`); the joined machine, its
 reach and the roster from `services/remoteRegistry`. State words are
 `components/status/words.ts`'s. Turn on and Turn off are the endpoint
@@ -57,7 +57,7 @@ reported.".
 | File | Role |
 |------|------|
 | `TrayPanel.tsx` | The panel: "gglib", the three blocks while the daemon answers, the not-running sentence while it does not, the footer (Turn on or Turn off, Start gglib, Open gglib), and the bridges it starts |
-| `Endpoint.tsx` | `Endpoint ● On` (`endpointSaying`: Starting and Connecting as ◌, Pinned as "On · only <model>"), the address with ⧉ and a one-second Copied, Key required with Copy key, the dimmed Off line, and a failed turn on or off |
+| `Endpoint.tsx` | `Endpoint ● On` (`endpointSaying`: Starting and Connecting as ◌, Pinned as "On · only <model>"), the address with ⧉ and a one-second Copied, Key required with Copy key, the dimmed Off line, and a failed turn on or off; the ● blinks once per served request (`components/status/useRequestBlink`) |
 | `Loaded.tsx` | One row per loaded model (`trayLoadedRows`: the dashboard's, else the running servers as Loaded) with its word and ×; the empty sentence once known; a failed unload |
 | `Devices.tsx` | The joined machine with its reach while there is one, and Sharing On · N paired or Off (`devicesLines`); not drawn before the first status |
 | `Failure.tsx` | A failure under its block: ✕, the daemon's words cut to fit (`shownFailure`), never empty |

@@ -87,6 +87,8 @@ import { cleanupModelEvents, initModelEvents } from '../../../src/services/model
 import { applyProxyStatus, resetProxyState } from '../../../src/services/proxyRegistry';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
+import { forgetServerList, refreshServers } from '../../../src/services/serverEvents';
+import { residentRows } from '../../../src/places/endpoint/lines';
 import { resetChats } from '../../../src/services/chatRegistry';
 import type { ProxyStatus } from '../../../src/services/transport/types/proxy';
 import type { DashboardSnapshot } from '../../../src/services/transport/types/dashboard';
@@ -119,6 +121,20 @@ const admitted = (slots: ReturnType<typeof residentSlot>[], extra: Partial<Dashb
   admission: { ...dashboardSnapshot().admission, slots, ...extra },
 });
 
+/** The server list's read landing with Qwen3-4B running on 9001. */
+// One clock for every server stamp in this file: the registry keeps only a
+// newer stamp, so a stamp from Date.now() loses to any earlier test's later one
+// and the outcome would depend on test order.
+let stamp = Date.now() + 2e9;
+const nextStamp = () => (stamp += 1e6);
+
+async function heardRunning() {
+  transport.listServers.mockImplementation(async () => [{ model_id: 1, model_name: 'Qwen3-4B', port: 9001, started_at: nextStamp() }]);
+  act(() => refreshServers());
+  await waitFor(() => expect(transport.listServers).toHaveBeenCalled());
+  await act(async () => {});
+}
+
 const loadedRow = (name: string) => within(screen.getByRole('listbox', { name: 'Loaded models' })).getByRole('option', { name: new RegExp(name) });
 const alert = () => screen.getByRole('alert');
 
@@ -136,6 +152,10 @@ describe('the endpoint place', () => {
   afterEach(() => {
     act(() => resetProxyState());
     cleanupModelEvents();
+    // What a test's server list held, gone, and its read forgotten.
+    act(() => ingestServerEvent({ type: 'stopped', modelId: '1', port: 9001, updatedAt: nextStamp(), modelName: 'Qwen3-4B' }));
+    act(() => forgetServerList());
+    transport.listServers.mockImplementation(async () => []);
   });
 
   describe('the address line', () => {
@@ -273,6 +293,46 @@ describe('the endpoint place', () => {
       await user.click(screen.getByRole('button', { name: 'Load a model…' }));
       expect(screen.getByRole('dialog', { name: 'Load a model' })).toBeInTheDocument();
       expect(at()).toBe('/endpoint');
+    });
+
+    it('off: lists the models still in memory, each Loaded, and only them; with none, no Loaded at all', async () => {
+      const { user } = renderEndpoint(DOWN);
+      expect(screen.queryByRole('region', { name: 'Loaded' })).not.toBeInTheDocument();
+
+      await heardRunning();
+      expect(within(loadedRow('Qwen3-4B')).getByText(RESIDENCY_WORDS.loaded)).toBeInTheDocument();
+      // Off, nothing queues and nothing loads by name: no palette.
+      expect(screen.queryByRole('button', { name: 'Load a model…' })).not.toBeInTheDocument();
+      await user.click(within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'Unload' }));
+      expect(transport.stopServer).toHaveBeenCalledWith(1);
+
+      act(() => ingestServerEvent({ type: 'stopped', modelId: '1', port: 9001, updatedAt: nextStamp(), modelName: 'Qwen3-4B' }));
+      expect(screen.queryByRole('region', { name: 'Loaded' })).not.toBeInTheDocument();
+    });
+
+    it("off: a row's Chat opens a chat on the model, handed its server's port", async () => {
+      const { user, at } = renderEndpoint(DOWN);
+      await heardRunning();
+      await user.click(within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'Chat' }));
+      await waitFor(() => expect(at()).toBe('/chat/new?model=1'));
+      expect(await screen.findByTestId('chat-page')).toHaveAttribute('data-port', '9001');
+    });
+
+    it('off: a running server becomes a Loaded row with its own port, once the list is heard', () => {
+      const server = { modelId: 1, modelName: 'Qwen3-4B', port: 9001, status: 'running' as const };
+      expect(residentRows(null, [server], true)).toEqual([
+        { modelId: 1, name: 'Qwen3-4B', port: 9001, state: 'loaded', word: 'Loaded', reading: null, flagLine: '' },
+      ]);
+      expect(residentRows(null, [server], false)).toEqual([]);
+    });
+
+    it("off: a daemon gone and back lists nothing until the server list's read lands again", async () => {
+      renderEndpoint(DOWN);
+      await heardRunning();
+      expect(loadedRow('Qwen3-4B')).toBeInTheDocument();
+      // The registry still holds the old daemon's server; only the read is forgotten.
+      act(() => forgetServerList());
+      expect(screen.queryByRole('region', { name: 'Loaded' })).not.toBeInTheDocument();
     });
 
     it('Unload asks the daemon even when this window has not heard the model is loaded', async () => {
@@ -712,6 +772,9 @@ describe('the endpoint place', () => {
       await waitFor(() => expect(transport.revealSecret).toHaveBeenCalled());
       // The dashboard waits for the key too, so Activity is not drawn; ⋯ is.
       expect(screen.queryByRole('group', { name: 'Activity' })).not.toBeInTheDocument();
+      // Nor Loaded: up, nothing is said of what is loaded before the dashboard speaks, a running server or not.
+      await heardRunning();
+      expect(screen.queryByRole('region', { name: 'Loaded' })).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'More' }));
       expect(screen.getByRole('menuitem', { name: 'Clear prompt cache' })).toBeDisabled();
       expect(dashboard.clear).not.toHaveBeenCalled();
@@ -760,8 +823,7 @@ describe('the endpoint place', () => {
   });
 
   describe('the inspector beside the place', () => {
-    let clock = Date.now() + 2e9;
-    afterEach(() => act(() => ingestServerEvent({ type: 'stopped', modelId: '1', updatedAt: (clock += 1e6) })));
+    afterEach(() => act(() => ingestServerEvent({ type: 'stopped', modelId: '1', updatedAt: nextStamp() })));
 
     it('a row opens its model beside the place, and × closes it to the place', async () => {
       const { user, at } = renderEndpoint();
@@ -778,7 +840,7 @@ describe('the endpoint place', () => {
     });
 
     it("a loaded model's status line says its latest rate and how long it has been loaded", async () => {
-      act(() => ingestServerEvent({ type: 'running', modelId: '1', port: 9001, updatedAt: (clock += 1e6), modelName: 'Qwen3-4B' }));
+      act(() => ingestServerEvent({ type: 'running', modelId: '1', port: 9001, updatedAt: nextStamp(), modelName: 'Qwen3-4B' }));
       renderEndpoint(UP, '/endpoint?inspect=model:1');
       await frame({
         ...admitted([residentSlot(1, 'Qwen3-4B', { resident_for_secs: 250, launch: { ...residentSlot(1, 'x').launch!, state: 'working' } })]),

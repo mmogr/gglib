@@ -15,6 +15,7 @@
  */
 
 import { RESIDENCY_WORDS } from '../../components/status/words';
+import type { ServerViewModel } from '../../hooks/useServers';
 import { rateWords, requestRate } from '../../readings/throughput';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 import type { ResidencyState } from '../../types/generated/ResidencyState';
@@ -60,6 +61,28 @@ export function loadedRows(snapshot: DashboardSnapshot | null): LoadedRow[] {
       flagLine: slot.launch?.flag_line ?? '',
     };
   });
+}
+
+/**
+ * What is in memory: the dashboard's rows while it has spoken, else the
+ * running servers, each Loaded, since a model stays in memory with the
+ * endpoint off (the dashboard is idle then); those only once the server
+ * list's read has landed (`heard`, `useServerListHeard`), since after a
+ * daemon restart the registry still holds the old daemon's servers. The
+ * endpoint place and the tray both read it.
+ */
+export function residentRows(snapshot: DashboardSnapshot | null, servers: ServerViewModel[], heard: boolean): LoadedRow[] {
+  if (snapshot) return loadedRows(snapshot);
+  if (!heard) return [];
+  return servers.map((s) => ({
+    modelId: s.modelId,
+    name: s.modelName,
+    port: s.port,
+    state: 'loaded',
+    word: RESIDENCY_WORDS.loaded,
+    reading: null,
+    flagLine: '',
+  }));
 }
 
 /** A wait in whole seconds as `gglib proxy dashboard` says it: "4s", "1m 5s". */

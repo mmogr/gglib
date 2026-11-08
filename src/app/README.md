@@ -26,7 +26,7 @@ The main window's shell: its addresses, its router, and what navigates or acts f
 
 ## Words this folder says that Rust does not
 
-"Could not load <name>: <the daemon's words>" (the menu's Load refused); the
+"Didn't load: <the daemon's words>" (the menu's Load refused, the inspector's words); the
 menu's Remove from Library… asks in the inspector's words ("Remove <name>
 from the library?", "The file stays on disk.", "Remove", "Could not remove
 <name>: …"). The menus' own words are Rust's, in `src-tauri/src/menu/` and

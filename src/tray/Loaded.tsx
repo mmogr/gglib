@@ -2,9 +2,9 @@
  * The tray's Loaded block: one row per model in memory, its residency word
  * and × to unload it.
  *
- * The rows are the dashboard's resident slots (`places/endpoint/lines`
- * `loadedRows`, the endpoint place's), whose words move with each request:
- * Working, Loaded, "Reading 61%". While the dashboard is idle (the endpoint
+ * The rows are the endpoint place's (`places/endpoint/lines`
+ * `residentRows`): the dashboard's resident slots, whose words move with
+ * each request: Working, Loaded, "Reading 61%". While the dashboard is idle (the endpoint
  * off, or its key not yet revealed) they are the server list's running
  * servers, each Loaded, since a model stays in memory with the endpoint
  * off; those only once the list's read has landed. "Nothing loaded" is said
@@ -22,12 +22,11 @@
 import { useState, type FC } from 'react';
 import { X } from 'lucide-react';
 import { RESIDENCY_MARK, StatusMark } from '../components/status/StatusMark';
-import { RESIDENCY_WORDS } from '../components/status/words';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import type { ServerViewModel } from '../hooks/useServers';
 import { Group, Note } from '../places/library/Group';
-import { loadedRows } from '../places/endpoint/lines';
+import { residentRows } from '../places/endpoint/lines';
 import { safeStopServer } from '../services/server/safeActions';
 import type { DashboardSnapshot } from '../services/transport/types/dashboard';
 import type { ResidencyState } from '../types/generated/ResidencyState';
@@ -43,9 +42,8 @@ export interface TrayLoadedRow {
 }
 
 /** The rows: the dashboard's while it has spoken, else the running servers, each Loaded. */
-export function trayLoadedRows(snapshot: DashboardSnapshot | null, servers: ServerViewModel[]): TrayLoadedRow[] {
-  if (snapshot) return loadedRows(snapshot).map(({ modelId, name, state, word }) => ({ modelId, name, state, word }));
-  return servers.map((s) => ({ modelId: s.modelId, name: s.modelName, state: 'loaded', word: RESIDENCY_WORDS.loaded }));
+export function trayLoadedRows(snapshot: DashboardSnapshot | null, servers: ServerViewModel[], heard: boolean): TrayLoadedRow[] {
+  return residentRows(snapshot, servers, heard).map(({ modelId, name, state, word }) => ({ modelId, name, state, word }));
 }
 
 interface LoadedProps {

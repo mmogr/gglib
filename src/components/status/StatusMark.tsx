@@ -45,16 +45,18 @@ interface StatusMarkProps {
   word?: string;
   /** What the shape says when it stands alone (`aria-label`); the word when one is drawn. */
   label?: string;
+  /** The `on` dot's once-per-request blink (`useRequestBlink`), the endpoint's alone; no other shape blinks. */
+  blink?: boolean;
   className?: string;
 }
 
 const DOT = 'inline-block w-2 h-2 rounded-full shrink-0';
 
 /** The shape for each kind: a glyph or a styled span, each the same footprint. */
-function Shape({ kind }: { kind: MarkKind }) {
+function Shape({ kind, blink }: { kind: MarkKind; blink: boolean }) {
   switch (kind) {
     case 'on':
-      return <span aria-hidden className={cn(DOT, 'bg-success')} />;
+      return <span aria-hidden className={cn(DOT, 'bg-success', blink && 'animate-request-blink')} />;
     case 'off':
       return <span aria-hidden className={cn(DOT, 'border border-text-muted')} />;
     case 'changing':
@@ -81,14 +83,14 @@ function Shape({ kind }: { kind: MarkKind }) {
   }
 }
 
-export const StatusMark: FC<StatusMarkProps> = ({ kind, word, label, className }) => (
+export const StatusMark: FC<StatusMarkProps> = ({ kind, word, label, blink = false, className }) => (
   <span
     className={cn('inline-flex items-center gap-xs text-sm text-text-secondary tabular-nums', className)}
     aria-label={word === undefined ? label : undefined}
     role={word === undefined && label !== undefined ? 'img' : undefined}
     data-kind={kind}
   >
-    <Shape kind={kind} />
+    <Shape kind={kind} blink={blink} />
     {word !== undefined && <span>{word}</span>}
   </span>
 );

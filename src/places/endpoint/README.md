@@ -83,7 +83,7 @@ only while it can act (the endpoint up and its key revealed), and a row's
 |------|------|
 | `EndpointPlace.tsx` | The route: the title and ⋯ (Live numbers, Clear prompt cache, Endpoint settings…), the sections in order once the dashboard has spoken, the Model ID Connect a client and Test it share, the inspector beside it `?connect=1` (the menu's Connect a Client…) scrolling to Connect a client once it is drawn, then leaving the address (at once while the endpoint is off) |
 | `Header.tsx` | The address line: On with the address, Copy, the meaning, Test it, Turn off; Pinned with its model and Unpin; Key required with Show; Off with Turn on, its sentence and Start when gglib launches; Starting; the daemon's failure and the proof's sentence |
-| `Loaded.tsx` | The resident rows (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯; Chat opens the model's latest chat, else an empty one, handed the slot's port through `app/openChat`), the queue's lines, the room line, the empty sentence and Load a model… (the palette) |
+| `Loaded.tsx` | The resident rows, and while the endpoint is off the running servers as Loaded, nothing when none (word or Reading % with its bar, the flag line, hover Unload and Chat, ⋯; Chat opens the model's latest chat, else an empty one, handed the slot's port through `app/openChat`), the queue's lines, the room line, the empty sentence and Load a model… (the palette) |
 | `LoadPalette.tsx` | Load a model…: the filter, this machine's models not loaded with quant, size and fit, On <machine>, ↑ ↓ Home End, ⏎ loads with nothing typed, ⌥⏎ opens Load with options, Esc gives focus back |
 | `paletteRows.ts` | Pure: the palette's rows (not loaded, matching the filter as the library's search does), a row's quant and size, its fit line from its explanation, and the paired machine's rows with why they cannot load there |
 | `useFitReads.ts` | The palette's explain reads: the highlighted row first, then the rows in view, three at most in flight across opens, kept for one open, an answer to a closed open dropped |
@@ -91,7 +91,7 @@ only while it can act (the endpoint up and its key revealed), and a row's
 | `UsingIt.tsx` | Requests in flight from apps on this machine, one line per joined device in the daemon's words, or the empty sentence with Connect a client |
 | `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what gglib did; All ›; not drawn when empty |
 | `Activity.tsx` | ▸ Activity: the dashboard's other sections as sentences, Clear prompt cache, Live numbers › |
-| `lines.ts` | Pure: the loaded rows, the queue's lines, the room line, the recent rows, the cache's reuse and the activity sentences, from one dashboard frame |
+| `lines.ts` | Pure: the loaded rows (`residentRows`: the dashboard's, else the running servers once the list's read has landed, the tray's too), the queue's lines, the room line, the recent rows, the cache's reuse and the activity sentences, from one dashboard frame |
 | `useClearCache.ts` | Clear prompt cache with the revealed key, its toast either way; also Diagnostics › Live's Clear |
 | `useEndpointActions.ts` | Turn on (no port), Turn off, serve one model or every model (stop, then start), and Test it, with the daemon's message for a failure |
 

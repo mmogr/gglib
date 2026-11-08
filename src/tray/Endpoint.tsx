@@ -7,7 +7,8 @@
  * key rule from `KEY_WORDS`, the pinned model's name. Pinned reads
  * "On · only <model>". While a turn-on is on its way, or the endpoint is up
  * but its status has not yet said where (Connecting), the mark turns (◌).
- * Key required puts `▲ Key required · Copy key` under the address; Copy key
+ * The ● blinks once per served request, as the sidebar's does
+ * (`useRequestBlink`). Key required puts `▲ Key required · Copy key` under the address; Copy key
  * copies the key the panel already revealed for its dashboard stream, so it
  * waits for that reveal. Off dims the bar to "Off. Clients can't connect.";
  * Turn on is the footer's. A copy says "Copied" for one second beside its
@@ -19,6 +20,7 @@
 import { useEffect, useState, type FC } from 'react';
 import { CopyValue } from '../components/CopyValue';
 import { StatusMark, type MarkKind } from '../components/status/StatusMark';
+import { useRequestBlink } from '../components/status/useRequestBlink';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../components/status/words';
 import { Button } from '../components/ui/Button';
 import type { EndpointFacts } from '../services/proxyRegistry';
@@ -64,9 +66,12 @@ interface EndpointProps {
   error: string | null;
   /** The proxy's key: `undefined` until revealed, `null` when none could be read. */
   apiKey: string | null | undefined;
+  /** The proxy's request count from the dashboard stream, `null` while it is idle: the dot blinks as it grows. */
+  served: number | null;
 }
 
-export const Endpoint: FC<EndpointProps> = ({ facts, busy, error, apiKey }) => {
+export const Endpoint: FC<EndpointProps> = ({ facts, busy, error, apiKey, served }) => {
+  const blinking = useRequestBlink(served);
   const [urlCopied, showUrlCopied] = useBriefly();
   const [keyCopied, showKeyCopied] = useBriefly();
   const saying = endpointSaying(facts, busy);
@@ -86,7 +91,7 @@ export const Endpoint: FC<EndpointProps> = ({ facts, busy, error, apiKey }) => {
     <section aria-label="Endpoint" className="flex flex-col gap-xs pb-md">
       <div className="flex items-center justify-between px-md">
         <span className="text-sm text-text">Endpoint</span>
-        <StatusMark kind={saying.mark} word={saying.word} className="min-w-0 truncate" />
+        <StatusMark kind={saying.mark} word={saying.word} blink={blinking} className="min-w-0 truncate" />
       </div>
 
       <div className="mx-md flex min-h-[36px] items-center gap-xs rounded-base bg-surface-elevated px-sm">

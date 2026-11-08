@@ -3,21 +3,33 @@
  * address a client reaches it at, whether a request needs the key, and how
  * many models are loaded. Between an event and the read that follows it,
  * the address is withheld rather than guessed. ⧉ copies the whole address
- * and goes nowhere; a click on the line opens the endpoint place.
+ * and goes nowhere; a click on the line opens the endpoint place. The dot
+ * blinks once when the proxy's request count grows, at most once a second,
+ * and never under reduced motion; the dashboard stream is played by the test.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
 vi.mock('../../../src/services/transport', () => ({
   getTransport: () => ({ revealSecret: async () => null, getSettings: async () => ({}) }),
 }));
+const dashboard = vi.hoisted(() => ({ send: null as ((s: unknown) => void) | null }));
+vi.mock('../../../src/services/clients/proxyDashboard', () => ({
+  subscribeProxyDashboard: (_h: string, _p: number, _k: unknown, onSnapshot: (s: unknown) => void) => {
+    dashboard.send = onSnapshot;
+    return () => {
+      dashboard.send = null;
+    };
+  },
+}));
 
 import { EndpointLine, secondLine, shownAddress } from '../../../src/sidebar/EndpointLine';
+import { dashboardSnapshot } from '../fixtures/dashboard';
 import { applyProxyStatus, ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import type { ProxyStatus } from '../../../src/services/transport/types/proxy';
@@ -127,6 +139,68 @@ describe('the endpoint line', () => {
 
     expect(app.at()).toBe('/endpoint');
     expect(line()).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+describe("the endpoint dot's request blink", () => {
+  // The filled dot inside the mark: only it blinks.
+  const dot = () => within(line()).getByRole('img', { name: 'On' }).firstElementChild;
+
+  /** A frame of the dashboard stream saying `total` requests served, at `at` ms. */
+  async function served(total: number, at: number) {
+    vi.setSystemTime(at);
+    for (let i = 0; i < 5 && dashboard.send === null; i += 1) await act(async () => {});
+    expect(dashboard.send).not.toBeNull();
+    act(() => dashboard.send?.(dashboardSnapshot({ total_requests: total })));
+  }
+
+  beforeEach(() => {
+    resetProxyState();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    applyProxyStatus(UP);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('blinks once, for 150 ms, when the count grows; not for the first frame', async () => {
+    render(<EndpointLine />, { wrapper: Wrapper });
+    await served(7, 10_000);
+    expect(dot()).not.toHaveClass('animate-request-blink');
+
+    await served(8, 20_000);
+    expect(dot()).toHaveClass('animate-request-blink');
+    act(() => vi.advanceTimersByTime(149));
+    expect(dot()).toHaveClass('animate-request-blink');
+    act(() => vi.advanceTimersByTime(1));
+    expect(dot()).not.toHaveClass('animate-request-blink');
+
+    // A frame with no new request does not blink.
+    await served(8, 30_000);
+    expect(dot()).not.toHaveClass('animate-request-blink');
+  });
+
+  it('two requests within 200 ms blink once; the next a second later blinks again', async () => {
+    render(<EndpointLine />, { wrapper: Wrapper });
+    await served(0, 10_000);
+    await served(1, 11_000);
+    expect(dot()).toHaveClass('animate-request-blink');
+    act(() => vi.advanceTimersByTime(150));
+
+    await served(2, 11_200);
+    expect(dot()).not.toHaveClass('animate-request-blink');
+
+    await served(3, 12_000);
+    expect(dot()).toHaveClass('animate-request-blink');
+  });
+
+  it('never blinks under reduced motion', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' }));
+    render(<EndpointLine />, { wrapper: Wrapper });
+    await served(0, 10_000);
+    await served(1, 20_000);
+    expect(dot()).not.toHaveClass('animate-request-blink');
   });
 });
 

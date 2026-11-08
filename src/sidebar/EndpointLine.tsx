@@ -11,6 +11,11 @@
  * line's own, until a place says it. ⧉ copies the whole address without
  * opening anything.
  *
+ * The dot blinks once (150 ms) each time the proxy has served another
+ * request (`components/status/useRequestBlink`), read from the one
+ * dashboard stream (`useEndpointDashboard`, the endpoint place's). It is
+ * the only motion at rest.
+ *
  * Clicking the line opens the endpoint place (`/endpoint`); it is drawn
  * raised while that place is open.
  *
@@ -22,10 +27,12 @@ import { KeyRound } from 'lucide-react';
 import { paths } from '../app/paths';
 import { CopyValue } from '../components/CopyValue';
 import { StatusMark, type MarkKind } from '../components/status/StatusMark';
+import { useRequestBlink } from '../components/status/useRequestBlink';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../components/status/words';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { useToastContext } from '../contexts/ToastContext';
+import { useEndpointDashboard } from '../places/library/useResidency';
 import { useEndpointFacts, type EndpointFacts } from '../services/proxyRegistry';
 import { useAllServerStates } from '../services/serverRegistry';
 import type { EndpointState } from '../types/generated/EndpointState';
@@ -55,6 +62,7 @@ export function secondLine(facts: EndpointFacts, loaded: number): string {
 
 export function EndpointLine({ current = false }: { current?: boolean }) {
   const facts = useEndpointFacts();
+  const blinking = useRequestBlink(useEndpointDashboard().snapshot?.total_requests ?? null);
   const loaded = useAllServerStates().filter((s) => s.status === 'running').length;
   const navigate = useNavigate();
   const { showToast } = useToastContext();
@@ -75,7 +83,7 @@ export function EndpointLine({ current = false }: { current?: boolean }) {
           aria-label={`Endpoint, ${word}`}
         >
           <span className="flex items-center gap-sm text-sm text-text">
-            <StatusMark kind={MARK[facts.state]} label={word} />
+            <StatusMark kind={MARK[facts.state]} label={word} blink={blinking} />
             <span>Endpoint</span>
           </span>
           <span className="flex items-center gap-xs text-sm text-text-secondary">

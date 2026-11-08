@@ -60,7 +60,7 @@ export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
         <StatusMark kind={MARK[state]} word={ENDPOINT_WORDS[state]} className="text-base text-text" />
         {up && facts.baseUrl !== null && (
           <>
-            <span className="min-w-0 flex-1 truncate font-mono text-xl text-text" title={facts.baseUrl}>
+            <span className="min-w-0 flex-1 truncate font-mono text-lg text-text" title={facts.baseUrl}>
               {facts.baseUrl}
             </span>
             <Button onClick={() => copy(facts.baseUrl ?? '')}>Copy</Button>
