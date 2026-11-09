@@ -281,11 +281,16 @@ pub(super) fn render_usage_rows(usage: &CacheUsage) -> String {
             .unwrap_or_default();
         let _ = writeln!(
             out,
-            "  {:<14} {} of {} prompt tokens{percent} in {} requests",
+            "  {:<14} {} of {} prompt tokens{percent} in {} {}",
             "Reused",
             thousands(usage.cached_tokens),
             thousands(usage.prompt_tokens),
             thousands(usage.reporting_requests),
+            if usage.reporting_requests == 1 {
+                "request"
+            } else {
+                "requests"
+            },
         );
         if let (Some(last_cached), Some(last_prompt)) =
             (usage.last_cached_tokens, usage.last_prompt_tokens)

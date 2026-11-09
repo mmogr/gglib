@@ -13,12 +13,14 @@ use super::{
     Host, SDXL_ID, SLOT, Timeline, drain, driver, flux_like, models, png, resident, sdxl_request,
     served_at,
 };
+use crate::process::Resident;
+use crate::process::admission::{AdmissionDecision, Candidate, PRIMARY_SLOT};
 use crate::sd::server::SdImageDriver;
 use crate::sd::server::job_api::{CancelOutcome, JobState};
 use crate::sd::server::job_poll::CANCEL_WAIT;
+use gglib_core::domain::{RuntimeKind, SecondarySlotDecision};
 use gglib_core::ports::{
-    GateError, GenerationTurn, ImageBatch, ImageError, ImageGenerationPort, ImageProgress,
-    ImageStage,
+    AdmissionLease, ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageStage,
 };
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -45,17 +47,43 @@ async fn leave(render: JoinHandle<Drawn>) {
     assert!(render.await.unwrap_err().is_cancelled());
 }
 
-/// A chat that asks for its turn to generate, in a task of its own.
-fn chat(host: &Arc<Host>) -> JoinHandle<Result<GenerationTurn, GateError>> {
-    let gate = host.queue.generation_gate();
-    tokio::spawn(async move { gate.llm_turn(None).await })
+/// The chat model's id, as `models()` lists it.
+const QWEN_ID: u32 = 3;
+
+/// How often a waiting chat asks the queue again.
+const CHAT_TICK: Duration = Duration::from_millis(250);
+
+/// A chat request for the chat model in the primary, in a task of its own:
+/// served by the admission queue once no render holds the GPU or waits ahead
+/// of it, as the proxy's are, and holding its lease after. The chat model is
+/// loaded the first time.
+fn chat(host: &Arc<Host>) -> JoinHandle<AdmissionLease> {
+    let queue = Arc::clone(&host.queue);
+    if queue.slot(PRIMARY_SLOT).is_none() {
+        let qwen = Resident {
+            runtime: RuntimeKind::Llama,
+            ..resident(QWEN_ID, "qwen")
+        };
+        drop(queue.install(PRIMARY_SLOT, qwen));
+    }
+    let chat = Candidate::llama(SecondarySlotDecision::RefuseUnknownBudget);
+    tokio::spawn(async move {
+        let ticket = queue.enqueue(QWEN_ID, "qwen");
+        loop {
+            match queue.poll(&ticket, chat) {
+                AdmissionDecision::Serve { slot } => return queue.claim(slot),
+                AdmissionDecision::Wait => tokio::time::sleep(CHAT_TICK).await,
+                other => panic!("the chat was not served: {other:?}"),
+            }
+        }
+    })
 }
 
-/// The turn of a chat that must have been given one by now. Asked, not
+/// The lease of a chat that must have been served by now. Asked, not
 /// awaited: a chat still waiting fails the test instead of hanging it.
-async fn granted(chat: JoinHandle<Result<GenerationTurn, GateError>>) -> GenerationTurn {
-    assert!(chat.is_finished(), "the chat still waits for its turn");
-    chat.await.unwrap().expect("the chat is given its turn")
+async fn granted(chat: JoinHandle<AdmissionLease>) -> AdmissionLease {
+    assert!(chat.is_finished(), "the chat still waits behind the render");
+    chat.await.unwrap()
 }
 
 fn log(host: &Host) -> Vec<String> {
@@ -69,7 +97,7 @@ fn cancels(jobs: &Timeline) -> usize {
 /// A reader that leaves while the job generates: `sd-server` refuses the
 /// cancel (409), so the server is killed while the render still holds the
 /// slot and its lease, the slot is emptied, and the chat that waited behind
-/// the render has its turn a second later. Nothing follows the job
+/// the render is served a second later. Nothing follows the job
 /// afterwards.
 #[tokio::test(start_paused = true)]
 async fn a_reader_that_leaves_mid_render_stops_the_server_and_frees_the_gpu() {
@@ -85,7 +113,7 @@ async fn a_reader_that_leaves_mid_render_stops_the_server_and_frees_the_gpu() {
 
     leave(render).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    let turn = granted(chat).await;
+    let chat = granted(chat).await;
 
     assert_eq!(cancels(&jobs), 1, "the cancel was asked, once");
     assert_eq!(log(&host), KILLED_THEN_EMPTIED);
@@ -94,7 +122,7 @@ async fn a_reader_that_leaves_mid_render_stops_the_server_and_frees_the_gpu() {
         !host.queue.ask_render_stop(SDXL_ID),
         "no render holds the model"
     );
-    drop(turn);
+    drop(chat);
 
     // 43 s in, with the job due to end at 72 s: nothing reads it to its end.
     tokio::time::sleep(Duration::from_mins(31)).await;
@@ -404,26 +432,25 @@ async fn a_draw_admitted_again_takes_no_request_from_a_newcomer() {
     let driver = Arc::new(driver(models(), &jobs, &host));
     let (first, _rx) = draw(&driver);
     tokio::time::sleep(Duration::from_secs(40)).await;
-    let chat = chat(&host);
-    tokio::time::sleep(Duration::from_secs(1)).await;
     let (second, _second_rx) = draw(&driver);
     tokio::time::sleep(Duration::from_secs(1)).await;
+    *host.arriving.lock().unwrap() = Some(resident(7, "embedder"));
 
     leave(first).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    let turn = granted(chat).await;
-    assert_eq!(host.inflight(), None, "the slot is empty");
-    let newcomer = host.queue.install(SLOT, resident(7, "embedder"));
-    drop(turn);
-    tokio::time::sleep(Duration::from_secs(1)).await;
 
+    assert_eq!(
+        log(&host),
+        ["kill, slot Some((1, 2))", "retired, slot None"],
+        "the draw's first lease was settled with the slot"
+    );
     assert_eq!(host.admits.load(Ordering::SeqCst), 3, "admitted again");
     assert_eq!(
         host.inflight(),
         Some(2),
         "the newcomer keeps its request, and the draw adds its own"
     );
-    drop(newcomer);
+    drop(host.newcomer.lock().unwrap().take());
     second.await.unwrap().expect("drawn");
     assert_eq!(host.inflight(), Some(0));
 }
@@ -470,8 +497,9 @@ async fn a_reader_that_leaves_the_gates_line_kills_nothing() {
     assert!(log(&host).is_empty());
 }
 
-/// The same behind a chat: a request waiting for the chat's turn to end
-/// leaves the line, and the chat's turn and the loaded model are untouched.
+/// The same behind a chat: a request waiting for the chat in flight to end
+/// leaves the line, and the chat's request and the loaded model are
+/// untouched.
 #[tokio::test(start_paused = true)]
 async fn a_reader_that_leaves_the_line_behind_a_chat_kills_nothing() {
     let jobs = Arc::new(Timeline::new(flux_like()).cancelled_with(CancelOutcome::Running));
@@ -479,7 +507,7 @@ async fn a_reader_that_leaves_the_line_behind_a_chat_kills_nothing() {
     let driver = Arc::new(driver(models(), &jobs, &host));
     let chat = chat(&host);
     tokio::time::sleep(Duration::from_secs(1)).await;
-    let turn = granted(chat).await;
+    let chat = granted(chat).await;
     let (render, _rx) = draw(&driver);
     tokio::time::sleep(Duration::from_secs(10)).await;
     assert_eq!(
@@ -498,7 +526,7 @@ async fn a_reader_that_leaves_the_line_behind_a_chat_kills_nothing() {
     );
     assert_eq!(cancels(&jobs), 0);
     assert!(log(&host).is_empty(), "nothing was killed");
-    drop(turn);
+    drop(chat);
 }
 
 /// A cancel `sd-server` does not answer is waited for [`CANCEL_WAIT`] and

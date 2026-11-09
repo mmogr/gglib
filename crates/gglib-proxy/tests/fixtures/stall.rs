@@ -8,8 +8,8 @@
 //! recycle, and after it the upstream answers normally. The runtime can hold
 //! same-model requests in admission one at a time, as `SERVER_PARALLEL = 1`
 //! makes the real queue do, or admit everything at once; and it can refuse a
-//! recycle while `held`, as the real one does while an agent run holds the
-//! model.
+//! recycle while `refusing`, as a runtime whose stop is refused does (the
+//! benchmark's pinned target).
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -159,8 +159,8 @@ pub(crate) struct StallRuntime {
     /// another request could have been admitted while it ran. Recorded only
     /// when there is a cap.
     pub(crate) admission_open_at_recycle: std::sync::Mutex<Vec<bool>>,
-    /// While set, `recycle_current` is refused, as a run's hold refuses it.
-    pub(crate) held: AtomicBool,
+    /// While set, `recycle_current` is refused.
+    pub(crate) refusing: AtomicBool,
 }
 
 /// The one-at-a-time cap, released by the lease.
@@ -183,7 +183,7 @@ impl StallRuntime {
             queue: one_at_a_time.then(|| Arc::new(Queue(Semaphore::new(1)))),
             recycles: std::sync::Mutex::new(Vec::new()),
             admission_open_at_recycle: std::sync::Mutex::new(Vec::new()),
-            held: AtomicBool::new(false),
+            refusing: AtomicBool::new(false),
         }
     }
 }
@@ -233,9 +233,8 @@ impl ModelRuntimePort for StallRuntime {
     }
 
     async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
-        if self.held.load(Ordering::SeqCst) {
-            let held = "held by an agent run".to_owned();
-            return Err(ModelRuntimeError::AdmissionTimeout(held));
+        if self.refusing.load(Ordering::SeqCst) {
+            return Err(ModelRuntimeError::Internal("stop refused".to_owned()));
         }
         self.stop_current().await
     }

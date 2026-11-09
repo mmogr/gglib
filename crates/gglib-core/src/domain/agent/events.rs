@@ -119,26 +119,25 @@ pub enum AgentEvent {
         frame: PreviewFrame,
     },
 
-    /// Nothing can happen until something else finishes: an image render
-    /// holds the GPU, or the model is loading. Sent again whenever what it
-    /// reports changes, so a person sees why the reply has not started.
+    /// Nothing can happen until the model has loaded. Sent again each
+    /// second, so a person sees why the reply has not started.
     Waiting {
         /// What is being waited for.
         reason: WaitingFor,
-        /// The step the work in the way last reported; 0 before its first.
+        /// The step the work in the way last reported: always 0 for a load,
+        /// which reports none. Kept on the wire for readers that decode it.
         step: u32,
-        /// How many steps that work takes; 0 when unknown.
+        /// How many steps that work takes: always 0 for a load.
         total: u32,
-        /// This wait's place in line, 1 being next; 0 when not in a line.
+        /// This wait's place in line: always 0 for a load, which waits in
+        /// no line.
         position: u32,
-        /// The name of the model being loaded, as the catalogue shows it;
-        /// absent from a wait for an image render.
+        /// The name of the model being loaded, as the catalogue shows it.
         #[serde(skip_serializing_if = "Option::is_none")]
         model: Option<String>,
         /// How long the load has taken so far, in milliseconds. A load's
         /// wait is sent again each second with this figure, so a client that
-        /// joins part-way can say "Loading Qwen3-4B… 12 s"; absent from a
-        /// wait for an image render.
+        /// joins part-way can say "Loading Qwen3-4B… 12 s".
         #[serde(skip_serializing_if = "Option::is_none")]
         elapsed_ms: Option<u64>,
         /// The wait as a person reads it, worded by
@@ -214,8 +213,6 @@ pub enum AgentEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WaitingFor {
-    /// An image render has the GPU, or is queued ahead.
-    ImageRender,
     /// The chat's model is being loaded.
     ModelLoad,
 }

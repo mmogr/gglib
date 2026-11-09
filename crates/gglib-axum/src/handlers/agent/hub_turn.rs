@@ -412,7 +412,7 @@ pub(super) async fn plan(
         super::image_gate::named(state, &model, &messages).await?;
     }
     // A turn has no budget of its own: off, or the model's default.
-    let thinking = thinking::settle(turn.thinking, settings.thinking, None);
+    let thinking = thinking::settle(turn.thinking, settings.thinking);
     let asked = if local {
         // The paired machine's catalogue says what its model calls; the
         // request pipeline there strips tools from one that calls none.

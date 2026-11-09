@@ -19,8 +19,8 @@ use crate::process::admission::{PRIMARY_SLOT, Resident};
 #[cfg(unix)]
 use crate::process::core::GuiProcessCore;
 use crate::process::residency::ResidentSet;
-use crate::process::residency::hold_tests::{core, resident};
 use crate::process::residency::residency_tests::{OneModel, launch_spec};
+use crate::process::residency::serve_tests::{core, resident};
 
 /// A weights file and a projector file, both on disk, so a launch gets past
 /// its file check.

@@ -888,9 +888,8 @@ when it is known, so a device that opens the chat reads them with no route
 of their own ([Context reading](clients.md#context-reading)).
 
 The `PUT` answers as soon as the run is made, before the chat's model is
-loaded. A model that has to load, or wait behind an image render, shows as a
-`waiting` event in the run, whose `said` is the sentence to show for it
-("Loading Qwen3-4B… 12 s", "Waiting for an image render, step 3 of 20"),
+loaded. A model that has to load shows as a `waiting` event in the run,
+whose `said` is the sentence to show for it ("Loading Qwen3-4B… 12 s"),
 worded by the daemon so every client says the same; a frame from an older
 daemon has none. A model that cannot be loaded ends the run
 `failed` with `model_unavailable` rather than refusing the `PUT`, or with

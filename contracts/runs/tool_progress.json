@@ -1,12 +1,5 @@
 [
   {
-    "position": 1,
-    "reason": "image_render",
-    "step": 12,
-    "total": 20,
-    "type": "waiting"
-  },
-  {
     "args_summary": null,
     "display_name": "Generate Image",
     "tool_call": {

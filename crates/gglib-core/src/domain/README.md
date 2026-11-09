@@ -120,8 +120,9 @@ infrastructure concerns (database, filesystem, etc.).
   listing says it (`VariantFit`, with its words), the picker's verdict on
   the wire
 - `figures` - How fast a model wrote (`tokens_per_second`), and a rate,
-  seconds and a count in the words every surface says them (`rate_words`,
-  `seconds_words`, `count_words`)
+  seconds, a count and a count of tokens in the words every surface says
+  them (`rate_words`, `seconds_words`, `count_words`, `tokens_words`: "1
+  token", "2,100 tokens")
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
 - `fit_sentence` - A context fit in words (`ContextFit::new` composes them):

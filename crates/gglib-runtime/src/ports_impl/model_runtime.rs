@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::{AdmissionSnapshot, LaunchPlan};
 use gglib_core::ports::{
-    Admission, AdmissionLease, AdmitObserver, LaunchOverrides, ModelLaunchSpec, ModelRuntimeError,
+    Admission, AdmitObserver, LaunchOverrides, ModelLaunchSpec, ModelRuntimeError,
     ModelRuntimePort, ProcessHandle, RunningTarget,
 };
 use std::fmt;
@@ -125,10 +125,6 @@ impl ModelRuntimePort for RuntimePortImpl {
         self.mgr.current_model()
     }
 
-    fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
-        self.mgr.hold(port, model_id)
-    }
-
     async fn list_running(&self) -> Vec<ProcessHandle> {
         self.mgr.list_running().await
     }
@@ -142,7 +138,8 @@ impl ModelRuntimePort for RuntimePortImpl {
     }
 
     async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
-        self.mgr.recycle_current().await
+        self.mgr.recycle_current().await;
+        Ok(())
     }
 
     fn pinned(&self) -> Option<gglib_core::ports::PinnedSpec> {

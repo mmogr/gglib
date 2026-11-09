@@ -150,22 +150,20 @@ export interface AgentToolProgressEvent {
 }
 
 /**
- * Nothing can happen until something else finishes: an image render holds
- * the GPU, or the model is loading. Sent again whenever what it reports
- * changes.
+ * Nothing can happen until the model has loaded. Sent again each second.
  */
 export interface AgentWaitingEvent {
   type: 'waiting';
-  reason: 'image_render' | 'model_load';
-  /** The step the work in the way last reported; 0 before its first. */
+  reason: 'model_load';
+  /** Always 0: a load reports no steps. */
   step: number;
-  /** How many steps that work takes; 0 when unknown. */
+  /** Always 0. */
   total: number;
-  /** This wait's place in line, 1 being next; 0 when not in a line. */
+  /** Always 0: a load waits in no line. */
   position: number;
-  /** The model being loaded, by the catalogue's name; absent from a render's wait. */
+  /** The model being loaded, by the catalogue's name. */
   model?: string;
-  /** How long the load has taken so far, in ms; said again each second. Absent from a render's wait. */
+  /** How long the load has taken so far, in ms; said again each second. */
   elapsed_ms?: number;
   /**
    * The wait as a person reads it, worded by the daemon

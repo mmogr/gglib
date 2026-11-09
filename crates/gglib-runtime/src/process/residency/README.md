@@ -27,12 +27,11 @@ once before the request ever joins the queue:
 
 An image model skips the context: it has none. It is placed by its files
 and its family's compute margin (`vram::image_footprint`) under the queue's
-image rules, and a held primary it cannot go beside refuses it at once as
-`image_model_does_not_fit`. While another image model is loaded or loading,
-that model's slot is the only one it may take, and it swaps in only when it
-fits in the memory that model gives back: it waits for the render, and is
-refused on the chat model's account only when a run holds the chat model and
-the newcomer would need its memory too (the admission README has the rules).
+image rules. While another image model is loaded or loading, that model's
+slot is the only one it may take, and it swaps in only when it fits in the
+memory that model gives back: it waits for the render, and one too large for
+that place waits without leading the line (the admission README has the
+rules).
 
 What remains in the loop is purely scheduling. That split is what keeps the
 launch sequence a straight line rather than a state machine.
@@ -74,10 +73,7 @@ the context size, the projector is fixed when llama-server starts, so a
 resident launched with another projector than the request resolves to is
 recycled, and the next pass launches the model with the one it is linked to
 now: a changed link takes effect at the model's next admission (a proxy
-request or a start), with no restart asked of anyone. A resident that a run
-holds is kept, and that request refused. A run sent straight to a server
-already started is not admitted here, and keeps the projector that server
-was started with. A projector missing on disk fails the launch by name,
+request or a start), with no restart asked of anyone. A projector missing on disk fails the launch by name,
 before the launch stops anything it displaces; a resident recycled for its
 link was stopped before that, when the request found it.
 

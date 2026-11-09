@@ -81,6 +81,7 @@ describe('figureParts', () => {
     expect(line({ toolCalls: 0, unfinished: false, made: MADE })).toBe('41 s · 12 t/s · 2,100 tokens reused');
     expect(line({ toolCalls: 0, unfinished: true, made: { turnDurationMs: 900 } })).toBe('unfinished · 0.9 s');
     expect(line({ toolCalls: 0, unfinished: false, made: { cachedTokens: 0 } })).toBe('0 tokens reused');
+    expect(line({ toolCalls: 0, unfinished: false, made: { turnDurationMs: 500, cachedTokens: 1 } })).toBe('0.5 s · 1 token reused');
   });
 
   it('says the daemon\'s rate, one decimal under ten, and none where it sent none', () => {
@@ -117,6 +118,11 @@ describe('figureDetail', () => {
   it('leaves out each figure the turn lacks', () => {
     expect(figureDetail({ toolCalls: 0, unfinished: false })).toEqual([]);
     expect(figureDetail({ toolCalls: 1, unfinished: false, made: { modelName: 'qwen3' } })).toEqual(['qwen3', '1 tool call']);
+    expect(figureDetail({ toolCalls: 0, unfinished: false, made: { promptTokens: 1, cachedTokens: 1, completionTokens: 1 } })).toEqual([
+      '1 token read',
+      '1 token reused',
+      '1 token written',
+    ]);
   });
 });
 
@@ -178,30 +184,25 @@ describe('arrivingPhase', () => {
 
 describe('a reply that waits', () => {
   const none = {};
-  const render = { reason: 'image_render' as const, step: 3, total: 20, position: 1, said: 'Waiting for an image render, step 3 of 20' };
   const load = { reason: 'model_load' as const, step: 0, total: 0, position: 0, said: 'Loading Qwen3-4B… 12 s' };
 
   it("says the daemon's words for what it waits for, until the model reads the prompt", () => {
-    expect(arrivingPhase({ ...none, waiting: render })).toBe('Waiting for an image render, step 3 of 20');
     expect(arrivingPhase({ ...none, waiting: load })).toBe('Loading Qwen3-4B… 12 s');
     // A wait still on the turn is newer than its prompt reading, which takes an older one off.
-    expect(arrivingPhase({ ...none, waiting: render, prompt: { processed: 2, total: 2, cached: 0 } })).toBe(
-      'Waiting for an image render, step 3 of 20',
+    expect(arrivingPhase({ ...none, waiting: load, prompt: { processed: 2, total: 2, cached: 0 } })).toBe(
+      'Loading Qwen3-4B… 12 s',
     );
   });
 
   it('says only that it waits for a wait from a daemon too old to word it', () => {
-    expect(arrivingPhase({ ...none, waiting: { reason: 'image_render', step: 3, total: 20, position: 2 } })).toBe(
-      'Waiting for the model',
-    );
     expect(arrivingPhase({ ...none, waiting: { reason: 'model_load', step: 0, total: 0, position: 0 } })).toBe(
       'Waiting for the model',
     );
   });
 
   it('is read from the turn drawn from a run', () => {
-    const message = { id: 'live', content: [], metadata: { custom: { waiting: render } } };
-    expect(replyFacts(message).waiting).toEqual(render);
+    const message = { id: 'live', content: [], metadata: { custom: { waiting: load } } };
+    expect(replyFacts(message).waiting).toEqual(load);
     expect(replyFacts({ id: 'live', content: [] }).waiting).toBeUndefined();
   });
 });

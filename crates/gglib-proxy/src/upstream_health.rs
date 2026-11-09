@@ -264,7 +264,7 @@ impl UpstreamHealth {
     ///
     /// [`Self::take_recycle_request`] clears the flag *and* zeroes the streak,
     /// on the assumption that the caller is about to act on it. When the stop
-    /// then fails, or a run's hold refuses it, the upstream is still degraded
+    /// then fails or is refused, the upstream is still degraded
     /// but the evidence for that has just been discarded — so without this the
     /// watchdog has to accumulate [`STRIKE_THRESHOLD`] fresh strikes before it
     /// will try again, against a server already known to be sick.

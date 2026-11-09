@@ -102,8 +102,7 @@ fn inflight(q: &AdmissionQueue, slot: usize) -> u32 {
 async fn a_lone_render_gets_its_turn_at_once() {
     let (q, lease) = chat_and_image();
     let gate = q.generation_gate();
-    let turn = granted(pin!(gate.render_turn(lease, None)).as_mut());
-    assert_eq!(turn.kind(), TurnKind::Render);
+    let _turn = granted(pin!(gate.render_turn(lease, None)).as_mut());
     assert_eq!(inflight(&q, 1), 1, "the turn holds the render's lease");
 }
 
@@ -141,8 +140,8 @@ async fn an_image_model_is_served_while_a_render_holds_the_gate() {
     drop(q.claim(1));
 }
 
-/// Rule 3: a render waits for a chat in flight; chats after it wait, on the
-/// fast path and as turns, and are served once it ends. So does a launch.
+/// Rule 3: a render waits for a chat in flight; chats after it wait on the
+/// fast path, and are served once it ends. So does a launch.
 #[tokio::test]
 async fn a_render_waits_for_chats_in_flight_and_chats_queue_behind_it() {
     let (q, lease) = chat_and_image();
@@ -154,13 +153,15 @@ async fn a_render_waits_for_chats_in_flight_and_chats_queue_behind_it() {
 
     let (later, decision) = chat(&q);
     assert_eq!(decision, AdmissionDecision::Wait, "the fast path waits");
-    let mut llm = pin!(gate.llm_turn(None));
-    assert!(poll(llm.as_mut()).is_pending(), "a turn waits");
 
     drop(in_flight);
+    assert_eq!(
+        q.poll(&later, NEVER_FITS),
+        AdmissionDecision::Wait,
+        "behind the waiting render"
+    );
     let turn = granted(render.as_mut());
     assert_eq!(q.poll(&later, NEVER_FITS), AdmissionDecision::Wait);
-    assert!(poll(llm.as_mut()).is_pending());
 
     drop(turn);
     assert_eq!(
@@ -168,7 +169,6 @@ async fn a_render_waits_for_chats_in_flight_and_chats_queue_behind_it() {
         AdmissionDecision::Serve { slot: PRIMARY_SLOT }
     );
     drop(q.claim(PRIMARY_SLOT));
-    drop(granted(llm.as_mut()));
 }
 
 /// Rule 3: a llama-server launch is generation too, so it waits while a
@@ -191,8 +191,9 @@ async fn a_chat_launch_waits_for_a_held_render() {
     );
 }
 
-/// Rule 3, order: render, chat, render, chat are granted in that order,
-/// whichever asks first after each turn ends.
+/// Rule 3, order: render, chat, render, chat go in that order. When the
+/// first render ends the older chat is served, the younger one waits behind
+/// the second render, and that render waits for the older chat to end.
 #[tokio::test]
 async fn turns_are_first_come_first_served() {
     let (q, lease) = chat_and_image();
@@ -200,26 +201,41 @@ async fn turns_are_first_come_first_served() {
     let gate = q.generation_gate();
 
     let r1 = granted(pin!(gate.render_turn(lease, None)).as_mut());
-    let mut c1 = pin!(gate.llm_turn(None));
+    let (c1, decision) = chat(&q);
+    assert_eq!(decision, AdmissionDecision::Wait);
     let mut r2 = pin!(gate.render_turn(second_lease, None));
-    let mut c2 = pin!(gate.llm_turn(None));
-    assert!(poll(c1.as_mut()).is_pending());
     assert!(poll(r2.as_mut()).is_pending());
-    assert!(poll(c2.as_mut()).is_pending());
+    let (c2, decision) = chat(&q);
+    assert_eq!(decision, AdmissionDecision::Wait);
 
     drop(r1);
-    assert!(poll(r2.as_mut()).is_pending(), "the older chat goes first");
-    assert!(poll(c2.as_mut()).is_pending(), "behind the waiting render");
-    let c1 = granted(c1.as_mut());
-
-    assert!(poll(c2.as_mut()).is_pending());
+    assert_eq!(
+        q.poll(&c2, NEVER_FITS),
+        AdmissionDecision::Wait,
+        "behind the waiting render"
+    );
+    assert_eq!(
+        q.poll(&c1, NEVER_FITS),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT },
+        "the older chat goes first"
+    );
+    let c1 = q.claim(PRIMARY_SLOT);
     assert!(poll(r2.as_mut()).is_pending(), "a chat is in flight");
+
     drop(c1);
-    assert!(poll(c2.as_mut()).is_pending(), "the render is older");
+    assert_eq!(
+        q.poll(&c2, NEVER_FITS),
+        AdmissionDecision::Wait,
+        "the render is older"
+    );
     let r2 = granted(r2.as_mut());
-    assert!(poll(c2.as_mut()).is_pending());
+    assert_eq!(q.poll(&c2, NEVER_FITS), AdmissionDecision::Wait);
     drop(r2);
-    drop(granted(c2.as_mut()));
+    assert_eq!(
+        q.poll(&c2, NEVER_FITS),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT }
+    );
+    drop(q.claim(PRIMARY_SLOT));
 }
 
 /// Rule 3, starvation: a stream of chats arriving after a waiting render
@@ -262,7 +278,7 @@ async fn a_second_render_waits_while_one_is_held() {
 }
 
 /// A render whose caller went away leaves the line: a dropped wait, queued
-/// behind a chat in flight, holds back neither a new turn nor the fast path.
+/// behind a chat in flight, does not hold back the chats after it.
 #[tokio::test]
 async fn a_dropped_render_wait_leaves_the_line() {
     let (q, lease) = chat_and_image();
@@ -276,7 +292,6 @@ async fn a_dropped_render_wait_leaves_the_line() {
         assert_eq!(decision, AdmissionDecision::Wait, "behind the render");
     }
 
-    drop(granted(pin!(gate.llm_turn(None)).as_mut()));
     drop(in_flight);
     let (_ticket, decision) = chat(&q);
     assert_eq!(decision, AdmissionDecision::Serve { slot: PRIMARY_SLOT });
@@ -284,13 +299,21 @@ async fn a_dropped_render_wait_leaves_the_line() {
 }
 
 /// The #722 shape: an older chat waits to evict the very slot the waiting
-/// render's lease pins (qwen is held by a run, so the second slot is the
-/// only way in). Tickets are not turns, and a hold is not one either, so the
-/// render goes and the chat follows it.
+/// render's lease pins (another chat model is loading into the primary, so
+/// the second slot is the only way in). Tickets are not turns, so the render
+/// goes and the chat follows it.
 #[tokio::test]
 async fn an_older_chat_waiting_on_the_render_slot_does_not_deadlock_it() {
     let (q, lease) = chat_and_image();
-    let _hold = q.hold(8001, QWEN).expect("qwen is resident on its port");
+    assert!(q.evict(PRIMARY_SLOT).is_some());
+    let loading = q.enqueue(3, "llama-70b");
+    assert_eq!(
+        q.poll(&loading, NEVER_FITS),
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            evict: None
+        }
+    );
     let older = q.enqueue(7, "embedder");
     assert_eq!(q.poll(&older, ALWAYS_FITS), AdmissionDecision::Wait);
 
@@ -308,59 +331,64 @@ async fn an_older_chat_waiting_on_the_render_slot_does_not_deadlock_it() {
     );
 }
 
-/// Rule 4: render steps are progress, so a chat waiting behind a render, as
-/// a ticket and as a turn, outlives the deadline while steps arrive; with
-/// none for the whole deadline both give up.
+/// Rule 4: render steps are progress, so a chat waiting behind a render, and
+/// a second render waiting for its turn, outlive the deadline while steps
+/// arrive; with none for the whole deadline both give up.
 #[tokio::test]
 async fn steps_keep_waiters_alive_and_silence_expires_them() {
     tokio::time::pause();
     let (q, lease) = chat_and_image();
+    let second_lease = q.lease(1).expect("flux is resident");
     let gate = q.generation_gate();
     let turn = granted(pin!(gate.render_turn(lease, None)).as_mut());
 
     let (ticket, decision) = chat(&q);
     assert_eq!(decision, AdmissionDecision::Wait);
-    let mut llm = pin!(gate.llm_turn(None));
-    assert!(poll(llm.as_mut()).is_pending());
+    let mut second = pin!(gate.render_turn(second_lease, None));
+    assert!(poll(second.as_mut()).is_pending());
 
     for step in 1..=3 {
         tokio::time::advance(ADMISSION_DEADLINE * 2 / 3).await;
         turn.progress(step, 20);
         assert_eq!(q.poll(&ticket, NEVER_FITS), AdmissionDecision::Wait);
-        assert!(poll(llm.as_mut()).is_pending(), "step {step}");
+        assert!(poll(second.as_mut()).is_pending(), "step {step}");
     }
 
     tokio::time::advance(ADMISSION_DEADLINE).await;
     assert_eq!(q.poll(&ticket, NEVER_FITS), AdmissionDecision::Expired);
     assert!(matches!(
-        poll(llm.as_mut()),
+        poll(second.as_mut()),
         Poll::Ready(Err(GateError::Stalled(_)))
     ));
 }
 
 /// A turn ending is queue progress: a chat still waiting after it, now
-/// behind the render that went next, starts its stall clock again.
+/// behind the render that went next, starts its stall clock again. The
+/// first render's lease is taken out of its turn and kept, so only the
+/// turn's end moves the queue.
 #[tokio::test]
 async fn a_turn_ending_restarts_the_stall_clock() {
     tokio::time::pause();
     let (q, lease) = chat_and_image();
+    let second_lease = q.lease(1).expect("flux is resident");
     let gate = q.generation_gate();
-    let llm = granted(pin!(gate.llm_turn(None)).as_mut());
-    let mut render = pin!(gate.render_turn(lease, None));
-    assert!(poll(render.as_mut()).is_pending());
+    let mut first = granted(pin!(gate.render_turn(lease, None)).as_mut());
+    let _kept = first.take_lease().expect("a render turn owns its lease");
+    let mut second = pin!(gate.render_turn(second_lease, None));
+    assert!(poll(second.as_mut()).is_pending());
     let (ticket, decision) = chat(&q);
     assert_eq!(decision, AdmissionDecision::Wait);
 
     tokio::time::advance(ADMISSION_DEADLINE * 5 / 6).await;
-    drop(llm);
-    let _render = granted(render.as_mut());
+    drop(first);
+    let _second = granted(second.as_mut());
     assert_eq!(q.poll(&ticket, NEVER_FITS), AdmissionDecision::Wait);
     tokio::time::advance(ADMISSION_DEADLINE / 3).await;
     assert_eq!(q.poll(&ticket, NEVER_FITS), AdmissionDecision::Wait);
 }
 
 /// Rule 7: a render turn moved into a task keeps its lease, and the model's
-/// count, until the task drops it.
+/// count, until the task drops it; a chat waits behind it until then.
 #[tokio::test]
 async fn a_turn_moved_into_a_task_keeps_its_lease_until_it_ends() {
     let (q, lease) = chat_and_image();
@@ -374,12 +402,17 @@ async fn a_turn_moved_into_a_task_keeps_its_lease_until_it_ends() {
 
     tokio::task::yield_now().await;
     assert_eq!(inflight(&q, 1), 1);
-    assert!(poll(pin!(gate.llm_turn(None)).as_mut()).is_pending());
+    let (ticket, decision) = chat(&q);
+    assert_eq!(decision, AdmissionDecision::Wait);
 
     finish.send(()).unwrap();
     task.await.unwrap();
     assert_eq!(inflight(&q, 1), 0);
-    drop(granted(pin!(gate.llm_turn(None)).as_mut()));
+    assert_eq!(
+        q.poll(&ticket, NEVER_FITS),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT }
+    );
+    drop(q.claim(PRIMARY_SLOT));
 }
 
 /// Rule 7: the process is killed while the render still holds its turn and
@@ -389,11 +422,13 @@ async fn retiring_a_render_kills_then_releases_and_evicts_then_ends() {
     let (q, lease) = chat_and_image();
     let gate = q.generation_gate();
     let turn = granted(pin!(gate.render_turn(lease, None)).as_mut());
+    let (ticket, decision) = chat(&q);
+    assert_eq!(decision, AdmissionDecision::Wait);
 
     let at_kill = Mutex::new(None);
     let retired = q
         .retire_render(turn, FLUX, async {
-            let held = poll(pin!(gate.llm_turn(None)).as_mut()).is_pending();
+            let held = q.poll(&ticket, NEVER_FITS) == AdmissionDecision::Wait;
             *at_kill.lock().unwrap() = Some((q.slot(1).map(|r| r.inflight), held));
         })
         .await;
@@ -405,7 +440,11 @@ async fn retiring_a_render_kills_then_releases_and_evicts_then_ends() {
     );
     assert_eq!(retired.map(|r| r.model_id), Some(FLUX));
     assert!(q.slot(1).is_none(), "the slot is emptied");
-    drop(granted(pin!(gate.llm_turn(None)).as_mut()));
+    assert_eq!(
+        q.poll(&ticket, NEVER_FITS),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT }
+    );
+    drop(q.claim(PRIMARY_SLOT));
 }
 
 /// Rule 7: when the slot was taken by a newcomer while the process died,
@@ -436,8 +475,8 @@ async fn retiring_a_render_spares_a_newcomer_in_its_slot() {
     drop(newcomer);
 }
 
-/// Rule 8: a chat waiting behind a render is told the render's step, total
-/// and its own place, and told again only when that changes.
+/// Rule 8: a render waiting behind another is told that render's step and
+/// total and its own place, and told again only when that changes.
 #[tokio::test]
 async fn the_observer_sees_the_render_step() {
     #[derive(Debug, Default)]
@@ -449,18 +488,19 @@ async fn the_observer_sees_the_render_step() {
     }
 
     let (q, lease) = chat_and_image();
+    let second_lease = q.lease(1).expect("flux is resident");
     let gate = q.generation_gate();
     let turn = granted(pin!(gate.render_turn(lease, None)).as_mut());
     let seen = Arc::new(Seen::default());
     let observer = Arc::clone(&seen) as Arc<dyn GateWaitObserver>;
-    let mut llm = pin!(gate.llm_turn(Some(observer)));
+    let mut second = pin!(gate.render_turn(second_lease, Some(observer)));
 
-    assert!(poll(llm.as_mut()).is_pending());
+    assert!(poll(second.as_mut()).is_pending());
     // Woken with nothing new to say: no second report.
     q.notify();
-    assert!(poll(llm.as_mut()).is_pending());
+    assert!(poll(second.as_mut()).is_pending());
     turn.progress(3, 20);
-    assert!(poll(llm.as_mut()).is_pending());
+    assert!(poll(second.as_mut()).is_pending());
 
     let wait = |step, total| GateWait {
         reason: WaitReason::ImageRender,
@@ -470,14 +510,16 @@ async fn the_observer_sees_the_render_step() {
     };
     assert_eq!(*seen.0.lock().unwrap(), [wait(0, 0), wait(3, 20)]);
     drop(turn);
-    drop(granted(llm.as_mut()));
+    drop(granted(second.as_mut()));
 }
 
 /// The dashboard's view of the gate: the render holding it names its image
-/// model and step, the chats in flight are counted, and so are the waiters.
+/// model and step, the chats in flight are counted, and so are the renders
+/// waiting.
 #[tokio::test]
 async fn the_snapshot_shows_the_render_the_chats_and_the_line() {
     let (q, lease) = chat_and_image();
+    let second_lease = q.lease(1).expect("flux is resident");
     let gate = q.generation_gate();
     assert_eq!(q.snapshot().generation, GenerationSnapshot::default());
 
@@ -495,8 +537,8 @@ async fn the_snapshot_shows_the_render_the_chats_and_the_line() {
     drop(in_flight);
     let turn = granted(render.as_mut());
     turn.progress(2, 4);
-    let mut llm = pin!(gate.llm_turn(None));
-    assert!(poll(llm.as_mut()).is_pending());
+    let mut second = pin!(gate.render_turn(second_lease, None));
+    assert!(poll(second.as_mut()).is_pending());
     assert_eq!(
         q.snapshot().generation,
         GenerationSnapshot {
@@ -511,18 +553,7 @@ async fn the_snapshot_shows_the_render_the_chats_and_the_line() {
     );
 
     drop(turn);
-    let chat_turn = granted(llm.as_mut());
-    let generation = q.snapshot().generation;
-    assert_eq!(
-        (
-            generation.render,
-            generation.llm_inflight,
-            generation.waiting
-        ),
-        (None, 1, 0),
-        "an explicit LLM turn counts"
-    );
-    drop(chat_turn);
+    drop(granted(second.as_mut()));
 }
 
 /// A Stop on the image model asks the render that draws with it and empties
@@ -556,21 +587,18 @@ async fn a_stop_asks_the_render_that_holds_the_model() {
 async fn a_stop_sends_a_waiting_render_out_of_the_line() {
     let (q, lease) = chat_and_image();
     let gate = q.generation_gate();
-    let chat = granted(pin!(gate.llm_turn(None)).as_mut());
+    let in_flight = q.lease(PRIMARY_SLOT).expect("qwen is resident");
     let mut render = pin!(gate.render_turn(lease, None));
     assert!(poll(render.as_mut()).is_pending());
     assert_eq!(inflight(&q, 1), 1);
 
-    // A chat that arrived after the render waits in the line behind it.
-    let mut behind = pin!(gate.llm_turn(None));
-    assert!(poll(behind.as_mut()).is_pending());
+    // A chat that arrived after the render waits behind it.
+    let (behind, decision) = chat(&q);
+    assert_eq!(decision, AdmissionDecision::Wait);
 
     assert!(q.ask_render_stop(FLUX));
     assert!(!q.render_stop_asked(FLUX), "it never drew");
 
-    // Only the asked render leaves: the chat behind it, asked first, is
-    // still waiting on it and is not told the stop.
-    assert!(poll(behind.as_mut()).is_pending());
     match poll(render.as_mut()) {
         Poll::Ready(Err(GateError::Unavailable(why))) => assert_eq!(why, RENDER_STOPPED),
         other => panic!("expected the stop, got {other:?}"),
@@ -578,6 +606,12 @@ async fn a_stop_sends_a_waiting_render_out_of_the_line() {
     assert_eq!(q.slot(1).map(|r| r.model_id), Some(FLUX));
     assert_eq!(inflight(&q, 1), 0, "its lease went back to its own slot");
     assert!(!q.ask_render_stop(FLUX), "no render holds the model now");
-    drop(granted(behind.as_mut()));
-    drop(chat);
+
+    drop(in_flight);
+    assert_eq!(
+        q.poll(&behind, NEVER_FITS),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT },
+        "the chat behind it goes on"
+    );
+    drop(q.claim(PRIMARY_SLOT));
 }

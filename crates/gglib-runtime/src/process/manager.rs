@@ -15,9 +15,8 @@ use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::{AdmissionSnapshot, LaunchPlan};
 use gglib_core::ports::{
-    Admission, AdmissionLease, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides,
-    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ProcessHandle, ResidencyObserver,
-    RunningTarget,
+    Admission, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides, ModelCatalogPort,
+    ModelLaunchSpec, ModelRuntimeError, ProcessHandle, ResidencyObserver, RunningTarget,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
@@ -195,7 +194,7 @@ impl ProcessManager {
         self.residency.current_model()
     }
 
-    /// Stop the model in the primary slot, even one a run holds.
+    /// Stop the model in the primary slot.
     ///
     /// # Errors
     ///
@@ -204,8 +203,7 @@ impl ProcessManager {
         self.residency.stop_primary(&self.core).await
     }
 
-    /// Stop model `model_id` in whichever slot holds it, even one a run
-    /// holds. See
+    /// Stop model `model_id` in whichever slot holds it. See
     /// [`ModelRuntimePort::stop_model`](gglib_core::ports::ModelRuntimePort::stop_model).
     ///
     /// # Errors
@@ -215,14 +213,11 @@ impl ProcessManager {
         self.residency.stop_model(model_id, &self.core).await
     }
 
-    /// Stop the model in the primary slot unless a run holds it. See
+    /// Empty the primary slot and stop its model, for the proxy's watchdog.
+    /// See
     /// [`ModelRuntimePort::recycle_current`](gglib_core::ports::ModelRuntimePort::recycle_current).
-    ///
-    /// # Errors
-    ///
-    /// [`ModelRuntimeError::AdmissionTimeout`] while a run holds it.
-    pub async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
-        self.residency.recycle(PRIMARY_SLOT, &self.core).await
+    pub async fn recycle_current(&self) {
+        self.residency.recycle(PRIMARY_SLOT, &self.core).await;
     }
 
     /// List running servers as [`ProcessHandle`]s.
@@ -259,14 +254,6 @@ impl ProcessManager {
     #[must_use]
     pub fn pinned(&self) -> Option<gglib_core::ports::PinnedSpec> {
         self.residency.pinned()
-    }
-
-    /// Keep model `model_id` on `port` loaded, and unrecycled, until the
-    /// returned lease drops. See
-    /// [`ModelRuntimePort::hold`](gglib_core::ports::ModelRuntimePort::hold).
-    #[must_use]
-    pub fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
-        self.residency.queue().hold(port, model_id)
     }
 
     /// The generation gate: whose turn it is to generate, a render's or the

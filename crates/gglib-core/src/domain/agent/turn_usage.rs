@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize, Serializer};
 
-use crate::domain::figures::{count_words, rate_words, seconds_words, tokens_per_second};
+use crate::domain::figures::{rate_words, seconds_words, tokens_per_second, tokens_words};
 
 /// How large the context of the server that answered was, and how many
 /// earlier messages were missing from the request it answered.
@@ -110,7 +110,7 @@ impl TurnUsage {
             Some(seconds_words(seconds)),
             self.tokens_per_second().map(rate_words),
             self.cached_tokens
-                .map(|cached| format!("{} tokens reused", count_words(u64::from(cached)))),
+                .map(|cached| format!("{} reused", tokens_words(u64::from(cached)))),
         ]
         .into_iter()
         .flatten()

@@ -102,7 +102,6 @@ const CODES: &[ErrorCode] = &[
     row("image_model_cannot_chat", INVALID, Some(400), "A chat request named an image model, which draws and cannot chat."),
     row("image_model_incomplete", INVALID, Some(400), "An image model's family needs a file it has none linked for, such as its VAE; the message names every missing role and the gglib model update --component command that links it."),
     row("image_runtime_not_installed", SERVER, Some(503), "An image model was asked for and stable-diffusion.cpp's sd-server is not installed; install it with gglib config sd install. Retrying will not help."),
-    row("image_model_does_not_fit", UNAVAILABLE, Some(503), "An image model needs more memory than is free, and the model it would displace is held by a run; refused at once, retry when that run ends."),
     row("model_does_not_fit", SERVER, Some(507), "A chat model's weights and its smallest context need more memory than this device gives a model; the message gives both sizes. Use a smaller model or quantization. Retrying will not help."),
     // Drawing: `ImageError::code`, on `/v1/images/generations` and the daemon's twin.
     row("not_an_image_model", INVALID, Some(400), "An image request named a model that is not an image model; name an image model, or leave the model out. Also what a run or turn is refused with when its image_model is not an image model."),

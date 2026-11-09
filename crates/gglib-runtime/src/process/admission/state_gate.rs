@@ -7,15 +7,15 @@
 //!
 //! The rules (the plumbing that waits on them is `gate.rs`):
 //!
-//! - **What counts.** The LLM turns in flight are the explicit LLM turns plus
-//!   every in-flight request on a llama-server resident. A lease on an
-//!   `sd-server` resident never counts, and the fast path ignores the gate
-//!   for one, so a render cannot wait on its own lease.
-//! - **Order.** A render starts when no render is held, no LLM turn is in
-//!   flight, and no gate waiter arrived before it. An LLM turn, and a
-//!   llama-server serve or launch, may go when no render is held and no
-//!   render waiter arrived before it, so new chats queue behind a waiting
-//!   render and cannot starve it.
+//! - **What counts.** The LLM requests in flight are the in-flight requests
+//!   on llama-server residents. A lease on an `sd-server` resident never
+//!   counts, and the fast path ignores the gate for one, so a render cannot
+//!   wait on its own lease.
+//! - **Order.** Only renders wait in the gate's line. A render starts when no
+//!   render is held, no LLM request is in flight, and no render arrived
+//!   before it. A llama-server serve or launch may go when no render is held
+//!   and none arrived before it, so new chats queue behind a waiting render
+//!   and cannot starve it.
 //! - **Tickets are not turns.** A request waiting for a slot does not block a
 //!   render: an older chat waiting to evict the very slot a waiting render's
 //!   lease pins would otherwise wait on the render while the render waited
@@ -29,11 +29,11 @@
 //!   lease), and a gate waiter expires under the same stall rule as a ticket,
 //!   [`ADMISSION_DEADLINE`] with nothing moving.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use gglib_core::domain::{GenerationSnapshot, RenderSnapshot, RuntimeKind};
-use gglib_core::ports::{GateWait, TurnKind, WaitReason};
+use gglib_core::ports::{GateWait, WaitReason};
 use tokio::time::Instant;
 
 use super::{ADMISSION_DEADLINE, QueueState, Resident, SlotState};
@@ -43,9 +43,7 @@ use super::{ADMISSION_DEADLINE, QueueState, Resident, SlotState};
 pub(super) struct GateState {
     /// The render that holds the GPU, if one does.
     render: Option<HeldRender>,
-    /// The explicit LLM turns in flight, by id.
-    llm: HashSet<u64>,
-    /// Who is waiting for a turn, oldest first.
+    /// The renders waiting for a turn, oldest first.
     waiters: VecDeque<GateWaiter>,
     /// The id the next granted turn gets.
     next_id: u64,
@@ -56,24 +54,23 @@ pub(super) struct GateState {
 struct HeldRender {
     id: u64,
     /// The slot its lease pins, which holds the image model drawing it.
-    slot: Option<usize>,
+    slot: usize,
     step: u32,
     total: u32,
     /// A Stop was asked of the model in `slot` while this render held it.
     stop_asked: bool,
 }
 
-/// One caller waiting for a turn.
+/// One render waiting for its turn.
 #[derive(Debug)]
 struct GateWaiter {
     seq: u64,
-    kind: TurnKind,
     /// When this waiter last saw the queue move; see [`ADMISSION_DEADLINE`].
     stalled_since: Instant,
     /// The progress epoch this waiter has accounted for.
     seen_epoch: u64,
-    /// A render's lease's slot; `None` for an LLM turn.
-    slot: Option<usize>,
+    /// The slot its lease pins.
+    slot: usize,
     /// A Stop was asked of the model in `slot` while this render waited.
     stop_asked: bool,
 }
@@ -82,9 +79,8 @@ struct GateWaiter {
 #[derive(Debug)]
 pub(in crate::process::admission) struct GateTicket {
     seq: u64,
-    kind: TurnKind,
-    /// A render's lease's slot; `None` for an LLM turn.
-    slot: Option<usize>,
+    /// The slot the render's lease pins.
+    slot: usize,
     created_at: Instant,
 }
 
@@ -97,7 +93,7 @@ pub(in crate::process::admission) enum GateVerdict {
         id: u64,
     },
     /// Wait for a wakeup and ask again. Carries what to tell an observer
-    /// when a render is in the way, and nothing when only LLM turns are.
+    /// when a render is in the way, and nothing when only LLM requests are.
     Wait(Option<GateWait>),
     /// Nothing moved for the whole deadline; the waiter is gone from the
     /// line.
@@ -108,19 +104,16 @@ pub(in crate::process::admission) enum GateVerdict {
 }
 
 impl QueueState {
-    /// Take a place in the gate's line for a turn of `kind`; a render names
-    /// the slot its lease pins.
+    /// Take a place in the gate's line for a render whose lease pins `slot`.
     pub(in crate::process::admission) fn gate_enqueue(
         &mut self,
-        kind: TurnKind,
-        slot: Option<usize>,
+        slot: usize,
         now: Instant,
     ) -> GateTicket {
         let seq = self.next_seq;
         self.next_seq += 1;
         self.gate.waiters.push_back(GateWaiter {
             seq,
-            kind,
             stalled_since: now,
             seen_epoch: self.progress_epoch,
             slot,
@@ -128,7 +121,6 @@ impl QueueState {
         });
         GateTicket {
             seq,
-            kind,
             slot,
             created_at: now,
         }
@@ -150,28 +142,17 @@ impl QueueState {
             self.gate_forget(ticket);
             return GateVerdict::Stopped;
         }
-        let may_go = match ticket.kind {
-            TurnKind::Llm => self.gate_admits_llm(ticket.seq),
-            TurnKind::Render => self.render_may_start(ticket.seq),
-        };
-        if may_go {
+        if self.render_may_start(ticket.seq) {
             self.gate_forget(ticket);
             let id = self.gate.next_id;
             self.gate.next_id += 1;
-            match ticket.kind {
-                TurnKind::Llm => {
-                    self.gate.llm.insert(id);
-                }
-                TurnKind::Render => {
-                    self.gate.render = Some(HeldRender {
-                        id,
-                        slot: ticket.slot,
-                        step: 0,
-                        total: 0,
-                        stop_asked: false,
-                    });
-                }
-            }
+            self.gate.render = Some(HeldRender {
+                id,
+                slot: ticket.slot,
+                step: 0,
+                total: 0,
+                stop_asked: false,
+            });
             return GateVerdict::Granted { id };
         }
         if let Some(waited) = self.gate_stalled(ticket, now) {
@@ -202,12 +183,7 @@ impl QueueState {
     /// What an observer of the waiter `seq` is told, when a render is in its
     /// way: one held, or one queued ahead of it.
     fn behind_a_render(&self, seq: u64) -> Option<GateWait> {
-        let render_ahead = self
-            .gate
-            .waiters
-            .iter()
-            .any(|w| w.kind == TurnKind::Render && w.seq < seq);
-        if self.gate.render.is_none() && !render_ahead {
+        if self.gate.render.is_none() && !self.render_waits_before(seq) {
             return None;
         }
         let (step, total) = self
@@ -223,44 +199,39 @@ impl QueueState {
         })
     }
 
-    /// Whether an LLM turn, or a llama-server serve or launch, arriving as
-    /// `seq` may go: no render held, and none waiting that arrived first.
+    /// Whether a render that arrived before `seq` waits in the gate's line.
+    fn render_waits_before(&self, seq: u64) -> bool {
+        self.gate.waiters.iter().any(|w| w.seq < seq)
+    }
+
+    /// Whether a llama-server serve or launch arriving as `seq` may go: no
+    /// render held, and none waiting that arrived first.
     pub(super) fn gate_admits_llm(&self, seq: u64) -> bool {
-        self.gate.render.is_none()
-            && !self
-                .gate
-                .waiters
-                .iter()
-                .any(|w| w.kind == TurnKind::Render && w.seq < seq)
+        self.gate.render.is_none() && !self.render_waits_before(seq)
     }
 
     /// Whether the render waiter `seq` may start: no render held, no LLM
-    /// turn in flight, and no gate waiter ahead of it. Tickets waiting for a
+    /// request in flight, and no render ahead of it. Tickets waiting for a
     /// slot are not consulted.
     fn render_may_start(&self, seq: u64) -> bool {
-        self.gate.render.is_none()
-            && self.llm_inflight() == 0
-            && !self.gate.waiters.iter().any(|w| w.seq < seq)
+        self.gate.render.is_none() && self.llm_inflight() == 0 && !self.render_waits_before(seq)
     }
 
-    /// The LLM turns in flight: explicit turns plus every in-flight request on
-    /// a llama-server resident. A lease on an `sd-server` resident is not one.
+    /// The LLM requests in flight: every in-flight request on a llama-server
+    /// resident. A lease on an `sd-server` resident is not one.
     fn llm_inflight(&self) -> u32 {
-        let leases: u32 = self
-            .residents()
+        self.residents()
             .filter(|(_, r)| r.runtime == RuntimeKind::Llama)
             .map(|(_, r)| r.inflight)
-            .sum();
-        leases.saturating_add(u32::try_from(self.gate.llm.len()).unwrap_or(u32::MAX))
+            .sum()
     }
 
     /// The gate projected for the dashboard.
     pub(super) fn generation_snapshot(&self) -> GenerationSnapshot {
         GenerationSnapshot {
             render: self.gate.render.as_ref().map(|r| RenderSnapshot {
-                model_name: r
-                    .slot
-                    .and_then(|slot| self.slot(slot))
+                model_name: self
+                    .slot(r.slot)
                     .map(|resident| resident.model_name.clone()),
                 step: r.step,
                 total: r.total,
@@ -278,12 +249,10 @@ impl QueueState {
         }
     }
 
-    /// The turn `id` has ended.
+    /// The render turn `id` has ended.
     pub(in crate::process::admission) fn gate_end(&mut self, id: u64) {
         if self.gate.render.as_ref().is_some_and(|r| r.id == id) {
             self.gate.render = None;
-        } else {
-            self.gate.llm.remove(&id);
         }
         // A turn ending is what everyone behind it was waiting for.
         self.record_progress();
@@ -301,12 +270,8 @@ impl QueueState {
         let Some(slot) = self.slot_holding(model_id) else {
             return (false, false);
         };
-        let held = self.gate.render.as_mut().filter(|r| r.slot == Some(slot));
-        let waiting = self
-            .gate
-            .waiters
-            .iter_mut()
-            .filter(|w| w.kind == TurnKind::Render && w.slot == Some(slot));
+        let held = self.gate.render.as_mut().filter(|r| r.slot == slot);
+        let waiting = self.gate.waiters.iter_mut().filter(|w| w.slot == slot);
         let (mut asked, mut news) = (false, false);
         for stop_asked in held
             .map(|r| &mut r.stop_asked)
@@ -326,7 +291,7 @@ impl QueueState {
         let Some(slot) = self.slot_holding(model_id) else {
             return false;
         };
-        let held = |r: &HeldRender| r.slot == Some(slot) && r.stop_asked;
+        let held = |r: &HeldRender| r.slot == slot && r.stop_asked;
         self.gate.render.as_ref().is_some_and(held)
     }
 

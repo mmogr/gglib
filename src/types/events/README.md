@@ -21,7 +21,7 @@ Download progress types live in `src/services/transport/types/`, not here.
 | `tool_call_start` | LLM emitted a tool call |
 | `tool_call_complete` | Tool executor returned a result, with the images the tool stored, by id and facts |
 | `tool_progress` | How far a long-running tool has got: its stage, pass and steps, or its place in line |
-| `waiting` | The turn waits for an image render or a model load, with that work's step and its place in line |
+| `waiting` | The turn waits for its model to load, with the model and how long the load has taken |
 | `iteration_complete` | One agentic loop iteration finished |
 | `final_answer` | Agent produced final response |
 | `error` | Unrecoverable error in the agent loop |

@@ -76,11 +76,11 @@ crates/gglib-cli/src/handlers/agent_chat/repl.rs 372
 crates/gglib-cli/src/handlers/agent_chat/sight_tests.rs 331
 crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 472
 crates/gglib-cli/src/handlers/agent_chat/turn_tests.rs 349
-crates/gglib-cli/src/handlers/benchmark.rs 1705
+crates/gglib-cli/src/handlers/benchmark.rs 1710
 crates/gglib-cli/src/handlers/config/engine.rs 507
 crates/gglib-cli/src/handlers/config/engine_tests.rs 350
 crates/gglib-cli/src/handlers/config/sd.rs 326
-crates/gglib-cli/src/handlers/config/settings/profiles.rs 416
+crates/gglib-cli/src/handlers/config/settings/profiles.rs 417
 crates/gglib-cli/src/handlers/image_tests.rs 328
 crates/gglib-cli/src/handlers/inference/agent_question.rs 303
 crates/gglib-cli/src/handlers/inference/proxy_tests.rs 320
@@ -90,7 +90,7 @@ crates/gglib-cli/src/handlers/model/download/interactive.rs 400
 crates/gglib-cli/src/handlers/model/list_tests.rs 360
 crates/gglib-cli/src/handlers/model/update.rs 683
 crates/gglib-cli/src/handlers/model/update_surface_tests.rs 368
-crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 390
+crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 395
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 685
 crates/gglib-cli/src/handlers/proxy_dashboard/wire.rs 328
 crates/gglib-cli/src/handlers/up/choose.rs 351
@@ -115,7 +115,7 @@ crates/gglib-core/src/domain/agent/events_tests.rs 312
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 414
 crates/gglib-core/src/domain/agent/openai_history.rs 301
 crates/gglib-core/src/domain/agent/replay.rs 369
-crates/gglib-core/src/domain/agent/replay_made_tests.rs 334
+crates/gglib-core/src/domain/agent/replay_made_tests.rs 351
 crates/gglib-core/src/domain/agent/replay_tests.rs 377
 crates/gglib-core/src/domain/benchmark/agentic.rs 1101
 crates/gglib-core/src/domain/benchmark/agentic_tests.rs 864
@@ -301,7 +301,7 @@ crates/gglib-runtime/src/ports_impl/llm_completion/retry/classify_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/turn_tests.rs 344
-crates/gglib-runtime/src/process/admission/gate_tests.rs 585
+crates/gglib-runtime/src/process/admission/gate_tests.rs 617
 crates/gglib-runtime/src/process/admission/queue_tests.rs 1045
 crates/gglib-runtime/src/process/admission/snapshot_tests.rs 355
 crates/gglib-runtime/src/process/admission/state.rs 801
@@ -322,10 +322,10 @@ crates/gglib-runtime/src/proxy/supervisor.rs 504
 crates/gglib-runtime/src/sd/install/install_tests.rs 320
 crates/gglib-runtime/src/sd/install/release_tests.rs 350
 crates/gglib-runtime/src/sd/server/job.rs 396
-crates/gglib-runtime/src/sd/server/job_leave_tests.rs 537
-crates/gglib-runtime/src/sd/server/job_tests.rs 1105
+crates/gglib-runtime/src/sd/server/job_leave_tests.rs 565
+crates/gglib-runtime/src/sd/server/job_tests.rs 1119
 crates/gglib-runtime/src/server_config_tests.rs 311
 crates/gglib-runtime/src/system/gpu.rs 331
-crates/gglib-runtime/src/system/mod.rs 657
+crates/gglib-runtime/src/system/mod.rs 659
 crates/gglib-runtime/src/unified_server_config.rs 465
 src-tauri/src/tray/icon.rs 367

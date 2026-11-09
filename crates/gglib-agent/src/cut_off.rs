@@ -14,6 +14,7 @@
 //! ([`IfWordless::Answer`]).
 
 use gglib_core::AgentEvent;
+use gglib_core::domain::figures::tokens_words;
 use gglib_core::ports::AgentError;
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -86,7 +87,9 @@ pub(crate) async fn end_on_cut_off<T>(
         ?completion_tokens,
         "the model's turn was cut off at its token limit"
     );
-    let after = completion_tokens.map_or_else(String::new, |n| format!(" after {n} tokens"));
+    let after = completion_tokens.map_or_else(String::new, |n| {
+        format!(" after {}", tokens_words(u64::from(n)))
+    });
     let message = format!(
         "The model's turn ran too long: it was cut off at its token limit{after}, \
          before it finished, so the run was stopped."
@@ -99,7 +102,9 @@ pub(crate) async fn end_on_cut_off<T>(
 /// `completion_tokens`, when the upstream reported them.
 #[must_use]
 pub fn cut_off_warning(completion_tokens: Option<u32>) -> AgentEvent {
-    let after = completion_tokens.map_or_else(String::new, |n| format!(" after {n} tokens"));
+    let after = completion_tokens.map_or_else(String::new, |n| {
+        format!(" after {}", tokens_words(u64::from(n)))
+    });
     AgentEvent::SystemWarning {
         message: format!("{CUT_OFF_WARNING}{after}, before it finished."),
         suggested_action: Some("Raise max_tokens to give it more room.".to_owned()),

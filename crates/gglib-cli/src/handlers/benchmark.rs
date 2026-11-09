@@ -1493,11 +1493,16 @@ fn compare_complete_line(r: &ModelCompareResult) -> String {
         .prompt_tps
         .map_or_else(|| "—".into(), |t| format!("{t:.1} tok/s prompt"));
     let tokens = fmt_count(r.completion_tokens);
+    let unit = if r.completion_tokens == Some(1) {
+        "token"
+    } else {
+        "tokens"
+    };
     let ms = r
         .generation_ms
         .map_or_else(|| "—".into(), |m| format!("{:.1}s", m / 1000.0));
     format!(
-        "{SUCCESS}✓ {gen_tps}  ·  {pp}  ·  {tokens} tokens  ·  {ms}{RESET}",
+        "{SUCCESS}✓ {gen_tps}  ·  {pp}  ·  {tokens} {unit}  ·  {ms}{RESET}",
         SUCCESS = style::SUCCESS,
         RESET = style::RESET
     )

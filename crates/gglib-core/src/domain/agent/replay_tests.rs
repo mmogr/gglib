@@ -323,7 +323,7 @@ fn progress_and_waiting_frames_change_no_row() {
         text("Here it is."),
     ];
     let with_progress = [
-        AgentEvent::image_render_wait(3, 20, 1),
+        AgentEvent::model_load_wait("Qwen3-4B", 3_000),
         started("c1"),
         AgentEvent::ToolProgress {
             tool_call_id: "c1".to_owned(),

@@ -37,6 +37,7 @@ const CONTRACT = JSON.parse(rust('contracts/runs/turn_made.json')) as {
   frames: AgentEvent[];
   metadata: Record<string, unknown>;
   figure_line: string;
+  one_token: { metadata: Record<string, unknown>; figure_line: string };
 };
 
 function drawn(): GglibMessage {
@@ -50,9 +51,9 @@ function drawn(): GglibMessage {
   return messages[0];
 }
 
-function loaded(): GglibMessage {
+function loaded(metadata: Record<string, unknown> = CONTRACT.metadata): GglibMessage {
   return buildLoadedMessage(
-    { id: 12, conversation_id: 1, role: 'assistant', content: 'It restarts.', created_at: '2026-09-30T09:13:00Z', metadata: CONTRACT.metadata },
+    { id: 12, conversation_id: 1, role: 'assistant', content: 'It restarts.', created_at: '2026-09-30T09:13:00Z', metadata },
     1,
   ) as GglibMessage;
 }
@@ -78,6 +79,12 @@ describe('turn_made contract', () => {
     expect(detail[0]).toMatch(/^Qwen3\.8-27B\b/);
     expect(detail).toContain('3,180 tokens read');
     expect(figureDetail(facts(drawn()))).toEqual(detail);
+  });
+
+  it('says one token reused in the singular, as gglib chat prints it', () => {
+    const line = '0.5 s · 1 token reused';
+    expect(CONTRACT.one_token.figure_line).toBe(line);
+    expect(figureParts(facts(loaded(CONTRACT.one_token.metadata))).join(' · ')).toBe(line);
   });
 
   it('gives the same context reading either way, from the counts and the size the turn carried', () => {

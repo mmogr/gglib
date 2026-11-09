@@ -1,5 +1,5 @@
 //! A run for a model that draws images is refused with
-//! `image_model_cannot_chat` before anything is admitted, held or written:
+//! `image_model_cannot_chat` before anything is admitted or written:
 //! here a device's turn on a hub chat whose model draws.
 
 use std::path::PathBuf;
@@ -11,8 +11,7 @@ use gglib_core::domain::chat::NewConversation;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::{ImageFamily, NewModel};
 use gglib_core::ports::{
-    Admission, AdmissionLease, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget,
-    RunsPort as _,
+    Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget, RunsPort as _,
 };
 
 use super::super::hub_turn::start;
@@ -33,12 +32,10 @@ fn turn(conversation_id: i64, content: &str) -> HubTurn {
     }
 }
 
-/// A runtime that counts every admission and hold it is asked for, and
-/// grants none.
+/// A runtime that counts every admission it is asked for, and grants none.
 #[derive(Debug, Default)]
 struct Counting {
     admitted: AtomicUsize,
-    held: AtomicUsize,
 }
 
 #[async_trait]
@@ -66,11 +63,6 @@ impl ModelRuntimePort for Counting {
 
     async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
         Ok(false)
-    }
-
-    fn hold(&self, _port: u16, _model_id: u32) -> Option<AdmissionLease> {
-        self.held.fetch_add(1, Ordering::SeqCst);
-        None
     }
 }
 

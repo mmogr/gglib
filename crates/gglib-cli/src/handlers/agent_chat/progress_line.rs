@@ -129,28 +129,17 @@ mod tests {
     #[test]
     fn a_wait_is_said_in_cores_words_with_the_model_and_its_seconds() {
         use gglib_core::domain::agent::WaitingFor;
-        let wait = |reason, step, total, model: Option<&str>, elapsed_ms| AgentEvent::Waiting {
-            reason,
-            step,
-            total,
-            position: 1,
-            model: model.map(str::to_owned),
-            elapsed_ms,
+        let wait = AgentEvent::Waiting {
+            reason: WaitingFor::ModelLoad,
+            step: 0,
+            total: 0,
+            position: 0,
+            model: Some("Qwen3-4B".to_owned()),
+            elapsed_ms: Some(12_000),
             said: None,
         };
         assert_eq!(
-            progress_line(&wait(WaitingFor::ImageRender, 3, 20, None, None)).as_deref(),
-            Some("Waiting for an image render, step 3 of 20")
-        );
-        assert_eq!(
-            progress_line(&wait(
-                WaitingFor::ModelLoad,
-                0,
-                0,
-                Some("Qwen3-4B"),
-                Some(12_000)
-            ))
-            .as_deref(),
+            progress_line(&wait).as_deref(),
             Some("Loading Qwen3-4B… 12 s")
         );
     }

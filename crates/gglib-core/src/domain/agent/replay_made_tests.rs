@@ -84,6 +84,23 @@ fn turn_made() -> Value {
         "frames": frames,
         "metadata": made(assistants(&saved)[0]),
         "figure_line": full_usage().figure_line(),
+        "one_token": one_token_made(),
+    })
+}
+
+/// A short turn the cache gave one token of: its saved metadata and its
+/// figure line, which says the token in the singular.
+fn one_token_made() -> Value {
+    let usage = TurnUsage {
+        duration_ms: 500,
+        cached_tokens: Some(1),
+        ..TurnUsage::default()
+    };
+    let figure_line = usage.figure_line();
+    let saved = rows(&[text("Hi."), AgentEvent::TurnUsage(usage)], true);
+    json!({
+        "metadata": made(assistants(&saved)[0]),
+        "figure_line": figure_line,
     })
 }
 

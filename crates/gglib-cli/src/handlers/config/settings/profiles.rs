@@ -198,6 +198,7 @@ async fn show(ctx: &CliContext, name: &str) -> Result<()> {
         profile.config.reasoning_budget_tokens.map(|n| match n {
             -1 => "-1 (defers to the launch default)".to_owned(),
             0 => "0 (thinking off)".to_owned(),
+            1 => "1 token".to_owned(),
             n => format!("{n} tokens"),
         }),
     );

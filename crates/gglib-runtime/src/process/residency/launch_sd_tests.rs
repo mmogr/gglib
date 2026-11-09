@@ -42,7 +42,6 @@ const IMAGE_ID: u32 = 999_202;
 const LATE_ID: u32 = 999_203;
 const DISPLACED_ID: u32 = 999_204;
 const PLACED_ID: u32 = 999_205;
-const HELD_ID: u32 = 999_206;
 
 const GIB: u64 = 1024 * 1024 * 1024;
 
@@ -448,7 +447,7 @@ async fn an_image_model_launches_on_sd_server_into_the_second_slot() {
     assert!(!recorded.exists(), "the stand-in was not started again");
     drop(again);
 
-    set.recycle(1, &core).await.unwrap();
+    set.recycle(1, &core).await;
     assert!(!core.read().await.is_running(PLACED_ID));
 }
 
@@ -513,49 +512,4 @@ fn an_image_footprint_is_files_plus_the_family_margin() {
     assert_eq!(footprint.weights_bytes, 12 * GIB + 7 * GIB);
     assert_eq!(footprint.kv_bytes, 0);
     assert!(vram::image_footprint(&launch_spec(3, "qwen")).is_none());
-}
-
-// --- a held primary ---
-
-/// An image model too large for the free memory, with a run holding the
-/// chat model in the primary, is refused at once as `ImageModelDoesNotFit`,
-/// naming the held model; the chat model stays and its server runs.
-#[tokio::test]
-async fn an_image_model_behind_a_held_primary_does_not_fit() {
-    gglib_core::paths::isolate_data_root();
-    let dir = tempfile::tempdir().unwrap();
-    let (llama, _) = sleeper(dir.path(), "llama-server");
-    let sd = file(dir.path(), "sd-server");
-    let huge = ModelLaunchSpec {
-        // More than any machine has free, so no reading grants it.
-        file_size_bytes: 1 << 50,
-        ..flux(dir.path(), IMAGE_ID)
-    };
-    let (set, core) = set_and_core(huge, 19_510, &llama, &sd);
-    running_primary(&set, &core, dir.path(), HELD_ID).await;
-    let port = set.queue().slot(PRIMARY_SLOT).unwrap().port;
-    let _held = set.queue().hold(port, HELD_ID).expect("a run holds it");
-
-    let refused = tokio::time::timeout(
-        Duration::from_secs(5),
-        set.admit(&core, "flux", None, None, LaunchOverrides::default()),
-    )
-    .await
-    .expect("refused at once, not queued")
-    .map(|_| ())
-    .unwrap_err();
-
-    match refused {
-        ModelRuntimeError::ImageModelDoesNotFit {
-            model, held_model, ..
-        } => {
-            assert_eq!(model, "flux");
-            assert_eq!(held_model, "qwen");
-        }
-        other => panic!("expected ImageModelDoesNotFit, got {other:?}"),
-    }
-    assert_eq!(set.queue().slot(PRIMARY_SLOT).unwrap().model_id, HELD_ID);
-    let mut core_w = core.write().await;
-    assert!(core_w.is_running(HELD_ID));
-    core_w.kill(HELD_ID).await.unwrap();
 }

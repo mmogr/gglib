@@ -302,8 +302,10 @@ describe('useGglibRuntime, a render\'s frames and progress', () => {
     const id = daemon.only().info.id;
     const custom = () => (hook.result.current.messages.at(-1)!.metadata as { custom: Record<string, unknown> }).custom;
 
-    daemon.emit(id, { type: 'waiting', reason: 'image_render', step: 3, total: 20, position: 1 });
-    await waitFor(() => expect(custom().waiting).toEqual({ reason: 'image_render', step: 3, total: 20, position: 1 }));
+    daemon.emit(id, { type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, said: 'Loading Qwen3-4B… 3 s' });
+    await waitFor(() =>
+      expect(custom().waiting).toEqual({ reason: 'model_load', step: 0, total: 0, position: 0, said: 'Loading Qwen3-4B… 3 s' }),
+    );
     daemon.emit(id, { type: 'prompt_progress', processed: 10, total: 40, cached: 0, time_ms: 5 });
     await waitFor(() => expect(custom().prompt).toBeDefined());
     expect(custom().waiting).toBeUndefined();
