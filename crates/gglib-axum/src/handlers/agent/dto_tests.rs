@@ -139,3 +139,35 @@ fn far_is_absent_unless_the_body_names_a_model_there() {
         })
     );
 }
+
+/// The tool limits Settings › Tools stores reach a turn that names none: a
+/// turn on a chat that saved none of its own, from any door.
+#[test]
+fn a_turn_naming_no_tool_limit_runs_with_the_stored_ones() {
+    let settings = gglib_core::Settings {
+        max_parallel_tools: Some(4),
+        tool_timeout_ms: Some(5_000),
+        ..gglib_core::Settings::default()
+    };
+    let config = AgentRequestConfig::default().into_agent_config(Some(&settings));
+    assert_eq!(config.max_parallel_tools, 4);
+    assert_eq!(config.tool_timeout_ms, 5_000);
+}
+
+/// A chat's own limit, which `hub_turn` names on its turn, outranks the
+/// stored one; a limit it leaves out is still the stored one.
+#[test]
+fn a_chats_own_tool_limit_outranks_the_stored_one() {
+    let settings = gglib_core::Settings {
+        max_parallel_tools: Some(4),
+        tool_timeout_ms: Some(5_000),
+        ..gglib_core::Settings::default()
+    };
+    let named = AgentRequestConfig {
+        max_parallel_tools: Some(2),
+        ..AgentRequestConfig::default()
+    };
+    let config = named.into_agent_config(Some(&settings));
+    assert_eq!(config.max_parallel_tools, 2);
+    assert_eq!(config.tool_timeout_ms, 5_000);
+}

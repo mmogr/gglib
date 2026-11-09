@@ -55,7 +55,7 @@ State words come from `components/status/words.ts`; figures and their words from
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptLine`, `ChatStatusBanners`, `ComposerFooter` with `PlusMenu`, `ModelPicker`, `ModelGoneLine`, `AgentLimitsSheet`) and message rendering (`MessageBubbles`, `ThinkingBlock`, `ToolCallRow`, `TurnFoot`, `TurnActions`, `ReplyArrival`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `MessageActionsContext`), and the picture sheet (`PictureSheet`, `SheetFrame`, `PictureWork`, `PictureBrush`) |
+| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptLine`, `ChatStatusBanners`, `ComposerFooter` with `PlusMenu`, `ModelPicker`, `ModelGoneLine`) and message rendering (`MessageBubbles`, `ThinkingBlock`, `ToolCallRow`, `TurnFoot`, `TurnActions`, `ReplyArrival`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `MessageActionsContext`), and the picture sheet (`PictureSheet`, `SheetFrame`, `PictureWork`, `PictureBrush`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders; `RunPreviewsContext` — the run's preview frames, reaching a reply beside its message and never in it |
 | `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading`, `useModelLoadWait`, `usePictureRedraw`, `usePictureKeeping` |
 

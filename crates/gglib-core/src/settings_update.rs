@@ -31,6 +31,8 @@ pub struct SettingsUpdate {
     pub max_download_queue_size: Option<Option<u32>>,
     pub max_tool_iterations: Option<Option<u32>>,
     pub max_stagnation_steps: Option<Option<u32>>,
+    pub max_parallel_tools: Option<Option<u32>>,
+    pub tool_timeout_ms: Option<Option<u64>>,
     pub default_model_id: Option<Option<i64>>,
     /// See [`Settings::default_image_model_id`](super::Settings::default_image_model_id).
     pub default_image_model_id: Option<Option<i64>>,

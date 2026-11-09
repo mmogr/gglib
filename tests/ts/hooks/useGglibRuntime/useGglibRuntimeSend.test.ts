@@ -21,13 +21,11 @@ import { act, waitFor } from '@testing-library/react';
 vi.mock('../../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
-vi.mock('../../../../src/services/tools', () => ({
-  getToolRegistry: () => ({ getEnabledDefinitions: () => [], getBackendName: (n: string) => n }),
-}));
 
 import { FakeDaemon } from '../../fixtures/fakeDaemon';
 import { conversation, mount, send, shown } from './runtimeHarness';
 import { resetRemoteState } from '../../../../src/services/remoteRegistry';
+import { getTransport } from '../../../../src/services/transport';
 import type { ModelRef } from '../../../../src/types/generated/ModelRef';
 import type { Thinking } from '../../../../src/types/generated/Thinking';
 
@@ -77,19 +75,47 @@ describe('useGglibRuntime send', () => {
     expect(daemon.count('PUT', '/api/messages')).toBe(0);
   });
 
-  it('sends no limits, tools or reasoning, whatever the Agent limits sheet stored: the daemon decides them', async () => {
-    localStorage.setItem(
-      'gglib.chat.agentOverrides',
-      JSON.stringify({ maxParallelTools: 4, toolTimeoutMs: 5000, reasoningEffort: 'high', reasoningBudgetTokens: 2048 }),
-    );
-    try {
-      const hook = await mount(local);
-      send(hook, 'hello');
-      await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-      expect(daemon.only().request).toStrictEqual({ conversation_id: 1, content: 'hello' });
-    } finally {
-      localStorage.removeItem('gglib.chat.agentOverrides');
-    }
+  it('sends no limits, tools or reasoning: the daemon takes them from what the conversation saved', async () => {
+    const hook = await mount(local);
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    expect(daemon.only().request).toStrictEqual({ conversation_id: 1, content: 'hello' });
+    expect(daemon.count('PUT', '/api/conversations/')).toBe(0);
+  });
+
+  it('saves the tools chosen before the chat was made with the chat the send makes, only tools, before its turn starts', async () => {
+    const save = vi.fn((cid: number) => getTransport().updateConversationSettings(cid, { tools: ['builtin:read_file'] }));
+    const hook = await mount({ model: here, tools: () => ({ patch: { tools: ['builtin:read_file'] }, save }) });
+    send(hook, 'hello');
+
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    const order = daemon.requests.map((r) => `${r.method} ${r.url.split('?')[0]}`).filter((r) => !r.startsWith('GET'));
+    expect(order.slice(0, 3)).toEqual(['POST /api/conversations', 'PUT /api/conversations/100', expect.stringMatching(/^PUT \/api\/runs\//)]);
+    expect(daemon.requests.find((r) => r.method === 'PUT' && r.url === '/api/conversations/100')!.body).toStrictEqual({
+      title: null,
+      settings: { tools: ['builtin:read_file'] },
+    });
+    expect(save).toHaveBeenCalledWith(100);
+  });
+
+  it('starts no turn where the tools chosen before the chat was made could not be saved, and says why', async () => {
+    const onError = vi.fn();
+    const save = vi.fn(async () => {
+      throw new Error('Conversation not found: 100');
+    });
+    const hook = await mount({ model: here, onError, tools: () => ({ patch: { no_tools: true }, save }) });
+    send(hook, 'hello');
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(new Error('Conversation not found: 100')));
+    expect(daemon.count('PUT', '/api/runs/')).toBe(0);
+  });
+
+  it('asks nothing of the tools in an open chat: its tools are saved as they change', async () => {
+    const tools = vi.fn(() => ({ patch: { no_tools: true }, save: vi.fn(async () => {}) }));
+    const hook = await mount({ ...local, tools });
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    expect(tools).not.toHaveBeenCalled();
+    expect(daemon.count('PUT', '/api/conversations/')).toBe(0);
   });
 
   it('creates the conversation first when none is open, so the run has one', async () => {

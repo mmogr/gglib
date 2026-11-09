@@ -72,6 +72,14 @@ pub struct SettingsSetArgs {
     /// Maximum stagnation steps before stopping agent loop
     #[arg(long)]
     pub max_stagnation_steps: Option<u32>,
+    /// Tool calls an agent run makes at once, where its chat names none
+    /// (clamped to 1-50 when a loop runs)
+    #[arg(long)]
+    pub max_parallel_tools: Option<u32>,
+    /// How long one tool call may take, in milliseconds, where its chat names
+    /// none (clamped to 100-60000 when a loop runs)
+    #[arg(long)]
+    pub tool_timeout_ms: Option<u64>,
     /// Address the endpoint binds (an IP, e.g. 127.0.0.1 or 0.0.0.0), for
     /// `proxy`, `serve` and the desktop app alike; `--host` on `proxy` and
     /// `serve` overrides it for one run, and `up` binds loopback by name.
@@ -173,8 +181,12 @@ pub struct SettingsSetArgs {
 mod tests {
     use super::{LoopGuardModeArg, SettingsSetArgs};
     use clap::{Args, Command, FromArgMatches};
+    use gglib_core::domain::agent::MIN_TOOL_TIMEOUT_MS;
     use gglib_core::settings::{CONTEXT_SIZE_RANGE, DOWNLOAD_QUEUE_RANGE, MIN_PORT};
-    use gglib_core::{LoopGuardMode, MAX_ITERATIONS_CEILING};
+    use gglib_core::{
+        LoopGuardMode, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
+        MAX_TOOL_TIMEOUT_MS_CEILING,
+    };
 
     /// Every variant maps to its own, and the mapping is the only place the
     /// two enums meet.
@@ -277,6 +289,14 @@ mod tests {
             (
                 "max-tool-iterations",
                 format!("(clamped to 1-{MAX_ITERATIONS_CEILING} "),
+            ),
+            (
+                "max-parallel-tools",
+                format!("(clamped to 1-{MAX_PARALLEL_TOOLS_CEILING} "),
+            ),
+            (
+                "tool-timeout-ms",
+                format!("(clamped to {MIN_TOOL_TIMEOUT_MS}-{MAX_TOOL_TIMEOUT_MS_CEILING} "),
             ),
         ] {
             let arg = command

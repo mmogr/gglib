@@ -126,6 +126,8 @@ const changes: [string, string, Change, UpdateSettingsRequest][] = [
   ['tools', 'MCP drawing', tick('mcp-drawing-input'), { mcpDrawing: false }],
   ['tools', 'tool rounds', disclosed('Agent limits', retype('max-tool-iterations-input', '20')), { maxToolIterations: 20 }],
   ['tools', 'stuck steps', disclosed('Agent limits', retype('max-stagnation-steps-input', '9')), { maxStagnationSteps: 9 }],
+  ['tools', 'parallel tool calls', disclosed('Agent limits', retype('max-parallel-tools-input', '4')), { maxParallelTools: 4 }],
+  ['tools', 'tool timeout', disclosed('Agent limits', retype('tool-timeout-ms-input', '5000')), { toolTimeoutMs: 5000 }],
   ['tools', 'title prompt', retype('title-prompt-input', 'another prompt'), { titleGenerationPrompt: 'another prompt' }],
   ['tools', 'title prompt Reset', async (user) => user.click(screen.getByRole('button', { name: 'Reset' })), { titleGenerationPrompt: null }],
 ];
@@ -158,6 +160,8 @@ describe('the number fields', () => {
     ['models', 'context-size-input', null, 'auto', /the server sizes each launch/, '512', '1000000'],
     ['tools', 'max-tool-iterations-input', 'Agent limits', '25', 'Default: 25', '1', '50'],
     ['tools', 'max-stagnation-steps-input', 'Agent limits', '5', 'Default: 5', '1', '100'],
+    ['tools', 'max-parallel-tools-input', 'Agent limits', '25', 'Default: 25', '1', '50'],
+    ['tools', 'tool-timeout-ms-input', 'Agent limits', '30000', 'Default: 30000', '100', '60000'],
   ];
 
   it.each(NUMBERS)(
@@ -211,6 +215,8 @@ describe('when a change takes effect', () => {
     ['tools', 'mcp-drawing-input', null, null],
     ['tools', 'max-tool-iterations-input', 'Agent limits', null],
     ['tools', 'max-stagnation-steps-input', 'Agent limits', null],
+    ['tools', 'max-parallel-tools-input', 'Agent limits', null],
+    ['tools', 'tool-timeout-ms-input', 'Agent limits', null],
     ['tools', 'title-prompt-input', null, null],
   ];
 

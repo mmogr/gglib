@@ -36,6 +36,7 @@ import type { ImageInput } from '../../hooks/useImageInput';
 import type { ThinkingSwitch } from '../../hooks/useThinkingSwitch';
 import type { UseGglibRuntimeReturn } from '../../hooks/useGglibRuntime';
 import type { DrawSwitch } from '../../hooks/useDrawSwitch';
+import type { ChatTools } from '../../hooks/useChatTools';
 import type { ChatFolder } from '../../hooks/useChatFolder';
 import { NO_PREVIEWS, type RunPreviews } from '../../hooks/useGglibRuntime/runPreviews';
 import { RunPreviewsProvider } from './context/RunPreviewsContext';
@@ -98,6 +99,8 @@ interface ChatMessagesPanelProps {
   branching?: UseGglibRuntimeReturn['branching'];
   /** The Draw button, for the composer's margin. */
   draw?: DrawSwitch;
+  /** The chat's saved tools, for the composer's Tools ▸; none on a far chat. */
+  tools?: ChatTools;
   /** The frames the run's tools are making, by call, for the reply that shows them. */
   previews?: RunPreviews;
   /** The paired machine the chat's model is on (a paired or a far chat), for the composer's away line. */
@@ -159,6 +162,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   folder,
   branching,
   draw,
+  tools,
   previews = NO_PREVIEWS,
   deskName,
   modelGone = null,
@@ -345,6 +349,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       thinking={thinking}
                       folder={folder}
                       draw={draw}
+                      tools={tools}
                       far={source === 'far'}
                       saved={activeConversationId !== null}
                       deskName={deskName}

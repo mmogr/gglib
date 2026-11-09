@@ -31,7 +31,7 @@ use std::collections::BTreeSet;
 
 use gglib_core::DeviceServers;
 use gglib_core::domain::chat::ConversationSettings;
-use gglib_core::ports::RemoteGatewayPort as _;
+use gglib_core::ports::{RemoteGatewayPort as _, names_whole_server};
 use gglib_mcp::BUILTIN_PREFIX;
 
 use super::AgentChatRequest;
@@ -147,7 +147,8 @@ impl Asked {
     /// its late step starts first ([`settle`]): none (`None`) for a device's
     /// run, or one that calls no tool; every one when its chat names no
     /// tool, or names one by its bare name, which any server may have; else
-    /// those whose ids its list names (`{id}:{tool}`).
+    /// those whose ids its list names (`{id}:{tool}`, or `{id}:*` for every
+    /// tool of one).
     fn here_servers(&self) -> Option<Starts> {
         if !matches!(self.reach, Reach::Here { calls: true }) {
             return None;
@@ -179,13 +180,16 @@ impl Asked {
     }
 
     /// Whether the chat's own list names `tool`, an opened tool's qualified
-    /// name: exactly, or by its bare name when the entry has no `:`. An
-    /// entry with one is some tool's whole qualified name.
+    /// name: exactly, by its bare name when the entry has no `:`, or as one
+    /// of every tool of its server (`{id}:*`, [`names_whole_server`]). Any
+    /// other entry with a `:` is some tool's whole qualified name.
     fn names(&self, tool: &str) -> bool {
         let bare = tool.split_once(':').map_or(tool, |(_, bare)| bare);
-        self.narrow
-            .iter()
-            .any(|entry| entry == tool || (!entry.contains(':') && entry == bare))
+        self.narrow.iter().any(|entry| {
+            entry == tool
+                || (!entry.contains(':') && entry == bare)
+                || names_whole_server(entry, tool)
+        })
     }
 }
 

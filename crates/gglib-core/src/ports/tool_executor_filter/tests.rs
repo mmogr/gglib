@@ -259,6 +259,51 @@ async fn another_servers_tool_named_like_a_qualified_entry_is_not_matched() {
     assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG));
 }
 
+/// `{id}:*` is every tool of that server, listed and run, and no other
+/// server's tool, nor a builtin.
+#[tokio::test]
+async fn a_whole_server_entry_allows_every_tool_of_that_server_and_no_other() {
+    let allowed: HashSet<String> = ["3:*".to_owned()].into();
+    let f = FilteredToolExecutor::new(
+        Arc::new(StubExecutor::new(&[
+            "3:search",
+            "3:extract",
+            "4:search",
+            "33:search",
+            "builtin:get_current_time",
+        ])) as Arc<dyn ToolExecutorPort>,
+        allowed,
+    );
+    let listed: Vec<String> = f.list_tools().await.into_iter().map(|t| t.name).collect();
+    assert_eq!(listed, ["3:search", "3:extract"]);
+    assert!(f.execute(&make_call("3:extract")).await.unwrap().success);
+    for theirs in ["4:search", "33:search", "builtin:get_current_time"] {
+        let err = f.execute(&make_call(theirs)).await.unwrap_err();
+        assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG), "{theirs}");
+    }
+}
+
+/// Only a server's number makes an entry whole: `builtin:*` names no
+/// builtin, so it never reaches the image tool, which only Draw offers.
+#[tokio::test]
+async fn builtin_star_names_nothing() {
+    let allowed: HashSet<String> = ["builtin:*".to_owned(), "fs:*".to_owned()].into();
+    let f = FilteredToolExecutor::new(
+        Arc::new(StubExecutor::new(&[
+            "builtin:generate_image",
+            "builtin:get_current_time",
+            "fs:read_file",
+        ])) as Arc<dyn ToolExecutorPort>,
+        allowed,
+    );
+    assert!(f.list_tools().await.is_empty());
+    let err = f
+        .execute(&make_call("builtin:generate_image"))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG));
+}
+
 // ------------------------------------------------------------------
 // EmptyToolExecutor
 // ------------------------------------------------------------------

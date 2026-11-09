@@ -14,6 +14,7 @@ import { loadFailed } from '../../../utils/errors';
 import type { ThinkingSwitch } from '../../../hooks/useThinkingSwitch';
 import type { DrawSwitch } from '../../../hooks/useDrawSwitch';
 import type { ChatFolder } from '../../../hooks/useChatFolder';
+import type { ChatTools } from '../../../hooks/useChatTools';
 import { useModelLoadWait } from '../hooks/useModelLoadWait';
 import { FolderChip } from './FolderChip';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
@@ -51,6 +52,8 @@ interface ComposerFooterProps {
   folder?: ChatFolder;
   /** The Draw switch, which `[+]` › Draw a picture presses. */
   draw?: DrawSwitch;
+  /** The chat's saved tools, which `[+]` › Tools ▸ ticks. */
+  tools?: ChatTools;
   /** A far chat: one of the paired machine's own. */
   far?: boolean;
   /** Whether the chat is a saved conversation (its turns may still be loading), not a new one. */
@@ -161,6 +164,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   thinking,
   folder,
   draw,
+  tools,
   far = false,
   saved = false,
   deskName,
@@ -237,12 +241,12 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
             <PlusMenu
               connected={isServerConnected}
               far={far}
-              modelId={modelId}
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
               folder={folder}
               onTypeFolder={setTypingFolder}
               draw={draw}
+              tools={tools}
             />
             {folder && <FolderChip folder={folder} typing={typingFolder} setTyping={setTypingFolder} />}
             {draw?.armed && <DrawChip draw={draw} />}

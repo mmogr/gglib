@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-Central tool registry for LLM function calling. Manages registration and enablement of both built-in backend tools and dynamically-loaded MCP server tools, handles name sanitization and collision detection, and stores optional React renderers for displaying tool results in the chat UI. It runs nothing: a run sends the enabled tools' backend names as its `tool_filter`, and the daemon executes them.
+Central tool registry for LLM function calling. Manages registration of both built-in backend tools and dynamically-loaded MCP server tools, handles name sanitization and collision detection, names each tool as the daemon knows it (`getBackendName`), and stores optional React renderers for displaying tool results in the chat UI. It runs nothing and chooses nothing: the composer's Tools ▸ lists it, and which tools a chat's runs may call is saved with the chat by those names (`hooks/useChatTools`); the daemon executes them.
 
 ## Architecture
 
@@ -10,14 +10,13 @@ Central tool registry for LLM function calling. Manages registration and enablem
                 Tool Registry (Singleton)
       ┌────────────────────────────────────────┐
       │  tools: Map<name, RegisteredTool>       │
-      │  enabledTools: Set<name>                │
       │  _nameMap: Map<sanitized, originalInfo> │
       └─────────────┬──────────────────────────┘
                     │
       ┌─────────────┼──────────────────┐
       ▼             ▼                  ▼
-builtinIntegration  mcpIntegration  run request (enabled tools,
-(fetch at startup)  (dynamic, per    by backend name)
+builtinIntegration  mcpIntegration  Tools ▸ (every tool, by
+(fetch at startup)  (dynamic, per    backend name)
                      MCP server)    renderers/ (render result)
 ```
 
@@ -25,7 +24,7 @@ builtinIntegration  mcpIntegration  run request (enabled tools,
 
 | File | Role |
 |------|------|
-| `registry.ts` | Core `ToolRegistry`; register, enable/disable, name resolution, renderer lookup |
+| `registry.ts` | Core `ToolRegistry`; register, name resolution, renderer lookup |
 | `types.ts` | `ToolDefinition`, `RegisteredTool`, `ToolResultRenderer` |
 | `builtinIntegration.ts` | Fetches built-in tool definitions from backend at startup; registers them with their renderers |
 | `mcpIntegration.ts` | Registers MCP server tools dynamically; converts MCP → OpenAI format |

@@ -15,9 +15,6 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 vi.mock('../../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
-vi.mock('../../../../src/services/tools', () => ({
-  getToolRegistry: () => ({ getEnabledDefinitions: () => [], getBackendName: (n: string) => n }),
-}));
 
 import { FakeFarDaemon } from '../../fixtures/fakeFarDaemon';
 import { mount, send, shown } from './runtimeHarness';
@@ -246,20 +243,12 @@ describe('useGglibRuntime on the far machine, the Thinking choice', () => {
     nothingHere();
   });
 
-  it('a far turn carries none of the device-wide reasoning controls, with or without the choice', async () => {
-    localStorage.setItem(
-      'gglib.chat.agentOverrides',
-      JSON.stringify({ reasoningEffort: 'high', reasoningBudgetTokens: 2048 }),
-    );
-    try {
-      let said: Thinking | undefined;
-      const hook = await mount({ ...far(1), thinking: () => said && { said, accepted: () => {} } });
-      expect(await exchange(hook, 'one')).toEqual({ content: 'one' });
-      said = 'off';
-      expect(await exchange(hook, 'two')).toEqual({ content: 'two', thinking: 'off' });
-    } finally {
-      localStorage.clear();
-    }
+  it('a far turn carries no reasoning control but the choice, with or without it', async () => {
+    let said: Thinking | undefined;
+    const hook = await mount({ ...far(1), thinking: () => said && { said, accepted: () => {} } });
+    expect(await exchange(hook, 'one')).toEqual({ content: 'one' });
+    said = 'off';
+    expect(await exchange(hook, 'two')).toEqual({ content: 'two', thinking: 'off' });
   });
 
   it('calls the choice accepted once that machine has taken the turn, while its reply is still being written, and not for a turn it refused', async () => {

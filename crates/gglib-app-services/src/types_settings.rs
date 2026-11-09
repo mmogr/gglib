@@ -24,6 +24,12 @@ pub struct AppSettings {
     pub max_download_queue_size: Option<u32>,
     pub max_tool_iterations: Option<u32>,
     pub max_stagnation_steps: Option<u32>,
+    /// Tool calls an agent run makes at once where its chat names none.
+    pub max_parallel_tools: Option<u32>,
+    /// How long one tool call may take, in milliseconds, where its chat
+    /// names none.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub tool_timeout_ms: Option<u64>,
     /// Default model ID for quick commands (e.g., `gglib question`).
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub default_model_id: Option<i64>,
@@ -95,6 +101,8 @@ impl From<gglib_core::Settings> for AppSettings {
             max_download_queue_size: settings.max_download_queue_size,
             max_tool_iterations: settings.max_tool_iterations,
             max_stagnation_steps: settings.max_stagnation_steps,
+            max_parallel_tools: settings.max_parallel_tools,
+            tool_timeout_ms: settings.tool_timeout_ms,
             default_model_id: settings.default_model_id,
             default_image_model_id: settings.default_image_model_id,
             inference_defaults: settings.inference_defaults,
@@ -150,6 +158,12 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub max_stagnation_steps: Option<Option<u32>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub max_parallel_tools: Option<Option<u32>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub tool_timeout_ms: Option<Option<u64>>,
     /// Default model ID for quick commands (e.g., `gglib question`).
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
@@ -251,6 +265,8 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             max_download_queue_size: request.max_download_queue_size,
             max_tool_iterations: request.max_tool_iterations,
             max_stagnation_steps: request.max_stagnation_steps,
+            max_parallel_tools: request.max_parallel_tools,
+            tool_timeout_ms: request.tool_timeout_ms,
             default_model_id: request.default_model_id,
             default_image_model_id: request.default_image_model_id,
             inference_defaults: request.inference_defaults,

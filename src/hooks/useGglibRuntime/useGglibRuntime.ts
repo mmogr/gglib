@@ -15,7 +15,9 @@
  * send there is its text and images, uploaded to that machine, which runs
  * and saves it, and it offers no edit, no regenerate and no new chat. A
  * conversation made here keeps the model the page opened it on (`model`):
- * one of this machine's, or the paired machine's, which then runs it there.
+ * one of this machine's, or the paired machine's, which then runs it there,
+ * and the tools chosen before it was made (`tools`), saved before its first
+ * turn starts.
  * Either kind of send says the chat's Thinking choice only
  * when the caller's `thinking` gives one, and calls its `accepted` once taken;
  * and says `draw` only when the caller's `draw` gives one, likewise. A run on
@@ -59,6 +61,7 @@ import { changeAndAnswer, editOf, regenerateOf, useBranching, type Branching } f
 import { useRunReader, type RunReaderInputs } from './useRunReader';
 import type { RunPreviews } from './runPreviews';
 import type { FolderSaid } from '../useChatFolder';
+import type { ToolsSaid } from '../useChatTools';
 
 export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpened'> {
   conversationId?: number;
@@ -92,6 +95,8 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
   folder?: () => FolderSaid | undefined;
   /** Whether a send says `draw`, asked at each send: something only while the Draw button is armed, and `accepted` is called once its turn is. */
   draw?: () => { accepted: (conversationId?: number) => void; imageModel?: number } | undefined;
+  /** The tools chosen before the chat was made, asked when a send makes it: saved with it before its turn starts. */
+  tools?: () => ToolsSaid | undefined;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -214,6 +219,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         const created = { id: cid, system_prompt: DEFAULT_SYSTEM_PROMPT, created_at: new Date().toISOString() };
         base = buildThreadMessages([], created, cid) as GglibMessage[];
         options.onConversationChanged?.(cid);
+        await options.tools?.()?.save(cid);
       }
       const asked = mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() });
       const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];

@@ -26,7 +26,7 @@ crates/gglib-app-services/src/sampling_explain_tests.rs 728
 crates/gglib-app-services/src/servers.rs 496
 crates/gglib-app-services/src/servers_events_tests.rs 335
 crates/gglib-app-services/src/service_graph.rs 321
-crates/gglib-app-services/src/settings_tests.rs 382
+crates/gglib-app-services/src/settings_tests.rs 415
 crates/gglib-app-services/src/setup.rs 363
 crates/gglib-app-services/src/setup_engines_tests.rs 541
 crates/gglib-app-services/src/test_support.rs 449
@@ -37,7 +37,7 @@ crates/gglib-axum/src/error.rs 331
 crates/gglib-axum/src/handlers/agent/compose.rs 375
 crates/gglib-axum/src/handlers/agent/compose_context_tests.rs 312
 crates/gglib-axum/src/handlers/agent/compose_draw_tests.rs 328
-crates/gglib-axum/src/handlers/agent/device_tools_wired_tests.rs 465
+crates/gglib-axum/src/handlers/agent/device_tools_wired_tests.rs 470
 crates/gglib-axum/src/handlers/agent/dto.rs 321
 crates/gglib-axum/src/handlers/agent/hub_model_tests.rs 304
 crates/gglib-axum/src/handlers/agent/hub_turn.rs 489
@@ -59,7 +59,7 @@ crates/gglib-axum/tests/integration_routes.rs 1066
 crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320
 crates/gglib-cli/src/commands.rs 379
-crates/gglib-cli/src/config_commands/settings_args.rs 307
+crates/gglib-cli/src/config_commands/settings_args.rs 313
 crates/gglib-cli/src/daemon_client/calls.rs 384
 crates/gglib-cli/src/daemon_client/images.rs 321
 crates/gglib-cli/src/daemon_client/images_tests.rs 466
@@ -148,6 +148,7 @@ crates/gglib-core/src/ports/model_catalog.rs 303
 crates/gglib-core/src/ports/model_runtime.rs 837
 crates/gglib-core/src/ports/model_runtime_tests.rs 409
 crates/gglib-core/src/ports/process_runner.rs 336
+crates/gglib-core/src/ports/tool_executor_filter/tests.rs 333
 crates/gglib-core/src/request_pipeline/constrain.rs 344
 crates/gglib-core/src/request_pipeline/drawn_note_tests.rs 416
 crates/gglib-core/src/request_pipeline/messages.rs 388
@@ -173,7 +174,7 @@ crates/gglib-core/src/services/model_verification_remote.rs 482
 crates/gglib-core/src/settings.rs 686
 crates/gglib-core/src/settings_remote.rs 303
 crates/gglib-core/src/settings_remote_tests.rs 325
-crates/gglib-core/src/settings_tests.rs 540
+crates/gglib-core/src/settings_tests.rs 558
 crates/gglib-core/src/sse/parser.rs 781
 crates/gglib-core/src/utils/system/packages.rs 586
 crates/gglib-db/src/loop_guard_trip_writer_tests.rs 302
