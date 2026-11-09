@@ -87,6 +87,8 @@ export function getProxyState(): ProxyState {
  *   loopback). `null` while off, and while up until the status has said.
  * - `key`: whether a request must carry the key, the same way.
  * - `pinnedModel`: the model a pinned run serves, else `null`.
+ * - `pinnedTo`: the pinned state said with that model, in the daemon's
+ *   words (`Pinned to <model>`), else `null`.
  *
  * A status that disagrees with `running` cannot be held (an event drops the
  * status, a read sets both), but the guard stays so a reader never trusts
@@ -97,12 +99,13 @@ export interface EndpointFacts {
   baseUrl: string | null;
   key: KeyState | null;
   pinnedModel: string | null;
+  pinnedTo: string | null;
 }
 
 export function endpointFacts({ running, status }: ProxyState): EndpointFacts {
-  if (!running) return { state: 'off', baseUrl: null, key: null, pinnedModel: null };
+  if (!running) return { state: 'off', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null };
   if (status === null || !status.running) {
-    return { state: 'on', baseUrl: null, key: null, pinnedModel: null };
+    return { state: 'on', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null };
   }
   // A daemon older than this GUI answers without the fields E2 added. The
   // two ship together, but a dev build adopting an installed daemon does
@@ -112,6 +115,7 @@ export function endpointFacts({ running, status }: ProxyState): EndpointFacts {
     baseUrl: status.base_url ?? null,
     key: status.key ?? null,
     pinnedModel: status.pinned_model ?? null,
+    pinnedTo: status.pinned_to ?? null,
   };
 }
 

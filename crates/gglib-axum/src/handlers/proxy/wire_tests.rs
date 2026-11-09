@@ -160,6 +160,7 @@ fn a_crashed_proxy_reports_as_stopped() {
     assert_eq!(status.base_url, None);
     assert_eq!(status.key, None);
     assert_eq!(status.pinned_model, None);
+    assert_eq!(status.pinned_to, None);
 }
 
 /// A listening proxy says `on`, or `pinned` when a model is pinned: the one
@@ -187,6 +188,8 @@ fn a_listening_proxy_says_on_or_pinned() {
     );
     assert_eq!(pinned.state, EndpointState::Pinned);
     assert_eq!(pinned.pinned_model.as_deref(), Some("qwen"));
+    assert_eq!(pinned.pinned_to.as_deref(), Some("Pinned to qwen"));
+    assert_eq!(open.pinned_to, None);
     assert_eq!(pinned.key, Some(KeyState::Required));
 
     // A key the daemon could not read is said as nothing, not guessed.

@@ -1,6 +1,9 @@
 /**
  * The words a state is shown as, one per state, the same words the CLI
- * prints, and the words for whose choice a launch argument is.
+ * prints, and the words for whose choice a launch argument is: the
+ * endpoint, a model's residency, a paired machine's reach, the key rule, an
+ * engine's install, a tool server, the download accelerator and the models
+ * folder.
  * `gglib_core::domain::state_words` is where the state words are written,
  * `ChoiceSource::word` the source words;
  * `contracts/vocabulary/words.json` is that table as the CLI's tests record
@@ -11,7 +14,11 @@
 
 import type { ChoiceSource } from '../../types/generated/ChoiceSource';
 import type { EndpointState } from '../../types/generated/EndpointState';
+import type { EngineState } from '../../types/generated/EngineState';
+import type { FastDownloadsState } from '../../types/generated/FastDownloadsState';
 import type { KeyState } from '../../types/generated/KeyState';
+import type { McpState } from '../../types/generated/McpState';
+import type { ModelsDirState } from '../../types/generated/ModelsDirState';
 import type { ReachState } from '../../types/generated/ReachState';
 import type { ResidencyState } from '../../types/generated/ResidencyState';
 
@@ -51,4 +58,33 @@ export const CHOICE_WORDS: Readonly<Record<ChoiceSource, string>> = {
   model_author: 'model author',
   gglib: 'gglib',
   you: 'you',
+};
+
+/** Whether an engine (llama.cpp, stable-diffusion.cpp) is installed, and works. */
+export const ENGINE_WORDS: Readonly<Record<EngineState, string>> = {
+  installed: 'Installed',
+  not_working: 'Installed, not working',
+  not_installed: 'Not installed',
+};
+
+/** What a tool server (an MCP server) is doing. */
+export const TOOL_SERVER_WORDS: Readonly<Record<McpState, string>> = {
+  running: 'Running',
+  starting: 'Starting',
+  stopped: 'Stopped',
+  failed: 'Failed',
+  unsupported: 'Not supported yet',
+};
+
+/** Whether the download accelerator (hf_xet) is set up. */
+export const FAST_DOWNLOADS_WORDS: Readonly<Record<FastDownloadsState, string>> = {
+  on: 'On',
+  off: 'Off',
+};
+
+/** Whether the models folder is there to write downloads into. */
+export const MODELS_DIR_WORDS: Readonly<Record<ModelsDirState, string>> = {
+  writable: 'Writable',
+  absent: 'Will be created',
+  not_writable: 'Not writable',
 };

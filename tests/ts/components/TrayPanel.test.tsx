@@ -65,8 +65,8 @@ import type { RemoteStatus } from '../../../src/services/transport/types/remote'
 import { activeConnection, dashboardSnapshot, residentSlot } from '../fixtures/dashboard';
 import { device } from '../places/devicesFixtures';
 
-const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
-const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null };
+const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null };
 
 const endpoint = () => screen.getByRole('region', { name: 'Endpoint' });
 const loaded = () => screen.getByRole('region', { name: 'Loaded' });
@@ -145,9 +145,10 @@ describe('the tray panel', () => {
       expect(transport.stopProxy).toHaveBeenCalledTimes(1);
     });
 
-    it('pinned: On · only the model', async () => {
-      await renderTray({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
-      expect(within(endpoint()).getByText(`${ENDPOINT_WORDS.on} · only Qwen3-4B`)).toBeInTheDocument();
+    it('pinned: the daemon\'s Pinned to the model, not a word of its own', async () => {
+      await renderTray({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B' });
+      expect(within(endpoint()).getByText('Pinned to Qwen3-4B')).toBeInTheDocument();
+      expect(within(endpoint()).queryByText(/only/)).not.toBeInTheDocument();
     });
 
     it('key required: says so under the address, and Copy key copies the key revealed for the stream', async () => {

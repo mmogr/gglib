@@ -123,7 +123,7 @@ describe('ChatPlace, model picker', () => {
 
   it("says a running model's state as the endpoint's live stream gives it", async () => {
     const user = userEvent.setup();
-    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null }));
+    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null, pinned_to: null }));
     renderPage();
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     await waitFor(() => expect(dashboard.send).not.toBeNull());
@@ -138,7 +138,7 @@ describe('ChatPlace, model picker', () => {
   it('while the endpoint is pinned, greys every model but the pinned one, the pin its reason', async () => {
     const user = userEvent.setup();
     act(() =>
-      applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b' }),
+      applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b', pinned_to: 'Pinned to llama-3.2-3b' }),
     );
     renderPage();
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
@@ -169,7 +169,7 @@ describe('ChatPlace, model picker', () => {
 
   it('greys nothing and names no pin while the endpoint serves any model', async () => {
     const user = userEvent.setup();
-    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null }));
+    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null, pinned_to: null }));
     renderPage();
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     await pickerGroup(user, 'Loaded');
@@ -314,7 +314,7 @@ describe('ChatPlace, model picker', () => {
       const user = userEvent.setup();
       joinDesk();
       act(() =>
-        applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b' }),
+        applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b', pinned_to: 'Pinned to llama-3.2-3b' }),
       );
       renderOn(null);
       await screen.findByRole('textbox', { name: 'Message' });

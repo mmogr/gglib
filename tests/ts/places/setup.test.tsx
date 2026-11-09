@@ -159,13 +159,13 @@ describe('setup', () => {
 
   it("says This Mac in the daemon's words, and Change saves the folder typed and shows the one read back", async () => {
     // The route names a stored folder `environment`, as it names GGLIB_MODELS_DIR (`paths/models.rs`).
-    transport.getModelsDirectory.mockResolvedValue({ path: '/Volumes/big/models', source: 'environment', default_path: '/x', exists: true, writable: true });
+    transport.getModelsDirectory.mockResolvedValue({ path: '/Volumes/big/models', source: 'environment', default_path: '/x', exists: true, writable: true, state: 'writable' });
     const { user } = start();
     const region = await step('This Mac');
 
     expect(region).toHaveTextContent('macOS ARM64 (Metal) · 43.2 GiB unified memory');
     const folder = within(region).getByRole('group', { name: 'Models folder' });
-    expect(folder).toHaveTextContent('/Users/me/.local/share/llama_models(will be created)');
+    expect(folder).toHaveTextContent('/Users/me/.local/share/llama_models(Will be created)');
 
     await user.click(within(folder).getByRole('button', { name: 'Change' }));
     const field = screen.getByRole('textbox', { name: 'Models folder' });
@@ -178,7 +178,7 @@ describe('setup', () => {
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenCalledWith('/Volumes/big/models'));
     const shown = await within(region).findByRole('group', { name: 'Models folder' });
     expect(shown).toHaveTextContent('/Volumes/big/models');
-    expect(shown).not.toHaveTextContent('will be created');
+    expect(shown).not.toHaveTextContent('Will be created');
     // Where it was set is not said: the route cannot tell a chosen folder from the variable.
     expect(region).not.toHaveTextContent('GGLIB_MODELS_DIR');
   });
@@ -266,7 +266,7 @@ describe('setup', () => {
     await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
     await waitFor(() => expect(order).toEqual(['fast', 'queue']));
     await press(user, 'Back');
-    expect(within(await step('Engines')).getByRole('group', { name: 'Faster downloads' })).toHaveTextContent('set up');
+    expect(within(await step('Engines')).getByRole('group', { name: 'Faster downloads' })).toHaveTextContent(/^Faster downloadsOn$/);
   });
 
   it('queues the model only once the set-up has landed, saying so meanwhile; a Skip then queues nothing', async () => {
@@ -313,7 +313,7 @@ describe('setup', () => {
     expect(within(fast).getByRole('status')).toHaveTextContent('pip failed');
     expect(fast).toHaveTextContent('downloads still work');
     await user.click(within(fast).getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(fast).toHaveTextContent('set up'));
+    await waitFor(() => expect(fast).toHaveTextContent(/^Faster downloadsOn$/));
     expect(api.enableFastDownloads).toHaveBeenCalledTimes(2);
   });
 

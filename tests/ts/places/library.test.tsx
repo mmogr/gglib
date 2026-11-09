@@ -204,6 +204,7 @@ describe('the library place', () => {
         base_url: 'http://192.168.1.5:8080/v1',
         key: 'none_needed',
         pinned_model: null,
+        pinned_to: null,
       }),
     );
     renderLibrary();

@@ -127,7 +127,9 @@ infrastructure concerns (database, filesystem, etc.).
 - `residency` - Whether a second model may stay resident in VRAM beside the
   first (`decide_secondary_slot`, `SecondarySlotDecision`)
 - `state_words` - The word every surface uses for a state (`EndpointState`,
-  `ResidencyState`, `ReachState`, `KeyState`), written once and recorded in
+  `ResidencyState`, `ReachState`, `KeyState`, `EngineState`, `McpState`,
+  `FastDownloadsState`, `ModelsDirState`), and the pinned endpoint with its
+  model (`EndpointState::pinned_to`), written once and recorded in
   `contracts/vocabulary/words.json`.
 - `admission` - What the admission queue and the VRAM resident set look like
   right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in

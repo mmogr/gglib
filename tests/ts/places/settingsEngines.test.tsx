@@ -23,6 +23,7 @@ import '@testing-library/jest-dom';
 import type { EngineStatus, LlamaProgressEvent, PinState, RuntimeKind, SetupStatus } from '../../../src/types/setup';
 import type { RenderedApp } from './harness';
 import { appSettings } from '../fixtures/settings';
+import { engineState } from './setupFixtures';
 
 interface Stream {
   onEvent: (event: LlamaProgressEvent) => void;
@@ -62,7 +63,7 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
   }),
   getSetupStatus: vi.fn(async () => {
     if (fake.refuseSetupStatus) throw new Error(fake.refuseSetupStatus);
-    return { ...fake.setup };
+    return { ...fake.setup, fastDownloads: fake.setup.fastDownloadReady ? 'on' : 'off' };
   }),
   enableFastDownloads: vi.fn(async () => {
     fake.enabled += 1;
@@ -126,6 +127,7 @@ function status(
     kind,
     installed,
     broken: null,
+    state: engineState(installed, overrides.broken ?? null),
     binaryPath: `/data/.${e.word}/bin/${e.server}`,
     install: installed ? { built: false, release, platform: e.download, date: '2026-10-01T00:00:00Z' } : null,
     recordError: null,

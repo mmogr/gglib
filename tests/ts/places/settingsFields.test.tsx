@@ -238,7 +238,7 @@ describe('the models folder', () => {
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenCalledWith('/models'));
     expect(transport.setModelsDirectory).toHaveBeenCalledTimes(1);
     expect(writes()).toEqual([]);
-    expect(await screen.findByText('exists · writable')).toBeInTheDocument();
+    expect(await screen.findByText('Writable')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenLastCalledWith('/custom/models'));
   });
@@ -257,16 +257,23 @@ describe('the models folder', () => {
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenCalledWith('/Volumes/big/models'));
   });
 
-  it('says a folder that is not there yet, or cannot be written, with the attention mark', async () => {
-    daemon.folder = { ...daemon.folder, exists: false, writable: false };
+  it('says a folder that is not there yet, or cannot be written, in the served word with the attention mark', async () => {
+    daemon.folder = { ...daemon.folder, exists: false, writable: false, state: 'absent' };
+    const first = renderApp('/settings/models');
+    const absent = await screen.findByText('Will be created');
+    expect(absent.closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
+    expect(screen.queryByText(/not writable/i)).not.toBeInTheDocument();
+    first.unmount();
+
+    daemon.folder = { ...daemon.folder, exists: true, writable: false, state: 'not_writable' };
     renderApp('/settings/models');
-    const said = await screen.findByText('will be created · not writable');
-    expect(said.closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
+    const locked = await screen.findByText('Not writable');
+    expect(locked.closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
   });
 
   it('says a folder that is there and writable plainly, with no mark', async () => {
     renderApp('/settings/models');
-    const said = await screen.findByText('exists · writable');
+    const said = await screen.findByText('Writable');
     expect(said.closest('[data-kind]')).toBeNull();
   });
 });

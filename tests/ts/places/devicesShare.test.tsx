@@ -51,7 +51,7 @@ const invite = () => screen.getByRole('button', { name: 'Invite a device' });
 const sheet = () => screen.getByRole('region', { name: 'Pairing code' });
 
 function keyRequired() {
-  applyProxyStatus({ running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'required', pinned_model: null });
+  applyProxyStatus({ running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'required', pinned_model: null, pinned_to: null });
 }
 
 describe('This Mac', () => {

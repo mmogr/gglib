@@ -100,8 +100,8 @@ import { renderApp } from './harness';
 const QWEN = guiModel({ id: 1, name: 'Qwen3-4B', openaiId: 'Qwen3-4B' });
 const GEMMA = guiModel({ id: 2, name: 'Gemma-3-4B-It', openaiId: 'Gemma-3-4B-It' });
 
-const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
-const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null };
+const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null };
 
 function renderEndpoint(status: ProxyStatus = UP, path = '/endpoint') {
   library.models = [QWEN, GEMMA];

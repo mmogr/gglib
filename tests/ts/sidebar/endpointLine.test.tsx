@@ -49,6 +49,7 @@ const UP: ProxyStatus = {
   base_url: 'http://192.168.1.20:8080/v1',
   key: 'none_needed',
   pinned_model: null,
+  pinned_to: null,
 };
 
 function serve(modelId: number, type: 'running' | 'stopped' = 'running') {
@@ -66,7 +67,7 @@ describe('the endpoint line', () => {
   });
 
   it('off: says Off, shows no address, and says what a click does', () => {
-    applyProxyStatus({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null });
+    applyProxyStatus({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null });
     render(<EndpointLine />, { wrapper: Wrapper });
     expect(line()).toHaveAccessibleName('Endpoint, Off');
     expect(screen.getByText('Off · click to turn on')).toBeInTheDocument();
@@ -88,11 +89,12 @@ describe('the endpoint line', () => {
     expect(screen.getByText('nothing loaded yet')).toBeInTheDocument();
   });
 
-  it('pinned: says Pinned and names the one model it serves', () => {
-    applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'qwen3-8b' });
+  it('pinned: says Pinned and, under it, the daemon\'s line naming the one model it serves', () => {
+    applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'qwen3-8b', pinned_to: 'Pinned to qwen3-8b' });
     render(<EndpointLine />, { wrapper: Wrapper });
     expect(line()).toHaveAccessibleName('Endpoint, Pinned');
-    expect(screen.getByText('only qwen3-8b')).toBeInTheDocument();
+    expect(screen.getByText('Pinned to qwen3-8b')).toBeInTheDocument();
+    expect(screen.queryByText(/only/)).not.toBeInTheDocument();
   });
 
   it('shows the key glyph only when a request must carry the key', () => {
@@ -106,7 +108,7 @@ describe('the endpoint line', () => {
   });
 
   it('between a start event and the daemon\'s answer, says On and withholds the old address', () => {
-    applyProxyStatus({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null });
+    applyProxyStatus({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null });
     render(<EndpointLine />, { wrapper: Wrapper });
     act(() => ingestProxyEvent({ type: 'proxy_started', port: 8080 }));
     expect(line()).toHaveAccessibleName('Endpoint, On');
@@ -213,10 +215,10 @@ describe('the words of the endpoint line', () => {
   });
 
   it('second line: off, starting, the pin, none, a count', () => {
-    const facts = { state: 'on' as const, baseUrl: 'http://127.0.0.1:8080/v1', key: null, pinnedModel: null };
+    const facts = { state: 'on' as const, baseUrl: 'http://127.0.0.1:8080/v1', key: null, pinnedModel: null, pinnedTo: null };
     expect(secondLine({ ...facts, state: 'off' }, 3)).toBe('Off · click to turn on');
     expect(secondLine({ ...facts, state: 'starting' }, 3)).toBe('Starting');
-    expect(secondLine({ ...facts, state: 'pinned', pinnedModel: 'qwen3-8b' }, 1)).toBe('only qwen3-8b');
+    expect(secondLine({ ...facts, state: 'pinned', pinnedModel: 'qwen3-8b', pinnedTo: 'Pinned to qwen3-8b' }, 1)).toBe('Pinned to qwen3-8b');
     expect(secondLine(facts, 0)).toBe('nothing loaded yet');
     expect(secondLine(facts, 1)).toBe('1 loaded');
     expect(secondLine(facts, 2)).toBe('2 loaded');

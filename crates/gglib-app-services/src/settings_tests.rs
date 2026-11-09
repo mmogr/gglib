@@ -343,3 +343,29 @@ async fn a_queue_size_write_reaches_the_running_download_manager() {
     let calls = downloads.calls.lock().unwrap().clone();
     assert_eq!(calls, ["set_max_queue_size 3", "set_max_queue_size 10"]);
 }
+
+/// The folder's state is what is on disk: a folder that is not there will
+/// be created, one there is writable, one marked read-only is not.
+#[test]
+fn the_folder_state_is_read_from_the_disk() {
+    let root = tempfile::tempdir().expect("a temp folder");
+    let missing = directory_info_at(&root.path().join("models"), "default", String::new());
+    assert_eq!(missing.state, ModelsDirState::Absent);
+    assert!(!missing.exists && !missing.writable);
+
+    let there = directory_info_at(root.path(), "explicit", String::new());
+    assert_eq!(there.state, ModelsDirState::Writable);
+    assert_eq!(there.source, "explicit");
+
+    let locked = root.path().join("locked");
+    std::fs::create_dir(&locked).expect("a folder to lock");
+    let writable = std::fs::metadata(&locked)
+        .expect("its metadata")
+        .permissions();
+    let mut locking = writable.clone();
+    locking.set_readonly(true);
+    std::fs::set_permissions(&locked, locking).expect("read-only");
+    let read_only = directory_info_at(&locked, "explicit", String::new());
+    std::fs::set_permissions(&locked, writable).expect("writable again, to clean up");
+    assert_eq!(read_only.state, ModelsDirState::NotWritable);
+}

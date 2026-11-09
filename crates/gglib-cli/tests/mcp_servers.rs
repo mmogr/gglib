@@ -15,11 +15,9 @@ use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
 
-use gglib_app_services::types::{
-    McpServerConfigDto, McpServerDto, McpServerInfo, McpServerStatusDto, McpToolInfo,
-};
+use gglib_app_services::types::{McpServerConfigDto, McpServerDto, McpServerInfo, McpToolInfo};
 use gglib_core::contracts::http::daemon::{MCP_SERVERS_PATH, mcp_server_start_path};
-use gglib_core::domain::mcp::{McpLifecycle, NewMcpServer};
+use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus, NewMcpServer};
 use gglib_test_http::blocking;
 
 #[path = "support/data_dir.rs"]
@@ -182,7 +180,7 @@ fn a_stored_sse_server_is_listed_as_not_supported_yet_refused_a_run_and_an_edit_
         .find(|line| line.contains("remote"))
         .unwrap_or_else(|| panic!("no row for the server, got: {listed}"));
     assert!(
-        row.contains(" sse ") && row.ends_with("not supported yet"),
+        row.contains(" sse ") && row.ends_with("Not supported yet"),
         "the row names its type and says it is not supported, got: {row}"
     );
 
@@ -654,11 +652,11 @@ fn stand_in_daemon(mut routes: Vec<(String, String)>) -> (u16, Arc<Mutex<Vec<Str
 fn in_the_daemon(
     id: i64,
     name: &str,
-    status: McpServerStatusDto,
+    status: McpServerStatus,
     tools: &[(&str, &str)],
 ) -> McpServerInfo {
-    McpServerInfo {
-        server: McpServerDto {
+    McpServerInfo::new(
+        McpServerDto {
             id,
             name: name.to_owned(),
             server_type: "stdio".to_owned(),
@@ -680,7 +678,7 @@ fn in_the_daemon(
             last_error: None,
         },
         status,
-        tools: tools
+        tools
             .iter()
             .map(|(name, description)| McpToolInfo {
                 name: (*name).to_owned(),
@@ -689,7 +687,7 @@ fn in_the_daemon(
                 title: None,
             })
             .collect(),
-    }
+    )
 }
 
 /// The daemon's list route answering `infos`.
@@ -732,14 +730,14 @@ fn list_shows_the_running_daemons_status_and_tools() {
     let running = in_the_daemon(
         id,
         "fs",
-        McpServerStatusDto::Running,
+        McpServerStatus::Running,
         &[("read_file", "reads"), ("write_file", "writes")],
     );
     let (port, log) = stand_in_daemon(vec![listing(&[running])]);
 
     let listed = succeeded(&mcp_on(root.path(), port, &["list"]));
 
-    assert_eq!(cell(&listed, "fs", "Status"), "running", "{listed}");
+    assert_eq!(cell(&listed, "fs", "Status"), "Running", "{listed}");
     assert_eq!(cell(&listed, "fs", "Tools"), "2", "{listed}");
     assert!(!listed.contains("unknown"), "{listed}");
     assert_eq!(
@@ -748,6 +746,32 @@ fn list_shows_the_running_daemons_status_and_tools() {
             "GET /health HTTP/1.1".to_owned(),
             format!("GET {MCP_SERVERS_PATH} HTTP/1.1")
         ]
+    );
+}
+
+/// A server the daemon has as failed is Failed in its row, the word every
+/// surface uses, and its reason is said under the table.
+#[test]
+fn list_says_a_failed_server_is_failed_and_why() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    let id = added(root.path(), "fs", &[]);
+    let failed = in_the_daemon(
+        id,
+        "fs",
+        McpServerStatus::Error("spawn npx: not found".to_owned()),
+        &[],
+    );
+    let (port, _log) = stand_in_daemon(vec![listing(&[failed])]);
+
+    let listed = succeeded(&mcp_on(root.path(), port, &["list"]));
+
+    assert_eq!(cell(&listed, "fs", "Status"), "Failed", "{listed}");
+    assert_eq!(cell(&listed, "fs", "Tools"), "0", "{listed}");
+    assert!(
+        listed
+            .lines()
+            .any(|line| line == "fs \u{2014} Failed: spawn npx: not found"),
+        "{listed}"
     );
 }
 
@@ -779,7 +803,7 @@ fn tools_prints_what_the_daemons_running_copy_offers() {
     let running = in_the_daemon(
         id,
         "fs",
-        McpServerStatusDto::Running,
+        McpServerStatus::Running,
         &[("read_file", "Read a file")],
     );
     let (port, log) = stand_in_daemon(vec![listing(&[running])]);
@@ -804,11 +828,11 @@ fn tools_prints_what_the_daemons_running_copy_offers() {
 fn tools_starts_a_stopped_server_in_the_daemon() {
     let root = tempfile::tempdir().expect("temp data dir");
     let id = added(root.path(), "fs", &[]);
-    let stopped = in_the_daemon(id, "fs", McpServerStatusDto::Stopped, &[]);
+    let stopped = in_the_daemon(id, "fs", McpServerStatus::Stopped, &[]);
     let started = in_the_daemon(
         id,
         "fs",
-        McpServerStatusDto::Running,
+        McpServerStatus::Running,
         &[("list_directory", "Lists a folder")],
     );
     let (port, log) = stand_in_daemon(vec![listing(&[stopped]), starting(&started)]);
@@ -834,11 +858,11 @@ fn tools_starts_a_stopped_server_in_the_daemon() {
 fn tools_reads_again_when_a_chat_started_the_server_first() {
     let root = tempfile::tempdir().expect("temp data dir");
     let id = added(root.path(), "fs", &[]);
-    let stopped = in_the_daemon(id, "fs", McpServerStatusDto::Stopped, &[]);
+    let stopped = in_the_daemon(id, "fs", McpServerStatus::Stopped, &[]);
     let running = in_the_daemon(
         id,
         "fs",
-        McpServerStatusDto::Running,
+        McpServerStatus::Running,
         &[("list_directory", "Lists a folder")],
     );
     // No start route: the start answers 404, as a refused start would fail.
@@ -863,8 +887,8 @@ fn tools_reads_again_when_a_chat_started_the_server_first() {
 fn tools_of_a_disabled_server_says_so_and_starts_nothing() {
     let root = tempfile::tempdir().expect("temp data dir");
     let id = added(root.path(), "off", &["--disabled"]);
-    let stopped = in_the_daemon(id, "off", McpServerStatusDto::Stopped, &[]);
-    let started = in_the_daemon(id, "off", McpServerStatusDto::Running, &[("t", "d")]);
+    let stopped = in_the_daemon(id, "off", McpServerStatus::Stopped, &[]);
+    let started = in_the_daemon(id, "off", McpServerStatus::Running, &[("t", "d")]);
     let (port, log) = stand_in_daemon(vec![listing(&[stopped]), starting(&started)]);
 
     let said = succeeded(&mcp_on(root.path(), port, &["tools", "off"]));

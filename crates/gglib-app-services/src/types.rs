@@ -5,7 +5,8 @@
 
 use gglib_core::domain::Model;
 use gglib_core::domain::Revision;
-use gglib_core::domain::mcp::McpLifecycle;
+use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus};
+use gglib_core::domain::{McpState, ModelsDirState};
 use gglib_core::ports::ProcessHandle;
 use serde::{Deserialize, Serialize};
 
@@ -403,6 +404,8 @@ pub struct ModelsDirectoryInfo {
     pub default_path: String,
     pub exists: bool,
     pub writable: bool,
+    /// `exists` and `writable` as the one state every surface words.
+    pub state: ModelsDirState,
 }
 
 #[path = "types_settings.rs"]
@@ -513,8 +516,36 @@ pub enum McpServerStatusDto {
 pub struct McpServerInfo {
     pub server: McpServerDto,
     pub status: McpServerStatusDto,
+    /// `status` as the one state every surface words; a failed server's
+    /// reason is `status`'s.
+    pub state: McpState,
     #[serde(default)]
     pub tools: Vec<McpToolInfo>,
+}
+
+impl McpServerInfo {
+    /// `server` in `status`, offering `tools`, with the state `status` is in.
+    #[must_use]
+    pub fn new(server: McpServerDto, status: McpServerStatus, tools: Vec<McpToolInfo>) -> Self {
+        Self {
+            server,
+            state: McpState::of(&status),
+            status: status.into(),
+            tools,
+        }
+    }
+}
+
+impl From<McpServerStatus> for McpServerStatusDto {
+    fn from(status: McpServerStatus) -> Self {
+        match status {
+            McpServerStatus::Running => Self::Running,
+            McpServerStatus::Stopped => Self::Stopped,
+            McpServerStatus::Starting => Self::Starting,
+            McpServerStatus::Error(msg) => Self::Error(msg),
+            McpServerStatus::Unsupported => Self::Unsupported,
+        }
+    }
 }
 
 /// Request to create a new MCP server.

@@ -54,7 +54,7 @@ limits is the chat's per-device `AgentLimitsSection`.
 | `SettingField.tsx` | A field's label, control, hint row (`settingDescriptionId` for `aria-describedby`), restart note and save line |
 | `SaveLine.tsx` | Under a field: the refusal, or "Saved." with Undo |
 | `SecretSetting.tsx` | The API key: Set with nothing stored; Show, Copy, Replace (asked first) and Clear with one held; Undo writing the key before back |
-| `ModelsFolder.tsx` | The models folder: typed, or Change… with the native picker on the desktop, Reset to the default, where it came from, "exists · writable"; its own write (`setModelsDirectory`) with Undo |
+| `ModelsFolder.tsx` | The models folder: typed, or Change… with the native picker on the desktop, Reset to the default, where it came from, its state (`MODELS_DIR_WORDS`: Writable, or Will be created or Not writable with ▲); its own write (`setModelsDirectory`) with Undo |
 | `SamplingDefaults.tsx` | One line of what is set, Change… opening the sampling form in place (the fields set and Add a value), Save writing `inferenceDefaults` alone |
 | `InferenceProfiles.tsx` | The profiles: a row each with "in model picker", Edit and ⋯ Delete… (asked first), Add profile, Install starter profiles (the daemon's nine); the editor in a sheet; every change writes the whole list (`summarize` for a row's values) |
 | `InferenceProfileEditor.tsx` | One profile's form, its fields unchanged (ST-5): name (checked as the server checks it), description, the sixteen numbers left blank to fall through, reasoning effort, Show in the model picker |
@@ -81,16 +81,15 @@ request is answered with a 400."; the API key's "Set", "Replace", "Clear",
 Copy (`components/CopyValue`) and the copy's failures, "Replace the API key?" with "Clients that send the
 old key are refused within a few seconds.", and "The key in use
 could not be read, so it was left as it is: <the daemon's words>"; the
-models folder's "Change…", "Reset", its sources' sentences, "exists" /
-"will be created", "writable" / "not writable", "Choose the models folder";
+models folder's "Change…", "Reset", its sources' sentences, "Choose the
+models folder" (its state is `MODELS_DIR_WORDS`);
 "None" in the model choices and "Model <id> (not an image model in this
 library)"; "Sampling defaults", "None set", "Change…", "Save", "Cancel" and
 the form's caption; "Profiles", its sentence, "No profiles yet. Add one, or
 install the starter profiles.", "in model picker", "Edit", "More for
 <name>", "Delete…" and "Delete the profile "<name>"?", "Add profile", "Edit
-<name>"; the Title prompt's "Reset". Engines: an engine's state
-"Installed", "Installed, not working", "Not installed" (no Rust state word;
-the CLI's `Status:` words), "prebuilt" / "built from source", "Pinned to
+<name>"; the Title prompt's "Reset". Engines (an engine's state is
+`ENGINE_WORDS`, the CLI's `Status:` words): "prebuilt" / "built from source", "Pinned to
 <release>", "Install", "Update to <release>…" with "Update <product> to
 <release>?" and its sentence, "More for <product>", "Reinstall",
 "Remove…" with "Remove <product>?" and its sentence, "Stop <model>
@@ -99,7 +98,7 @@ to remove: …", "Reading <product>…", "Details", the Details labels
 (Install record, "none, installed outside gglib", Release / Built from,
 Download / Acceleration, Downloaded / Built, Binary, Binary reports,
 Serving), `pinStanding`'s sentences, the source build's two sentences;
-"Faster downloads", its sentence, "On" / "Off" (no Rust state word),
+"Faster downloads", its sentence (its state is `FAST_DOWNLOADS_WORDS`),
 "Set up", "Setting up. This can take a minute.", "More for Faster
 downloads", "Turn off", "It needs Python 3.10 or newer. Once that is
 installed:", "Copy the command", "Copied" beside it. About: "gglib

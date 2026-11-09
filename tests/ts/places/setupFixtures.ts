@@ -10,7 +10,18 @@ import type { EngineStatus, PinState, RecommendationDto, RuntimeKind, SetupStatu
 
 const GIB = 1024 ** 3;
 
+/** The state the daemon serves for an engine (`EngineState::of`). */
+export function engineState(installed: boolean, broken: string | null): EngineStatus['state'] {
+  if (!installed) return 'not_installed';
+  return broken === null ? 'installed' : 'not_working';
+}
+
+/**
+ * The setup status, with the accelerator's state the daemon serves beside
+ * `fastDownloadReady` (`FastDownloadsState::of`) unless one is given.
+ */
 export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
+  const ready = overrides.fastDownloadReady ?? true;
   return {
     setupCompleted: false,
     llamaInstalled: false,
@@ -27,9 +38,17 @@ export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
       vulkanGlslcInstalled: false,
       vulkanSpirvHeadersInstalled: false,
     },
-    modelsDirectory: { path: '/Users/me/.local/share/llama_models', source: 'default', default_path: '/Users/me/.local/share/llama_models', exists: false, writable: false },
+    modelsDirectory: {
+      path: '/Users/me/.local/share/llama_models',
+      source: 'default',
+      default_path: '/Users/me/.local/share/llama_models',
+      exists: false,
+      writable: false,
+      state: 'absent',
+    },
     pythonAvailable: true,
-    fastDownloadReady: true,
+    fastDownloadReady: ready,
+    fastDownloads: ready ? 'on' : 'off',
     systemMemory: { totalRamBytes: 48 * GIB, gpuMemoryBytes: 36 * GIB, isUnifiedMemory: true, hasNvidiaGpu: false },
     ...overrides,
   };
@@ -44,6 +63,7 @@ export function engine(kind: RuntimeKind, installed = false, overrides: Partial<
     kind,
     installed,
     broken: null,
+    state: engineState(installed, overrides.broken ?? null),
     binaryPath: `/data/${kind}`,
     install: installed ? { built: false, release: RELEASE[kind], platform: 'Metal', date: '2026-10-26T00:00:00Z' } : null,
     recordError: null,
@@ -78,5 +98,5 @@ export const REC: RecommendationDto = {
   context: 32768,
 };
 
-export const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
-export const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+export const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null };
+export const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null };

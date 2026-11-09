@@ -32,6 +32,10 @@ pub(crate) struct ProxyStatus {
     /// The model this proxy run is pinned to, when started in pinned mode
     /// (`gglib serve`). `None` for the ordinary auto-swapping proxy.
     pub pinned_model: Option<String>,
+    /// The pinned state said with its model, `Pinned to <model>`
+    /// (`EndpointState::pinned_to`), as every surface says it. `None` when
+    /// nothing is pinned.
+    pub pinned_to: Option<String>,
 }
 
 /// Optional configuration for starting the proxy.
@@ -119,6 +123,7 @@ pub(super) fn to_api_status(
             port: Some(address.port()),
             base_url: Some(endpoint_base_url(*address)),
             key,
+            pinned_to: pinned_model.as_deref().map(EndpointState::pinned_to),
             pinned_model,
         },
         // A crashed proxy is not serving, so it reports exactly as a stopped
@@ -130,6 +135,7 @@ pub(super) fn to_api_status(
             base_url: None,
             key: None,
             pinned_model: None,
+            pinned_to: None,
         },
     }
 }

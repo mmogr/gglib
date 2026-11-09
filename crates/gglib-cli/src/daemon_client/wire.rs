@@ -71,6 +71,10 @@ pub(crate) struct ProxyStatusDto {
     pub key: Option<KeyState>,
     #[serde(default)]
     pub pinned_model: Option<String>,
+    /// The pinned state with its model, `Pinned to <model>`, as the daemon
+    /// words it; `None` when nothing is pinned.
+    #[serde(default)]
+    pub pinned_to: Option<String>,
 }
 
 /// One copyable line of a client recipe, as the daemon sends it.

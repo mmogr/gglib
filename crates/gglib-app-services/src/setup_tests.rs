@@ -69,9 +69,31 @@ async fn the_setup_status_sends_the_directory_and_the_memory_the_settings_routes
         status["systemMemory"],
         serde_json::to_value(memory).expect("json")
     );
-    for key in ["path", "source", "default_path", "exists", "writable"] {
+    for key in [
+        "path",
+        "source",
+        "default_path",
+        "exists",
+        "writable",
+        "state",
+    ] {
         assert!(status["modelsDirectory"].get(key).is_some(), "{key}");
     }
+    // The folder's state and the accelerator's are the facts beside them,
+    // said as the one state every surface words.
+    let folder = &status["modelsDirectory"];
+    let want = match (folder["exists"].as_bool(), folder["writable"].as_bool()) {
+        (Some(false), _) => "absent",
+        (Some(true), Some(true)) => "writable",
+        _ => "not_writable",
+    };
+    assert_eq!(folder["state"], want);
+    let fast = if status["fastDownloadReady"] == true {
+        "on"
+    } else {
+        "off"
+    };
+    assert_eq!(status["fastDownloads"], fast);
     for key in ["totalRamBytes", "isUnifiedMemory", "hasNvidiaGpu"] {
         assert!(status["systemMemory"].get(key).is_some(), "{key}");
     }

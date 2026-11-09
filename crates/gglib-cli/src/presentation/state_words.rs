@@ -12,7 +12,10 @@
 mod tests {
     use std::path::PathBuf;
 
-    use gglib_core::domain::{ChoiceSource, EndpointState, KeyState, ReachState, ResidencyState};
+    use gglib_core::domain::{
+        ChoiceSource, EndpointState, EngineState, FastDownloadsState, KeyState, McpState,
+        ModelsDirState, ReachState, ResidencyState,
+    };
     use serde::Serialize;
 
     /// One state: its name on the wire and the word a person reads.
@@ -22,8 +25,8 @@ mod tests {
         word: &'static str,
     }
 
-    /// The tables as the file holds them, each in display order: the four
-    /// state tables, and whose choice a launch argument is.
+    /// The tables as the file holds them, each in display order: the state
+    /// tables, and whose choice a launch argument is.
     #[derive(Serialize)]
     struct Words {
         endpoint: Vec<Recorded>,
@@ -31,6 +34,10 @@ mod tests {
         reach: Vec<Recorded>,
         key: Vec<Recorded>,
         choice: Vec<Recorded>,
+        engine: Vec<Recorded>,
+        tool_server: Vec<Recorded>,
+        fast_downloads: Vec<Recorded>,
+        models_dir: Vec<Recorded>,
     }
 
     fn row<S: Serialize>(state: S, word: &'static str) -> Recorded {
@@ -55,6 +62,16 @@ mod tests {
             reach: ReachState::ALL.iter().map(|s| row(s, s.word())).collect(),
             key: KeyState::ALL.iter().map(|s| row(s, s.word())).collect(),
             choice: ChoiceSource::ALL.iter().map(|s| row(s, s.word())).collect(),
+            engine: EngineState::ALL.iter().map(|s| row(s, s.word())).collect(),
+            tool_server: McpState::ALL.iter().map(|s| row(s, s.word())).collect(),
+            fast_downloads: FastDownloadsState::ALL
+                .iter()
+                .map(|s| row(s, s.word()))
+                .collect(),
+            models_dir: ModelsDirState::ALL
+                .iter()
+                .map(|s| row(s, s.word()))
+                .collect(),
         }
     }
 
