@@ -381,10 +381,11 @@ impl fmt::Display for FastDownloadsState {
 pub enum ModelsDirState {
     /// It is there, and can be written.
     Writable,
-    /// It is not there yet; the first download makes it.
+    /// It is not there yet, and can be made: the first download makes it.
     #[default]
     Absent,
-    /// It is there, and cannot be written.
+    /// It cannot be written: it is there and refuses a write, or it is not
+    /// there and the folder it would be made in refuses one.
     NotWritable,
 }
 
@@ -392,13 +393,14 @@ impl ModelsDirState {
     /// Every state, in display order.
     pub const ALL: [Self; 3] = [Self::Writable, Self::Absent, Self::NotWritable];
 
-    /// The state of a folder that `exists`, and if so is `writable`.
+    /// The state of a folder that `exists` or not, and that can be written
+    /// (made, for one that is not there) or not.
     #[must_use]
     pub const fn of(exists: bool, writable: bool) -> Self {
         match (exists, writable) {
-            (false, _) => Self::Absent,
+            (_, false) => Self::NotWritable,
+            (false, true) => Self::Absent,
             (true, true) => Self::Writable,
-            (true, false) => Self::NotWritable,
         }
     }
 

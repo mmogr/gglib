@@ -72,8 +72,8 @@ pub(crate) struct ProxyStatusDto {
     #[serde(default)]
     pub pinned_model: Option<String>,
     /// The pinned state with its model, `Pinned to <model>`, as the daemon
-    /// words it; `None` when nothing is pinned.
-    #[serde(default)]
+    /// words it; `None` when nothing is pinned. Required, as `state` is:
+    /// the CLI and the daemon ship together.
     pub pinned_to: Option<String>,
 }
 

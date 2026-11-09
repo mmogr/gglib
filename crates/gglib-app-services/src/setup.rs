@@ -50,9 +50,8 @@ pub struct SetupStatus {
     /// Whether Python 3 is available, i.e. whether the optional `hf_xet`
     /// accelerator *could* be provisioned. Downloading does not depend on it.
     pub python_available: bool,
-    /// Whether the `hf_xet` accelerator is already provisioned.
-    pub fast_download_ready: bool,
-    /// `fast_download_ready` as the one state every surface words.
+    /// Whether the `hf_xet` accelerator is already provisioned, as the one
+    /// state every surface words.
     pub fast_downloads: FastDownloadsState,
     /// System memory information.
     pub system_memory: Option<SystemMemoryInfo>,
@@ -145,7 +144,8 @@ impl SetupOps {
             .await
             .is_ok();
 
-        let fast_download_ready = gglib_download::cli_exec::fast_helper_provisioned();
+        let fast_downloads =
+            FastDownloadsState::of(gglib_download::cli_exec::fast_helper_provisioned());
 
         // System memory
         let system_memory = system_memory(self.deps.system_probe.as_ref());
@@ -180,8 +180,7 @@ impl SetupOps {
             gpu_info,
             models_directory,
             python_available,
-            fast_download_ready,
-            fast_downloads: FastDownloadsState::of(fast_download_ready),
+            fast_downloads,
             system_memory,
         })
     }

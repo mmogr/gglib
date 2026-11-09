@@ -5,8 +5,8 @@ use std::sync::Arc;
 use gglib_core::SettingsUpdate;
 use gglib_core::domain::ModelsDirState;
 use gglib_core::paths::{
-    DirectoryCreationStrategy, ModelsDirSource, PathError, default_models_dir, resolve_models_dir,
-    set_models_dir,
+    DirectoryCreationStrategy, ModelsDirSource, PathError, can_write_folder, default_models_dir,
+    resolve_models_dir, set_models_dir,
 };
 use gglib_core::ports::{DownloadManagerPort, SystemProbePort};
 use gglib_core::services::AppCore;
@@ -45,14 +45,16 @@ pub fn models_directory_info() -> Result<ModelsDirectoryInfo, PathError> {
 }
 
 /// The description of the folder at `path`, chosen from `source`: whether
-/// it is there and can be written, and so its state.
+/// it is there, whether it can be written (made, for one that is not
+/// there: `can_write_folder` writes a probe to it or to the folder it would
+/// be made in), and so its state.
 fn directory_info_at(
     path: &std::path::Path,
     source: &str,
     default_path: String,
 ) -> ModelsDirectoryInfo {
     let exists = path.exists();
-    let writable = exists && std::fs::metadata(path).is_ok_and(|m| !m.permissions().readonly());
+    let writable = can_write_folder(path);
     ModelsDirectoryInfo {
         path: path.to_string_lossy().to_string(),
         source: source.to_owned(),

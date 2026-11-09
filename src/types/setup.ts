@@ -43,8 +43,7 @@ export interface SetupStatus {
   gpuInfo: GpuInfo;
   modelsDirectory: ModelsDirectoryInfo;
   pythonAvailable: boolean;
-  fastDownloadReady: boolean;
-  /** `fastDownloadReady` as the state every surface words (`FAST_DOWNLOADS_WORDS`). */
+  /** Whether the accelerator is set up, as the state every surface words (`FAST_DOWNLOADS_WORDS`). */
   fastDownloads: FastDownloadsState;
   systemMemory?: SystemMemoryInfo | null;
 }

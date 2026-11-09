@@ -16,12 +16,8 @@ export function engineState(installed: boolean, broken: string | null): EngineSt
   return broken === null ? 'installed' : 'not_working';
 }
 
-/**
- * The setup status, with the accelerator's state the daemon serves beside
- * `fastDownloadReady` (`FastDownloadsState::of`) unless one is given.
- */
+/** The setup status of a Mac nothing has run on, the accelerator On. */
 export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
-  const ready = overrides.fastDownloadReady ?? true;
   return {
     setupCompleted: false,
     llamaInstalled: false,
@@ -43,12 +39,11 @@ export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
       source: 'default',
       default_path: '/Users/me/.local/share/llama_models',
       exists: false,
-      writable: false,
+      writable: true,
       state: 'absent',
     },
     pythonAvailable: true,
-    fastDownloadReady: ready,
-    fastDownloads: ready ? 'on' : 'off',
+    fastDownloads: 'on',
     systemMemory: { totalRamBytes: 48 * GIB, gpuMemoryBytes: 36 * GIB, isUnifiedMemory: true, hasNvidiaGpu: false },
     ...overrides,
   };

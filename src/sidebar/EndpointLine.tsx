@@ -3,11 +3,11 @@
  *
  * `● Endpoint  On`, the address a client reaches it at with ⧉ beside it,
  * and one secondary line: how many models are loaded, "nothing loaded yet",
- * the daemon's "Pinned to <model>" for a pinned run (`pinned_to`), or "Off ·
- * click to turn on". Every fact is the daemon's: the state word from
+ * the pinned model's name alone for a pinned run (the state word above
+ * already says Pinned), or "Off · click to turn on". Every fact is the daemon's: the state word from
  * `ENDPOINT_WORDS`, the address from the status's `base_url` (the daemon's
  * dial rule, a wildcard bind reached on loopback), the key rule from
- * `KEY_WORDS`, the pinned run's line, the
+ * `KEY_WORDS`, the pinned model's name, the
  * count from the server registry. The sentence around a count is this
  * line's own, until a place says it. ⧉ copies the whole address without
  * opening anything.
@@ -55,7 +55,7 @@ export function shownAddress(baseUrl: string): string {
 export function secondLine(facts: EndpointFacts, loaded: number): string {
   if (facts.state === 'off') return `${ENDPOINT_WORDS.off} · click to turn on`;
   if (facts.state === 'starting') return ENDPOINT_WORDS.starting;
-  if (facts.pinnedTo !== null) return facts.pinnedTo;
+  if (facts.pinnedModel !== null) return facts.pinnedModel;
   if (loaded === 0) return 'nothing loaded yet';
   return `${loaded} loaded`;
 }

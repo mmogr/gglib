@@ -75,6 +75,10 @@ fn the_accelerator_is_on_when_provisioned_and_the_folder_says_whether_it_can_be_
     assert_eq!(FastDownloadsState::On.word(), "On");
     assert_eq!(FastDownloadsState::Off.to_string(), "Off");
     assert_eq!(ModelsDirState::of(false, true), ModelsDirState::Absent);
+    assert_eq!(
+        ModelsDirState::of(false, false),
+        ModelsDirState::NotWritable
+    );
     assert_eq!(ModelsDirState::of(true, true), ModelsDirState::Writable);
     assert_eq!(ModelsDirState::of(true, false), ModelsDirState::NotWritable);
     assert_eq!(ModelsDirState::default(), ModelsDirState::Absent);

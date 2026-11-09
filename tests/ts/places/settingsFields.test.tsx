@@ -258,7 +258,7 @@ describe('the models folder', () => {
   });
 
   it('says a folder that is not there yet, or cannot be written, in the served word with the attention mark', async () => {
-    daemon.folder = { ...daemon.folder, exists: false, writable: false, state: 'absent' };
+    daemon.folder = { ...daemon.folder, exists: false, writable: true, state: 'absent' };
     const first = renderApp('/settings/models');
     const absent = await screen.findByText('Will be created');
     expect(absent.closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');

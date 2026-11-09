@@ -26,7 +26,7 @@ crates/gglib-app-services/src/sampling_explain_tests.rs 728
 crates/gglib-app-services/src/servers.rs 496
 crates/gglib-app-services/src/servers_events_tests.rs 335
 crates/gglib-app-services/src/service_graph.rs 321
-crates/gglib-app-services/src/settings_tests.rs 371
+crates/gglib-app-services/src/settings_tests.rs 382
 crates/gglib-app-services/src/setup.rs 363
 crates/gglib-app-services/src/setup_engines_tests.rs 541
 crates/gglib-app-services/src/test_support.rs 449
@@ -132,7 +132,7 @@ crates/gglib-core/src/domain/recommendation.rs 410
 crates/gglib-core/src/domain/residency.rs 524
 crates/gglib-core/src/domain/runs/wire_tests.rs 307
 crates/gglib-core/src/domain/runtime_capabilities.rs 532
-crates/gglib-core/src/domain/state_words.rs 424
+crates/gglib-core/src/domain/state_words.rs 426
 crates/gglib-core/src/download/auto_pick.rs 404
 crates/gglib-core/src/download/auto_pick_tests.rs 730
 crates/gglib-core/src/download/completion.rs 432

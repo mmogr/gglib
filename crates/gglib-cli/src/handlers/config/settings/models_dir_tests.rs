@@ -27,11 +27,15 @@ fn the_folder_is_shown_with_its_source_and_its_state() {
         ]
     );
     assert_eq!(
-        models_dir_lines(&folder(false, false))[1],
+        models_dir_lines(&folder(false, true))[1],
         "Status: Will be created"
     );
     assert_eq!(
         models_dir_lines(&folder(true, false))[1],
+        "Status: Not writable"
+    );
+    assert_eq!(
+        models_dir_lines(&folder(false, false))[1],
         "Status: Not writable"
     );
 }

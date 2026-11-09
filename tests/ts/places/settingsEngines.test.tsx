@@ -34,7 +34,7 @@ interface Stream {
 const fake = vi.hoisted(() => ({
   statuses: { llama: [], stable_diffusion: [] } as Record<string, unknown[]>,
   streams: { llama: [], stable_diffusion: [] } as Record<string, Stream[]>,
-  setup: { fastDownloadReady: false, pythonAvailable: true },
+  setup: { fastDownloads: 'off', pythonAvailable: true } as Pick<SetupStatus, 'fastDownloads' | 'pythonAvailable'>,
   uninstalled: [] as string[],
   enabled: 0,
   disabled: 0,
@@ -63,18 +63,18 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
   }),
   getSetupStatus: vi.fn(async () => {
     if (fake.refuseSetupStatus) throw new Error(fake.refuseSetupStatus);
-    return { ...fake.setup, fastDownloads: fake.setup.fastDownloadReady ? 'on' : 'off' };
+    return { ...fake.setup };
   }),
   enableFastDownloads: vi.fn(async () => {
     fake.enabled += 1;
     if (fake.hold) await fake.hold;
     if (fake.refuseEnable) throw new Error(fake.refuseEnable);
-    fake.setup.fastDownloadReady = true;
+    fake.setup.fastDownloads = 'on';
   }),
   disableFastDownloads: vi.fn(async () => {
     fake.disabled += 1;
     if (fake.hold) await fake.hold;
-    fake.setup.fastDownloadReady = false;
+    fake.setup.fastDownloads = 'off';
     return { removed: true };
   }),
 }));
@@ -166,7 +166,7 @@ beforeEach(async () => {
   vi.resetModules();
   fake.statuses = { llama: [status('llama', 'atPin')], stable_diffusion: [status('stable_diffusion', 'atPin')] };
   fake.streams = { llama: [], stable_diffusion: [] };
-  fake.setup = { fastDownloadReady: false, pythonAvailable: true } as Pick<SetupStatus, 'fastDownloadReady' | 'pythonAvailable'>;
+  fake.setup = { fastDownloads: 'off', pythonAvailable: true };
   fake.uninstalled = [];
   fake.enabled = 0;
   fake.disabled = 0;
@@ -387,7 +387,8 @@ describe('the engine rows', () => {
     renderApp('/settings/engines');
     const r = await row('llama.cpp');
 
-    expect(await r.findByText('Installed, not working')).toBeInTheDocument();
+    const word = await r.findByText('Installed, not working');
+    expect(word.closest('[data-kind]')).toHaveAttribute('data-kind', 'failed');
     expect(r.getByText('llama-server exited: missing libggml')).toBeInTheDocument();
   });
 
@@ -516,18 +517,18 @@ describe('Faster downloads', () => {
   it('sets it up from Off, and reads On back', async () => {
     renderApp('/settings/engines');
     const r = await row('Faster downloads');
-    expect(await r.findByText('Off')).toBeInTheDocument();
+    expect((await r.findByText('Off')).closest('[data-kind]')).toHaveAttribute('data-kind', 'off');
     expect(r.queryByText('gglib config fast-downloads enable')).not.toBeInTheDocument();
 
     await userEvent.click(r.getByRole('button', { name: 'Set up' }));
 
-    expect(await r.findByText('On')).toBeInTheDocument();
+    expect((await r.findByText('On')).closest('[data-kind]')).toHaveAttribute('data-kind', 'on');
     expect(fake.enabled).toBe(1);
     expect(r.queryByRole('button', { name: 'Set up' })).not.toBeInTheDocument();
   });
 
   it('turns it off from ⋯, and reads Off back', async () => {
-    fake.setup.fastDownloadReady = true;
+    fake.setup.fastDownloads = 'on';
     renderApp('/settings/engines');
     const r = await row('Faster downloads');
     expect(await r.findByText('On')).toBeInTheDocument();

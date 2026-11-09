@@ -185,21 +185,21 @@ describe("setup's engines", () => {
   });
 
   it('sets nothing up for faster downloads on arrival, and says it is set up with a model', async () => {
-    const { region } = await reachEngines(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    const { region } = await reachEngines(setupStatus({ fastDownloads: 'off', pythonAvailable: true }));
     expect(line(region, 'Faster downloads')).toHaveTextContent('set up when you get a model');
     await stream('llama');
     expect(api.enableFastDownloads).not.toHaveBeenCalled();
   });
 
   it('says faster downloads need Python 3 where it is not there, and sets nothing up', async () => {
-    const { region } = await reachEngines(setupStatus({ fastDownloadReady: false, pythonAvailable: false }));
+    const { region } = await reachEngines(setupStatus({ fastDownloads: 'off', pythonAvailable: false }));
     expect(line(region, 'Faster downloads')).toHaveTextContent('needs Python 3; downloads still work');
     await stream('llama');
     expect(api.enableFastDownloads).not.toHaveBeenCalled();
   });
 
   it('says faster downloads are set up when they are', async () => {
-    const { region } = await reachEngines(setupStatus({ fastDownloadReady: true }));
+    const { region } = await reachEngines(setupStatus({ fastDownloads: 'on' }));
     expect(line(region, 'Faster downloads')).toHaveTextContent(/^Faster downloadsOn$/);
   });
 
