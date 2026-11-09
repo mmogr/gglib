@@ -115,9 +115,9 @@ pub struct ContextFit {
     /// [`ContextFit::new`]):
     /// `Fits this machine with 32K context, of 128K trained.`
     pub sentence: String,
-    /// What the served context needs against the budget, with the verdict:
-    /// `fits (35.81 GiB of 48.00 GiB)`; `None` when the fit did not know
-    /// every figure it works from.
+    /// What the served context needs against the share of the budget the
+    /// fit spends, with the verdict: `fits (35.81 GiB of 43.20 GiB usable)`;
+    /// `None` when the budget, the weights or the KV cost is unknown.
     pub note: Option<String>,
 }
 

@@ -25,7 +25,7 @@ row per labelled decision (`rows.ts` holds the one label table), each
 saying the plan's narration for that decision where it has one (the words
 How it ran says), else its arguments, and whose choice it was and why on
 hover; Templates is always drawn (Auto with no flag), the Context row adds the
-daemon's note (`plan.fit.note`, "fits (35.81 GiB of 48.00 GiB)"),
+daemon's note (`plan.fit.note`, "fits (35.81 GiB of 43.20 GiB usable)"),
 Speculative too once
 the person has set it, under the launch line
 (`LaunchPlan::command_line` drawn token by token). Sampling and Reasoning

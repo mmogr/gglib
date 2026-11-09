@@ -19,7 +19,7 @@ Context
   Fits this machine with 128K context, of 256K trained.
   serves at              131072 (fitted to hardware)
   fitted to hardware     131072
-    memory               fits (13.55 GiB of 96.00 GiB)
+    memory               fits (13.55 GiB of 86.40 GiB usable)
     device budget        96.00 GiB
     weights              3.99 GiB
     kv bytes/token       78336

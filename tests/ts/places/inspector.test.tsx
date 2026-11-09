@@ -152,7 +152,7 @@ describe('the inspector, a model on this machine', () => {
   it('says the fit sentence the daemon serves, a refusal as a refusal, and the Context row its note', async () => {
     renderInspector();
     expect(await screen.findByText('Fits this machine with 32K context, of 128K trained.')).toBeInTheDocument();
-    expect(row('Context')).toHaveTextContent('32,768 · fits (35.81 GiB of 48.00 GiB)');
+    expect(row('Context')).toHaveTextContent('32,768 · fits (35.81 GiB of 43.20 GiB usable)');
     cleanup();
 
     // The fit Rust records for a machine whose memory could not be read.

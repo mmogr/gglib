@@ -3,11 +3,13 @@
 //!
 //! Composed once here from [`ContextFit`]'s figures, served on it, and
 //! printed by `gglib model explain`; the GUI shows the served words as
-//! they are. Nothing here fits anything: the verdict is the launch's own
-//! (`fitted` against `serves_at`), and this only spells it.
+//! they are. Nothing here fits anything: the verdict is the context fit's
+//! own test (the weights and the served context's KV cache inside
+//! [`usable_share`] of the budget), and this only spells it.
 
 use super::context_fit::FitInputs;
 use super::launch_plan::ContextFit;
+use super::recommendation::usable_share;
 use crate::download::format::format_size;
 use crate::server_config::ContextSizeSource;
 
@@ -40,27 +42,37 @@ impl ContextFit {
 }
 
 /// The fit sentence: the context the model would be served at, of the
-/// window it was trained for, and whether it fits this machine.
+/// window it was trained for, and whether it fits this machine's memory.
 ///
 /// - `Fits this machine with 32K context, of 128K trained.`
 /// - `Serves at 64K context, of 128K trained; 32K fits this machine.`
+/// - `Fits this machine with 64K context, more than the 32K it was trained for.`
 /// - `Serves at 4K context; gglib could not fit one to this machine: …`,
 ///   naming each figure the fit was missing.
+///
+/// "Fits" is the memory's verdict ([`memory`]), not a comparison with the
+/// rung: a context above the rung can still fit, and a rung the trained
+/// window capped says nothing of memory. The rung is only the figure in
+/// "32K fits this machine", which is true of every rung the fit reaches.
 #[must_use]
 pub(crate) fn fit_sentence(fit: &ContextFit) -> String {
     let at = tokens(fit.serves_at);
-    let trained = fit
-        .trained_ctx
-        .map_or_else(String::new, |t| format!(", of {} trained", tokens(t)));
-    match fit.fitted {
-        None => format!(
+    let trained = fit.trained_ctx.map_or_else(String::new, |t| {
+        if fit.serves_at > t {
+            format!(", more than the {} it was trained for", tokens(t))
+        } else {
+            format!(", of {} trained", tokens(t))
+        }
+    });
+    match (fit.fitted, memory(fit)) {
+        (None, _) => format!(
             "Serves at {at} context{trained}; gglib could not fit one to this machine{}.",
             missing(fit)
         ),
-        Some(fitted) if fit.serves_at <= fitted => {
+        (Some(_), Some(m)) if m.fits() => {
             format!("Fits this machine with {at} context{trained}.")
         }
-        Some(fitted) => format!(
+        (Some(fitted), _) => format!(
             "Serves at {at} context{trained}; {} fits this machine.",
             tokens(fitted)
         ),
@@ -68,27 +80,46 @@ pub(crate) fn fit_sentence(fit: &ContextFit) -> String {
 }
 
 /// What the served context needs (the weights and a KV cache that size)
-/// against the budget, with the verdict: `fits (35.81 GiB of 48.00 GiB)`.
+/// against the share of the budget the runtime spends ([`usable_share`]),
+/// with the verdict: `fits (35.81 GiB of 43.20 GiB usable)`.
 ///
-/// `None` unless the fit knew every figure it works from: without the
-/// trained window the fit refuses whatever the memory, so a verdict beside
-/// a sum would say nothing true.
+/// `None` unless the budget, the weights and the KV cost are all known.
 #[must_use]
 pub(crate) fn fit_note(fit: &ContextFit) -> Option<String> {
-    let budget = fit.budget_bytes?;
-    let weights = fit.weights_bytes?;
-    let per_token = fit.kv_bytes_per_token?;
-    fit.trained_ctx?;
-    let need = weights.saturating_add(per_token.saturating_mul(fit.serves_at));
-    let word = match fit.fitted {
-        Some(fitted) if fit.serves_at <= fitted => "fits",
-        _ => "does not fit",
-    };
+    let m = memory(fit)?;
+    let word = if m.fits() { "fits" } else { "does not fit" };
     Some(format!(
-        "{word} ({} of {})",
-        format_size(need),
-        format_size(budget)
+        "{word} ({} of {} usable)",
+        format_size(m.need),
+        format_size(m.usable)
     ))
+}
+
+/// The served context's memory against what the runtime spends.
+#[derive(Debug, Clone, Copy)]
+struct Memory {
+    need: u64,
+    usable: u64,
+}
+
+impl Memory {
+    /// The context fit's own test: the weights and the KV cache inside the
+    /// usable share, as `fit_context_explained` sizes the rung.
+    const fn fits(self) -> bool {
+        self.need <= self.usable
+    }
+}
+
+/// What the served context needs and what the runtime spends, when the
+/// budget, the weights and the KV cost are known.
+fn memory(fit: &ContextFit) -> Option<Memory> {
+    let per_token = fit.kv_bytes_per_token?;
+    Some(Memory {
+        need: fit
+            .weights_bytes?
+            .saturating_add(per_token.saturating_mul(fit.serves_at)),
+        usable: usable_share(fit.budget_bytes?),
+    })
 }
 
 /// What a refused fit was missing, from the figures that are `None`:

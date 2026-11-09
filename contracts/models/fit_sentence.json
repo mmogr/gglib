@@ -9,7 +9,7 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Fits this machine with 32K context, of 128K trained.",
-    "note": "fits (35.81 GiB of 48.00 GiB)"
+    "note": "fits (35.81 GiB of 43.20 GiB usable)"
   },
   {
     "servesAt": 16384,
@@ -21,7 +21,7 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Fits this machine with 16K context, of 128K trained.",
-    "note": "fits (19.07 GiB of 48.00 GiB)"
+    "note": "fits (19.07 GiB of 43.20 GiB usable)"
   },
   {
     "servesAt": 65536,
@@ -33,7 +33,7 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Serves at 64K context, of 128K trained; 32K fits this machine.",
-    "note": "does not fit (69.28 GiB of 48.00 GiB)"
+    "note": "does not fit (69.28 GiB of 43.20 GiB usable)"
   },
   {
     "servesAt": 30000,
@@ -45,7 +45,31 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Fits this machine with 30,000 context, of 128K trained.",
-    "note": "fits (32.98 GiB of 48.00 GiB)"
+    "note": "fits (32.98 GiB of 43.20 GiB usable)"
+  },
+  {
+    "servesAt": 36000,
+    "source": "explicit",
+    "fitted": 32768,
+    "budgetBytes": 51539607552,
+    "weightsBytes": 2500000000,
+    "kvBytesPerToken": 1097000,
+    "trainedCtx": 131072,
+    "unsnapped": 40005,
+    "sentence": "Fits this machine with 36,000 context, of 128K trained.",
+    "note": "fits (39.11 GiB of 43.20 GiB usable)"
+  },
+  {
+    "servesAt": 65536,
+    "source": "explicit",
+    "fitted": 32768,
+    "budgetBytes": 103079215104,
+    "weightsBytes": 2500000000,
+    "kvBytesPerToken": 1097000,
+    "trainedCtx": 32768,
+    "unsnapped": 32768,
+    "sentence": "Fits this machine with 64K context, more than the 32K it was trained for.",
+    "note": "fits (69.28 GiB of 86.40 GiB usable)"
   },
   {
     "servesAt": 4096,
@@ -57,7 +81,7 @@
     "trainedCtx": 131072,
     "unsnapped": null,
     "sentence": "Serves at 4K context, of 128K trained; gglib could not fit one to this machine.",
-    "note": "does not fit (64.18 GiB of 48.00 GiB)"
+    "note": "does not fit (64.18 GiB of 43.20 GiB usable)"
   },
   {
     "servesAt": 4096,
@@ -105,7 +129,7 @@
     "trainedCtx": null,
     "unsnapped": null,
     "sentence": "Serves at 4K context; gglib could not fit one to this machine: the model does not say what it was trained for.",
-    "note": null
+    "note": "fits (6.51 GiB of 43.20 GiB usable)"
   },
   {
     "servesAt": 4096,

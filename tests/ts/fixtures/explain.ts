@@ -80,7 +80,7 @@ export function chatPlan(overrides: Partial<LaunchPlan> = {}): LaunchPlan {
       trainedCtx: 131072,
       unsnapped: 40005,
       sentence: 'Fits this machine with 32K context, of 128K trained.',
-      note: 'fits (35.81 GiB of 48.00 GiB)',
+      note: 'fits (35.81 GiB of 43.20 GiB usable)',
     },
     ...overrides,
   };

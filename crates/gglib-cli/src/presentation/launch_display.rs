@@ -95,7 +95,8 @@ pub(crate) fn argument_lines(plan: &LaunchPlan) -> Vec<String> {
 ///
 /// It opens with the fit sentence the GUI shows under the model's name,
 /// and the note its Context row says (what the served context needs of
-/// the budget) when the fit knew every figure.
+/// the share of the budget the fit spends) when the budget, the weights
+/// and the KV cost are known.
 ///
 /// Printed whatever the winning rung was. A fit that lost to a number
 /// someone typed is still the fact that says whether the number was a good
@@ -256,8 +257,8 @@ mod tests {
     }
 
     /// Every figure is printed, a refusal as `unknown`, never as a zero,
-    /// under the fit sentence; a refusal that did not know every figure
-    /// has no memory row.
+    /// under the fit sentence; a refusal that did not know the KV cost has
+    /// no memory row.
     #[test]
     fn the_context_section_prints_the_chain_and_the_fits_inputs() {
         let fit = ContextFit::new(
@@ -297,7 +298,7 @@ mod tests {
         );
         assert_eq!(
             context_text(&fit),
-            "Context\n  Fits this machine with 32K context, of 128K trained.\n  serves at              32768 (fitted to hardware)\n  fitted to hardware     32768\n    memory               fits (35.81 GiB of 48.00 GiB)\n    device budget        48.00 GiB\n    weights              2.33 GiB\n    kv bytes/token       1097000\n    trained window       131072\n    before snapping      40005\n"
+            "Context\n  Fits this machine with 32K context, of 128K trained.\n  serves at              32768 (fitted to hardware)\n  fitted to hardware     32768\n    memory               fits (35.81 GiB of 43.20 GiB usable)\n    device budget        48.00 GiB\n    weights              2.33 GiB\n    kv bytes/token       1097000\n    trained window       131072\n    before snapping      40005\n"
         );
     }
 
