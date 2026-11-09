@@ -129,16 +129,16 @@ Not installed.
 $ gglib config llama status
 Status: Installed
 Binary: /Users/mmogr/Library/Application Support/gglib/.llama/bin/llama-server
-Pinned release: b11669, which is the one installed.
+Pinned release: b11960, which is the one installed.
 Health: ✓ Functional
 
 Pre-built download:
-  Version: b11669
+  Version: b11960
   Platform: macOS ARM64 (Metal)
-  Installed: 2026-10-31 06:24:56 UTC
+  Installed: 2026-11-09 10:12:02 UTC
 
-Binary version: version: 0.7.0-dev (build 11669, commit 620d2225c)
-  Build: b11669
+Binary version: version: 0.8.0-dev (build 11960, commit 8642541b2)
+  Build: b11960
   Native capabilities: RuntimeFlags(PEG_NATIVE_TOOL_CALLS)
 ```
 <!-- /snippet -->
@@ -193,7 +193,7 @@ Every location gglib resolved, with its source.
 ```console
 $ gglib config paths
 binary = /Users/mmogr/.local/src/gglib/target/release/gglib
-version = 0.29.0-rc.4 (12c44308c253)
+version = 0.31.0-rc.8 (062c4956c712)
 data_root_source = GGLIB_DATA_DIR
 daemon_port = 9907
 data_root = /Users/mmogr/Library/Application Support/gglib

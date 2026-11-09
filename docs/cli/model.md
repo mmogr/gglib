@@ -12,7 +12,7 @@ Found 3 model(s):
 
 ID  Name                      Model ID               Params   ⚡ t/s      Arch         Quant    Size       Context    Images  Draws Added                File Path
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-3   Qwen3.8-27B               Qwen3.8-27B            27.0     --         qwen35       Q8_0     26.63 GiB  262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
+3   Qwen3.8-27B               Qwen3.8-27B            27.0     --         qwen35       Q8_0     27.05 GiB  262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
 2   Qwen3-4B-Instruct-2507    Qwen3-4B-Instruct-2507 4.0      --         qwen3        Q8_0     3.99 GiB   262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
 1   Qwen3-30B-A3B             Qwen3-30B-A3B          30.0     --         qwen3moe     Q4_K_M   17.28 GiB  40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf
 ```
@@ -60,7 +60,7 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 
   Tags
 ------------------------------------------------------------
-  reasoning, agent, format:qwen-xml
+  agent, format:qwen-xml, reasoning
 
   Capabilities
 ------------------------------------------------------------
@@ -71,7 +71,7 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 
   Timestamps
 ------------------------------------------------------------
-  Added          : 2026-10-31 06:25:37 (7 hours ago)
+  Added          : 2026-10-31 06:25:37 (9 days ago)
 ------------------------------------------------------------
 ```
 <!-- /snippet -->
@@ -149,7 +149,6 @@ Context
 -------------------------------------------------------------------------------------
   Operator flags (gglib proxy --temperature, ...) outrank every layer above.
   Client sampling is ignored, except max_tokens, reasoning_budget_tokens.
-
 ```
 <!-- /snippet -->
 
@@ -195,20 +194,20 @@ $ gglib model search "gemma 3 instruct" --limit 5
 
 📋 Found 5 models:
 ────────────────────────────────────────────────────────────────────────────────
- 1. DavidAU/gemma-4-31B-it-Mystery-Fine-Tune-HERETIC-UNCENSORED-Thinking-Instruct-GGUF (↓2.6K ❤65)
-    Quantizations: Q4_K_S, Q6_K
-
- 2. lm-kit/gemma-3-4b-instruct-gguf (↓1.9K ❤4)
+ 1. lm-kit/gemma-3-4b-instruct-gguf (↓2.3K ❤4)
     Quantizations: F16, Q2_K, Q3_K_L, Q3_K_M, Q3_K_S, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K, Q8_0
 
- 3. mradermacher/gemma-3-12b-it-vl-GLM-4.7-Flash-INSTRUCT-Thinking-Hybrid-Heretic-Uncensored-i1-GGUF (↓1.8K ❤3)
-    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_NL, IQ4_XS, Q2_K, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K
+ 2. DavidAU/gemma-4-31B-it-Mystery-Fine-Tune-HERETIC-UNCENSORED-Thinking-Instruct-GGUF (↓2.2K ❤65)
+    Quantizations: INSTRUCT-Q4_K_S, INSTRUCT-Q6_k, Thinking-Q4_K_S, Thinking-Q6_k, mmproj-BF16, mmproj-F16, mmproj-F32
 
- 4. mradermacher/gemma-3-12b-it-vl-Polaris-GLM-4.7-Flash-VAR-Thinking-Instruct-Heretic-Uncensored-i1-GGUF (↓1.5K ❤6)
-    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_NL, IQ4_XS, Q2_K, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K
+ 3. mradermacher/gemma-3-12b-it-vl-GLM-4.7-Flash-INSTRUCT-Thinking-Hybrid-Heretic-Uncensored-i1-GGUF (↓1.3K ❤3)
+    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_NL, IQ4_XS, Q2_K, Q2_K_S, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K, gemma-3-12b-it-vl-GLM-4.7-Flash-INSTRUCT-Thinking-Hybrid-Heretic-Uncensored.imatrix
 
- 5. mradermacher/Gemma3-27B-it-vl-Polaris-HI16-Heretic-Uncensored-INSTRUCT-i1-GGUF (↓1.3K ❤1)
-    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_XS, Q2_K, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K
+ 4. mradermacher/gemma-3-12b-it-vl-Polaris-GLM-4.7-Flash-VAR-Thinking-Instruct-Heretic-Uncensored-i1-GGUF (↓1.3K ❤6)
+    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_NL, IQ4_XS, Q2_K, Q2_K_S, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K, gemma-3-12b-it-vl-Polaris-GLM-4.7-Flash-VAR-Thinking-Instruct-Heretic-Uncensored.imatrix
+
+ 5. lm-kit/gemma-3-12b-instruct-gguf (↓1.2K ❤1)
+    Quantizations: F16, Q3_K_M, Q4_K_M, Q6_K, Q8_0
 
 💡 To download a model: gglib model download <model_id>
 💡 To list quantizations: gglib model download <model_id> --list-quants

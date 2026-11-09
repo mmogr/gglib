@@ -17,8 +17,8 @@ those snippets; the splice always covers every page.
 
 Renames are applied, as the GIFs rename this machine's user: $HOME becomes
 /Users/mmogr, the demo copy's folder becomes the folder gglib uses by default
-on a Mac, and a `daemon status` line that found the demo's proxy on 8081 is
-shown on its stored port, so a page shows what a reader would see.
+on a Mac, and the demo's proxy port 9908 and llama base port 9600 are shown
+as 8080 and 9300, so a page shows what a reader would see.
 
 A recording that times out is named at the end and the others still run.
 --splice records nothing and splices the .txt files already there, after a
@@ -40,13 +40,21 @@ CLI = HERE.parent / "cli"
 SNIPPETS = CLI / "snippets"
 MARKER = re.compile(r"(<!-- snippet: (\S+) -->\n)(.*?)(<!-- /snippet -->)", re.S)
 HOME = os.path.expanduser("~")
+CHECKOUT = HERE.parent.parent
 RENAMES = [
+    # `config paths` names the gglib on PATH, which may sit in a worktree.
+    f"{CHECKOUT}=/Users/mmogr/.local/src/gglib",
     f"{HOME}=/Users/mmogr",
     "/Users/mmogr/.local/share/gglib-demo=/Users/mmogr/Library/Application Support/gglib",
-    # A recording machine whose own daemon holds 8080 records the demo copy's
-    # proxy on 8081; the status line shows the demo's stored port. Only that
-    # line, so an example that really names 8081 is left alone.
-    "Proxy:   On at http://127.0.0.1:8081/v1=Proxy:   On at http://127.0.0.1:8080/v1",
+    # The machine that records keeps its own gglib on 8080 and 9300 up, so the
+    # demo copy stores proxy port 9908 and llama base port 9600; the pages
+    # show the ports the README sets. Each pair is anchored on the text around
+    # the number, so a figure that holds the same digits is left alone.
+    "127.0.0.1:9908=127.0.0.1:8080",
+    "--port 9908=--port 8080",
+    "proxy-port               9908=proxy-port               8080",
+    "llama-base-port          9600=llama-base-port          9300",
+    "yes (port 9600)=yes (port 9300)",
 ]
 
 

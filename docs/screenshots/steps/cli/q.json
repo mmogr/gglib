@@ -14,7 +14,7 @@
    "sleep": 0.5
   },
   {
-   "type": "gglib q \"In one sentence, what is a GGUF file?\""
+   "type": "gglib q \"Write a haiku about a cold start\""
   },
   {
    "keys": "\r"

@@ -48,4 +48,3 @@ Context
 -------------------------------------------------------------------------------------
   Operator flags (gglib proxy --temperature, ...) outrank every layer above.
   Client sampling is ignored, except max_tokens, reasoning_budget_tokens.
-

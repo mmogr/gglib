@@ -7,13 +7,13 @@ say so, a paired device's chats.
 <!-- snippet: mcp -->
 ```console
 $ gglib mcp add --name filesystem --type stdio --command npx --args="-y,@modelcontextprotocol/server-filesystem,."
-✓ Added MCP server 'filesystem' (id: 2)
+✓ Added MCP server 'filesystem' (id: 4)
 $ gglib mcp list
 Found 1 MCP server(s):
 
 ID   Name                      Type   Enabled   Remote  Lifecycle   Status     Tools 
 -----------------------------------------------------------------------------------
-2    filesystem                stdio  yes       no      lazy        Stopped    0     
+4    filesystem                stdio  yes       no      lazy        Stopped    0     
 $ gglib mcp test filesystem
 Testing connection to 'filesystem'...
 ✓ Connection successful — 14 tool(s) discovered
