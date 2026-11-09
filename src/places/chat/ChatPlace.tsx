@@ -5,9 +5,11 @@
  * whose first send makes the conversation.
  *
  * Leaving it keeps the model loaded (the endpoint serves it to every
- * client); Unload <model> is in the composer's model picker ▾. A model
- * unloaded or crashed while the chat is open replaces the composer with a
- * line that says so, with no banner and no toast.
+ * client); Unload <model> is in the composer's model picker ▾. Nothing
+ * locks the composer: a send loads the chat's model when it is not
+ * loaded, and turns the endpoint on when it is off. While either is so,
+ * one line above the composer says what a send will do, with no banner
+ * and no toast.
  *
  * @module places/chat/ChatPlace
  */
@@ -27,10 +29,13 @@ import { useChatTools } from '../../hooks/useChatTools';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { refreshChats, useChats } from '../../services/chatRegistry';
-import { useServerState } from '../../services/serverEvents';
+import { useServerListHeard, useServerState } from '../../services/serverEvents';
+import { endpointFacts, useProxyState } from '../../services/proxyRegistry';
+import { sendLine } from '../../components/status/sendLine';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../services/transport';
 import type { ConversationSummary } from '../../services/transport';
 import type { HubChatOpen } from '../../types/generated/HubChatOpen';
+import type { ModelAbsence } from '../../types/generated/ModelAbsence';
 import type { ModelRef } from '../../types/generated/ModelRef';
 import type { ChatDraft } from '../../types/messages';
 
@@ -56,14 +61,12 @@ export type ChatPlaceProps = {
   /** The conversation the address names; `null` for an empty thread. */
   conversationId: number | null;
   draft?: ChatDraft; // Unsent text and images to put back in the composer, e.g. after a model switch
-  startingModel?: string | null; // The model Load it again is starting, which its line says
-  // Load the model again, from the line that says it was unloaded; local only.
-  onLoadModel?: () => Promise<void>;
   // Move the chat to another model, keeping open the conversation (and the
   // draft) that `context` reads when the switch lands; local only.
   onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: ChatDraft }) => Promise<void>;
   // Unload the model, which every client of the proxy loses with it; the
-  // chat stays open, its composer saying so. Local only.
+  // chat stays open, a line over its composer saying a send loads it.
+  // Offered while the model is loaded. Local only.
   onUnloadModel?: () => Promise<void>;
   /** The open conversation is now `id`: the first send made it, a branch, or Start over. The address follows. */
   onOpened?: (id: number) => void;
@@ -100,8 +103,6 @@ export default function ChatPlace(props: ChatPlaceProps) {
     modelName,
     conversationId,
     draft,
-    startingModel = null,
-    onLoadModel,
     onSwitchModel,
     onUnloadModel,
     onOpened,
@@ -216,22 +217,26 @@ export default function ChatPlace(props: ChatPlaceProps) {
     for (const image of draft.images) runtime.thread.composer.addAttachment(image).catch(() => {});
   }, [draft, runtime]);
 
-  // Server state from registry - derives isServerRunning reactively
-  // Note: If serverState is null (no event received yet), the composer is
-  // live: a model not running is loaded by the turn that needs it.
-  // A paired or far chat subscribes to nothing — this registry only knows
-  // servers started here, so its silence about the far machine must not be
-  // read as that machine being down and the composer locked.
+  // What a send does first, as one line over the live composer: load the
+  // model when the server registry says it is not running, again when it
+  // crashed; turn the endpoint on when it is off; refused where it is
+  // pinned to another model. Said only once each has
+  // been read: before the server list lands an absent server is not yet
+  // "not loaded", and before the endpoint's status lands it is not yet off.
+  // Never for a paired or far chat: these registries know only this
+  // machine, and their silence about another must not be read as anything.
   const serverState = useServerState(modelId ?? -1);
-  const isServerRunning =
-    pairedChat || far || (serverState?.status !== 'stopped' && serverState?.status !== 'crashed');
-  // A model gone mid-chat replaces the composer with a line that says so: no
-  // banner and no toast. Never for a paired or far chat, which this
-  // registry knows nothing of.
-  const modelGone = pairedChat || far ? null
-    : serverState?.status === 'crashed' ? 'crashed'
-      : serverState?.status === 'stopped' ? 'unloaded'
-        : null;
+  const serversHeard = useServerListHeard();
+  const proxy = useProxyState();
+  const local = !pairedChat && !far;
+  const status = serverState?.status;
+  const resident = status === 'running' || status === 'stopping';
+  const absence: ModelAbsence | null =
+    !local || !serversHeard || resident ? null : status === 'crashed' ? 'crashed' : 'not_loaded';
+  // A pin is compared by name, as the picker compares models.
+  const facts = local && proxy.status !== null ? endpointFacts(proxy) : null;
+  const line = sendLine(modelName, absence, facts?.state ?? 'on', facts?.pinnedModel ?? null);
+  const sendNote = line === null ? null : { line, crashed: absence === 'crashed' };
 
   // An error belongs to the conversation it happened in.
   useEffect(() => setChatError(null), [activeConversationId]);
@@ -248,7 +253,6 @@ export default function ChatPlace(props: ChatPlaceProps) {
           key={activeConversationId ?? 'none'}
           activeConversation={activeConversation}
           activeConversationId={activeConversationId}
-          isServerConnected={isServerRunning}
           serverPort={far ? undefined : serverPort}
           titleGenerationPrompt={titleGenerationPrompt}
           onRenameConversation={actions.rename}
@@ -275,9 +279,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
               images: runtime.thread.composer.getState().attachments.flatMap((a) => a.file ?? []),
             },
           })))}
-          startingModel={startingModel}
-          onLoadModel={onLoadModel}
-          onUnloadModel={onUnloadModel}
+          onUnloadModel={resident ? onUnloadModel : undefined}
           quantization={far ? null : quantization}
           imageInput={imageInput}
           thinking={thinking}
@@ -287,7 +289,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
           tools={tools}
           previews={previews}
           deskName={paired?.machineName ?? desk?.machineName}
-          modelGone={modelGone}
+          sendNote={sendNote}
           onShowModel={onShowModel}
           onShowLog={onShowLog}
           onOpenFar={onOpenFar}

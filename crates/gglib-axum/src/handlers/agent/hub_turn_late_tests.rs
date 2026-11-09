@@ -363,4 +363,14 @@ async fn a_loads_wait_names_its_model_and_says_how_long_each_second() {
         .collect();
     assert_eq!(said, [("Qwen3-4B", 0), ("Qwen3-4B", 1), ("Qwen3-4B", 2)]);
     assert!(waits.iter().all(|w| w["reason"] == "model_load"));
+    // Each in the words every surface shows it by.
+    let words: Vec<&str> = waits.iter().map(|w| w["said"].as_str().unwrap()).collect();
+    assert_eq!(
+        words,
+        [
+            "Loading Qwen3-4B…",
+            "Loading Qwen3-4B… 1 s",
+            "Loading Qwen3-4B… 2 s"
+        ]
+    );
 }

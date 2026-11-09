@@ -79,6 +79,12 @@ impl SseBroadcaster {
             .subscribe_until(SseOptions::default(), shutdown)
     }
 
+    /// Every event sent from now on, for a test that asserts one was.
+    #[cfg(test)]
+    pub(crate) fn events(&self) -> impl futures_core::Stream<Item = AppEvent> + Send + 'static {
+        self.inner.subscribe_events()
+    }
+
     /// Get the number of active subscribers.
     #[must_use]
     pub fn subscriber_count(&self) -> usize {

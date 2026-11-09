@@ -18,8 +18,6 @@ import { folderOffer } from './FolderChip';
 
 /** Tools ▸'s line for a model that cannot call tools. */
 export const CANT_CALL_TOOLS = "This model can't call tools";
-/** Why nothing is offered while the model is not loaded. */
-export const NOT_LOADED = 'The model is not loaded.';
 /** Draw ▸'s title while it is pressed. */
 export const DRAW_ARMED = 'The next message draws a picture. × on the chip sends it without drawing.';
 
@@ -36,9 +34,12 @@ export function drawOffer(model: string | undefined): string {
   return `Let the next message draw a picture${model ? ` with ${model}` : ''}. It applies to that message only.`;
 }
 
-/** "Add image…": disabled with the reason where the model reads no images, or nothing serves it. */
-export function imageItem(input: ImageInput, connected: boolean, add: () => void): MenuItem {
-  const reason = !input.offered ? input.reason : connected ? null : NOT_LOADED;
+/**
+ * "Add image…": disabled with the reason where the model reads no images.
+ * A model that is not loaded takes them all the same: the send loads it.
+ */
+export function imageItem(input: ImageInput, add: () => void): MenuItem {
+  const reason = input.offered ? null : input.reason;
   return { label: 'Add image…', onPick: add, disabled: reason !== null, title: reason ?? undefined };
 }
 

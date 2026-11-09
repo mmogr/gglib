@@ -206,6 +206,7 @@ fn waiting_serialises_its_reason() {
         position: 1,
         model: None,
         elapsed_ms: None,
+        said: None,
     };
     assert_eq!(
         serde_json::to_string(&evt).unwrap(),
@@ -218,6 +219,7 @@ fn waiting_serialises_its_reason() {
         position: 0,
         model: Some("Qwen3-4B".to_owned()),
         elapsed_ms: Some(12_000),
+        said: None,
     };
     assert_eq!(
         serde_json::to_string(&load).unwrap(),
@@ -256,6 +258,7 @@ fn drawing_frames() -> Vec<AgentEvent> {
             position: 1,
             model: None,
             elapsed_ms: None,
+            said: None,
         },
         AgentEvent::ToolCallStart {
             tool_call: ToolCall {

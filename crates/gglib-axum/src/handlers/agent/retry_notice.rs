@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use gglib_core::domain::agent::{AgentEvent, WaitingFor};
+use gglib_core::domain::agent::AgentEvent;
 use gglib_core::ports::{GateWait, RetryObserver, WaitReason};
 
 /// Turns retry callbacks into `SystemWarning` frames on the agent's channel.
@@ -71,16 +71,11 @@ impl RetryObserver for RetryNotice {
     }
 
     fn on_gate_wait(&self, wait: GateWait) {
-        let reason = match wait.reason {
-            WaitReason::ImageRender => WaitingFor::ImageRender,
-        };
-        self.send(AgentEvent::Waiting {
-            reason,
-            step: wait.step,
-            total: wait.total,
-            position: u32::try_from(wait.position).unwrap_or(u32::MAX),
-            model: None,
-            elapsed_ms: None,
+        let position = u32::try_from(wait.position).unwrap_or(u32::MAX);
+        self.send(match wait.reason {
+            WaitReason::ImageRender => {
+                AgentEvent::image_render_wait(wait.step, wait.total, position)
+            }
         });
     }
 }
@@ -90,7 +85,8 @@ mod tests {
     use super::*;
 
     /// A wait behind a render reaches the stream as a `waiting` frame
-    /// carrying the render's step and this wait's place in line.
+    /// carrying the render's step and this wait's place in line, and the
+    /// words it is shown as.
     #[test]
     fn a_gate_wait_is_sent_as_a_waiting_frame() {
         let (tx, mut rx) = mpsc::channel(4);
@@ -105,6 +101,7 @@ mod tests {
             frame,
             serde_json::json!({
                 "type": "waiting", "reason": "image_render", "step": 3, "total": 20, "position": 2,
+                "said": "Waiting for an image render, step 3 of 20, 2 in line",
             })
         );
     }

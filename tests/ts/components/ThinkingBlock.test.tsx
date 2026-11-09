@@ -7,7 +7,7 @@ import { render } from '@testing-library/react';
 import ThinkingBlock from '../../../src/components/ChatMessagesPanel/components/ThinkingBlock';
 
 const renderThinking = (thinking: string) =>
-  render(<ThinkingBlock messageId="m1" segmentIndex={0} thinking={thinking} durationSeconds={null} />);
+  render(<ThinkingBlock segments={[{ messageId: "m1", durationSeconds: null }]} thinking={thinking} />);
 
 describe('ThinkingBlock', () => {
   it('draws inline code inside its paragraph, not as a block', () => {

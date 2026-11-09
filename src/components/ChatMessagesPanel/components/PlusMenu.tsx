@@ -13,8 +13,6 @@ import { changeFolder } from './FolderChip';
 import { ASKING, drawItem, folderItem, imageItem, toolRows, toolsItem, type EnabledServer, type ListedTool } from './composerMenus';
 
 interface PlusMenuProps {
-  /** Whether a server answers the chat: no image is offered while none does. */
-  connected: boolean;
   /** A far chat: no folder here. */
   far: boolean;
   supportsToolCalls?: boolean | null;
@@ -58,7 +56,6 @@ function useListedTools(): { listed: ListedTool[] | string; reread: () => void }
  * chat's saved choice (`tools`). Nothing here starts a server.
  */
 export const PlusMenu: FC<PlusMenuProps> = ({
-  connected,
   far,
   supportsToolCalls,
   toolFormat,
@@ -72,7 +69,7 @@ export const PlusMenu: FC<PlusMenuProps> = ({
   const { listed, reread } = useListedTools();
 
   const items = [
-    imageItem(imageInput, connected, addImage),
+    imageItem(imageInput, addImage),
     folderItem(folder, far, () => folder && changeFolder(folder, onTypeFolder)),
     drawItem(draw),
     toolsItem(listed, tools, supportsToolCalls, toolFormat),

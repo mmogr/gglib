@@ -21,7 +21,7 @@ import {
   BranchingContext,
   BranchEnd,
 } from './components';
-import type { MessageActionsContextValue, ModelChoice, ModelGone } from './components';
+import type { MessageActionsContextValue, ModelChoice, SendNote } from './components';
 import {
   useTitleGeneration,
   useMessageDeletion,
@@ -44,7 +44,6 @@ import { RunPreviewsProvider } from './context/RunPreviewsContext';
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
   activeConversationId: number | null;
-  isServerConnected: boolean;
   /** Absent for a chat with another machine: no local server to title with. */
   serverPort?: number;
   titleGenerationPrompt: string;
@@ -76,11 +75,7 @@ interface ChatMessagesPanelProps {
   modelId?: number;
   /** Move the chat to another model, from the composer's margin. */
   onPickModel?: (choice: ModelChoice) => Promise<void>;
-  /** The model Load it again is starting, which the line says until it lands. */
-  startingModel?: string | null;
-  /** Load the model again, from the line that says it was unloaded. */
-  onLoadModel?: () => Promise<void>;
-  /** Unload the model, from beside the picker; the chat stays open. */
+  /** Unload the model, from beside the picker, while it is loaded; the chat stays open. */
   onUnloadModel?: () => Promise<void>;
   /** Its quantisation, from its catalogue entry, when known. */
   quantization?: string | null;
@@ -105,8 +100,8 @@ interface ChatMessagesPanelProps {
   previews?: RunPreviews;
   /** The paired machine the chat's model is on (a paired or a far chat), for the composer's away line. */
   deskName?: string;
-  /** This machine's model was unloaded or crashed: the composer is replaced by a line that says so. */
-  modelGone?: ModelGone | null;
+  /** What a send does first (loads the model, turns the endpoint on), as a line above the composer. */
+  sendNote?: SendNote | null;
   /** Open the model's inspector (the picker's Show <model>). */
   onShowModel?: () => void;
   /** Open the model's log (a crash's Show log). */
@@ -132,7 +127,6 @@ const ReadingColumn: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   activeConversation,
   activeConversationId,
-  isServerConnected,
   serverPort,
   titleGenerationPrompt,
   onRenameConversation,
@@ -152,8 +146,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   modelName,
   modelId,
   onPickModel,
-  onLoadModel,
-  startingModel,
   onUnloadModel,
   quantization,
   source = 'this',
@@ -165,7 +157,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   tools,
   previews = NO_PREVIEWS,
   deskName,
-  modelGone = null,
+  sendNote = null,
   onShowModel,
   onShowLog,
   onOpenFar,
@@ -255,7 +247,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // The run read here failed: its line under the turns says why (`Unanswered`),
   // so the banner does not say the same failure again.
   const failure = endedRun?.status === 'failed' ? (endedRun.error?.message ?? '') : null;
-  const failureShown = failure !== null && isServerConnected && !isThreadRunning;
+  const failureShown = failure !== null && !isThreadRunning;
   const bannerError =
     failureShown && chatError !== null && (failure ? chatError.includes(failure) : chatError === 'The reply failed.')
       ? null
@@ -325,7 +317,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                             <ThreadPrimitive.Messages components={messageComponents} />
                           </RunPreviewsProvider>
                           <BranchEnd />
-                          {isServerConnected && <Unanswered failure={failure} />}
+                          <Unanswered failure={failure} />
                         </ReadingColumn>
                       </NotebookColumn>
                       <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
@@ -334,14 +326,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     </ThreadPrimitive.Viewport>
 
                     <ComposerFooter
-                      isServerConnected={isServerConnected}
                       isThreadRunning={isThreadRunning}
                       onStopGeneration={() => threadRuntime?.cancelRun()}
                       modelName={modelName}
                       modelId={modelId}
                       onPickModel={onPickModel}
-                      onLoadModel={onLoadModel}
-                      startingModel={startingModel}
                       onUnloadModel={onUnloadModel}
                       quantization={quantization}
                       supportsToolCalls={supportsToolCalls}
@@ -353,7 +342,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       far={source === 'far'}
                       saved={activeConversationId !== null}
                       deskName={deskName}
-                      modelGone={modelGone}
+                      sendNote={sendNote}
                       onShowModel={onShowModel}
                       onShowLog={onShowLog}
                       onOpenFar={onOpenFar}

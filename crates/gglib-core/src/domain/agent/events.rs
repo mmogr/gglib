@@ -141,6 +141,13 @@ pub enum AgentEvent {
         /// wait for an image render.
         #[serde(skip_serializing_if = "Option::is_none")]
         elapsed_ms: Option<u64>,
+        /// The wait as a person reads it, worded by
+        /// [`waiting_sentence`](AgentEvent::waiting_sentence) when the frame
+        /// was made: "Loading Qwen3-4B… 12 s". Every surface shows it
+        /// verbatim. Absent from a frame logged before it was added, which
+        /// a reader words from the fields above.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        said: Option<String>,
     },
 
     /// One full LLM→tool-execution cycle has completed.

@@ -9,7 +9,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   CANT_CALL_TOOLS,
-  NOT_LOADED,
   drawItem,
   folderItem,
   imageItem,
@@ -23,7 +22,6 @@ import type { ChatFolder } from '../../../src/hooks/useChatFolder';
 import type { DrawSwitch } from '../../../src/hooks/useDrawSwitch';
 import type { ChatTools } from '../../../src/hooks/useChatTools';
 import type { ImageModelRow } from '../../../src/types/generated/ImageModelRow';
-import { loadingReplyOf } from '../../../src/components/ChatMessagesPanel/hooks/useModelLoadWait';
 
 const folder = (over: Partial<ChatFolder> = {}): ChatFolder => ({
   shown: true,
@@ -79,17 +77,16 @@ const chat = (ticked: string[], over: Partial<ChatTools> = {}): ChatTools => ({
 });
 
 describe('imageItem', () => {
-  it('is offered for a model that reads images while it is loaded, and adds one when picked', () => {
+  it('is offered for a model that reads images, loaded or not, and adds one when picked', () => {
     const add = vi.fn();
-    const item = imageItem({ offered: true, reason: null, contextLength: 4096 }, true, add);
+    const item = imageItem({ offered: true, reason: null, contextLength: 4096 }, add);
     expect(item).toMatchObject({ label: 'Add image…', disabled: false, title: undefined });
     item.onPick!();
     expect(add).toHaveBeenCalledTimes(1);
   });
 
-  it("is greyed with the model's reason, and while nothing serves the chat with that", () => {
-    expect(imageItem({ offered: false, reason: 'no projector', contextLength: null }, true, vi.fn())).toMatchObject({ disabled: true, title: 'no projector' });
-    expect(imageItem({ offered: true, reason: null, contextLength: null }, false, vi.fn())).toMatchObject({ disabled: true, title: NOT_LOADED });
+  it("is greyed with the model's reason", () => {
+    expect(imageItem({ offered: false, reason: 'no projector', contextLength: null }, vi.fn())).toMatchObject({ disabled: true, title: 'no projector' });
   });
 });
 
@@ -225,24 +222,5 @@ describe('toolsItem', () => {
 
   it('names a tool as words: get_current_time is "Get Current Time"', () => {
     expect(toolLabel('get_current_time')).toBe('Get Current Time');
-  });
-});
-
-describe('loadingReplyOf', () => {
-  const reply = (status: string, waiting?: object) => ({
-    id: 'r1',
-    role: 'assistant',
-    status: { type: status },
-    metadata: { custom: waiting ? { waiting } : {} },
-  });
-
-  it('is the newest reply while it waits for its model to load, and nothing otherwise', () => {
-    const asked = (messages: unknown[]) => loadingReplyOf(messages as Parameters<typeof loadingReplyOf>[0]);
-    expect(asked([reply('running', { reason: 'model_load', step: 0, total: 0, position: 0 })])).toBe('r1');
-    expect(asked([reply('running', { reason: 'image_render', step: 1, total: 20, position: 1 })])).toBeNull();
-    expect(asked([reply('complete', { reason: 'model_load', step: 0, total: 0, position: 0 })])).toBeNull();
-    expect(asked([reply('running')])).toBeNull();
-    expect(asked([{ id: 'u', role: 'user', metadata: {} }])).toBeNull();
-    expect(asked([])).toBeNull();
   });
 });

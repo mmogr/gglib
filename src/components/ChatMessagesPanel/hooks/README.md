@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-Custom hooks for the chat messages panel: message deletion, live timer ticks, and AI title generation. Loading a conversation belongs to the runtime (`hooks/useGglibRuntime/useRunReader.ts`). They are called from the panel root so that state which touches the thread runtime stays in the component that owns it. `useContextReading.ts` and `useModelLoadWait.ts` are the exceptions: each reads the thread itself, from what draws it, so the root hands nothing down for them.
+Custom hooks for the chat messages panel: message deletion, live timer ticks, and AI title generation. Loading a conversation belongs to the runtime (`hooks/useGglibRuntime/useRunReader.ts`). They are called from the panel root so that state which touches the thread runtime stays in the component that owns it. `useContextReading.ts` is the exception: it reads the thread itself, from what draws it, so the root hands nothing down for it.
 
 ## Key Files
 
@@ -15,6 +15,5 @@ Custom hooks for the chat messages panel: message deletion, live timer ticks, an
 | `usePictureRedraw.ts` | One picture drawn again on this machine: the picture and the mask of what was brushed sent, the render followed, stopped or failed, and the result stored and kept beside its source only on Keep |
 | `usePictureKeeping.ts` | What the open chat's drawn pictures are fixed and redone with (none on a far chat or an unsaved one), and the chat read again once a newer picture is kept |
 | `useContextReading.ts` | The open thread's context reading, for the composer's ring and an image's share of the context; null when the thread gives none |
-| `useModelLoadWait.ts` | Whole seconds the newest reply has waited for its model to load (`waiting.reason === 'model_load'`), for the composer's "Loading <model>… 12 s"; null when none waits. Like `useContextReading`, it reads the thread itself |
 
 <!-- module-docs:end -->

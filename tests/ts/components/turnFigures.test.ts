@@ -15,7 +15,6 @@ import {
   promptLines,
   replyFacts,
   secondsWords,
-  waitingLines,
   writingRate,
 } from '../../../src/readings/turnFigures';
 
@@ -177,25 +176,25 @@ describe('arrivingPhase', () => {
 
 describe('a reply that waits', () => {
   const none = {};
-  const render = { reason: 'image_render' as const, step: 3, total: 20, position: 1 };
-  const load = { reason: 'model_load' as const, step: 0, total: 0, position: 0 };
+  const render = { reason: 'image_render' as const, step: 3, total: 20, position: 1, said: 'Waiting for an image render, step 3 of 20' };
+  const load = { reason: 'model_load' as const, step: 0, total: 0, position: 0, said: 'Loading Qwen3-4B… 12 s' };
 
-  it('says what it waits for, until the model reads the prompt', () => {
-    expect(arrivingPhase({ ...none, waiting: render })).toBe('Queued behind an image render');
-    expect(arrivingPhase({ ...none, waiting: load })).toBe('Waiting for the model to load');
+  it("says the daemon's words for what it waits for, until the model reads the prompt", () => {
+    expect(arrivingPhase({ ...none, waiting: render })).toBe('Waiting for an image render, step 3 of 20');
+    expect(arrivingPhase({ ...none, waiting: load })).toBe('Loading Qwen3-4B… 12 s');
     // A wait still on the turn is newer than its prompt reading, which takes an older one off.
     expect(arrivingPhase({ ...none, waiting: render, prompt: { processed: 2, total: 2, cached: 0 } })).toBe(
-      'Queued behind an image render',
+      'Waiting for an image render, step 3 of 20',
     );
   });
 
-  it('says the step the render is on, and its place in line only when it is not next', () => {
-    expect(waitingLines(render)).toEqual(['step 3 of 20']);
-    expect(waitingLines({ ...render, position: 2 })).toEqual(['step 3 of 20', '2 in line']);
-    // A render that has reported no step yet has no count to say.
-    expect(waitingLines({ ...render, step: 0, total: 0 })).toEqual([]);
-    expect(waitingLines({ ...render, step: 0, total: 20 })).toEqual(['step 0 of 20']);
-    expect(waitingLines({ ...load, total: 20, position: 3 })).toEqual([]);
+  it('says only that it waits for a wait from a daemon too old to word it', () => {
+    expect(arrivingPhase({ ...none, waiting: { reason: 'image_render', step: 3, total: 20, position: 2 } })).toBe(
+      'Waiting for the model',
+    );
+    expect(arrivingPhase({ ...none, waiting: { reason: 'model_load', step: 0, total: 0, position: 0 } })).toBe(
+      'Waiting for the model',
+    );
   });
 
   it('is read from the turn drawn from a run', () => {

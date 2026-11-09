@@ -11,14 +11,10 @@
  * and the draft are read when the pick is made, so the page opens at the
  * conversation's own address, on the new model, with the unsent text.
  *
- * Load it again, on the line that says the chat's model was unloaded, starts
- * that model here, and says which model it is starting until it lands. It
- * goes when H2 lets a send load the model.
- *
  * @module app/useChatSwitch
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 
 import type { ModelChoice } from '../components/ChatMessagesPanel';
@@ -37,17 +33,12 @@ export interface SwitchContext {
 export interface ChatSwitch {
   /** Save `choice` as the chat's model and open the chat on it. */
   switchTo: (choice: ModelChoice, context: () => SwitchContext) => Promise<void>;
-  /** Start the chat's own model again, after it was unloaded. */
-  loadAgain: (choice: ModelChoice) => Promise<void>;
-  /** The model Load it again is starting, or `null`. */
-  startingModel: string | null;
 }
 
 export function useChatSwitch(): ChatSwitch {
   const navigate = useNavigate();
   const latest = useRef(0);
   const open = useRef(true);
-  const [startingModel, setStartingModel] = useState<string | null>(null);
 
   useEffect(() => {
     open.current = true;
@@ -74,14 +65,5 @@ export function useChatSwitch(): ChatSwitch {
     [navigate],
   );
 
-  const loadAgain = useCallback(async (choice: ModelChoice) => {
-    setStartingModel(choice.modelName);
-    try {
-      await getTransport().serveModel({ id: choice.modelId });
-    } finally {
-      if (open.current) setStartingModel(null);
-    }
-  }, []);
-
-  return { switchTo, loadAgain, startingModel };
+  return { switchTo };
 }

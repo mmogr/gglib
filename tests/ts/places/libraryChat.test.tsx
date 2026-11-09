@@ -130,23 +130,19 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
     serverPort,
     conversationId,
     draft,
-    startingModel,
     paired,
     onSwitchModel,
-    onLoadModel,
     onUnloadModel,
   }: {
     modelName: string;
     serverPort?: number;
     conversationId?: number | null;
     draft?: { text: string; images: File[] };
-    startingModel?: string | null;
     paired?: { far: { id: number }; machineName: string };
     onSwitchModel?: (
       choice: { modelId: number; modelName: string },
       context: () => { conversationId: number | null; draft: { text: string; images: File[] } },
     ) => Promise<void>;
-    onLoadModel?: () => Promise<void>;
     onUnloadModel?: () => Promise<void>;
   }) => {
     const [mountedPort] = useState(serverPort);
@@ -160,7 +156,6 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
         data-conversation={conversationId ?? ''}
         data-draft={draft?.text ?? ''}
         data-draft-images={draft?.images.map((f) => f.name).join(',') ?? ''}
-        data-starting={startingModel ?? ''}
       >
         Chatting with {modelName}
         <button
@@ -172,11 +167,6 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
         >
           Switch model
         </button>
-        {onLoadModel && (
-          <button type="button" onClick={() => void onLoadModel().catch(() => {})}>
-            Load it again
-          </button>
-        )}
         {onUnloadModel && (
           <button type="button" onClick={() => void onUnloadModel()}>
             Unload
@@ -617,20 +607,6 @@ describe('the library, into a chat', () => {
 
     expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with qwen3-8b');
     expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '9123');
-  });
-
-  it('Load it again starts the chat\'s own model, saying so until it lands, and saves nothing', async () => {
-    let answer!: (value: { port: number }) => void;
-    serveModel.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
-    const user = await openChatOnQwen();
-
-    await user.click(screen.getByRole('button', { name: 'Load it again' }));
-
-    expect(serveModel).toHaveBeenCalledWith({ id: 7 });
-    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', 'qwen3-8b');
-    await act(async () => answer({ port: 9124 }));
-    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', '');
-    expect(updateConversationSettings).not.toHaveBeenCalled();
   });
 
   it('queues a download in the desktop window with no word from its shell', async () => {

@@ -9,9 +9,8 @@ interface ChatStatusBannersProps {
  * The banner that sits above the message list: the current chat error.
  *
  * A model unloaded or crashed mid-chat has no banner here, and no toast:
- * the composer is replaced by the line that says so (`ModelGoneLine`),
- * which is the read-only lock until H2
- * (`feat(gui)/chat-without-lock`) removes it.
+ * one line above the live composer says what a send does about it
+ * (`SendNoteLine`).
  */
 export const ChatStatusBanners: FC<ChatStatusBannersProps> = ({ chatError }) =>
   chatError ? (

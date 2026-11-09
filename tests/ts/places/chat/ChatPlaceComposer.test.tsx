@@ -438,22 +438,17 @@ describe('ChatPlace, the composer', () => {
     expect(within(composer()).queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
   });
 
-  it('says the model is loading, and for how long, while the reply waits for it, in place of the picker', async () => {
+  it('says the model is loading in the reply, in the daemon\'s words, and keeps the picker and the text box', async () => {
     fixture.runs = [agentRun('r1', 1, 'in_progress')];
-    fixture.frames.r1 = [{ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0 }];
+    fixture.frames.r1 = [
+      { type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'Qwen3.8-27B', elapsed_ms: 7_200, said: 'Loading Qwen3.8-27B… 7 s' },
+    ];
     renderLocal();
-    const line = await within(document.body).findByText(/^Loading Qwen3\.8-27B… \d+ s$/);
-    expect(line).toHaveAttribute('role', 'status');
-    expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
-  });
-
-  it('says nothing of loading while a reply waits behind an image render', async () => {
-    fixture.runs = [agentRun('r1', 1, 'in_progress')];
-    fixture.frames.r1 = [{ type: 'waiting', reason: 'image_render', step: 3, total: 20, position: 1 }];
-    renderLocal();
-    await screen.findByText('Queued behind an image render');
-    expect(screen.queryByText(/^Loading Qwen3\.8-27B…/)).not.toBeInTheDocument();
+    const line = await screen.findByText('Loading Qwen3.8-27B… 7 s');
+    expect(line.closest('[role="status"]')?.closest('[data-turn="reply"]')).not.toBeNull();
+    expect(within(composer()).queryByText(/Loading/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Model: Qwen3.8-27B' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
   });
 });
 
@@ -483,13 +478,14 @@ describe('ChatPlace, a chat on the paired machine', () => {
     expect(within(composer()).getByText('qwen3 on desk')).toBeInTheDocument();
   });
 
-  it('says the paired model is loading by its own name while a reply waits for it', async () => {
+  it('says the paired model is loading in the words its wait came with', async () => {
     act(() => applyRemoteStatus(away(null)));
     fixture.runs = [agentRun('r1', 1, 'in_progress')];
-    fixture.frames.r1 = [{ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0 }];
+    fixture.frames.r1 = [{ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'qwen3', elapsed_ms: 3_000, said: 'Loading qwen3… 3 s' }];
     renderPaired();
-    expect(await screen.findByText(/^Loading qwen3… \d+ s$/)).toHaveAttribute('role', 'status');
+    expect(await screen.findByText('Loading qwen3… 3 s')).toBeInTheDocument();
     expect(screen.queryByText(/on desk…/)).not.toBeInTheDocument();
+    expect(within(composer()).getByText('qwen3 on desk')).toBeInTheDocument();
   });
 
   it("makes a new chat's conversation for the paired machine's model, on its first send", async () => {
