@@ -215,13 +215,22 @@ async fn a_hub_chats_turn_saves_its_models_launched_context() {
 async fn an_endpoint_that_is_off_is_turned_on_and_dialled() {
     use futures_util::StreamExt;
     let (_dir, state) = state().await;
-    let free = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = free.local_addr().unwrap().port();
-    drop(free);
-    store_port(&state, port).await;
     let mut events = Box::pin(state.sse.events());
 
-    let opened = this_machines_door(&state).await;
+    // A port freed here can be taken by a test running beside this one before
+    // the endpoint binds it; a refused start is tried again on another.
+    let mut tries = 0;
+    let (port, opened) = loop {
+        let free = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = free.local_addr().unwrap().port();
+        drop(free);
+        store_port(&state, port).await;
+        let opened = this_machines_door(&state).await;
+        tries += 1;
+        if opened.is_ok() || tries == 5 {
+            break (port, opened);
+        }
+    };
     let again = this_machines_door(&state).await;
     let running = state.proxy.status().await;
     state.proxy.stop().await.expect("stop");
