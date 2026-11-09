@@ -6,8 +6,8 @@
  * from its `turn_usage` event while drawn and from its saved row once
  * loaded: the same figures, so both say the same. The rate is the
  * daemon's (`tokensPerSecond`, in `readings/rate`'s words), sent and saved
- * with the counts it is made from; a reply saved before the daemon sent
- * one has none.
+ * with the counts it is made from, and given on read to a reply saved
+ * before it was saved (`fill_made_rate`).
  *
  * A reply says its figures in three places, each read here: the fold's
  * summary (how long it thought, how many tools it called), the figure line

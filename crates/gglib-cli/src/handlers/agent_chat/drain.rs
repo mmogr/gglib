@@ -53,10 +53,7 @@ pub(crate) async fn drain_event_stream(
     // A progress line is on stderr, unfinished, until the next other event
     // wipes it.
     let mut progress_showing = false;
-    // How the reply's last model call was made: a turn that called tools
-    // made one per call, and the reply's figure line is its last one's, as
-    // the GUI's is.
-    let mut made: Option<TurnUsage> = None;
+    let mut figures = ReplyFigures::default();
 
     while let Some(event) = rx.recv().await {
         let is_progress = matches!(
@@ -108,15 +105,15 @@ pub(crate) async fn drain_event_stream(
                     println!();
                 }
 
-                if !quiet && let Some(usage) = &made {
-                    eprintln!("{}", figure_line(usage));
+                if let Some(line) = figures.line(quiet) {
+                    eprintln!("{line}");
                 }
                 return true;
             }
 
             AgentEvent::TurnUsage(usage) => {
                 close_thinking(&mut ctx);
-                made = Some(usage.clone());
+                figures.saw(usage);
             }
 
             // ── Tool / progress / error events ───────────────────────
@@ -140,3 +137,32 @@ pub(crate) async fn drain_event_stream(
     }
     false
 }
+
+/// Which of a reply's figures it prints after itself, and whether.
+///
+/// A turn that called tools made one model call per tool round, each with
+/// its usage; the reply's figure line is its last call's, as the GUI's is.
+#[derive(Default)]
+pub(super) struct ReplyFigures {
+    last: Option<TurnUsage>,
+}
+
+impl ReplyFigures {
+    /// A model call's usage, as it arrives: the newest replaces the one before.
+    pub(super) fn saw(&mut self, usage: &TurnUsage) {
+        self.last = Some(usage.clone());
+    }
+
+    /// The line to print after the reply: none under `--quiet`, and none for
+    /// a reply whose calls sent no usage.
+    pub(super) fn line(&self, quiet: bool) -> Option<String> {
+        if quiet {
+            return None;
+        }
+        self.last.as_ref().map(figure_line)
+    }
+}
+
+#[cfg(test)]
+#[path = "drain_tests.rs"]
+mod tests;

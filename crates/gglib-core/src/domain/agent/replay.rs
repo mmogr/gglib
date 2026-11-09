@@ -22,6 +22,7 @@ use super::tool_types::{ToolCall, ToolResult};
 use super::transcript::to_new_message;
 use super::turn_usage::TurnUsage;
 use crate::domain::chat::NewMessage;
+use crate::domain::figures::tokens_per_second;
 
 /// The metadata key the chat page reads an assistant row's reasoning from.
 pub const THINKING_KEY: &str = "thinking";
@@ -245,6 +246,32 @@ fn tool_row(result: ToolResult, conversation_id: i64) -> NewMessage {
         images: result.images.into_iter().map(|image| image.id).collect(),
     };
     to_new_message(&message, conversation_id)
+}
+
+/// Give a saved row's metadata the rate of the turn that made it, when the
+/// row predates the daemon saving one.
+///
+/// The rate is its tokens written over its time writing
+/// ([`tokens_per_second`]), under [`MADE_KEYS`]. A row that already
+/// says its rate, or lacks either figure, is left as it is. The chat history
+/// store passes every row it reads through here, so a reply saved before the
+/// rate was saved says the same rate it did when the page worked it out.
+pub fn fill_made_rate(metadata: &mut Value) {
+    let Value::Object(made) = metadata else {
+        return;
+    };
+    let k = &MADE_KEYS;
+    if made.contains_key(k.tokens_per_second) {
+        return;
+    }
+    let tokens = made
+        .get(k.completion_tokens)
+        .and_then(Value::as_u64)
+        .and_then(|tokens| u32::try_from(tokens).ok());
+    let writing_ms = made.get(k.writing_ms).and_then(Value::as_u64);
+    if let Some(rate) = tokens_per_second(tokens, writing_ms) {
+        made.insert(k.tokens_per_second.to_owned(), Value::from(rate));
+    }
 }
 
 /// Set `key` in a row's metadata, making the metadata an object if it had

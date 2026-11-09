@@ -15,7 +15,9 @@
     "34 t/s",
     "8.5 t/s",
     null,
-    null
+    null,
+    "10 t/s",
+    "8.3 t/s"
   ],
   "recent_requests": [
     {
@@ -94,6 +96,46 @@
       "reasoning_chars": 0,
       "recorded_at_secs": 1790000000,
       "tokens_per_second": null,
+      "tool_calls": 0,
+      "tool_repaired": false,
+      "was_clamped": false
+    },
+    {
+      "completion_tokens": 100,
+      "dialect_residue": false,
+      "finish_reason": "stop",
+      "generation_ms": 10000,
+      "grammar_enforced": false,
+      "interventions": [],
+      "loop_guard_ended": false,
+      "loop_guard_trip": null,
+      "messages_truncated": 0,
+      "model_name": "phi-4",
+      "payload_chars_after": 2000,
+      "payload_chars_before": 2000,
+      "reasoning_chars": 0,
+      "recorded_at_secs": 1790000000,
+      "tokens_per_second": 10.0,
+      "tool_calls": 0,
+      "tool_repaired": false,
+      "was_clamped": false
+    },
+    {
+      "completion_tokens": 33,
+      "dialect_residue": false,
+      "finish_reason": "stop",
+      "generation_ms": 4000,
+      "grammar_enforced": false,
+      "interventions": [],
+      "loop_guard_ended": false,
+      "loop_guard_trip": null,
+      "messages_truncated": 0,
+      "model_name": "phi-4",
+      "payload_chars_after": 2000,
+      "payload_chars_before": 2000,
+      "reasoning_chars": 0,
+      "recorded_at_secs": 1790000000,
+      "tokens_per_second": 8.25,
       "tool_calls": 0,
       "tool_repaired": false,
       "was_clamped": false

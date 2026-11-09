@@ -152,11 +152,9 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
 
     out.push('\n');
     let _ = writeln!(out, "Total requests served: {}", snapshot.total_requests);
-    let _ = writeln!(
-        out,
-        "Tool calls repaired:   {}",
-        thousands(snapshot.tool_repairs_succeeded)
-    );
+    if let Some(repaired) = snapshot.tool_repairs_succeeded {
+        let _ = writeln!(out, "Tool calls repaired:   {}", thousands(repaired));
+    }
     if let Some(trips) = snapshot.loop_guard_trips_total {
         let _ = writeln!(out, "Loop-guard trips:      {}", thousands(trips));
     }

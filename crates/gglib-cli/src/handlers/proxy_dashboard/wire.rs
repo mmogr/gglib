@@ -27,9 +27,10 @@ pub(super) struct DashboardSnapshot {
     pub(super) slots_status: Option<String>,
     pub(super) total_requests: u64,
     /// Turns whose tool call was re-issued and came back conformant.
-    /// `default` on a proxy older than the field.
+    /// `None` on a proxy older than the field, which prints no count rather
+    /// than a zero it never counted.
     #[serde(default)]
-    pub(super) tool_repairs_succeeded: u64,
+    pub(super) tool_repairs_succeeded: Option<u64>,
     /// Requests the proxy's loop guard tripped on, across every model.
     /// `None` on a proxy older than the field, which prints no total rather
     /// than a zero it never counted.

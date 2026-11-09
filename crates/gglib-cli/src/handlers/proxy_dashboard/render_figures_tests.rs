@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use super::super::wire::{AdmissionSnapshot, CacheStatus, CacheUsage, DashboardSnapshot};
 use super::render_frame;
+use gglib_core::domain::figures::rate_words;
 
 /// The proxy's figures from known traffic, as `gglib-proxy` serves them.
 const FIGURES: &str = include_str!("../../../../../contracts/proxy/figures.json");
@@ -18,7 +19,7 @@ fn the_recorded_figures_print_as_the_proxy_says_them() {
     let out = frame(serde_json::json!({
         "active_connections": [],
         "slots_available": false,
-        "total_requests": 4,
+        "total_requests": 6,
         "tool_repairs_succeeded": figures["tool_repairs_succeeded"],
         "loop_guard_trips_total": figures["loop_guard_trips_total"],
         "cache": { "disk_enabled": false, "ram_state": "llama_default", "usage": figures["cache_usage"] },
@@ -28,26 +29,36 @@ fn the_recorded_figures_print_as_the_proxy_says_them() {
         .lines()
         .skip_while(|line| *line != "Recent requests")
         .skip(1)
-        .take(4)
+        .take(5)
         .collect();
     assert!(
-        recent[0].ends_with("Qwen3-8B"),
+        recent[0].ends_with("phi-4                    33 tokens \u{b7} 8.3 t/s"),
+        "a tie goes up: {out}"
+    );
+    assert!(
+        recent[1].ends_with("phi-4                    100 tokens \u{b7} 10 t/s"),
+        "ten is said whole: {out}"
+    );
+    assert!(
+        recent[2].ends_with("Qwen3-8B"),
         "cut short, no figures: {out}"
     );
     assert!(
-        recent[1].ends_with("Qwen3-8B                 1 token"),
+        recent[3].ends_with("Qwen3-8B                 1 token"),
         "{out}"
     );
     assert!(
-        recent[2].ends_with("gemma-3-12b              1,200 tokens \u{b7} 8.5 t/s"),
+        recent[4].ends_with("gemma-3-12b              1,200 tokens \u{b7} 8.5 t/s"),
         "{out}"
     );
-    assert!(
-        recent[3].ends_with("Qwen3-8B                 812 tokens \u{b7} 34 t/s"),
-        "{out}"
-    );
-    assert_eq!(figures["rate_words"][0], "34 t/s");
-    assert_eq!(figures["rate_words"][1], "8.5 t/s");
+    // Every recorded rate in the words the proxy recorded beside it.
+    let said: Vec<serde_json::Value> = figures["recent_requests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["tokens_per_second"].as_f64().map(rate_words).into())
+        .collect();
+    assert_eq!(serde_json::Value::from(said), figures["rate_words"]);
     assert!(
         out.contains("  Reused         6,600 of 10,000 prompt tokens (66%) in 2 requests\n"),
         "{out}"
@@ -130,17 +141,17 @@ fn the_frame_ends_with_the_repairs_and_trips_totals() {
     );
 }
 
-/// A proxy older than the trips total prints none, never a zero it did not
-/// count.
+/// A proxy older than the repairs and trips totals prints neither, never a
+/// zero it did not count.
 #[test]
-fn an_older_proxy_prints_no_trips_total() {
+fn an_older_proxy_prints_no_repairs_or_trips_total() {
     let snapshot = DashboardSnapshot {
         active_connections: vec![],
         slots_available: false,
         slots: vec![],
         slots_status: None,
         total_requests: 0,
-        tool_repairs_succeeded: 0,
+        tool_repairs_succeeded: None,
         loop_guard_trips_total: None,
         cache: Some(CacheStatus {
             disk_enabled: false,
@@ -157,5 +168,6 @@ fn an_older_proxy_prints_no_trips_total() {
     };
     let out = render_frame("http://127.0.0.1:9944", &snapshot, 100);
     assert!(!out.contains("Loop-guard trips"), "{out}");
-    assert!(out.ends_with("Tool calls repaired:   0\n"), "{out}");
+    assert!(!out.contains("Tool calls repaired"), "{out}");
+    assert!(out.ends_with("Total requests served: 0\n"), "{out}");
 }

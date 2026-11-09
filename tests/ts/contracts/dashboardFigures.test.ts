@@ -44,11 +44,13 @@ describe('dashboard figures contract', () => {
   it('says each recorded rate in the words the proxy recorded beside it', () => {
     const said = FIGURES.recent_requests.map((r) => (r.tokens_per_second != null ? rateWords(r.tokens_per_second) : null));
     expect(said).toEqual(FIGURES.rate_words);
-    expect(said).toEqual(['34 t/s', '8.5 t/s', null, null]);
+    expect(said).toEqual(['34 t/s', '8.5 t/s', null, null, '10 t/s', '8.3 t/s']);
   });
 
   it("shows Recent's figures from the recorded requests, newest first, a rate only where the proxy sent one", () => {
-    expect(recentRows(FRAME).map((r) => `${r.model} ${r.figures}`.trim())).toEqual([
+    expect(recentRows(FRAME, 6).map((r) => `${r.model} ${r.figures}`.trim())).toEqual([
+      'phi-4 33 tokens · 8.3 t/s',
+      'phi-4 100 tokens · 10 t/s',
       'Qwen3-8B',
       'Qwen3-8B 1 token',
       'gemma-3-12b 1,200 tokens · 8.5 t/s',
@@ -59,11 +61,16 @@ describe('dashboard figures contract', () => {
   it("names a model's newest recorded rate, passing over requests with none", () => {
     expect(latestRate(FIGURES.recent_requests, 'Qwen3-8B')).toBe(FIGURES.recent_requests[0].tokens_per_second);
     expect(latestRate(FIGURES.recent_requests, 'gemma-3-12b')).toBe(FIGURES.recent_requests[1].tokens_per_second);
-    expect(latestRate(FIGURES.recent_requests, 'phi-4')).toBeNull();
+    expect(latestRate(FIGURES.recent_requests, 'phi-4')).toBe(FIGURES.recent_requests[5].tokens_per_second);
+    expect(latestRate(FIGURES.recent_requests, 'Mistral-7B')).toBeNull();
   });
 
   it("says the cache's reuse in the proxy's sentence and the trips in its total", () => {
     expect(activitySentences(FRAME)).toEqual(['Prompt cache 66% reused', '3 loop-guard trips']);
     expect(FIGURES.cache_usage.summary).toBe('Prompt cache 66% reused');
+  });
+
+  it('says no trips sentence when the proxy counted none', () => {
+    expect(activitySentences({ ...FRAME, loop_guard_trips_total: 0 })).toEqual(['Prompt cache 66% reused']);
   });
 });

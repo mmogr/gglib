@@ -125,6 +125,37 @@ fn the_rate_is_saved_and_no_share_of_the_context_is() {
     }
 }
 
+/// A row saved before the rate was is given it, from its own counts, the
+/// rate the page once worked out; one that says its rate keeps it, and one
+/// without both counts, or with one token, gets none.
+#[test]
+fn an_old_row_is_given_its_rate_from_its_counts() {
+    let mut old =
+        json!({ "completionTokens": 496, "writingDurationMs": 38_200, "turnDurationMs": 41_000 });
+    fill_made_rate(&mut old);
+    assert_eq!(old["tokensPerSecond"], json!(496.0 / 38.2));
+    assert_eq!(old["turnDurationMs"], 41_000);
+
+    let mut said =
+        json!({ "completionTokens": 496, "writingDurationMs": 38_200, "tokensPerSecond": 9.5 });
+    fill_made_rate(&mut said);
+    assert_eq!(said["tokensPerSecond"], 9.5);
+
+    for mut lacking in [
+        json!({ "completionTokens": 496 }),
+        json!({ "writingDurationMs": 38_200 }),
+        json!({ "completionTokens": 1, "writingDurationMs": 0 }),
+        json!({ "tool_call_id": "c1" }),
+    ] {
+        let before = lacking.clone();
+        fill_made_rate(&mut lacking);
+        assert_eq!(lacking, before);
+    }
+    let mut not_an_object = json!("text");
+    fill_made_rate(&mut not_an_object);
+    assert_eq!(not_an_object, json!("text"));
+}
+
 /// A turn with no time writing saves no rate, never a zero.
 #[test]
 fn a_turn_without_time_writing_saves_no_rate() {

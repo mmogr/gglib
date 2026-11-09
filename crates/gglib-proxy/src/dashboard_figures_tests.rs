@@ -48,8 +48,9 @@ fn generated(tokens: u32, ms: Option<u64>) -> TurnGeneration {
     }
 }
 
-/// A frame's figures from known traffic: three finished requests (one of a
-/// single token, so with no rate), one cut short before its usage, a cache
+/// A frame's figures from known traffic: five finished requests (one of a
+/// single token, so with no rate, one at ten exactly and one at a tie of
+/// 8.25), one cut short before its usage, a cache
 /// that served 6,600 of 10,000 prompt tokens (the last request 2,400 of
 /// 4,000), and three loop-guard trips over two models. Beside each request,
 /// the words its rate is said in.
@@ -61,6 +62,9 @@ fn figures() -> Value {
         ("gemma-3-12b", Some(generated(1_200, Some(141_800)))),
         ("Qwen3-8B", Some(generated(1, Some(0)))),
         ("Qwen3-8B", None),
+        // Ten exactly, said whole, and a tie, which goes up.
+        ("phi-4", Some(generated(100, Some(10_000)))),
+        ("phi-4", Some(generated(33, Some(4_000)))),
     ] {
         let seq = metrics.record(request(model));
         if let Some(generation) = generation {
@@ -111,7 +115,7 @@ fn the_served_figures_are_the_ones_the_traffic_makes() {
     let figures = figures();
     assert_eq!(
         figures["rate_words"],
-        json!(["34 t/s", "8.5 t/s", null, null])
+        json!(["34 t/s", "8.5 t/s", null, null, "10 t/s", "8.3 t/s"])
     );
     assert_eq!(figures["cache_usage"]["reuse_percent"], 66);
     assert_eq!(figures["cache_usage"]["last_reuse_percent"], 60);

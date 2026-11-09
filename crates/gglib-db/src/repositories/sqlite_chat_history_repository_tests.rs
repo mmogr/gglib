@@ -119,6 +119,37 @@ async fn save_and_get_messages_round_trip() {
     assert_eq!(repo.get_messages(cid).await.unwrap().len(), 2);
 }
 
+/// A reply saved before the daemon saved its rate reads back with it, from
+/// its own counts; one saved with its rate reads back with that one, and a
+/// row with neither count reads back as it was. No migration: every read
+/// passes through `fill_made_rate`.
+#[tokio::test]
+async fn an_old_reply_reads_back_with_the_rate_its_counts_give() {
+    let repo = repo().await;
+    let cid = repo.create_conversation(make_conv("Old")).await.unwrap();
+    let reply = |metadata: serde_json::Value| NewMessage {
+        role: MessageRole::Assistant,
+        metadata: Some(metadata),
+        ..make_msg(cid, "It restarts.")
+    };
+    let old = serde_json::json!({
+        "modelName": "Qwen3.8-27B", "completionTokens": 496, "writingDurationMs": 38_200,
+        "turnDurationMs": 41_000, "cachedTokens": 2_100
+    });
+    let new = serde_json::json!({ "completionTokens": 496, "writingDurationMs": 38_200, "tokensPerSecond": 12.5 });
+    let bare = serde_json::json!({ "modelName": "Qwen3.8-27B", "turnDurationMs": 900 });
+    for metadata in [old, new, bare.clone()] {
+        repo.save_message(reply(metadata)).await.unwrap();
+    }
+
+    let read = repo.get_messages(cid).await.unwrap();
+    let made = |i: usize| read[i].metadata.clone().expect("metadata");
+    assert_eq!(made(0)["tokensPerSecond"], serde_json::json!(496.0 / 38.2));
+    assert_eq!(made(0)["cachedTokens"], 2_100);
+    assert_eq!(made(1)["tokensPerSecond"], 12.5);
+    assert_eq!(made(2), bare);
+}
+
 /// `created_at` has one-second resolution and follows the clock, which can
 /// go back; the order a chat is read in is the order its rows were saved.
 #[tokio::test]
