@@ -137,7 +137,8 @@ infrastructure concerns (database, filesystem, etc.).
   `contracts/vocabulary/words.json`.
 - `send_line` - The line above a chat's composer when a send has more to do
   than be answered (`ModelAbsence`: the model isn't loaded or crashed; the
-  endpoint is Off, or pinned to another model, which refuses it), recorded in `contracts/vocabulary/send_line.json`.
+  endpoint is Off, or pinned to another model, which refuses it; a pin is
+  matched by the model's id, `NamedModel`), recorded in `contracts/vocabulary/send_line.json`.
 - `admission` - What the admission queue and the VRAM resident set look like
   right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in
 - `cache_budget` - Auto-sizing of llama-server's host-RAM prompt cache

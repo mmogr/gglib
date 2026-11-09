@@ -74,7 +74,8 @@ prints it ("4s", "1m 5s"); the inspector's "loaded 4m 10s" is
 Connect a client's Model ID starts at the inspected model, else the pinned
 one, else the last loaded, else the default model setting, else the
 library's smallest chat model, so Test it never asks the endpoint to load
-the biggest. ⋯ Live numbers, Activity's Live numbers › and Recent's All ›
+the biggest; pinned to a model that is not a chat model (an image model),
+it is that model alone, with no picker. ⋯ Live numbers, Activity's Live numbers › and Recent's All ›
 open Diagnostics › Live (`/diagnostics/live`). Clear prompt cache is offered
 only while it can act (the endpoint up and its key revealed), and a row's
 ⋯ Pin waits while a pin change is on its way.
@@ -87,7 +88,7 @@ only while it can act (the endpoint up and its key revealed), and a row's
 | `LoadPalette.tsx` | Load a model…: the filter, this machine's models not loaded with quant, size and fit, On <machine>, ↑ ↓ Home End, ⏎ loads with nothing typed, ⌥⏎ opens Load with options, Esc gives focus back |
 | `paletteRows.ts` | Pure: the palette's rows (not loaded, matching the filter as the library's search does), a row's quant and size, its fit line from its explanation, and the paired machine's rows with why they cannot load there |
 | `useFitReads.ts` | The palette's explain reads: the highlighted row first, then the rows in view, three at most in flight across opens, kept for one open, an answer to a closed open dropped |
-| `Serves.tsx` | Serves ▾: Every model, the loaded models, the library's other chat models; the pin chosen by its name |
+| `Serves.tsx` | Serves ▾: Every model, the loaded models, the library's other chat models; the pin chosen by its model's id (`pinned_model_id`) |
 | `UsingIt.tsx` | Requests in flight from apps on this machine, one line per joined device in the daemon's words, or the empty sentence with Connect a client |
 | `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what gglib did; All ›; not drawn when empty |
 | `Activity.tsx` | ▸ Activity: the dashboard's other sections as sentences, Clear prompt cache, Live numbers › |

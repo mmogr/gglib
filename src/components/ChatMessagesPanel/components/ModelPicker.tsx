@@ -46,8 +46,9 @@ const STAYS = 'A chat stays on its machine. Start a new chat to use this model.'
  * running one's word is the proxy's live dashboard's (`useResidency`), else
  * Loaded. The chat's own model is ticked where it is: under Loaded while it
  * runs, else first under On this Mac. While the endpoint is pinned
- * (`ProxyStatus.pinned_model`, a name) the daemon refuses to start any
- * other model, so the others are greyed, each with the pin as its reason
+ * (`ProxyStatus.pinned_model_id`, the pinned model's id) the daemon
+ * refuses to start any other model, so every other id is greyed, a model
+ * sharing the pinned one's name too, each with the pin as its reason
  * ("Pinned · only <model>").
  * Choosing a model here hands it to the page, which saves it as the chat's
  * model and starts nothing: the next send loads it. A pick the daemon
@@ -71,7 +72,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   const canPick = onPick !== undefined && modelId !== undefined;
   const paired = usePairedModels(canPick);
   const residency = useResidency();
-  const { pinnedModel } = useEndpointFacts();
+  const { pinned } = useEndpointFacts();
 
   if (!canPick) {
     return <span className="truncate px-sm text-sm text-text-secondary">{modelName}</span>;
@@ -99,10 +100,10 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   const stated = (id: number, name: string) =>
     `${name} · ${RESIDENCY_WORDS[runningIds.has(id) ? (residency.get(id) ?? 'loaded') : 'not_loaded']}`;
   /** Why the pinned endpoint will not start a model, or `undefined` for one it will (the pinned one, or any while unpinned). */
-  const refusal = (name: string) =>
-    pinnedModel !== null && name !== pinnedModel ? `${ENDPOINT_WORDS.pinned} · only ${pinnedModel}` : undefined;
+  const refusal = (id: number) =>
+    pinned !== null && id !== pinned.id ? `${ENDPOINT_WORDS.pinned} · only ${pinned.name}` : undefined;
   const choice = (id: number, name: string): MenuItem => {
-    const why = refusal(name);
+    const why = refusal(id);
     return { label: stated(id, name), checked: false, disabled: why !== undefined, title: why, onPick: () => void pick({ modelId: id, modelName: name }) };
   };
   /** The chat's own model, ticked: under Loaded while it runs, else first under On this Mac. */

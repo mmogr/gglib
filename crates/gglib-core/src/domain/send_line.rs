@@ -31,6 +31,16 @@ impl ModelAbsence {
     pub const ALL: [Self; 2] = [Self::NotLoaded, Self::Crashed];
 }
 
+/// A model as the line knows it: its catalogue id, which a pin is matched
+/// by, and the name the line shows, which another model may share.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct NamedModel<'a> {
+    /// The model's id in this machine's catalogue.
+    pub id: i64,
+    /// The model's name, as the catalogue shows it.
+    pub name: &'a str,
+}
+
 /// The line above a chat's composer for `model`, by the name the catalogue
 /// shows: what is wrong, then what a send does about it.
 ///
@@ -40,27 +50,40 @@ impl ModelAbsence {
 ///   loads it` (`… loads it again`);
 /// - resident, with the endpoint off: `The endpoint is Off · sending turns
 ///   it on`;
-/// - the endpoint pinned (`pinned`, the name of the model it is pinned to)
-///   to another model, whatever `model`'s state: `The endpoint is Pinned to
-///   Qwen3-8B and cannot serve Qwen3-4B · sending is refused`, since a
-///   pinned endpoint refuses every other model (`pinned_model_mismatch`).
+/// - the endpoint pinned (`pinned`, the model it is pinned to) to another
+///   model, whatever `model`'s state: `The endpoint is Pinned to Qwen3-8B
+///   and cannot serve Qwen3-4B · sending is refused`, since a pinned
+///   endpoint refuses every other model (`pinned_model_mismatch`). Another
+///   model is another id: one that shares `model`'s name is refused too,
+///   said so the two do not read as one: `The endpoint is Pinned to another
+///   model named Qwen3-4B and cannot serve this one · sending is refused`.
 ///   Pinned to `model` itself, a send loads it as on any endpoint.
 ///
 /// `None` when the model is resident and the endpoint is not off: a send is
 /// answered, with nothing to say first.
 #[must_use]
 pub fn send_line(
-    model: &str,
+    model: NamedModel<'_>,
     absence: Option<ModelAbsence>,
     endpoint: EndpointState,
-    pinned: Option<&str>,
+    pinned: Option<NamedModel<'_>>,
 ) -> Option<String> {
-    if let Some(pin) = pinned.filter(|pin| endpoint == EndpointState::Pinned && *pin != model) {
-        return Some(format!(
-            "The endpoint is {} to {pin} and cannot serve {model} · sending is refused",
-            EndpointState::Pinned.word()
-        ));
+    if let Some(pin) = pinned.filter(|pin| endpoint == EndpointState::Pinned && pin.id != model.id)
+    {
+        let pinned = EndpointState::Pinned.word();
+        return Some(if pin.name == model.name {
+            format!(
+                "The endpoint is {pinned} to another model named {} and cannot serve this one · sending is refused",
+                pin.name
+            )
+        } else {
+            format!(
+                "The endpoint is {pinned} to {} and cannot serve {} · sending is refused",
+                pin.name, model.name
+            )
+        });
     }
+    let model = model.name;
     let off = endpoint == EndpointState::Off;
     let Some(absence) = absence else {
         return off.then(|| {

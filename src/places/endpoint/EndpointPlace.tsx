@@ -77,7 +77,11 @@ export default function EndpointPlace() {
   const slots = snapshot?.admission.slots ?? [];
   const loaded = slots.map((s) => ({ modelId: s.model_id, name: s.model_name }));
   const chatModels = models.filter((m) => m.imageFamily === undefined);
-  const pinnedId = chatModels.find((m) => m.name === facts.pinnedModel)?.id ?? null;
+  const pinnedId = facts.pinned?.id ?? null;
+  // A pin that is not a chat model (`gglib serve` on an image model) is the
+  // one model a client can name, and Connect a client names it alone.
+  const pin = facts.pinned;
+  const pinAlone = pin !== null && !chatModels.some((m) => m.id === pin.id) ? pin : undefined;
   const lastLoaded = [...slots].sort((a, b) => a.resident_for_secs - b.resident_for_secs)[0]?.model_id ?? null;
   const settled = chatModels.find((m) => m.id === settings?.defaultModelId)?.id ?? null;
   const smallest = [...chatModels].sort((a, b) => a.sizeBytes - b.sizeBytes)[0]?.id ?? null;
@@ -132,16 +136,16 @@ export default function EndpointPlace() {
           />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pb-md">
-          <Header facts={facts} actions={actions} onTest={() => void actions.test(facts.pinnedModel !== null ? null : modelId)} />
+          <Header facts={facts} actions={actions} onTest={() => void actions.test(facts.pinned !== null ? null : modelId)} />
           {showLoaded && (
             <Loaded snapshot={snapshot} rows={resident} inspected={inspected} paired={paired} onUnload={unload} onPin={(id) => void actions.serve(id)} pinning={actions.busy !== null} />
           )}
           {up && (
-            <Serves loaded={loaded} library={chatModels} pinnedModel={facts.pinnedModel} disabled={actions.busy !== null} onServe={(id) => void actions.serve(id)} />
+            <Serves loaded={loaded} library={chatModels} pinnedId={pinnedId} disabled={actions.busy !== null} onServe={(id) => void actions.serve(id)} />
           )}
           {up && facts.baseUrl !== null && (
             <div ref={connectRef}>
-              <ConnectClient baseUrl={facts.baseUrl} keyState={facts.key} models={chatModels} modelId={modelId} onModel={setPicked} />
+              <ConnectClient baseUrl={facts.baseUrl} keyState={facts.key} models={chatModels} modelId={modelId} onModel={setPicked} only={pinAlone} />
             </div>
           )}
           {up && snapshot && (

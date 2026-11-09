@@ -97,7 +97,7 @@ import { FAR_FINGERPRINT, farEntry, pairedModels } from '../fixtures/fakeFarDaem
 import { guiModel } from '../fixtures/model';
 import { renderApp } from './harness';
 
-const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null };
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null };
 const DESK: RemoteStatus = {
   ...IDLE_STATUS,
   connected: { port: 41234, base_url: 'http://127.0.0.1:41234/v1', ticket_fingerprint: FAR_FINGERPRINT, path: 'direct', away_for_s: null },

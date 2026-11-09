@@ -4,8 +4,8 @@
  * The choices are Every model, then each loaded model, then the rest of
  * the library's chat models. Choosing restarts the endpoint, pinned to the
  * model or plain (`useEndpointActions().serve`). The pin is the daemon's
- * (`ProxyStatus.pinned_model`, a model's name), matched to the library by
- * that name.
+ * (`ProxyStatus.pinned_model_id`, a model's catalogue id), chosen here by
+ * that id.
  *
  * @module places/endpoint/Serves
  */
@@ -17,15 +17,16 @@ interface ServesProps {
   /** The models loaded now, by id and name. */
   loaded: { modelId: number; name: string }[];
   library: GgufModel[];
-  pinnedModel: string | null;
+  /** The id of the model the endpoint is pinned to, else `null`. */
+  pinnedId: number | null;
   disabled: boolean;
   onServe: (modelId: number | null) => void;
 }
 
-export const Serves: FC<ServesProps> = ({ loaded, library, pinnedModel, disabled, onServe }) => {
+export const Serves: FC<ServesProps> = ({ loaded, library, pinnedId, disabled, onServe }) => {
   const loadedIds = new Set(loaded.map((l) => l.modelId));
   const rest = library.filter((m) => m.imageFamily === undefined && !loadedIds.has(m.id));
-  const pinned = pinnedModel === null ? undefined : [...loaded.map((l) => ({ id: l.modelId, name: l.name })), ...library].find((m) => m.name === pinnedModel);
+  const offered = pinnedId !== null && (loadedIds.has(pinnedId) || library.some((m) => m.id === pinnedId));
   return (
     <section aria-label="Serves" className="flex items-center gap-md px-md pb-md text-sm">
       <label htmlFor="endpoint-serves" className="text-xs font-semibold text-text-secondary">
@@ -34,7 +35,7 @@ export const Serves: FC<ServesProps> = ({ loaded, library, pinnedModel, disabled
       <select
         id="endpoint-serves"
         className="rounded-base bg-surface-elevated px-sm py-xs text-sm text-text"
-        value={pinned === undefined ? '' : String(pinned.id)}
+        value={offered ? String(pinnedId) : ''}
         disabled={disabled}
         onChange={(e) => onServe(e.target.value === '' ? null : Number(e.target.value))}
       >

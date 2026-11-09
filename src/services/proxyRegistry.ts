@@ -86,7 +86,9 @@ export function getProxyState(): ProxyState {
  *   daemon (the dial rule is the daemon's: a wildcard bind is reached on
  *   loopback). `null` while off, and while up until the status has said.
  * - `key`: whether a request must carry the key, the same way.
- * - `pinnedModel`: the model a pinned run serves, else `null`.
+ * - `pinned`: the model a pinned run serves, else `null`: its catalogue id,
+ *   which a model is matched to (two can share a name, and a rename keeps
+ *   the id), and its name, for showing.
  * - `pinnedTo`: the pinned state said with that model, in the daemon's
  *   words (`Pinned to <model>`), else `null`.
  *
@@ -98,23 +100,31 @@ export interface EndpointFacts {
   state: EndpointState;
   baseUrl: string | null;
   key: KeyState | null;
-  pinnedModel: string | null;
+  pinned: { id: number; name: string } | null;
   pinnedTo: string | null;
 }
 
 export function endpointFacts({ running, status }: ProxyState): EndpointFacts {
-  if (!running) return { state: 'off', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null };
+  if (!running) return { state: 'off', baseUrl: null, key: null, pinned: null, pinnedTo: null };
   if (status === null || !status.running) {
-    return { state: 'on', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null };
+    return { state: 'on', baseUrl: null, key: null, pinned: null, pinnedTo: null };
   }
   // A daemon older than this GUI answers without the fields E2 added. The
   // two ship together, but a dev build adopting an installed daemon does
-  // not, and a missing field is then "not said", never a crash.
+  // not. A missing address, key rule or Pinned-to sentence is then `null`
+  // (the tray says the bare Pinned word for the last); a missing word is
+  // guessed from the pin's name (Pinned or On); a missing pin id names no
+  // pin, so nothing is greyed or refused for one even while the word says
+  // Pinned.
   return {
     state: status.state ?? (status.pinned_model ? 'pinned' : 'on'),
     baseUrl: status.base_url ?? null,
     key: status.key ?? null,
-    pinnedModel: status.pinned_model ?? null,
+    // A pin is its model's id; a status without one names no pin to match.
+    pinned:
+      status.pinned_model_id == null || status.pinned_model == null
+        ? null
+        : { id: status.pinned_model_id, name: status.pinned_model },
     pinnedTo: status.pinned_to ?? null,
   };
 }

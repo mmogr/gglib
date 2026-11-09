@@ -107,6 +107,7 @@ async fn a_pinned_load_pins_the_endpoint_before_it_loads_the_model() {
         "base_url": "http://127.0.0.1:8080/v1",
         "key": "none_needed",
         "pinned_model": "qwen3",
+        "pinned_model_id": 3,
     });
     let started = serde_json::json!({ "port": 9301, "message": "loaded at 9301 (stand-in)" });
     let (lines, taken) = against(
