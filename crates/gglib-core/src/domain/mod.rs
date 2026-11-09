@@ -17,6 +17,7 @@ pub mod device_budget;
 pub mod dialect;
 pub mod engine_pins;
 mod file_type;
+mod fit_sentence;
 pub mod folder;
 pub(crate) mod generation_config;
 pub mod gguf;

@@ -20,7 +20,7 @@ paired devices and their descriptions from `services/remoteRegistry`. State
 words are `components/status/words.ts`'s.
 
 Load a model… opens a palette of this machine's models not loaded, each
-with the fit sentence of its explanation (`readings/launchFit`, the
+with the fit sentence of its explanation (served on `plan.fit`, the
 inspector's) and, when the launch would unload a model first, the CLI's
 unload sentence (pinned by `contracts/unloadReason.test.ts`); the
 joined machine's models follow as On <machine>, loadable there as the far

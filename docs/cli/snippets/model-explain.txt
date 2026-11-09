@@ -16,8 +16,10 @@ $ gglib model explain Qwen3-4B-Instruct-2507
   --cache-type-v      q8_0         ← gglib: q8_0 halves the KV cache at no measured cost
 
 Context
+  Fits this machine with 128K context, of 256K trained.
   serves at              131072 (fitted to hardware)
   fitted to hardware     131072
+    memory               fits (13.55 GiB of 86.40 GiB usable)
     device budget        96.00 GiB
     weights              3.99 GiB
     kv bytes/token       78336

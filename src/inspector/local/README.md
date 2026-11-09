@@ -4,7 +4,8 @@
 
 The inspector for a model on this machine. From the top: its name (⧉
 copies the Model ID), ⋯ and ×; the library row's line of facts; the fit
-sentence; Load and Chat (Chat and Unload once loaded, with its state word);
+sentence the daemon serves (`plan.fit.sentence`, the words `gglib model
+explain` prints); Load and Chat (Chat and Unload once loaded, with its state word);
 the Model ID to use it by; How it runs (How it ran once loaded); ▸ Log with
 the server's last line once loaded (it opens the Log subject); Details,
 closed and remembered. A failed load's line offers Show log. × closes to
@@ -23,7 +24,9 @@ How it runs is the plan's arguments grouped by `LaunchArg.decision`, one
 row per labelled decision (`rows.ts` holds the one label table), each
 saying the plan's narration for that decision where it has one (the words
 How it ran says), else its arguments, and whose choice it was and why on
-hover; Templates is always drawn (Auto with no flag), Speculative too once
+hover; Templates is always drawn (Auto with no flag), the Context row adds the
+daemon's note (`plan.fit.note`, "fits (35.81 GiB of 43.20 GiB usable)"),
+Speculative too once
 the person has set it, under the launch line
 (`LaunchPlan::command_line` drawn token by token). Sampling and Reasoning
 rows count the explanation's sources. Change turns a row into its control
@@ -52,8 +55,7 @@ across leaving it and never shown on another; a file check answered here
 is the "files checked" time, since the daemon stores none.
 
 Words with no Rust twin, composed from Rust's fields here: "loaded 4m 10s"
-and the rate's "34 t/s" on a loaded model's status line, the fit sentence
-and its refusal, the Context row's note, the Sampling row's count, "set by
+and the rate's "34 t/s" on a loaded model's status line, the Sampling row's count, "set by
 you", "Auto", "On", "Off", "Applies at next load.", "Copy as command",
 "Didn't load:" and "Didn't unload:" (`utils/errors` `loadFailed`),
 "Copied" beside ⋯ after ⋯ › Copy path and beside Copy as command, "Drawing needs
@@ -76,7 +78,7 @@ damaged line is `damaged_line`, served on the report's `damage`.
 | `Change.tsx` | Each row's control (Context field, Templates and Speculative selects, Images and Parts file menus, the compact sampling form) and each row's Reset, saving one field of the update |
 | `LaunchLine.tsx` | The launch line in mono, each argument a button opening a note with its reason and source, and Change for this model… where the sheet holds its decision; a token the person chose underlined |
 | `commandLine.ts` | Pure: `commandLine`, `argText` and `shellToken`, the command line as `LaunchPlan::command_line` writes it |
-| `rows.ts` | Pure: the decision labels, the rows of a plan, a row's value and hover, the caption, the Context note, the Sampling and Reasoning lines, and whether the person set them |
+| `rows.ts` | Pure: the decision labels, the rows of a plan, a row's value and hover, the caption, the Sampling and Reasoning lines, and whether the person set them |
 | `Details.tsx` | Details ▸: file, source (with the verification line and the last file check), name and quant label (click to edit), architecture, trained context, tags, abilities, reasoning support, measured speed, the loaded server's llama-server port ("port 9001, internal"), raw GGUF metadata; open or closed remembered per viewer (the far model's Details share its fold, `Item` and `When`) |
 | `LogLink.tsx` | `▸ Log` on a loaded model: the label opens `/models/:id/log`, the server's last line follows it in tertiary mono, cut with an ellipsis |
 | `SourceStatus.tsx` | The line under Source a file check or update check writes: progress and bar, the daemon's verdict in its word and its action, the file list opened from it, a refusal with Retry |

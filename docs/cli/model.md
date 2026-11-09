@@ -86,7 +86,10 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 The launch gglib would make for the model, without making it: the command
 it would run, each argument beside whose choice it was (the model author's,
 gglib's, or yours) and why, then the context size the model would be served
-at and how it was fitted. When a loaded model would have to go first, one
+at and how it was fitted, under the sentence the app shows below the
+model's name ("Fits this machine with 128K context, of 256K trained.")
+and, when the budget, the weights and the KV cost are known, what that
+context needs of the share of the memory budget gglib spends. When a loaded model would have to go first, one
 more line says which and why: it would not fit beside it, the second slot is
 taken, or one image model is loaded at a time.
 Then every resolved sampling parameter, beside the layer that supplied it.
@@ -114,8 +117,10 @@ $ gglib model explain Qwen3-4B-Instruct-2507
   --cache-type-v      q8_0         ← gglib: q8_0 halves the KV cache at no measured cost
 
 Context
+  Fits this machine with 128K context, of 256K trained.
   serves at              131072 (fitted to hardware)
   fitted to hardware     131072
+    memory               fits (13.55 GiB of 86.40 GiB usable)
     device budget        96.00 GiB
     weights              3.99 GiB
     kv bytes/token       78336

@@ -93,6 +93,11 @@ pub(crate) fn argument_lines(plan: &LaunchPlan) -> Vec<String> {
 
 /// The context chain, and what the fit worked from where it reached one.
 ///
+/// It opens with the fit sentence the GUI shows under the model's name,
+/// and the note its Context row says (what the served context needs of
+/// the share of the budget the fit spends) when the budget, the weights
+/// and the KV cost are known.
+///
 /// Printed whatever the winning rung was. A fit that lost to a number
 /// someone typed is still the fact that says whether the number was a good
 /// one, and a fit that refused is the fact that explains the floor. The
@@ -100,7 +105,7 @@ pub(crate) fn argument_lines(plan: &LaunchPlan) -> Vec<String> {
 /// ladder costs, which is the whole of ADR 0009's first kill criterion.
 #[must_use]
 pub(crate) fn context_text(fit: &ContextFit) -> String {
-    let mut out = String::from("Context\n");
+    let mut out = format!("Context\n  {}\n", fit.sentence);
     let _ = writeln!(
         out,
         "  {:<22} {} ({})",
@@ -109,6 +114,9 @@ pub(crate) fn context_text(fit: &ContextFit) -> String {
         fit.source.label()
     );
     let _ = writeln!(out, "  {:<22} {}", "fitted to hardware", opt(fit.fitted));
+    if let Some(note) = &fit.note {
+        let _ = writeln!(out, "  {:<22} {note}", "  memory");
+    }
     let _ = writeln!(out, "  {:<22} {}", "  device budget", gib(fit.budget_bytes));
     let _ = writeln!(out, "  {:<22} {}", "  weights", gib(fit.weights_bytes));
     let _ = writeln!(
@@ -142,7 +150,7 @@ fn gib(v: Option<u64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::{ChoiceSource, LaunchArg, LaunchNarration};
+    use gglib_core::domain::{ChoiceSource, FitInputs, LaunchArg, LaunchNarration};
     use gglib_core::server_config::ContextSizeSource;
 
     fn arg(flag: &str, value: Option<&str>, source: ChoiceSource, reason: &str) -> LaunchArg {
@@ -248,24 +256,52 @@ mod tests {
         assert_eq!(displacement_text(&beside), None);
     }
 
-    /// Every figure is printed, a refusal as `unknown`, never as a zero.
+    /// Every figure is printed, a refusal as `unknown`, never as a zero,
+    /// under the fit sentence; a refusal that did not know the KV cost has
+    /// no memory row.
     #[test]
     fn the_context_section_prints_the_chain_and_the_fits_inputs() {
-        let fit = ContextFit {
-            serves_at: 4096,
-            source: ContextSizeSource::BuiltInDefault,
-            fitted: None,
-            budget_bytes: Some(96 << 30),
-            weights_bytes: Some(4_284_481_536),
-            kv_bytes_per_token: None,
-            trained_ctx: None,
-            unsnapped: None,
-        };
+        let fit = ContextFit::new(
+            4096,
+            ContextSizeSource::BuiltInDefault,
+            None,
+            &FitInputs {
+                budget_bytes: Some(96 << 30),
+                weights_bytes: Some(4_284_481_536),
+                ..FitInputs::default()
+            },
+        );
         assert_eq!(
             context_text(&fit),
-            "Context\n  serves at              4096 (built-in default)\n  fitted to hardware     unknown\n    device budget        96.00 GiB\n    weights              3.99 GiB\n    kv bytes/token       unknown\n    trained window       unknown\n    before snapping      unknown\n"
+            "Context\n  Serves at 4K context; gglib could not fit one to this machine: the model does not say what its context costs or what it was trained for.\n  serves at              4096 (built-in default)\n  fitted to hardware     unknown\n    device budget        96.00 GiB\n    weights              3.99 GiB\n    kv bytes/token       unknown\n    trained window       unknown\n    before snapping      unknown\n"
         );
     }
+
+    /// A fit that knew every figure says it fits, and what the served
+    /// context needs of the budget, the words the GUI shows.
+    #[test]
+    fn a_fit_prints_its_sentence_and_its_memory_row() {
+        let fit = ContextFit::new(
+            32_768,
+            ContextSizeSource::FittedToHardware,
+            Some(32_768),
+            // The GUI fixtures' chat model: 2.5 GB of weights, 1,097,000
+            // bytes of KV cache a token, a 128K window and 48 GiB, which fit
+            // 40,005 tokens before snapping to 32K.
+            &FitInputs {
+                budget_bytes: Some(48 << 30),
+                weights_bytes: Some(2_500_000_000),
+                kv_bytes_per_token: Some(1_097_000),
+                trained_ctx: Some(131_072),
+                unsnapped: Some(40_005),
+            },
+        );
+        assert_eq!(
+            context_text(&fit),
+            "Context\n  Fits this machine with 32K context, of 128K trained.\n  serves at              32768 (fitted to hardware)\n  fitted to hardware     32768\n    memory               fits (35.81 GiB of 43.20 GiB usable)\n    device budget        48.00 GiB\n    weights              2.33 GiB\n    kv bytes/token       1097000\n    trained window       131072\n    before snapping      40005\n"
+        );
+    }
+
     /// The plans `contracts/models/launch_line.json` records: an ordinary
     /// llama launch, one whose values need quoting for a shell (a space, a
     /// single quote, a double quote, a tab, an empty value, a `$`, a

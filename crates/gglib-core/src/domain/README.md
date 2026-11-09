@@ -121,6 +121,9 @@ infrastructure concerns (database, filesystem, etc.).
   the wire
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
+- `fit_sentence` - A context fit in words (`ContextFit::new` composes them):
+  the fit sentence and the Context note, served on `ContextFit` and
+  printed by `gglib model explain`
 - `revision` - The revision a model's files came from, a commit sha or a
   ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine

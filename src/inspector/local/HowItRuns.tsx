@@ -29,7 +29,6 @@ import {
   argsValue,
   argsWhy,
   chosenBy,
-  contextNote,
   grouped,
   labelOf,
   narrated,
@@ -135,7 +134,7 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
   const value = (row: RunRow) => {
     const said = narrated(plan.narration, row.key);
     const own = row.args.length ? argsValue(row.args) : null;
-    if (row.key === 'ctx') return [said ?? own, contextNote(plan.fit)].filter(Boolean).join(' · ');
+    if (row.key === 'ctx') return [said ?? own, plan.fit?.note].filter(Boolean).join(' · ');
     if (row.key === 'sampling') return samplingValue(sampling);
     if (row.key === 'reasoning') {
       const set = settingsLine(sampling, REASONING_KEYS).set;
