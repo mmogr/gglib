@@ -114,7 +114,7 @@ crates/gglib-core/src/domain/benchmark/tune/apply.rs 449
 crates/gglib-core/src/domain/cache_budget.rs 305
 crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/chat.rs 337
-crates/gglib-core/src/domain/fit_sentence_tests.rs 317
+crates/gglib-core/src/domain/fit_sentence_tests.rs 350
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 396
 crates/gglib-core/src/domain/hub_chats_tests.rs 481
