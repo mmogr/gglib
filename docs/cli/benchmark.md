@@ -15,19 +15,19 @@ $ gglib benchmark compare -p "Write a haiku about a lighthouse, and nothing else
   ╰───────────────────────────────────────╯
 
 [1/2] Qwen3-4B-Instruct-2507
-Salt wind whispers tall,  
-ancient beam cuts dark sea—  
-watchers' steady eye.
-✓ 84.8 tok/s gen  ·  358.0 tok/s prompt  ·  0 tokens  ·  0.2s
+Silent sentinel,  
+waves whisper past your beam—  
+light cuts the night deep.
+✓ 82.9 tok/s gen  ·  502.4 tok/s prompt  ·  19 tokens  ·  0.2s
 
 [2/2] Qwen3.8-27B
-We need to respond to user: "Write a haiku about a lighthouse, and nothing else." Need final only haiku, nothing else. Need likely 5-7-5 syllables? Let's craft: "Stone sentinel stands" (4? Stone(1) sen(2) ti(3) nel(4) stands(5) =5). "its beam cuts the midnight sea" (its1 beam2 cuts3 the4 mid5 night6 sea7? Wait its=1, beam=1 =>2, cuts=1=>3, the=1=>4, mid=1=>5, night=1=>6, sea=1=>7 yes 7). "waves break in white foam" (waves1 break2 in3 white4 foam5 =5). Good. Final only those three lines. Ensure nothing else.
-Stone sentinel stands  
-its beam cuts the midnight sea  
-waves break in white foam
-✓ 27.9 tok/s gen  ·  103.7 tok/s prompt  ·  0 tokens  ·  7.0s
+thought for 10.3s
+Beacon cuts the night
+steady hand against the waves
+rock endures below
+✓ 27.0 tok/s gen  ·  110.2 tok/s prompt  ·  293 tokens  ·  10.8s
 
-✓ Run #4 complete
+✓ Run #7 complete
 ```
 <!-- /snippet -->
 

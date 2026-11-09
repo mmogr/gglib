@@ -76,9 +76,7 @@ and commit it, so the last chapter's `git diff` has something to compare
 against. The scripts set `HOME` and opencode's `XDG_*` folders under that
 copy, so neither the recording nor opencode touches your own setup. The copy
 serves on 8080 so the pictures show the default port, which means stopping
-your own proxy (`gglib proxy stop`) while you record. A `daemon status`
-snippet alone can be recorded with the demo's proxy started on 8081 instead;
-`snippets.py` shows that one line on the stored port:
+your own proxy (`gglib proxy stop`) while you record:
 
 ```bash
 export GGLIB_DATA_DIR=$HOME/.local/share/gglib-demo GGLIB_DAEMON_PORT=9907
@@ -86,6 +84,10 @@ export GGLIB_MODELS_DIR=$GGLIB_DATA_DIR/models
 gglib config settings set --proxy-port 8080 --llama-base-port 9300
 gglib model add $GGLIB_MODELS_DIR/<the model to serve>.gguf
 ```
+
+The CLI snippets need no such stop: they can be recorded with the copy on
+`--proxy-port 9908 --llama-base-port 9600`, and `snippets.py` shows those
+ports as 8080 and 9300.
 
 ```bash
 python3 record.py steps/cli-up.json up.cast
@@ -143,9 +145,9 @@ python3 snippets.py --splice   # after editing a page's prose: no recording
 python3 snippets.py --check    # the pages hold what snippets/ holds
 ```
 
-The steps files use the demo copy above, with its proxy on 8080, so your own
-proxy is stopped while they record. The ones that ask a model (`q`,
-`q-pipe`, `chat`, `run-start`, `benchmark-compare`, `up-again`) load the
+The steps files use the demo copy above, on 8080 and 9300 or on 9908 and
+9600, the second so your own gglib can keep 8080. The ones that ask a model
+(`q`, `q-pipe`, `chat`, `run-start`, `benchmark-compare`, `up-again`) load the
 copy's default model, `Qwen3-4B-Instruct-2507`, and `mcp` adds a filesystem
 server to the copy with `npx`. Put the gglib under test first on `PATH`, as
 above, so `config paths` names it. `--rename` is applied twice: this

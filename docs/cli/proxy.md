@@ -20,7 +20,7 @@ $ gglib daemon status
 
   ╭─ ℹ️ Daemon ───────────────────────────╮
   Status:  running at http://127.0.0.1:9907
-  PID:     29672
+  PID:     11834
   Proxy:   On at http://127.0.0.1:8080/v1
   API key: None needed
 
@@ -88,8 +88,14 @@ on, by day.
 $ gglib proxy trips
 The loop guard's log, the last 30 day(s):
 DAY (UTC)   MODEL                         VERSION    MODE    SCANNED  TRIPS  LOOPS  STAGN.  SESSIONS
+2026-11-09  Qwen3-4B-Instruct-2507        0.31.0-rc.8  note          9      0      0       0         0
+2026-11-07  Qwen3-4B-Instruct-2507        0.31.0-rc.3  note          1      0      0       0         0
+2026-11-07  Qwen3-4B-Instruct-2507        0.31.0-rc.5  note          1      0      0       0         0
+2026-11-07  Qwen3.8-27B                   0.31.0-rc.3  note          1      0      0       0         0
 2026-10-31  Qwen3-30B-A3B                 0.29.0-rc.1  note          1      0      0       0         0
+2026-10-31  Qwen3-4B-Instruct-2507        0.29.0-rc.4  note          2      0      0       0         0
 2026-10-31  Qwen3.8-27B                   0.29.0-rc.1  note         10      0      0       0         0
+2026-10-31  Qwen3.8-27B                   0.29.0-rc.4  note          1      0      0       0         0
 
 A trip is the guard's decision, not a delivery: a noted request can still fail to reach the model.
 ```

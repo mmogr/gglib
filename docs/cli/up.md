@@ -43,7 +43,7 @@ $ gglib up
 
 [4/5] Endpoint
 
-  ✓ answered in 20.0s by Qwen3.8-27B
+  ✓ answered in 2.6s by Qwen3.8-27B
 
   Connect your client  Model ID Qwen3.8-27B · gglib id 3
 
