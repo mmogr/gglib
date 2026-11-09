@@ -16,7 +16,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ConversationSettings } from '../../../../src/services/transport';
-import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../../src/types/generated/LocalTurn';
 import { TransportError } from '../../../../src/services/transport/errors';
 import { FOLDER_GONE } from '../../../../src/hooks/useChatFolder';
 import { agentRun, chatTransport, conversation, plusItem, wrapper, type ChatFixture } from './chatPlaceHarness';
@@ -32,7 +32,7 @@ import ChatPlace from '../../../../src/places/chat/ChatPlace';
 
 let fixture: ChatFixture;
 /** The body of each run the page started, in order. */
-let started: AgentRunRequest[];
+let started: LocalTurn[];
 /** Folders that are gone: a run in a chat remembering one is refused 409. */
 let gone: Set<string>;
 
@@ -52,7 +52,7 @@ function pageTransport() {
   return {
     ...chatTransport(fixture),
     getModel: vi.fn(async () => guiModel({ id: 7, quantization: 'Q8_0' })),
-    startAgentRun: vi.fn(async (id: string, request: AgentRunRequest) => {
+    startAgentRun: vi.fn(async (id: string, request: LocalTurn) => {
       started.push(request);
       const cid = request.conversation_id as number;
       const settings = fixture.conversations.find((c) => c.id === cid)?.settings;
@@ -65,7 +65,7 @@ function pageTransport() {
           c.id === cid ? { ...c, settings: remembering(c.settings, said) } : c,
         );
       }
-      const asked = String(request.messages.at(-1)?.content ?? '');
+      const asked = request.content;
       fixture.rows[cid] = [
         ...(fixture.rows[cid] ?? []),
         { id: nextRow++, conversation_id: cid, role: 'user', content: asked, created_at: '2026-09-01T10:00:00Z' },
@@ -87,7 +87,7 @@ const rowOf = (element: HTMLElement) => element.closest('form') as HTMLElement;
 const margin = () => within(rowOf(composer()));
 
 /** Send `text`, and wait for its run to start and end and for the list to be read after it. */
-async function exchange(user: ReturnType<typeof userEvent.setup>, text: string): Promise<AgentRunRequest> {
+async function exchange(user: ReturnType<typeof userEvent.setup>, text: string): Promise<LocalTurn> {
   const runs = started.length;
   const reads = stub().listConversations.mock.calls.length;
   await user.type(composer(), `${text}{Enter}`);

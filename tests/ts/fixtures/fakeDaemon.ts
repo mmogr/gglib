@@ -12,11 +12,18 @@
  *   branching rules say (`fakeBranches.ts`): in place, or on a new chat of
  *   the same family holding a copy of the rows it keeps, each copy keyed by
  *   the row it copies as first written. A refusal changes nothing.
- * - `PUT /api/runs/{id}?kind=agent` answers `201` with the run `queued`, or
- *   `200` with the run that already has the id, saving nothing again. Once
- *   accepted it saves the request's last message when it is the user's; with
- *   `answer_saved`, none, and it is refused unless the chat ends in a
- *   question. A refusal changes nothing.
+ * - `POST /api/conversations` keeps the `model` it is made for as the
+ *   conversation's settings' model, and `PUT /api/conversations/{id}` saves
+ *   the settings a patch names (`settings`), answering with nothing.
+ * - `PUT /api/runs/{id}?kind=agent` takes this machine's turn (`LocalTurn`):
+ *   a key it does not name is refused `invalid_request`, and so is a turn
+ *   that says neither text nor an image, or answers the saved question and
+ *   carries one. It answers `201` with the run `queued` (and with
+ *   `refuseLate`, then ends it `failed` having written nothing), or `200` with the
+ *   run that already has the id, saving nothing again. Once accepted it
+ *   saves the turn's message as the user's row; with `answer_saved`, none,
+ *   and it is refused unless the chat ends in a question. A refusal changes
+ *   nothing.
  * - A run is `in_progress` from its first event. Its end (a `finish`, or a
  *   cancel) saves the reply after the call that asked for it returns, and
  *   only then does its status read as ended and its readers get the one
@@ -25,18 +32,19 @@
  *   `event: preview` with no id: it is never logged, so a reader that comes
  *   later does not get it, and `last_seq` does not move.
  * - `GET /api/runs` is newest first; absent optional fields are left out.
- * - `/api/attachments` is the image store (`fakeImageStore.ts`): a run
- *   whose messages name an image not stored, or over 16 MiB of images
- *   together, is refused by its code before it starts, and a saved user row
- *   lists its images' facts.
+ * - `/api/attachments` is the image store (`fakeImageStore.ts`): a turn
+ *   whose images, or its chat's saved ones, name an image not stored, or
+ *   come to over 16 MiB together, is refused by its code before it starts,
+ *   and a saved user row lists its images' facts.
  *
  * A test drives a run with `emit` and `finish`, and can act at any request
  * with `before`. Every request is recorded.
  */
 
 import type { ChatMessage } from '../../../src/services/transport';
-import type { AgentRunRequest } from '../../../src/types/generated/AgentRunRequest';
 import type { ChatChange } from '../../../src/types/generated/ChatChange';
+import type { ConversationSettingsPatch } from '../../../src/types/generated/ConversationSettingsPatch';
+import type { LocalTurn } from '../../../src/types/generated/LocalTurn';
 import type { RunInfo } from '../../../src/types/generated/RunInfo';
 import { answerable, plan, points, REFUSED_STATUS, type LineChat, type PathRow } from './fakeBranches';
 import { FakeImageStore } from './fakeImageStore';
@@ -49,7 +57,7 @@ export interface Recorded {
 
 interface FakeRun {
   info: RunInfo;
-  request: AgentRunRequest | null;
+  request: LocalTurn | null;
   frames: string[];
   streams: Array<ReadableStreamDefaultController<Uint8Array>>;
   ending: Promise<void> | null;
@@ -58,6 +66,19 @@ interface FakeRun {
 type NewRow = Omit<ChatMessage, 'id' | 'conversation_id' | 'created_at'>;
 
 const encoder = new TextEncoder();
+
+/** Every key a turn may say: `LocalTurn`'s, each named, so a key added in Rust fails to compile here. */
+const TURN_KEY_LIST = {
+  conversation_id: true,
+  content: true,
+  images: true,
+  thinking: true,
+  answer_saved: true,
+  draw: true,
+  image_model: true,
+  folder: true,
+} as const satisfies Record<keyof LocalTurn, true>;
+const TURN_KEYS = new Set(Object.keys(TURN_KEY_LIST));
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -80,6 +101,15 @@ export class FakeDaemon {
   runs = new Map<string, FakeRun>();
   requests: Recorded[] = [];
   images = new FakeImageStore();
+  /**
+   * The next turn is taken (`201`) and then refused, once, as the daemon
+   * refuses a turn whose paired machine is away or whose model cannot load:
+   * its run ends `failed` with this error, having written no row.
+   */
+  refuseLate: RunInfo['error'] | null = null;
+  /** The next turn is accepted and then waits, its question unsaved, as a run whose model is still loading does; cancelled, it ends with nothing written. */
+  loadsSlowly = false;
+  private loading = new Set<string>();
   /** The answer the next run start gets instead of a run, once. */
   refuseNext: { status: number; type: string; error: string } | null = null;
   /** The next run start never reaches the daemon: `fetch` rejects, once. */
@@ -96,6 +126,8 @@ export class FakeDaemon {
   before: ((method: string, path: string) => Promise<void> | void) | null = null;
   /** Readers whose `fetch` was aborted. */
   abortedReads = 0;
+  /** Each conversation's settings, as the patches sent to it left them. */
+  settings = new Map<number, ConversationSettingsPatch>();
   private unsaved = new Set<string>();
   private nextRow = 1;
   /** The row each copy copies as first written; a row absent here is its own. */
@@ -214,7 +246,7 @@ export class FakeDaemon {
    * End run `id` as `status`. Its reply (`rows`) is saved after this
    * returns; then, at once, it reads as ended and its readers are told.
    */
-  finish(id: string, status: RunInfo['status'], rows: NewRow[] = []): Promise<void> {
+  finish(id: string, status: RunInfo['status'], rows: NewRow[] = [], error?: RunInfo['error']): Promise<void> {
     const run = this.runs.get(id)!;
     run.ending ??= new Promise((resolve) => {
       setTimeout(async () => {
@@ -223,7 +255,7 @@ export class FakeDaemon {
         rows.forEach((row) => this.save(conversationId, row));
         run.info = { ...run.info, status, finished_at_ms: 1790000008250 };
         if (status === 'failed') {
-          run.info.error = { code: 'agent_error', message: 'The agent loop failed.' };
+          run.info.error = error ?? { code: 'agent_error', message: 'The agent loop failed.' };
         }
         if (this.unsaved.has(id)) {
           run.info.error = { code: 'transcript_not_saved', message: 'The reply could not be saved to its conversation.' };
@@ -262,6 +294,9 @@ export class FakeDaemon {
     if (method === 'POST' && path === '/api/conversations') {
       const id = this.nextConversation++;
       this.conversations.add(id);
+      // A conversation made for a model keeps it as its settings' model.
+      const model = (body as { model?: ConversationSettingsPatch['model'] }).model;
+      if (model) this.settings.set(id, { model });
       return json(id);
     }
     if (method === 'GET' && (m = /^\/api\/conversations\/(\d+)\/thread$/.exec(path))) {
@@ -272,6 +307,13 @@ export class FakeDaemon {
         ...(along.length > 0 && { points: along }),
         ...(answerable(this.path(cid)) && { answerable: true }),
       });
+    }
+    if (method === 'PUT' && (m = /^\/api\/conversations\/(\d+)$/.exec(path))) {
+      const cid = Number(m[1]);
+      if (!this.conversations.has(cid)) return refusal(404, 'not_found', `Conversation not found: ${cid}`);
+      const patch = (body as { settings?: ConversationSettingsPatch | null }).settings;
+      if (patch) this.settings.set(cid, { ...this.settings.get(cid), ...patch });
+      return new Response(null, { status: 200 });
     }
     if (method === 'POST' && (m = /^\/api\/conversations\/(\d+)\/changes$/.exec(path))) {
       return this.change(Number(m[1]), body as ChatChange);
@@ -291,7 +333,7 @@ export class FakeDaemon {
         throw new TypeError('Failed to fetch');
       }
       await this.startGate;
-      return this.start(decodeURIComponent(m[1]), body as AgentRunRequest);
+      return this.start(decodeURIComponent(m[1]), body as Record<string, unknown>);
     }
     if (method === 'GET' && path === '/api/runs') {
       const newest = [...this.runs.values()].reverse();
@@ -308,7 +350,9 @@ export class FakeDaemon {
         .filter((e) => e.type === 'text_delta')
         .map((e) => e.content)
         .join('');
-      if (this.cancelEndsAs === 'failed') {
+      if (this.loading.delete(run.info.id)) {
+        void this.finish(run.info.id, 'cancelled', []);
+      } else if (this.cancelEndsAs === 'failed') {
         this.unsaved.add(run.info.id);
         void this.finish(run.info.id, 'failed');
       } else {
@@ -339,7 +383,7 @@ export class FakeDaemon {
     return run;
   }
 
-  private start(id: string, request: AgentRunRequest): Response {
+  private start(id: string, body: Record<string, unknown>): Response {
     const existing = this.runs.get(id);
     if (existing) return json(existing.info, 200);
     if (this.refuseNext) {
@@ -347,21 +391,40 @@ export class FakeDaemon {
       this.refuseNext = null;
       return refusal(status, type, error);
     }
-    const cid = request.conversation_id;
-    const unreadable = this.images.check(request.messages as Array<{ images?: string[] }>);
-    if (unreadable) return unreadable;
-    if (cid !== null && !this.conversations.has(cid)) {
+    const unknown = Object.keys(body).find((key) => !TURN_KEYS.has(key));
+    if (unknown !== undefined) return refusal(400, 'invalid_request', "a turn's body is a LocalTurn, and no other key");
+    const turn = body as unknown as LocalTurn;
+    const images = turn.images ?? [];
+    const said = turn.content.trim() !== '' || images.length > 0;
+    if (said === (turn.answer_saved ?? false)) {
+      return refusal(400, 'invalid_request', said ? 'an answer carries no message' : 'a turn has neither text nor an image');
+    }
+    const cid = turn.conversation_id;
+    if (!this.conversations.has(cid)) {
       return refusal(404, 'conversation_not_found', `no conversation has id ${cid}`);
     }
-    const last = request.messages[request.messages.length - 1];
-    if (request.answer_saved && (cid === null || !answerable(this.path(cid)))) {
+    if (turn.answer_saved && !answerable(this.path(cid))) {
       return refusal(409, 'nothing_to_answer', 'the conversation ends in no question to answer');
     }
+    // The chat's saved images count with the turn's, as the history does.
+    const history = [...this.path(cid), { images }];
+    const unreadable = this.images.check(history);
+    if (unreadable) return unreadable;
     const run = this.accept(id, cid);
-    run.request = request;
-    if (cid !== null && last?.role === 'user') {
-      const images = last.images ?? [];
-      this.save(cid, { role: 'user', content: last.content, ...(images.length > 0 && { images: this.images.infos(images) }) });
+    run.request = turn;
+    const late = this.refuseLate;
+    if (late) {
+      this.refuseLate = null;
+      void this.finish(id, 'failed', [], late);
+      return json(run.info, 201);
+    }
+    if (this.loadsSlowly) {
+      this.loadsSlowly = false;
+      this.loading.add(id);
+      return json(run.info, 201);
+    }
+    if (!turn.answer_saved) {
+      this.save(cid, { role: 'user', content: turn.content, ...(images.length > 0 && { images: this.images.infos(images) }) });
     }
     return json(run.info, 201);
   }

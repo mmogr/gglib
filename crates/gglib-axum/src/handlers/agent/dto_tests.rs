@@ -8,7 +8,7 @@
 
 use gglib_core::domain::ReasoningEffort;
 
-use super::{AgentChatRequest, AgentRequestConfig, AgentRunRequest};
+use super::{AgentChatRequest, AgentRequestConfig};
 
 fn parse(json: &str) -> AgentChatRequest {
     serde_json::from_str(json).expect("parses")
@@ -137,26 +137,5 @@ fn far_is_absent_unless_the_body_names_a_model_there() {
             },
             id: 3,
         })
-    );
-}
-
-/// A run's folder is said as the body has it: absent, a path, or `""` to
-/// forget, which is a word of its own and not an absence.
-#[test]
-fn a_runs_folder_is_absent_a_path_or_the_empty_word() {
-    let folder = |body: &str| {
-        serde_json::from_str::<AgentRunRequest>(body)
-            .expect("parses")
-            .folder
-    };
-
-    assert_eq!(folder(MINIMAL), None);
-    assert_eq!(
-        folder(r#"{"port":9000,"messages":[],"folder":"/work/project"}"#).as_deref(),
-        Some("/work/project")
-    );
-    assert_eq!(
-        folder(r#"{"port":9000,"messages":[],"folder":""}"#).as_deref(),
-        Some("")
     );
 }

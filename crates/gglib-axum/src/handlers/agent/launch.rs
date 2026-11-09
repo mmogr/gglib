@@ -1,20 +1,17 @@
 //! How an agent run starts: the id reserved in the caller's scope, the
 //! user's message saved, the loop started, and the reply saved when it ends.
 //!
-//! The page's run prepares its loop first and reserves after
-//! ([`launch`]). A turn on one of the hub's chats, a paired device's or
-//! this machine's own, is reserved first ([`launch_turn`]): its model may
-//! have to load, or wait behind an image render, for longer than the
-//! client waits for its `PUT`, so the load happens inside the run, which
-//! says it is waiting. What such a run is
-//! refused for after that ends it `failed` with the code the `PUT` would
-//! have answered, and it has written nothing. Both write a turn's rows
-//! through [`begin_writes`].
+//! A turn on one of this machine's chats, a paired device's or this
+//! machine's own, is reserved first ([`launch_turn`]): its model may have
+//! to load, or wait behind an image render, for longer than the client
+//! waits for its `PUT`, so the load happens inside the run, which says it
+//! is waiting. What such a run is refused for after that ends it `failed`
+//! with the code the `PUT` would have answered, and it has written nothing.
+//! A turn's rows are written through [`begin_writes`].
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use axum::http::StatusCode;
 use futures_util::future::BoxFuture;
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
@@ -42,7 +39,7 @@ pub(super) struct Transcript {
     pub(super) answer_saved: bool,
     pub(super) remember: Remember,
     /// The folder the conversation is to remember once the run starts.
-    /// Only the page's run says one.
+    /// Only this machine's own turn says one.
     pub(super) remember_folder: RememberFolder,
 }
 
@@ -51,6 +48,11 @@ pub(super) struct Transcript {
 /// and `Some(None)` forgets it.
 pub(super) type RememberFolder = Option<Option<String>>;
 
+/// The page's launch before its turns went through `hub_turn`, kept as a
+/// test driver until the old door is retired (D7): it runs a prepared loop
+/// through the same writes and work a turn has, prepared first and
+/// reserved after.
+///
 /// Reserve the id in `scope`, refuse a run on another machine than its
 /// conversation's, save the user's message (naming the device, for a
 /// device's run), the model the run uses, the Thinking choice its turn
@@ -59,6 +61,7 @@ pub(super) type RememberFolder = Option<Option<String>>;
 /// a retry finds the run rather than saving the message, or replacing rows,
 /// again. A run that is refused, or whose id is already a run, writes none
 /// of them.
+#[cfg(test)]
 pub(super) async fn launch(
     state: &AppState,
     id: &str,
@@ -77,13 +80,14 @@ pub(super) async fn launch(
     ));
     task.await.unwrap_or_else(|_| {
         Err(HttpError::Coded {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
+            status: axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             code: "internal_error",
             message: "the run could not be started".to_owned(),
         })
     })
 }
 
+#[cfg(test)]
 async fn reserve_and_start(
     state: AppState,
     id: String,
@@ -97,19 +101,19 @@ async fn reserve_and_start(
     let state = &state;
     // A device's turn says so, on its message and on each turn of the reply.
     prepared.made_by.device = scope.device().map(str::to_owned);
-    let spec = RunSpec {
+    let spec = gglib_app_services::RunSpec {
         kind: RunKind::Agent,
-        model: Some(prepared.model.clone()),
+        model: Some(prepared.made_by.model.clone()),
         conversation_id,
     };
     let reserved = match state.runs.reserve(scope, id, spec)? {
-        Reservation::Existing(info) => {
+        gglib_app_services::Reservation::Existing(info) => {
             return Ok(Created {
                 info,
                 created: false,
             });
         }
-        Reservation::New(reserved) => reserved,
+        gglib_app_services::Reservation::New(reserved) => reserved,
     };
     let times = FrameTimes::new();
     // Dropping `reserved` on the way out leaves no run behind. Held, it

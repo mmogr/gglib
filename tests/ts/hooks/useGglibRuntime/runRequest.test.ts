@@ -1,139 +1,68 @@
 /**
- * What an agent run's body carries.
- *
- * The body is hand-built rather than generated, so nothing but a test notices
- * a missing key. A turn on the paired machine's model names it by `far`, that
- * machine and the model's id there, and never by a name, which another model
- * there could share; a local turn names no model and lets llama-server serve
- * the one it loaded. The conversation's Thinking choice is a key of its own,
- * there only when the run changes it, beside the two reasoning controls and
- * never in place of them; so is its folder. `draw` is a key only on a run sent with Draw
- * pressed: the daemon offers its drawing tool by that key and nothing else.
+ * What this machine's turn carries: the conversation and the new message,
+ * and nothing the daemon decides. No history, no port, no model, no tool
+ * filter and no limits: the daemon rebuilds the history from what is saved
+ * and runs the turn on what the conversation's settings name. The
+ * conversation's Thinking choice and its folder are keys only on the turn
+ * that changes them; `draw` only on a turn sent with Draw pressed, and
+ * `image_model` only beside it.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-vi.mock('../../../../src/services/platform', () => ({
-  appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
-}));
-vi.mock('../../../../src/services/tools', () => ({
-  getToolRegistry: () => ({ getEnabledDefinitions: () => [], getBackendName: (n: string) => n }),
-}));
-
-import {
-  buildRunRequest,
-  mintRunId,
-  type RunRequestOptions,
-} from '../../../../src/hooks/useGglibRuntime/runRequest';
-import type { GglibMessage } from '../../../../src/types/messages';
-import type { ModelRef } from '../../../../src/types/generated/ModelRef';
-
-const hello = {
-  id: 'u1',
-  role: 'user',
-  content: [{ type: 'text', text: 'hello' }],
-} as unknown as GglibMessage;
+import { buildTurn, mintRunId, type TurnOptions } from '../../../../src/hooks/useGglibRuntime/runRequest';
 
 /** Options with every knob at rest, so each test states only its own fields. */
-function options(extra: Partial<RunRequestOptions> = {}): RunRequestOptions {
-  return { messages: [hello], conversationId: 4, selectedServerPort: 9000, ...extra };
+function options(extra: Partial<TurnOptions> = {}): TurnOptions {
+  return { conversationId: 4, content: 'hello', ...extra };
 }
 
-describe('buildRunRequest', () => {
-  it('names the conversation the daemon saves to, and carries the history', () => {
-    expect(buildRunRequest(options())).toMatchObject({
+describe('buildTurn', () => {
+  it('is the conversation and the message, and nothing else', () => {
+    expect(buildTurn(options())).toStrictEqual({ conversation_id: 4, content: 'hello' });
+  });
+
+  it('carries the images by their ids, in order, and no key when there are none', () => {
+    expect(buildTurn(options({ images: ['b', 'a'] }))).toStrictEqual({ conversation_id: 4, content: 'hello', images: ['b', 'a'] });
+    expect(Object.keys(buildTurn(options({ images: [] })))).not.toContain('images');
+  });
+
+  it('answers the saved question with no message of its own', () => {
+    expect(buildTurn(options({ content: '', answerSaved: true }))).toStrictEqual({
       conversation_id: 4,
-      messages: [{ role: 'user', content: 'hello' }],
+      content: '',
+      answer_saved: true,
     });
-  });
-
-  it('names a far model by its machine and its id there', () => {
-    const far: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
-    const body = buildRunRequest(options({ selectedServerPort: undefined, far }));
-    expect(body.far).toEqual(far);
-    expect(body.model).toBeNull();
-    expect(body.port).toBe(0);
-  });
-
-  it('locally names no model and no far one', () => {
-    const body = buildRunRequest(options());
-    expect(body.model).toBeNull();
-    expect(body.far).toBeNull();
-    expect(body.port).toBe(9000);
-  });
-
-  it('a model known not to call tools is offered none', () => {
-    expect(buildRunRequest(options({ supportsToolCalls: false })).tool_filter).toEqual([]);
-  });
-
-  it('sends a config only when a field of it was set', () => {
-    expect(buildRunRequest(options({ config: {} })).config).toBeNull();
-    expect(buildRunRequest(options({ config: { max_parallel_tools: 3 } })).config).toMatchObject({
-      max_parallel_tools: 3,
-      tool_timeout_ms: null,
-    });
-  });
-
-  it('carries both reasoning controls at the top level', () => {
-    const body = buildRunRequest(
-      options({ reasoning: { reasoning_effort: 'high', reasoning_budget_tokens: 0 } }),
-    );
-    expect(body).toMatchObject({ reasoning_effort: 'high', reasoning_budget_tokens: 0 });
+    expect(Object.keys(buildTurn(options({ answerSaved: false })))).not.toContain('answer_saved');
   });
 
   it('says the Thinking choice only when given one, and changes nothing else by it', () => {
-    const reasoning = { reasoning_effort: 'high', reasoning_budget_tokens: 2048 };
-    const unsaid = buildRunRequest(options({ reasoning }));
-    expect(Object.keys(unsaid)).not.toContain('thinking');
-    expect(unsaid).toMatchObject({ reasoning_effort: 'high', reasoning_budget_tokens: 2048 });
-
-    expect(buildRunRequest(options({ reasoning, thinking: 'off' }))).toEqual({ ...unsaid, thinking: 'off' });
-    expect(buildRunRequest(options({ reasoning, thinking: 'default' }))).toEqual({ ...unsaid, thinking: 'default' });
+    const unsaid = buildTurn(options());
+    expect(buildTurn(options({ thinking: 'off' }))).toStrictEqual({ ...unsaid, thinking: 'off' });
+    expect(buildTurn(options({ thinking: 'default' }))).toStrictEqual({ ...unsaid, thinking: 'default' });
   });
 
-  it('says the folder only on a run that changes it: a path sets it, "" forgets it', () => {
-    const unsaid = buildRunRequest(options());
-    expect(Object.keys(unsaid)).not.toContain('folder');
-    expect(Object.keys(buildRunRequest(options({ folder: undefined })))).not.toContain('folder');
-
-    // Nothing else changes by it, and Clear's "" is sent, not dropped.
-    expect(buildRunRequest(options({ folder: '/home/m/src' }))).toEqual({ ...unsaid, folder: '/home/m/src' });
-    expect(buildRunRequest(options({ folder: '' }))).toEqual({ ...unsaid, folder: '' });
+  it('says the folder only on a turn that changes it: a path sets it, "" forgets it', () => {
+    const unsaid = buildTurn(options());
+    expect(Object.keys(buildTurn(options({ folder: undefined })))).not.toContain('folder');
+    expect(buildTurn(options({ folder: '/home/m/src' }))).toStrictEqual({ ...unsaid, folder: '/home/m/src' });
+    // Clear's "" is sent, not dropped.
+    expect(buildTurn(options({ folder: '' }))).toStrictEqual({ ...unsaid, folder: '' });
   });
 
-  it('says draw only for a send made with Draw pressed, and has no such key otherwise', () => {
-    const unsaid = buildRunRequest(options());
-    expect(Object.keys(unsaid)).not.toContain('draw');
-    expect(Object.keys(buildRunRequest(options({ draw: false })))).not.toContain('draw');
-    expect(Object.keys(buildRunRequest(options({ draw: undefined })))).not.toContain('draw');
-
-    // Nothing else changes by it: the tool filter is the daemon's to add to.
-    expect(buildRunRequest(options({ draw: true }))).toEqual({ ...unsaid, draw: true });
+  it('says draw only for a send made with Draw pressed', () => {
+    const unsaid = buildTurn(options());
+    expect(Object.keys(buildTurn(options({ draw: false })))).not.toContain('draw');
+    expect(buildTurn(options({ draw: true }))).toStrictEqual({ ...unsaid, draw: true });
   });
 
-  it('says the image model only beside draw, by its id, and has no such key otherwise', () => {
-    const drawn = buildRunRequest(options({ draw: true }));
-    expect(Object.keys(drawn)).not.toContain('image_model');
-    expect(buildRunRequest(options({ draw: true, imageModel: 7 }))).toEqual({ ...drawn, image_model: 7 });
-
-    // A choice is the chat's, held between drawings: a run without Draw never carries it.
+  it('says the image model only beside draw, by its id', () => {
+    const drawn = buildTurn(options({ draw: true }));
+    expect(buildTurn(options({ draw: true, imageModel: 7 }))).toStrictEqual({ ...drawn, image_model: 7 });
+    // A choice is the chat's, held between drawings: a turn without Draw never carries it.
     for (const draw of [false, undefined]) {
-      const plain = buildRunRequest(options({ draw, imageModel: 7 }));
-      expect(Object.keys(plain)).not.toContain('image_model');
-      expect(Object.keys(plain)).not.toContain('draw');
+      expect(buildTurn(options({ draw, imageModel: 7 }))).toStrictEqual({ conversation_id: 4, content: 'hello' });
     }
-  });
-
-  it('never says draw by the tool filter: a model that calls no tools still names none', () => {
-    expect(buildRunRequest(options({ supportsToolCalls: false }))).toMatchObject({ tool_filter: [] });
-    expect(Object.keys(buildRunRequest(options({ supportsToolCalls: false })))).not.toContain('draw');
-    expect(buildRunRequest(options()).tool_filter).toBeNull();
-  });
-
-  it('says the Thinking choice of a turn on a far model as well', () => {
-    const far: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
-    const body = buildRunRequest(options({ selectedServerPort: undefined, far, thinking: 'off' }));
-    expect(body).toMatchObject({ far, thinking: 'off' });
   });
 });
 

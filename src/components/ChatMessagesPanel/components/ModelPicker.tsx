@@ -7,7 +7,7 @@ import { useResidency } from '../../../places/library/useResidency';
 import { useEndpointFacts } from '../../../services/proxyRegistry';
 import { useModelLibrary } from '../../../services/modelRegistry';
 import { useToastContext } from '../../../contexts/ToastContext';
-import { loadFailed } from '../../../utils/errors';
+import { formatError, loadFailed } from '../../../utils/errors';
 
 /** A model to move the chat to, as the picker names it. */
 export interface ModelChoice {
@@ -20,13 +20,8 @@ interface ModelPickerProps {
   modelId?: number;
   modelName: string;
   quantization?: string | null;
-  /** Move the chat to another model; a failure is toasted here. Absent where there is nothing to pick. */
+  /** Move the chat to another model; a refusal is toasted here. Absent where there is nothing to pick. */
   onPick?: (choice: ModelChoice) => Promise<void>;
-  /**
-   * The model a switch is starting. Held by the page's session, not here:
-   * this remounts with each conversation, and must stay locked across that.
-   */
-  starting?: string | null;
   /** Unload the model the chat is on; offered only while it is loaded. */
   onUnload?: () => Promise<void>;
   /** Open the model's inspector, where its log is. */
@@ -53,9 +48,10 @@ const STAYS = 'A chat stays on its machine. Start a new chat to use this model.'
  * runs, else first under On this Mac. While the endpoint is pinned
  * (`ProxyStatus.pinned_model`, a name) the daemon refuses to start any
  * other model, so the others are greyed, each with the pin as its reason
- * ("Pinned · only <model>"). Choosing a model
- * here hands it to the page, which moves the chat there, starting the model
- * first if it is not running; meanwhile the picker is locked and says so.
+ * ("Pinned · only <model>").
+ * Choosing a model here hands it to the page, which saves it as the chat's
+ * model and starts nothing: the next send loads it. A pick the daemon
+ * refuses says why.
  * A chat's machine is fixed, so a paired machine's model opens a new chat
  * on it from a new chat, and is listed greyed, with why, in a saved one. A chat with another machine has
  * nothing here to pick, so it names its model as text.
@@ -65,7 +61,6 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   modelName,
   quantization,
   onPick,
-  starting = null,
   onUnload,
   onShow,
   onOpenFar,
@@ -82,20 +77,12 @@ export const ModelPicker: FC<ModelPickerProps> = ({
     return <span className="truncate px-sm text-sm text-text-secondary">{modelName}</span>;
   }
 
-  if (starting !== null) {
-    return (
-      <span role="status" className="truncate px-sm text-sm text-text-secondary">
-        {RESIDENCY_WORDS.loading} {starting}…
-      </span>
-    );
-  }
-
   const pick = async (choice: ModelChoice) => {
     try {
       await onPick(choice);
     } catch (error) {
-      // The chat stays on the model it was on.
-      showToast(loadFailed(error), 'error');
+      // The chat stays on the model it was on, and the daemon's sentence says why.
+      showToast(formatError(error), 'error');
     }
   };
 

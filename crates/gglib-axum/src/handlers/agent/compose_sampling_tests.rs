@@ -1,4 +1,4 @@
-//! What a daemon turn samples with: the page's run and a paired device's
+//! What a daemon turn samples with: a chat route request and a paired device's
 //! turn. The served model's own values and this machine's global defaults
 //! are folded beneath what the request names, by the rules `gglib chat` and
 //! the proxy resolve by, so a turn that names nothing sends what

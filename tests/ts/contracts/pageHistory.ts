@@ -1,18 +1,17 @@
 /**
- * Conversion to the wire form of an agent run's history (`AgentRunRequest.messages`).
+ * The history the page sent with each turn, before a turn was its new
+ * message alone: its thread's messages as the flat `AgentMessage[]` the
+ * agent loop reads. Kept here, out of `src`, as the record
+ * `savedHistory.test.ts` replays against the history the daemon rebuilds
+ * (`saved_history`), which is the one that remains.
  *
- * The backend expects a flat `AgentMessage[]` (OpenAI multi-turn format) while
- * the UI stores messages as `GglibMessage[]` with rich content-part arrays.
- * {@link convertToWireMessages} performs that translation. The wire types are
- * the generated ones, so a change to the Rust message fails the build here.
- *
- * @module wireMessages
+ * The wire types are the generated ones, so a change to the Rust message
+ * fails the build here.
  */
 
-import { appLogger } from '../../services/platform';
-import type { AgentMessage } from '../../types/generated/AgentMessage';
-import type { ToolCall } from '../../types/generated/ToolCall';
-import { extractParts, toolCallImages, type GglibMessage, type GglibToolCallPart, type TextPart } from '../../types/messages';
+import type { AgentMessage } from '../../../src/types/generated/AgentMessage';
+import type { ToolCall } from '../../../src/types/generated/ToolCall';
+import { extractParts, toolCallImages, type GglibMessage, type GglibToolCallPart, type TextPart } from '../../../src/types/messages';
 
 // ---------------------------------------------------------------------------
 // Type guards
@@ -73,10 +72,6 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentMessage[] 
       // excluded. The backend wire format has no `reasoning` role and the model
       // does not need its own CoT trace as context.
       const allToolCallParts = parts.filter(p => p.type === 'tool-call');
-      const reasoningCount = parts.filter(p => p.type === 'reasoning').length;
-      if (reasoningCount > 0) {
-        appLogger.debug('hook.runtime', 'convertToWireMessages: excluded reasoning parts (not sent to backend)', { reasoningCount });
-      }
       const completedToolCallParts = allToolCallParts.filter(
         (p): p is GglibToolCallPart & { toolCallId: string; toolName: string; result: unknown } =>
           p.type === 'tool-call' &&
@@ -84,10 +79,6 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentMessage[] 
           p.toolName != null &&
           p.result !== undefined,
       );
-      const droppedCount = allToolCallParts.length - completedToolCallParts.length;
-      if (droppedCount > 0) {
-        appLogger.debug('hook.runtime', 'convertToWireMessages: dropped in-flight tool calls (no result yet)', { droppedCount });
-      }
 
       const toolCalls: ToolCall[] = completedToolCallParts.map(p => ({
         id: p.toolCallId,

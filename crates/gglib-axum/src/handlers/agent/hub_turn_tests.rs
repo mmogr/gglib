@@ -1,6 +1,6 @@
 //! A device's turn on a hub chat: read against the hub's record, refused
 //! before anything is written when it cannot run, and saved as the chat
-//! page's runs are.
+//! page's turns are.
 
 use std::time::Duration;
 
@@ -13,7 +13,8 @@ use serde_json::json;
 use super::{plan, start};
 use crate::error::HttpError;
 use crate::handlers::agent::compose::take_permit;
-use crate::handlers::agent::launch::{launch, ready};
+use crate::handlers::agent::launch::launch;
+use crate::handlers::agent::launch::ready;
 pub(super) use crate::handlers::agent::run_fixture::device;
 use crate::handlers::agent::run_fixture::{
     End, finished_reply, meta, paced, prepared, saved, saving, settled, state,

@@ -38,8 +38,10 @@ const NO_CHATS: ConversationSummary[] = [];
 /**
  * Whose model is answering.
  *
- * The local arm is a server started here: a port to talk to and a model id
- * the registry knows. The paired arm is a model of the machine on the other
+ * The local arm is one of this machine's models, by the id the registry
+ * knows; the port it is served on, when it is, names it for a title. A turn
+ * needs none: the daemon loads the model the chat saved when it is not
+ * running. The paired arm is a model of the machine on the other
  * end of the tunnel, by that machine and its id there — the daemon supplies
  * its port and key per turn, so neither exists on this side, and a union
  * rather than optional numbers is what stops the health subscription being
@@ -53,7 +55,9 @@ export type ChatPlaceProps = {
   /** The conversation the address names; `null` for an empty thread. */
   conversationId: number | null;
   draft?: ChatDraft; // Unsent text and images to put back in the composer, e.g. after a model switch
-  startingModel?: string | null; // The model a switch is starting, which locks the picker
+  startingModel?: string | null; // The model Load it again is starting, which its line says
+  // Load the model again, from the line that says it was unloaded; local only.
+  onLoadModel?: () => Promise<void>;
   // Move the chat to another model, keeping open the conversation (and the
   // draft) that `context` reads when the switch lands; local only.
   onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: ChatDraft }) => Promise<void>;
@@ -71,7 +75,7 @@ export type ChatPlaceProps = {
   /** Open a new chat on the paired machine's model, by its id there; local only. */
   onOpenFar?: (id: number) => void;
 } & (
-  | { paired?: undefined; desk?: undefined; serverPort: number; modelId: number }
+  | { paired?: undefined; desk?: undefined; serverPort?: number; modelId: number }
   | {
       /** The paired machine's model, and the name that machine is shown by. */
       paired: { far: ModelRef; machineName: string };
@@ -96,6 +100,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
     conversationId,
     draft,
     startingModel = null,
+    onLoadModel,
     onSwitchModel,
     onUnloadModel,
     onOpened,
@@ -131,6 +136,10 @@ export default function ChatPlace(props: ChatPlaceProps) {
   };
 
   const conversations = useChats(source).list ?? NO_CHATS;
+
+  // The model a conversation made here keeps: a first send's, and Start over's.
+  const chatModel: ModelRef | undefined =
+    paired?.far ?? (modelId === undefined ? undefined : { machine: { kind: 'local' }, id: modelId });
   const syncConversations = () => refreshChats(source);
 
   // What a chat remembers can change on another device, and only its
@@ -177,14 +186,12 @@ export default function ChatPlace(props: ChatPlaceProps) {
     onBranched: (_id, unanswered) => unanswered
       ? showToast(`Saved as a new branch, but it was not answered: ${unanswered.message}`, 'warning')
       : showToast('Saved as a new branch. The original is kept.', 'success'),
-    selectedServerPort: serverPort,
-    pairedModel: paired?.far,
+    model: chatModel,
     onError: (error) => setChatError(error.message),
     // Non-fatal: the turn is still running, so this is a transient notice
     // rather than `chatError`, which renders as a failed turn.
     onSystemWarning: (message, suggestedAction) =>
       showToast(suggestedAction ? `${message} — ${suggestedAction}` : message, 'warning'),
-    supportsToolCalls,
     // assistant-ui only logs a paste or a drop that fails; this is the person told.
     onImageRefused: (sentence) => showToast(sentence, 'error'),
     thinking: thinking.forSend,
@@ -204,8 +211,8 @@ export default function ChatPlace(props: ChatPlaceProps) {
   }, [draft, runtime]);
 
   // Server state from registry - derives isServerRunning reactively
-  // Note: If serverState is null (no event received yet), we assume running
-  // because the place is only opened when a server is already running.
+  // Note: If serverState is null (no event received yet), the composer is
+  // live: a model not running is loaded by the turn that needs it.
   // A paired or far chat subscribes to nothing — this registry only knows
   // servers started here, so its silence about the far machine must not be
   // read as that machine being down and the composer locked.
@@ -225,7 +232,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
 
   // What changes a conversation: this machine's only, never a far chat.
   const actions = useConversationActions({
-    far, activeConversation, confirm, onError: setChatError, onOpened: open, onDeleted, pairedModel: paired?.far,
+    far, activeConversation, confirm, onError: setChatError, onOpened: open, onDeleted, model: chatModel,
   });
 
   return (
@@ -263,6 +270,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
             },
           })))}
           startingModel={startingModel}
+          onLoadModel={onLoadModel}
           onUnloadModel={onUnloadModel}
           quantization={far ? null : quantization}
           imageInput={imageInput}

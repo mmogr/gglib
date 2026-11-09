@@ -152,7 +152,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/agent/chat` | The server-side agentic loop, streamed as SSE |
 | `GET` | `/api/runs` | Every run, newest first |
 | `GET` | `/api/runs/{id}` | One run |
-| `PUT` | `/api/runs/{id}` | Start a chat run with the body as its request, or answer with the run that has the id (201 new, 200 existing); `?kind=agent` runs the agent loop |
+| `PUT` | `/api/runs/{id}` | Start a chat run with the body as its request, or answer with the run that has the id (201 new, 200 existing); `?kind=agent` takes this machine's turn on one of its chats (`LocalTurn`: the conversation and the message), and runs the agent loop on what the chat saved |
 | `GET` | `/api/runs/{id}/events` | A run's events (SSE), from `?after=N` |
 | `POST` | `/api/runs/{id}/cancel` | Cancel a run; idempotent |
 | `GET` | `/api/conversations` | List conversations |

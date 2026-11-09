@@ -29,7 +29,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const open = (id: number) => ({ conversationId: id, conversation: conversation(id), selectedServerPort: 9000 });
+const open = (id: number) => ({ conversationId: id, conversation: conversation(id) });
 
 const toolStart = {
   type: 'tool_call_start',

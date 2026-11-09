@@ -17,7 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../../src/types/generated/LocalTurn';
 import type { DrawingAvailability } from '../../../../src/types/generated/DrawingAvailability';
 import type { ImageModelRow } from '../../../../src/types/generated/ImageModelRow';
 import type { RunInfo } from '../../../../src/types/generated/RunInfo';
@@ -56,7 +56,7 @@ let fixture: ChatFixture;
 /** The machine's image models. `undefined` is a machine from before the list. */
 let models: ImageModelRow[] | undefined;
 /** The bodies of the runs started, in order. */
-let started: AgentRunRequest[];
+let started: LocalTurn[];
 /** Ends the run going. */
 let feed: (item: Item) => void;
 
@@ -77,7 +77,7 @@ function pageTransport() {
   return {
     ...chatTransport(fixture),
     drawingAvailability: vi.fn(async (_source: string, chat: { imageModel?: number | null } = {}) => answerFor(chat.imageModel)),
-    startAgentRun: vi.fn(async (id: string, request: AgentRunRequest) => {
+    startAgentRun: vi.fn(async (id: string, request: LocalTurn) => {
       started.push(request);
       return agentRun(id, 1, 'queued');
     }),
