@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.32.0-rc.1](https://github.com/mmogr/gglib/compare/v0.31.0-rc.9...v0.32.0-rc.1) (2026-11-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **runtime:** the admission paths no chat turn uses are gone, and one token is singular ([#1865](https://github.com/mmogr/gglib/issues/1865))
+
+### Documentation
+
+* **cli:** every snippet is recorded again from the code as it is ([#1862](https://github.com/mmogr/gglib/issues/1862)) ([49e970d](https://github.com/mmogr/gglib/commit/49e970d0c3b91aedf40c41d8204d41515a652a78))
+
+
+### Internal
+
+* **runtime:** the admission paths no chat turn uses are gone, and one token is singular ([#1865](https://github.com/mmogr/gglib/issues/1865)) ([97b5c27](https://github.com/mmogr/gglib/commit/97b5c27f667e2576467d5c9e0d751c9c629d9a6d))
+
 ## [0.31.0-rc.9](https://github.com/mmogr/gglib/compare/v0.31.0-rc.8...v0.31.0-rc.9) (2026-11-09)
 
 
