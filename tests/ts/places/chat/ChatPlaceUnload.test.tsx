@@ -1,22 +1,27 @@
 /**
- * Leaving a chat and unloading its model are two different wishes (#1211).
+ * Leaving a chat and unloading its model are two different wishes (#1211),
+ * and neither locks the chat.
  *
  * The proxy serves the chat's model to every client, Copilot included, so
  * leaving the chat (the sidebar navigates; there is no Close) stops nothing,
  * and Unload <model>, in the model picker ▾, is the one control here that
  * stops the model (the model's inspector has its own). The place hands it
  * up to the chat route, which `tests/ts/places/libraryChat.test.tsx` pins
- * (CH-10). A model gone mid-chat replaces the composer with one line that
- * says so, with no banner and no toast: "was unloaded. [Load it again]", or
- * "stopped unexpectedly · Show log".
+ * (CH-10).
+ *
+ * The composer is never locked. A send loads the chat's model when it is
+ * not loaded and turns the endpoint on when it is off; while either is so,
+ * one line above the live composer says what a send will do, in Rust's
+ * words (`contracts/vocabulary/send_line.json`), with no banner, no toast
+ * and no Load button. A crash is the same line, marked, with Show log.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
-import { chatTransport, conversation, modelPicker, wrapper as pageWrapper } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, framesThenWait, modelPicker, wrapper as pageWrapper } from './chatPlaceHarness';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../../src/services/transport', async () => {
@@ -26,7 +31,10 @@ vi.mock('../../../../src/services/transport', async () => {
 
 import ChatPlace from '../../../../src/places/chat/ChatPlace';
 import { ingestServerEvent } from '../../../../src/services/serverRegistry';
+import { cleanupServerEvents, forgetServerList, initServerEvents } from '../../../../src/services/serverEvents';
+import { applyProxyStatus, resetProxyState } from '../../../../src/services/proxyRegistry';
 import { useToastContext } from '../../../../src/contexts/ToastContext';
+import type { LocalTurn } from '../../../../src/types/generated/LocalTurn';
 
 /** The toasts, which `ToastProvider` holds but does not draw. */
 const ToastProbe = () => {
@@ -41,13 +49,21 @@ const onSwitchModel = vi.fn(async (_choice: { modelId: number; modelName: string
 const onShowModel = vi.fn();
 const onShowLog = vi.fn();
 
-function renderLocal(modelId = 7, startingModel: string | null = null) {
+const ON = { running: true, state: 'on' as const, port: 9946, base_url: 'http://127.0.0.1:9946/v1', key: 'none_needed' as const, pinned_model: null, pinned_to: null, pinned_model_id: null };
+const OFF = { running: false, state: 'off' as const, port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null };
+
+/** The frames a started run is read as; none until a test says. */
+let runFrames: object[];
+/** The bodies of the runs started, in order. */
+let started: LocalTurn[];
+let clock = Date.now();
+
+function renderLocal(modelId: number) {
   return render(
     <ChatPlace
       modelName="qwen3"
       modelId={modelId}
       serverPort={4321}
-      startingModel={startingModel}
       onSwitchModel={onSwitchModel}
       onUnloadModel={onUnloadModel}
       onShowModel={onShowModel}
@@ -57,6 +73,10 @@ function renderLocal(modelId = 7, startingModel: string | null = null) {
     { wrapper },
   );
 }
+
+/** The server registry says model `id` is up, is being unloaded, was unloaded, or crashed. */
+const event = (type: 'running' | 'stopping' | 'stopped' | 'crashed', id: number) =>
+  act(() => ingestServerEvent({ type, modelId: String(id), port: 4321, updatedAt: (clock += 1e6), modelName: 'qwen3' }));
 
 /** Open the picker ▾ and return its item `name`. */
 async function fromPicker(user: ReturnType<typeof userEvent.setup>, name: string): Promise<HTMLElement> {
@@ -70,6 +90,10 @@ async function head() {
   return screen.getByRole('heading', { name: 'launchd KeepAlive' }).closest('[data-head]') as HTMLElement;
 }
 
+/** The line above the composer, by its words. */
+const lineSaying = (words: string) => screen.findByText(words, { selector: '[role="status"] > span' });
+const NO_LINE = /isn't loaded|stopped unexpectedly|endpoint is (Off|Pinned)/;
+
 beforeEach(() => {
   window.localStorage.clear();
   onUnloadModel.mockReset();
@@ -77,17 +101,38 @@ beforeEach(() => {
   onSwitchModel.mockClear();
   onShowModel.mockClear();
   onShowLog.mockClear();
-  transport.current = chatTransport({
+  runFrames = [];
+  started = [];
+  const fixture = {
     conversations: [conversation(1, 'launchd KeepAlive')],
-    rows: { 1: [{ id: 11, conversation_id: 1, role: 'user', content: 'What does KeepAlive do?', created_at: '2026-09-01T09:12:00Z' }] },
+    rows: { 1: [{ id: 11, conversation_id: 1, role: 'user' as const, content: 'What does KeepAlive do?', created_at: '2026-09-01T09:12:00Z' }] },
     runs: [],
     frames: {},
-  });
+  };
+  transport.current = {
+    ...chatTransport(fixture),
+    // Nothing is loaded when the page reads the list.
+    listServers: vi.fn(async () => []),
+    startAgentRun: vi.fn(async (id: string, turn: LocalTurn) => {
+      started.push(turn);
+      return agentRun(id, 1, 'queued');
+    }),
+    readRunEvents: (_id: string, _after: number, signal: AbortSignal) => framesThenWait(runFrames, signal),
+  };
+  resetProxyState();
+  applyProxyStatus(ON);
+  forgetServerList();
+  initServerEvents();
+});
+
+afterEach(() => {
+  cleanupServerEvents();
+  resetProxyState();
 });
 
 describe('ChatPlace, leaving and Unload', () => {
   it('has no Close: leaving the place (the sidebar navigates) unloads nothing', async () => {
-    const page = renderLocal();
+    const page = renderLocal(7);
     expect(within(await head()).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
 
     page.unmount();
@@ -95,68 +140,130 @@ describe('ChatPlace, leaving and Unload', () => {
     expect(onUnloadModel).not.toHaveBeenCalled();
   });
 
-  it('a model unloaded mid-chat replaces the composer with "was unloaded. [Load it again]": no banner, no toast, no Close', async () => {
-    const user = userEvent.setup();
+  it('a model unloaded mid-chat leaves the composer live, with one line that says a send loads it: no banner, no toast, no Load button', async () => {
     // An id of its own: the registry outlives the test.
     renderLocal(17);
     await head();
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+    event('running', 17);
+    await waitFor(() => expect(screen.queryByText(NO_LINE)).not.toBeInTheDocument());
 
-    act(() => ingestServerEvent({ type: 'stopped', modelId: '17', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
-    const line = await screen.findByText('qwen3 was unloaded.');
-    expect(line).toHaveAttribute('role', 'status');
-    expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Server not running|read-only/)).not.toBeInTheDocument();
+    event('stopped', 17);
+    const line = await lineSaying("qwen3 isn't loaded · sending loads it");
+    expect(line.closest('[role="status"]')).toHaveClass('text-xs');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+    expect(modelPicker()).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add to the message' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Load it again|^Load/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/was unloaded|Server not running|read-only/)).not.toBeInTheDocument();
     expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
-    expect(within(line).getAllByRole('button').map((b) => b.textContent)).toEqual(['Load it again']);
     expect(onUnloadModel).not.toHaveBeenCalled();
-
-    // Load it again is the picker's switch, back onto the same model.
-    await user.click(within(line).getByRole('button', { name: 'Load it again' }));
-    expect(onSwitchModel).toHaveBeenCalledTimes(1);
-    expect(onSwitchModel.mock.calls[0][0]).toEqual({ modelId: 17, modelName: 'qwen3' });
   });
 
-  it('Load it again that fails says why, in the sentence every load failure is said in', async () => {
+  it("a send with the model not loaded is sent, and the reply says the daemon's wait in its words", async () => {
     const user = userEvent.setup();
-    onSwitchModel.mockRejectedValueOnce(new Error('out of memory'));
-    renderLocal(19);
+    renderLocal(20);
     await head();
-    act(() => ingestServerEvent({ type: 'stopped', modelId: '19', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
-    const line = await screen.findByText('qwen3 was unloaded.');
-    await user.click(within(line).getByRole('button', { name: 'Load it again' }));
-    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't load: out of memory"));
+    await lineSaying("qwen3 isn't loaded · sending loads it");
+    runFrames = [{ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'qwen3', elapsed_ms: 12_300, said: 'Loading qwen3… 12 s' }];
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Again?{Enter}');
+
+    await waitFor(() => expect(started).toHaveLength(1));
+    const wait = await screen.findByText('Loading qwen3… 12 s');
+    expect(wait.closest('[data-turn="reply"]')).not.toBeNull();
+    // While the reply waits, its own line says so: the one over the composer is gone.
+    expect(screen.queryByText(NO_LINE)).not.toBeInTheDocument();
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
   });
 
-  it('a model that crashed mid-chat says "stopped unexpectedly · Show log", and Show log is handed up', async () => {
+  it('a model that crashed mid-chat says so, marked, with Show log, over a live composer', async () => {
     const user = userEvent.setup();
     renderLocal(18);
     await head();
+    event('running', 18);
 
-    act(() => ingestServerEvent({ type: 'crashed', modelId: '18', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
-    const line = (await screen.findByText(/^qwen3 stopped unexpectedly/)).closest('[role="status"]') as HTMLElement;
-    expect(line).toHaveTextContent('qwen3 stopped unexpectedly·Show log');
-    expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
-    expect(within(line).queryByRole('button', { name: 'Load it again' })).not.toBeInTheDocument();
+    event('crashed', 18);
+    const line = (await lineSaying('qwen3 stopped unexpectedly · sending loads it again')).closest('[role="status"]') as HTMLElement;
+    expect(line).toHaveTextContent('qwen3 stopped unexpectedly · sending loads it again·Show log');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+    expect(within(line).getAllByRole('button').map((b) => b.textContent)).toEqual(['Show log']);
+    // Marked failed, in the danger colour: the crash is a shape plus words.
+    expect(line.querySelector('.text-danger svg')).not.toBeNull();
     expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
 
     await user.click(within(line).getByRole('button', { name: 'Show log' }));
     expect(onShowLog).toHaveBeenCalledTimes(1);
   });
 
-  it('while Load it again starts the model, the line says it is loading', async () => {
-    renderLocal(19, 'qwen3');
+  it('with the endpoint off, the line says a send turns it on', async () => {
+    renderLocal(21);
     await head();
-    act(() => ingestServerEvent({ type: 'stopped', modelId: '19', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
-    expect(await screen.findByText('Loading qwen3…')).toHaveAttribute('role', 'status');
-    expect(screen.queryByRole('button', { name: 'Load it again' })).not.toBeInTheDocument();
+    event('running', 21);
+    act(() => applyProxyStatus(OFF));
+    expect(await lineSaying('The endpoint is Off · sending turns it on')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+
+    event('stopped', 21);
+    expect(await lineSaying("qwen3 isn't loaded · sending turns the endpoint on and loads it")).toBeInTheDocument();
+
+    act(() => applyProxyStatus(ON));
+    expect(await lineSaying("qwen3 isn't loaded · sending loads it")).toBeInTheDocument();
+    // Not loaded is not a crash: no mark.
+    expect(screen.getByText("qwen3 isn't loaded · sending loads it").closest('[role="status"]')?.querySelector('.text-danger')).toBeNull();
+  });
+
+  it('with the endpoint pinned to another model, the line says a send is refused; pinned to this one, that a send loads it', async () => {
+    renderLocal(26);
+    await head();
+    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'Qwen3-8B', pinned_to: 'Pinned to Qwen3-8B', pinned_model_id: 30 }));
+    expect(await lineSaying('The endpoint is Pinned to Qwen3-8B and cannot serve qwen3 · sending is refused')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+
+    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'qwen3', pinned_to: 'Pinned to qwen3', pinned_model_id: 26 }));
+    expect(await lineSaying("qwen3 isn't loaded · sending loads it")).toBeInTheDocument();
+  });
+
+  it('a pin is matched by id: pinned to another model of the same name, the line says a send is refused', async () => {
+    renderLocal(28);
+    await head();
+    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'qwen3', pinned_to: 'Pinned to qwen3', pinned_model_id: 31 }));
+    expect(await lineSaying('The endpoint is Pinned to another model named qwen3 and cannot serve this one · sending is refused')).toBeInTheDocument();
+
+    // Pinned to this chat's model under a name it no longer has, a send loads it.
+    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'qwen3-old', pinned_to: 'Pinned to qwen3-old', pinned_model_id: 28 }));
+    expect(await lineSaying("qwen3 isn't loaded · sending loads it")).toBeInTheDocument();
+  });
+
+  it('a model being unloaded is still loaded until it has gone', async () => {
+    renderLocal(27);
+    await head();
+    event('running', 27);
+    await waitFor(() => expect(screen.queryByText(NO_LINE)).not.toBeInTheDocument());
+
+    event('stopping', 27);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(NO_LINE)).not.toBeInTheDocument();
+
+    event('stopped', 27);
+    expect(await lineSaying("qwen3 isn't loaded · sending loads it")).toBeInTheDocument();
+  });
+
+  it('says nothing before the server list and the endpoint have been read', async () => {
+    cleanupServerEvents();
+    forgetServerList();
+    resetProxyState();
+    renderLocal(22);
+    await head();
+    expect(screen.queryByText(NO_LINE)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
   });
 
   it('Unload <model>, in the picker ▾ after a gap, hands up the unload and leaves the chat; Show <model> opens its inspector', async () => {
     const user = userEvent.setup();
-    renderLocal();
+    renderLocal(23);
     await head();
+    event('running', 23);
 
     const unload = await fromPicker(user, 'Unload qwen3');
     expect(unload).toHaveAttribute('title', expect.stringMatching(/Copilot included/));
@@ -169,23 +276,29 @@ describe('ChatPlace, leaving and Unload', () => {
     expect(onShowModel).toHaveBeenCalledTimes(1);
   });
 
-  it('Unload is out of reach while a model starts, and says why an unload failed', async () => {
+  it('offers no Unload while the model is not loaded', async () => {
     const user = userEvent.setup();
-    const page = renderLocal(7, 'gemma-3-12b');
+    renderLocal(24);
     await head();
-    expect(await screen.findByText('Loading gemma-3-12b…')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
-    page.unmount();
+    await lineSaying("qwen3 isn't loaded · sending loads it");
+    await user.click(modelPicker());
+    expect(screen.getByRole('menuitem', { name: 'Show qwen3' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Unload qwen3' })).not.toBeInTheDocument();
+  });
 
+  it('Unload says why an unload failed', async () => {
+    const user = userEvent.setup();
     onUnloadModel.mockRejectedValueOnce(new Error('daemon unreachable'));
-    renderLocal();
+    renderLocal(25);
     await head();
+    event('running', 25);
     await user.click(await fromPicker(user, 'Unload qwen3'));
 
     await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't unload: daemon unreachable"));
   });
 
-  it('a chat with another machine offers no Unload: the model is not this one’s', async () => {
+  it('a chat with another machine offers no Unload and is never locked or lined by this machine’s registries (CH-9)', async () => {
+    act(() => applyProxyStatus(OFF));
     render(
       <ChatPlace
         paired={{ far: { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 }, machineName: 'desk' }}
@@ -198,7 +311,11 @@ describe('ChatPlace, leaving and Unload', () => {
     );
     await head();
     await screen.findByText('qwen3 on desk');
+    // The paired model's id is 3 there; here, model 3 crashed and the endpoint is off. Neither is the paired model's.
+    event('crashed', 3);
 
     expect(screen.queryByRole('button', { name: /Unload/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(NO_LINE)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
   });
 });

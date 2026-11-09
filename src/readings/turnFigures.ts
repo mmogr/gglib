@@ -4,8 +4,10 @@
  * A figure the page does not have is left out, never drawn as zero, a dash
  * or a guess. How a turn was made (its model, token counts and times) comes
  * from its `turn_usage` event while drawn and from its saved row once
- * loaded: the same figures, so both say the same. The rate is tokens
- * written over the time writing (`readings/throughput`); nothing saves it.
+ * loaded: the same figures, so both say the same. The rate is the
+ * daemon's (`tokensPerSecond`, in `readings/rate`'s words), sent and saved
+ * with the counts it is made from, and given on read to a reply saved
+ * before it was saved (`fill_made_rate`).
  *
  * A reply says its figures in three places, each read here: the fold's
  * summary (how long it thought, how many tools it called), the figure line
@@ -18,8 +20,7 @@
 import type { GglibMessageCustom, PromptReading, TurnWaiting } from '../types/messages';
 import type { TurnMade } from '../utils/messages/turnMade';
 import { formatCount } from '../utils/format';
-import { formatPerSecond } from '../utils/formatPerSecond';
-import { tokensPerSecond } from './throughput';
+import { rateWords } from './rate';
 
 /**
  * Seconds as a turn says them: "0.4 s", "4.7 s" and "3 s" under ten, "19 s",
@@ -53,15 +54,6 @@ export interface ReplyFacts {
   made?: TurnMade;
 }
 
-/**
- * Tokens written per second of writing; null without both figures, and for
- * a turn of one token or one not streamed, which have no time writing.
- */
-export function writingRate(made: TurnMade | undefined): number | null {
-  if (made?.completionTokens != null && made.completionTokens < 2) return null;
-  return tokensPerSecond(made?.completionTokens, made?.writingDurationMs);
-}
-
 function toolCallWords(count: number): string {
   return `${count} tool call${count === 1 ? '' : 's'}`;
 }
@@ -92,11 +84,10 @@ export const UNFINISHED = 'unfinished';
  */
 export function figureParts(facts: ReplyFacts): string[] {
   const made = facts.made;
-  const rate = writingRate(made);
   return [
     facts.unfinished ? UNFINISHED : null,
     made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
-    rate != null ? `${formatPerSecond(rate)} tok/s` : null,
+    made?.tokensPerSecond != null ? rateWords(made.tokensPerSecond) : null,
     made?.cachedTokens != null ? `${formatCount(made.cachedTokens)} tokens reused` : null,
   ].filter((part): part is string => part !== null);
 }
@@ -114,10 +105,9 @@ export function figureDetail(facts: ReplyFacts): string[] {
   if (made?.promptTokens != null) lines.push(`${formatCount(made.promptTokens)} tokens read`);
   if (made?.cachedTokens != null) lines.push(`${formatCount(made.cachedTokens)} tokens reused`);
   if (made?.completionTokens != null) lines.push(`${formatCount(made.completionTokens)} tokens written`);
-  const rate = writingRate(made);
   const timing = [
     made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
-    rate != null ? `${formatPerSecond(rate)} tok/s` : null,
+    made?.tokensPerSecond != null ? rateWords(made.tokensPerSecond) : null,
   ].filter((part): part is string => part !== null);
   if (timing.length > 0) lines.push(timing.join(' · '));
   return lines;
@@ -137,47 +127,32 @@ export function modelShown(facts: ReplyFacts, previous: string | null | undefine
 }
 
 /**
- * What a reply with no token yet is waiting for, as its events so far say.
- * Once a token comes the fold and the text say what it is doing.
+ * What a reply with no token yet is doing, where the daemon has not said
+ * it in words. Once a token comes the fold and the text say what it is
+ * doing.
  */
-export type ArrivingPhase =
-  | 'Waiting for the model'
-  | 'Queued behind an image render'
-  | 'Waiting for the model to load'
-  | 'Reading the prompt'
-  | 'Starting the reply';
+export type ArrivingPhase = 'Waiting for the model' | 'Reading the prompt' | 'Starting the reply';
 
 /**
+ * The arrival line's words. A wait is the daemon's own sentence, verbatim
+ * ("Loading Qwen3-4B… 12 s", "Waiting for an image render, step 3 of 20"),
+ * and one from a daemon too old to word it says only that the reply waits.
  * A wait is said only until the model reads the prompt: a prompt reading
  * that comes after it takes it off the turn, so one still there is the
  * newer of the two.
  */
-export function arrivingPhase(parts: { prompt?: PromptReading; waiting?: TurnWaiting }): ArrivingPhase {
-  if (parts.waiting) {
-    return parts.waiting.reason === 'image_render' ? 'Queued behind an image render' : 'Waiting for the model to load';
-  }
+export function arrivingPhase(parts: { prompt?: PromptReading; waiting?: TurnWaiting }): string {
+  if (parts.waiting) return parts.waiting.said ?? 'Waiting for the model';
   if (parts.prompt && parts.prompt.processed < parts.prompt.total) return 'Reading the prompt';
   if (parts.prompt) return 'Starting the reply';
   return 'Waiting for the model';
 }
 
 /**
- * How far the render a reply is queued behind has got, and the reply's
- * place in line when it is not next: each only when the wait says it.
- */
-export function waitingLines(waiting: TurnWaiting): string[] {
-  if (waiting.reason !== 'image_render') return [];
-  const lines: string[] = [];
-  if (waiting.total > 0) lines.push(`step ${waiting.step} of ${waiting.total}`);
-  if (waiting.position > 1) lines.push(`${waiting.position} in line`);
-  return lines;
-}
-
-/**
  * The arrival line's figures after its phase: how far the prompt is read
  * while it is read, how much was read once it is, and what the cache gave.
  */
-export function promptLines(prompt: PromptReading, phase: ArrivingPhase): string[] {
+export function promptLines(prompt: PromptReading, phase: string): string[] {
   return [
     phase === 'Reading the prompt'
       ? `${formatCount(prompt.processed)} of ${formatCount(prompt.total)} tokens read`

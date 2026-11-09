@@ -14,9 +14,6 @@ import { act, waitFor } from '@testing-library/react';
 vi.mock('../../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
-vi.mock('../../../../src/services/tools', () => ({
-  getToolRegistry: () => ({ getEnabledDefinitions: () => [], getBackendName: (n: string) => n }),
-}));
 
 import { FakeDaemon } from '../../fixtures/fakeDaemon';
 import { conversation, edit, mount, regenerate, shown } from './runtimeHarness';
@@ -35,7 +32,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const open = { conversationId: 1, conversation: conversation(1), selectedServerPort: 9000 };
+const open = { conversationId: 1, conversation: conversation(1) };
 
 /** What `cid` holds, as saved. */
 const saved = (cid: number) => daemon.saved(cid).map((r) => [r.role, r.content]);
@@ -65,7 +62,7 @@ describe('useGglibRuntime changes', () => {
     });
     expect(onBranched).toHaveBeenCalledWith(100, undefined);
     expect(onConversationChanged).toHaveBeenCalledWith(100);
-    expect(daemon.only().request).toMatchObject({ conversation_id: 100, answer_saved: true, messages: [] });
+    expect(daemon.only().request).toStrictEqual({ conversation_id: 100, content: '', answer_saved: true });
     expect(saved(1)).toEqual([['user', 'q'], ['assistant', 'a']]);
     expect(saved(100)).toEqual([['user', 'q2']]);
     expect(hook.result.current.isRunning).toBe(false);
@@ -80,7 +77,7 @@ describe('useGglibRuntime changes', () => {
     edit(hook, 'db-2', 'q4');
 
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-    expect(daemon.only().request).toMatchObject({ conversation_id: 1, answer_saved: true, messages: [] });
+    expect(daemon.only().request).toStrictEqual({ conversation_id: 1, content: '', answer_saved: true });
     // The edited question is shown as saved while its reply is read.
     await waitFor(() => expect(seen(hook)).toContainEqual(['user', 'q4']));
     expect(seen(hook)).not.toContainEqual(['user', 'q3']);
@@ -167,7 +164,7 @@ describe('useGglibRuntime changes', () => {
 
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
     expect(daemon.requests.some((r) => r.url.endsWith('/changes'))).toBe(false);
-    expect(daemon.only().request).toMatchObject({ conversation_id: 1, answer_saved: true, messages: [] });
+    expect(daemon.only().request).toStrictEqual({ conversation_id: 1, content: '', answer_saved: true });
     const { id } = daemon.only().info;
     void daemon.finish(id, 'completed', [{ role: 'assistant', content: 'a3' }]);
     await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
@@ -267,15 +264,5 @@ describe('useGglibRuntime changes', () => {
     expect(daemon.requests.some((r) => r.url.endsWith('/changes'))).toBe(false);
     expect(daemon.count('PUT', '/api/runs/')).toBe(0);
     void daemon.finish('live', 'completed');
-  });
-
-  it('asks nothing of a run for a chat with no server to answer it', async () => {
-    const onError = vi.fn();
-    const hook = await mount({ ...open, selectedServerPort: undefined, onError });
-    regenerate(hook, 'db-1');
-
-    await waitFor(() => expect(onError).toHaveBeenCalled());
-    expect(onError.mock.calls[0][0].message).toBe('No server selected. Please serve a model first.');
-    expect(daemon.requests.some((r) => r.url.endsWith('/changes'))).toBe(false);
   });
 });

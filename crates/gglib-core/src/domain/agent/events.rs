@@ -1,6 +1,6 @@
 //! [`AgentEvent`] and [`LlmStreamEvent`] — observable events in the agentic loop.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::tool_call_writing::ToolCallWriting;
 use super::tool_progress::{PreviewFrame, ToolStage};
@@ -22,7 +22,12 @@ use crate::normalize::NormalizationErrorKind;
 ///
 /// `#[serde(tag = "type", rename_all = "snake_case")]` produces e.g.
 /// `{"type":"tool_call_start","tool_call":{...}}`.
-#[derive(Debug, Clone, Serialize)]
+///
+/// Read back from a run's logged frames by a client of the daemon's door
+/// (`gglib chat`), which renders them as its own loop's. A
+/// [`ToolPreview`](AgentEvent::ToolPreview) is never logged, so it is never
+/// read back.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentEvent {
     /// An incremental text fragment from the model's response.
@@ -106,6 +111,7 @@ pub enum AgentEvent {
     /// matters, so a run keeps it beside its log, not in it, and a saved
     /// chat never holds one. Consumers show it and drop it when that call's
     /// [`ToolCallComplete`](AgentEvent::ToolCallComplete) arrives.
+    #[serde(skip_deserializing)]
     ToolPreview {
         /// The call this frame belongs to.
         tool_call_id: String,
@@ -125,6 +131,23 @@ pub enum AgentEvent {
         total: u32,
         /// This wait's place in line, 1 being next; 0 when not in a line.
         position: u32,
+        /// The name of the model being loaded, as the catalogue shows it;
+        /// absent from a wait for an image render.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+        /// How long the load has taken so far, in milliseconds. A load's
+        /// wait is sent again each second with this figure, so a client that
+        /// joins part-way can say "Loading Qwen3-4B… 12 s"; absent from a
+        /// wait for an image render.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        elapsed_ms: Option<u64>,
+        /// The wait as a person reads it, worded by
+        /// [`waiting_sentence`](AgentEvent::waiting_sentence) when the frame
+        /// was made: "Loading Qwen3-4B… 12 s". Every surface shows it
+        /// verbatim. Absent from a frame logged before it was added, which
+        /// a reader words from the fields above.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        said: Option<String>,
     },
 
     /// One full LLM→tool-execution cycle has completed.
@@ -188,7 +211,7 @@ pub enum AgentEvent {
 }
 
 /// What an [`AgentEvent::Waiting`] is waiting for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WaitingFor {
     /// An image render has the GPU, or is queued ahead.

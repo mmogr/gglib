@@ -143,9 +143,9 @@ this machine's own agent run) may say `thinking: "off"` or `"default"`. `off`
 runs the turn with a budget of `0` and the chat remembers it
 (`ConversationSettings.thinking`); `default` forgets it; a turn that says
 neither runs as the chat remembers. A remembered `off` beats the request's own
-`reasoning_budget_tokens`: the chat page keeps one budget per browser, not per
-chat, in its agent limits (the composer's Tools ▸ › Agent limits…), and once one is set sends it with every message,
-and a chat that was switched off does not start thinking again because of it.
+`reasoning_budget_tokens`, and a budget in the global settings (Settings ›
+Models › Sampling defaults), so a chat that was switched off does not start
+thinking again because of either.
 Nothing else is remembered. A request's own budget and `reasoning_effort` are
 that request's, and with `default`, or with nothing remembered, the budget
 resolves through the hierarchy as it always has.
@@ -630,9 +630,11 @@ gglib config settings set --trust-client-sampling false
 `{model}:{profile}` selection is unaffected either way — that is not a client
 sampling parameter, it is part of the requested model name, and profiles remain the
 sanctioned way for a client to express a sampling preference without needing to be
-trusted (see below). In-process callers (`gglib chat`, `gglib q`, a chat in the
-app) are also unaffected: their sampling parameters are gglib's own typed
-configuration, not an external client's request body, so they are always honoured.
+trusted (see below). gglib's own chats (`gglib chat`, `gglib q`, a chat in the
+app) are clients of the endpoint too: the sampling a chat saved, `gglib chat`'s
+flags, is sent as a client's and honoured only while this is on, and `gglib chat`
+says so in one line when it is off. Its `max_tokens` is the client's own budget
+and applies either way, as a profile a chat saved does, and Thinking off.
 
 ## Inference profiles (`<model>:<profile>`)
 
@@ -937,19 +939,16 @@ machine's. The proxy follows it, and so does a chat with one of this machine's
 models: `gglib chat` and `gglib q` on a model in the library, and a chat in
 the app, on the chat page or from a paired device.
 
-Four callers read no stored setting and keep the cap whatever it says:
+Three callers read no stored setting and keep the cap whatever it says:
 
 - a turn sent to a paired machine's model. It is capped as it leaves here, and
   that machine's proxy then resolves it by its own settings;
-- `gglib chat` or `gglib q` against a `--port` server whose model the library
-  does not hold;
 - `gglib benchmark agentic`, in each arm that runs the pipeline;
 - `gglib benchmark tune`.
 
-The environment variable switches the cap off for every caller, these four
-included, in the process that shapes the request: the command itself for
-`gglib chat` and `gglib q`, and the daemon for the proxy, a chat in the app
-and a benchmark.
+The environment variable switches the cap off for every caller, these three
+included, in the process that shapes the request: the daemon, for the proxy,
+a chat in the app or from `gglib chat` and `gglib q`, and a benchmark.
 
 Two surfaces cannot report it, both by construction: `gglib model explain` and
 the GUI's sampling provenance explain *stored configuration* with no request in

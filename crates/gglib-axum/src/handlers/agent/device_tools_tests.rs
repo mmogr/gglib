@@ -73,6 +73,17 @@ fn a_chat_naming_tools_narrows_by_exact_or_bare_name() {
     );
 }
 
+/// `{id}:*` keeps every opened tool of that server and none of another's.
+#[test]
+fn a_whole_server_entry_keeps_every_opened_tool_of_that_server() {
+    let opened = strings(&["3:search", "3:extract", "4:crawl", "33:search"]);
+    let chat = named(&["3:*"]);
+    assert_eq!(
+        offered(&opened, &Asked::of_chat(&chat, false)),
+        ["3:search", "3:extract"]
+    );
+}
+
 /// A chat's list only narrows: a tool it names that no opened server has,
 /// a builtin or another server's, is never added.
 #[test]
@@ -164,7 +175,7 @@ async fn resolve_offers_the_floor_while_no_session_is_live() {
     );
     let chat = named(&[echo.as_str(), "echo"]);
     assert_eq!(resolve(&state, &Asked::of_chat(&chat, true)).await, [DRAW]);
-    let request = serde_json::from_value(json!({ "port": 0, "messages": [] })).unwrap();
+    let request = crate::handlers::agent::loop_request::LoopRequest::default();
     let settled = settle(&state, request, &Asked::of_chat(&chat, true)).await;
     assert_eq!(settled.tool_filter, Some(vec![DRAW.to_owned()]));
     state.mcp.shutdown().await;

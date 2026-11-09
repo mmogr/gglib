@@ -22,7 +22,7 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../../src/services/transport';
 import type { ChatMessage, GenerateTitleParams } from '../../../../src/services/transport';
-import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../../src/types/generated/LocalTurn';
 import type { RunInfo } from '../../../../src/types/generated/RunInfo';
 import { agentRun, chatTransport, conversation, fromTitleMenu, wrapper, type ChatFixture } from './chatPlaceHarness';
 
@@ -74,9 +74,9 @@ function end(id: string, status: 'completed' | 'cancelled' | 'failed', reply: st
 function pageTransport() {
   return {
     ...chatTransport(fixture),
-    startAgentRun: vi.fn(async (id: string, request: AgentRunRequest) => {
+    startAgentRun: vi.fn(async (id: string, request: LocalTurn) => {
       const conversationId = request.conversation_id as number;
-      save(conversationId, 'user', String(request.messages.at(-1)?.content ?? ''));
+      save(conversationId, 'user', request.content);
       run(id, conversationId);
       return agentRun(id, conversationId, 'queued');
     }),

@@ -10,6 +10,7 @@
       "completion_tokens": 12,
       "duration_ms": 700,
       "writing_ms": 500,
+      "tokens_per_second": 24.0,
       "finish_reason": "tool_calls",
       "trimmed_messages": 2
     },
@@ -46,6 +47,7 @@
       "completion_tokens": 7,
       "duration_ms": 700,
       "writing_ms": 500,
+      "tokens_per_second": 14.0,
       "finish_reason": "stop"
     },
     { "type": "final_answer", "content": "It is an empty `main`." }
@@ -79,6 +81,7 @@
         "completionTokens": 12,
         "turnDurationMs": 700,
         "writingDurationMs": 500,
+        "tokensPerSecond": 24.0,
         "trimmedMessages": 2
       },
       "images": 0
@@ -99,7 +102,8 @@
         "cachedTokens": 10,
         "completionTokens": 7,
         "turnDurationMs": 700,
-        "writingDurationMs": 500
+        "writingDurationMs": 500,
+        "tokensPerSecond": 14.0
       },
       "images": 0
     }
@@ -133,6 +137,7 @@
         "completionTokens": 12,
         "turnDurationMs": 700,
         "writingDurationMs": 500,
+        "tokensPerSecond": 24.0,
         "trimmedMessages": 2
       },
       "images": 0
@@ -154,6 +159,7 @@
         "completionTokens": 7,
         "turnDurationMs": 700,
         "writingDurationMs": 500,
+        "tokensPerSecond": 14.0,
         "incomplete": true
       },
       "images": 0

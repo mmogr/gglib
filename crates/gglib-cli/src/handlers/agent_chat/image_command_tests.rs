@@ -31,11 +31,10 @@ fn a_line_that_is_not_the_image_command_is_a_message() {
     }
 }
 
-/// A REPL session on a model that can see, or cannot.
-async fn repl(service: &AttachmentService, image_input: bool) -> TurnImages<'_> {
-    let (mut images, _) = attached(service, &[], true).await.unwrap();
-    let sight = Sight::catalogue("qwen", image_input);
-    images.judge(sight, &[]).await.expect("no image yet");
+/// A REPL session with no image attached yet. Whether its model can read
+/// one is the daemon's to say, when the turn that carries it is sent.
+async fn repl(service: &AttachmentService) -> TurnImages<'_> {
+    let (images, _) = attached(service, &[], true).await.unwrap();
     images
 }
 
@@ -45,7 +44,7 @@ async fn the_image_command_attaches_to_the_next_message_and_says_what_it_costs()
     let bytes = png(640, 320);
     let path = file(&dir, "shot.png", &bytes);
     let (service, _) = service();
-    let mut images = repl(&service, true).await;
+    let mut images = repl(&service).await;
 
     let reply = images.command(&format!("/image {}", path.display())).await;
 
@@ -58,29 +57,11 @@ async fn the_image_command_attaches_to_the_next_message_and_says_what_it_costs()
 }
 
 #[tokio::test]
-async fn the_image_command_is_refused_and_stores_nothing_for_a_model_that_cannot_see() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let path = file(&dir, "shot.png", &png(64, 32));
-    let (service, store) = service();
-    let mut images = repl(&service, false).await;
-
-    let reply = images.command(&format!("/image {}", path.display())).await;
-
-    assert!(
-        reply
-            .unwrap()
-            .starts_with("Model 'qwen' cannot read images")
-    );
-    assert!(store.kept.lock().unwrap().is_empty());
-    assert!(images.take().is_empty());
-}
-
-#[tokio::test]
 async fn the_image_command_names_a_file_it_cannot_attach_and_attaches_nothing() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = file(&dir, "notes.txt", b"plain text");
     let (service, _) = service();
-    let mut images = repl(&service, true).await;
+    let mut images = repl(&service).await;
 
     let reply = images.command(&format!("/image {}", path.display())).await;
 
@@ -95,7 +76,7 @@ async fn the_image_command_names_a_file_it_cannot_attach_and_attaches_nothing() 
 #[tokio::test]
 async fn the_image_command_with_no_path_says_how_it_is_used() {
     let (service, _) = service();
-    let mut images = repl(&service, true).await;
+    let mut images = repl(&service).await;
 
     assert_eq!(images.command("/image").await.as_deref(), Some(USAGE));
 }
@@ -103,7 +84,7 @@ async fn the_image_command_with_no_path_says_how_it_is_used() {
 #[tokio::test]
 async fn any_other_line_is_left_for_the_model() {
     let (service, _) = service();
-    let mut images = repl(&service, true).await;
+    let mut images = repl(&service).await;
 
     assert_eq!(images.command("what is in /image?").await, None);
 }

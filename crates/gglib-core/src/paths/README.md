@@ -44,6 +44,10 @@ the loader's own parser, then the default. A daemon's download manager asks
 it as each download starts and keeps the answer for that download's files
 alone, so a directory stored while the daemon runs is where its next download
 goes, unless the daemon's own environment names one.
+`can_write_folder` says whether it can be written by writing a probe file
+to it, or, while it is not there, to the nearest folder above it that is:
+the settings page's, the setup status's and `gglib config models-dir show`'s
+state for the folder.
 
 # Design
 

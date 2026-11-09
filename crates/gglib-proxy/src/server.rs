@@ -200,7 +200,6 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         disk_budget,
         host,
         dashboard: publish_dashboard,
-        agent_metrics,
         observers,
         access,
     } = config;
@@ -286,7 +285,6 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         Arc::clone(&upstream_health),
         Arc::new(CacheStatusCache::new()),
         Arc::new(CacheMetricsStore::new()),
-        agent_metrics,
         Arc::clone(&runtime_port),
         sampling_audit,
     ));

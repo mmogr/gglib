@@ -13,12 +13,8 @@
 use anyhow::{Result, anyhow, bail};
 use gglib_app_services::{FarProxy, GuiError, RemoteConnection, far_credentials};
 
-use super::{TurnModel, Upstream};
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonHandle};
-use crate::handlers::agent_chat::config::BannerInfo;
-use crate::handlers::agent_chat::upstream;
-use crate::presentation::style;
 
 /// This machine's daemon, connected to the paired machine: the handle a
 /// command asks the daemon through, the connection it reported, and the
@@ -33,13 +29,10 @@ pub(crate) struct Paired {
 }
 
 /// The paired machine, as this machine reaches it directly: its proxy
-/// through the tunnel, with the key this machine received when it paired,
-/// and how the tunnel is reaching it.
+/// through the tunnel, with the key this machine received when it paired.
 pub(crate) struct Far {
     /// The far proxy, the same client the daemon's `/api/remote` routes use.
     pub proxy: FarProxy,
-    /// How the far side is being reached: `direct`, `relayed`, `idle`.
-    pub path: String,
 }
 
 impl super::Target {
@@ -99,33 +92,6 @@ impl super::Target {
             far_credentials(stored.as_ref(), &connection.ticket_fingerprint).map_err(refused)?;
         Ok(Far {
             proxy: FarProxy::new(&connection.base_url, &credentials).map_err(refused)?,
-            path: connection.path,
         })
     }
-}
-
-/// The machine on the other end of the tunnel, as a turn's upstream. The
-/// banner names the model as that machine resolved it, `turn`.
-pub(super) async fn remote_upstream(
-    ctx: &CliContext,
-    turn: Option<&TurnModel>,
-    banner: &BannerInfo,
-) -> Result<Upstream> {
-    let Far { proxy, path } = super::Target::Remote.far(ctx).await?;
-    if !banner.quiet {
-        style::print_info_banner("Info", "\u{2139}\u{fe0f}");
-        let asked = turn.map_or_else(|| proxy.shown_name().to_owned(), TurnModel::shown);
-        eprintln!("  Asking {asked} at {} ({path})", proxy.base_url());
-        if let Some(ref s) = banner.sampling {
-            upstream::print_sampling_lines(s);
-        }
-        style::print_banner_close();
-    }
-    Ok(Upstream {
-        base_url: proxy.server_root(),
-        // The banner above has just named this machine to the user; the key
-        // carries that name onward so a later refusal of it can name the same
-        // machine, which by then nothing downstream could look up.
-        door: Some(proxy.door()),
-    })
 }

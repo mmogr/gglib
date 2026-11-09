@@ -32,9 +32,6 @@ export const hasLaunch = (s: Frame): boolean => s.launch !== null;
 /** The prompt cache's configuration, once a request has resolved a model. */
 export const hasPromptCache = (s: Frame): boolean => s.cache !== null;
 
-/** A GUI-chat turn measured, or one that came back without the figures. */
-export const hasAgentCache = (s: Frame): boolean => s.agent_usage.reporting_requests > 0 || s.agent_usage.unreported_requests > 0;
-
 /**
  * Anything the readback has said: a comparison or the reason it cannot make
  * one (blind is shown, never folded), the build's defaults or why they could

@@ -60,13 +60,12 @@ A chat is its own address: the conversation list (left) and the messages panel (
   - **Message Editing**: Inline edit of a question (Send, asked again) or a reply (Save, kept as written); an edit that would rewrite a saved reply is made on a new branch of the chat, Branch from here in every turn's ⋯, `‹ 2/3 ›` in the foot of a turn where a chat's branches part, and Retry answering a chat that ends in a question (ADR 0017)
   - **Message Deletion**: Delete… in a question's ⋯, through the one confirm sheet, with cascade deletion of subsequent messages
   - The composer: one `[+]` menu (Add image…, Use a folder…, Draw a picture, Tools ▸), chips only when set, a labelled Thinking toggle, the context ring, the model picker ▾, and Send / Stop
-- **`AgentLimitsSection.tsx`**: The device-wide agent limits and reasoning controls (`services/agentOverrides`), opened from the composer's Tools ▸ › Agent limits… in a sheet: an interim home until Settings › Tools › Agent limits (S1 `feat(gui)/settings-place`, S2 `feat(gui)/settings-tools`)
 - **`ContextUsageDonut.tsx`**: A slot's context as a donut with its figure, for `proxy/SlotCard` (the tray and the live dashboard) until those go (T3, G1); the composer's ring is its own
 - **`ToolUI/`**: A tool call's result, by its tool's renderer or the generic one
 - **`ToolExecutionProgress/`**: A reply's tool calls as its fold lists them, and a running tool's progress
 
 ### Server Management
-- **`ConnectClient.tsx`**: Connect a client on the endpoint place and setup's Connect step: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker, and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable
+- **`ConnectClient.tsx`**: Connect a client on the endpoint place and setup's Connect step: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker (a pin the picker does not offer, an image model, named alone instead, `only`), and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable
 
 ### Support Components
 - **`Toast/`**: Reusable toast notification system for success/error/info messages

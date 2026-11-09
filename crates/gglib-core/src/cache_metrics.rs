@@ -14,12 +14,14 @@
 //! profile nothing like a user's conversation, so averaging them would make
 //! either figure harder to read.
 //!
-//! Deliberately raw counters. Everything exposed is something the upstream
-//! actually measured; nothing is derived, extrapolated, or turned into a
+//! Raw counters, and one ratio of two of them. Every count is something the
+//! upstream actually measured; nothing is extrapolated or turned into a
 //! "time saved" figure. Reuse counts are exact, but what that reuse *saved*
 //! depends on a counterfactual prefill that never ran — presenting an estimate
-//! of it as a dashboard number would invite trust it can't earn. Consumers that
-//! want a ratio can divide two figures that are both real.
+//! of it as a dashboard number would invite trust it can't earn. The share
+//! of prompt tokens served from the cache is two real figures divided, made
+//! here once ([`CacheUsage::reuse_percent`]) and said here once
+//! ([`CacheUsage::summary`]), so every surface shows the same percent.
 //!
 //! Requests whose upstream didn't report the field are counted separately
 //! (`unreported_requests`) rather than folded in as zero-reuse, so a server
@@ -28,7 +30,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// A point-in-time view of prompt-cache reuse since the proxy started.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct CacheUsage {
     /// Completed requests whose upstream reported a cached-token count.
@@ -51,6 +53,38 @@ pub struct CacheUsage {
     pub last_prompt_tokens: Option<u32>,
     /// Tokens reused from cache in the most recent reporting request.
     pub last_cached_tokens: Option<u32>,
+    /// [`Self::cached_tokens`] as a whole percent of [`Self::prompt_tokens`],
+    /// a half rounded up; `None` before any prompt token was measured.
+    pub reuse_percent: Option<u8>,
+    /// The reuse as every surface says it, "Prompt cache 71% reused"; `None`
+    /// with [`Self::reuse_percent`].
+    pub summary: Option<String>,
+    /// [`Self::last_cached_tokens`] as a whole percent of
+    /// [`Self::last_prompt_tokens`], a half rounded up; `None` before a
+    /// request reported, and for one with an empty prompt.
+    pub last_reuse_percent: Option<u8>,
+}
+
+impl CacheUsage {
+    /// `cached` as a whole percent of `prompt`, a half rounded up; `None`
+    /// when no prompt token was measured. A cached count above the prompt
+    /// count says 100, as the store already clamps it.
+    #[must_use]
+    pub fn reuse_percent(prompt: u64, cached: u64) -> Option<u8> {
+        if prompt == 0 {
+            return None;
+        }
+        let cached = u128::from(cached.min(prompt));
+        let prompt = u128::from(prompt);
+        let percent = (cached * 200 + prompt) / (prompt * 2);
+        u8::try_from(percent).ok()
+    }
+
+    /// The reuse in words: "Prompt cache 71% reused".
+    #[must_use]
+    pub fn summary(percent: u8) -> String {
+        format!("Prompt cache {percent}% reused")
+    }
 }
 
 /// Running totals of prompt-cache reuse.
@@ -130,13 +164,21 @@ impl CacheMetricsStore {
             (None, None)
         };
 
+        let prompt_tokens = self.prompt_tokens.load(Ordering::Relaxed);
+        let cached_tokens = self.cached_tokens.load(Ordering::Relaxed);
+        let reuse_percent = CacheUsage::reuse_percent(prompt_tokens, cached_tokens);
         CacheUsage {
             reporting_requests: self.reporting_requests.load(Ordering::Relaxed),
             unreported_requests: self.unreported_requests.load(Ordering::Relaxed),
-            prompt_tokens: self.prompt_tokens.load(Ordering::Relaxed),
-            cached_tokens: self.cached_tokens.load(Ordering::Relaxed),
+            prompt_tokens,
+            cached_tokens,
             last_prompt_tokens,
             last_cached_tokens,
+            reuse_percent,
+            summary: reuse_percent.map(CacheUsage::summary),
+            last_reuse_percent: last_prompt_tokens.zip(last_cached_tokens).and_then(
+                |(prompt, cached)| CacheUsage::reuse_percent(u64::from(prompt), u64::from(cached)),
+            ),
         }
     }
 }
@@ -158,6 +200,47 @@ impl crate::ports::UsageSink for CacheMetricsStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The share and its words, from known counts: none before a prompt
+    /// token, a half rounded up, a full re-prefill a real zero.
+    #[test]
+    fn the_reuse_is_a_whole_percent_of_the_prompt_said_in_words() {
+        let store = CacheMetricsStore::new();
+        assert_eq!(store.snapshot().reuse_percent, None);
+        assert_eq!(store.snapshot().summary, None);
+
+        store.record(10_000, Some(7_050));
+        let got = store.snapshot();
+        assert_eq!(got.reuse_percent, Some(71));
+        assert_eq!(got.summary.as_deref(), Some("Prompt cache 71% reused"));
+        assert_eq!(got.last_reuse_percent, Some(71));
+
+        // The total and the last request apart: 7,950 of 12,000 is 66%,
+        // the last 900 of 2,000 is 45%.
+        store.record(2_000, Some(900));
+        let got = store.snapshot();
+        assert_eq!(got.reuse_percent, Some(66));
+        assert_eq!(got.last_reuse_percent, Some(45));
+
+        assert_eq!(CacheUsage::reuse_percent(5_000, 0), Some(0));
+        assert_eq!(CacheUsage::reuse_percent(200, 1), Some(1));
+        assert_eq!(CacheUsage::reuse_percent(200, 0), Some(0));
+        assert_eq!(CacheUsage::reuse_percent(3, 1), Some(33));
+        assert_eq!(CacheUsage::reuse_percent(100, 100), Some(100));
+        assert_eq!(CacheUsage::reuse_percent(100, 250), Some(100));
+        assert_eq!(CacheUsage::reuse_percent(0, 0), None);
+    }
+
+    /// A request whose upstream reported no cache count gives no percent:
+    /// "no data" is not "no reuse".
+    #[test]
+    fn an_upstream_that_never_reports_gives_no_percent() {
+        let store = CacheMetricsStore::new();
+        store.record(5_000, None);
+        assert_eq!(store.snapshot().reuse_percent, None);
+        assert_eq!(store.snapshot().summary, None);
+        assert_eq!(store.snapshot().last_reuse_percent, None);
+    }
 
     #[test]
     fn empty_store_reports_nothing_recorded() {

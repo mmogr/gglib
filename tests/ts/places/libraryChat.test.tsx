@@ -50,6 +50,8 @@ const queueDownload = vi.hoisted(() => vi.fn(async (_params: { modelId: string; 
 // The desktop shell's event channel: it records who listens and sends nothing.
 const shell = vi.hoisted(() => ({ listen: vi.fn(async (_event: string) => () => {}) }));
 const serveModel = vi.hoisted(() => vi.fn(async (_config: { id: number }) => ({ port: 9456 })));
+// The settings patch a model switch saves the conversation's model by.
+const updateConversationSettings = vi.hoisted(() => vi.fn(async (_id: number, _patch: object) => {}));
 // What the stub chat page's switch button picks, and the conversation it
 // reports as open when the switch lands.
 const stub = vi.hoisted(() => ({
@@ -76,6 +78,7 @@ vi.mock('../../../src/services/transport', async () => {
       getPairedModel: vi.fn(async (id: number) => ({ detail: farDetail(id, 'qwen3-8b') })),
       loadPairedModel: vi.fn(async () => ({ model: 'qwen3-8b', started: true, context: 30000 })),
       serveModel,
+      updateConversationSettings,
       listServers: vi.fn(async () => []),
       getDownloadQueue: vi.fn(async () => downloads.queue),
       queueDownload,
@@ -127,7 +130,6 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
     serverPort,
     conversationId,
     draft,
-    startingModel,
     paired,
     onSwitchModel,
     onUnloadModel,
@@ -136,7 +138,6 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
     serverPort?: number;
     conversationId?: number | null;
     draft?: { text: string; images: File[] };
-    startingModel?: string | null;
     paired?: { far: { id: number }; machineName: string };
     onSwitchModel?: (
       choice: { modelId: number; modelName: string },
@@ -155,7 +156,6 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
         data-conversation={conversationId ?? ''}
         data-draft={draft?.text ?? ''}
         data-draft-images={draft?.images.map((f) => f.name).join(',') ?? ''}
-        data-starting={startingModel ?? ''}
       >
         Chatting with {modelName}
         <button
@@ -251,6 +251,8 @@ describe('the library, into a chat', () => {
     queueDownload.mockClear();
     shell.listen.mockClear();
     serveModel.mockClear();
+    updateConversationSettings.mockReset();
+    updateConversationSettings.mockImplementation(async () => {});
     stub.choice = { modelId: 9, modelName: 'gemma-3-12b' };
     stub.conversationId = 2;
     far.hang = false;
@@ -358,12 +360,15 @@ describe('the library, into a chat', () => {
     return user;
   }
 
-  /** A serve that answers when the test says so. */
-  function heldServe() {
-    let answer!: (value: { port: number }) => void;
-    serveModel.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
-    return (port: number) => act(async () => answer({ port }));
+  /** A settings save that answers when the test says so. */
+  function heldSave() {
+    let answer!: () => void;
+    updateConversationSettings.mockImplementationOnce(() => new Promise<void>((resolve) => { answer = resolve; }));
+    return () => act(async () => answer());
   }
+
+  /** The model a switch saved as conversation `id`'s, this machine's `modelId`. */
+  const savedAs = (id: number, modelId: number) => [id, { model: { machine: { kind: 'local' }, id: modelId } }];
 
   it('offers Load and Chat for a model that is not loaded, and no Unload', async () => {
     library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
@@ -496,15 +501,17 @@ describe('the library, into a chat', () => {
     expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with qwen3-8b');
   });
 
-  it('serves a model that is not running, then moves the chat to it with its conversation', async () => {
+  it("saves the picked model as the conversation's and moves the chat to it, starting nothing", async () => {
     const user = await openChatOnQwen();
 
     await user.click(screen.getByRole('button', { name: 'Switch model' }));
 
     await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b'));
-    expect(serveModel).toHaveBeenCalledWith({ id: 9 });
+    expect(updateConversationSettings.mock.calls).toEqual([savedAs(2, 9)]);
+    // Nothing is started: the conversation's next turn loads the model.
+    expect(serveModel).not.toHaveBeenCalled();
     const chat = screen.getByTestId('chat-page');
-    expect(chat).toHaveAttribute('data-port', '9456');
+    expect(chat).not.toHaveAttribute('data-port');
     expect(chat).toHaveAttribute('data-conversation', '2');
     expect(chat).toHaveAttribute('data-draft', 'half a thought');
     expect(chat).toHaveAttribute('data-draft-images', 'shot.png');
@@ -512,7 +519,7 @@ describe('the library, into a chat', () => {
     expect(stopServer).not.toHaveBeenCalled();
   });
 
-  it('moves the chat to a server already running without starting anything', async () => {
+  it('moves the chat to a server already running, on its port', async () => {
     stub.choice = { modelId: 8, modelName: 'llama-3.2-3b' };
     const user = await openChatOnQwen([{ modelId: 8, modelName: 'llama-3.2-3b', port: 9200, status: 'running' }]);
 
@@ -520,75 +527,73 @@ describe('the library, into a chat', () => {
 
     await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with llama-3.2-3b'));
     expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '9200');
+    expect(updateConversationSettings.mock.calls).toEqual([savedAs(2, 8)]);
     expect(serveModel).not.toHaveBeenCalled();
   });
 
-  it('stays away when the chat is left while the new model starts', async () => {
-    const answer = heldServe();
+  it('an empty chat saves nothing: its address names the model, which its first send keeps', async () => {
+    stub.conversationId = null;
+    const user = await openChatOnQwen();
+
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
+
+    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b'));
+    expect(updateConversationSettings).not.toHaveBeenCalled();
+    expect(serveModel).not.toHaveBeenCalled();
+  });
+
+  it('stays away when the chat is left while the model is being saved', async () => {
+    const answer = heldSave();
     const user = await openChatOnQwen();
 
     await user.click(screen.getByRole('button', { name: 'Switch model' }));
     await user.click(screen.getByRole('button', { name: 'Leave chat' }));
     await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
-    expect(stopServer).not.toHaveBeenCalled();
 
-    await answer(9456);
+    await answer();
 
     expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
   });
 
-  it('opens the conversation chosen while the new model started, not the one open at the pick', async () => {
-    const answer = heldServe();
-    const user = await openChatOnQwen();
-
-    await user.click(screen.getByRole('button', { name: 'Switch model' }));
-    stub.conversationId = 3;
-    await answer(9456);
-
-    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b'));
-    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-conversation', '3');
-  });
-
-  it('stays on the model it was on when the new one will not start', async () => {
-    serveModel.mockRejectedValueOnce(new Error('not enough memory'));
+  it('stays on the model it was on when the daemon refuses the save', async () => {
+    updateConversationSettings.mockRejectedValueOnce(new Error('this chat ran on another machine'));
     const user = await openChatOnQwen();
 
     await user.click(screen.getByRole('button', { name: 'Switch model' }));
 
-    await waitFor(() => expect(serveModel).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(updateConversationSettings).toHaveBeenCalledTimes(1));
+    await act(async () => {});
     const chat = screen.getByTestId('chat-page');
     expect(chat).toHaveTextContent('Chatting with qwen3-8b');
     expect(chat).toHaveAttribute('data-port', '9123');
   });
 
-  it('lands the last model picked, whichever starts first', async () => {
+  it('lands the last model picked, whichever save answers first', async () => {
     for (const order of [['first', 'second'], ['second', 'first']] as const) {
-      const answer = { first: heldServe(), second: heldServe() };
+      updateConversationSettings.mockClear();
+      const answer = { first: heldSave(), second: heldSave() };
       const user = await openChatOnQwen();
       await user.click(screen.getByRole('button', { name: 'Switch model' }));
       stub.choice = { modelId: 11, modelName: 'phi-4' };
       await user.click(screen.getByRole('button', { name: 'Switch model' }));
-      expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', 'phi-4');
 
-      await answer[order[0]](order[0] === 'first' ? 9456 : 9457);
+      await answer[order[0]]();
       if (order[0] === 'first') {
-        // The superseded model is up, and the chat still waits on the last pick.
+        // The superseded pick is saved, and the chat still waits on the last.
         expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with qwen3-8b');
-        expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', 'phi-4');
       }
-      await answer[order[1]](order[1] === 'first' ? 9456 : 9457);
+      await answer[order[1]]();
 
       const chat = screen.getByTestId('chat-page');
       expect(chat, `resolved ${order.join(' then ')}`).toHaveTextContent('Chatting with phi-4');
-      expect(chat).toHaveAttribute('data-port', '9457');
-      expect(chat).toHaveAttribute('data-starting', '');
+      expect(updateConversationSettings.mock.calls).toEqual([savedAs(2, 9), savedAs(2, 11)]);
       cleanup();
       stub.choice = { modelId: 9, modelName: 'gemma-3-12b' };
     }
   });
 
   it('does not hand a switch to a chat reopened on the same model while it was pending', async () => {
-    const answer = heldServe();
+    const answer = heldSave();
     const user = await openChatOnQwen();
     const first = screen.getByTestId('chat-page');
 
@@ -597,29 +602,11 @@ describe('the library, into a chat', () => {
     await user.click(await screen.findByRole('button', { name: 'Chat' }));
     const reopened = await screen.findByTestId('chat-page');
     expect(reopened).not.toBe(first);
-    expect(reopened).toHaveAttribute('data-starting', '');
 
-    await answer(9456);
+    await answer();
 
     expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with qwen3-8b');
     expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '9123');
-  });
-
-  it('tells the chat page which model is starting, until the switch lands or fails', async () => {
-    const answer = heldServe();
-    const user = await openChatOnQwen();
-
-    await user.click(screen.getByRole('button', { name: 'Switch model' }));
-    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', 'gemma-3-12b');
-    await answer(9456);
-    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b'));
-    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', '');
-
-    serveModel.mockRejectedValueOnce(new Error('not enough memory'));
-    stub.choice = { modelId: 11, modelName: 'phi-4' };
-    await user.click(screen.getByRole('button', { name: 'Switch model' }));
-    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', ''));
-    expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b');
   });
 
   it('queues a download in the desktop window with no word from its shell', async () => {

@@ -1,6 +1,6 @@
-//! What `POST /api/agent/chat` does before its loop runs, and how it writes
-//! each event: one place, so every caller of the agent loop resolves,
-//! validates, limits and frames exactly as the chat route does.
+//! What a run does before its loop runs, and how it writes each event: one
+//! place, so every door a turn comes through validates, limits and frames
+//! alike.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -12,14 +12,13 @@ use gglib_app_services::transcript::MadeBy;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
-use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, RetryObserver};
+use gglib_core::ports::{AgentGuardReporter, AgentLoopPort, RetryObserver};
 use gglib_core::services::{AttachmentService, drawing_availability};
 use gglib_mcp::{BUILTIN_PREFIX, DrawArm, DrawWith, DrawingTool, FILE_TOOLS};
-use gglib_runtime::{LoopGeneration, compose_agent_loop};
+use gglib_runtime::compose_agent_loop;
 
-use super::AgentChatRequest;
-use super::dto::AgentRequestConfig;
-use super::remote_upstream::{self, Upstream};
+use super::loop_request::{LoopRequest, NamedLimits};
+use super::remote_upstream::Upstream;
 use super::retry_notice::RetryNotice;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -33,21 +32,15 @@ pub(crate) struct Prepared {
     pub(crate) tx: mpsc::Sender<AgentEvent>,
     /// Where the loop's events arrive.
     pub(crate) rx: mpsc::Receiver<AgentEvent>,
-    /// The model the loop is counted under: the request's, or the one
-    /// running on its port.
-    pub(crate) model: String,
     /// The model each turn was made by, for its `turn_usage` event. Its
-    /// context's size is read once the run holds the model
-    /// (`remote_upstream::hold_model`).
+    /// context's size is read once the run's model is loaded
+    /// (`remote_upstream::endpoint`).
     pub(crate) made_by: MadeBy,
     /// The port and id of the local model the loop drives; otherwise none.
     pub(crate) local_model: Option<(u16, i64)>,
     /// The paired machine's model the loop drives, by its machine;
     /// otherwise none.
     pub(crate) far_model: Option<ModelRef>,
-    /// A run's hold on that model (`remote_upstream::hold`), taken by
-    /// [`prepare_held`]; `prepare` takes none.
-    pub(crate) hold: Option<AdmissionLease>,
 }
 
 /// One slot of the agent semaphore, or `None` when every slot is taken.
@@ -67,9 +60,8 @@ pub(crate) const DRAW_TOOL: &str = gglib_core::request_pipeline::DRAW_TOOL_NAME;
 /// request without `draw` passes, unless it chose an image model: it is
 /// offered no image tool at all, so the choice would be dropped in silence.
 ///
-/// The one place every door's `draw` and `image_model` are judged: the
-/// page's run, a device's turn, a chat run with builtins and the chat
-/// route.
+/// The one place every door's `draw` and `image_model` are judged: this
+/// machine's turn, a device's turn and a chat run with builtins.
 ///
 /// # Errors
 ///
@@ -79,7 +71,7 @@ pub(crate) const DRAW_TOOL: &str = gglib_core::request_pipeline::DRAW_TOOL_NAME;
 /// its reason.
 pub(crate) async fn refuse_unavailable_drawing(
     state: &AppState,
-    req: &AgentChatRequest,
+    req: &LoopRequest,
 ) -> Result<(), HttpError> {
     let refused = |code, message| HttpError::Coded {
         status: axum::http::StatusCode::BAD_REQUEST,
@@ -160,75 +152,23 @@ pub(crate) fn with_folder(
     filter
 }
 
-/// Resolve the upstream, validate the request, apply the configured limits
-/// and compose the loop, with no folder: the chat route's loop offers none
-/// of gglib's own file tools.
+/// Apply the configured limits and compose `req`'s loop over `upstream`,
+/// with `folder` as the root of gglib's own file tools: a canonical path,
+/// or `None` for no file tools.
 ///
-/// # Errors
-///
-/// Whatever [`remote_upstream::resolve`] refuses.
-pub(crate) async fn prepare(
-    state: &AppState,
-    req: AgentChatRequest,
-) -> Result<Prepared, HttpError> {
-    // Local llama-server or the remote tunnel: settled first, because it
-    // decides the port check, the model context, the stored sampling layers
-    // and the bearer together.
-    let upstream = remote_upstream::resolve(state, &req).await?;
-    Ok(prepare_over(state, req, upstream, None).await)
-}
-
-/// [`prepare`] for a run, which holds its model while it lives: the page's
-/// run and a device's turn. The hold is taken, and the context the model was
-/// launched with read, before the loop is composed, so the loop trims the
-/// conversation to that context (`remote_upstream::hold_model`). `folder` is
-/// the run's, where gglib's own file tools read: the page's run passes its
-/// conversation's, and a device's turn none.
-///
-/// # Errors
-///
-/// Whatever [`remote_upstream::resolve`] or the hold refuses.
-pub(crate) async fn prepare_held(
-    state: &AppState,
-    req: AgentChatRequest,
-    folder: Option<PathBuf>,
-) -> Result<Prepared, HttpError> {
-    let upstream = remote_upstream::resolve(state, &req).await?;
-    held_over(state, req, upstream, folder).await
-}
-
-/// [`prepare_held`], once the upstream is settled; drivable in a test, as
-/// [`prepare_over`] is.
-///
-/// # Errors
-///
-/// Whatever the hold refuses.
-pub(super) async fn held_over(
-    state: &AppState,
-    req: AgentChatRequest,
-    mut upstream: Upstream,
-    folder: Option<PathBuf>,
-) -> Result<Prepared, HttpError> {
-    let hold = remote_upstream::hold_model(state.runtime.as_ref(), &mut upstream).await?;
-    let mut prepared = prepare_over(state, req, upstream, folder).await;
-    prepared.hold = hold;
-    Ok(prepared)
-}
-
-/// [`prepare`], once the upstream is settled, with `folder` as the root of
-/// gglib's own file tools: a canonical path, or `None` for no file tools.
-///
-/// Its own function because `prepare` cannot be driven in a test: no test
-/// has a running llama-server for `remote_upstream::resolve` to find.
+/// A loop on this machine's model goes through its endpoint
+/// (`remote_upstream::endpoint`): its turns are any client's there, so the
+/// endpoint's loop guard counts them and this loop reports its own guard's
+/// decisions nowhere. A loop on the paired machine's model reports them to
+/// this machine's ledger.
 pub(super) async fn prepare_over(
     state: &AppState,
-    req: AgentChatRequest,
+    req: LoopRequest,
     upstream: Upstream,
     folder: Option<PathBuf>,
 ) -> Prepared {
     // Read before `tool_filter` consumes the request piecemeal, and before the
-    // loop is composed: the two reasoning controls are the only sampling this
-    // endpoint accepts, and they occupy the ladder's top rung.
+    // loop is composed: the turn's own sampling, the ladder's top rung.
     let sampling = req.sampling_layer();
     let draw = req.draw;
     // The folder before Draw: a `[]` that Draw then names the image tool in
@@ -255,49 +195,37 @@ pub(super) async fn prepare_over(
     let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
 
-    let model = upstream.counted_as.clone();
     let local_model = upstream.local_model;
     let far_model = upstream.far_model.clone();
+    // A far run's guard decisions go to this process's ledger (#1091),
+    // under the name that machine has for the model.
+    let guard = reports_its_guard(&upstream.door).then(|| AgentGuardReporter {
+        sink: state.proxy.agent_guard_sink(),
+        model: upstream.counted_as,
+    });
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
-        // `upstream`, not `req`: the two paths mean opposite things by an
-        // absent model, and `resolve` is where that was already decided.
         upstream.model,
         upstream.model_context,
         state.mcp.clone(),
         tool_filter,
         folder,
-        // GUI chat runs in the same process as the embedded proxy; report its
-        // reuse to the shared agent-path store behind `agent_usage`.
-        Some(state.proxy.agent_metrics()),
-        // And its guard decisions to the same process's ledger, which is the
-        // only reason the agent path's trips are counted at all (#1091). The
-        // name is `resolve`'s, not `req`'s: a request that named no model is
-        // counted under the model actually running on the port.
-        AgentGuardReporter {
-            sink: state.proxy.agent_guard_sink(),
-            model: upstream.counted_as,
-        },
+        guard,
         Some(retry_observer),
         sampling,
         upstream.layers,
         upstream.door,
         state.core.attachments().store(),
-        // A reply on this machine's model waits for an image render, and
-        // says so through the retry notice; a far one takes no turn here.
-        LoopGeneration {
-            gate: Some(Arc::clone(&state.generation_gate)),
-            drawing,
-        },
+        drawing,
     );
 
-    let mut config = config_for(state, req.config).await;
+    let mut config = config_for(state, req.limits).await;
     // Pressing Draw is the person's explicit ask: the run's first reply
     // must be the call for the picture, offered that tool alone, and is
     // never left to the model to decide. The picture is asked for once:
     // the reply after it is offered no tools. Every door that composes a run
-    // with `draw` comes through here: the page's runs, a device's turn and
+    // with `draw` comes through here: this machine's turns, a device's and
     // a chat run with builtins. A run on another machine's model was
     // refused `draw` before this.
     config.first_call = draw.then(DrawingTool::first_call);
@@ -308,30 +236,32 @@ pub(super) async fn prepare_over(
         config,
         tx,
         rx,
-        model,
         made_by: upstream.made_by,
         local_model,
         far_model,
-        hold: None,
     }
 }
 
-/// The loop config a request runs with: what it names, and for the limits
-/// it leaves out this machine's stored ones (`TurnLimits::resolve`). A
-/// turn on a saved chat reaches here with that chat's saved iteration limit
-/// already standing in for one it did not name (`hub_turn::plan` for a
-/// paired device's turn, `run::plan` for the page's run). So a client that
-/// names no iteration limit runs with its chat's, and failing that with
-/// `max_tool_iterations`, and none has to send either. A settings read that
-/// fails leaves the built-in defaults.
+/// Whether a loop through `door` reports its own guard's decisions to this
+/// process's ledger: one on a paired machine's model does, which this
+/// machine counts as it composed it. A loop through this machine's endpoint
+/// does not: the endpoint's loop guard sees every request and counts what
+/// it decides, and a count here would count each trip twice.
+pub(super) fn reports_its_guard(door: &gglib_runtime::Door) -> bool {
+    door.is_far()
+}
+
+/// The loop config a turn runs with: the limits its chat's settings name
+/// (`hub_turn::plan`, for this machine's turn and a paired device's), and
+/// for those they leave out this machine's stored ones
+/// (`TurnLimits::resolve`). So a turn on a chat that names no iteration
+/// limit runs with `max_tool_iterations`. A settings read that fails leaves
+/// the built-in defaults.
 ///
-/// Its own function because `prepare` cannot be driven in a test: it needs
-/// a running llama-server.
-pub(crate) async fn config_for(state: &AppState, named: Option<AgentRequestConfig>) -> AgentConfig {
+/// Its own function so a test can read the config a planned turn runs with.
+pub(crate) async fn config_for(state: &AppState, named: NamedLimits) -> AgentConfig {
     let settings = state.core.settings().get().await.ok();
-    named
-        .unwrap_or_default()
-        .into_agent_config(settings.as_ref())
+    named.into_agent_config(settings.as_ref())
 }
 
 /// One event as the `data:` text of its SSE frame.
@@ -356,20 +286,14 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
 }
 
 #[cfg(test)]
-#[path = "compose_context_tests.rs"]
-pub(super) mod context_tests;
-#[cfg(test)]
 #[path = "compose_draw_tests.rs"]
 mod draw_tests;
 #[cfg(test)]
 #[path = "compose_drawn_picture_tests.rs"]
 mod drawn_picture_tests;
 #[cfg(test)]
+#[path = "compose_endpoint_tests.rs"]
+mod endpoint_tests;
+#[cfg(test)]
 #[path = "compose_folder_tests.rs"]
 mod folder_tests;
-#[cfg(test)]
-#[path = "compose_gate_tests.rs"]
-mod gate_tests;
-#[cfg(test)]
-#[path = "compose_sampling_tests.rs"]
-mod sampling_tests;

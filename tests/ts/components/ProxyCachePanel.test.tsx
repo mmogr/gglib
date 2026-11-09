@@ -11,6 +11,9 @@ const emptyUsage: CacheUsage = {
   cached_tokens: 0,
   last_prompt_tokens: null,
   last_cached_tokens: null,
+  reuse_percent: null,
+  summary: null,
+  last_reuse_percent: null,
 };
 
 function status(overrides: Partial<CacheStatus> = {}): CacheStatus {
@@ -43,6 +46,9 @@ describe('ProxyCachePanel', () => {
             cached_tokens: 29450,
             last_prompt_tokens: 10000,
             last_cached_tokens: 9500,
+            reuse_percent: 97,
+            summary: 'Prompt cache 97% reused',
+            last_reuse_percent: 95,
           },
         })}
       />,
@@ -124,5 +130,20 @@ describe('ProxyCachePanel', () => {
       />,
     );
     expect(screen.getByText(/not enough memory/i)).toBeInTheDocument();
+  });
+
+  // The percents are the proxy's: the panel shows what it was sent and
+  // divides nothing, so a frame without them shows none.
+  it('shows the proxy\'s reuse percents as it sent them, and none it did not send', () => {
+    const measured = { ...emptyUsage, reporting_requests: 2, prompt_tokens: 10000, cached_tokens: 6600, last_prompt_tokens: 4000, last_cached_tokens: 2400 };
+    const { rerender } = render(
+      <ProxyCachePanel cache={status({ usage: { ...measured, reuse_percent: 66, summary: 'Prompt cache 66% reused', last_reuse_percent: 60 } })} />,
+    );
+    expect(screen.getByText('Cache hit rate').parentElement).toHaveTextContent('Cache hit rate66 %');
+    expect(screen.getByText('Last request reuse').parentElement).toHaveTextContent('Last request reuse60 %');
+
+    rerender(<ProxyCachePanel cache={status({ usage: measured })} />);
+    expect(screen.queryByText('Cache hit rate')).not.toBeInTheDocument();
+    expect(screen.queryByText('Last request reuse')).not.toBeInTheDocument();
   });
 });

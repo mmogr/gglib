@@ -5,6 +5,7 @@
 
 import type { DependencyDto } from './generated/DependencyDto';
 import type { DiagnosticsDto } from './generated/DiagnosticsDto';
+import type { FastDownloadsState } from './generated/FastDownloadsState';
 import type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
 import type { PinStanding } from './generated/PinStanding';
 import type { PinState } from './generated/PinState';
@@ -42,7 +43,8 @@ export interface SetupStatus {
   gpuInfo: GpuInfo;
   modelsDirectory: ModelsDirectoryInfo;
   pythonAvailable: boolean;
-  fastDownloadReady: boolean;
+  /** Whether the accelerator is set up, as the state every surface words (`FAST_DOWNLOADS_WORDS`). */
+  fastDownloads: FastDownloadsState;
   systemMemory?: SystemMemoryInfo | null;
 }
 

@@ -8,7 +8,7 @@ import type { KeyState } from "./KeyState";
  */
 export type ProxyStatus = { running: boolean, 
 /**
- * The same fact as `running` and `pinned_model`, said as the one word
+ * The same fact as `running` and `pinned_model_id`, said as the one word
  * every surface uses: `on`, `off` or `pinned`.
  */
 state: EndpointState, port: number | null, 
@@ -24,7 +24,20 @@ base_url: string | null,
  */
 key: KeyState | null, 
 /**
- * The model this proxy run is pinned to, when started in pinned mode
- * (`gglib serve`). `None` for the ordinary auto-swapping proxy.
+ * The name of the model this proxy run is pinned to, when started in
+ * pinned mode (`gglib serve`), for showing. `None` for the ordinary
+ * auto-swapping proxy.
  */
-pinned_model: string | null, };
+pinned_model: string | null, 
+/**
+ * The pinned state said with its model, `Pinned to <model>`
+ * (`EndpointState::pinned_to`), as every surface says it. `None` when
+ * nothing is pinned.
+ */
+pinned_to: string | null, 
+/**
+ * The catalogue id of the pinned model: the pin's identity, which every
+ * surface matches a model to. Two models can share a name, and a
+ * rename keeps the id. `None` exactly when `pinned_model` is.
+ */
+pinned_model_id: number | null, };

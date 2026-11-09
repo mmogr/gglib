@@ -1,19 +1,18 @@
 //! A conversation's machine is fixed once it has a saved message: a run on
-//! another machine than the one it ran on is refused before anything is
-//! written, in both directions. Before that, the model it names was only
-//! chosen, and a run on any machine is not refused.
+//! another machine than the one it ran on ends `failed`, `conflict`, before
+//! anything is written, in both directions. Before that, the model it names
+//! was only chosen, and a run on any machine is not refused.
 
-use axum::http::StatusCode;
 use gglib_core::domain::chat::{
     Conversation, ConversationSettings, MessageRole, NewConversation, NewMessage,
 };
+use gglib_core::domain::runs::{RunError, RunStatus};
 use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::RunsPort as _;
 
 use super::compose::{Prepared, take_permit};
-use super::launch::launch;
+use super::run_fixture::launch;
 use super::run_fixture::{End, LOCAL, finished_reply, prepared, saved, saving, settled, state};
-use crate::error::HttpError;
 use crate::state::AppState;
 
 fn paired(fingerprint: &str) -> Machine {
@@ -73,18 +72,17 @@ fn on(fingerprint: &str) -> Prepared {
     p
 }
 
-async fn launched(state: &AppState, conversation: i64, p: Prepared) -> Result<(), HttpError> {
-    let created = launch(
-        state,
-        "m1",
-        LOCAL,
-        saving(conversation),
-        p,
-        take_permit(state).expect("a free slot"),
-    )
-    .await;
+/// Run `p` on `conversation`; how its run ended: with no error, or the
+/// one it failed with.
+async fn launched(state: &AppState, conversation: i64, p: Prepared) -> Result<(), RunError> {
+    let permit = || take_permit(state).expect("a free slot");
+    launch(state, "m1", LOCAL, saving(conversation), p, permit()).expect("reserved");
     settled(state).await;
-    created.map(|_| ())
+    let ended = state.runs.get(&LOCAL, "m1").unwrap();
+    match ended.status {
+        RunStatus::Completed => Ok(()),
+        _ => Err(ended.error.expect("a failed run says why")),
+    }
 }
 
 async fn read(state: &AppState, id: i64) -> Conversation {
@@ -109,23 +107,16 @@ async fn said(state: &AppState, id: i64) {
         .unwrap();
 }
 
-/// Conversation `id`, once it has a saved message, refuses the run with a
-/// `409` that names `words`, with no message saved, no run left behind and
-/// the stored model as it was.
+/// Conversation `id`, once it has a saved message, ends the run `failed`,
+/// `conflict`, in words that name `words`, with no message saved and the
+/// stored model as it was.
 async fn refused(state: &AppState, id: i64, p: Prepared, words: &str) {
     said(state, id).await;
     let before = read(state, id).await.settings.and_then(|s| s.model);
     let error = launched(state, id, p).await.expect_err("refused");
-    let HttpError::Coded {
-        status, message, ..
-    } = &error
-    else {
-        panic!("a coded refusal, not {error:?}");
-    };
-    assert_eq!(*status, StatusCode::CONFLICT);
-    assert!(message.contains(words), "{message}");
+    assert_eq!(error.code, "conflict");
+    assert!(error.message.contains(words), "{}", error.message);
     assert_eq!(saved(state, id).await.len(), 1, "nothing was saved");
-    assert!(state.runs.get(&LOCAL, "m1").is_err(), "no run is left");
     let after = read(state, id).await.settings.and_then(|s| s.model);
     assert_eq!(after, before, "the chat keeps its machine");
 }

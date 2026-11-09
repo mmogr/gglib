@@ -25,7 +25,7 @@ const transport = vi.hoisted(() => ({
   subscribe: vi.fn(() => () => {}),
   listModels: vi.fn(async () => []),
   getSettings: vi.fn(async () => ({})),
-  getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null })),
+  getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null })),
   getRemoteStatus: vi.fn(async () => null),
   revealSecret: vi.fn(async () => null),
   listPairedModels: vi.fn(async () => ({ machine: { kind: 'paired', fingerprint: '3ca82708b995' }, actions: [], models: [] })),

@@ -83,6 +83,9 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
 }));
 
 import { ENDPOINT_WORDS, KEY_WORDS, RESIDENCY_WORDS } from '../../../src/components/status/words';
+import type { CacheUsage } from '../../../src/types/generated/CacheUsage';
+import type { ContextSnapshot } from '../../../src/types/generated/ContextSnapshot';
+import { rust } from '../contracts/rustSource';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { applyProxyStatus, resetProxyState } from '../../../src/services/proxyRegistry';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
@@ -97,11 +100,19 @@ import { activeConnection, dashboardSnapshot, modelDefectCounts, recentRequest, 
 import { guiModel } from '../fixtures/model';
 import { renderApp } from './harness';
 
+/** The proxy's figures from known traffic, as `gglib-proxy` serves them. */
+const FIGURES = JSON.parse(rust('contracts/proxy/figures.json')) as {
+  recent_requests: ContextSnapshot[];
+  rate_words: (string | null)[];
+  cache_usage: CacheUsage;
+  loop_guard_trips_total: number;
+};
+
 const QWEN = guiModel({ id: 1, name: 'Qwen3-4B', openaiId: 'Qwen3-4B' });
 const GEMMA = guiModel({ id: 2, name: 'Gemma-3-4B-It', openaiId: 'Gemma-3-4B-It' });
 
-const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
-const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null };
+const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null };
 
 function renderEndpoint(status: ProxyStatus = UP, path = '/endpoint') {
   library.models = [QWEN, GEMMA];
@@ -226,7 +237,7 @@ describe('the endpoint place', () => {
     });
 
     it('pinned: says Pinned and the one model it serves; Unpin stops, then starts every model', async () => {
-      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B', pinned_model_id: 1 });
       expect(screen.getByText(ENDPOINT_WORDS.pinned)).toBeInTheDocument();
       expect(screen.getByText('only Qwen3-4B, other names are refused')).toBeInTheDocument();
 
@@ -427,7 +438,7 @@ describe('the endpoint place', () => {
     });
 
     it('a pinned endpoint shows its model chosen, and Every model unpins it', async () => {
-      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B', pinned_model_id: 1 });
       await screen.findByRole('option', { name: 'Only Qwen3-4B' });
       const serves = screen.getByRole('combobox', { name: 'Serves' });
       await waitFor(() => expect(serves).toHaveValue('1'));
@@ -435,6 +446,18 @@ describe('the endpoint place', () => {
       await user.selectOptions(serves, 'Every model');
       await waitFor(() => expect(transport.startProxy).toHaveBeenCalledWith({}));
       expect(transport.stopProxy.mock.invocationCallOrder[0]).toBeLessThan(transport.startProxy.mock.invocationCallOrder[0]);
+    });
+
+    it('a pinned endpoint is matched to its model by id, never to another of the same name', async () => {
+      const twin = guiModel({ id: 3, name: 'Qwen3-4B', openaiId: 'Qwen3-4B' });
+      library.models = [QWEN, twin, GEMMA];
+      act(() => applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B', pinned_model_id: 3 }));
+      initModelEvents();
+      renderApp('/endpoint');
+      const serves = await screen.findByRole('combobox', { name: 'Serves' });
+      await waitFor(() => expect(serves).toHaveValue('3'));
+      // Connect a client names the pinned one too.
+      await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(3));
     });
   });
 
@@ -462,7 +485,7 @@ describe('the endpoint place', () => {
 
     it('an unpin whose start fails after the stop says the daemon\'s message as it said it', async () => {
       transport.startProxy.mockRejectedValueOnce(new Error('port 8080 is in use'));
-      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B', pinned_model_id: 1 });
       await user.click(screen.getByRole('button', { name: 'Unpin' }));
       await waitFor(() => expect(alert()).toHaveTextContent(/^port 8080 is in use$/));
       expect(transport.stopProxy).toHaveBeenCalledTimes(1);
@@ -497,8 +520,22 @@ describe('the endpoint place', () => {
       expect(within(webui).getByText('gglib')).toBeInTheDocument();
     });
 
+    it('pinned to an image model, names that model alone, with no picker of chat models', async () => {
+      const flux = guiModel({ id: 9, name: 'flux-schnell', imageFamily: 'flux1' });
+      transport.getProxyClients.mockImplementation(async (id) => answer(id === 9 ? 'flux-schnell' : 'Qwen3-4B', id ?? 0));
+      library.models = [QWEN, GEMMA, flux];
+      act(() => applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'flux-schnell', pinned_to: 'Pinned to flux-schnell', pinned_model_id: 9 }));
+      initModelEvents();
+      renderApp('/endpoint?inspect=model:1');
+      const connect = await screen.findByRole('region', { name: 'Connect a client' });
+      await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(9));
+      expect(await within(connect).findByText('flux-schnell', { selector: 'code' })).toBeInTheDocument();
+      expect(within(connect).getByText('flux-schnell', { selector: 'span' })).toBeInTheDocument();
+      expect(within(connect).queryByRole('combobox', { name: 'Model to connect with' })).not.toBeInTheDocument();
+    });
+
     it('names the pinned model before the last loaded one', async () => {
-      renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Gemma-3-4B-It' });
+      renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Gemma-3-4B-It', pinned_to: 'Pinned to Gemma-3-4B-It', pinned_model_id: 2 });
       await frame(admitted([residentSlot(1, 'Qwen3-4B')]));
       await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(2));
     });
@@ -597,7 +634,7 @@ describe('the endpoint place', () => {
     });
 
     it('a pinned endpoint is proved with its pin', async () => {
-      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' }, '/endpoint?inspect=model:2');
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B', pinned_model_id: 1 }, '/endpoint?inspect=model:2');
       await user.click(screen.getByRole('button', { name: 'Test it' }));
       expect(transport.proveProxy).toHaveBeenCalledWith(null);
     });
@@ -685,7 +722,7 @@ describe('the endpoint place', () => {
         scrolled.push(this);
       };
       try {
-        const { at } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' }, '/endpoint?connect=1');
+        const { at } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B', pinned_model_id: 1 }, '/endpoint?connect=1');
         const connect = await screen.findByRole('region', { name: 'Connect a client' });
         await waitFor(() => expect(at()).toBe('/endpoint'));
         expect(scrolled.filter((el) => el.contains(connect))).toHaveLength(1);
@@ -708,23 +745,24 @@ describe('the endpoint place', () => {
       await frame({
         recent_requests: [
           ...[0, 1, 2, 3].map((n) => recentRequest({ model_name: `m${n}`, recorded_at_secs: when(n) })),
-          recentRequest({ model_name: 'm4', recorded_at_secs: when(4), completion_tokens: 1, generation_ms: 0 }),
+          { ...FIGURES.recent_requests[2], model_name: 'm4', recorded_at_secs: when(4) },
           recentRequest({ model_name: 'm5', recorded_at_secs: when(5) }),
-          recentRequest({
+          {
+            ...FIGURES.recent_requests[0],
             model_name: 'Qwen3-4B',
             recorded_at_secs: when(6),
-            completion_tokens: 812,
-            generation_ms: 24_000,
             interventions: [
               { what: { kind: 'repaired_tool_call' }, word: 'Repaired a tool call' },
               { what: { kind: 'trimmed', messages: 4 }, word: 'Trimmed 4 old messages' },
             ],
-          }),
+          },
         ],
       });
       const rows = within(screen.getByRole('list', { name: 'Recent requests' })).getAllByRole('listitem');
       expect(rows.map((r) => r.children[1].textContent)).toEqual(['Qwen3-4B', 'm5', 'm4', 'm3', 'm2']);
-      expect(rows[0]).toHaveTextContent('812 tokens · 34 t/s');
+      // The proxy's rate, in the words it is recorded beside.
+      expect(rows[0]).toHaveTextContent(`812 tokens · ${FIGURES.rate_words[0]}`);
+      expect(FIGURES.rate_words[0]).toBe('34 t/s');
       expect(rows[0]).toHaveTextContent('Repaired a tool call · Trimmed 4 old messages');
       expect(rows[1].textContent).not.toMatch(/token|t\/s/);
       // One token, written in no time: singular, and no rate.
@@ -748,7 +786,11 @@ describe('the endpoint place', () => {
       const { user } = renderEndpoint({ ...UP, key: 'required' });
       await frame({
         tool_repairs_succeeded: 3,
-        per_model_defects: { 'Qwen3-4B': modelDefectCounts({ loop_guard_trips: 1 }) },
+        per_model_defects: {
+          'Qwen3-8B': modelDefectCounts({ loop_guard_trips: 2 }),
+          'gemma-3-12b': modelDefectCounts({ loop_guard_trips: 1 }),
+        },
+        loop_guard_trips_total: FIGURES.loop_guard_trips_total,
         sampling_audit: samplingAudit({ client_fields_discarded: 12 }),
         cache: {
           disk_enabled: false,
@@ -757,11 +799,12 @@ describe('the endpoint place', () => {
           ram_state: 'healthy',
           needs_attention: false,
           warnings: [],
-          usage: { reporting_requests: 4, unreported_requests: 0, prompt_tokens: 1000, cached_tokens: 710, last_prompt_tokens: null, last_cached_tokens: null },
+          usage: FIGURES.cache_usage,
         },
       });
       const activity = screen.getByRole('group', { name: 'Activity' });
-      expect(activity).toHaveTextContent('Prompt cache 71% reused · 3 tool calls repaired · 1 loop-guard trip · 12 client sampling fields ignored');
+      // The cache's sentence and the trips total are the proxy's, as recorded.
+      expect(activity).toHaveTextContent('Prompt cache 66% reused · 3 tool calls repaired · 3 loop-guard trips · 12 client sampling fields ignored');
 
       await user.click(within(activity).getByRole('button', { name: 'Clear prompt cache' }));
       expect(dashboard.clear).toHaveBeenCalledWith('127.0.0.1', 8080, 'k3y');
@@ -841,6 +884,44 @@ describe('the endpoint place', () => {
       expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument();
     });
 
+    it('the rows are one Tab stop, ↑ ↓ inspect the next row as they move, and a key on a row\'s button moves nothing', async () => {
+      const { user, at, router } = renderEndpoint();
+      await frame(admitted([residentSlot(1, 'Qwen3-4B'), residentSlot(2, 'Gemma-3-4B-It')]));
+      const qwen = loadedRow('Qwen3-4B');
+      const gemma = loadedRow('Gemma-3-4B-It');
+      expect([qwen.tabIndex, gemma.tabIndex]).toEqual([0, -1]);
+
+      qwen.focus();
+      await user.keyboard('{ArrowDown}');
+      expect(document.activeElement).toBe(gemma);
+      expect(at()).toBe('/endpoint?inspect=model:2');
+      expect(gemma).toHaveAttribute('aria-selected', 'true');
+      expect([qwen.tabIndex, gemma.tabIndex]).toEqual([-1, 0]);
+
+      within(gemma).getByRole('button', { name: 'Unload' }).focus();
+      await user.keyboard('{ArrowUp}');
+      expect(document.activeElement).toBe(within(gemma).getByRole('button', { name: 'Unload' }));
+      expect(at()).toBe('/endpoint?inspect=model:2');
+
+      gemma.focus();
+      await user.keyboard('{ArrowUp}');
+      expect(document.activeElement).toBe(qwen);
+      expect(at()).toBe('/endpoint?inspect=model:1');
+      // The first key pick added an entry, the second replaced it.
+      await act(() => router.navigate(-1));
+      expect(at()).toBe('/endpoint');
+    });
+
+    it('a focused row keeps its picked fill and draws a ring that moves nothing', async () => {
+      renderEndpoint(UP, '/endpoint?inspect=model:1');
+      await frame(admitted([residentSlot(1, 'Qwen3-4B'), residentSlot(2, 'Gemma-3-4B-It')]));
+      const qwen = loadedRow('Qwen3-4B');
+      expect(qwen).toHaveClass('bg-surface-hover', 'focus-visible:bg-surface-hover');
+      expect(qwen).not.toHaveClass('focus-visible:bg-background-hover');
+      expect(loadedRow('Gemma-3-4B-It')).toHaveClass('focus-visible:bg-background-hover');
+      for (const row of [qwen, loadedRow('Gemma-3-4B-It')]) expect(row).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-inset', 'focus-visible:ring-primary');
+    });
+
     it("a loaded model's status line says its latest rate and how long it has been loaded", async () => {
       act(() => ingestServerEvent({ type: 'running', modelId: '1', port: 9001, updatedAt: nextStamp(), modelName: 'Qwen3-4B' }));
       renderEndpoint(UP, '/endpoint?inspect=model:1');
@@ -848,9 +929,11 @@ describe('the endpoint place', () => {
         ...admitted([residentSlot(1, 'Qwen3-4B', { resident_for_secs: 250, launch: { ...residentSlot(1, 'x').launch!, state: 'working' } })]),
         // Oldest first, as the proxy sends them: the newest with a rate is said.
         recent_requests: [
-          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000 }),
-          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 50, generation_ms: 1_000 }),
-          recentRequest({ model_name: 'Gemma-3-4B-It', completion_tokens: 10, generation_ms: 1_000 }),
+          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000, tokens_per_second: 33.8 }),
+          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 50, generation_ms: 1_000, tokens_per_second: 50 }),
+          recentRequest({ model_name: 'Gemma-3-4B-It', completion_tokens: 10, generation_ms: 1_000, tokens_per_second: 10 }),
+          // The proxy sent no rate for these: the page divides nothing.
+          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 40, generation_ms: 1_000 }),
           recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 1, generation_ms: 0 }),
         ],
       });

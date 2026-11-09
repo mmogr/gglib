@@ -10,7 +10,9 @@ and the loop guard's log, one row per day, model, version and mode
 caller left out — an omitted field means "use what is configured", not "use the
 compile-time default", so a tray panel that sends no port must still land on
 the same one as `gglib proxy`. Those rules are where the surprises live, and
-they are testable without any routing around them.
+they are testable without any routing around them. The status names a pin by
+its model's catalogue id (`pinned_model_id`) beside its name (`pinned_model`,
+for showing): two models can share a name, and a rename keeps the id.
 
 What stays in `mod` is the routing and two idempotency decisions:
 

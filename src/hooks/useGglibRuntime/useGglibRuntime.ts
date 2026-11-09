@@ -2,20 +2,23 @@
  * The chat runtime: an `ExternalStoreRuntime` over the messages
  * `useRunReader` holds, drawn from runs the daemon owns.
  *
- * A send starts a run (`PUT /api/runs/{id}?kind=agent`) under an id minted
- * here, in a conversation that exists first, and reads it. The daemon saves
- * the user's message when the run starts and the reply when it ends; the
- * page saves no turn itself. Stop cancels the run; leaving only stops
- * reading it.
+ * A send starts a turn (`PUT /api/runs/{id}?kind=agent`) under an id minted
+ * here, in a conversation that exists first, and reads it. The turn is the
+ * new message alone: the daemon rebuilds the history from what is saved,
+ * and runs it on the model the conversation saved, loading it first when it
+ * is not running. The daemon saves the user's message when the run starts
+ * and the reply when it ends; the page saves no turn itself. Stop cancels
+ * the run; leaving only stops reading it.
  *
  * A send carries the composer's images by the ids their uploads answered
- * (`imageAttachments`), and so does every user message of the history it
- * sends. A far chat (`source: 'far'`) is the far machine's: a send there is
- * its text and images, uploaded to that machine, which runs and saves it,
- * and it offers no edit, no regenerate and no new chat. A chat with a far
- * model (`pairedModel`) is this machine's, run here on that machine's model:
- * its runs name the model by its machine, and a conversation made for it
- * keeps that model. Either kind of send says the chat's Thinking choice only
+ * (`imageAttachments`). A far chat (`source: 'far'`) is the far machine's: a
+ * send there is its text and images, uploaded to that machine, which runs
+ * and saves it, and it offers no edit, no regenerate and no new chat. A
+ * conversation made here keeps the model the page opened it on (`model`):
+ * one of this machine's, or the paired machine's, which then runs it there,
+ * and the tools chosen before it was made (`tools`), saved before its first
+ * turn starts.
+ * Either kind of send says the chat's Thinking choice only
  * when the caller's `thinking` gives one, and calls its `accepted` once taken;
  * and says `draw` only when the caller's `draw` gives one, likewise. A run on
  * this machine says the chat's folder only when the caller's `folder` gives
@@ -48,7 +51,7 @@ import {
   type ThreadConversation,
 } from '../useChatPersistence/buildThreadMessages';
 import type { ReasoningTimingTracker } from './reasoningTiming';
-import { mintRunId, runBodyFor, type RunRequestOptions } from './runRequest';
+import { buildTurn, mintRunId, type TurnOptions } from './runRequest';
 import { imageStoreOf, runsOf, turnText } from './chatSource';
 import { useImageAttachments, type SentImage } from './imageAttachments';
 import type { Downscale } from './imagePrep';
@@ -58,6 +61,7 @@ import { changeAndAnswer, editOf, regenerateOf, useBranching, type Branching } f
 import { useRunReader, type RunReaderInputs } from './useRunReader';
 import type { RunPreviews } from './runPreviews';
 import type { FolderSaid } from '../useChatFolder';
+import type { ToolsSaid } from '../useChatTools';
 
 export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpened'> {
   conversationId?: number;
@@ -65,9 +69,8 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
   source?: ChatSource;
   /** The open conversation, whose system prompt heads its thread. */
   conversation?: ThreadConversation | null;
-  selectedServerPort?: number;
-  /** The paired machine's model the chat is with, in place of a server here. */
-  pairedModel?: ModelRef;
+  /** The model a conversation made here keeps: this machine's, or the paired machine's. */
+  model?: ModelRef;
   onError?: (error: Error) => void;
   /**
    * Called for each non-fatal `system_warning` the loop emits — an upstream
@@ -75,11 +78,6 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
    * does not mean the turn failed: the loop is still running.
    */
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
-  /**
-   * Whether the active model supports tool/function calling: `false` strips
-   * tools; `null` / `undefined` is unknown and treated as supported.
-   */
-  supportsToolCalls?: boolean | null;
   /**
    * Called with a conversation's id once a send created it, and once a run
    * in it has saved its reply: the conversation list is the caller's.
@@ -92,11 +90,13 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
   /** Makes an image too large to send smaller; the browser's canvas by default. */
   downscaleImage?: Downscale;
   /** What a send says of the chat's Thinking choice, asked at each send: nothing unless it changed, and `accepted` is called once its turn is. */
-  thinking?: () => { said: RunRequestOptions['thinking']; accepted: () => void } | undefined;
+  thinking?: () => { said: TurnOptions['thinking']; accepted: () => void } | undefined;
   /** What a run on this machine says of the chat's folder, asked at each start: nothing where the chat has none to offer. */
   folder?: () => FolderSaid | undefined;
   /** Whether a send says `draw`, asked at each send: something only while the Draw button is armed, and `accepted` is called once its turn is. */
   draw?: () => { accepted: (conversationId?: number) => void; imageModel?: number } | undefined;
+  /** The tools chosen before the chat was made, asked when a send makes it: saved with it before its turn starts. */
+  tools?: () => ToolsSaid | undefined;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -116,8 +116,11 @@ export interface UseGglibRuntimeReturn {
   branching: Branching;
 }
 
+/** How many of `messages` are the user's. */
+const userRows = (messages: readonly GglibMessage[]) => messages.filter((m) => m.role === 'user').length;
+
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
-  const { conversationId, selectedServerPort, pairedModel, onError, supportsToolCalls } = options;
+  const { conversationId, onError } = options;
   const source = options.source ?? 'this';
   const far = source === 'far';
   const reader = useRunReader(conversationId, options);
@@ -143,22 +146,13 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   const giveBackDraft = (content: GglibContent, attached: readonly SentImage[]) =>
     giveDraftBack(runtimeRef.current?.thread.composer, content, attached, imageStoreOf(source).blob);
 
-  // Whether a run can start, saying why not: a far model's turn needs no server here.
-  const canRun = () => {
-    if (far || selectedServerPort || pairedModel) return true;
-    onError?.(new Error('No server selected. Please serve a model first.'));
-    return false;
-  };
-
-  const target = { selectedServerPort, supportsToolCalls, far: pairedModel };
-
   /** Start a run answering the question `cid` ends in, as saved; its id. */
   const answer = async (cid: number) => {
     const thinking = options.thinking?.();
     const runId = mintRunId();
     const draw = options.draw?.();
     const folder = options.folder?.();
-    const body = runBodyFor(target, { conversationId: cid, messages: [], answerSaved: true, thinking: thinking?.said, folder: folder?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
+    const body = buildTurn({ conversationId: cid, content: '', answerSaved: true, thinking: thinking?.said, folder: folder?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
     await getTransport().startAgentRun(runId, body).catch((error: unknown) => {
       const told = folder?.refused(error, cid);
       throw told ? new Error(told) : error;
@@ -172,7 +166,6 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
 
   /** Make `change` to the open chat, or answer the question it ends in (Retry). */
   const change = async (made: ChatChange | null) => {
-    if (!canRun()) return;
     stopAskedRef.current = false;
     const { onConversationChanged, onBranched } = options;
     await changeAndAnswer(made, { conversationId, reader, answer, onConversationChanged, onBranched, onError });
@@ -185,7 +178,6 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
    */
   const start = async (base: GglibMessage[], content: GglibContent, attached: readonly SentImage[]) => {
     const handBack = () => giveBackDraft(content, attached);
-    if (!canRun()) return;
     if (far && conversationId === undefined) {
       onError?.(new Error('A chat on the other machine is started there.'));
       handBack();
@@ -221,28 +213,38 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
           title: 'New Chat',
           modelId: null,
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
-          model: pairedModel ?? null,
+          model: options.model ?? null,
         });
         reader.adopt(cid);
         const created = { id: cid, system_prompt: DEFAULT_SYSTEM_PROMPT, created_at: new Date().toISOString() };
         base = buildThreadMessages([], created, cid) as GglibMessage[];
         options.onConversationChanged?.(cid);
+        await options.tools?.()?.save(cid);
       }
       const asked = mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() });
       const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];
       const thinking = options.thinking?.();
       const draw = options.draw?.();
-      const request = far ? null : runBodyFor(target, { conversationId: cid, messages: history, thinking: thinking?.said, folder: folder?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
+      const text = turnText(content);
+      const images = attached.map((image) => image.id);
       messagesRef.current = history;
       setMessages(history);
       const runId = mintRunId();
-      if (request) await getTransport().startAgentRun(runId, request);
-      else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id), thinking?.said, draw !== undefined, draw?.imageModel);
+      if (far) await getTransport().addFarTurn(cid, runId, text, images, thinking?.said, draw !== undefined, draw?.imageModel);
+      else await getTransport().startAgentRun(runId, buildTurn({ conversationId: cid, content: text, images, thinking: thinking?.said, folder: folder?.said, draw: draw !== undefined, imageModel: draw?.imageModel }));
       thinking?.accepted();
       folder?.accepted(cid);
       draw?.accepted(cid);
       if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
-      if (!signal.aborted) await reader.follow(cid, runId, signal);
+      const ended = signal.aborted ? null : await reader.follow(cid, runId, signal);
+      // A turn that ended before its question was saved (refused once its
+      // run existed: its paired machine away, its model unable to load; or
+      // stopped while its model loaded) wrote nothing: its question is not
+      // among the saved rows, so it goes back to the composer, beside the
+      // run's reason, rather than being lost.
+      const status = ended?.info?.status;
+      const endedEarly = status !== undefined && status !== 'completed';
+      if (endedEarly && !signal.aborted && userRows(messagesRef.current) <= userRows(base)) handBack();
     } catch (error) {
       if (signal.aborted) return;
       reader.endReading(signal);

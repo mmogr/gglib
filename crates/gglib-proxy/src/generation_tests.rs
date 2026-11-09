@@ -24,6 +24,7 @@ fn snapshot(model: &str) -> ContextSnapshot {
         tool_calls: 0,
         finish_reason: None,
         generation_ms: None,
+        tokens_per_second: None,
         loop_guard_trip: None,
         loop_guard_ended: false,
         recorded_at_secs: 7,
@@ -154,6 +155,7 @@ fn the_readings_serialise_beside_the_snapshots_other_keys() {
             "tool_calls": 0,
             "finish_reason": null,
             "generation_ms": null,
+            "tokens_per_second": null,
         }),
         "a turn not yet over, or never forwarded"
     );
@@ -165,5 +167,41 @@ fn the_readings_serialise_beside_the_snapshots_other_keys() {
     expected["tool_calls"] = json!(2);
     expected["finish_reason"] = json!("tool_calls");
     expected["generation_ms"] = json!(130);
+    expected["tokens_per_second"] = json!(37.0 / 0.13);
     assert_eq!(rows(&store).remove(0), expected);
+}
+
+/// The rate is written with the readings it is made from, and a turn with
+/// no time writing (one token, or a body that arrived whole) has none.
+#[test]
+fn the_rate_is_written_with_the_readings_and_only_with_time_writing() {
+    let store = ContextMetricsStore::new();
+    let timed = store.record(snapshot("a"));
+    let one_token = store.record(snapshot("b"));
+    let whole = store.record(snapshot("c"));
+
+    store.flag_generation(timed, readings());
+    store.flag_generation(
+        one_token,
+        TurnGeneration {
+            completion_tokens: Some(1),
+            generation_ms: Some(0),
+            ..TurnGeneration::default()
+        },
+    );
+    store.flag_generation(
+        whole,
+        TurnGeneration {
+            completion_tokens: Some(37),
+            generation_ms: None,
+            ..TurnGeneration::default()
+        },
+    );
+
+    let rates: Vec<Option<f64>> = store
+        .recent(usize::MAX)
+        .iter()
+        .map(|row| row.tokens_per_second)
+        .collect();
+    assert_eq!(rates, [Some(37.0 / 0.13), None, None]);
 }

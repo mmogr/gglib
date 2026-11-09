@@ -108,27 +108,11 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/loop-guard-trips", get(handlers::proxy::trips))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))
-        // A generation turn, held while the connection is open (`gglib chat`)
-        .route("/generation/turn", get(handlers::generation::turn))
         // Events (SSE), and the event a `gglib` command posts for a change
         // it made to the library in its own process.
         .route(
             "/events",
             get(handlers::events::stream).post(handlers::events::relay),
-        )
-        // Agent (server-side agentic loop with SSE streaming)
-        //
-        // Body limit: **4 MiB** (vs the Axum default of 2 MiB).
-        //
-        // Agent requests carry the full conversation history — every prior user
-        // message, assistant turn, and tool result.  A typical turn adds ~2-4 KB
-        // (prompt + tool JSON), so 4 MiB comfortably holds ~1 000 turns.  If you
-        // place a reverse proxy (nginx, Caddy, …) in front of this server, make
-        // sure its own body-size limit is at least 4 MiB as well, otherwise the
-        // proxy will reject long sessions before Axum ever sees them.
-        .route(
-            "/agent/chat",
-            post(handlers::agent::chat).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
         )
         .nest("/benchmark", crate::routes_benchmark::benchmark_routes())
         // Chat routes (merged without prefix since we're already building /api)

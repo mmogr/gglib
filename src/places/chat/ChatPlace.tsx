@@ -5,9 +5,11 @@
  * whose first send makes the conversation.
  *
  * Leaving it keeps the model loaded (the endpoint serves it to every
- * client); Unload <model> is in the composer's model picker ▾. A model
- * unloaded or crashed while the chat is open replaces the composer with a
- * line that says so, with no banner and no toast.
+ * client); Unload <model> is in the composer's model picker ▾. Nothing
+ * locks the composer: a send loads the chat's model when it is not
+ * loaded, and turns the endpoint on when it is off. While either is so,
+ * one line above the composer says what a send will do, with no banner
+ * and no toast.
  *
  * @module places/chat/ChatPlace
  */
@@ -23,13 +25,17 @@ import { useImageInput } from '../../hooks/useImageInput';
 import { useThinkingSwitch } from '../../hooks/useThinkingSwitch';
 import { useDrawSwitch } from '../../hooks/useDrawSwitch';
 import { useChatFolder } from '../../hooks/useChatFolder';
+import { useChatTools } from '../../hooks/useChatTools';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { refreshChats, useChats } from '../../services/chatRegistry';
-import { useServerState } from '../../services/serverEvents';
+import { useServerListHeard, useServerState } from '../../services/serverEvents';
+import { endpointFacts, useProxyState } from '../../services/proxyRegistry';
+import { sendLine } from '../../components/status/sendLine';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../services/transport';
 import type { ConversationSummary } from '../../services/transport';
 import type { HubChatOpen } from '../../types/generated/HubChatOpen';
+import type { ModelAbsence } from '../../types/generated/ModelAbsence';
 import type { ModelRef } from '../../types/generated/ModelRef';
 import type { ChatDraft } from '../../types/messages';
 
@@ -38,8 +44,10 @@ const NO_CHATS: ConversationSummary[] = [];
 /**
  * Whose model is answering.
  *
- * The local arm is a server started here: a port to talk to and a model id
- * the registry knows. The paired arm is a model of the machine on the other
+ * The local arm is one of this machine's models, by the id the registry
+ * knows; the port it is served on, when it is, names it for a title. A turn
+ * needs none: the daemon loads the model the chat saved when it is not
+ * running. The paired arm is a model of the machine on the other
  * end of the tunnel, by that machine and its id there — the daemon supplies
  * its port and key per turn, so neither exists on this side, and a union
  * rather than optional numbers is what stops the health subscription being
@@ -53,12 +61,12 @@ export type ChatPlaceProps = {
   /** The conversation the address names; `null` for an empty thread. */
   conversationId: number | null;
   draft?: ChatDraft; // Unsent text and images to put back in the composer, e.g. after a model switch
-  startingModel?: string | null; // The model a switch is starting, which locks the picker
   // Move the chat to another model, keeping open the conversation (and the
   // draft) that `context` reads when the switch lands; local only.
   onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: ChatDraft }) => Promise<void>;
   // Unload the model, which every client of the proxy loses with it; the
-  // chat stays open, its composer saying so. Local only.
+  // chat stays open, a line over its composer saying a send loads it.
+  // Offered while the model is loaded. Local only.
   onUnloadModel?: () => Promise<void>;
   /** The open conversation is now `id`: the first send made it, a branch, or Start over. The address follows. */
   onOpened?: (id: number) => void;
@@ -71,7 +79,7 @@ export type ChatPlaceProps = {
   /** Open a new chat on the paired machine's model, by its id there; local only. */
   onOpenFar?: (id: number) => void;
 } & (
-  | { paired?: undefined; desk?: undefined; serverPort: number; modelId: number }
+  | { paired?: undefined; desk?: undefined; serverPort?: number; modelId: number }
   | {
       /** The paired machine's model, and the name that machine is shown by. */
       paired: { far: ModelRef; machineName: string };
@@ -95,7 +103,6 @@ export default function ChatPlace(props: ChatPlaceProps) {
     modelName,
     conversationId,
     draft,
-    startingModel = null,
     onSwitchModel,
     onUnloadModel,
     onOpened,
@@ -131,6 +138,10 @@ export default function ChatPlace(props: ChatPlaceProps) {
   };
 
   const conversations = useChats(source).list ?? NO_CHATS;
+
+  // The model a conversation made here keeps: a first send's, and Start over's.
+  const chatModel: ModelRef | undefined =
+    paired?.far ?? (modelId === undefined ? undefined : { machine: { kind: 'local' }, id: modelId });
   const syncConversations = () => refreshChats(source);
 
   // What a chat remembers can change on another device, and only its
@@ -167,6 +178,10 @@ export default function ChatPlace(props: ChatPlaceProps) {
   // pressed, the next send says so, and that send alone.
   const draw = useDrawSwitch({ conversationId: activeConversationId, far, paired: paired?.far, supportsToolCalls, refresh: settings?.defaultImageModelId });
 
+  // The tools its runs may call, saved with the chat as Tools ▸ ticks them;
+  // a chat not yet made saves its choice as its first send makes it.
+  const tools = useChatTools({ conversationId: activeConversationId, conversations, far, onError: (sentence) => showToast(sentence, 'error') });
+
   // Runtime: sends start runs the daemon owns and saves; opening a
   // conversation shows what is saved, then the run still going in it.
   const { runtime, isLoading: messageLoading, endedRun, previews, timingTracker, currentStreamingAssistantMessageId, branching } = useGglibRuntime({
@@ -177,19 +192,18 @@ export default function ChatPlace(props: ChatPlaceProps) {
     onBranched: (_id, unanswered) => unanswered
       ? showToast(`Saved as a new branch, but it was not answered: ${unanswered.message}`, 'warning')
       : showToast('Saved as a new branch. The original is kept.', 'success'),
-    selectedServerPort: serverPort,
-    pairedModel: paired?.far,
+    model: chatModel,
     onError: (error) => setChatError(error.message),
     // Non-fatal: the turn is still running, so this is a transient notice
     // rather than `chatError`, which renders as a failed turn.
     onSystemWarning: (message, suggestedAction) =>
       showToast(suggestedAction ? `${message} — ${suggestedAction}` : message, 'warning'),
-    supportsToolCalls,
     // assistant-ui only logs a paste or a drop that fails; this is the person told.
     onImageRefused: (sentence) => showToast(sentence, 'error'),
     thinking: thinking.forSend,
     folder: folder.forSend,
     draw: draw.forSend,
+    tools: tools?.forCreate,
     onFarOpened: setFarOpen,
   });
 
@@ -203,29 +217,33 @@ export default function ChatPlace(props: ChatPlaceProps) {
     for (const image of draft.images) runtime.thread.composer.addAttachment(image).catch(() => {});
   }, [draft, runtime]);
 
-  // Server state from registry - derives isServerRunning reactively
-  // Note: If serverState is null (no event received yet), we assume running
-  // because the place is only opened when a server is already running.
-  // A paired or far chat subscribes to nothing — this registry only knows
-  // servers started here, so its silence about the far machine must not be
-  // read as that machine being down and the composer locked.
+  // What a send does first, as one line over the live composer: load the
+  // model when the server registry says it is not running, again when it
+  // crashed; turn the endpoint on when it is off; refused where it is
+  // pinned to another model. Said only once each has
+  // been read: before the server list lands an absent server is not yet
+  // "not loaded", and before the endpoint's status lands it is not yet off.
+  // Never for a paired or far chat: these registries know only this
+  // machine, and their silence about another must not be read as anything.
   const serverState = useServerState(modelId ?? -1);
-  const isServerRunning =
-    pairedChat || far || (serverState?.status !== 'stopped' && serverState?.status !== 'crashed');
-  // A model gone mid-chat replaces the composer with a line that says so: no
-  // banner and no toast. Never for a paired or far chat, which this
-  // registry knows nothing of.
-  const modelGone = pairedChat || far ? null
-    : serverState?.status === 'crashed' ? 'crashed'
-      : serverState?.status === 'stopped' ? 'unloaded'
-        : null;
+  const serversHeard = useServerListHeard();
+  const proxy = useProxyState();
+  const local = !pairedChat && !far;
+  const status = serverState?.status;
+  const resident = status === 'running' || status === 'stopping';
+  const absence: ModelAbsence | null =
+    !local || !serversHeard || resident ? null : status === 'crashed' ? 'crashed' : 'not_loaded';
+  // A pin is matched by the model's id, as the picker matches models.
+  const facts = local && proxy.status !== null ? endpointFacts(proxy) : null;
+  const line = sendLine({ id: modelId ?? -1, name: modelName }, absence, facts?.state ?? 'on', facts?.pinned ?? null);
+  const sendNote = line === null ? null : { line, crashed: absence === 'crashed' };
 
   // An error belongs to the conversation it happened in.
   useEffect(() => setChatError(null), [activeConversationId]);
 
   // What changes a conversation: this machine's only, never a far chat.
   const actions = useConversationActions({
-    far, activeConversation, confirm, onError: setChatError, onOpened: open, onDeleted, pairedModel: paired?.far,
+    far, activeConversation, confirm, onError: setChatError, onOpened: open, onDeleted, model: chatModel,
   });
 
   return (
@@ -235,7 +253,6 @@ export default function ChatPlace(props: ChatPlaceProps) {
           key={activeConversationId ?? 'none'}
           activeConversation={activeConversation}
           activeConversationId={activeConversationId}
-          isServerConnected={isServerRunning}
           serverPort={far ? undefined : serverPort}
           titleGenerationPrompt={titleGenerationPrompt}
           onRenameConversation={actions.rename}
@@ -262,17 +279,17 @@ export default function ChatPlace(props: ChatPlaceProps) {
               images: runtime.thread.composer.getState().attachments.flatMap((a) => a.file ?? []),
             },
           })))}
-          startingModel={startingModel}
-          onUnloadModel={onUnloadModel}
+          onUnloadModel={resident ? onUnloadModel : undefined}
           quantization={far ? null : quantization}
           imageInput={imageInput}
           thinking={thinking}
           folder={folder}
           branching={far ? undefined : branching}
           draw={draw}
+          tools={tools}
           previews={previews}
           deskName={paired?.machineName ?? desk?.machineName}
-          modelGone={modelGone}
+          sendNote={sendNote}
           onShowModel={onShowModel}
           onShowLog={onShowLog}
           onOpenFar={onOpenFar}

@@ -11,7 +11,6 @@ use gglib_core::ports::{RunEvent, RunEvents, RunsPort as _};
 use serde_json::json;
 
 use super::run_fixture::{End, LOCAL, logged, paced, settled, start, state};
-use super::sse_event;
 
 fn tool_start() -> AgentEvent {
     AgentEvent::ToolCallStart {
@@ -196,10 +195,4 @@ async fn another_calls_completion_leaves_the_render_its_preview() {
     assert_eq!(&*tool_call_id, "c1");
     state.runs.cancel(&LOCAL, "a1").unwrap();
     settled(&state).await;
-}
-
-#[test]
-fn the_chat_route_carries_progress_and_drops_the_preview() {
-    assert!(sse_event(&tool_preview(1)).is_none());
-    assert!(sse_event(&tool_progress(1)).is_some());
 }

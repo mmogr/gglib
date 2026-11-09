@@ -82,7 +82,7 @@ Concrete examples of established patterns:
 
 | Domain | Event type | CLI consumer | Axum consumer | Tauri consumer |
 |---|---|---|---|---|
-| Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
+| Agent loop | `AgentEvent` | spinner + streaming print, read from the run's frames | SSE at `GET /api/runs/{id}/events`, a run started by `PUT /api/runs/{id}?kind=agent` | same SSE stream — no Tauri event |
 | llama install | `LlamaProgressEvent` | spinner + progress bar via `render_install_events` | SSE at `POST /api/config/system/engines/llama/install` | same SSE stream — no Tauri event |
 | image runtime install | `LlamaProgressEvent` (the same events, the download phase labelled by `InstallPhase::label_for`) | spinner + progress bar via `render_install_events` (`gglib config sd install`) | SSE at `POST /api/config/system/engines/stable_diffusion/install`, the same event names | same SSE stream — no Tauri event |
 | llama build | `BuildEvent` | spinner + progress bar via `render_build_events`, for an install and an update alike, and for stable-diffusion.cpp's build | none: a source build is the command line's, and the daemon installs downloads | none |
@@ -200,8 +200,9 @@ tool-call body is not `{"name", "arguments"}` JSON and not the
    it to a spec in `dialect_for_tags()`
    (`crates/gglib-core/src/normalize/registry.rs`).
 
-The `normalize` pipeline (shared by the proxy and the in-process agent
-path) picks up specs automatically via `get_parser()`.
+The `normalize` pipeline (shared by the proxy and the completion adapter's
+sends to a llama-server, a benchmark arm's) picks up specs automatically via
+`get_parser()`.
 
 ### Capability overrides
 

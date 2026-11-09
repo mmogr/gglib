@@ -1,9 +1,10 @@
 /**
  * Tool registry: what the UI knows about the tools the daemon can run.
  *
- * It holds each tool's definition, which ones the person has enabled, the
- * daemon's name for each, and how to draw its result. It runs nothing: a run
- * names its enabled tools in `tool_filter` and the daemon executes them.
+ * It holds each tool's definition, the daemon's name for each, and how to
+ * draw its result. It runs nothing and chooses nothing: which tools a chat's
+ * runs may call is saved with the chat (`hooks/useChatTools`), by the
+ * daemon's names, and the daemon executes them.
  */
 
 import type { ToolDefinition, ToolResultRenderer, RegisteredTool } from './types';
@@ -35,14 +36,10 @@ export interface NameMapEntry {
 
 /**
  * Registry of the tools available to the LLM.
- * Handles tool registration, lookup and enablement.
+ * Handles tool registration and lookup.
  */
 export class ToolRegistry {
   private tools = new Map<string, RegisteredToolWithSource>();
-  // Secure-by-default: tools are disabled unless explicitly enabled.
-  // We keep an allowlist instead of a denylist so registration cannot
-  // accidentally re-enable tools (e.g., during MCP resync).
-  private enabledTools = new Set<string>();
 
   /**
    * Reverse map: sanitized tool name → { originalName, serverId }.
@@ -69,9 +66,6 @@ export class ToolRegistry {
       throw new Error(`Tool "${name}" is already registered`);
     }
     this.tools.set(name, { definition, source, renderer });
-    // Newly registered tools are disabled by default.
-    // Intentionally do not mutate enable-state here so that if a tool is
-    // re-registered after being enabled (e.g., MCP resync), it stays enabled.
   }
 
   /**
@@ -123,7 +117,7 @@ export class ToolRegistry {
    *   (the format the backend agent handlers expect).
    * - Built-in tools (and any tool without a name mapping) keep their sanitized name.
    *
-   * This is the single source of truth used by the agentic chat tool-filter.
+   * This is the one source of the names a chat's saved tools are written in.
    */
   getBackendName(sanitizedName: string): string {
     const entry = this._nameMap.get(sanitizedName);
@@ -131,21 +125,6 @@ export class ToolRegistry {
       return `${entry.serverId}:${entry.originalName}`;
     }
     return sanitizedName;
-  }
-
-  /**
-   * Return all registered tools as `{ displayName, backendName, description }` triples.
-   *
-   * `displayName` is the human-readable name shown in the UI (sanitized name).
-   * `backendName` is the wire name sent to the backend (see `getBackendName`).
-   * `description` is the tool's LLM-facing description string.
-   */
-  getAllAsBackendTools(): Array<{ displayName: string; backendName: string; description: string }> {
-    return Array.from(this.tools.entries()).map(([sanitized, tool]) => ({
-      displayName: sanitized,
-      backendName: this.getBackendName(sanitized),
-      description: tool.definition.function.description ?? '',
-    }));
   }
 
   /**
@@ -193,45 +172,11 @@ export class ToolRegistry {
   }
 
   /**
-   * Check if a tool is enabled.
-   * Returns true if tool exists and is not disabled.
-   */
-  isEnabled(name: string): boolean {
-    return this.tools.has(name) && this.enabledTools.has(name);
-  }
-
-  /**
-   * Enable a tool by name.
-   */
-  enable(name: string): void {
-    if (this.tools.has(name)) {
-      this.enabledTools.add(name);
-    }
-  }
-
-  /**
-   * Disable a tool by name.
-   */
-  disable(name: string): void {
-    this.enabledTools.delete(name);
-  }
-
-  /**
    * Get all registered tool definitions.
    * Returns array suitable for OpenAI API `tools` parameter.
    */
   getDefinitions(): ToolDefinition[] {
     return Array.from(this.tools.values()).map((t) => t.definition);
-  }
-
-  /**
-   * Get enabled tool definitions only.
-   * Returns array of definitions for tools that are not disabled.
-   */
-  getEnabledDefinitions(): ToolDefinition[] {
-    return Array.from(this.tools.entries())
-      .filter(([name]) => this.enabledTools.has(name))
-      .map(([, t]) => t.definition);
   }
 
   /**
@@ -261,7 +206,6 @@ export class ToolRegistry {
    */
   clear(): void {
     this.tools.clear();
-    this.enabledTools.clear();
     this._nameMap.clear();
   }
 
@@ -313,22 +257,6 @@ export class ToolRegistry {
       stats.set(tool.source, (stats.get(tool.source) || 0) + 1);
     }
     return stats;
-  }
-
-  /**
-   * Get enabled tool definitions grouped by source.
-   * Returns a map of source -> definitions for UI grouping.
-   */
-  getEnabledDefinitionsBySource(): Map<ToolSource, ToolDefinition[]> {
-    const grouped = new Map<ToolSource, ToolDefinition[]>();
-    for (const [name, tool] of this.tools) {
-      if (this.enabledTools.has(name)) {
-        const list = grouped.get(tool.source) || [];
-        list.push(tool.definition);
-        grouped.set(tool.source, list);
-      }
-    }
-    return grouped;
   }
 }
 

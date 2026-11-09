@@ -5,7 +5,7 @@ export { ChatPanelHeader } from './ChatPanelHeader';
 export { SystemPromptLine } from './SystemPromptLine';
 export { ChatStatusBanners } from './ChatStatusBanners';
 export { ComposerFooter } from './ComposerFooter';
-export type { ModelGone } from './ModelGoneLine';
+export type { SendNote } from './SendNoteLine';
 export { ImageInputContext } from './ComposerImages';
 export type { ModelChoice } from './ModelPicker';
 

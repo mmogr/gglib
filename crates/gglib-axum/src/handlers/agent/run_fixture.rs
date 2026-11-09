@@ -8,13 +8,17 @@ use std::time::Duration;
 use async_trait::async_trait;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolResult};
 use gglib_core::domain::chat::{Message, NewConversation};
-use gglib_core::domain::runs::RunInfo;
-use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, RunScope, RunsPort as _};
+use gglib_core::domain::runs::{RunInfo, RunKind};
+use gglib_core::domain::{Machine, ModelRef};
+use gglib_core::ports::{
+    AgentError, AgentLoopPort, AgentRunOutput, Created, RunScope, RunsPort as _,
+};
 use serde_json::{Value, json};
-use tokio::sync::mpsc;
+use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
 use super::compose::Prepared;
-use super::launch::launch;
+use super::launch::{Transcript, launch_turn, ready};
+use crate::error::HttpError;
 use crate::state::AppState;
 
 pub(super) const LOCAL: RunScope = RunScope::Local;
@@ -27,8 +31,6 @@ pub(in crate::handlers) fn device(name: &str) -> RunScope {
 pub(super) enum End {
     Finish,
     Fail,
-    /// Fails as the loop does when llama-server goes silent mid-reply.
-    Stalled,
     Hang,
     Panic,
 }
@@ -73,9 +75,6 @@ impl AgentLoopPort for Scripted {
             End::Fail => Err(AgentError::LoopDetected {
                 signature: "SIGNATURE-SECRET".to_owned(),
             }),
-            End::Stalled => Err(AgentError::Internal(
-                "stream collection error: llama-server sent nothing for 300s".to_owned(),
-            )),
             End::Hang => std::future::pending().await,
             End::Panic => panic!("the scripted loop panicked"),
         }
@@ -94,6 +93,18 @@ pub(in crate::handlers) async fn state() -> (tempfile::TempDir, AppState) {
     })
     .await
     .expect("bootstrap an isolated context");
+    // A turn whose model loads dials this machine's endpoint, turning it on
+    // where the settings say when it is off. Its stored port is one this
+    // process holds for good, so such a turn is refused at the door and no
+    // test ever binds the default port, which the user's own gglib may hold.
+    let held = std::net::TcpListener::bind("127.0.0.1:0").expect("a port to hold");
+    let port = held.local_addr().unwrap().port();
+    Box::leak(Box::new(held));
+    let update = gglib_core::SettingsUpdate {
+        proxy_port: Some(Some(port)),
+        ..gglib_core::SettingsUpdate::default()
+    };
+    state.core.settings().update(update).await.unwrap();
     (dir, Arc::new(state))
 }
 
@@ -165,7 +176,6 @@ pub(super) fn paced(
         config: AgentConfig::default(),
         tx,
         rx,
-        model: "qwen".to_owned(),
         // A run on no model of this machine's; a test of what a local run
         // is made by resolves one (see `run_made_tests`).
         made_by: gglib_app_services::transcript::MadeBy {
@@ -176,7 +186,6 @@ pub(super) fn paced(
         },
         local_model: None,
         far_model: None,
-        hold: None,
     };
     (prepared, dropped)
 }
@@ -239,13 +248,29 @@ pub(super) async fn conversation(state: &AppState) -> i64 {
 }
 
 /// A transcript saved to `conversation`, its message after the rest.
-pub(super) fn saving(conversation: i64) -> super::launch::Transcript {
-    super::launch::Transcript {
+pub(super) fn saving(conversation: i64) -> Transcript {
+    Transcript {
         conversation_id: Some(conversation),
         answer_saved: false,
         remember: None,
         remember_folder: None,
     }
+}
+
+/// Start run `id` in `scope` on the scripted loop `p`, as a turn starts one
+/// once its loop is ready (`launch::launch_turn`): the run reserved on the
+/// model `p` was made by and answered at once, then its rows written and
+/// its loop run as the run's own work.
+pub(super) fn launch(
+    state: &AppState,
+    id: &str,
+    scope: RunScope,
+    transcript: Transcript,
+    p: Prepared,
+    permit: OwnedSemaphorePermit,
+) -> Result<Created, HttpError> {
+    let run = (RunKind::Agent, p.made_by.model.clone());
+    launch_turn(state, id, scope, run, transcript, ready(p), permit)
 }
 
 pub(super) async fn start(
@@ -258,7 +283,7 @@ pub(super) async fn start(
         state,
         id,
         LOCAL,
-        super::launch::Transcript {
+        Transcript {
             conversation_id: conversation,
             answer_saved: false,
             remember: None,
@@ -267,7 +292,6 @@ pub(super) async fn start(
         p,
         super::compose::take_permit(state).expect("a free slot"),
     )
-    .await
     .expect("started");
     assert!(created.created);
     created.info
@@ -326,4 +350,23 @@ pub(super) async fn drain(mut events: gglib_core::ports::RunEvents) -> (usize, O
     .await
     .expect("the stream ends within five seconds");
     (frames, read)
+}
+
+/// This machine's `qwen`, by its id: the one catalogued, else one added. A
+/// chat names its model by id; a name alone is never looked up.
+pub(super) async fn qwen(state: &AppState) -> ModelRef {
+    let found = state.core.models().get("qwen").await.unwrap();
+    let id = if let Some(model) = found {
+        model.id
+    } else {
+        super::turn_fixture::model(state, |m| {
+            "qwen".clone_into(&mut m.name);
+            m.file_path = "/models/qwen.gguf".into();
+        })
+        .await
+    };
+    ModelRef {
+        machine: Machine::Local,
+        id,
+    }
 }

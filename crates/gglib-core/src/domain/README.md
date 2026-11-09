@@ -50,7 +50,8 @@ infrastructure concerns (database, filesystem, etc.).
   without the bytes (`AttachmentInfo`), and the answer to an upload
   (`AttachmentUpload`)
 - `hub_chats` - The hub's chats as a paired device reads them (`HubChat`, `HubChatOpen`),
-  and the turn it adds (`HubTurn`)
+  the turn it adds (`HubTurn`), and this machine's own turn, a `HubTurn` and
+  the chat's folder (`LocalTurn`)
 - `runs` - Wire shapes of a run, a reply the daemon owns (`RunInfo`, `RunStatus`)
 - `gguf` - GGUF metadata and capability types
 - `tensor_table` - The names and outermost-first shapes of the tensors a GGUF or
@@ -118,8 +119,14 @@ infrastructure concerns (database, filesystem, etc.).
 - `variant_fit` - Whether a repository's variant fits this machine, as a
   listing says it (`VariantFit`, with its words), the picker's verdict on
   the wire
+- `figures` - How fast a model wrote (`tokens_per_second`), and a rate,
+  seconds and a count in the words every surface says them (`rate_words`,
+  `seconds_words`, `count_words`)
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
+- `fit_sentence` - A context fit in words (`ContextFit::new` composes them):
+  the fit sentence and the Context note, served on `ContextFit` and
+  printed by `gglib model explain`
 - `revision` - The revision a model's files came from, a commit sha or a
   ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine
@@ -127,8 +134,14 @@ infrastructure concerns (database, filesystem, etc.).
 - `residency` - Whether a second model may stay resident in VRAM beside the
   first (`decide_secondary_slot`, `SecondarySlotDecision`)
 - `state_words` - The word every surface uses for a state (`EndpointState`,
-  `ResidencyState`, `ReachState`, `KeyState`), written once and recorded in
+  `ResidencyState`, `ReachState`, `KeyState`, `EngineState`, `McpState`,
+  `FastDownloadsState`, `ModelsDirState`), and the pinned endpoint with its
+  model (`EndpointState::pinned_to`), written once and recorded in
   `contracts/vocabulary/words.json`.
+- `send_line` - The line above a chat's composer when a send has more to do
+  than be answered (`ModelAbsence`: the model isn't loaded or crashed; the
+  endpoint is Off, or pinned to another model, which refuses it; a pin is
+  matched by the model's id, `NamedModel`), recorded in `contracts/vocabulary/send_line.json`.
 - `admission` - What the admission queue and the VRAM resident set look like
   right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in
 - `cache_budget` - Auto-sizing of llama-server's host-RAM prompt cache

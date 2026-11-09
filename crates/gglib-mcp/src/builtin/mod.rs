@@ -122,8 +122,7 @@ impl BuiltinToolExecutorAdapter {
     }
 
     /// Offer `generate_image` through `tool` whenever `armed` says so: a run
-    /// sent with `draw: true`, or the message after `/draw`. `None` never
-    /// offers it.
+    /// sent with `draw: true`. `None` never offers it.
     #[must_use]
     pub fn with_drawing(mut self, drawing: Option<(DrawingTool, DrawArm)>) -> Self {
         (self.drawing, self.armed) = drawing.map_or_else(

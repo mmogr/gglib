@@ -4,8 +4,8 @@
  *
  * Every fact is the daemon's (`proxyRegistry`'s `EndpointFacts`): the state
  * word from `ENDPOINT_WORDS`, the address from the status's `base_url`, the
- * key rule from `KEY_WORDS`, the pinned model's name. Pinned reads
- * "On · only <model>". While a turn-on is on its way, or the endpoint is up
+ * key rule from `KEY_WORDS`. Pinned reads the daemon's "Pinned to <model>"
+ * (`pinned_to`), or `ENDPOINT_WORDS.pinned` until the status says it. While a turn-on is on its way, or the endpoint is up
  * but its status has not yet said where (Connecting), the mark turns (◌).
  * The ● blinks once per served request, as the sidebar's does
  * (`useRequestBlink`). Key required puts `▲ Key required · Copy key` under the address; Copy key
@@ -35,7 +35,7 @@ export function endpointSaying(facts: EndpointFacts, busy: EndpointBusy): { mark
   if (facts.state === 'off') return { mark: 'off', word: ENDPOINT_WORDS.off };
   // Up, but the status has not said where yet: Connecting.
   if (facts.baseUrl === null) return { mark: 'changing', word: ENDPOINT_WORDS.on };
-  if (facts.pinnedModel !== null) return { mark: 'on', word: `${ENDPOINT_WORDS.on} · only ${facts.pinnedModel}` };
+  if (facts.state === 'pinned') return { mark: 'on', word: facts.pinnedTo ?? ENDPOINT_WORDS.pinned };
   return { mark: 'on', word: ENDPOINT_WORDS.on };
 }
 

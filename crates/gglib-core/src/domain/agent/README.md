@@ -19,13 +19,14 @@ no infrastructure concerns.
 | `tool_progress` | [`ToolProgressUpdate`] — how far a running tool has got (a [`ToolStage`], steps, place in line), sent to a [`ToolProgressSink`] that never blocks; [`PreviewFrame`] — a small PNG of the image being made, shown and never logged |
 | [`messages`] | [`AgentMessage`] — closed conversation-turn enum; a user turn names its images by id, and each is charged [`IMAGE_CHARGE_CHARS`] against the context budget |
 | `messages_serde` | Custom `Serialize`/`Deserialize` impls for [`AssistantContent`] |
-| [`events`] | [`AgentEvent`] (SSE units), [`LlmStreamEvent`] (stream protocol) |
+| [`events`] | [`AgentEvent`] (SSE units, read back from a run's log by a client of the daemon's door), [`LlmStreamEvent`] (stream protocol) |
+| `waiting` | [`AgentEvent::waiting_sentence`] — what a wait before a reply says, worded once for every surface and carried on the frame as its `said` (`AgentEvent::model_load_wait`, `AgentEvent::image_render_wait`): "Loading Qwen3-4B… 12 s", "Waiting for an image render, step 3 of 20, 2 in line" |
 | [`loop_detection`] | [`LoopDetector`] — repeated tool-call-batch guard (FNV-1a batch signatures) |
 | [`stagnation`] | [`StagnationDetector`] — repeated assistant-text guard |
-| `transcript` | [`to_new_message`] — an agent message as a saved chat row; [`saved_history`] — a saved chat's prompt and rows as the messages its next turn starts from |
+| `transcript` | [`to_new_message`] — an agent message as a saved chat row; [`saved_history`] — a saved chat's prompt and rows as the messages its next turn starts from, the one history every turn is sent, pinned against what the page used to send by `contracts/chats/history.json` |
 | `openai_history` | [`parse_openai_messages`] and [`into_agent_messages`] — an `OpenAI` request's `messages` (system, user text and image parts, assistant with `tool_calls`, tool rows) as the loop's history, for a phone-kept chat that runs with builtins; an inline image is named by the id it was stored under, and a refusal names a message by its index, never its text |
 | `replay` | [`rows_from_frames`] — a reply's saved rows, rebuilt from its logged events, each turn's [`TurnUsage`] saved under [`MADE_KEYS`], its context's size, the messages trimmed and why it stopped among them; a tool row carries the ids of the images its result lists |
-| `turn_usage` | [`TurnUsage`] — how one model turn was made: model, token counts, times, why it stopped; never text. [`ContextReading`] — how large the answering server's context was and how many earlier messages did not fit, under one spelling for the proxy's usage frame and the `turn_usage` event |
+| `turn_usage` | [`TurnUsage`] — how one model turn was made: model, token counts, times, why it stopped; never text. Its writing rate is sent beside the counts it is made from (`tokens_per_second`), and its figure line is said once here (`figure_line`, what `gglib chat` prints after a reply and the GUI under it). [`ContextReading`] — how large the answering server's context was and how many earlier messages did not fit, under one spelling for the proxy's usage frame and the `turn_usage` event |
 | [`fnv1a`] | [`fnv1a::fnv1a_64`] — the hash backing both detectors |
 | [`tool_display`] | [`tool_display::format_tool_display_name`] and [`tool_display::format_tool_args_summary`] — a tool's name and arguments as the label every surface shows |
 

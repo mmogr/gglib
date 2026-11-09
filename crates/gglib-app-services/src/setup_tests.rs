@@ -69,9 +69,25 @@ async fn the_setup_status_sends_the_directory_and_the_memory_the_settings_routes
         status["systemMemory"],
         serde_json::to_value(memory).expect("json")
     );
-    for key in ["path", "source", "default_path", "exists", "writable"] {
+    for key in [
+        "path",
+        "source",
+        "default_path",
+        "exists",
+        "writable",
+        "state",
+    ] {
         assert!(status["modelsDirectory"].get(key).is_some(), "{key}");
     }
+    // The folder's state is the facts beside it, said as the one state
+    // every surface words.
+    let folder = &status["modelsDirectory"];
+    let want = match (folder["exists"].as_bool(), folder["writable"].as_bool()) {
+        (Some(false), Some(true)) => "absent",
+        (Some(true), Some(true)) => "writable",
+        _ => "not_writable",
+    };
+    assert_eq!(folder["state"], want);
     for key in ["totalRamBytes", "isUnifiedMemory", "hasNvidiaGpu"] {
         assert!(status["systemMemory"].get(key).is_some(), "{key}");
     }
@@ -90,5 +106,41 @@ async fn the_setup_status_says_where_llama_stands_as_the_engine_does() {
     assert_eq!(
         status["llamaPin"],
         serde_json::to_value(engine).expect("json")
+    );
+}
+
+/// An accelerator set up in this test binary's own data root is On in the
+/// setup status and in the diagnostics, and Off again once removed: the
+/// state is read from the environment on disk, the same file check that
+/// picks a download's backend.
+#[tokio::test]
+async fn the_accelerator_is_on_while_its_environment_is_there_and_off_once_it_is_gone() {
+    let (setup, _) = both_surfaces(MockSystemProbePort::default().total_ram_bytes).await;
+    let env_dir = gglib_download::cli_exec::fast_helper_status()
+        .expect("the accelerator's status")
+        .env_dir;
+    let python = if cfg!(windows) {
+        env_dir.join("Scripts").join("python.exe")
+    } else {
+        env_dir.join("bin").join("python")
+    };
+    std::fs::create_dir_all(python.parent().expect("its folder")).expect("the environment");
+    std::fs::write(&python, b"").expect("its interpreter");
+
+    let on = serde_json::to_value(setup.get_status().await.expect("status")).expect("json");
+    let on_diagnostics = setup.diagnostics().expect("diagnostics").fast_downloads;
+    std::fs::remove_dir_all(&env_dir).expect("the environment removed");
+    let off = serde_json::to_value(setup.get_status().await.expect("status")).expect("json");
+    let off_diagnostics = setup.diagnostics().expect("diagnostics").fast_downloads;
+
+    assert_eq!(on["fastDownloads"], "on");
+    assert_eq!(
+        on_diagnostics.state,
+        gglib_core::domain::FastDownloadsState::On
+    );
+    assert_eq!(off["fastDownloads"], "off");
+    assert_eq!(
+        off_diagnostics.state,
+        gglib_core::domain::FastDownloadsState::Off
     );
 }

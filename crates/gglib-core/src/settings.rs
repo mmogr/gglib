@@ -93,6 +93,17 @@ pub struct Settings {
     /// Maximum stagnation steps before stopping agent loop.
     pub max_stagnation_steps: Option<u32>,
 
+    /// How many tool calls an agent run makes at once, where its chat names
+    /// none: clamped to 1-`MAX_PARALLEL_TOOLS_CEILING` where a loop reads it,
+    /// like the two limits above. `None` is the built-in default.
+    pub max_parallel_tools: Option<u32>,
+
+    /// How long one tool call of an agent run may take, in milliseconds,
+    /// where its chat names none: clamped to `MIN_TOOL_TIMEOUT_MS`-
+    /// `MAX_TOOL_TIMEOUT_MS_CEILING` where a loop reads it. `None` is the
+    /// built-in default.
+    pub tool_timeout_ms: Option<u64>,
+
     /// Default model ID for commands that support a default model.
     pub default_model_id: Option<i64>,
 
@@ -358,6 +369,8 @@ impl Settings {
             max_tool_iterations: Some(crate::domain::agent::DEFAULT_MAX_ITERATIONS as u32),
             #[allow(clippy::cast_possible_truncation)]
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
+            max_parallel_tools: None,
+            tool_timeout_ms: None,
             agentic_sampling: None,
             default_model_id: None,
             default_image_model_id: None,
@@ -474,6 +487,12 @@ impl Settings {
         }
         if let Some(ref steps) = other.max_stagnation_steps {
             self.max_stagnation_steps = *steps;
+        }
+        if let Some(parallel) = other.max_parallel_tools {
+            self.max_parallel_tools = parallel;
+        }
+        if let Some(timeout) = other.tool_timeout_ms {
+            self.tool_timeout_ms = timeout;
         }
         if let Some(ref model_id) = other.default_model_id {
             self.default_model_id = *model_id;

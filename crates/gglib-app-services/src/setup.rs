@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use gglib_core::domain::RuntimeKind;
+use gglib_core::domain::{FastDownloadsState, RuntimeKind};
 use gglib_core::ports::{ModelRuntimePort, SystemProbePort};
 use gglib_core::services::AppCore;
 use gglib_core::utils::system::SystemMemoryInfo;
@@ -50,8 +50,9 @@ pub struct SetupStatus {
     /// Whether Python 3 is available, i.e. whether the optional `hf_xet`
     /// accelerator *could* be provisioned. Downloading does not depend on it.
     pub python_available: bool,
-    /// Whether the `hf_xet` accelerator is already provisioned.
-    pub fast_download_ready: bool,
+    /// Whether the `hf_xet` accelerator is already provisioned, as the one
+    /// state every surface words.
+    pub fast_downloads: FastDownloadsState,
     /// System memory information.
     pub system_memory: Option<SystemMemoryInfo>,
 }
@@ -143,7 +144,8 @@ impl SetupOps {
             .await
             .is_ok();
 
-        let fast_download_ready = gglib_download::cli_exec::fast_helper_provisioned();
+        let fast_downloads =
+            FastDownloadsState::of(gglib_download::cli_exec::fast_helper_provisioned());
 
         // System memory
         let system_memory = system_memory(self.deps.system_probe.as_ref());
@@ -178,7 +180,7 @@ impl SetupOps {
             gpu_info,
             models_directory,
             python_available,
-            fast_download_ready,
+            fast_downloads,
             system_memory,
         })
     }
@@ -279,6 +281,7 @@ impl SetupOps {
                 builder: status.builder,
                 available_builder: status.available_builder.to_string(),
                 error: None,
+                state: FastDownloadsState::of(status.provisioned),
             },
             Err(e) => FastDownloadsInfo {
                 provisioned: false,
@@ -287,6 +290,7 @@ impl SetupOps {
                 builder: None,
                 available_builder: String::new(),
                 error: Some(e.to_string()),
+                state: FastDownloadsState::Off,
             },
         };
 
@@ -330,6 +334,8 @@ pub struct FastDownloadsInfo {
     pub available_builder: String,
     /// Why the status could not be read, when it could not.
     pub error: Option<String>,
+    /// `provisioned` as the one state every surface words.
+    pub state: FastDownloadsState,
 }
 
 /// The system diagnostics bundle — `gglib config check-deps`, `paths` and

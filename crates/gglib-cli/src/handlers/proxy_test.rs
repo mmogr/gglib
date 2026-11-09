@@ -41,7 +41,7 @@ pub(crate) async fn execute(ctx: &CliContext, model: Option<&str>) -> Result<()>
                 .id,
         ),
         // The daemon proves its pin by id when none is named.
-        None if status.pinned_model.is_some() => None,
+        None if status.pinned_model_id.is_some() => None,
         None => Some(the_one_chat_model(&handle).await?),
     };
 

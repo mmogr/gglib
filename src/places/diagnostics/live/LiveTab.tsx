@@ -1,7 +1,7 @@
 /**
  * Diagnostics › Live: the endpoint's live numbers, each section drawn only
  * when it has something, in this order: Requests, Loaded and queue, Launch
- * decisions, Prompt cache (with Clear), Agent cache, Sampling readback,
+ * decisions, Prompt cache (with Clear), Sampling readback,
  * Per-model signals, Tune activity, Slots, Loop-guard trips. The names of
  * the sections with nothing fold into one 12 px line under them.
  *
@@ -24,12 +24,11 @@ import { useEndpointDashboard } from '../../library/useResidency';
 import type { DashboardSnapshot } from '../../../services/transport/types/dashboard';
 import { LoopGuardTripsPanel } from './LoopGuardTripsPanel';
 import { ProxyAdmissionPanel } from './ProxyAdmissionPanel';
-import { CacheUsageRows, ProxyCachePanel } from './ProxyCachePanel';
+import { ProxyCachePanel } from './ProxyCachePanel';
 import { ProxyLaunchPanel } from './ProxyLaunchPanel';
 import { ModelSignalsSection, RequestsSection, SlotsSection } from './ProxyMetricsGrid';
 import { ProxySamplingPanel } from './ProxySamplingPanel';
 import {
-  hasAgentCache,
   hasLaunch,
   hasLoaded,
   hasPromptCache,
@@ -86,9 +85,6 @@ export function LiveTab() {
       ),
       body: (f) => <ProxyCachePanel cache={f.cache} />,
     },
-    // A separate population from the proxied figure above: GUI-chat runs
-    // talk to llama-server directly, so their reuse is never averaged in.
-    { name: 'Agent cache', frame: true, has: hasAgentCache, body: (f) => <CacheUsageRows usage={f.agent_usage} /> },
     { name: 'Sampling readback', frame: true, has: hasSampling, body: (f) => <ProxySamplingPanel audit={f.sampling_audit} /> },
     { name: 'Per-model signals', frame: true, has: hasSignals, body: (f) => <ModelSignalsSection snapshot={f} /> },
     { name: 'Tune activity', frame: false, has: tune !== null && tune.length > 0, body: () => <TuneActivityCard entries={tune ?? []} /> },

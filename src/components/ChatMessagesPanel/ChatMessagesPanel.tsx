@@ -21,7 +21,7 @@ import {
   BranchingContext,
   BranchEnd,
 } from './components';
-import type { MessageActionsContextValue, ModelChoice, ModelGone } from './components';
+import type { MessageActionsContextValue, ModelChoice, SendNote } from './components';
 import {
   useTitleGeneration,
   useMessageDeletion,
@@ -36,6 +36,7 @@ import type { ImageInput } from '../../hooks/useImageInput';
 import type { ThinkingSwitch } from '../../hooks/useThinkingSwitch';
 import type { UseGglibRuntimeReturn } from '../../hooks/useGglibRuntime';
 import type { DrawSwitch } from '../../hooks/useDrawSwitch';
+import type { ChatTools } from '../../hooks/useChatTools';
 import type { ChatFolder } from '../../hooks/useChatFolder';
 import { NO_PREVIEWS, type RunPreviews } from '../../hooks/useGglibRuntime/runPreviews';
 import { RunPreviewsProvider } from './context/RunPreviewsContext';
@@ -43,7 +44,6 @@ import { RunPreviewsProvider } from './context/RunPreviewsContext';
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
   activeConversationId: number | null;
-  isServerConnected: boolean;
   /** Absent for a chat with another machine: no local server to title with. */
   serverPort?: number;
   titleGenerationPrompt: string;
@@ -75,9 +75,7 @@ interface ChatMessagesPanelProps {
   modelId?: number;
   /** Move the chat to another model, from the composer's margin. */
   onPickModel?: (choice: ModelChoice) => Promise<void>;
-  /** The model a switch is starting; the picker is locked until it lands. */
-  startingModel?: string | null;
-  /** Unload the model, from beside the picker; the chat stays open. */
+  /** Unload the model, from beside the picker, while it is loaded; the chat stays open. */
   onUnloadModel?: () => Promise<void>;
   /** Its quantisation, from its catalogue entry, when known. */
   quantization?: string | null;
@@ -96,12 +94,14 @@ interface ChatMessagesPanelProps {
   branching?: UseGglibRuntimeReturn['branching'];
   /** The Draw button, for the composer's margin. */
   draw?: DrawSwitch;
+  /** The chat's saved tools, for the composer's Tools ▸; none on a far chat. */
+  tools?: ChatTools;
   /** The frames the run's tools are making, by call, for the reply that shows them. */
   previews?: RunPreviews;
   /** The paired machine the chat's model is on (a paired or a far chat), for the composer's away line. */
   deskName?: string;
-  /** This machine's model was unloaded or crashed: the composer is replaced by a line that says so. */
-  modelGone?: ModelGone | null;
+  /** What a send does first (loads the model, turns the endpoint on), as a line above the composer. */
+  sendNote?: SendNote | null;
   /** Open the model's inspector (the picker's Show <model>). */
   onShowModel?: () => void;
   /** Open the model's log (a crash's Show log). */
@@ -127,7 +127,6 @@ const ReadingColumn: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   activeConversation,
   activeConversationId,
-  isServerConnected,
   serverPort,
   titleGenerationPrompt,
   onRenameConversation,
@@ -147,7 +146,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   modelName,
   modelId,
   onPickModel,
-  startingModel,
   onUnloadModel,
   quantization,
   source = 'this',
@@ -156,9 +154,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   folder,
   branching,
   draw,
+  tools,
   previews = NO_PREVIEWS,
   deskName,
-  modelGone = null,
+  sendNote = null,
   onShowModel,
   onShowLog,
   onOpenFar,
@@ -248,7 +247,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // The run read here failed: its line under the turns says why (`Unanswered`),
   // so the banner does not say the same failure again.
   const failure = endedRun?.status === 'failed' ? (endedRun.error?.message ?? '') : null;
-  const failureShown = failure !== null && isServerConnected && !isThreadRunning;
+  const failureShown = failure !== null && !isThreadRunning;
   const bannerError =
     failureShown && chatError !== null && (failure ? chatError.includes(failure) : chatError === 'The reply failed.')
       ? null
@@ -318,7 +317,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                             <ThreadPrimitive.Messages components={messageComponents} />
                           </RunPreviewsProvider>
                           <BranchEnd />
-                          {isServerConnected && <Unanswered failure={failure} />}
+                          <Unanswered failure={failure} />
                         </ReadingColumn>
                       </NotebookColumn>
                       <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
@@ -327,13 +326,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     </ThreadPrimitive.Viewport>
 
                     <ComposerFooter
-                      isServerConnected={isServerConnected}
                       isThreadRunning={isThreadRunning}
                       onStopGeneration={() => threadRuntime?.cancelRun()}
                       modelName={modelName}
                       modelId={modelId}
                       onPickModel={onPickModel}
-                      startingModel={startingModel}
                       onUnloadModel={onUnloadModel}
                       quantization={quantization}
                       supportsToolCalls={supportsToolCalls}
@@ -341,10 +338,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       thinking={thinking}
                       folder={folder}
                       draw={draw}
+                      tools={tools}
                       far={source === 'far'}
                       saved={activeConversationId !== null}
                       deskName={deskName}
-                      modelGone={modelGone}
+                      sendNote={sendNote}
                       onShowModel={onShowModel}
                       onShowLog={onShowLog}
                       onOpenFar={onOpenFar}

@@ -16,7 +16,8 @@ import { ToastProvider } from '../../../../src/contexts/ToastContext';
 import { ConfirmProvider } from '../../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../../src/contexts/SettingsContext';
 import { resetChats, useChats } from '../../../../src/services/chatRegistry';
-import type { ChatMessage, ConversationSummary } from '../../../../src/services/transport';
+import type { ChatMessage, ConversationSettings, ConversationSummary } from '../../../../src/services/transport';
+import type { ConversationSettingsPatch } from '../../../../src/types/generated/ConversationSettingsPatch';
 import type { DrawingAvailability } from '../../../../src/types/generated/DrawingAvailability';
 import type { RunInfo } from '../../../../src/types/generated/RunInfo';
 
@@ -94,8 +95,6 @@ export function chatTransport(fixture: ChatFixture) {
   return {
     getServerToolSupport: vi.fn(async () => ({ supports_tool_calls: true, detected_format: null })),
     getModel: vi.fn(async () => ({ quantization: 'Q8_0' })),
-    // Asked by the agent limits sheet the first time it opens, for the effort row.
-    getModelDetail: vi.fn(async () => ({ reasoningEffortSupport: 'unknown' })),
     // The picker reads the endpoint's live dashboard while it is up, for which the key is revealed.
     revealSecret: vi.fn(async () => null),
     // A copy, as a fetch gives: the page must not see the fixture change under it.
@@ -104,6 +103,19 @@ export function chatTransport(fixture: ChatFixture) {
       const id = Math.max(0, ...fixture.conversations.map((c) => c.id)) + 1;
       fixture.conversations.unshift(conversation(id, params.title));
       return id;
+    }),
+    // The patch made as the daemon makes it: a field sent replaces its setting.
+    updateConversationSettings: vi.fn(async (id: number, patch: ConversationSettingsPatch) => {
+      fixture.conversations = fixture.conversations.map((c) => {
+        if (c.id !== id) return c;
+        const settings: ConversationSettings = { ...c.settings };
+        if (patch.tools !== undefined) settings.tools = patch.tools;
+        if (patch.no_tools !== undefined) {
+          if (patch.no_tools) settings.no_tools = true;
+          else delete settings.no_tools;
+        }
+        return { ...c, settings };
+      });
     }),
     deleteConversation: vi.fn(async (id: number) => {
       fixture.conversations = fixture.conversations.filter((c) => c.id !== id);
@@ -116,6 +128,8 @@ export function chatTransport(fixture: ChatFixture) {
     // Asked for the composer's Draw button; nothing to draw with unless a test says so.
     drawingAvailability: vi.fn(async () => NO_DRAWING),
     subscribe: vi.fn(() => () => {}),
+    // Read by the composer's Tools ▸: no tool server unless a test says so.
+    listMcpServers: vi.fn(async (): Promise<unknown[]> => []),
   };
 }
 

@@ -6,7 +6,7 @@
  * The port is the server list's. The rest is the frame's: the model's
  * resident slot (how long it has been loaded, the context it was launched
  * with, the requests holding it), its newest recorded rate
- * (`readings/throughput`), and, for the primary model only, the context
+ * (the proxy's, `readings/rate`), and, for the primary model only, the context
  * each of its llama.cpp slots holds, slot by slot as `gglib proxy
  * dashboard` prints them, since the proxy polls the primary's alone.
  * Without the frame (the endpoint off) the port is all there is.
@@ -14,7 +14,7 @@
  * @module places/diagnostics/logFacts
  */
 
-import { latestRate, rateWords } from '../../readings/throughput';
+import { latestRate, rateWords } from '../../readings/rate';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 import { formatCount, formatDuration } from '../../utils/format';
 import { slotContext, slotContextWords } from './live/slotContext';

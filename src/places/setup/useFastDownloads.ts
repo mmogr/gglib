@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { enableFastDownloads } from '../../services/transport/api/setup';
 import { formatError } from '../../utils/errors';
+import type { FastDownloadsState } from '../../types/generated/FastDownloadsState';
 
 /** Ready; never tried (no Python 3); waiting for Get it; being set up; or why it failed. */
 export type FastState = 'ready' | 'no-python' | 'later' | 'setting-up' | { failed: string };
@@ -24,9 +25,12 @@ export interface FastDownloads {
   retry: () => void;
 }
 
-/** `ready` and `python` are the setup status's: whether it is set up, and whether it can be. */
-export function useFastDownloads(ready: boolean, python: boolean): FastDownloads {
-  const [fast, setFast] = useState<FastState>(ready ? 'ready' : python ? 'later' : 'no-python');
+/**
+ * `served` and `python` are the setup status's: the accelerator's state
+ * (`fastDownloads`, On once it is set up), and whether it can be set up.
+ */
+export function useFastDownloads(served: FastDownloadsState, python: boolean): FastDownloads {
+  const [fast, setFast] = useState<FastState>(served === 'on' ? 'ready' : python ? 'later' : 'no-python');
   const running = useRef<Promise<void> | null>(null);
   const live = useRef(true);
   useEffect(() => {

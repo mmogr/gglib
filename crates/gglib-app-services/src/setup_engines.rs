@@ -8,7 +8,7 @@
 
 use serde::Serialize;
 
-use gglib_core::domain::RuntimeKind;
+use gglib_core::domain::{EngineState, RuntimeKind};
 use gglib_core::paths::{LLAMA_INSTALL_COMMAND, SD_INSTALL_COMMAND};
 use gglib_core::ports::ModelRuntimePort;
 use gglib_runtime::engine::{InstallPlan, PinStanding, PinState, pin_state, plan_install};
@@ -30,6 +30,9 @@ pub struct EngineStatus {
     /// Why the installed binary does not work, when gglib checked and it does
     /// not (llama.cpp's validation); null otherwise.
     pub broken: Option<String>,
+    /// Installed, installed and not working, or not installed: `installed`
+    /// and `broken` as the one state every surface words.
+    pub state: EngineState,
     pub binary_path: String,
     /// How it got there, from the install's record; null with no readable
     /// record.
@@ -144,6 +147,7 @@ fn common_status(
         kind,
         installed,
         broken: None,
+        state: EngineState::of(installed, false),
         binary_path,
         install: None,
         record_error: None,
@@ -179,6 +183,7 @@ pub(super) fn llama_engine_status(
         (None, None) => None,
     };
     EngineStatus {
+        state: EngineState::of(status.installed, status.health_error.is_some()),
         broken: status.health_error,
         install,
         record_error: status.build_error,

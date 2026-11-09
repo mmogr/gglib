@@ -150,7 +150,6 @@ fn a_start_server_response_deserializes_into_the_narrowing() {
     let got: StartServerDto =
         serde_json::from_value(json).expect("the narrowing reads what the daemon sends");
 
-    assert_eq!(got.port, sent.port);
     assert_eq!(got.message, sent.message, "the daemon's sentence is kept");
 }
 
@@ -202,6 +201,8 @@ fn a_status_with_every_contract_field_is_read_whole() {
         "base_url" => serde_json::json!("http://127.0.0.1:8080/v1"),
         "key" => serde_json::json!("required"),
         "pinned_model" => serde_json::json!("qwen"),
+        "pinned_to" => serde_json::json!("Pinned to qwen"),
+        "pinned_model_id" => serde_json::json!(12),
         other => panic!("no sample value for contract field `{other}` — add one"),
     };
     let answer: serde_json::Map<String, serde_json::Value> = PROXY_STATUS_FIELDS
@@ -219,8 +220,10 @@ fn a_status_with_every_contract_field_is_read_whole() {
         base_url,
         key,
         pinned_model,
+        pinned_to,
+        pinned_model_id,
     } = status;
-    let fields: [(&str, bool); 6] = [
+    let fields: [(&str, bool); 8] = [
         ("running", running),
         ("state", state == EndpointState::On),
         ("port", port == Some(8080)),
@@ -230,6 +233,8 @@ fn a_status_with_every_contract_field_is_read_whole() {
         ),
         ("key", key == Some(KeyState::Required)),
         ("pinned_model", pinned_model.as_deref() == Some("qwen")),
+        ("pinned_to", pinned_to.as_deref() == Some("Pinned to qwen")),
+        ("pinned_model_id", pinned_model_id == Some(12)),
     ];
     assert_eq!(fields.len(), PROXY_STATUS_FIELDS.len());
     for (name, read) in fields {

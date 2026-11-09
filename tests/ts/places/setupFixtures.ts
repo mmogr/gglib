@@ -10,6 +10,13 @@ import type { EngineStatus, PinState, RecommendationDto, RuntimeKind, SetupStatu
 
 const GIB = 1024 ** 3;
 
+/** The state the daemon serves for an engine (`EngineState::of`). */
+export function engineState(installed: boolean, broken: string | null): EngineStatus['state'] {
+  if (!installed) return 'not_installed';
+  return broken === null ? 'installed' : 'not_working';
+}
+
+/** The setup status of a Mac nothing has run on, the accelerator On. */
 export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
   return {
     setupCompleted: false,
@@ -27,9 +34,16 @@ export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
       vulkanGlslcInstalled: false,
       vulkanSpirvHeadersInstalled: false,
     },
-    modelsDirectory: { path: '/Users/me/.local/share/llama_models', source: 'default', default_path: '/Users/me/.local/share/llama_models', exists: false, writable: false },
+    modelsDirectory: {
+      path: '/Users/me/.local/share/llama_models',
+      source: 'default',
+      default_path: '/Users/me/.local/share/llama_models',
+      exists: false,
+      writable: true,
+      state: 'absent',
+    },
     pythonAvailable: true,
-    fastDownloadReady: true,
+    fastDownloads: 'on',
     systemMemory: { totalRamBytes: 48 * GIB, gpuMemoryBytes: 36 * GIB, isUnifiedMemory: true, hasNvidiaGpu: false },
     ...overrides,
   };
@@ -44,6 +58,7 @@ export function engine(kind: RuntimeKind, installed = false, overrides: Partial<
     kind,
     installed,
     broken: null,
+    state: engineState(installed, overrides.broken ?? null),
     binaryPath: `/data/${kind}`,
     install: installed ? { built: false, release: RELEASE[kind], platform: 'Metal', date: '2026-10-26T00:00:00Z' } : null,
     recordError: null,
@@ -78,5 +93,5 @@ export const REC: RecommendationDto = {
   context: 32768,
 };
 
-export const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
-export const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+export const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null };
+export const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null };

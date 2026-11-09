@@ -167,6 +167,8 @@ fn a_remote_machine() -> Settings {
         max_download_queue_size: Some(3),
         max_tool_iterations: Some(40),
         max_stagnation_steps: Some(9),
+        max_parallel_tools: Some(6),
+        tool_timeout_ms: Some(9_000),
         default_model_id: Some(7),
         default_image_model_id: Some(8),
         inference_defaults: Some(sampling.clone()),

@@ -3,9 +3,8 @@
 //! of its runs, before the session stores anything.
 //!
 //! Each test runs `run` with a stand-in on a loopback port in the daemon's
-//! place. The chat holds an image and its `--port` server cannot see, so a
-//! session that goes on past the question ends there, at a refusal that asks
-//! the server its `/props`, and never at a prompt.
+//! place. A session that goes on past the question ends at the `--image`
+//! it names, a file that is not there, and never at a prompt.
 
 use gglib_core::domain::Thinking;
 use gglib_core::domain::attachment::AttachmentId;
@@ -15,14 +14,11 @@ use serde_json::{Value, json};
 
 use super::images::images_tests::{file, png};
 use super::resume_settings::tests::chat_args;
-use super::sight::sight_tests::props_server;
 use super::*;
 use crate::bootstrap::test_context;
 use crate::daemon_client::handle_tests::{Asked, answering, daemon_health, nobody};
 use crate::daemon_client::{STAND_IN_PORT, paths};
 use crate::target::Target;
-
-const BLIND: &str = r#"{"modalities":{"vision":false}}"#;
 
 /// A stored chat whose one message holds an image: its id.
 async fn chat(ctx: &CliContext) -> i64 {
@@ -53,11 +49,10 @@ async fn stored(ctx: &CliContext, id: i64) -> Value {
     json!({ "row": row, "messages": messages })
 }
 
-/// `gglib chat qwen --continue <id> --port <port>`.
-fn resume(id: i64, port: u16) -> ChatArgs {
+/// `gglib chat qwen --continue <id>`.
+fn resume(id: i64) -> ChatArgs {
     ChatArgs {
         continue_id: Some(id),
-        port: Some(port),
         no_tools: true,
         ..chat_args()
     }
@@ -103,7 +98,7 @@ fn the_question() -> Vec<String> {
 /// chat and one that has ended on this one. The chat is refused in a
 /// sentence that names it and the run, and nothing a session stores on its
 /// way in is stored: not the image `--image` names, not the Thinking choice
-/// `--thinking` has a chat remember, not a row. Its server is asked nothing.
+/// `--thinking` has a chat remember, not a row, and no turn is sent.
 /// `--remote` changes none of it: the rows are this machine's either way.
 #[tokio::test]
 async fn a_chat_the_daemon_is_replying_to_is_refused_by_name_before_anything_is_stored() {
@@ -115,12 +110,11 @@ async fn a_chat_the_daemon_is_replying_to_is_refused_by_name_before_anything_is_
     let attached = png(8, 8);
 
     for target in [Target::Local, Target::Remote] {
-        let server = props_server(BLIND);
         let args = ChatArgs {
             images: vec![file(&dir, "new.png", &attached)],
             thinking: Some(Thinking::Off),
             target,
-            ..resume(id, server.port)
+            ..resume(id)
         };
         let (port, asked) = daemon(vec![
             listed("on-another", RunStatus::InProgress, Some(id + 1)),
@@ -142,16 +136,16 @@ async fn a_chat_the_daemon_is_replying_to_is_refused_by_name_before_anything_is_
         assert_eq!(stored(&ctx, id).await, before, "{target:?}");
         let image = AttachmentId::of(&attached);
         assert!(ctx.app.attachments().info(&image).await.is_err());
-        assert!(server.requests().is_empty(), "{target:?}");
         assert_eq!(lines(&asked), the_question(), "{target:?}");
     }
 }
 
-/// The chat continues as it did, here as far as its server's refusal: with
-/// nothing on the daemon's port; with another program there; with a daemon
-/// whose runs on the chat have ended; and with a daemon that does not answer
-/// with its runs, as another data root's does not. Nothing is asked twice,
-/// and only a daemon is asked for its runs.
+/// The chat continues as it did, here as far as the image it cannot
+/// attach: with nothing on the daemon's port, where no daemon is started to
+/// ask; with another program there; with a daemon whose runs on the chat
+/// have ended; and with one that does not answer with its runs, as another
+/// data root's does not. Nothing is asked twice, and only a daemon is asked
+/// for its runs.
 #[tokio::test]
 async fn a_chat_no_daemon_says_it_is_replying_to_continues() {
     gglib_core::paths::isolate_data_root();
@@ -165,6 +159,11 @@ async fn a_chat_no_daemon_says_it_is_replying_to_continues() {
         listed("ended", RunStatus::Completed, Some(id)),
         listed("stopped", RunStatus::Cancelled, Some(id)),
     ]);
+    let missing = dir.path().join("gone.png");
+    let args = ChatArgs {
+        images: vec![missing.clone()],
+        ..resume(id)
+    };
 
     for (what, (port, asked), question) in [
         ("no daemon", (nobody(), Asked::default()), Vec::new()),
@@ -180,18 +179,10 @@ async fn a_chat_no_daemon_says_it_is_replying_to_continues() {
             the_question(),
         ),
     ] {
-        let server = props_server(BLIND);
+        let went_on = STAND_IN_PORT.scope(port, run(&ctx, &args)).await;
 
-        let went_on = STAND_IN_PORT
-            .scope(port, run(&ctx, &resume(id, server.port)))
-            .await;
-
-        let went_on = went_on.expect_err("the server cannot see").to_string();
-        assert!(
-            went_on.starts_with("Model 'qwen' cannot read images"),
-            "{what}: {went_on}"
-        );
-        assert_eq!(server.requests(), ["GET /props HTTP/1.1"], "{what}");
+        let went_on = went_on.expect_err("it ends before a prompt").to_string();
+        assert!(went_on.contains("cannot read image"), "{what}: {went_on}");
         assert_eq!(lines(&asked), question, "{what}");
     }
 }

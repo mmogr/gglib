@@ -80,5 +80,107 @@
       "state": "you",
       "word": "you"
     }
+  ],
+  "engine": [
+    {
+      "state": "installed",
+      "word": "Installed"
+    },
+    {
+      "state": "not_working",
+      "word": "Installed, not working"
+    },
+    {
+      "state": "not_installed",
+      "word": "Not installed"
+    }
+  ],
+  "tool_server": [
+    {
+      "state": "running",
+      "word": "Running"
+    },
+    {
+      "state": "starting",
+      "word": "Starting"
+    },
+    {
+      "state": "stopped",
+      "word": "Stopped"
+    },
+    {
+      "state": "failed",
+      "word": "Failed"
+    },
+    {
+      "state": "unsupported",
+      "word": "Not supported yet"
+    }
+  ],
+  "fast_downloads": [
+    {
+      "state": "on",
+      "word": "On"
+    },
+    {
+      "state": "off",
+      "word": "Off"
+    }
+  ],
+  "models_dir": [
+    {
+      "state": "writable",
+      "word": "Writable"
+    },
+    {
+      "state": "absent",
+      "word": "Will be created"
+    },
+    {
+      "state": "not_writable",
+      "word": "Not writable"
+    }
+  ],
+  "verdict": [
+    {
+      "state": "healthy",
+      "word": "Healthy"
+    },
+    {
+      "state": "unhealthy",
+      "word": "Unhealthy"
+    },
+    {
+      "state": "unverifiable",
+      "word": "Unverifiable"
+    }
+  ],
+  "file_health": [
+    {
+      "state": "healthy",
+      "word": "Healthy"
+    },
+    {
+      "state": "corrupt",
+      "word": "Corrupt"
+    },
+    {
+      "state": "missing",
+      "word": "Missing"
+    },
+    {
+      "state": "no_oid",
+      "word": "No OID available"
+    }
+  ],
+  "damaged": [
+    {
+      "state": "1",
+      "word": "1 file damaged"
+    },
+    {
+      "state": "2",
+      "word": "2 files damaged"
+    }
   ]
 }

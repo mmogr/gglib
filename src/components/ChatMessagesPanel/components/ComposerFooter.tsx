@@ -5,26 +5,23 @@ import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { IconButton } from '../../ui/IconButton';
 import { StatusMark } from '../../status/StatusMark';
-import { REACH_WORDS, RESIDENCY_WORDS } from '../../status/words';
+import { REACH_WORDS } from '../../status/words';
 import { useRemoteState } from '../../../services/remoteRegistry';
-import { useToastContext } from '../../../contexts/ToastContext';
 import { awaySince } from '../../../places/devices/devices';
 import { cn } from '../../../utils/cn';
-import { loadFailed } from '../../../utils/errors';
 import type { ThinkingSwitch } from '../../../hooks/useThinkingSwitch';
 import type { DrawSwitch } from '../../../hooks/useDrawSwitch';
 import type { ChatFolder } from '../../../hooks/useChatFolder';
-import { useModelLoadWait } from '../hooks/useModelLoadWait';
+import type { ChatTools } from '../../../hooks/useChatTools';
 import { FolderChip } from './FolderChip';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
 import { ComposerImages, ImageInputContext } from './ComposerImages';
 import { ContextRing } from './ContextRing';
-import { ModelGoneLine, type ModelGone } from './ModelGoneLine';
+import { SendNoteLine, type SendNote } from './SendNoteLine';
 import { PlusMenu } from './PlusMenu';
 import { DRAW_ARMED } from './composerMenus';
 
 interface ComposerFooterProps {
-  isServerConnected: boolean;
   /** Whether the assistant is currently producing a response. */
   isThreadRunning: boolean;
   onStopGeneration: () => void;
@@ -34,9 +31,7 @@ interface ComposerFooterProps {
   modelId?: number;
   /** Move the chat to another model; absent where there is none to pick. */
   onPickModel?: (choice: ModelChoice) => Promise<void>;
-  /** The model a switch is starting; the picker is locked until it lands. */
-  startingModel?: string | null;
-  /** Unload the model; offered only while its server is up. */
+  /** Unload the model; handed only while it is loaded. */
   onUnloadModel?: () => Promise<void>;
   /** Its quantisation, from the model's catalogue entry, when known. */
   quantization?: string | null;
@@ -49,14 +44,16 @@ interface ComposerFooterProps {
   folder?: ChatFolder;
   /** The Draw switch, which `[+]` › Draw a picture presses. */
   draw?: DrawSwitch;
+  /** The chat's saved tools, which `[+]` › Tools ▸ ticks. */
+  tools?: ChatTools;
   /** A far chat: one of the paired machine's own. */
   far?: boolean;
   /** Whether the chat is a saved conversation (its turns may still be loading), not a new one. */
   saved?: boolean;
   /** The paired machine the chat's model is on (a paired or a far chat), for the away line. */
   deskName?: string;
-  /** This machine's model is no longer loaded: the composer is replaced by a line that says so. */
-  modelGone?: ModelGone | null;
+  /** What a send does first (loads the model, turns the endpoint on), as a line above the composer. */
+  sendNote?: SendNote | null;
   /** Open the model's inspector, where its log is (Show <model>). */
   onShowModel?: () => void;
   /** Open the model's log (a crash's Show log). */
@@ -139,18 +136,18 @@ function useAwayLine(deskName: string | undefined): string | null {
  * The model is a picker on this machine's chat and plain text on one with
  * the paired machine ("<model> on desk", "desk picks the model"); while
  * that machine is away it reads "desk is away since 14:02. Your message
- * will wait." and Send is disabled. While the newest reply waits for its
- * model to load it reads "Loading <model>… 12 s". Where this machine's
- * model is gone, the whole composer is one line that says so (`ModelGoneLine`).
+ * will wait." and Send is disabled. The composer is never locked: where a
+ * send has more to do than be answered (the model is not loaded, it
+ * stopped, the endpoint is off), one 12 px line above it says what a send
+ * does (`SendNoteLine`), and is gone while a reply is written, when the
+ * reply's own arrival line says what it waits for.
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
-  isServerConnected,
   isThreadRunning,
   onStopGeneration,
   modelName,
   modelId,
   onPickModel,
-  startingModel = null,
   onUnloadModel,
   quantization,
   supportsToolCalls,
@@ -158,35 +155,19 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   thinking,
   folder,
   draw,
+  tools,
   far = false,
   saved = false,
   deskName,
-  modelGone = null,
+  sendNote = null,
   onShowModel,
   onShowLog,
   onOpenFar,
 }) => {
   const imageInput = useContext(ImageInputContext);
-  const { showToast } = useToastContext();
   const empty = useThread({ optional: true, selector: isEmpty }) ?? true;
   const [typingFolder, setTypingFolder] = useState(false);
   const away = useAwayLine(deskName);
-  const loadWait = useModelLoadWait();
-
-  if (modelGone !== null) {
-    const loadAgain =
-      onPickModel && modelId !== undefined
-        ? () =>
-            void onPickModel({ modelId, modelName }).catch((error: unknown) =>
-              showToast(loadFailed(error), 'error'),
-            )
-        : undefined;
-    return (
-      <div className="mx-auto w-full max-w-[728px] shrink-0 px-lg pb-lg">
-        <ModelGoneLine gone={modelGone} modelName={modelName} starting={startingModel} onLoadAgain={loadAgain} onShowLog={onShowLog} />
-      </div>
-    );
-  }
 
   // The model as the picker names it: on the paired machine, it says so.
   const named = far ? `${deskName} picks the model` : deskName !== undefined ? `${modelName} on ${deskName}` : modelName;
@@ -195,25 +176,19 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
       <StatusMark kind="away" />
       <span className="truncate">{away}</span>
     </span>
-  ) : loadWait !== null ? (
-    <span role="status" className="flex items-center gap-xs px-sm text-sm text-text-secondary tabular-nums">
-      <StatusMark kind="changing" />
-      {RESIDENCY_WORDS.loading} {far ? 'the model' : modelName}… {loadWait} s
-    </span>
   ) : (
     <ModelPicker
       modelId={modelId}
       modelName={named}
       quantization={quantization}
       onPick={onPickModel}
-      starting={startingModel}
-      onUnload={isServerConnected ? onUnloadModel : undefined}
+      onUnload={onUnloadModel}
       onShow={onShowModel}
       onOpenFar={saved ? undefined : onOpenFar}
     />
   );
 
-  const sendable = isServerConnected && away === null;
+  const sendable = away === null;
   // An empty thread asks (a new chat, or a saved one with no turns, as Start
   // over leaves it); one with turns replies. The composer mounts only once a
   // saved chat's turns are read, so "empty" is known here.
@@ -221,7 +196,8 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
 
   return (
     <div className="mx-auto w-full max-w-[728px] shrink-0 px-lg pb-lg pt-md">
-      <ComposerPrimitive.AttachmentDropzone asChild disabled={!imageInput.offered || !isServerConnected}>
+      {sendNote && !isThreadRunning && <SendNoteLine note={sendNote} onShowLog={onShowLog} />}
+      <ComposerPrimitive.AttachmentDropzone asChild disabled={!imageInput.offered}>
         <ComposerPrimitive.Root className="flex flex-col gap-sm rounded-lg bg-background-input p-sm data-[dragging=true]:bg-surface-elevated">
           <ComposerImages />
           <ComposerPrimitive.Input
@@ -230,18 +206,16 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
             submitOnEnter={sendable}
             className="max-h-[150px] min-h-[40px] resize-none bg-transparent px-sm py-xs text-base text-text outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-50"
             placeholder={placeholder}
-            disabled={!isServerConnected}
           />
           <div className="flex items-center gap-xs">
             <PlusMenu
-              connected={isServerConnected}
               far={far}
-              modelId={modelId}
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
               folder={folder}
               onTypeFolder={setTypingFolder}
               draw={draw}
+              tools={tools}
             />
             {folder && <FolderChip folder={folder} typing={typingFolder} setTyping={setTypingFolder} />}
             {draw?.armed && <DrawChip draw={draw} />}

@@ -170,24 +170,6 @@ fn a_local_command_refuses_remote_with_the_one_sentence() {
     );
 }
 
-// ── The wire name ────────────────────────────────────────────────────────
-
-/// Locally an absent `--model` leaves the wire name empty on purpose; on the
-/// paired machine the positional, as that machine resolved it, is the wire
-/// name, because `""` comes back as `404 Model '' not found`.
-#[test]
-fn the_wire_name_is_the_positional_only_on_the_paired_machine() {
-    let flag = Some("typed".to_owned());
-    assert_eq!(Target::Local.wire_model_name(flag.clone(), "qwen"), flag);
-    assert_eq!(Target::Local.wire_model_name(None, "qwen"), None);
-    assert_eq!(Target::Remote.wire_model_name(flag.clone(), "3"), flag);
-    assert_eq!(
-        Target::Remote.wire_model_name(None, "3:coding"),
-        Some("3:coding".to_owned())
-    );
-    assert_eq!(Target::Remote.wire_model_name(None, ""), None);
-}
-
 #[test]
 fn the_flag_is_the_only_way_to_the_paired_machine() {
     assert_eq!(Target::from_flag(false), Target::Local);

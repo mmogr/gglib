@@ -35,8 +35,11 @@ is the terminal's and shows as on with a line saying so. The image model
 choice lists only models that draw, keeping a stored id that is not one.
 
 Tools' tool servers are `tools/` (its own README): a row each and one
-sheet to add and edit, over one list (ST-8). "This device" under Agent
-limits is the chat's per-device `AgentLimitsSection`.
+sheet to add and edit, over one list (ST-8). Agent limits are this
+machine's, for every agent run on it: Max tool rounds, Max stuck steps,
+Parallel tool calls and Tool timeout, the last two outranked by a chat's
+own where it saved one. There are no per-device limits. A reasoning effort
+and budget are Models › Sampling defaults'.
 
 
 | File | Role |
@@ -45,7 +48,7 @@ limits is the chat's per-device `AgentLimitsSection`.
 | `GeneralSection.tsx` | Start the endpoint when gglib launches; in the desktop app only, Start gglib at login and Keep running in the menu bar when the window closes |
 | `EndpointSection.tsx` | Port, the API key, Bind address (the endpoint's), Allowed hosts (`hostsText`/`hostsFrom`), the prompt cache on disk and its budget, Model servers start at; What gglib does to requests: Repair broken tool calls, Stop runaway loops (with its trips), Cap sampling on agent runs, Let clients set sampling |
 | `ModelsSection.tsx` | The models folder, Download queue size, Context for models without their own, Model for gglib q, Image model for drawing (`imageChoices`), Sampling defaults, Profiles |
-| `ToolsSection.tsx` | The tool servers (`tools/`, over the one `useMcpServers`), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, This device), Title prompt with Reset, the "Learn more about MCP" footnote |
+| `ToolsSection.tsx` | The tool servers (`tools/`, over the one `useMcpServers`), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, Parallel tool calls, Tool timeout (ms)), Title prompt with Reset, the "Learn more about MCP" footnote |
 | `tools/` | The tool server rows and their add and edit sheet: its own README |
 | `EnginesSection.tsx` | A row for llama.cpp and for stable-diffusion.cpp, then Faster downloads |
 | `AboutSection.tsx` | The build, Documentation (the native Help menu's address), and Stop gglib… asked first, then held as Stopping gglib… until the window's service-not-running screen takes over (`app/ServiceDown`); a refusal in the daemon's words |
@@ -54,7 +57,7 @@ limits is the chat's per-device `AgentLimitsSection`.
 | `SettingField.tsx` | A field's label, control, hint row (`settingDescriptionId` for `aria-describedby`), restart note and save line |
 | `SaveLine.tsx` | Under a field: the refusal, or "Saved." with Undo |
 | `SecretSetting.tsx` | The API key: Set with nothing stored; Show, Copy, Replace (asked first) and Clear with one held; Undo writing the key before back |
-| `ModelsFolder.tsx` | The models folder: typed, or Change… with the native picker on the desktop, Reset to the default, where it came from, "exists · writable"; its own write (`setModelsDirectory`) with Undo |
+| `ModelsFolder.tsx` | The models folder: typed, or Change… with the native picker on the desktop, Reset to the default, where it came from, its state (`MODELS_DIR_WORDS`: Writable, or Will be created or Not writable with ▲); its own write (`setModelsDirectory`) with Undo |
 | `SamplingDefaults.tsx` | One line of what is set, Change… opening the sampling form in place (the fields set and Add a value), Save writing `inferenceDefaults` alone |
 | `InferenceProfiles.tsx` | The profiles: a row each with "in model picker", Edit and ⋯ Delete… (asked first), Add profile, Install starter profiles (the daemon's nine); the editor in a sheet; every change writes the whole list (`summarize` for a row's values) |
 | `InferenceProfileEditor.tsx` | One profile's form, its fields unchanged (ST-5): name (checked as the server checks it), description, the sixteen numbers left blank to fall through, reasoning effort, Show in the model picker |
@@ -75,22 +78,23 @@ on.", "Takes effect when gglib next starts.", "Takes effect when the desktop
 app next starts.", "A new key takes effect within a few seconds. A cleared
 key stops being required when the endpoint next turns on."; "Saved." / "Undo"; "Asking gglib" and "Couldn't read the
 settings: <the daemon's words>"; "What gglib does to requests", "Agent
-limits", "This device", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
+limits", "Parallel tool calls", "Tool timeout (ms)", "How many tool calls an
+agent run makes at once.", "How long one tool call may take before it is
+stopped.", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
 request is answered with a 400."; the API key's "Set", "Replace", "Clear",
 "Cancel", "The new key", "none", the Show/Hide/Copy labels, "Copied" beside
 Copy (`components/CopyValue`) and the copy's failures, "Replace the API key?" with "Clients that send the
 old key are refused within a few seconds.", and "The key in use
 could not be read, so it was left as it is: <the daemon's words>"; the
-models folder's "Change…", "Reset", its sources' sentences, "exists" /
-"will be created", "writable" / "not writable", "Choose the models folder";
+models folder's "Change…", "Reset", its sources' sentences, "Choose the
+models folder" (its state is `MODELS_DIR_WORDS`);
 "None" in the model choices and "Model <id> (not an image model in this
 library)"; "Sampling defaults", "None set", "Change…", "Save", "Cancel" and
 the form's caption; "Profiles", its sentence, "No profiles yet. Add one, or
 install the starter profiles.", "in model picker", "Edit", "More for
 <name>", "Delete…" and "Delete the profile "<name>"?", "Add profile", "Edit
-<name>"; the Title prompt's "Reset". Engines: an engine's state
-"Installed", "Installed, not working", "Not installed" (no Rust state word;
-the CLI's `Status:` words), "prebuilt" / "built from source", "Pinned to
+<name>"; the Title prompt's "Reset". Engines (an engine's state is
+`ENGINE_WORDS`, the CLI's `Status:` words): "prebuilt" / "built from source", "Pinned to
 <release>", "Install", "Update to <release>…" with "Update <product> to
 <release>?" and its sentence, "More for <product>", "Reinstall",
 "Remove…" with "Remove <product>?" and its sentence, "Stop <model>
@@ -99,7 +103,7 @@ to remove: …", "Reading <product>…", "Details", the Details labels
 (Install record, "none, installed outside gglib", Release / Built from,
 Download / Acceleration, Downloaded / Built, Binary, Binary reports,
 Serving), `pinStanding`'s sentences, the source build's two sentences;
-"Faster downloads", its sentence, "On" / "Off" (no Rust state word),
+"Faster downloads", its sentence (its state is `FAST_DOWNLOADS_WORDS`),
 "Set up", "Setting up. This can take a minute.", "More for Faster
 downloads", "Turn off", "It needs Python 3.10 or newer. Once that is
 installed:", "Copy the command", "Copied" beside it. About: "gglib

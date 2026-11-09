@@ -5,7 +5,7 @@ Found 1 MCP server(s):
 
 ID   Name                      Type   Enabled   Remote  Lifecycle   Status     Tools 
 -----------------------------------------------------------------------------------
-2    filesystem                stdio  yes       no      lazy        stopped    0     
+2    filesystem                stdio  yes       no      lazy        Stopped    0     
 $ gglib mcp test filesystem
 Testing connection to 'filesystem'...
 ✓ Connection successful — 14 tool(s) discovered

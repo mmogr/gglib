@@ -63,8 +63,9 @@ fn render_frame_shows_placeholder_when_no_connections() {
         slots: vec![],
         slots_status: Some("disabled upstream (--no-slots)".to_string()),
         total_requests: 0,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache: None,
-        agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
@@ -100,8 +101,9 @@ fn render_frame_shows_connection_and_slot_bars() {
         ],
         slots_status: None,
         total_requests: 3,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache: None,
-        agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
@@ -135,8 +137,9 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
         slots: vec![],
         slots_status: Some(long_reason.clone()),
         total_requests: 0,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache: None,
-        agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
@@ -195,8 +198,9 @@ fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
         slots: vec![],
         slots_status: None,
         total_requests: 0,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache: None,
-        agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
@@ -237,25 +241,9 @@ fn frame_with_cache(cache: Option<CacheStatus>) -> String {
         slots: vec![],
         slots_status: None,
         total_requests: 3,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache,
-        agent_usage: CacheUsage::default(),
-        admission: AdmissionSnapshot::default(),
-        per_model_defects: BTreeMap::new(),
-        sampling_audit: None,
-        recent_requests: vec![],
-    };
-    render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
-}
-
-fn frame_with_agent_usage(agent_usage: CacheUsage) -> String {
-    let snapshot = DashboardSnapshot {
-        active_connections: vec![],
-        slots_available: false,
-        slots: vec![],
-        slots_status: None,
-        total_requests: 0,
-        cache: None,
-        agent_usage,
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
@@ -271,8 +259,9 @@ fn frame_with_admission(admission: AdmissionSnapshot) -> String {
         slots: vec![],
         slots_status: None,
         total_requests: 0,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache: None,
-        agent_usage: CacheUsage::default(),
         admission,
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
@@ -384,8 +373,9 @@ fn a_long_launch_line_is_clipped_to_the_terminal() {
         slots: vec![],
         slots_status: None,
         total_requests: 0,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache: None,
-        agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot {
             slots: vec![ResidentSlotSnapshot {
                 model_name: "qwen-coder".to_string(),
@@ -468,8 +458,9 @@ fn a_long_second_slot_explanation_is_clipped_to_the_terminal() {
         slots: vec![],
         slots_status: None,
         total_requests: 0,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache: None,
-        agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot {
             secondary_slot: SecondarySlotStatus { detail },
             ..Default::default()
@@ -495,30 +486,25 @@ fn cache_section_reports_when_no_model_has_resolved() {
     assert!(frame.contains("(no model resolved yet)"), "{frame}");
 }
 
-/// The agent population renders in its own section, even when no proxied
-/// model has resolved (so the "Prompt cache" section shows the placeholder).
+/// Chat turns go through the endpoint, so the frame has one prompt-cache
+/// section and no second one for an agent path. A proxy from before this
+/// still sends `agent_usage`, and the frame reads past it.
 #[test]
-fn agent_cache_section_renders_its_own_population() {
-    let idle = frame_with_agent_usage(CacheUsage::default());
-    assert!(idle.contains("Agent cache (GUI chat)"), "{idle}");
-    assert!(idle.contains("(no cache activity recorded yet)"), "{idle}");
-    // The proxied section is independent and still shows its placeholder.
-    assert!(idle.contains("(no model resolved yet)"), "{idle}");
-
-    let active = frame_with_agent_usage(CacheUsage {
-        reporting_requests: 4,
-        prompt_tokens: 12_000,
-        cached_tokens: 9_800,
-        last_prompt_tokens: Some(3_000),
-        last_cached_tokens: Some(2_500),
-        ..CacheUsage::default()
+fn the_frame_has_one_prompt_cache_section() {
+    let body = serde_json::json!({
+        "active_connections": [],
+        "slots_available": false,
+        "slots": [],
+        "total_requests": 0,
+        "agent_usage": { "reporting_requests": 4, "prompt_tokens": 12000, "cached_tokens": 9800 },
+        "recent_requests": [],
     });
-    assert!(active.contains("Agent cache (GUI chat)"), "{active}");
-    assert!(active.contains("9,800 of 12,000 prompt tokens"), "{active}");
-    assert!(
-        active.contains("2,500 of 3,000 tokens from cache"),
-        "{active}"
-    );
+    let snapshot: DashboardSnapshot = serde_json::from_value(body).expect("an older proxy's frame");
+    let frame = render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH);
+
+    assert_eq!(frame.matches("Prompt cache").count(), 1, "{frame}");
+    assert!(!frame.contains("Agent cache"), "{frame}");
+    assert!(!frame.contains("9,800"), "{frame}");
 }
 
 #[test]
@@ -544,9 +530,9 @@ fn cache_section_shows_reuse_totals_with_separators() {
 /// facts; the server keeps them apart, so the frame must too.
 #[test]
 fn cache_section_distinguishes_no_activity_from_a_measured_zero() {
-    // Scope to the proxied "Prompt cache" section: the agent section shares
-    // the same placeholder text and would otherwise mask the distinction.
-    let proxied = |frame: &str| frame.split("Agent cache").next().unwrap().to_string();
+    // Scope to the "Prompt cache" section: the sections after it could share
+    // its placeholder text and mask the distinction.
+    let proxied = |frame: &str| frame.split("Prompt cache").nth(1).unwrap().to_string();
 
     let idle = proxied(&frame_with_cache(Some(cache_status(CacheUsage::default()))));
     assert!(idle.contains("(no cache activity recorded yet)"), "{idle}");
@@ -657,14 +643,17 @@ fn the_recent_requests_sit_before_the_total() {
         slots: vec![],
         slots_status: None,
         total_requests: 1,
+        tool_repairs_succeeded: None,
+        loop_guard_trips_total: None,
         cache: None,
-        agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
         recent_requests: vec![RecentRequest {
             model_name: "qwen3".to_owned(),
             recorded_at_secs: u64::MAX,
+            completion_tokens: None,
+            tokens_per_second: None,
             interventions: vec![Intervention {
                 word: "Repaired a tool call".to_owned(),
             }],

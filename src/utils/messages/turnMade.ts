@@ -6,8 +6,9 @@
  * The keys are the saved row's (`MADE_KEYS` in `gglib-core`'s replay). Each
  * is present only when the turn had it: absent is not zero. `device` names
  * the paired device whose turn it answered; this machine's own name none.
- * Nothing derived is kept: how full the context is, is worked out where it
- * is shown, from the counts and `contextSize`.
+ * One figure is derived, by the daemon: `tokensPerSecond`, the rate it
+ * sends and saves beside the counts it is made from. How full the context
+ * is, is worked out where it is shown, from the counts and `contextSize`.
  *
  * @module turnMade
  */
@@ -24,6 +25,8 @@ export interface TurnMade {
   turnDurationMs?: number;
   /** From the first generated token's arrival to the last, timed before normalisation. */
   writingDurationMs?: number;
+  /** Tokens written per second of writing, the daemon's; absent with no time writing. */
+  tokensPerSecond?: number;
   /** The paired device whose turn this answered. */
   device?: string;
   /** Why the model stopped writing: `stop`, `length` when it was cut off, `tool_calls`. */
@@ -41,6 +44,7 @@ const COUNT_KEYS = [
   'completionTokens',
   'turnDurationMs',
   'writingDurationMs',
+  'tokensPerSecond',
   'contextSize',
   'trimmedMessages',
 ] as const;
@@ -69,6 +73,7 @@ export interface TurnUsageWire {
   completion_tokens?: number;
   duration_ms?: number;
   writing_ms?: number;
+  tokens_per_second?: number;
   device?: string;
   finish_reason?: string;
   context_size?: number;
@@ -85,6 +90,7 @@ export function turnMadeFromUsage(event: TurnUsageWire): TurnMade | undefined {
     completionTokens: event.completion_tokens,
     turnDurationMs: event.duration_ms,
     writingDurationMs: event.writing_ms,
+    tokensPerSecond: event.tokens_per_second,
     device: event.device,
     finishReason: event.finish_reason,
     contextSize: event.context_size,

@@ -10,7 +10,7 @@ use gglib_mcp::{
 use crate::error::GuiError;
 use crate::types::{
     CreateMcpServerRequest, McpEnvUpdateDto, McpServerConfigDto, McpServerDto, McpServerInfo,
-    McpServerStatusDto, McpTestResult, McpToolInfo, UpdateMcpServerRequest,
+    McpTestResult, McpToolInfo, UpdateMcpServerRequest,
 };
 
 /// Dependencies for MCP operations.
@@ -65,17 +65,6 @@ impl McpOps {
         }
     }
 
-    /// Convert status to DTO.
-    fn status_to_dto(status: McpServerStatus) -> McpServerStatusDto {
-        match status {
-            McpServerStatus::Running => McpServerStatusDto::Running,
-            McpServerStatus::Stopped => McpServerStatusDto::Stopped,
-            McpServerStatus::Starting => McpServerStatusDto::Starting,
-            McpServerStatus::Error(msg) => McpServerStatusDto::Error(msg),
-            McpServerStatus::Unsupported => McpServerStatusDto::Unsupported,
-        }
-    }
-
     /// List all MCP server configurations with status.
     pub async fn list(&self) -> Result<Vec<McpServerInfo>, GuiError> {
         let servers = self
@@ -86,10 +75,12 @@ impl McpOps {
 
         Ok(servers
             .into_iter()
-            .map(|info| McpServerInfo {
-                server: Self::server_to_dto(&info.server),
-                status: Self::status_to_dto(info.status),
-                tools: info.tools.iter().map(Self::tool_to_info).collect(),
+            .map(|info| {
+                McpServerInfo::new(
+                    Self::server_to_dto(&info.server),
+                    info.status,
+                    info.tools.iter().map(Self::tool_to_info).collect(),
+                )
             })
             .collect())
     }
@@ -130,11 +121,11 @@ impl McpOps {
             .await
             .map_err(GuiError::from)?;
 
-        Ok(McpServerInfo {
-            server: Self::server_to_dto(&server),
-            status: McpServerStatusDto::Stopped,
-            tools: Vec::new(),
-        })
+        Ok(McpServerInfo::new(
+            Self::server_to_dto(&server),
+            McpServerStatus::Stopped,
+            Vec::new(),
+        ))
     }
 
     /// Update an MCP server configuration.
@@ -186,11 +177,11 @@ impl McpOps {
 
         let status = self.mcp.get_server_status(id).await;
 
-        Ok(McpServerInfo {
-            server: Self::server_to_dto(&server),
-            status: Self::status_to_dto(status),
-            tools: Vec::new(),
-        })
+        Ok(McpServerInfo::new(
+            Self::server_to_dto(&server),
+            status,
+            Vec::new(),
+        ))
     }
 
     /// Remove an MCP server configuration.
@@ -203,11 +194,11 @@ impl McpOps {
         let tools = self.mcp.start_server(id).await.map_err(GuiError::from)?;
         let info = self.mcp.get_server_info(id).await.map_err(GuiError::from)?;
 
-        Ok(McpServerInfo {
-            server: Self::server_to_dto(&info.server),
-            status: Self::status_to_dto(info.status),
-            tools: tools.iter().map(Self::tool_to_info).collect(),
-        })
+        Ok(McpServerInfo::new(
+            Self::server_to_dto(&info.server),
+            info.status,
+            tools.iter().map(Self::tool_to_info).collect(),
+        ))
     }
 
     /// Stop an MCP server.
@@ -215,11 +206,11 @@ impl McpOps {
         self.mcp.stop_server(id).await.map_err(GuiError::from)?;
         let info = self.mcp.get_server_info(id).await.map_err(GuiError::from)?;
 
-        Ok(McpServerInfo {
-            server: Self::server_to_dto(&info.server),
-            status: Self::status_to_dto(info.status),
-            tools: Vec::new(),
-        })
+        Ok(McpServerInfo::new(
+            Self::server_to_dto(&info.server),
+            info.status,
+            Vec::new(),
+        ))
     }
 
     /// Test a configured server end to end — `gglib mcp test`.

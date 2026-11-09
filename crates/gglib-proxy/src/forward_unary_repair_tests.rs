@@ -139,6 +139,7 @@ pub(super) fn snapshot() -> ContextSnapshot {
         tool_calls: 0,
         finish_reason: None,
         generation_ms: None,
+        tokens_per_second: None,
         loop_guard_trip: None,
         loop_guard_ended: false,
         seq: 0,

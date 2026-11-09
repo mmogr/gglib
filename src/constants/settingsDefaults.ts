@@ -139,6 +139,30 @@ export const MAX_STAGNATION_STEPS: NumericSettingSpec = {
 };
 
 /**
+ * Tool calls an agent run makes at once where its chat names none. Rust:
+ * `DEFAULT_MAX_PARALLEL_TOOLS`, clamped to `MAX_PARALLEL_TOOLS_CEILING` in
+ * `domain/agent/config.rs` where a loop reads it; no `validate_settings`
+ * entry.
+ */
+export const MAX_PARALLEL_TOOLS: NumericSettingSpec = {
+  default: '25',
+  min: '1',
+  max: '50',
+};
+
+/**
+ * How long one tool call may take, in milliseconds, where its chat names
+ * none. Rust: `AgentConfig::default`'s 30 000, clamped to
+ * `MIN_TOOL_TIMEOUT_MS`–`MAX_TOOL_TIMEOUT_MS_CEILING` where a loop reads it;
+ * no `validate_settings` entry.
+ */
+export const TOOL_TIMEOUT_MS: NumericSettingSpec = {
+  default: '30000',
+  min: '100',
+  max: '60000',
+};
+
+/**
  * The on-disk prompt cache's budget in GiB.
  *
  * Rust: unset in `Settings::with_defaults()`, at least `MIN_CACHE_DISK_GB` in

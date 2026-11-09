@@ -33,9 +33,8 @@ impl RetryPolicy {
 
     /// A policy that makes one attempt and never retries.
     ///
-    /// What the CLI's `--no-retry` resolves to, and what a caller wanting
-    /// strictly one-shot behaviour should ask for by name rather than by
-    /// knowing that `max_attempts: 1` means "off".
+    /// What a caller wanting strictly one-shot behaviour should ask for by
+    /// name rather than by knowing that `max_attempts: 1` means "off".
     #[must_use]
     pub fn disabled() -> Self {
         Self {

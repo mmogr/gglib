@@ -1,207 +1,65 @@
-//! Which upstream `POST /api/agent/chat` drives: a llama-server this daemon
-//! started, or a model of the machine on the other end of the remote tunnel.
+//! Which upstream an agent loop drives: this machine's endpoint, for a turn
+//! on one of this machine's models ([`through_endpoint`]), or a model of the
+//! machine on the other end of the remote tunnel ([`far`]).
 //!
-//! One decision, taken before anything else in the handler, because the two
-//! cases differ in every input the adapter takes: the local case validates
-//! the port against the servers this daemon owns, shapes the turn for the
-//! model that port serves, by its row in this machine's catalog, and hands
-//! over this machine's global sampling defaults and its agentic sampling
-//! switch; the far case takes the port the tunnel bound, attaches the key
-//! from the pairing (ADR 0012, decision 7 — the listener does not inject
-//! it), looks the model up there by its id, and shapes nothing, because the
-//! far proxy runs its own pipeline over its own models.
+//! The two differ in every input the adapter takes: through this machine's
+//! endpoint the turn names the model by its catalogue id, reads its row
+//! here, and carries the endpoint's own layers for the one thing the turn
+//! still folds; the far case takes the port the tunnel bound, attaches the
+//! key from the pairing (ADR 0012, decision 7 — the listener does not
+//! inject it), looks the model up there by its id, and shapes nothing,
+//! because the far proxy runs its own pipeline over its own models.
 
 use gglib_app_services::FarProxy;
+use gglib_app_services::GuiError;
 use gglib_app_services::transcript::MadeBy;
-use gglib_app_services::types::ServerInfo;
-use gglib_core::domain::{Machine, ModelRef};
-use gglib_core::ports::{AdmissionLease, ModelRuntimePort};
+use gglib_core::Settings;
+use gglib_core::domain::{InferenceProfile, Machine, ModelRef};
+use gglib_core::events::AppEvent;
+use gglib_core::ports::AppEventEmitter;
+use gglib_core::ports::ModelRuntimePort;
 use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use gglib_runtime::Door;
+use gglib_runtime::proxy::ProxyStatus;
 
-use super::AgentChatRequest;
+use super::chat_sampling::ChatSampling;
+use super::hub_model::Loaded;
+use super::loop_request::LoopRequest;
 use crate::handlers::remote::far_error;
-use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
+use crate::{error::HttpError, state::AppState};
 
 /// Where the completion adapter points, and with what.
 pub(super) struct Upstream {
-    /// `http://127.0.0.1:<port>`, without the `/v1`.
+    /// The root the loop posts to, without the `/v1`: the door's.
     pub base_url: String,
-    /// The far machine's door on the far path — its key and the name it
-    /// is shown by; nothing locally.
-    pub door: Option<Door>,
-    /// Locally, the context of the model the port serves, with the context
-    /// it was launched with once a run holds it ([`hold_model`]);
-    /// passthrough for the far machine, whose proxy resolves.
+    /// The endpoint the turn goes through: this machine's ([`endpoint`]), or
+    /// the far machine's on the far path, with its key and the name it is
+    /// shown by.
+    pub door: Door,
+    /// The context of the model the turn runs on, by its catalogue row
+    /// here; passthrough for the far machine, whose proxy resolves, but for
+    /// whether it reads images.
     pub model_context: ModelContext,
-    /// The stored sampling layers beneath what the request names. Locally,
-    /// this machine's global defaults and its agentic sampling switch, and
-    /// no profile: a run's request can name none. For the far machine, whose
-    /// proxy folds its own, no layer, and the ceiling on.
+    /// The stored sampling layers the endpoint folds beneath what the turn
+    /// names ([`endpoint_layers`]). For the far machine, whose proxy folds
+    /// its own, no layer, and the ceiling on.
     pub layers: SamplingLayers,
-    /// What goes in the body's `model` field.
-    ///
-    /// Locally `None` is the ordinary case and means "whatever llama-server
-    /// loaded". On the far path it is always the model's id there, so the
-    /// far proxy serves the model that was picked and no other of its name.
+    /// What goes in the body's `model` field: the model's id at the
+    /// endpoint, so the endpoint serves the model that was picked and no
+    /// other of its name, with the chat's profile as its `:<profile>`
+    /// suffix.
     pub model: Option<String>,
-    /// The model name this run's guard decisions are counted under (#1091).
-    ///
-    /// Never absent, where [`Self::model`] may be: a counter keyed on nothing
-    /// is not a counter. Locally, the name the request gave, or — when it gave
-    /// none, or gave only whitespace, which is the same absence — the name of
-    /// the model actually running on the port it was sent to. On the far
-    /// path, the name that machine has for the model the id names.
-    ///
-    /// This is deliberately not `model.unwrap_or(…)` at the point of use: the
-    /// fallback needs the running server, which only this module has, and a
-    /// placeholder would file real traffic under something that is not a
-    /// model.
+    /// The model name this run's guard decisions are counted under (#1091):
+    /// the name the catalogue, or the far machine, has for the model.
     pub counted_as: String,
-    /// The model each turn is made by, as its saved row names it: locally
-    /// the one loaded on the port with its catalogue quantisation, on the
-    /// far path the one the id names there, with that machine's.
+    /// The model each turn is made by, as its saved row names it: the
+    /// catalogue's name and quantisation for the id, or on the far path the
+    /// one the id names there, with that machine's.
     pub made_by: MadeBy,
     /// Locally, the port and the id of the model found on it; otherwise none.
     pub local_model: Option<(u16, i64)>,
     /// On the far path, the model driven, by its machine; otherwise none.
     pub far_model: Option<ModelRef>,
-}
-
-/// The model this request named, if it named one.
-///
-/// A name that is nothing but whitespace is no name: it reaches llama-server
-/// as an empty model, and it would key a counter on nothing.
-fn named_model(req: &AgentChatRequest) -> Option<String> {
-    req.model
-        .as_deref()
-        .map(str::trim)
-        .filter(|m| !m.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-/// The name a local run's guard decisions are counted under.
-///
-/// The request's own name when it gave one, and otherwise the model actually
-/// running on the port it was sent to. Locally an absent model is the ordinary
-/// case — it means "whatever llama-server loaded" — so recording nothing would
-/// blind the instrument exactly where most of the traffic is, and a
-/// placeholder would file real traffic under something that is not a model.
-///
-/// Its own function because `resolve` cannot be driven in a test: the axum
-/// harness bootstraps an `AppState` with no running servers, so `validate_port`
-/// refuses before any of this is reached.
-fn counted_as(req: &AgentChatRequest, server: &ServerInfo) -> String {
-    named_model(req).unwrap_or_else(|| server.model_name.clone())
-}
-
-/// Resolve the upstream for one request.
-///
-/// # Errors
-///
-/// Locally, whatever `validate_port` says, `image_model_cannot_chat` (400)
-/// when the port serves a model that draws, and `model_cannot_read_images`
-/// (400) when a message carries an image the served model cannot read. On
-/// the far path, where that is the far proxy's to refuse, `400` for a ref
-/// to this machine; `409` when this machine is not connected, holds no key
-/// for the machine it is connected to (`RemoteOps::far` refuses both, in
-/// words that name the fix) or is connected to another machine than the
-/// ref's; and the far machine's refusal of the model, such as a `404` for
-/// an id it does not have.
-pub(super) async fn resolve(
-    state: &AppState,
-    req: &AgentChatRequest,
-) -> Result<Upstream, HttpError> {
-    let Some(far) = &req.far else {
-        let server = validate_port(state, req.port).await?;
-        return local(state, req, server).await;
-    };
-    // Before the connection is read: the request's own shape is settled
-    // before this machine's state is, so a ref to this machine is a `400`
-    // whether or not a tunnel happens to be up.
-    if far.machine == Machine::Local {
-        return Err(HttpError::BadRequest(
-            "`far` names a model on this machine; a model here is driven by its server's `port`"
-                .to_owned(),
-        ));
-    }
-    let proxy = state.remote.far_for(&far.machine).await?;
-    remote(&proxy, far).await
-}
-
-/// A local request's upstream, once its port is known to serve `server`.
-///
-/// # Errors
-///
-/// `image_model_cannot_chat` (400) when `server` is an `sd-server`, which
-/// draws and cannot chat; `model_cannot_read_images` (400) when a message,
-/// history included, carries an image and the model `server` serves has no
-/// projector.
-pub(super) async fn local(
-    state: &AppState,
-    req: &AgentChatRequest,
-    server: ServerInfo,
-) -> Result<Upstream, HttpError> {
-    super::image_gate::chats(server.runtime, &server.model_name)?;
-    super::image_gate::served(state, server.model_id, &req.messages).await?;
-    // By its id: the catalog row the server was started from. Never by the
-    // request's `model`, which the page and a paired device leave empty and
-    // which names only what llama-server is to route by.
-    let by_id = server.model_id.to_string();
-    let model_context = request_pipeline::resolve(state.catalog.as_ref(), Some(&by_id)).await;
-    // A settings read that fails leaves the global layer out and the agentic
-    // switch on, as it leaves the limits at their defaults
-    // (`compose::config_for`).
-    let settings = state.core.settings().get().await.unwrap_or_default();
-    let layers = SamplingLayers {
-        agentic_adjustments: settings.effective_agentic_sampling(),
-        global: settings.inference_defaults,
-        ..SamplingLayers::default()
-    };
-    Ok(Upstream {
-        base_url: format!("http://127.0.0.1:{}", req.port),
-        door: None,
-        model_context,
-        layers,
-        model: req.model.clone(),
-        counted_as: counted_as(req, &server),
-        made_by: MadeBy {
-            quantization: quantization_of(state, server.model_id).await,
-            model: server.model_name,
-            device: None,
-            context_size: None,
-        },
-        local_model: Some((req.port, server.model_id)),
-        far_model: None,
-    })
-}
-
-/// A local run's hold on the model it resolved, which its loop talks to past
-/// the proxy's queue: while held, no proxy request swaps or recycles it. A
-/// remote run holds nothing here; the far proxy admits each of its requests.
-///
-/// # Errors
-///
-/// `unavailable` (503) when that model is no longer the one on its port: a
-/// swap came between resolving it and holding it.
-pub(super) fn hold(
-    runtime: &dyn ModelRuntimePort,
-    local_model: Option<(u16, i64)>,
-) -> Result<Option<AdmissionLease>, HttpError> {
-    let Some((port, model_id)) = local_model else {
-        return Ok(None);
-    };
-    let held = u32::try_from(model_id)
-        .ok()
-        .and_then(|id| runtime.hold(port, id));
-    held.map(Some).ok_or_else(|| HttpError::Coded {
-        status: axum::http::StatusCode::SERVICE_UNAVAILABLE,
-        code: "unavailable",
-        message: format!(
-            "the model on port {port} was stopped or swapped while the run was prepared; \
-             try again"
-        ),
-    })
 }
 
 /// The context the model a local run drives was launched with: the primary
@@ -220,44 +78,178 @@ async fn launched_context(
     same.then_some(running.effective_ctx)
 }
 
-/// Take a run's [`hold`] on its model, then read the context that model was
-/// launched with onto the run: the size its turns report, and the budget its
-/// conversation is trimmed to.
-///
-/// In that order: until the model is held a proxy request may relaunch it at
-/// another context, and a size read before the hold could be the old one.
-/// And before the loop is composed, which takes the budget from
-/// `model_context`. Without this the budget was the catalogue's
-/// `context_length`, the model's trained ceiling, and a long chat on a
-/// smaller launched context was refused by llama-server (#1272). A size this
-/// cannot read leaves the catalogue's.
+/// This machine's endpoint, as a turn on one of its models dials it: turned
+/// on first when it is off, as starting a model turns it on, and said to be
+/// on (`proxy_started`) so every window showing it Off hears it.
 ///
 /// # Errors
 ///
-/// Whatever [`hold`] refuses.
-pub(super) async fn hold_model(
-    runtime: &dyn ModelRuntimePort,
-    upstream: &mut Upstream,
-) -> Result<Option<AdmissionLease>, HttpError> {
-    let held = hold(runtime, upstream.local_model)?;
-    let launched = launched_context(runtime, upstream.local_model).await;
-    upstream.made_by.context_size = launched;
-    if launched.is_some() {
-        upstream.model_context.context_length = launched;
+/// `conflict` (409) with the endpoint's own reason when it cannot be turned
+/// on (its port held by another process); `invalid_request` (400) naming
+/// that it is off, should it stop between the two; `internal_error` (500)
+/// when the settings that hold its key cannot be read.
+pub(super) async fn this_machines_door(state: &AppState) -> Result<Door, HttpError> {
+    let was_off = !matches!(state.proxy.status().await, ProxyStatus::Running { .. });
+    let address = state.proxy.ensure_running().await?;
+    if was_off {
+        state.sse.emit(AppEvent::proxy_started(address.port()));
     }
-    Ok(held)
+    state
+        .proxy
+        .door()
+        .await
+        .map_err(|closed| HttpError::from(GuiError::from(closed)))
+}
+
+/// A turn on this machine's model `loaded`, through this machine's endpoint
+/// `door`, as any client sends one: to the door's root with its key, naming
+/// the model by its catalogue id, which the endpoint resolves before any
+/// name and loads again if it is no longer resident.
+///
+/// Everything is read from the catalogue's row for that id, never from what
+/// its port serves now: the load's lease is gone, so another client may have
+/// swapped the model out, or another in onto the same port, and the turn is
+/// still the chat's model's. The endpoint shapes the request; the model's
+/// context and the endpoint's own layers ([`endpoint_layers`]) are kept for
+/// what the turn still reads of them here: whether it sees images, and
+/// whether the endpoint's ladder names a `max_tokens`, for the turn's limit. The turns report the context the model was launched
+/// with when it is still the one in the primary slot (#1272), and none
+/// otherwise. The endpoint trims to the context it serves.
+///
+/// No hold is taken: the endpoint admits each request, and its lease is the
+/// turn's.
+///
+/// # Errors
+///
+/// `image_model_cannot_chat` (400) for a model that draws, and
+/// `model_cannot_read_images` (400) when a message carries an image it
+/// cannot read.
+pub(super) async fn endpoint(
+    state: &AppState,
+    req: &LoopRequest,
+    loaded: Loaded,
+    door: Door,
+) -> Result<Upstream, HttpError> {
+    let Loaded { id, port } = loaded;
+    let by_id = id.to_string();
+    super::image_gate::chats_named(state, &by_id).await?;
+    super::image_gate::served(state, id, &req.messages).await?;
+    let model_context = request_pipeline::resolve(state.catalog.as_ref(), Some(&by_id)).await;
+    let settings = state.core.settings().get().await.unwrap_or_default();
+    let profile = req.saved.configured_profile(&settings);
+    let layers = endpoint_layers(state, &settings, profile).await;
+    let row = state.core.models().get_by_id(id).await.ok().flatten();
+    let name = row
+        .as_ref()
+        .map_or_else(|| by_id.clone(), |m| m.name.clone());
+    let quantization = row
+        .as_ref()
+        .and_then(|m| m.quant_label().map(str::to_owned));
+    let local_model = Some((port, id));
+    Ok(Upstream {
+        base_url: door.root_url.clone(),
+        door,
+        model_context,
+        layers,
+        // The chat's saved profile rides on the id, which the endpoint
+        // routes to that profile whether or not it trusts clients' sampling;
+        // one no longer configured is left off, and the turn runs without it.
+        model: Some(profile.map_or_else(|| by_id.clone(), |p| format!("{by_id}:{}", p.name))),
+        counted_as: name.clone(),
+        made_by: MadeBy {
+            model: name,
+            quantization,
+            device: None,
+            context_size: launched_context(state.runtime.as_ref(), local_model).await,
+        },
+        local_model,
+        far_model: None,
+    })
+}
+
+/// The stored layers the running endpoint folds the turn's request with:
+/// the sampling it was started with (`gglib serve`'s flags), a profile, this
+/// machine's global defaults and its agentic switch. The profile is the
+/// chat's, `chat`, when the turn names one, as the endpoint routes
+/// `<id>:<profile>` to it, and otherwise the endpoint's default. Handed to
+/// the adapter for the one thing it folds through a door: whether the
+/// endpoint's ladder names a `max_tokens`, which a turn's limit would
+/// otherwise outrank. A settings read that fails leaves the global layer and
+/// the default profile out, and the switch on.
+async fn endpoint_layers(
+    state: &AppState,
+    settings: &Settings,
+    chat: Option<&InferenceProfile>,
+) -> SamplingLayers {
+    let (cli_override, default_profile) = state.proxy.started_sampling().await.unwrap_or_default();
+    // As the endpoint reads it: a default profile that is no longer
+    // configured is no layer, and a profile the request names replaces it.
+    let profile = chat.map(|p| p.config.clone()).or_else(|| {
+        let name = default_profile?;
+        let profiles = settings.inference_profiles.as_deref().unwrap_or_default();
+        let found = profiles.iter().find(|p| p.name == name)?;
+        Some(found.config.clone())
+    });
+    SamplingLayers {
+        cli_override,
+        profile,
+        agentic_adjustments: settings.effective_agentic_sampling(),
+        global: settings.inference_defaults.clone(),
+        ..SamplingLayers::default()
+    }
+}
+
+/// [`endpoint`] for a turn whose model was just found running or loaded,
+/// once [`this_machines_door`] is open.
+///
+/// # Errors
+///
+/// [`this_machines_door`]'s, then [`endpoint`]'s.
+pub(super) async fn through_endpoint(
+    state: &AppState,
+    req: &LoopRequest,
+    loaded: Loaded,
+) -> Result<Upstream, HttpError> {
+    let door = this_machines_door(state).await?;
+    endpoint(state, req, loaded, door).await
+}
+
+/// The upstream of a turn on `model`, a model of the paired machine, with
+/// what its chat `saved`: what [`remote`] makes of the far proxy `reach`
+/// finds for that machine (`RemoteOps::far_for`, in the daemon).
+///
+/// # Errors
+///
+/// `409` when this machine is not connected, holds no key for the machine
+/// it is connected to (`RemoteOps::far` refuses both, in words that name
+/// the fix) or is connected to another machine than the ref's; and the far
+/// machine's refusal of the model, such as a `404` for an id it does not
+/// have.
+pub(super) async fn far(
+    reach: impl AsyncFnOnce(&Machine) -> Result<FarProxy, GuiError>,
+    model: &ModelRef,
+    saved: &ChatSampling,
+) -> Result<Upstream, HttpError> {
+    let proxy = reach(&model.machine).await?;
+    remote(&proxy, model, saved).await
 }
 
 /// A far request's upstream: the far proxy's root through the tunnel, the
 /// far machine as the adapter carries it, and `model`'s id as the body's
-/// model. The id is looked up there first, so the run is counted under,
+/// model, with the profile the chat `saved` as its `{id}:{profile}` suffix,
+/// which that machine routes to a profile of its own. The id is looked up
+/// there first, so the run is counted under,
 /// and its turns made by, the name and quantisation that machine has for
 /// it, and a model it does not have is refused before any turn starts.
 ///
 /// # Errors
 ///
 /// The far machine's refusal of the lookup, with its status and message.
-pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream, HttpError> {
+pub(super) async fn remote(
+    far: &FarProxy,
+    model: &ModelRef,
+    saved: &ChatSampling,
+) -> Result<Upstream, HttpError> {
     let id = model.id.to_string();
     let detail = far.lookup(&id).await.map_err(far_error)?.detail;
     Ok(Upstream {
@@ -266,7 +258,7 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
         // built from holds both: the request that fails on a rotated key
         // comes back to the adapter, which by then has no way to ask who was
         // asked.
-        door: Some(far.door()),
+        door: far.door(),
         // Nothing of that machine's row is known here but what its lookup
         // answered. Whether the model reads images is, and decides one
         // thing: whether it is shown the most recent drawn picture.
@@ -289,25 +281,15 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
             device: None,
             context_size: None,
         },
-        model: Some(id),
+        model: Some(saved.model(id)),
         local_model: None,
         far_model: Some(model.clone()),
     })
 }
 
-/// The catalogue's quantisation for a served model; `None` when it has none
-/// or cannot be read, which leaves the figure out rather than failing a run.
-async fn quantization_of(state: &AppState, model_id: i64) -> Option<String> {
-    let model = state
-        .core
-        .models()
-        .get_by_id(model_id)
-        .await
-        .ok()
-        .flatten()?;
-    model.quant_label().map(str::to_owned)
-}
-
+#[cfg(test)]
+#[path = "remote_upstream_endpoint_tests.rs"]
+mod endpoint_tests;
 #[cfg(test)]
 #[path = "remote_upstream_tests.rs"]
 mod tests;

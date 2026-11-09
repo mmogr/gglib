@@ -245,5 +245,24 @@ async fn the_launch_is_the_runtimes_plan_through_the_one_shot_runtime() {
         "{:?}",
         explanation.plan.args
     );
-    assert!(text.contains("\nContext\n  serves at"), "{text}");
+    // The fit sentence the runtime served, over the figures: this fixture's
+    // header says neither what its context costs nor its trained window.
+    // Whether this machine's memory is read depends on where the test runs,
+    // so that reason may come first.
+    let Some((sentence, _)) = text
+        .split("\nContext\n  ")
+        .nth(1)
+        .and_then(|rest| rest.split_once("\n  serves at"))
+    else {
+        panic!("{text}")
+    };
+    assert!(
+        sentence.starts_with("Serves at 4K context; gglib could not fit one to this machine: "),
+        "{text}"
+    );
+    assert!(
+        sentence
+            .ends_with("the model does not say what its context costs or what it was trained for."),
+        "{text}"
+    );
 }

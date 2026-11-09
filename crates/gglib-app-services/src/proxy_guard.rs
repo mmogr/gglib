@@ -10,11 +10,13 @@ impl ProxyOps {
     /// The ledger an agent loop in this process counts its guard decisions
     /// into, shared with the proxy dashboard that reads them.
     ///
-    /// The companion of [`ProxyOps::agent_metrics`], and available for the
-    /// same reason: both live on the supervisor for the process's lifetime,
-    /// whether or not a proxy is running. GUI chat composes its loop with
-    /// this, so a loop or stagnation trip on the agent path reaches a counter
-    /// (#1091) instead of ending the run and leaving no trace.
+    /// Available whether or not a proxy is running: it lives on the
+    /// supervisor for the process's lifetime. A loop whose turns do not go
+    /// through this machine's endpoint (a turn on a paired machine's model)
+    /// composes its loop with this, so a loop or stagnation
+    /// trip there reaches a counter (#1091) instead of ending the run and
+    /// leaving no trace. A turn through the endpoint is counted by the
+    /// endpoint's own loop guard.
     ///
     /// The count is the per-process ledger's, which resets when the process
     /// does. The loop guard's *log*, which outlives the process, still records

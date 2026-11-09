@@ -26,6 +26,7 @@ import { useNavigate } from 'react-router';
 import { paths } from '../../app/paths';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { listMove } from '../../components/ui/Listbox';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import type { PairedModelsState } from '../../hooks/usePairedModels';
@@ -121,17 +122,13 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
   };
 
   const point = (at: number) => setActive({ key: choices[at] ? keyOf(choices[at]) : null, at });
-  const move = (to: number) => point(Math.max(0, Math.min(choices.length - 1, to)));
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     const keys: Record<string, () => void> = {
-      ArrowDown: () => move(current + 1),
-      ArrowUp: () => move(current - 1),
-      Home: () => move(0),
-      End: () => move(choices.length - 1),
       Enter: () => choose(highlighted, event.altKey),
       Escape: () => close(true),
     };
-    const act = keys[event.key];
+    const to = listMove(event.key, current, choices.length);
+    const act = to === null ? keys[event.key] : () => point(to);
     if (!act) return;
     event.preventDefault();
     act();
