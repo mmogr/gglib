@@ -7,7 +7,6 @@ pub(crate) mod chat_title;
 pub(crate) mod config;
 pub(crate) mod daemon;
 pub(crate) mod events;
-pub(crate) mod generation;
 pub(crate) mod images;
 pub(crate) mod mcp;
 pub(crate) mod model;

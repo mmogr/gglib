@@ -34,8 +34,8 @@ use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::ports::{RemoteGatewayPort as _, names_whole_server};
 use gglib_mcp::BUILTIN_PREFIX;
 
-use super::AgentChatRequest;
 use super::compose::DRAW_TOOL;
+use super::loop_request::LoopRequest;
 use crate::state::AppState;
 
 /// What a turn's run asks of this machine's tools, before any server is
@@ -231,11 +231,7 @@ pub(super) async fn resolve(state: &AppState, asked: &Asked) -> Vec<String> {
 /// model is ready ([`resolve`]). This machine's own run keeps the filter it
 /// was planned with ([`Asked::planned`]), once the enabled servers it reads
 /// are started (`McpService::start_enabled`).
-pub(super) async fn settle(
-    state: &AppState,
-    mut chat: AgentChatRequest,
-    asked: &Asked,
-) -> AgentChatRequest {
+pub(super) async fn settle(state: &AppState, mut chat: LoopRequest, asked: &Asked) -> LoopRequest {
     if matches!(asked.reach, Reach::Here { .. }) {
         match asked.here_servers() {
             Some(Starts::Every) => state.mcp.start_enabled(None).await,

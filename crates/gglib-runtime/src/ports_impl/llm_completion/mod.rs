@@ -12,8 +12,8 @@ use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
     domain::capability_tags,
-    ports::{AttachmentStore, GenerationGate, LlmCompletionPort, RetryObserver, UsageSink},
-    request_pipeline::{self, ModelContext, SamplingDecision, SamplingLayers},
+    ports::{AttachmentStore, LlmCompletionPort, RetryObserver, UsageSink},
+    request_pipeline::{self, ModelContext, SamplingLayers},
     retry::RetryPolicy,
 };
 
@@ -22,7 +22,6 @@ mod door;
 mod images;
 mod retry;
 mod stream;
-mod turn;
 mod turn_limit;
 mod writing_time;
 
@@ -68,9 +67,9 @@ pub struct LlmCompletionAdapter {
     /// name it — see [`Door`]. Never logged: the adapter derives no `Debug`,
     /// and the door's own `Debug` leaves the key out.
     ///
-    /// A send through a door is *proxied*: the endpoint shapes it, parses
-    /// the model's dialect and takes its generation turn, so this side does
-    /// none of the three ([`Self::shaped_body`], [`Self::send`]).
+    /// A send through a door is *proxied*: the endpoint shapes it and
+    /// parses the model's dialect, so this side does neither
+    /// ([`Self::shaped_body`], [`Self::send`]).
     door: Option<Door>,
     /// Where the images a message names by id are read from (`images.rs`).
     /// `None` for a caller whose messages carry none.
@@ -94,9 +93,6 @@ pub struct LlmCompletionAdapter {
     /// and nowhere before it. A caller that hands over none (the default)
     /// has neither layer, and the ceiling on.
     layers: SamplingLayers,
-    /// Told what each request's sampling resolved to. `None` (the default)
-    /// for a caller with nothing to say about it.
-    sampling_observer: Option<SamplingObserver>,
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     send_timeout_secs: u64,
@@ -137,11 +133,6 @@ pub struct LlmCompletionAdapter {
     /// the case for CLI `gglib chat`/`q`, which render the loop's events
     /// directly.
     retry_observer: Option<Arc<dyn RetryObserver>>,
-    /// The daemon's generation gate, on which a send to this machine's
-    /// llama-server waits for its turn behind an image render (`turn.rs`).
-    /// `None` (the default) for a caller with no gate to wait on, such as a
-    /// benchmark arm, which runs when someone chose to run it.
-    generation_gate: Option<Arc<dyn GenerationGate>>,
     /// Skip the request-shaping pipeline entirely and send the bare body.
     ///
     /// The control arm of an A/B evaluation: no sampling resolution (the
@@ -176,15 +167,6 @@ pub struct LlmCompletionAdapter {
     /// loop's turns; off by default.
     limit_turns: bool,
 }
-
-/// Told what one request's sampling resolved to, once the pipeline has
-/// decided it: the values sent and the rung that supplied each.
-///
-/// The ladder is folded in [`request_pipeline::apply()`] and nowhere else, so
-/// a caller that has something to say about the outcome — the terminal, of a
-/// flag the ladder passed over — is told here rather than folding a ladder
-/// of its own to find out.
-pub type SamplingObserver = Arc<dyn Fn(&SamplingDecision) + Send + Sync>;
 
 /// Build the completions endpoint URL from a base URL.
 ///
@@ -292,9 +274,6 @@ impl LlmCompletionAdapter {
         )
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
 
-        if let Some(observe) = &self.sampling_observer {
-            observe(&report.sampling);
-        }
         if self.limit_turns {
             let reasoning = capability_tags::is_reasoning(&self.model_context.tags);
             turn_limit::limit_turn(&mut body, reasoning);
@@ -356,17 +335,6 @@ impl LlmCompletionAdapter {
         let images = images::resolve(self.attachments.as_ref(), messages, sees).await?;
         let body = self.shaped_body(messages, tools, &images, must_call)?;
 
-        // A send to this machine's llama-server waits for its generation
-        // turn first, outside the send timer and the policy's deadline: an
-        // image render can hold the GPU for longer than either. A send through
-        // a door takes none: the endpoint takes its own for the request.
-        // A failed send below drops the turn at once.
-        let gate = self
-            .generation_gate
-            .as_ref()
-            .filter(|_| self.door.is_none());
-        let turn = turn::take(gate, self.retry_observer.as_ref()).await?;
-
         // Each attempt's connect + first-byte phase is bounded by the send
         // timeout, and the whole sequence by the policy's own deadline, so a
         // stalled llama-server can neither hang the agent task nor multiply the
@@ -388,9 +356,8 @@ impl LlmCompletionAdapter {
         .await?;
 
         // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
-        // The turn rides in the stream: the generation lasts as long as the
-        // reply does, not until its headers. Through a door the endpoint has
-        // already parsed the model's dialect into `OpenAI` tool calls.
+        // Through a door the endpoint has already parsed the model's dialect
+        // into `OpenAI` tool calls.
         let dialect = self
             .model_context
             .dialect
@@ -402,7 +369,7 @@ impl LlmCompletionAdapter {
             self.usage_sink.clone(),
             self.stream_idle_timeout,
         );
-        Ok(Box::pin(turn::held(events, turn)))
+        Ok(Box::pin(events))
     }
 }
 

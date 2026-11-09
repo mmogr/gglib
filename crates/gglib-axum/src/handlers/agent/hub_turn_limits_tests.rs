@@ -49,7 +49,7 @@ async fn chat_saving(state: &AppState, saved: Option<usize>) -> i64 {
 }
 
 /// The config `turn` runs with: read as its door reads it, then given its
-/// limits as `prepare` gives them.
+/// limits as `prepare_over` gives them.
 async fn config_of(state: &AppState, turn_at: Turn) -> AgentConfig {
     let (scope, saved) = match turn_at {
         Turn::Device { saved } => (device("phone"), saved),
@@ -57,7 +57,7 @@ async fn config_of(state: &AppState, turn_at: Turn) -> AgentConfig {
     };
     let id = chat_saving(state, saved).await;
     let plan = plan(state, &scope, turn(id, "second"), None).await.unwrap();
-    config_for(state, plan.chat.config).await
+    config_for(state, plan.chat.limits).await
 }
 
 /// Each row is the iteration limit this machine stores, the turn, and the
@@ -106,7 +106,7 @@ async fn this_machines_turn_runs_with_the_tool_limits_its_chat_saved() {
         let plan = plan(&state, &scope, turn(id, "second"), None)
             .await
             .unwrap();
-        let config = config_for(&state, plan.chat.config).await;
+        let config = config_for(&state, plan.chat.limits).await;
         assert_eq!(
             (config.max_parallel_tools, config.tool_timeout_ms),
             (3, 45_000),

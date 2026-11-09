@@ -16,8 +16,7 @@ use gglib_app_services::{
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, GenerationGate, HfClientPort, ImageGenerationPort, ModelCatalogPort,
-    ModelRuntimePort,
+    AppEventEmitter, HfClientPort, ImageGenerationPort, ModelCatalogPort, ModelRuntimePort,
 };
 use gglib_core::services::AppCore;
 use gglib_db::{
@@ -64,12 +63,12 @@ pub struct AxumContext {
     /// the entire process lifetime.  Handlers clone the client cheaply (it is
     /// internally `Arc`-backed).
     pub http_client: reqwest::Client,
-    /// Concurrency limiter for `POST /api/agent/chat` sessions.
+    /// Concurrency limiter for agent runs.
     ///
-    /// Each active agent SSE stream holds one permit.  When all permits are
-    /// taken the handler rejects new requests with 429 rather than queuing
-    /// them — preventing resource exhaustion from parallel loops that each
-    /// consume LLM inference time and tool I/O.
+    /// Each agent run holds one permit until it ends. When all permits are
+    /// taken a new turn is refused with 429 rather than queued — preventing
+    /// resource exhaustion from parallel loops that each consume LLM
+    /// inference time and tool I/O.
     pub agent_semaphore: Arc<tokio::sync::Semaphore>,
     /// Benchmark run repository for compare and perf results.
     ///
@@ -97,10 +96,6 @@ pub struct AxumContext {
     /// capabilities, tags and inference defaults; resolving them through this
     /// port is what keeps those surfaces in step with the proxy.
     pub catalog: Arc<dyn ModelCatalogPort>,
-    /// The generation gate of the one `ProcessManager`: a reply on this
-    /// machine's model waits on it for its turn behind an image render, and
-    /// `GET /api/generation/turn` holds a turn there for `gglib chat`.
-    pub generation_gate: Arc<dyn GenerationGate>,
     /// Drawing, for `/api/images/generations`: the service graph's one
     /// `sd-server` job driver.
     pub images: Arc<dyn ImageGenerationPort>,
@@ -211,7 +206,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         model_repo: _,
         catalog,
         runtime,
-        generation_gate,
         images,
     } = build_service_graph(ServiceGraphParams {
         core: Arc::clone(&core),
@@ -258,7 +252,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         benchmark,
         runtime,
         catalog,
-        generation_gate,
         images,
         daemon_shutdown: None,
     })

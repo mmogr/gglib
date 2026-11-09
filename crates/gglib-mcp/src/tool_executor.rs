@@ -17,7 +17,7 @@
 //!
 //! This adapter is not constructed by the entrypoint crates. It is wrapped by
 //! [`crate::combined::CombinedToolExecutor`], which `gglib-runtime`'s
-//! `compose::compose_agent_loop_inner` builds:
+//! `compose::compose_agent_loop` builds:
 //!
 //! ```rust,ignore
 //! let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {

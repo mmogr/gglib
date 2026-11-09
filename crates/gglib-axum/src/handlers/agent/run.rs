@@ -1,11 +1,11 @@
 //! What an agent run shares, whichever door started it (`hub_turn`, for
-//! this machine's turn and a paired device's): the codes its refusals
-//! carry, how a chat's folder is settled, and the run's work, the loop
-//! `/api/agent/chat` runs, owned by the daemon from start to end so closing
-//! the page no longer stops the reply. A slot of the agent semaphore is
-//! kept until the run ends, and each event is logged as the chat route's
-//! `data:` text. The run holds no model: each of its requests goes through
-//! this machine's endpoint, which admits it.
+//! this machine's turn and a paired device's, and `chat_turn`): the codes
+//! its refusals carry, how a chat's folder is settled, and the run's work,
+//! the loop, owned by the daemon from start to end so closing the page does
+//! not stop the reply. A slot of the agent semaphore is kept until the run
+//! ends, and each event is logged as its JSON text (`compose::frame`). The
+//! run holds no model: each of its requests goes through this machine's
+//! endpoint, which admits it.
 //!
 //! Nothing here logs or returns a frame, a request body or a tool argument:
 //! only ids, statuses and counts, and in a `folder_unusable` refusal the
@@ -39,7 +39,7 @@ pub(super) fn coded(
     }
 }
 
-/// The chat route's refusals, with the code a run's client matches on.
+/// A refusal, with the code a run's client matches on.
 pub(super) fn with_code(error: HttpError) -> HttpError {
     match error {
         HttpError::BadRequest(m) => coded(StatusCode::BAD_REQUEST, "invalid_request", m),
@@ -107,7 +107,7 @@ pub(super) fn settle_folder(
     }
 }
 
-/// Run the loop, logging each event as the chat route frames it. Dropped
+/// Run the loop, logging each event as [`frame`] writes it. Dropped
 /// when the run is cancelled, which aborts the loop and any tool call in
 /// flight, drops the reply it is reading, so the endpoint ends that request
 /// and releases its lease, and releases the permit.

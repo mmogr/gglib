@@ -63,7 +63,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 - **`dto/`** — Request/response DTOs for API endpoints
 - **`handlers/model/`** — Model CRUD, verification, downloads, `HuggingFace` discovery handlers
 - **`handlers/config/`** — Settings, system setup and engine handlers
-- **`handlers/agent/`** — `POST /api/agent/chat`, the server-side agentic loop over SSE, and the agent runs started at `/api/runs` and by a paired device
+- **`handlers/agent/`** — The server-side agentic loop: the agent runs started at `/api/runs` and by a paired device
 - **`handlers/runs/`** — `/api/runs/*`: start, list, read and cancel the daemon's runs
 - **`handlers/remote/`** — The remote tunnel: enable, disable, status, invite and the devices on the serve side; join, disconnect and kill on the connect side; and the far machine's chats, runs, images and models
 - **`handlers/proxy/`** — Proxy status, start, start-pinned and stop, and the loop guard's log
@@ -146,10 +146,8 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/proxy/stop` | Stop the proxy; one already stopped is a success |
 | `GET` | `/api/proxy/loop-guard-trips` | The loop guard's log, one row per UTC day, model, version and mode, newest day first |
 | `POST` | `/api/daemon/shutdown` | Stop the daemon; answers 202 and tears down after the server stops accepting |
-| `GET` | `/api/generation/turn` | An LLM turn on the daemon's generation gate, held while the connection is open (`gglib chat`) |
 | `GET` | `/api/events` | The event stream (SSE) every client of the daemon reads |
 | `POST` | `/api/events` | Put one event on that stream: what a `gglib` command sends for a change it made to the library in its own process |
-| `POST` | `/api/agent/chat` | The server-side agentic loop, streamed as SSE |
 | `GET` | `/api/runs` | Every run, newest first |
 | `GET` | `/api/runs/{id}` | One run |
 | `PUT` | `/api/runs/{id}` | Start a chat run with the body as its request, or answer with the run that has the id (201 new, 200 existing); `?kind=agent` takes this machine's turn on one of its chats (`LocalTurn`: the conversation and the message), and runs the agent loop on what the chat saved |

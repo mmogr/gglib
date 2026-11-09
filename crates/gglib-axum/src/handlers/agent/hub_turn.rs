@@ -9,7 +9,7 @@
 //! answers that question. The hub rebuilds the history from its
 //! own record, as the chat page would send it: the conversation's system
 //! prompt, then every saved row but a system one, then the new message,
-//! with the limits the conversation's settings name (`prepare` takes an
+//! with the limits the conversation's settings name (`prepare_over` takes an
 //! iteration limit they do not name from this machine's settings), and with
 //! thinking off
 //! when the turn says so or the chat remembers it (`thinking`). The reply
@@ -53,14 +53,13 @@ use gglib_core::ports::{AgentRunStarter, Created, RunScope, RunsError, TurnRefus
 use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
-use super::AgentChatRequest;
 use super::chat_sampling::ChatSampling;
 use super::chat_turn::{ChatQuery, Drawing};
 use super::compose::{prepare_over, refuse_unavailable_drawing, take_permit};
 use super::device_tools::{self, Asked};
-use super::dto::AgentRequestConfig;
 use super::hub_model::{calls_tools, on_model, paired, turn_model};
 use super::launch::{LatePrepare, Transcript, launch_turn};
+use super::loop_request::{LoopRequest, NamedLimits};
 use super::remote_upstream;
 use super::run::{coded, settle_folder, with_code};
 use crate::bootstrap::AxumContext;
@@ -264,21 +263,20 @@ pub(super) async fn start(
 pub(super) fn late_on(
     state: AppState,
     model: String,
-    chat: AgentChatRequest,
+    chat: LoopRequest,
     asked: Asked,
     folder: Option<PathBuf>,
 ) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
-            let loaded = if chat.far.is_some() {
-                None
-            } else {
-                Some(on_model(&state, &model, &loading).await?)
+            let loaded = match &chat.far {
+                Some(far) => Err(far.clone()),
+                None => Ok(on_model(&state, &model, &loading).await?),
             };
             let chat = device_tools::settle(&state, chat, &asked).await;
             let upstream = match loaded {
-                None => remote_upstream::resolve(&state, &chat).await,
-                Some(loaded) => remote_upstream::through_endpoint(&state, &chat, loaded).await,
+                Err(far) => remote_upstream::far(&state, &far, &chat.saved).await,
+                Ok(loaded) => remote_upstream::through_endpoint(&state, &chat, loaded).await,
             };
             let upstream = upstream.map_err(with_code)?;
             Ok(prepare_over(&state, chat, upstream, folder).await)
@@ -311,8 +309,8 @@ pub(super) fn begin(
     launch_turn(state, id, scope, run, transcript, late, permit)
 }
 
-/// A turn read against the hub's record: the model it runs on, the chat
-/// request the loop is composed from, less the port, and where the run is saved,
+/// A turn read against the hub's record: the model it runs on, the
+/// request the loop is composed from, and where the run is saved,
 /// with what the chat is to remember of thinking and of its folder once it
 /// starts, what it asks of this machine's tools, settled once the run
 /// starts, and the folder gglib's file tools read in.
@@ -320,7 +318,7 @@ pub(super) struct Plan {
     /// This machine's model, as its catalogue resolves it; or, when
     /// `chat.far` names the paired machine's, the name the chat has for it.
     pub(super) model: String,
-    pub(super) chat: AgentChatRequest,
+    pub(super) chat: LoopRequest,
     pub(super) transcript: Transcript,
     pub(super) asked: Asked,
     /// A canonical path, on this machine's own turn only.
@@ -419,14 +417,11 @@ pub(super) async fn plan(
     } else {
         Asked::of_chat(&settings, turn.draw)
     };
-    let chat = AgentChatRequest {
-        port: 0,
+    let chat = LoopRequest {
         far,
         messages,
-        config: config_of(&settings),
+        limits: limits_of(&settings),
         tool_filter: asked.planned(),
-        model: None,
-        reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
         draw: turn.draw,
         image_model: turn.image_model,
@@ -451,18 +446,13 @@ pub(super) async fn plan(
     })
 }
 
-/// The loop's limits the conversation's settings name, if any.
-fn config_of(settings: &ConversationSettings) -> Option<AgentRequestConfig> {
-    let config = AgentRequestConfig {
+/// The loop's limits the conversation's settings name.
+const fn limits_of(settings: &ConversationSettings) -> NamedLimits {
+    NamedLimits {
         max_iterations: settings.max_iterations,
         max_parallel_tools: settings.max_parallel,
         tool_timeout_ms: settings.tool_timeout_ms,
-        ..AgentRequestConfig::default()
-    };
-    let named = config.max_iterations.is_some()
-        || config.max_parallel_tools.is_some()
-        || config.tool_timeout_ms.is_some();
-    named.then_some(config)
+    }
 }
 
 #[cfg(test)]

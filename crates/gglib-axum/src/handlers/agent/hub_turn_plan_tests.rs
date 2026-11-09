@@ -8,6 +8,7 @@ use super::hub_turn_tests::{CHAT_MODEL, chat, device, turn};
 use super::plan;
 use crate::handlers::agent::device_tools::Asked;
 use crate::handlers::agent::hub_model::model_for;
+use crate::handlers::agent::loop_request::NamedLimits;
 use crate::handlers::agent::run_fixture::state;
 
 #[tokio::test]
@@ -46,7 +47,7 @@ async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
     assert_eq!(wire, want);
     let held = state.core.models().get(CHAT_MODEL).await.unwrap().unwrap();
     assert_eq!(plan.model, held.id.to_string(), "the chat's, by its id");
-    assert!(plan.chat.config.is_none());
+    assert_eq!(plan.chat.limits, NamedLimits::default());
     assert_eq!(
         plan.chat.tool_filter,
         Some(Vec::new()),
@@ -70,7 +71,7 @@ async fn a_device_turn_is_planned_with_no_mcp_tool_whatever_its_chat_names() {
         .await
         .unwrap();
     assert_eq!(plan.chat.tool_filter, Some(Vec::new()));
-    assert_eq!(plan.chat.config.and_then(|c| c.max_iterations), Some(4));
+    assert_eq!(plan.chat.limits.max_iterations, Some(4));
 }
 
 /// Draw adds exactly the image tool's qualified name, and nothing without

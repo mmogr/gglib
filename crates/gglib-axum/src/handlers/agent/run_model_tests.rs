@@ -7,7 +7,7 @@ use gglib_core::ports::RunScope;
 
 use super::compose::{Prepared, take_permit};
 use super::hub_model::choose;
-use super::launch::launch;
+use super::run_fixture::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, prepared, saving, settled, state,
 };
@@ -41,7 +41,6 @@ async fn run(state: &AppState, scope: RunScope, id: &str, conversation: i64, p: 
         p,
         take_permit(state).expect("a free slot"),
     )
-    .await
     .expect("started");
     assert!(created.created);
     settled(state).await;

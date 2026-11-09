@@ -9,13 +9,13 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::{AttachmentStore, GenerationGate, RetryObserver, UsageSink};
+use gglib_core::ports::{AttachmentStore, RetryObserver, UsageSink};
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_core::retry::RetryPolicy;
 use gglib_core::secret::held;
 use reqwest::Client;
 
-use super::{DEFAULT_SEND_TIMEOUT_SECS, Door, LlmCompletionAdapter, SamplingObserver};
+use super::{DEFAULT_SEND_TIMEOUT_SECS, Door, LlmCompletionAdapter};
 
 fn completions_url(base_url: &str) -> String {
     format!("{}/v1/chat/completions", base_url.trim_end_matches('/'))
@@ -66,14 +66,12 @@ impl LlmCompletionAdapter {
                 agentic_adjustments: true,
                 ..SamplingLayers::default()
             },
-            sampling_observer: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             stream_idle_timeout: gglib_proxy::STREAM_IDLE_TIMEOUT,
             model_context: ModelContext::passthrough(),
             usage_sink: None,
             retry_policy: RetryPolicy::from_env(),
             retry_observer: None,
-            generation_gate: None,
             raw_passthrough: false,
             first_turn_tool_choice: None,
             first_turn_pending: AtomicBool::new(true),
@@ -91,8 +89,7 @@ impl LlmCompletionAdapter {
     /// llama-server on loopback.
     ///
     /// A send through a door is proxied: the endpoint shapes the request and
-    /// parses the model's dialect, so the adapter does neither, and takes no
-    /// generation turn. It still reads the images the messages name, writes
+    /// parses the model's dialect, so the adapter does neither. It still reads the images the messages name, writes
     /// the first call's `tool_choice`, and, for this machine's endpoint, the
     /// turn's limit.
     ///
@@ -154,16 +151,6 @@ impl LlmCompletionAdapter {
         self
     }
 
-    /// Tell `observer` what each request's sampling resolved to.
-    ///
-    /// Called once a request, after the pipeline has shaped it and before it
-    /// is sent. `None` (the default) tells nobody.
-    #[must_use]
-    pub fn with_sampling_observer(mut self, observer: Option<SamplingObserver>) -> Self {
-        self.sampling_observer = observer;
-        self
-    }
-
     /// Set the resolved per-model context, from
     /// [`gglib_core::request_pipeline::resolve()`].
     ///
@@ -215,20 +202,6 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_retry_observer(mut self, observer: Option<Arc<dyn RetryObserver>>) -> Self {
         self.retry_observer = observer;
-        self
-    }
-
-    /// Wait on `gate` for a generation turn before each send to this
-    /// machine's llama-server, and hold it until the reply's stream ends.
-    ///
-    /// Every chat on this machine's models passes the daemon's gate, so a
-    /// reply waits for an image render rather than sharing the GPU with it.
-    /// A send through a door ([`with_door`](Self::with_door)) takes no turn
-    /// whatever is set here. `None` (the default) waits on
-    /// nothing.
-    #[must_use]
-    pub fn with_generation_gate(mut self, gate: Option<Arc<dyn GenerationGate>>) -> Self {
-        self.generation_gate = gate;
         self
     }
 

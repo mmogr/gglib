@@ -7,7 +7,7 @@ use gglib_core::domain::runs::RunStatus;
 use gglib_core::ports::{RunScope, RunsPort as _};
 
 use crate::handlers::agent::compose::take_permit;
-use crate::handlers::agent::launch::launch;
+use crate::handlers::agent::run_fixture::launch;
 use crate::handlers::agent::run_fixture::{
     End, LOCAL, conversation, drain, finished_reply, logged, paced, saved, saving, settled, state,
 };
@@ -27,7 +27,6 @@ async fn forgetting_the_device_mid_turn_still_saves_the_reply() {
         p,
         take_permit(&state).unwrap(),
     )
-    .await
     .unwrap();
     logged(&state, "d1", 1).await;
     let reading = state.runs.events(&LOCAL, "d1", 0).unwrap();
