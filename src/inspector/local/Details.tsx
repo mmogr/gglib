@@ -17,6 +17,7 @@
 import { Fragment, useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { Check, ChevronRight, ExternalLink } from 'lucide-react';
 import { CopyValue } from '../../components/CopyValue';
+import { VERDICT_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
 import { Input } from '../../components/ui/Input';
@@ -34,7 +35,7 @@ import { tokens } from '../../readings/launchFit';
 import { SourceStatus } from './SourceStatus';
 import { Tags } from './Tags';
 import type { ModelDetailState } from './useModelDetail';
-import { checkVerdict, type Verification } from './useVerification';
+import type { Verification } from './useVerification';
 
 const OPEN_KEY = 'gglib.inspector.details';
 
@@ -205,8 +206,8 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, port, onUpdat
               {d?.downloadDate && <When at={d.downloadDate} before="downloaded " />}
               {(d?.revision || d?.downloadDate) && checkedAt && ' · '}
               {checkedAt && <When at={checkedAt} before="files checked " />}
-              {report && checkVerdict(report) === 'intact' && (
-                <Icon icon={Check} size={12} className="ml-xs align-middle text-success" role="img" aria-hidden={false} aria-label="intact" />
+              {report?.overall_health === 'healthy' && (
+                <Icon icon={Check} size={12} className="ml-xs align-middle text-success" role="img" aria-hidden={false} aria-label={VERDICT_WORDS.healthy} />
               )}
             </span>
             <div ref={source} className={status.kind === 'idle' ? undefined : 'mt-xs'}>

@@ -156,20 +156,36 @@ pub struct VerificationReport {
     pub overall_health: OverallHealth,
     /// Health status for each shard.
     pub shards: Vec<ShardHealthReport>,
+    /// The files a repair fetches again and the line saying how many;
+    /// `None` when no file is corrupt or missing.
+    pub damage: Option<Damage>,
     /// When the verification was performed.
     pub verified_at: chrono::DateTime<Utc>,
 }
 
-/// Overall health status for a model.
+/// The corrupt and missing files of a check, as [`Damage::of`] finds them.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct Damage {
+    /// Each damaged file's index among the model's files, which a repair
+    /// names it by.
+    pub files: Vec<usize>,
+    /// How many there are, as a person reads it: `2 files damaged`.
+    pub line: String,
+}
+
+/// A model's verdict after a file check, as [`OverallHealth::of`] gives
+/// it from each file's health.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum OverallHealth {
-    /// All shards are healthy.
+    /// At least one file was compared with its hash, and every file
+    /// compared matched; files with no hash may be among them.
     Healthy,
-    /// One or more shards are corrupt or missing.
+    /// One or more files are corrupt or missing.
     Unhealthy,
-    /// No OIDs available for verification.
+    /// Nothing was compared: no file has a hash to check against.
     Unverifiable,
 }
 
@@ -430,8 +446,6 @@ impl ModelVerificationService {
             // Hold the operation lock for the duration of the verification task
             let _guard = guard;
             let mut shard_reports = Vec::new();
-            let mut has_unhealthy = false;
-            let mut has_healthy_or_no_oid = false;
 
             for (index, (file, kind)) in model_files.iter().zip(kinds).enumerate() {
                 let place = FilePlace {
@@ -460,12 +474,6 @@ impl ModelVerificationService {
                     );
                 }
 
-                // Track overall health
-                match &health {
-                    ShardHealth::Corrupt { .. } | ShardHealth::Missing => has_unhealthy = true,
-                    ShardHealth::Healthy | ShardHealth::NoOid => has_healthy_or_no_oid = true,
-                }
-
                 shard_reports.push(ShardHealthReport {
                     index,
                     kind,
@@ -479,17 +487,10 @@ impl ModelVerificationService {
                     .await;
             }
 
-            let overall_health = if has_unhealthy {
-                OverallHealth::Unhealthy
-            } else if !has_healthy_or_no_oid {
-                OverallHealth::Unverifiable
-            } else {
-                OverallHealth::Healthy
-            };
-
             Ok(VerificationReport {
                 model_id,
-                overall_health,
+                overall_health: OverallHealth::of(shard_reports.iter().map(|s| &s.health)),
+                damage: Damage::of(&shard_reports),
                 shards: shard_reports,
                 verified_at: Utc::now(),
             })
