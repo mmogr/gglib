@@ -90,6 +90,7 @@ import { resetEngineInstall } from '../../../src/places/library/engineInstall';
 import { RESIDENCY_WORDS } from '../../../src/components/status/words';
 import { appLogger } from '../../../src/services/platform';
 import { REASONING_KEYS, SAMPLING_KEYS } from '../../../src/inspector/local/rows';
+import type { ContextFit } from '../../../src/types/generated/ContextFit';
 import type { LaunchPlan } from '../../../src/types/generated/LaunchPlan';
 import { renderApp } from './harness';
 import { guiModel } from '../fixtures/model';
@@ -148,17 +149,22 @@ describe('the inspector, a model on this machine', () => {
     serve('stopped');
   });
 
-  it('says the context it would serve, of the trained window, and a refusal as a refusal', async () => {
+  it('says the fit sentence the daemon serves, a refusal as a refusal, and the Context row its note', async () => {
     renderInspector();
-    expect(await screen.findByText('Fits this Mac with 32K context, of 128K trained.')).toBeInTheDocument();
+    expect(await screen.findByText('Fits this machine with 32K context, of 128K trained.')).toBeInTheDocument();
+    expect(row('Context')).toHaveTextContent('32,768 · fits (35.81 GiB of 48.00 GiB)');
     cleanup();
 
-    const fit = chatPlan().fit!;
-    explain.answer = launchExplanation(samplingExplanation(), chatPlan({ fit: { ...fit, servesAt: 4096, fitted: null, budgetBytes: null, source: 'built_in_default' } }));
+    // The fit Rust records for a machine whose memory could not be read.
+    const recorded = JSON.parse(rust('contracts/models/fit_sentence.json')) as ContextFit[];
+    const refused = recorded.find((f) => f.fitted === null && f.budgetBytes === null)!;
+    explain.answer = launchExplanation(samplingExplanation(), chatPlan({ fit: refused }));
     renderInspector();
     expect(
-      await screen.findByText("Serves at 4K context, of 128K trained; gglib could not fit one to this Mac: this Mac's memory could not be read."),
+      await screen.findByText("Serves at 4K context, of 128K trained; gglib could not fit one to this machine: this machine's memory could not be read."),
     ).toBeInTheDocument();
+    // A fit that did not know every figure has no note.
+    expect(row('Context').textContent).not.toContain('fit (');
   });
 
   it('groups the arguments by their decision, each row saying whose choice and why on hover', async () => {

@@ -111,6 +111,14 @@ pub struct ContextFit {
     /// The context that fit before snapping to a rung.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub unsnapped: Option<u64>,
+    /// The fit said in a sentence, from the figures above (composed by
+    /// [`ContextFit::new`]):
+    /// `Fits this machine with 32K context, of 128K trained.`
+    pub sentence: String,
+    /// What the served context needs against the budget, with the verdict:
+    /// `fits (35.81 GiB of 48.00 GiB)`; `None` when the fit did not know
+    /// every figure it works from.
+    pub note: Option<String>,
 }
 
 /// Why a launch unloads the model it names first.

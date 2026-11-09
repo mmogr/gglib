@@ -95,7 +95,7 @@ crates/gglib-cli/src/model_commands.rs 448
 crates/gglib-cli/src/presentation/explain_display.rs 413
 crates/gglib-cli/src/presentation/explain_display_tests.rs 687
 crates/gglib-cli/src/presentation/inspect_display.rs 319
-crates/gglib-cli/src/presentation/launch_display.rs 415
+crates/gglib-cli/src/presentation/launch_display.rs 450
 crates/gglib-cli/tests/llama_asks_first.rs 400
 crates/gglib-cli/tests/mcp_servers.rs 893
 crates/gglib-cli/tests/setup_scripts.rs 366

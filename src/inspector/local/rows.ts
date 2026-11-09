@@ -6,9 +6,8 @@
  * the same key (the words How it ran uses), else its arguments. Templates
  * has no decision of its own in the narration (its `flags` line also holds
  * the reasoning and embeddings flags), so it reads its arguments. The
- * Context row's note is composed from `ContextFit`'s figures (the fit
- * sentence is `readings/launchFit`'s); the Sampling and Reasoning rows count
- * the explanation's sources. Nothing is worked out that the daemon did not
+ * Context row's note is the daemon's (`plan.fit.note`); the Sampling and
+ * Reasoning rows count the explanation's sources. Nothing is worked out that the daemon did not
  * say.
  *
  * @module inspector/local/rows
@@ -17,11 +16,9 @@
 import { CHOICE_WORDS } from '../../components/status/words';
 import type { ProvenanceParamKey, SamplingExplanation, SamplingParamKey } from '../../types';
 import type { ChoiceSource } from '../../types/generated/ChoiceSource';
-import type { ContextFit } from '../../types/generated/ContextFit';
 import type { LaunchArg } from '../../types/generated/LaunchArg';
 import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import type { LaunchPlan } from '../../types/generated/LaunchPlan';
-import { formatSize } from '../../utils/format';
 import { PARAM_LABELS, describeSource, formatProvenanceValue, publishedByParam } from '../../utils/samplingProvenance';
 
 /**
@@ -122,17 +119,6 @@ const SOURCE_ORDER: ChoiceSource[] = ['model_author', 'gglib', 'you'];
 export function chosenBy(args: LaunchArg[]): string {
   const sources = SOURCE_ORDER.filter((s) => args.some((a) => a.source === s));
   return sources.length === 0 ? '' : `chosen by ${sources.map((s) => CHOICE_WORDS[s]).join(', ')}`;
-}
-
-/**
- * The Context row's note: what the served context needs (the weights and a
- * KV cache that size) against the budget, when the fit knew all three.
- */
-export function contextNote(fit: ContextFit | null): string | null {
-  if (!fit || fit.budgetBytes === null || fit.weightsBytes === null || fit.kvBytesPerToken === null) return null;
-  const need = fit.weightsBytes + fit.kvBytesPerToken * fit.servesAt;
-  const word = fit.fitted !== null && fit.servesAt <= fit.fitted ? 'fits' : 'does not fit';
-  return `${word} (${formatSize(need)} of ${formatSize(fit.budgetBytes)})`;
 }
 
 /** The fifteen sampler fields the Sampling row counts. */

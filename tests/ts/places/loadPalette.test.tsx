@@ -114,7 +114,7 @@ const LLAMA = model(3, 'Llama-3.2-3B');
 const FLUX = model(4, 'Flux-Schnell', { imageFamily: 'flux1', quantization: null });
 
 const fitting = (plan: Partial<LaunchPlan> = {}) => launchExplanation(samplingExplanation(), chatPlan(plan));
-const FIT_WORDS = 'Fits this Mac with 32K context, of 128K trained.';
+const FIT_WORDS = 'Fits this machine with 32K context, of 128K trained.';
 const UNLOAD_WORDS = 'Unloads Qwen3-30B-A3B first: it would not fit beside it.';
 
 /** Play a dashboard frame in which the models `loaded` names are resident. */

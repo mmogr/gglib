@@ -156,16 +156,7 @@ pub fn plan_launch(
         args,
         narration: planned.narration,
         unloads,
-        fit: fit.map(|(fitted, inputs)| ContextFit {
-            serves_at,
-            source,
-            fitted,
-            budget_bytes: inputs.budget_bytes,
-            weights_bytes: inputs.weights_bytes,
-            kv_bytes_per_token: inputs.kv_bytes_per_token,
-            trained_ctx: inputs.trained_ctx,
-            unsnapped: inputs.unsnapped,
-        }),
+        fit: fit.map(|(fitted, inputs)| ContextFit::new(serves_at, source, fitted, &inputs)),
     })
 }
 
