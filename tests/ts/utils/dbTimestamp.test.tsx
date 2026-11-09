@@ -157,7 +157,7 @@ describe('every place a database time is shown', () => {
     );
 
     expect(screen.getByText(/^files checked /)).toHaveAttribute('title', new Date(INSTANT).toLocaleString());
-    expect(screen.getByRole('img', { name: 'intact' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Healthy' })).toBeInTheDocument();
     localStorage.removeItem('gglib.inspector.details');
   });
 });

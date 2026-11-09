@@ -2,9 +2,10 @@
  * The line under Details › Source that a file check or an update check
  * writes: how far the check is (the file the daemon is hashing, with a 2 px
  * bar), then its answer and the one action it offers, or the daemon's
- * refusal with Retry. A file check's answer opens a list of every file,
- * closed until asked, each named by what it is and its health, a damaged
- * file's expected and actual hash on hover.
+ * refusal with Retry. A file check's answer is the daemon's verdict in its
+ * word, and opens a list of every file, closed until asked, each named by
+ * what it is and its health's word, a damaged file's expected and actual
+ * hash on hover.
  *
  * @module inspector/local/SourceStatus
  */
@@ -12,12 +13,12 @@
 import type { FC, ReactNode } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import { StatusMark } from '../../components/status/StatusMark';
+import { FILE_HEALTH_WORDS, VERDICT_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
 import type { VerificationReport } from '../../services/transport';
-import type { ShardHealth } from '../../types/generated/ShardHealth';
 import type { VerifiedFileKind } from '../../types/generated/VerifiedFileKind';
-import { checkVerdict, damagedFiles, type Verification } from './useVerification';
+import { damagedFiles, type Verification } from './useVerification';
 
 /** A file named by what it is, as `VerifiedFileKind::label` names it: a shard counted over the weights alone, from 1. */
 const fileLabel = (kind: VerifiedFileKind): string => {
@@ -29,14 +30,6 @@ const fileLabel = (kind: VerifiedFileKind): string => {
     case 'companion':
       return 'Companion';
   }
-};
-
-/** A file's health in the words `gglib model verify --per-shard` prints. */
-const HEALTH_WORDS: Readonly<Record<ShardHealth['type'], string>> = {
-  healthy: 'Healthy',
-  corrupt: 'Corrupt',
-  missing: 'Missing',
-  no_oid: 'No OID available',
 };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -73,28 +66,33 @@ const FileList: FC<{ report: VerificationReport }> = ({ report }) => (
         >
           <span className="shrink-0 text-text-secondary">{fileLabel(file.kind)}</span>
           <span className="min-w-0 flex-1 truncate font-mono">{file.file_path.split('/').pop()}</span>
-          <span className="shrink-0">{HEALTH_WORDS[file.health.type]}</span>
+          <span className="shrink-0">{FILE_HEALTH_WORDS[file.health.type]}</span>
         </li>
       ))}
     </ul>
   </details>
 );
 
+/** The daemon's verdict in its word, with Re-download for the damaged files when there are any. */
 const Verified: FC<{ v: Verification; report: VerificationReport }> = ({ v, report }) => {
+  const verdict = report.overall_health;
   const damaged = damagedFiles(report).length;
-  const verdict = checkVerdict(report);
   return (
     <>
-      {verdict === 'intact' && <Good>Files intact</Good>}
-      {verdict === 'damaged' && (
-        <Line>
-          <StatusMark kind="attention" word={`${plural(damaged, 'file', 'files')} damaged`} className="text-xs text-text" />
+      <Line>
+        <span role="status">
+          {verdict === 'healthy' ? (
+            <Good>{VERDICT_WORDS[verdict]}</Good>
+          ) : (
+            <StatusMark kind="attention" word={VERDICT_WORDS[verdict]} className="text-xs text-text" />
+          )}
+        </span>
+        {damaged > 0 && (
           <Action onClick={() => void v.repairDamaged(report)} disabled={v.busy}>
             {damaged === 1 ? 'Re-download it' : 'Re-download them'}
           </Action>
-        </Line>
-      )}
-      {verdict === 'nothing_compared' && <StatusMark kind="attention" word="No file has a hash to check against" className="text-xs text-text" />}
+        )}
+      </Line>
       <FileList report={report} />
     </>
   );

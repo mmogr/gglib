@@ -111,16 +111,6 @@ export function damagedFiles(report: VerificationReport) {
   return report.shards.filter((s) => s.health.type === 'corrupt' || s.health.type === 'missing');
 }
 
-/**
- * What a file check found, read from its files and not `overall_health`:
- * the daemon counts a file with no hash as healthy, so a model none of
- * whose files has one comes back `healthy` with nothing compared.
- */
-export function checkVerdict(report: VerificationReport): 'damaged' | 'nothing_compared' | 'intact' {
-  if (damagedFiles(report).length > 0) return 'damaged';
-  return report.shards.some((s) => s.health.type === 'healthy') ? 'intact' : 'nothing_compared';
-}
-
 export interface Verification {
   status: VerifyStatus;
   /** A repair or re-download being asked or queued. */

@@ -35,10 +35,10 @@ override field and `+ flag` wait for a Rust surface that sets any flag.
 
 ⋯ Verify files and Check for updates (the second only for a model from
 Hugging Face) start the check at once and open Details on Source, where
-its line is: the file the daemon is hashing, with a bar; then `✓ Files
-intact`, `▲ N files damaged [Re-download them]` with every file's health
-in a list opened from the line, or, when no file has a hash, that nothing
-was compared (the daemon calls that healthy, so the line reads the files);
+its line is: the file the daemon is hashing, with a bar; then the
+daemon's verdict in its word (`VERDICT_WORDS`): `✓ Healthy`, `▲ Unhealthy
+[Re-download them]`, or `▲ Unverifiable` when no file has a hash, with
+every file's health (`FILE_HEALTH_WORDS`) in a list opened from the line;
 for updates, up to date, or a newer revision with Download changed files
 and Re-download at latest…;
 a refusal in the daemon's words with Retry. Each repair and re-download asks
@@ -53,14 +53,13 @@ you", "Auto", "On", "Off", "Applies at next load.", "Didn't load:" and
 "Didn't unload:" (`utils/errors` `loadFailed`), "Copied" beside ⋯ after
 ⋯ › Copy path, "Drawing needs
 stable-diffusion.cpp.", and the verification line's "Checking files…",
-"Checking … N%", "Files intact", "N files damaged", "Re-download it/them",
-"No file has a hash to check against", "Checking for
+"Checking … N%", "Re-download it/them", "Checking for
 updates…", "Up to date", "A newer revision exists (may be README only)",
 "A newer revision exists: N files changed", "No revision is recorded for
 this model, so there is nothing to compare.", "Download changed files",
 "Re-download at latest…", "Sent to the download queue.", "Retry", and the confirms' words (kept from the verification
-dialog). The per-file health words are those `gglib model verify
---per-shard` prints, which no Rust function returns.
+dialog). The verdict and per-file health words are
+`OverallHealth::word` and `ShardHealth::word`, from `words.ts`.
 
 | File | Role |
 |------|------|
@@ -73,7 +72,7 @@ dialog). The per-file health words are those `gglib model verify
 | `rows.ts` | Pure: the decision labels, the rows of a plan, a row's value and hover, the caption, the Context note, the Sampling and Reasoning lines, and whether the person set them |
 | `Details.tsx` | Details ▸: file, source (with the verification line and the last file check), name and quant label (click to edit), architecture, trained context, tags, abilities, reasoning support, measured speed, the loaded server's llama-server port ("port 9001, internal"), raw GGUF metadata; open or closed remembered per viewer (the far model's Details share its fold, `Item` and `When`) |
 | `LogLink.tsx` | `▸ Log` on a loaded model: the label opens `/models/:id/log`, the server's last line follows it in tertiary mono, cut with an ellipsis |
-| `SourceStatus.tsx` | The line under Source a file check or update check writes: progress and bar, the answer and its action, the file list opened from it, a refusal with Retry |
+| `SourceStatus.tsx` | The line under Source a file check or update check writes: progress and bar, the daemon's verdict in its word and its action, the file list opened from it, a refusal with Retry |
 | `useVerification.ts` | Each model's file check and update check, held per model outside the inspector: the `verification` stream's progress, the daemon's answers, a later run overtaking an earlier, and the confirmed repair, changed-files download and re-download |
 | `Tags.tsx` | The tags as chips with ×, and a field that adds one |
 | `Abilities.tsx` | The four capability flags as boxes, with one footnote |

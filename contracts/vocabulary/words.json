@@ -80,5 +80,37 @@
       "state": "you",
       "word": "you"
     }
+  ],
+  "verdict": [
+    {
+      "state": "healthy",
+      "word": "Healthy"
+    },
+    {
+      "state": "unhealthy",
+      "word": "Unhealthy"
+    },
+    {
+      "state": "unverifiable",
+      "word": "Unverifiable"
+    }
+  ],
+  "file_health": [
+    {
+      "state": "healthy",
+      "word": "Healthy"
+    },
+    {
+      "state": "corrupt",
+      "word": "Corrupt"
+    },
+    {
+      "state": "missing",
+      "word": "Missing"
+    },
+    {
+      "state": "no_oid",
+      "word": "No OID available"
+    }
   ]
 }

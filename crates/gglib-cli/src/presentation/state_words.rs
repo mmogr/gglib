@@ -1,10 +1,12 @@
 //! The state words, written to `contracts/vocabulary/words.json`.
 //!
 //! `gglib_core::domain::state_words` is the one place a state's word lives,
-//! and `ChoiceSource::word` the one place a launch choice's source has its
-//! words. The test here writes every state and every source with its wire
-//! name and its word to the contract file, and fails when the file goes
-//! stale, so the GUI's word tables (held to that file by
+//! `ChoiceSource::word` the one place a launch choice's source has its
+//! words, and `OverallHealth::word` and `ShardHealth::word` the one place a
+//! file check's verdict and each file's health have theirs. The test here
+//! writes every state and every source with its wire name and its word to
+//! the contract file, and fails when the file goes stale, so the GUI's word
+//! tables (held to that file by
 //! `tests/ts/contracts/stateWords.test.ts`) cannot drift from what the CLI
 //! prints.
 
@@ -13,6 +15,7 @@ mod tests {
     use std::path::PathBuf;
 
     use gglib_core::domain::{ChoiceSource, EndpointState, KeyState, ReachState, ResidencyState};
+    use gglib_core::services::{OverallHealth, ShardHealth};
     use serde::Serialize;
 
     /// One state: its name on the wire and the word a person reads.
@@ -23,7 +26,8 @@ mod tests {
     }
 
     /// The tables as the file holds them, each in display order: the four
-    /// state tables, and whose choice a launch argument is.
+    /// state tables, whose choice a launch argument is, a file check's
+    /// verdict, and each file's health.
     #[derive(Serialize)]
     struct Words {
         endpoint: Vec<Recorded>,
@@ -31,6 +35,8 @@ mod tests {
         reach: Vec<Recorded>,
         key: Vec<Recorded>,
         choice: Vec<Recorded>,
+        verdict: Vec<Recorded>,
+        file_health: Vec<Recorded>,
     }
 
     fn row<S: Serialize>(state: S, word: &'static str) -> Recorded {
@@ -38,6 +44,17 @@ mod tests {
         let state = state
             .as_str()
             .expect("a state is a string on the wire")
+            .to_owned();
+        Recorded { state, word }
+    }
+
+    /// [`row`] for a state that is an object on the wire, named by its
+    /// `type` tag.
+    fn tagged_row<S: Serialize>(state: S, word: &'static str) -> Recorded {
+        let state = serde_json::to_value(&state).expect("serialise");
+        let state = state["type"]
+            .as_str()
+            .expect("a tagged state names its type")
             .to_owned();
         Recorded { state, word }
     }
@@ -55,6 +72,14 @@ mod tests {
             reach: ReachState::ALL.iter().map(|s| row(s, s.word())).collect(),
             key: KeyState::ALL.iter().map(|s| row(s, s.word())).collect(),
             choice: ChoiceSource::ALL.iter().map(|s| row(s, s.word())).collect(),
+            verdict: OverallHealth::ALL
+                .iter()
+                .map(|s| row(s, s.word()))
+                .collect(),
+            file_health: ShardHealth::all()
+                .iter()
+                .map(|s| tagged_row(s, s.word()))
+                .collect(),
         }
     }
 

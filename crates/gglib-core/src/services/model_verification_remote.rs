@@ -476,3 +476,7 @@ mod label_tests;
 #[cfg(test)]
 #[path = "model_verification_unknown_tests.rs"]
 mod unknown_tests;
+
+#[cfg(test)]
+#[path = "model_verification_health_tests.rs"]
+mod health_tests;

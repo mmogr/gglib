@@ -1,9 +1,10 @@
 /**
  * Verify files and Check for updates, from the inspector's ⋯: each opens
  * Details and writes its line under Source. The file check's progress comes
- * from the `verification` stream; its answer is intact, or damaged with a
- * re-download that asks first and names those files, and opens a list of
- * every file. The update check composes the revision check and the file
+ * from the `verification` stream; its answer is the daemon's verdict in
+ * its word (Healthy, Unhealthy with a re-download that asks first and names
+ * the damaged files, Unverifiable), and opens a list of every file with its
+ * health's word. The update check composes the revision check and the file
  * check: up to date, or a newer revision with Download changed files and
  * Re-download at latest…, each asking first. A refusal is the daemon's
  * words with Retry. A status is the model's own: it survives leaving the
@@ -137,6 +138,8 @@ async function pick(item: string) {
 }
 
 const details = () => screen.getByText('Details').closest('details')!;
+/** The file check's answer: the daemon's verdict in its word, on the line and not in the file list. */
+const VERDICT = { selector: '[role="status"] *' };
 const posts = (suffix: string) => post.mock.calls.filter(([path]) => path.endsWith(suffix));
 
 describe('verify and update results, in Details › Source', () => {
@@ -184,10 +187,10 @@ describe('verify and update results, in Details › Source', () => {
     expect(screen.getByRole('progressbar', { name: 'Files checked' })).toHaveAttribute('aria-valuenow', '45');
 
     run.answer(report([shard(0, { type: 'healthy' })], 'healthy'));
-    expect(await screen.findByText('Files intact')).toBeInTheDocument();
+    expect(await screen.findByText('Healthy', VERDICT)).toBeInTheDocument();
     // A late event from the run just answered does not undo the answer.
     emit(progress(9, 'Shard 3/3', 99));
-    expect(screen.getByText('Files intact')).toBeInTheDocument();
+    expect(screen.getByText('Healthy', VERDICT)).toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
@@ -201,7 +204,7 @@ describe('verify and update results, in Details › Source', () => {
       report([shard(0, { type: 'healthy' }), shard(1, { type: 'corrupt', expected, actual }), shard(2, { type: 'missing' })], 'unhealthy'),
     );
 
-    expect(await screen.findByText('2 files damaged')).toBeInTheDocument();
+    expect((await screen.findByText('Unhealthy', VERDICT)).closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
     // The list is closed until opened from the line.
     const list = screen.getByRole('list', { name: 'Files checked', hidden: true });
     expect(list.closest('details')).not.toHaveAttribute('open');
@@ -234,7 +237,7 @@ describe('verify and update results, in Details › Source', () => {
     renderInspector();
     await pick('Verify files');
     run.answer(report([shard(0, { type: 'missing' }), shard(1, { type: 'no_oid' })], 'unhealthy'));
-    expect(await screen.findByText('1 file damaged')).toBeInTheDocument();
+    expect(await screen.findByText('Unhealthy', VERDICT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Re-download it' })).toBeInTheDocument();
   });
 
@@ -271,9 +274,9 @@ describe('verify and update results, in Details › Source', () => {
     await act(() => router.navigate('/models/10'));
     await screen.findByRole('heading', { name: 'Qwen3-8B' });
     run.answer(report([shard(0, { type: 'healthy' })], 'healthy'));
-    expect(screen.queryByText('Files intact')).not.toBeInTheDocument();
+    expect(screen.queryByText('Healthy', VERDICT)).not.toBeInTheDocument();
     await act(() => router.navigate('/models/9'));
-    expect(await screen.findByText('Files intact')).toBeInTheDocument();
+    expect(await screen.findByText('Healthy', VERDICT)).toBeInTheDocument();
   });
 
   it('drops an answer that a later check on the model overtook', async () => {
@@ -416,29 +419,36 @@ describe('verify and update results, in Details › Source', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to start verification: No model files found for verification');
   });
 
-  it('says nothing was compared when no file has a hash, though the daemon calls that healthy', async () => {
+  it('says unverifiable when no file has a hash, as the daemon does', async () => {
     const run = pendingVerify();
     renderInspector();
     const user = await pick('Verify files');
-    // `verify_model_integrity` counts a file with no hash with the healthy ones.
-    run.answer(report([shard(0, { type: 'no_oid' }), shard(1, { type: 'no_oid' })], 'healthy'));
+    run.answer(report([shard(0, { type: 'no_oid' }), shard(1, { type: 'no_oid' })], 'unverifiable'));
 
-    expect(await screen.findByText('No file has a hash to check against')).toBeInTheDocument();
-    expect(screen.queryByText('Files intact')).not.toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: 'intact' })).not.toBeInTheDocument();
+    // Said with the attention mark, never the good news's ✓.
+    expect((await screen.findByText('Unverifiable', VERDICT)).closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
+    expect(screen.queryByText('Healthy', VERDICT)).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Healthy' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Re-download/ })).not.toBeInTheDocument();
     await user.click(screen.getByText('2 files'));
     const rows = within(screen.getByRole('list', { name: 'Files checked' })).getAllByRole('listitem');
     expect(rows[0]).toHaveTextContent(/No OID available$/);
   });
 
-  it('marks the files-checked time intact only after a check that compared a file', async () => {
+  it('marks the files-checked time healthy when the daemon says healthy, a file with no hash beside one that matched', async () => {
     const run = pendingVerify();
     renderInspector();
-    await pick('Verify files');
+    const user = await pick('Verify files');
     run.answer(report([shard(0, { type: 'healthy' }), shard(1, { type: 'no_oid' })], 'healthy'));
-    expect(await screen.findByText('Files intact')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'intact' })).toBeInTheDocument();
+    // Good news, with its ✓ and no attention mark.
+    expect((await screen.findByText('Healthy', VERDICT)).closest('[data-kind]')).toBeNull();
+    expect(screen.getByRole('img', { name: 'Healthy' })).toBeInTheDocument();
+    await user.click(screen.getByText('2 files'));
+    const rows = within(screen.getByRole('list', { name: 'Files checked' })).getAllByRole('listitem');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'Shard 1/3gemma-00001-of-00003.ggufHealthy',
+      'Shard 2/3gemma-00002-of-00003.ggufNo OID available',
+    ]);
   });
 
   it('sends one check when Verify files is picked twice', async () => {

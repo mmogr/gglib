@@ -160,16 +160,18 @@ pub struct VerificationReport {
     pub verified_at: chrono::DateTime<Utc>,
 }
 
-/// Overall health status for a model.
+/// A model's verdict after a file check, as [`OverallHealth::of`] gives
+/// it from each file's health.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum OverallHealth {
-    /// All shards are healthy.
+    /// At least one file was compared with its hash, and every file
+    /// compared matched; files with no hash may be among them.
     Healthy,
-    /// One or more shards are corrupt or missing.
+    /// One or more files are corrupt or missing.
     Unhealthy,
-    /// No OIDs available for verification.
+    /// Nothing was compared: no file has a hash to check against.
     Unverifiable,
 }
 
@@ -430,8 +432,6 @@ impl ModelVerificationService {
             // Hold the operation lock for the duration of the verification task
             let _guard = guard;
             let mut shard_reports = Vec::new();
-            let mut has_unhealthy = false;
-            let mut has_healthy_or_no_oid = false;
 
             for (index, (file, kind)) in model_files.iter().zip(kinds).enumerate() {
                 let place = FilePlace {
@@ -460,12 +460,6 @@ impl ModelVerificationService {
                     );
                 }
 
-                // Track overall health
-                match &health {
-                    ShardHealth::Corrupt { .. } | ShardHealth::Missing => has_unhealthy = true,
-                    ShardHealth::Healthy | ShardHealth::NoOid => has_healthy_or_no_oid = true,
-                }
-
                 shard_reports.push(ShardHealthReport {
                     index,
                     kind,
@@ -479,13 +473,7 @@ impl ModelVerificationService {
                     .await;
             }
 
-            let overall_health = if has_unhealthy {
-                OverallHealth::Unhealthy
-            } else if !has_healthy_or_no_oid {
-                OverallHealth::Unverifiable
-            } else {
-                OverallHealth::Healthy
-            };
+            let overall_health = OverallHealth::of(shard_reports.iter().map(|s| &s.health));
 
             Ok(VerificationReport {
                 model_id,
