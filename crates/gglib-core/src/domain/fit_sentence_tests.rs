@@ -217,6 +217,39 @@ fn a_refusal_with_every_figure_known_is_a_model_too_big_for_the_smallest_rung() 
 }
 
 #[test]
+fn a_context_served_at_the_whole_trained_window_is_of_it_not_more() {
+    let inputs = FitInputs {
+        trained_ctx: Some(32_768),
+        ..known()
+    };
+    let f = fit(32_768, Some(32_768), &inputs);
+    assert_eq!(
+        f.sentence,
+        "Fits this machine with 32K context, of 32K trained."
+    );
+}
+
+#[test]
+fn a_model_trained_for_less_than_the_smallest_rung_is_refused_for_it() {
+    let inputs = FitInputs {
+        trained_ctx: Some(2048),
+        unsnapped: None,
+        ..known()
+    };
+    let f = fit(4096, None, &inputs);
+    assert_eq!(
+        f.sentence,
+        "Serves at 4K context, more than the 2K it was trained for; gglib could not fit one \
+         to this machine: the smallest context gglib fits, 4K, is more than it was trained for."
+    );
+    // Memory is not why: the weights and a 4K cache fit.
+    assert_eq!(
+        f.note.as_deref(),
+        Some("fits (6.51 GiB of 43.20 GiB usable)")
+    );
+}
+
+#[test]
 fn a_context_that_is_not_whole_thousands_is_its_number_grouped() {
     let f = fit(30_000, Some(32_768), &known());
     assert_eq!(

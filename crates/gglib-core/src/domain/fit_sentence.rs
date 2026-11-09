@@ -12,6 +12,7 @@ use super::launch_plan::ContextFit;
 use super::recommendation::usable_share;
 use crate::download::format::format_size;
 use crate::server_config::ContextSizeSource;
+use crate::settings::DEFAULT_CONTEXT_SIZE;
 
 impl ContextFit {
     /// The fit of a context served at `serves_at` (from `source`), sized by
@@ -122,9 +123,10 @@ fn memory(fit: &ContextFit) -> Option<Memory> {
     })
 }
 
-/// What a refused fit was missing, from the figures that are `None`:
-/// `": a and b"`, or nothing when it knew them all (the smallest rung did
-/// not fit). What the model's header leaves out is one clause, so a model
+/// Why a fit was refused: each figure that is `None`, and a trained window
+/// below the smallest context the fit takes (`DEFAULT_CONTEXT_SIZE`), as
+/// `": a and b"`; nothing when neither holds (the smallest rung did not fit
+/// in memory). What the model's header leaves out is one clause, so a model
 /// that says neither reads "the model does not say what its context costs
 /// or what it was trained for".
 fn missing(fit: &ContextFit) -> String {
@@ -145,6 +147,14 @@ fn missing(fit: &ContextFit) -> String {
             .is_none()
             .then(|| "the weights' size is not known".to_owned()),
         model,
+        fit.trained_ctx
+            .filter(|&t| t < DEFAULT_CONTEXT_SIZE)
+            .map(|_| {
+                format!(
+                    "the smallest context gglib fits, {}, is more than it was trained for",
+                    tokens(DEFAULT_CONTEXT_SIZE)
+                )
+            }),
     ]
     .into_iter()
     .flatten()
