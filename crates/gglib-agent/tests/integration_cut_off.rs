@@ -178,7 +178,7 @@ async fn a_call_cut_off_mid_argument_ends_the_run_as_too_long() {
     let (_, events, _) = run(&llm, false).await;
     let errors = errors(&events);
     assert!(errors[0].contains("ran too long"), "{errors:?}");
-    assert!(errors[0].contains("after 16384 tokens"), "{errors:?}");
+    assert!(errors[0].contains("after 16,384 tokens"), "{errors:?}");
 }
 
 /// A call whose arguments happen to close is still cut off: it is not run,
