@@ -7,9 +7,9 @@
 //! claim about a model, and the split keeps both honest.
 //!
 //! Counters are cumulative and process-lifetime (they live on the proxy
-//! supervisor, like the agent cache metrics, so a proxy restart does not
-//! zero them). There is no windowing here, and no `delta` helper: nothing acts
-//! on these automatically (ADR 0006), and the one reader —
+//! supervisor, so a proxy restart does not zero them). There is no windowing
+//! here, and no `delta` helper: nothing acts on these automatically (ADR
+//! 0006), and the one reader —
 //! `gglib proxy dashboard` — shows the run's totals, which is the honest shape
 //! for a counter that resets with the process.
 //!

@@ -30,12 +30,6 @@ pub(super) struct DashboardSnapshot {
     /// resolves a model, and on a proxy older than this field.
     #[serde(default)]
     pub(super) cache: Option<CacheStatus>,
-    /// Agent-path prompt-cache reuse (GUI chat) — a separate
-    /// population from [`CacheStatus::usage`]. Top-level and always present,
-    /// since it does not depend on a resolved model; `default` on a proxy older
-    /// than this field.
-    #[serde(default)]
-    pub(super) agent_usage: CacheUsage,
     /// VRAM residency and the admission queue. `default` on a proxy older than
     /// this field, which renders as an empty resident set.
     #[serde(default)]

@@ -151,7 +151,6 @@ const FULL: Partial<DashboardSnapshot> = {
   admission: { ...dashboardSnapshot().admission, slots: [residentSlot(1, 'Qwen3-4B')] },
   launch: { model_name: 'Qwen3-4B', quantization: 'Q4_K_M', weights_bytes: 2_684_354_560, decisions: [{ label: 'Context', value: '8192', source: 'model author' }] },
   cache: CACHE,
-  agent_usage: { ...CACHE.usage, reporting_requests: 2 },
   sampling_audit: samplingAudit({ state: { state: 'blind', reason: 'no slot has reported yet' } }),
   per_model_defects: { 'Qwen3-4B': modelDefectCounts({ requests: 1 }) },
   slots_available: true,
@@ -278,7 +277,6 @@ describe('the diagnostics place', () => {
         'Loaded and queue',
         'Launch decisions',
         'Prompt cache',
-        'Agent cache',
         'Sampling readback',
         'Per-model signals',
         'Tune activity',
@@ -298,7 +296,7 @@ describe('the diagnostics place', () => {
       await waitFor(() => expect(reads.trips).toHaveBeenCalled());
       expect(sectionNames()).toEqual([]);
       expect(fold()).toHaveTextContent(
-        'Nothing yet: Requests · Loaded and queue · Launch decisions · Prompt cache · Agent cache · Sampling readback · Per-model signals · Tune activity · Slots · Loop-guard trips.',
+        'Nothing yet: Requests · Loaded and queue · Launch decisions · Prompt cache · Sampling readback · Per-model signals · Tune activity · Slots · Loop-guard trips.',
       );
       expect(fold()).toHaveClass('text-xs');
     });
@@ -308,7 +306,7 @@ describe('the diagnostics place', () => {
       await frame({ launch: FULL.launch, slots_available: true, slots_status: null, slots: FULL.slots });
       expect(sectionNames()).toEqual(['Launch decisions', 'Slots']);
       expect(fold()).toHaveTextContent(
-        'Nothing yet: Requests · Loaded and queue · Prompt cache · Agent cache · Sampling readback · Per-model signals · Tune activity · Loop-guard trips.',
+        'Nothing yet: Requests · Loaded and queue · Prompt cache · Sampling readback · Per-model signals · Tune activity · Loop-guard trips.',
       );
     });
 
@@ -322,8 +320,6 @@ describe('the diagnostics place', () => {
       ['Loaded and queue', { admission: { ...NONE.admission, generation: { render: null, llm_inflight: 0, waiting: 2 } } }],
       ['Loaded and queue', { admission: { ...NONE.admission, total_queued: 3 } }],
       ['Loaded and queue', { admission: { ...NONE.admission, total_swaps: 1 } }],
-      ['Agent cache', { agent_usage: { ...NONE.agent_usage, reporting_requests: 1 } }],
-      ['Agent cache', { agent_usage: { ...NONE.agent_usage, unreported_requests: 1 } }],
       ['Sampling readback', { sampling_audit: samplingAudit({ state: { state: 'comparing', comparisons: 2, divergences: 0 } }) }],
       ['Sampling readback', { sampling_audit: samplingAudit({ baseline: { state: 'unreadable', reason: '/props timed out' } }) }],
       ['Sampling readback', { sampling_audit: samplingAudit({ client_fields_discarded: 1 }) }],

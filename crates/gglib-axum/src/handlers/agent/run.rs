@@ -2,9 +2,10 @@
 //! this machine's turn and a paired device's): the codes its refusals
 //! carry, how a chat's folder is settled, and the run's work, the loop
 //! `/api/agent/chat` runs, owned by the daemon from start to end so closing
-//! the page no longer stops the reply. A slot of the agent semaphore (and,
-//! for a local model, a hold on it) is kept until the run ends, and each
-//! event is logged as the chat route's `data:` text.
+//! the page no longer stops the reply. A slot of the agent semaphore is
+//! kept until the run ends, and each event is logged as the chat route's
+//! `data:` text. The run holds no model: each of its requests goes through
+//! this machine's endpoint, which admits it.
 //!
 //! Nothing here logs or returns a frame, a request body or a tool argument:
 //! only ids, statuses and counts, and in a `folder_unusable` refusal the
@@ -14,14 +15,13 @@ use std::path::{Path, PathBuf};
 
 use axum::http::StatusCode;
 use tokio::sync::OwnedSemaphorePermit;
-use tokio::time::{Duration, Instant};
 
 use gglib_app_services::RunLog;
 use gglib_app_services::transcript::FrameTimes;
 use gglib_core::domain::agent::AgentEvent;
 use gglib_core::domain::folder;
 use gglib_core::domain::runs::RunError;
-use gglib_core::ports::{AdmissionLease, AgentError};
+use gglib_core::ports::AgentError;
 
 use super::compose::{Prepared, frame};
 use super::launch::RememberFolder;
@@ -107,17 +107,10 @@ pub(super) fn settle_folder(
     }
 }
 
-/// How often a held run reports progress on its hold: each report takes the
-/// queue's lock and wakes every waiter, so not once per event.
-pub(super) const PROGRESS_EVERY: Duration = Duration::from_secs(5);
-
 /// Run the loop, logging each event as the chat route frames it. Dropped
 /// when the run is cancelled, which aborts the loop and any tool call in
-/// flight and releases the permit and the model's hold.
-///
-/// Each event is progress on the hold, reported at most once every
-/// [`PROGRESS_EVERY`], so a request waiting behind the run is not given up
-/// as stalled while the run streams.
+/// flight, drops the reply it is reading, so the endpoint ends that request
+/// and releases its lease, and releases the permit.
 ///
 /// A tool's preview frame is never logged: it is kept beside the log as the
 /// run's latest (`RunLog::preview`) and forgotten in the step that logs that
@@ -137,10 +130,8 @@ pub(super) async fn work(
         tx,
         mut rx,
         made_by,
-        hold,
         ..
     } = prepared;
-    let progress = hold.as_ref().map(AdmissionLease::progress_handle);
     let run = async move {
         let outcome = agent_loop.run(messages, config, tx).await;
         // Its retry notices hold a sender, so the events end only once the
@@ -150,14 +141,7 @@ pub(super) async fn work(
     };
     let forward = async {
         let mut first = true;
-        let mut reported: Option<Instant> = None;
         while let Some(mut event) = rx.recv().await {
-            if let Some(progress) = &progress
-                && reported.is_none_or(|at| at.elapsed() >= PROGRESS_EVERY)
-            {
-                reported = Some(Instant::now());
-                progress.report();
-            }
             if std::mem::take(&mut first) {
                 log.started();
             }

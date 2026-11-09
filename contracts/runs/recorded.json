@@ -96,6 +96,15 @@
       "type": "final_answer"
     }
   ],
+  "model_load": {
+    "elapsed_ms": 1000,
+    "model": "Qwen3-4B",
+    "position": 0,
+    "reason": "model_load",
+    "step": 0,
+    "total": 0,
+    "type": "waiting"
+  },
   "list": {
     "runs": [
       {

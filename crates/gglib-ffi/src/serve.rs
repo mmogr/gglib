@@ -23,7 +23,6 @@ use std::net::Ipv4Addr;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{
     McpServerRepository, ModelCatalogPort, ModelRepository, ModelRuntimePort, SettingsRepository,
 };
@@ -160,7 +159,6 @@ pub(crate) async fn start(
         disk_budget: DiskBudget::Auto,
         host: HostFacts::none(),
         dashboard: false,
-        agent_metrics: Arc::new(CacheMetricsStore::new()),
         observers: ProxyObservers::default(),
         access: ProxyAccessConfig {
             api_key: Some(api_key.clone()),

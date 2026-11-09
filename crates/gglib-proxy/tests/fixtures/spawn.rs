@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gglib_core::ProxyAccessConfig;
-use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::InMemorySettings;
 use gglib_proxy::slot_eviction::DiskBudget;
 use gglib_proxy::{HostFacts, ProxyObservers, ServeConfig, StreamBounds, TEST_STREAM_BOUNDS};
@@ -54,7 +53,6 @@ pub(crate) async fn defaults() -> ServeConfig {
         disk_budget: DiskBudget::Auto,
         host: HostFacts::none(),
         dashboard: true,
-        agent_metrics: Arc::new(CacheMetricsStore::new()),
         observers: ProxyObservers::default(),
         access: ProxyAccessConfig::default(),
     }

@@ -167,14 +167,6 @@ const SNAPSHOT: DashboardSnapshot = {
   },
   per_model_defects: {},
   cache: null,
-  agent_usage: {
-    reporting_requests: 0,
-    unreported_requests: 0,
-    prompt_tokens: 0,
-    cached_tokens: 0,
-    last_prompt_tokens: null,
-    last_cached_tokens: null,
-  },
   launch: null,
   admission: {
     slots: [],

@@ -39,13 +39,12 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * The measured-reuse rows for one cache population, shared by the proxied
- * figure and the agent-path figure.
+ * The measured-reuse rows of the prompt cache.
  *
  * `hasMeasurements` distinguishes "nothing measured yet" from "measured, and it
  * was zero" — the backend keeps those apart, so the UI must not merge them.
  */
-export const CacheUsageRows: FC<{ usage?: CacheUsage | null }> = ({ usage }) => {
+const CacheUsageRows: FC<{ usage?: CacheUsage | null }> = ({ usage }) => {
   const hasMeasurements = (usage?.reporting_requests ?? 0) > 0;
 
   const hitRatePct =

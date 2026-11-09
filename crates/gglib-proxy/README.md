@@ -1081,7 +1081,6 @@ Diagnostics › Live (`src/places/diagnostics/live/`).
 | `recent_requests` | array | Last ≤ 20 requests processed by the truncation pipeline, oldest-first |
 | `total_requests` | `u64` | All requests since proxy start, including evicted ones |
 | `cache` | `object \| null` | Prompt-cache configuration for the running model; `null` until the first request resolves one |
-| `agent_usage` | `object` | Prompt-cache reuse for the in-process agent path (GUI chat), reported separately from `cache.usage` — see below |
 | `dialect_residue_total` | `u64` | Requests whose client-visible output carried dialect markup that survived normalization; eviction-safe |
 | `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued, with `tool_choice: "required"` or as a second draw under gglib's own grammar on a turn it constrained, counted whether or not the re-issue worked |
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
@@ -1191,15 +1190,14 @@ Prompt-cache reuse measured since the proxy started, sourced from
 `n_prompt_tokens_cache`). Both the streaming and non-streaming forward paths
 report, so neither is silently missing from the totals.
 
-**Scope: proxied `/v1/chat/completions` requests only.** GUI-chat runs bypass
-this crate's forward path — they compose an LLM adapter directly against the
-model's `base_url` — so their reuse is reported *separately* in the top-level
-[`agent_usage`](#agent_usage-cacheusage), never merged into this figure. That
-separation is deliberate: an agent turn issues many small tool-driven calls
-whose reuse characteristics are nothing like a user's conversation, and
-averaging the two would make this figure harder to interpret, not more
-complete. Routing those internal loops back through the user-facing
-proxy purely to collect telemetry would also be a U-turn for no benefit.
+**Scope: every `/v1/chat/completions` request this endpoint forwards.** Chat
+is a client of the endpoint: a turn on one of the daemon's chats, from the
+GUI, a paired phone or a phone-kept chat run with builtins, sends each of its
+requests here, with the endpoint's key, as any client does. So its reuse is in
+this one "Prompt cache" figure, beside every other client's, and there is no
+second, agent-path figure: a turn is shaped, guarded, admitted and counted
+here like the rest. (The chat route, `POST /api/agent/chat`, still talks to
+llama-server's port until it is retired, and is counted nowhere.)
 
 Raw counts only. Nothing is derived or extrapolated — in particular there is
 no "time saved" figure: reuse is measured exactly, but what it saved depends
@@ -1214,22 +1212,6 @@ numbers that are both real.
 | `cached_tokens` | `u64` | Total prompt tokens served from cache. Always `<= prompt_tokens` (an upstream figure above it is clamped) |
 | `last_prompt_tokens` | `u32 \| null` | Prompt tokens in the most recent reporting request; `null` before any |
 | `last_cached_tokens` | `u32 \| null` | Tokens reused in that same request. A `0` here is a measured full re-prefill, not missing data |
-
-#### `agent_usage` (`CacheUsage`)
-
-The same [`CacheUsage`](#cacheusage-cacheusage) shape as `cache.usage`, but a
-**separate population**: prompt-cache reuse for the in-process agent path —
-GUI chat — which reaches llama-server directly rather than through the forward
-path above. Recorded by tapping the shared LLM adapter's response stream
-(`gglib_core::ports::CacheMetricsSink`), so every agent collector is covered by
-one hook. Top-level rather than nested under `cache` because it does not depend
-on the proxy's cache configuration and surfaces even before a proxied request
-has resolved a model.
-
-CLI `gglib chat`/`q` (and standalone `gglib web`) run in a
-separate process with no dashboard, so their reuse is not reported here; the
-same `CacheMetricsSink` seam would let a future cross-process reporter fill that
-gap without changing the adapter.
 
 #### `active_connections[]` (`ActiveConnectionSnapshot`)
 

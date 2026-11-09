@@ -57,15 +57,20 @@ pub struct LlmCompletionAdapter {
     model: String,
     client: Client,
     /// The gglib endpoint this turn is going through, when it is going
-    /// through one: in this release only a paired machine's.
+    /// through one: this machine's own, or a paired machine's.
     ///
     /// `None` for a llama-server on loopback, which asks for nothing and has
-    /// no name. Set for the remote tunnel's loopback port (ADR 0012), which
-    /// is the far machine's proxy and demands its key; the listener there
-    /// does not inject one, so this side has to. Its identity rides along
-    /// with the key because a refusal from that machine has to name it —
-    /// see [`Door`]. Never logged: the adapter derives no `Debug`, and the
-    /// door's own `Debug` leaves the key out.
+    /// no name. Set for this machine's endpoint, which a chat turn dials as
+    /// any client does, and for the remote tunnel's loopback port (ADR
+    /// 0012), which is the far machine's proxy and demands its key; the
+    /// listener there does not inject one, so this side has to. Its identity
+    /// rides along with the key because a refusal from that machine has to
+    /// name it — see [`Door`]. Never logged: the adapter derives no `Debug`,
+    /// and the door's own `Debug` leaves the key out.
+    ///
+    /// A send through a door is *proxied*: the endpoint shapes it, parses
+    /// the model's dialect and takes its generation turn, so this side does
+    /// none of the three ([`Self::shaped_body`], [`Self::send`]).
     door: Option<Door>,
     /// Where the images a message names by id are read from (`images.rs`).
     /// `None` for a caller whose messages carry none.
@@ -242,6 +247,20 @@ impl LlmCompletionAdapter {
             return Ok(body);
         }
 
+        // Through a door the endpoint shapes the request, as it shapes any
+        // client's: it folds the sampling ladder over what the body names,
+        // trims to the context it serves, and writes the dialect's grammar.
+        // This side sends what a client sends, and the turn's limit.
+        // Only this machine's endpoint is given a limit: a paired machine's
+        // proxy resolves its own settings, and a limit from here would outrank
+        // them.
+        if self.door.is_some() {
+            if self.limit_turns && !self.door.as_ref().is_some_and(Door::is_far) {
+                turn_limit::limit_proxied_turn(&mut body, &self.model_context, &self.layers);
+            }
+            return Ok(body);
+        }
+
         // The same pipeline, in the same order, that the proxy runs, and the
         // one place this turn's sampling ladder is folded. `build_chat_body`
         // has already written the caller's own parameters into the body, which
@@ -276,9 +295,7 @@ impl LlmCompletionAdapter {
         if let Some(observe) = &self.sampling_observer {
             observe(&report.sampling);
         }
-        // Not through a door (today only a paired machine's): its proxy
-        // resolves that machine's settings, and a limit here would outrank them.
-        if self.limit_turns && self.door.is_none() {
+        if self.limit_turns {
             let reasoning = capability_tags::is_reasoning(&self.model_context.tags);
             turn_limit::limit_turn(&mut body, reasoning);
         }
@@ -342,7 +359,7 @@ impl LlmCompletionAdapter {
         // A send to this machine's llama-server waits for its generation
         // turn first, outside the send timer and the policy's deadline: an
         // image render can hold the GPU for longer than either. A send through
-        // a door (today only a paired machine's) takes none: that proxy counts it.
+        // a door takes none: the endpoint takes its own for the request.
         // A failed send below drops the turn at once.
         let gate = self
             .generation_gate
@@ -372,10 +389,16 @@ impl LlmCompletionAdapter {
 
         // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
         // The turn rides in the stream: the generation lasts as long as the
-        // reply does, not until its headers.
+        // reply does, not until its headers. Through a door the endpoint has
+        // already parsed the model's dialect into `OpenAI` tool calls.
+        let dialect = self
+            .model_context
+            .dialect
+            .as_ref()
+            .filter(|_| self.door.is_none());
         let events = stream::normalized_event_stream(
             response,
-            self.model_context.dialect.as_ref(),
+            dialect,
             self.usage_sink.clone(),
             self.stream_idle_timeout,
         );
@@ -386,6 +409,9 @@ impl LlmCompletionAdapter {
 #[cfg(test)]
 #[path = "first_call_tests.rs"]
 mod first_call_tests;
+#[cfg(test)]
+#[path = "proxied_tests.rs"]
+mod proxied_tests;
 #[cfg(test)]
 #[path = "shaping_tests.rs"]
 mod shaping_tests;

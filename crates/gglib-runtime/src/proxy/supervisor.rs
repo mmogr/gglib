@@ -22,7 +22,6 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use gglib_core::{ApiKeySource, CorsConfig, ProxyAccessConfig};
@@ -130,15 +129,11 @@ pub struct ProxySupervisor {
     handle: Mutex<Option<ProxyHandle>>,
     /// Watch channel for broadcasting proxy status changes (exit events).
     exit_tx: watch::Sender<ProxyStatus>,
-    /// Agent-path prompt-cache reuse store. Owned here — the supervisor is the
-    /// composition root that both the proxy (`serve`, for the dashboard) and
-    /// the embedded axum server (GUI chat, via [`Self::agent_metrics`]) reach —
-    /// so a single population survives proxy restarts within one process.
-    agent_metrics: Arc<CacheMetricsStore>,
     /// What every proxy run reports to — the per-model defect counters and,
-    /// in the daemon, the loop guard's log — owned here for the same reason
-    /// `agent_metrics` is: they must outlive any single proxy run, so a
-    /// diagnosis spanning several proxy restarts is still one population.
+    /// in the daemon, the loop guard's log — owned here, the composition root
+    /// both the proxy and the embedded axum server reach: they must outlive
+    /// any single proxy run, so a diagnosis spanning several proxy restarts
+    /// is still one population.
     observers: gglib_proxy::ProxyObservers,
 }
 
@@ -170,19 +165,8 @@ impl ProxySupervisor {
         Self {
             handle: Mutex::new(None),
             exit_tx,
-            agent_metrics: Arc::new(CacheMetricsStore::new()),
             observers,
         }
-    }
-
-    /// The agent-path prompt-cache reuse store shared with the proxy dashboard.
-    ///
-    /// The embedded axum server (GUI chat) records into this so its reuse lands
-    /// on `/v1/proxy/status`'s `agent_usage`. Cloning is
-    /// cheap; the store lives for the supervisor's lifetime.
-    #[must_use]
-    pub fn agent_metrics(&self) -> Arc<CacheMetricsStore> {
-        Arc::clone(&self.agent_metrics)
     }
 
     /// Where an agent loop running in this process reports its guard decisions.
@@ -302,7 +286,6 @@ impl ProxySupervisor {
         let default_profile = config.default_profile;
         let started_override = inference_override.clone();
         let started_default_profile = default_profile.clone();
-        let agent_metrics = Arc::clone(&self.agent_metrics);
         let observers = self.observers.clone();
         let exit_tx = self.exit_tx.clone();
 
@@ -332,7 +315,6 @@ impl ProxySupervisor {
                 disk_budget,
                 host: crate::system::host_facts(),
                 dashboard: true,
-                agent_metrics,
                 observers,
                 access,
             })

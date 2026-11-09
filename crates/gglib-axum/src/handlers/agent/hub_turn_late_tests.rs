@@ -88,7 +88,7 @@ fn slow(
     let loaded = Arc::clone(loaded);
     Box::new(move |loading| {
         Box::pin(async move {
-            loading.waiting();
+            loading.waiting("qwen");
             loaded.notified().await;
             let (mut p, _) = prepared(finished_reply(), End::Finish);
             p.messages = messages;
@@ -240,40 +240,32 @@ async fn a_refused_first_write_saves_no_reply() {
     assert_eq!(saved(&state, id).await.len(), 2, "no row was written");
 }
 
-/// A turn whose model is gone from its port by the time it is held, stopped
-/// or swapped since it was found, is refused at the hold: the run ends
-/// `failed` with that refusal, and neither the message nor a reply was
-/// written, because the rows are written only once the model is held. The
-/// hold is the run's late step's, before its loop is composed, as
-/// `late_on` takes it once the model is found.
+/// A turn whose endpoint cannot be turned on, its port held by another
+/// process, ends `failed` with the endpoint's own reason, coded `conflict`,
+/// and neither the message nor a reply was written: the rows are written
+/// only once the loop is composed. The door is opened in the run's late
+/// step, once its model is loaded, as `late_on` opens it.
 #[tokio::test]
-async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
-    use crate::handlers::agent::{compose::held_over, remote_upstream::local, run::with_code};
+async fn a_refusal_at_the_endpoint_ends_the_run_failed_and_writes_no_row() {
+    use crate::handlers::agent::{remote_upstream::this_machines_door, run::with_code};
 
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
+    let held = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = held.local_addr().unwrap().port();
+    let update = gglib_core::SettingsUpdate {
+        proxy_port: Some(Some(port)),
+        ..gglib_core::SettingsUpdate::default()
+    };
+    state.core.settings().update(update).await.unwrap();
     let plan = plan(&state, &device("phone"), turn(id, "second"), None)
         .await
         .unwrap();
-    let mut chat = plan.chat;
-    chat.port = 19_555;
-    // A local model on a port where nothing runs: the runtime holds none.
-    let server = gglib_app_services::types::ServerInfo {
-        model_id: 7,
-        model_name: "qwen".to_owned(),
-        pid: None,
-        port: 19_555,
-        started_at: 0,
-        runtime: gglib_core::domain::RuntimeKind::Llama,
-        launch: None,
-    };
     let at = Arc::clone(&state);
     let late: LatePrepare = Box::new(move |_| {
         Box::pin(async move {
-            let upstream = local(&at, &chat, server).await?;
-            held_over(&at, chat, upstream, None)
-                .await
-                .map_err(with_code)
+            this_machines_door(&at).await.map_err(with_code)?;
+            unreachable!("the endpoint's port is held");
         })
     });
 
@@ -288,16 +280,87 @@ async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
     )
     .unwrap();
 
-    assert_eq!(failed_with(&state, "phone", "d1").await, "unavailable");
+    assert_eq!(failed_with(&state, "phone", "d1").await, "conflict");
     let run = state
         .runs
         .existing(&device("phone"), "d1")
         .unwrap()
         .unwrap();
     let message = run.error.unwrap().message;
-    assert!(message.contains("stopped or swapped"), "{message}");
+    assert!(message.contains("already in use"), "{message}");
     assert_eq!(saved(&state, id).await.len(), 2, "no row was written");
     let (events, end) = drain(state.runs.events(&device("phone"), "d1", 0).unwrap()).await;
     assert_eq!(events, 0, "the loop never ran");
     assert_eq!(end.map(|info| info.status), Some(RunStatus::Failed));
+    drop(held);
+}
+
+/// A cold load's wait names the model being loaded, and is said again each
+/// second with how long the load has taken, so a client that joins part-way
+/// can say "Loading Qwen3-4B… 2 s". Once loaded, nothing more is said of it.
+#[tokio::test]
+async fn a_loads_wait_names_its_model_and_says_how_long_each_second() {
+    use crate::handlers::agent::launch::{LOAD_TICK, Transcript};
+
+    let (_dir, state) = state().await;
+    // Paused once the database is open, and nothing here writes to it: a
+    // paused clock jumps ahead to a pool's timeouts while it waits on its
+    // worker thread.
+    tokio::time::pause();
+    let loaded = Arc::new(Notify::new());
+    let waiting = Arc::clone(&loaded);
+    let late: LatePrepare = Box::new(move |loading| {
+        Box::pin(async move {
+            loading.waiting("Qwen3-4B");
+            waiting.notified().await;
+            Ok(prepared(finished_reply(), End::Finish).0)
+        })
+    });
+    let unsaved = Transcript {
+        conversation_id: None,
+        answer_saved: false,
+        remember: None,
+        remember_folder: None,
+    };
+
+    begin(
+        &state,
+        device("phone"),
+        "d1",
+        "qwen".to_owned(),
+        unsaved,
+        late,
+        take_permit(&state).unwrap(),
+    )
+    .unwrap();
+    tokio::time::sleep(LOAD_TICK * 5 / 2).await;
+    loaded.notify_one();
+    settled(&state).await;
+
+    let mut events = state.runs.events(&device("phone"), "d1", 0).unwrap();
+    let mut waits = Vec::new();
+    while let Some(event) = futures_util::StreamExt::next(&mut events).await {
+        match event {
+            RunEvent::Frame { data, .. } => {
+                let frame: serde_json::Value = serde_json::from_str(&data).unwrap();
+                if frame["type"] == "waiting" {
+                    waits.push(frame);
+                }
+            }
+            RunEvent::End(_) => break,
+            RunEvent::Preview { .. } => {}
+        }
+    }
+    // In whole seconds: the clock's timers round up to the millisecond.
+    let said: Vec<(&str, u64)> = waits
+        .iter()
+        .map(|w| {
+            (
+                w["model"].as_str().unwrap(),
+                w["elapsed_ms"].as_u64().unwrap() / 1000,
+            )
+        })
+        .collect();
+    assert_eq!(said, [("Qwen3-4B", 0), ("Qwen3-4B", 1), ("Qwen3-4B", 2)]);
+    assert!(waits.iter().all(|w| w["reason"] == "model_load"));
 }

@@ -1,6 +1,8 @@
-//! A daemon turn for a test: a chat route request and a paired device's
-//! turn, each read as its door reads it, run as `prepare` runs it once its model is
-//! found on a port, against a model server that records what it is sent.
+//! A daemon turn for a test: a chat route request, run as `prepare` runs it
+//! once its model is found on a port, and a turn on one of this machine's
+//! chats or a device's, run as `late_on` runs it once its model is loaded:
+//! through this machine's endpoint. Each against a server that records what
+//! it is sent, standing in for llama-server or for the endpoint.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -15,9 +17,9 @@ use gglib_core::domain::{
 use gglib_core::settings::SettingsUpdate;
 use serde_json::{Value, json};
 
-use super::compose::{Prepared, held_over, prepare_over};
+use super::compose::{Prepared, prepare_over};
 use crate::handlers::agent::AgentChatRequest;
-use crate::handlers::agent::remote_upstream::local;
+use crate::handlers::agent::remote_upstream::{endpoint, local};
 use crate::handlers::agent::run_fixture::device;
 use crate::handlers::remote::fake_far::far;
 use crate::state::AppState;
@@ -42,10 +44,14 @@ pub(super) const DRAWS: &str = concat!(
 /// The built-in tool, as a tool filter names it.
 pub(super) const TOOL: &str = "builtin:get_current_time";
 
-/// What a turn did: each request its model server received, the events its
-/// loop sent, and whether the loop ended well.
+/// The key this machine's endpoint demands in a test's turn through it.
+pub(super) const ENDPOINT_KEY: &str = "sk-this-machines-endpoint";
+
+/// What a turn did: each request its model server received, the bearer each
+/// carried, the events its loop sent, and whether the loop ended well.
 pub(super) struct Turn {
     pub(super) requests: Vec<Value>,
+    pub(super) bearers: Vec<Option<String>>,
     pub(super) events: Vec<AgentEvent>,
     pub(super) ended_well: bool,
 }
@@ -65,10 +71,10 @@ pub(super) async fn turn(
 enum Prep {
     /// As `prepare_over` prepares it, with this folder.
     Over(Option<PathBuf>),
-    /// As `held_over` prepares a run, for `hub_turn::late_on`'s turns: its
-    /// model held on `state.runtime` before the loop is composed,
-    /// with no folder.
-    Held,
+    /// As `hub_turn::late_on` prepares a turn once its model is loaded:
+    /// through this machine's endpoint, which the server stands in for,
+    /// demanding [`ENDPOINT_KEY`], with no folder.
+    Endpoint,
 }
 
 /// [`turn`], prepared as `prep` says.
@@ -93,10 +99,21 @@ async fn turn_as(
         runtime: gglib_core::domain::RuntimeKind::Llama,
         launch: None,
     };
-    let upstream = local(state, &chat, server).await.unwrap();
     let prepared = match prep {
-        Prep::Over(folder) => prepare_over(state, chat, upstream, folder).await,
-        Prep::Held => held_over(state, chat, upstream, None).await.unwrap(),
+        Prep::Over(folder) => {
+            let upstream = local(state, &chat, server).await.unwrap();
+            prepare_over(state, chat, upstream, folder).await
+        }
+        Prep::Endpoint => {
+            let door = gglib_runtime::Door {
+                root_url: root,
+                key: Some(ENDPOINT_KEY.to_owned()),
+                name: None,
+            };
+            let loaded = super::hub_model::Loaded { id: model_id, port };
+            let upstream = endpoint(state, &chat, loaded, door).await.unwrap();
+            prepare_over(state, chat, upstream, None).await
+        }
     };
     let Prepared {
         agent_loop,
@@ -126,6 +143,7 @@ async fn turn_as(
         .collect();
     Turn {
         requests,
+        bearers: seen.into_iter().map(|request| request.bearer).collect(),
         events,
         ended_well: ended.is_ok(),
     }
@@ -136,18 +154,24 @@ pub(super) async fn sent(state: &AppState, model_id: i64, chat: AgentChatRequest
     sent_as(state, model_id, chat, Prep::Over(None)).await
 }
 
-/// [`sent`], for a run that holds its model on `state.runtime`.
-pub(super) async fn sent_held(state: &AppState, model_id: i64, chat: AgentChatRequest) -> Value {
-    sent_as(state, model_id, chat, Prep::Held).await
-}
-
-/// [`sent`], for a paired device's turn once its model is found.
-pub(super) async fn sent_by_device(
+/// [`sent`], for a turn on one of this machine's chats or a device's once
+/// its model is loaded: the body this machine's endpoint receives.
+pub(super) async fn sent_through_endpoint(
     state: &AppState,
     model_id: i64,
     chat: AgentChatRequest,
 ) -> Value {
-    sent_as(state, model_id, chat, Prep::Held).await
+    sent_as(state, model_id, chat, Prep::Endpoint).await
+}
+
+/// [`turn`], through this machine's endpoint as [`sent_through_endpoint`].
+pub(super) async fn turn_through_endpoint(
+    state: &AppState,
+    model_id: i64,
+    chat: AgentChatRequest,
+    reply: &str,
+) -> Turn {
+    turn_as(state, model_id, chat, reply, Prep::Endpoint).await
 }
 
 /// [`sent`], for a run whose folder is `folder`.
@@ -290,20 +314,19 @@ pub(super) fn hi(conversation_id: i64) -> HubTurn {
     }
 }
 
-/// The same turn from each door: a chat route request, and a paired
-/// device's on a chat of `model_id`. With [`TOOL`] when `tools`, and otherwise none.
+/// The turn from each door that shapes it here: the chat route's request
+/// (`POST /api/agent/chat`), which posts to llama-server's port. With
+/// [`TOOL`] when `tools`, and otherwise none. A turn on a hub chat goes
+/// through this machine's endpoint, which shapes it as it shapes any
+/// client's ([`sent_through_endpoint`]).
 pub(super) async fn doors(
     state: &AppState,
-    model_id: i64,
+    _model_id: i64,
     tools: bool,
-) -> [(&'static str, AgentChatRequest); 2] {
+) -> [(&'static str, AgentChatRequest); 1] {
     let filter: Vec<String> = tools.then(|| TOOL.to_owned()).into_iter().collect();
     let page = page(state, json!({ "tool_filter": &filter })).await;
-    let mut phone = phone(state, model_id).await;
-    // As a device's plan would hold it were it offered this tool; the
-    // filter, not where it came from, is what these tests are about.
-    phone.tool_filter = Some(filter);
-    [("the page", page), ("a paired device", phone)]
+    [("the page", page)]
 }
 
 pub(super) fn carries_tools(body: &Value) -> bool {

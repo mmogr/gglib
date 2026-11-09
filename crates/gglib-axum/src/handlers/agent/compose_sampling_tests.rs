@@ -1,8 +1,9 @@
-//! What a daemon turn samples with: a chat route request and a paired device's
-//! turn. The served model's own values and this machine's global defaults
-//! are folded beneath what the request names, by the rules `gglib chat` and
-//! the proxy resolve by, so a turn that names nothing sends what
-//! `gglib model explain` reports.
+//! What the chat route's turn samples with. The served model's own values
+//! and this machine's global defaults are folded beneath what the request
+//! names, by the rules `gglib chat` and the proxy resolve by, so a turn that
+//! names nothing sends what `gglib model explain` reports. A turn on a hub
+//! chat goes through this machine's endpoint, which folds the same ladder
+//! (`compose_endpoint_tests`).
 
 use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
 use serde_json::json;
@@ -14,7 +15,7 @@ use crate::handlers::agent::turn_fixture::{
 };
 
 #[tokio::test]
-async fn a_global_temperature_is_sent_by_the_page_and_by_a_paired_device() {
+async fn a_global_temperature_is_sent_by_the_page() {
     let (_dir, state) = state().await;
     let id = model(&state, |_| {}).await;
     global(&state, temperature(0.42)).await;
@@ -83,7 +84,7 @@ async fn an_ordinary_model_with_nothing_chosen_is_sent_no_temperature() {
     }
 }
 
-/// Both doors follow this machine's agentic sampling switch. Stored off, a
+/// The chat route follows this machine's agentic sampling switch. Stored off, a
 /// turn with tools is sent the temperature it resolves to: the 0.9 of a
 /// recipe nobody here reviewed, or none at all for a model with nothing.
 /// Stored on, or not stored, the recipe's is capped; nothing is still sent
@@ -110,7 +111,7 @@ async fn a_turn_with_tools_is_capped_unless_agentic_sampling_is_stored_off() {
                 assert!(carries_tools(&body), "{door}");
                 sent_from.push((door, body["temperature"].clone()));
             }
-            let each = [("the page", json!(want)), ("a paired device", json!(want))];
+            let each = [("the page", json!(want))];
             assert_eq!(sent_from, each, "stored {switch:?}");
         }
     }
@@ -178,7 +179,7 @@ async fn a_turn_that_names_nothing_sends_what_model_explain_reports() {
 }
 
 /// A loop turn on a model nothing names a `max_tokens` for is limited to
-/// 16384 tokens at both doors, with tools and without, so a turn the model
+/// 16384 tokens, with tools and without, so a turn the model
 /// never ends stops there. A limit this machine's settings name is sent
 /// instead, above that or below it.
 #[tokio::test]

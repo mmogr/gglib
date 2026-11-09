@@ -17,9 +17,10 @@ reachable host (Docker networks, remote servers, CI environments).
 
 The adapter sends nothing by default: a llama-server on loopback asks for
 nothing. [`LlmCompletionAdapter::with_door`] adds `Authorization: Bearer …` to
-every request, for an upstream that is a gglib endpoint — today the remote
-tunnel's loopback port, which is another machine's proxy (ADR 0012) and whose
-listener deliberately injects no credential of its own. The token is held in a
+every request, for an upstream that is a gglib endpoint: this machine's own,
+which a chat turn dials as any client does, or the remote tunnel's loopback
+port, which is another machine's proxy (ADR 0012) and whose listener
+deliberately injects no credential of its own. The token is held in a
 field the struct never prints: the adapter derives no `Debug`, and
 [`Door`]'s `Debug` leaves the key out.
 
@@ -30,6 +31,18 @@ the result to holds a URL that is loopback either way — so the identity comes
 down with the key, and the send loop can say in the door's words when the
 endpoint turns the key away. See `retry/` for what it then says, and for why
 nothing may key on the refusal code alone.
+
+# Through a door
+
+A send through a door is proxied: the endpoint runs the request pipeline
+over it as it does over any client's request, so the adapter does not. It
+folds no sampling ladder (the person's own choice, written into the body,
+reaches the endpoint as a client's: thinking off is
+`reasoning_budget_tokens: 0`), merges no turns, trims nothing and writes no
+grammar; the first call's `tool_choice` goes as it was written. The reply
+comes back with the dialect's markup already parsed into `OpenAI` tool
+calls, so no dialect parser runs over it. The images a message names are
+still read here, since the endpoint takes them inline.
 
 # Images
 
@@ -92,8 +105,13 @@ exception and are always answered for. The limit is written after the ladder is
 folded, so the sampling observer, and `gglib model explain`, do not report it.
 A send to another machine is not limited: a run on a paired machine's model
 gets no limit from this side, and that machine's proxy applies its own
-settings for the model, as it would for any client that names none. An adapter
-without it, such as a benchmark arm's, sends none.
+settings for the model, as it would for any client that names none. A send
+through this machine's endpoint is: the endpoint takes `max_tokens` as the
+client's own budget whatever it trusts, so a limit written here would
+outrank one its ladder names. The ladder is folded on a copy, with the
+layers and model the endpoint folds with, and the limit is written only when
+that fold names no `max_tokens`. An adapter without it, such as a benchmark
+arm's, sends none.
 
 # Generation turns
 
@@ -103,9 +121,10 @@ machine's llama-server waits on the daemon's generation gate
 before the send, outside the send timer and the retry policy's deadline,
 and is reported through the retry observer. The turn rides inside the
 returned stream and ends when the reply ends or is dropped, not when its
-headers arrive. A send to another machine takes no turn here: that
-machine's proxy counts it. A caller with no gate, such as a benchmark arm,
-waits on nothing.
+headers arrive. A send through a door takes no turn here: the endpoint takes
+its own for each request it forwards, and a turn here would make the reply
+wait on itself. A caller with no gate, such as a benchmark arm, waits on
+nothing.
 
 # Layout
 

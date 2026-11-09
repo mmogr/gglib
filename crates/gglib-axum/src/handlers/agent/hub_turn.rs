@@ -14,8 +14,8 @@
 //! thinking off
 //! when the turn says so or the chat remembers it (`thinking`). The reply
 //! runs on the chat's model, loaded as `/v1/models/{name}/load` loads it
-//! when it is not running, as an agent run in the turn's scope, saved to
-//! the chat.
+//! when it is not running, as an agent run in the turn's scope whose every
+//! request goes through this machine's endpoint, saved to the chat.
 //!
 //! The scopes differ in three things only:
 //!
@@ -55,7 +55,7 @@ use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
 use super::chat_turn::{ChatQuery, Drawing};
-use super::compose::{held_over, refuse_unavailable_drawing, take_permit};
+use super::compose::{prepare_over, refuse_unavailable_drawing, take_permit};
 use super::device_tools::{self, Asked};
 use super::dto::AgentRequestConfig;
 use super::hub_model::{calls_tools, on_model, paired, turn_model};
@@ -248,12 +248,18 @@ pub(super) async fn start(
 /// What a run on `model` does once it exists: find the model on its port
 /// or load it, unless it is the paired machine's (`chat.far`), settle the
 /// tools it is offered as `asked` (starting an MCP server open to devices
-/// that is not running, for a device's run), then hold the model and
-/// compose `chat`'s loop with gglib's file tools reading `folder`. A
-/// device's run has none: a folder is this machine's choice, and a device's
-/// turn reaches no tool of this machine's but the image tool its Draw asks
-/// for and the tools of the servers open to devices (ADR 0025), which name
-/// no file tool.
+/// that is not running, for a device's run), then compose `chat`'s loop
+/// with gglib's file tools reading `folder`. A device's run has none: a
+/// folder is this machine's choice, and a device's turn reaches no tool of
+/// this machine's but the image tool its Draw asks for and the tools of the
+/// servers open to devices (ADR 0025), which name no file tool.
+///
+/// A loop on this machine's model dials this machine's endpoint, turning it
+/// on when it is off, as any client does (`remote_upstream::endpoint`): its
+/// requests are shaped, guarded and counted there, and are in its ledger.
+/// The model is loaded first, so the wait has a name, then the run holds
+/// nothing: each request is admitted by the endpoint, and a model swapped
+/// out between two of them is loaded again by the next.
 pub(super) fn late_on(
     state: AppState,
     model: String,
@@ -263,17 +269,18 @@ pub(super) fn late_on(
 ) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
-            let chat = if chat.far.is_some() {
-                chat
+            let loaded = if chat.far.is_some() {
+                None
             } else {
-                on_model(&state, &model, chat, &loading).await?
+                Some(on_model(&state, &model, &loading).await?)
             };
             let chat = device_tools::settle(&state, chat, &asked).await;
-            let upstream = remote_upstream::resolve(&state, &chat).await;
+            let upstream = match loaded {
+                None => remote_upstream::resolve(&state, &chat).await,
+                Some(loaded) => remote_upstream::through_endpoint(&state, &chat, loaded).await,
+            };
             let upstream = upstream.map_err(with_code)?;
-            held_over(&state, chat, upstream, folder)
-                .await
-                .map_err(with_code)
+            Ok(prepare_over(&state, chat, upstream, folder).await)
         })
     })
 }
@@ -286,11 +293,10 @@ pub(super) async fn shown_model(state: &AppState, model: &str) -> String {
 }
 
 /// Start the run `id` on `model`, reserved in `scope` before `late` finds
-/// or loads the model and composes the loop. The run
-/// then holds its model and is saved as `transcript` says: its message and
-/// reply to the chat, which then remembers what the turn said of thinking.
-/// What `late`, the hold or the first write refuses ends the run `failed`
-/// with that code, with nothing written.
+/// or loads the model and composes the loop. The run is then saved as
+/// `transcript` says: its message and reply to the chat, which then
+/// remembers what the turn said of thinking. What `late` or the first write
+/// refuses ends the run `failed` with that code, with nothing written.
 pub(super) fn begin(
     state: &AppState,
     scope: RunScope,
@@ -463,6 +469,9 @@ mod hub_turn_answer_tests;
 #[cfg(test)]
 #[path = "hub_turn_drawn_tests.rs"]
 mod hub_turn_drawn_tests;
+#[cfg(test)]
+#[path = "hub_turn_endpoint_tests.rs"]
+mod hub_turn_endpoint_tests;
 #[cfg(test)]
 #[path = "hub_turn_forget_tests.rs"]
 mod hub_turn_forget_tests;

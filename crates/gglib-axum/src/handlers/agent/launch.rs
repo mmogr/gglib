@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use futures_util::future::BoxFuture;
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
+use tokio::time::{Duration, Instant, MissedTickBehavior};
 
 use gglib_app_services::transcript::{FrameTimes, remember_folder, remember_thinking};
 use gglib_app_services::{Reservation, RunEnded, RunLog, RunSpec};
@@ -195,18 +196,24 @@ pub(super) async fn begin_writes(
 
 /// Told that a turn's model is not running and has to load.
 #[derive(Debug, Clone)]
-pub(super) struct Loading(mpsc::UnboundedSender<()>);
+pub(super) struct Loading(mpsc::UnboundedSender<String>);
 
 impl Loading {
-    /// The model is about to be loaded: the run says it is waiting.
-    pub(super) fn waiting(&self) {
-        let _ = self.0.send(());
+    /// `model`, by the name the catalogue shows, is about to be loaded: the
+    /// run says it is waiting for it, and says so again each
+    /// [`LOAD_TICK`] with how long the load has taken.
+    pub(super) fn waiting(&self, model: &str) {
+        let _ = self.0.send(model.to_owned());
     }
 }
 
-/// What a turn does once its run exists: find or load its model,
-/// hold it and compose its loop, telling `Loading` when the model has to
-/// load.
+/// How often a run waiting for its model to load says so again, with the
+/// time the load has taken: a client that joins part-way can then show
+/// "Loading Qwen3-4B… 12 s" to the second.
+pub(super) const LOAD_TICK: Duration = Duration::from_secs(1);
+
+/// What a turn does once its run exists: find or load its model and
+/// compose its loop, telling `Loading` when the model has to load.
 pub(super) type LatePrepare =
     Box<dyn FnOnce(Loading) -> BoxFuture<'static, Result<Prepared, HttpError>> + Send>;
 
@@ -219,7 +226,7 @@ pub(super) fn ready(prepared: Prepared) -> LatePrepare {
 /// Start a turn: reserve `id` in `scope` for a run of `kind` (an agent run
 /// for a turn on a hub chat, a chat run for a chat a device keeps itself;
 /// either logs the agent loop's events) on `model`, and only then, as the
-/// run's own work, hold its model and prepare its loop (`late`), write its
+/// run's own work, load its model and prepare its loop (`late`), write its
 /// rows ([`begin_writes`]) and run it. The caller's `PUT` is answered as
 /// soon as the run is reserved.
 ///
@@ -315,15 +322,29 @@ impl Turn {
         let (loading, mut waits) = mpsc::unbounded_channel();
         let preparing = late(Loading(loading));
         tokio::pin!(preparing);
+        // The model being loaded, and since when.
+        let mut load: Option<(String, Instant)> = None;
+        let mut tick = tokio::time::interval(LOAD_TICK);
+        tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let prepared = loop {
             tokio::select! {
                 biased;
-                Some(()) = waits.recv() => say_waiting(&log, &times),
+                Some(model) = waits.recv() => {
+                    let since = Instant::now();
+                    say_waiting(&log, &times, &model, since);
+                    load = Some((model, since));
+                    tick.reset();
+                }
+                _ = tick.tick(), if load.is_some() => {
+                    if let Some((model, since)) = &load {
+                        say_waiting(&log, &times, model, *since);
+                    }
+                }
                 prepared = &mut preparing => break prepared,
             }
         };
-        while waits.try_recv().is_ok() {
-            say_waiting(&log, &times);
+        while let Ok(model) = waits.try_recv() {
+            say_waiting(&log, &times, &model, Instant::now());
         }
         let mut prepared = prepared.map_err(refused)?;
         // A device's turn says so, on its message and on each turn of the reply.
@@ -336,13 +357,16 @@ impl Turn {
     }
 }
 
-/// Log that the run waits for its model to load.
-fn say_waiting(log: &RunLog, times: &FrameTimes) {
+/// Log that the run waits for `model` to load, which began at `since`.
+fn say_waiting(log: &RunLog, times: &FrameTimes, model: &str, since: Instant) {
+    let elapsed = u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX);
     let waiting = AgentEvent::Waiting {
         reason: WaitingFor::ModelLoad,
         step: 0,
         total: 0,
         position: 0,
+        model: Some(model.to_owned()),
+        elapsed_ms: Some(elapsed),
     };
     if log.append(frame(&waiting)).is_ok() {
         times.logged();

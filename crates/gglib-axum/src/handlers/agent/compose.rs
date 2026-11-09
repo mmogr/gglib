@@ -12,7 +12,7 @@ use gglib_app_services::transcript::MadeBy;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
-use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, RetryObserver};
+use gglib_core::ports::{AgentGuardReporter, AgentLoopPort, RetryObserver};
 use gglib_core::services::{AttachmentService, drawing_availability};
 use gglib_mcp::{BUILTIN_PREFIX, DrawArm, DrawWith, DrawingTool, FILE_TOOLS};
 use gglib_runtime::{LoopGeneration, compose_agent_loop};
@@ -34,17 +34,14 @@ pub(crate) struct Prepared {
     /// Where the loop's events arrive.
     pub(crate) rx: mpsc::Receiver<AgentEvent>,
     /// The model each turn was made by, for its `turn_usage` event. Its
-    /// context's size is read once the run holds the model
-    /// (`remote_upstream::hold_model`).
+    /// context's size is read once the run's model is loaded
+    /// (`remote_upstream::endpoint`).
     pub(crate) made_by: MadeBy,
     /// The port and id of the local model the loop drives; otherwise none.
     pub(crate) local_model: Option<(u16, i64)>,
     /// The paired machine's model the loop drives, by its machine;
     /// otherwise none.
     pub(crate) far_model: Option<ModelRef>,
-    /// A run's hold on that model (`remote_upstream::hold`), taken by
-    /// [`held_over`]; `prepare` takes none.
-    pub(crate) hold: Option<AdmissionLease>,
 }
 
 /// One slot of the agent semaphore, or `None` when every slot is taken.
@@ -175,31 +172,14 @@ pub(crate) async fn prepare(
     Ok(prepare_over(state, req, upstream, None).await)
 }
 
-/// [`prepare_over`] for a run, which holds its model while it lives: a
-/// turn, this machine's or a paired device's. The hold is taken, and the
-/// context the model was launched with read, before the loop is composed,
-/// so the loop trims the conversation to that context
-/// (`remote_upstream::hold_model`). `folder` is the run's, where gglib's own
-/// file tools read: this machine's turn passes its chat's, and a device's
-/// turn none.
-///
-/// # Errors
-///
-/// Whatever the hold refuses.
-pub(super) async fn held_over(
-    state: &AppState,
-    req: AgentChatRequest,
-    mut upstream: Upstream,
-    folder: Option<PathBuf>,
-) -> Result<Prepared, HttpError> {
-    let hold = remote_upstream::hold_model(state.runtime.as_ref(), &mut upstream).await?;
-    let mut prepared = prepare_over(state, req, upstream, folder).await;
-    prepared.hold = hold;
-    Ok(prepared)
-}
-
 /// [`prepare`], once the upstream is settled, with `folder` as the root of
 /// gglib's own file tools: a canonical path, or `None` for no file tools.
+///
+/// A turn on one of this machine's chats or a device's comes here too, once
+/// its upstream is this machine's endpoint (`remote_upstream::endpoint`):
+/// its loop's turns go through the endpoint as any client's, so the
+/// endpoint's loop guard counts them and this loop reports its own guard's
+/// decisions nowhere. Every other loop reports them to the same ledger.
 ///
 /// Its own function because `prepare` cannot be driven in a test: no test
 /// has a running llama-server for `remote_upstream::resolve` to find.
@@ -240,6 +220,14 @@ pub(super) async fn prepare_over(
 
     let local_model = upstream.local_model;
     let far_model = upstream.far_model.clone();
+    // Its guard decisions to the same process's ledger, which is the only
+    // reason the chat route's trips are counted at all (#1091). The name is
+    // `resolve`'s, not `req`'s: a request that named no model is counted
+    // under the model actually running on the port.
+    let guard = reports_its_guard(upstream.door.as_ref()).then(|| AgentGuardReporter {
+        sink: state.proxy.agent_guard_sink(),
+        model: upstream.counted_as,
+    });
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
@@ -250,24 +238,15 @@ pub(super) async fn prepare_over(
         state.mcp.clone(),
         tool_filter,
         folder,
-        // GUI chat runs in the same process as the embedded proxy; report its
-        // reuse to the shared agent-path store behind `agent_usage`.
-        Some(state.proxy.agent_metrics()),
-        // And its guard decisions to the same process's ledger, which is the
-        // only reason the agent path's trips are counted at all (#1091). The
-        // name is `resolve`'s, not `req`'s: a request that named no model is
-        // counted under the model actually running on the port.
-        AgentGuardReporter {
-            sink: state.proxy.agent_guard_sink(),
-            model: upstream.counted_as,
-        },
+        guard,
         Some(retry_observer),
         sampling,
         upstream.layers,
         upstream.door,
         state.core.attachments().store(),
-        // A reply on this machine's model waits for an image render, and
-        // says so through the retry notice; a far one takes no turn here.
+        // A reply on llama-server's port waits for an image render, and says
+        // so through the retry notice; one through a door takes no turn here:
+        // the endpoint takes it for each request it forwards.
         LoopGeneration {
             gate: Some(Arc::clone(&state.generation_gate)),
             drawing,
@@ -293,8 +272,17 @@ pub(super) async fn prepare_over(
         made_by: upstream.made_by,
         local_model,
         far_model,
-        hold: None,
     }
+}
+
+/// Whether a loop through `door` reports its own guard's decisions to this
+/// process's ledger: a loop on llama-server's port does, and so does one on
+/// a paired machine's model, which this machine counts as it composed it. A
+/// loop through this machine's endpoint does not: the endpoint's loop guard
+/// sees every request and counts what it decides, and a count here would
+/// count each trip twice.
+pub(super) fn reports_its_guard(door: Option<&gglib_runtime::Door>) -> bool {
+    door.is_none_or(gglib_runtime::Door::is_far)
 }
 
 /// The loop config a request runs with: what it names, and for the limits
@@ -338,13 +326,16 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
 
 #[cfg(test)]
 #[path = "compose_context_tests.rs"]
-pub(super) mod context_tests;
+mod context_tests;
 #[cfg(test)]
 #[path = "compose_draw_tests.rs"]
 mod draw_tests;
 #[cfg(test)]
 #[path = "compose_drawn_picture_tests.rs"]
 mod drawn_picture_tests;
+#[cfg(test)]
+#[path = "compose_endpoint_tests.rs"]
+mod endpoint_tests;
 #[cfg(test)]
 #[path = "compose_folder_tests.rs"]
 mod folder_tests;

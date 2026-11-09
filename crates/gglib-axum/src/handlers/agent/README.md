@@ -72,37 +72,71 @@ An agent run stamps each turn's `turn_usage` event with the model it drove
 (`gglib_app_services::transcript::MadeBy`: locally the model on the port and
 its catalogue quantisation, on the paired machine the name and quantisation
 that machine has for the model) before logging it, so the
-frame a page draws and the row the reply is saved as say the same. A local
-run also stamps the context its model was launched with
-(`remote_upstream::hold_model`): read once the run holds the model, so it
-cannot be an earlier launch's, and only when the primary slot's model is the
-run's own by port and id. A run on the paired machine's model, or on a model
-in the second slot, stamps none, and the figure is left out: never a default.
-The same read, taken before the loop is composed, is the budget the loop trims
-the conversation to; without it the budget is the catalogue's trained context.
-The loop itself counts the messages it left out of each request and reports
-why the model stopped.
+frame a page draws and the row the reply is saved as say the same. A turn
+on this machine's model also stamps the context its model was launched with
+(`remote_upstream::endpoint`): read once the model is loaded, and only when
+the primary slot's model is the turn's own by port and id. A run on the
+paired machine's model, or on a model in the second slot, stamps none, and
+the figure is left out: never a default. The loop itself counts the messages
+it left out of each request and reports why the model stopped.
 
-Every loop composed here waits on the daemon's generation gate before each
-send to this machine's model, so a reply waits for an image render rather
-than sharing the GPU with it. `retry_notice` reports that wait as a
-`waiting` event with the render's step, beside its retry notices; a run on
-the paired machine's model takes no turn here.
+# Through the endpoint
 
-Every loop composed here also limits each turn whose request names no
+Chat is a client of this machine's endpoint. A turn on one of its chats,
+this machine's or a paired device's, and a phone-kept chat run with
+builtins (`chat_turn`) load their model first, saying so with a `waiting`
+event that names the model and, each second, how long the load has taken;
+then drop the load's lease and dial the endpoint (`hub_turn::late_on`,
+`remote_upstream::through_endpoint`): at the door's root
+(`ProxyOps::door`, the endpoint turned on first when it is off, as starting
+a model turns it on), with the key it demands, the model named by its
+catalogue id. The turn is read from the catalogue's row for that id (its
+name, quantisation, images and ladder), never from what the port serves by
+the time it dials: the load's lease is gone, so the port may be empty or
+serve another model, and the endpoint loads the chat's model again. A turn's
+limit is written only when the endpoint's own ladder, with the sampling it
+was started with and its default profile, names no `max_tokens`. Every
+request of the loop is then a request to the endpoint
+like any client's: shaped by its pipeline, guarded by its loop guard,
+admitted on its queue, counted in its ledger (Endpoint › Recent, `gglib
+proxy dashboard`) and in its one prompt-cache figure. Nothing holds the
+model between requests: a swap between tool turns, a draw that evicts the
+chat model or a recycle between turns makes the next request load it again,
+and a reply waiting behind an image render waits in the endpoint's queue,
+saying nothing. A key the endpoint does not admit (changed within its
+settings cache's window) fails the run in this machine's own words
+(`Door::key_refused`); an endpoint whose port another process holds fails
+it `conflict` with the endpoint's reason; a pinned endpoint (`gglib serve`)
+refuses a turn on another model with its `pinned_model_mismatch`. A
+cancelled run drops the reply it is reading, so the endpoint ends that
+request and lets go of the model.
+
+The loop through the endpoint shapes nothing itself (`gglib_runtime`'s
+proxied mode): it reads the images its messages name, writes Draw's
+`required` on the first request, and limits each turn whose ladder names no
 `max_tokens` to 16384 tokens (32768 for a `reasoning`-tagged model), or to
-its thinking budget plus 8192 when that is more (`gglib_runtime`'s turn
-limit). A reply cut off there while it writes a call, or before it writes
-any text, ends the run `failed`, `turn_too_long`; one cut off in its text is
-taken as if it had stopped, after a `system_warning`. The words after a
-Draw's picture are the exception and are always answered for. A device's `max_tokens` is not read,
-so it can neither raise nor lower the limit. A run on the paired machine's
-model is not limited from this side: that machine's own settings apply.
+its thinking budget plus 8192 when that is more. A reply cut off there while
+it writes a call, or before it writes any text, ends the run `failed`,
+`turn_too_long`; one cut off in its text is taken as if it had stopped,
+after a `system_warning`. The words after a Draw's picture are the exception
+and are always answered for. A device's `max_tokens` is not read, so it can
+neither raise nor lower the limit. The endpoint's loop guard alone counts
+such a loop's trips; when it ends the run it answers in the model's place
+with a finished message, which ends the run well with that sentence.
+
+The chat route's loop (`POST /api/agent/chat`, until it is retired) still
+drives llama-server's port: it waits on the daemon's generation gate before
+each send, so a reply waits for an image render rather than sharing the GPU
+with it (`retry_notice` reports that wait as a `waiting` event with the
+render's step), is limited the same way, and reports its guard's decisions
+to the same ledger. A run on the paired machine's model takes no turn here
+and is not limited from this side: that machine's own settings apply.
 
 # Which upstream
 
-`remote_upstream` decides, before anything else, whether the loop drives a
-llama-server this daemon started (the request's `port`, validated against
+`remote_upstream` decides, before anything else, whether the loop drives this
+machine's endpoint (a turn on a hub chat or a chat run with builtins, above),
+a llama-server this daemon started (the chat route: the request's `port`, validated against
 the servers it owns; the turn is shaped for the model that port serves, by
 its row in this catalog, whatever `model` the request names) or a model of
 the machine on the other end of the remote tunnel (`far`, that machine and
@@ -111,7 +145,7 @@ the bearer, and no shaping, because the far proxy runs its own pipeline). A
 local run whose messages, history included, carry an image is refused `400
 model_cannot_read_images` when the model its server serves has no projector
 (`image_gate`), and any local run on a port an `sd-server` serves is refused
-`400 image_model_cannot_chat`, before its hold is taken; a far run is not
+`400 image_model_cannot_chat`, before its loop is composed; a far run is not
 judged here, since the far proxy refuses it by the same code. A
 `far` naming this machine is a `400`. Not connected, connected without a key,
 or connected to another machine than the ref's is a `409`
@@ -122,12 +156,16 @@ On the far path the id is looked up there first (`FarProxy::lookup`), so a
 model that machine does not have is its `404` before any turn starts; the
 turns are sent with the id as the model, so no other model of its name
 answers, and the run is counted under, and its turns made by, the name and
-quantisation that machine has for it. Locally an absent `model` is the
-ordinary case and means "whatever llama-server loaded".
+quantisation that machine has for it. Through this machine's endpoint the
+model is likewise its catalogue id. On llama-server's port an absent `model`
+is the ordinary case and means "whatever llama-server loaded".
 
 # Sampling
 
-A local turn's sampling is resolved by the rules every chat resolves by, in
+A turn through this machine's endpoint is resolved there, by its pipeline,
+over what the turn names: the two reasoning controls (thinking off is
+`reasoning_budget_tokens: 0`, which the endpoint honours from any client).
+The chat route's turn is resolved by the same rules, in
 the one place they are: `gglib_core::request_pipeline::apply`, which the
 completion adapter calls as it shapes each request. `compose::prepare` hands
 it the pieces unfolded: the two reasoning controls, which are all the
@@ -162,12 +200,10 @@ rebuilds are checked by their sizes alone (`AttachmentService::check_request`):
 an id not stored is `400 attachment_not_found`, and images over 16 MiB
 together `400 request_images_too_large`, on this machine's model or the
 paired machine's, whose images are read here too.
-A local run holds its model until it ends (`remote_upstream::hold`), so no
-proxy request swaps it out or recycles it mid-run, and the proxy's stall
-watchdog waits for the run to end; a person's stop does not. A llama-server
-that goes silent mid-reply for five minutes, the proxy's own idle bound, ends
-the run with an error (one that never sends headers ends it at the ten-minute
-send timeout), so a silent server cannot keep the hold. A turn's run
+A run holds no model (see "Through the endpoint"). A model server that goes
+silent mid-reply for five minutes, the proxy's own idle bound, ends the run
+with an error (one that never sends headers ends it at the ten-minute send
+timeout). A turn's run
 (`launch::launch_turn`, then `launch::begin_writes`) refuses a run on another machine than the one its
 conversation ran on (a `409`: a chat's machine is fixed for its life, and a
 paired machine is told apart by its fingerprint), saves the user's message,
@@ -338,16 +374,18 @@ the device's scope whose `frames` say `agent`.
 
 The run exists before its model does (`launch::launch_turn`). The `PUT`
 reads the turn, takes a slot, reserves the run and answers; finding or
-loading the model, composing the loop, holding the model and writing the
-turn's rows (`launch::begin_writes`) are the run's own work. The test
+loading the model, opening the endpoint's door, composing the loop and
+writing the turn's rows (`launch::begin_writes`) are the run's own work. The test
 driver `launch::launch` (test builds only, until the old door is retired)
 prepares a loop first and runs it through the same writes and work. A cold load, or a load queued behind an
-image render, is then a `waiting` event (`model_load`) in the run's log, not
+image render, is then a `waiting` event (`model_load`, naming the model and,
+said again each second, how long the load has taken) in the run's log, not
 a `PUT` that hangs past the bound a device or the tunnel gives it. What is
 refused once the run exists ends it `failed`: `model_not_found`, naming
 the model, when this machine does not hold it, and otherwise the code the
-`PUT` answered before (`model_unavailable`, `unavailable`, `conflict`). No
-row is written: the turn's writes begin only once the loop is ready, and a
-run whose writes never began saves no reply.
+`PUT` answered before (`model_unavailable`, `unavailable`, `conflict`, an
+endpoint that cannot be turned on among them). No row is written: the
+turn's writes begin only once the loop is ready, and a run whose writes
+never began saves no reply.
 
 <!-- module-docs:end -->

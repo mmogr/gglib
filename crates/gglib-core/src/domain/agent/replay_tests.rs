@@ -328,6 +328,8 @@ fn progress_and_waiting_frames_change_no_row() {
             step: 3,
             total: 20,
             position: 1,
+            model: None,
+            elapsed_ms: None,
         },
         started("c1"),
         AgentEvent::ToolProgress {

@@ -1,5 +1,6 @@
 //! A local send takes its generation turn before it is sent and holds it
-//! until its reply ends; a send to another machine takes none.
+//! until its reply ends; a send through a door, this machine's endpoint or
+//! another machine's, takes none.
 //!
 //! The gate is the real admission queue's where waiting is the point, and a
 //! counting double where only the turn's start and end matter. The model
@@ -298,6 +299,31 @@ async fn a_send_to_another_machine_takes_no_turn() {
         gate.taken.load(Ordering::SeqCst),
         0,
         "a far send took a turn"
+    );
+}
+
+/// A send through this machine's own endpoint asks the gate for nothing
+/// either: the endpoint takes the turn for the request it forwards, so a
+/// turn here would make the reply wait on itself.
+#[tokio::test]
+async fn a_send_through_this_machines_endpoint_takes_no_turn() {
+    let llama = Llama::start(1).await;
+    let gate = Arc::new(Counting::default());
+    let endpoint = Door {
+        root_url: String::new(),
+        key: None,
+        name: None,
+    };
+    let adapter = adapter(&llama.base, Arc::clone(&gate) as Arc<dyn GenerationGate>)
+        .with_door(Some(endpoint));
+
+    let reply = adapter.chat_stream(&hi(), &[]).await.expect("served");
+    assert!(tokio::time::timeout(PATIENCE, reply.count()).await.unwrap() > 0);
+    assert_eq!(llama.accepted(), 1);
+    assert_eq!(
+        gate.taken.load(Ordering::SeqCst),
+        0,
+        "a proxied send took a turn"
     );
 }
 
