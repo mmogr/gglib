@@ -60,7 +60,7 @@ async fn nothing_a_run_carries_reaches_a_log_line() {
 
     let log = String::from_utf8_lossy(&captured.0.lock().unwrap()).into_owned();
     assert!(
-        log.contains("agent run started"),
+        log.contains("a turn was reserved before its model"),
         "the capture works: {log}"
     );
     assert!(log.contains("reply was saved"), "the capture works: {log}");

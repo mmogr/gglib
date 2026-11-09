@@ -49,11 +49,11 @@ crates/gglib-axum/src/handlers/agent/image_model_tests.rs 356
 crates/gglib-axum/src/handlers/agent/launch.rs 389
 crates/gglib-axum/src/handlers/agent/remote_upstream.rs 413
 crates/gglib-axum/src/handlers/agent/remote_upstream_tests.rs 314
-crates/gglib-axum/src/handlers/agent/run_fixture.rs 354
+crates/gglib-axum/src/handlers/agent/run_fixture.rs 372
 crates/gglib-axum/src/handlers/agent/run_folder_tests.rs 306
 crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 357
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 342
-crates/gglib-axum/src/handlers/proxy/wire_tests.rs 438
+crates/gglib-axum/src/handlers/proxy/wire_tests.rs 467
 crates/gglib-axum/src/routes.rs 467
 crates/gglib-axum/tests/agent_runs_route.rs 367
 crates/gglib-axum/tests/conversation_settings_route.rs 445
@@ -65,6 +65,7 @@ crates/gglib-cli/src/config_commands/settings_args.rs 313
 crates/gglib-cli/src/daemon_client/calls.rs 384
 crates/gglib-cli/src/daemon_client/images.rs 321
 crates/gglib-cli/src/daemon_client/images_tests.rs 466
+crates/gglib-cli/src/daemon_client/wire_tests.rs 301
 crates/gglib-cli/src/dispatch.rs 309
 crates/gglib-cli/src/handlers/agent_chat/config.rs 477
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 460
@@ -82,7 +83,7 @@ crates/gglib-cli/src/handlers/config/sd.rs 326
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 416
 crates/gglib-cli/src/handlers/image_tests.rs 328
 crates/gglib-cli/src/handlers/inference/agent_question.rs 303
-crates/gglib-cli/src/handlers/inference/proxy_tests.rs 319
+crates/gglib-cli/src/handlers/inference/proxy_tests.rs 320
 crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 361
 crates/gglib-cli/src/handlers/mcp_cli.rs 431
 crates/gglib-cli/src/handlers/model/download/interactive.rs 400
@@ -105,7 +106,7 @@ crates/gglib-cli/tests/llama_asks_first.rs 400
 crates/gglib-cli/tests/mcp_servers.rs 917
 crates/gglib-cli/tests/setup_scripts.rs 366
 crates/gglib-core/src/cache_metrics.rs 345
-crates/gglib-core/src/contracts/http/daemon.rs 496
+crates/gglib-core/src/contracts/http/daemon.rs 497
 crates/gglib-core/src/contracts/http/images.rs 302
 crates/gglib-core/src/domain/admission.rs 438
 crates/gglib-core/src/domain/agent/config.rs 795

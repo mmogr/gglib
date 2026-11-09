@@ -50,6 +50,7 @@ pub const PROXY_STATUS_FIELDS: &[&str] = &[
     "key",
     "pinned_model",
     "pinned_to",
+    "pinned_model_id",
 ];
 
 /// How a client connects to the endpoint for one model (`?model=<gglib id>`).
@@ -103,35 +104,6 @@ pub fn mcp_server_start_path(id: i64) -> String {
 
 /// The verbs [`mcp_server_start_path`] is called with.
 pub const MCP_SERVER_START_METHODS: &[&str] = &["POST"];
-
-/// A generation turn on the daemon's gate, held while the connection is
-/// open.
-///
-/// `gglib chat` opens it around each send to a llama-server port, so an
-/// image render and its replies take turns on the GPU. The stream says [`GENERATION_TURN_WAITING`] while a render is in the
-/// way, then [`GENERATION_TURN_GRANTED`], or [`GENERATION_TURN_REFUSED`] and
-/// ends.
-///
-/// Not in [`CLI_ROUTE_CONTRACT`]: that sweep reads each `GET` to its end,
-/// and this one does not end while the turn is held.
-/// `gglib-axum/tests/daemon_route_contract.rs` checks it on its own.
-pub const GENERATION_TURN_PATH: &str = "/api/generation/turn";
-
-/// The verbs [`GENERATION_TURN_PATH`] is called with.
-pub const GENERATION_TURN_METHODS: &[&str] = &["GET"];
-
-/// The event that says a render is in the way: data
-/// `{"step", "total", "position"}`.
-pub const GENERATION_TURN_WAITING: &str = "waiting";
-
-/// The event that says the turn is held until the connection closes: data
-/// `{}`.
-pub const GENERATION_TURN_GRANTED: &str = "granted";
-
-/// The event that says no turn was granted, after which the stream ends:
-/// data `{"message", "stalled_secs"}`, the seconds waited for a stall and
-/// `null` otherwise.
-pub const GENERATION_TURN_REFUSED: &str = "refused";
 
 /// The daemon's event stream. `GET` is the stream the app reads. `POST`
 /// puts one event on it: a `gglib` command that changed the library in its

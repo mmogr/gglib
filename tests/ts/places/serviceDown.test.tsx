@@ -29,7 +29,7 @@ const fake = vi.hoisted(() => ({
   startRefusal: null as string | null,
   opened: [] as string[],
   /** The endpoint the daemon reports while it answers. */
-  proxy: { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null } as Record<string, unknown>,
+  proxy: { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null } as Record<string, unknown>,
   wakes: 0,
 }));
 
@@ -135,7 +135,7 @@ beforeEach(() => {
     starts: 0,
     startRefusal: null,
     opened: [],
-    proxy: { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null },
+    proxy: { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null },
     wakes: 0,
   });
   // The window's bridges, as `AppContent` starts them.
@@ -252,7 +252,7 @@ describe('the service-not-running screen', () => {
     expect(await screen.findByText(DOWN)).toBeInTheDocument();
 
     // The new daemon turns its endpoint on as it starts.
-    fake.proxy = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null };
+    fake.proxy = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null };
     await user.click(screen.getByRole('button', { name: 'Start gglib' }));
     await nextProbe();
 

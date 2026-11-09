@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { turnMadeFromMetadata, turnMadeFromUsage } from '../../../../src/utils/messages/turnMade';
 
 describe('turnMadeFromUsage', () => {
-  it('reads a frame with no model, as /api/agent/chat sends it', () => {
+  it('reads a frame with no model', () => {
     expect(turnMadeFromUsage({ prompt_tokens: 30, completion_tokens: 2, duration_ms: 900 })).toEqual({
       promptTokens: 30,
       completionTokens: 2,

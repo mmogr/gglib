@@ -19,8 +19,7 @@ are qualified with the numeric server id (e.g. `"3:read_file"`).
 One table names every builtin and what it needs: the filesystem tools need a
 sandbox root, and are named by `FILE_TOOLS`, which the CLI's `--tools` check
 and the daemon's tool filter read too; and `generate_image` (`generate_image.rs`) needs a drawing tool
-that is armed for this message, which is a run sent with `draw: true` or the
-message after `/draw` in `gglib chat`. Listing and calling both read the
+that is armed for this message, which is a run sent with `draw: true`. Listing and calling both read the
 table, so a tool that is not listed is refused when called. The page's tool
 list (`bare_definitions`, `GET /api/builtin/tools`) holds only the tools that
 need nothing from the run, so it never carries `generate_image` or a file
@@ -47,7 +46,7 @@ the next entry. In a chat's runs the root is its folder
 Which image model draws is never the calling model's to say: the tool has no
 such argument, and a `model` key in a call is not read. A person's choice
 reaches the tool through `DrawWith`, a cell its composer holds (a run's door
-sets it once, `gglib chat` changes it with `/draw <model>`), and the tool
+sets it once), and the tool
 sets it as the model of the request it hands the image driver. With none
 chosen the request names no model and the driver's default rule draws.
 

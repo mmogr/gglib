@@ -408,6 +408,26 @@ describe('setup', () => {
     expect(await within(region).findByText(proofAnswered(PROOF))).toBeInTheDocument();
   });
 
+  it('proves a pinned endpoint with its pin, naming no model, and so does Retry', async () => {
+    library.models = [QWEN];
+    const pinned = { ...UP, state: 'pinned' as const, pinned_model: 'Qwen3-8B', pinned_to: 'Pinned to Qwen3-8B', pinned_model_id: 7 };
+    transport.startProxy.mockImplementation(async () => {
+      applyProxyStatus(pinned);
+      return pinned;
+    });
+    transport.proveProxy.mockRejectedValueOnce(new Error('the model did not load'));
+    const { user } = start();
+    await reach(user, 'First model');
+    const region = await step('Endpoint');
+
+    expect(await within(region).findByRole('alert')).toHaveTextContent('the model did not load');
+    expect(transport.proveProxy).toHaveBeenLastCalledWith(null);
+    await user.click(within(region).getByRole('button', { name: 'Retry' }));
+    expect(await within(region).findByText(proofAnswered(PROOF))).toBeInTheDocument();
+    expect(transport.proveProxy).toHaveBeenCalledTimes(2);
+    expect(transport.proveProxy).toHaveBeenLastCalledWith(null);
+  });
+
   it('Copy puts the address on the clipboard and says Copied beside it', async () => {
     const { user } = start();
     await reach(user, 'Endpoint');

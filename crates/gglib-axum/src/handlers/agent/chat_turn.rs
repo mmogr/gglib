@@ -14,7 +14,7 @@
 //! hub turn's is, with this machine's sampling for it: what the request
 //! says of sampling, `max_tokens` included, is not read, as on a hub turn.
 //! One thing of it is: the phone's Thinking choice. A body that turns
-//! thinking off as a phone-kept chat does on the chat route,
+//! thinking off as a client that keeps its own chats does,
 //! `"reasoning_budget_tokens": 0`, runs with a thinking budget of `0`; any
 //! other budget is sampling, and is not read. It is offered the tools of
 //! the MCP servers open to paired devices that its query lets it use,
@@ -44,11 +44,11 @@ use gglib_core::domain::agent::{inline_images, into_agent_messages, parse_openai
 use gglib_core::domain::runs::RunKind;
 use gglib_core::ports::{Created, RunScope};
 
-use super::AgentChatRequest;
 use super::compose::{refuse_unavailable_drawing, take_permit};
 use super::device_tools::Asked;
 use super::hub_turn::{late_on, shown_model};
 use super::launch::{Transcript, launch_turn};
+use super::loop_request::LoopRequest;
 use super::run::coded;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -172,7 +172,7 @@ pub(super) async fn read(
     state: &AppState,
     body: &Value,
     Drawing { draw, image_model }: Drawing,
-) -> Result<(String, AgentChatRequest), HttpError> {
+) -> Result<(String, LoopRequest), HttpError> {
     let model = body
         .get("model")
         .and_then(Value::as_str)
@@ -184,22 +184,16 @@ pub(super) async fn read(
     let model = catalogued(state, model).await;
     super::image_gate::chats_named(state, &model).await?;
 
-    let mut chat = AgentChatRequest {
-        port: 0,
-        far: None,
-        messages: Vec::new(),
-        config: None,
+    let mut chat = LoopRequest {
         // The floor: the image tool with Draw. The servers open to devices
         // are read when the run starts, not for a request that is refused.
         tool_filter: Some(Asked::of_phone(draw, BTreeSet::new()).floor()),
-        model: None,
         // The request's own sampling is not read: the model's, as on a hub
         // turn. Its Thinking choice is: off, or the model's default.
-        reasoning_effort: None,
         reasoning_budget_tokens: thinking_off(body).then_some(0),
         draw,
         image_model,
-        saved: super::chat_sampling::ChatSampling::default(),
+        ..LoopRequest::default()
     };
     refuse_unavailable_drawing(state, &chat).await?;
 
@@ -217,7 +211,7 @@ pub(super) async fn read(
 }
 
 /// Whether `body` turns thinking off, as a client that keeps its own chats
-/// says it on the chat route: `"reasoning_budget_tokens": 0`
+/// says it: `"reasoning_budget_tokens": 0`
 /// (docs/clients.md, "Thinking"). A budget above zero is sampling.
 fn thinking_off(body: &Value) -> bool {
     body.get("reasoning_budget_tokens").and_then(Value::as_i64) == Some(0)

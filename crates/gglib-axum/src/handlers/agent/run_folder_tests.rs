@@ -11,11 +11,11 @@ use serde_json::{Value, json};
 
 use super::compose::take_permit;
 use super::hub_turn::{Plan, plan, start_local};
-use super::launch::launch;
+use super::run_fixture::launch;
 use super::run_fixture::{
     End, LOCAL, device, finished_reply, prepared, qwen, saved, settled, state,
 };
-use super::turn_fixture::{TOOL, hi, model, sent_in, sent_through_endpoint};
+use super::turn_fixture::{TOOL, hi, model, sent, sent_in};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -57,7 +57,6 @@ async fn run(
         p,
         take_permit(state).expect("a slot"),
     )
-    .await
     .unwrap();
     assert!(created.created, "{id}");
     settled(state).await;
@@ -285,7 +284,7 @@ async fn a_devices_turn_on_a_chat_with_a_folder_is_offered_no_file_tool() {
     // Every tool, as no device's turn is given: what keeps the file tools
     // out is the folder, not the filter.
     phone.tool_filter = None;
-    let device = sent_through_endpoint(&state, model_id, phone).await;
+    let device = sent(&state, model_id, phone).await;
     let names: Vec<&str> = device["tools"]
         .as_array()
         .expect("the turn is offered tools")

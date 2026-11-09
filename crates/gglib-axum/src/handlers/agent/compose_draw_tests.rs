@@ -36,12 +36,7 @@ async fn without_draw_no_tool_filter_reaches_the_image_tool() {
     let (_dir, state) = drawing_state().await;
     let id = model(&state, |_| {}).await;
 
-    let every = sent(
-        &state,
-        id,
-        page(&state, json!({ "tool_filter": null })).await,
-    )
-    .await;
+    let every = sent(&state, id, page(json!({ "tool_filter": null }))).await;
     let names = offered(&every);
     assert_eq!(every["tool_choice"], "auto", "nothing is demanded of it");
     assert!(
@@ -54,14 +49,14 @@ async fn without_draw_no_tool_filter_reaches_the_image_tool() {
     );
 
     let said_false = json!({ "tool_filter": null, "draw": false });
-    let names = offered(&sent(&state, id, page(&state, said_false).await).await);
+    let names = offered(&sent(&state, id, page(said_false)).await);
     assert!(
         !names.iter().any(|n| n.contains("generate_image")),
         "{names:?}"
     );
 
     let summoning = json!({ "tool_filter": [DRAW_TOOL, "generate_image", TOOL] });
-    let names = offered(&sent(&state, id, page(&state, summoning).await).await);
+    let names = offered(&sent(&state, id, page(summoning)).await);
     assert_eq!(names, [TOOL], "a filter cannot summon the image tool");
 }
 
@@ -77,7 +72,7 @@ async fn a_draw_runs_first_request_must_call_the_image_tool_and_its_second_offer
     let filters = [json!([TOOL]), json!([]), json!(null)];
     for filter in filters {
         let asked = json!({ "tool_filter": filter, "draw": true });
-        let [first, later] = drawn(&state, id, page(&state, asked).await).await;
+        let [first, later] = drawn(&state, id, page(asked)).await;
         assert_eq!(offered(&first), [DRAW_TOOL], "only the image tool at first");
         assert_eq!(first["tool_choice"], "required");
         assert!(offers_nothing(&later), "{later}");
@@ -96,7 +91,7 @@ async fn a_draw_runs_closing_instruction_reaches_the_model_and_no_saved_row() {
 
     let (_dir, state) = drawing_state().await;
     let id = model(&state, |_| {}).await;
-    let asked = page(&state, json!({ "tool_filter": [], "draw": true })).await;
+    let asked = page(json!({ "tool_filter": [], "draw": true }));
     let instructs = |text: &str| {
         text.contains(gglib_mcp::DRAW_THEN_SAY) || text.contains(gglib_mcp::DRAW_THEN_SAY_FAILED)
     };
@@ -128,11 +123,13 @@ async fn a_draw_runs_closing_instruction_reaches_the_model_and_no_saved_row() {
 
 /// The message after a drawn picture, sent without Draw, here with the call
 /// and the model's words in one assistant message, so that nothing but the
-/// person's message follows the tool's answer: the model is told once, at
-/// the front, that the picture exists, and is offered no image tool. Saved as a run's rows are, the turn has no row that holds the note,
-/// and no event of its loop does.
+/// person's message follows the tool's answer: it is offered no image tool,
+/// and goes to the endpoint as the history it is, whose pipeline tells the
+/// model that the picture exists, as it does for any client. Saved as a
+/// run's rows are, the turn has no row that holds the note, and no event of
+/// its loop does.
 #[tokio::test]
-async fn the_message_after_a_drawn_picture_tells_the_model_and_no_saved_row() {
+async fn the_message_after_a_drawn_picture_is_offered_no_image_tool_and_no_row_holds_the_note() {
     use crate::handlers::agent::run_fixture::{End, prepared, settled, start};
     use crate::handlers::agent::turn_fixture::{REPLY, turn};
     use gglib_core::request_pipeline::DRAWN_NOTE;
@@ -148,7 +145,7 @@ async fn the_message_after_a_drawn_picture_tells_the_model_and_no_saved_row() {
         { "role": "tool", "tool_call_id": "c1", "content": drew },
         { "role": "user", "content": "thanks" },
     ]);
-    let asked = page(&state, json!({ "tool_filter": [], "messages": history })).await;
+    let asked = page(json!({ "tool_filter": [], "messages": history }));
 
     let turn = turn(&state, id, asked, REPLY).await;
 
@@ -156,10 +153,9 @@ async fn the_message_after_a_drawn_picture_tells_the_model_and_no_saved_row() {
     assert_eq!(turn.requests.len(), 1);
     let request = &turn.requests[0];
     assert!(offers_nothing(request), "{request}");
-    let note = json!({ "role": "system", "content": DRAWN_NOTE });
-    assert_eq!(request["messages"][0], note);
-    assert_eq!(request["messages"].as_array().unwrap().len(), 5);
-    assert_eq!(request.to_string().matches(DRAWN_NOTE).count(), 1);
+    assert_eq!(request["messages"][0]["content"], "draw a fox");
+    assert_eq!(request["messages"].as_array().unwrap().len(), 4);
+    assert!(!request.to_string().contains(DRAWN_NOTE), "{request}");
     let events = format!("{:?}", turn.events);
     assert!(!events.contains(DRAWN_NOTE), "{events}");
 
@@ -192,7 +188,7 @@ async fn a_draw_run_whose_model_asks_for_no_picture_fails_and_says_so() {
 
     let (_dir, state) = drawing_state().await;
     let id = model(&state, |_| {}).await;
-    let asked = page(&state, json!({ "tool_filter": [TOOL], "draw": true })).await;
+    let asked = page(json!({ "tool_filter": [TOOL], "draw": true }));
 
     let turn = turn(&state, id, asked, REPLY).await;
 
@@ -259,42 +255,21 @@ fn refusal(result: Result<(), HttpError>) -> (u16, &'static str, String) {
 #[tokio::test]
 async fn draw_is_refused_where_it_cannot_draw() {
     let (_dir, can) = drawing_state().await;
-    let here = page(&can, json!({ "draw": true })).await;
+    let here = page(json!({ "draw": true }));
     assert!(refuse_unavailable_drawing(&can, &here).await.is_ok());
 
     let machine = json!({ "kind": "paired", "fingerprint": "0a1b2c3d4e5f" });
     let far = json!({ "draw": true, "far": { "machine": machine, "id": 7 } });
-    let far = page(&can, far).await;
+    let far = page(far);
     let (status, code, why) = refusal(refuse_unavailable_drawing(&can, &far).await);
     assert_eq!((status, code), (400, "drawing_unavailable"));
     assert!(why.contains("another machine"), "{why}");
 
     let (_dir, cannot) = state().await;
-    let asked = page(&cannot, json!({ "draw": true })).await;
+    let asked = page(json!({ "draw": true }));
     let (status, code, why) = refusal(refuse_unavailable_drawing(&cannot, &asked).await);
     assert_eq!((status, code), (400, "drawing_unavailable"));
     assert!(why.contains("not installed"), "{why}");
-    let plain = page(&cannot, json!({})).await;
+    let plain = page(json!({}));
     assert!(refuse_unavailable_drawing(&cannot, &plain).await.is_ok());
-}
-
-/// The chat route refuses it before its slot is taken, as this machine's
-/// turn does (`hub_turn_route_tests`).
-#[tokio::test]
-async fn the_chat_route_refuses_a_draw_it_cannot_draw_before_its_slot() {
-    let (_dir, state) = state().await;
-    let request = page(&state, json!({ "draw": true })).await;
-
-    let answered =
-        crate::handlers::agent::chat(axum::extract::State(state.clone()), axum::Json(request))
-            .await;
-
-    match answered {
-        Err(HttpError::Coded { status, code, .. }) => {
-            assert_eq!((status.as_u16(), code), (400, "drawing_unavailable"));
-        }
-        Err(other) => panic!("not a coded refusal: {other:?}"),
-        Ok(_) => panic!("the chat route drew"),
-    }
-    assert_eq!(state.agent_semaphore.available_permits(), 1);
 }

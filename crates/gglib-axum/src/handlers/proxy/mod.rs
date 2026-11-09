@@ -17,9 +17,18 @@ use gglib_core::ports::AppEventEmitter;
 use wire::{to_api_status, to_runtime_config};
 
 /// Fetch current proxy status from backend.
+///
+/// The pin is named as the catalogue names its model now: a rename while
+/// pinned does not touch the pin, which keeps the name it was set with, so
+/// that name is said only when the model has gone from the catalogue.
 async fn fetch_status(state: &AppState) -> ProxyStatus {
     let s = state.proxy.status().await;
-    let pinned = state.proxy.pinned().map(|pin| pin.name);
+    let mut pinned = state.proxy.pinned();
+    if let Some(pin) = pinned.as_mut()
+        && let Ok(Some(model)) = state.core.models().get_by_id(pin.id).await
+    {
+        pin.name = model.name;
+    }
     let key = state.proxy.key_state().await;
     to_api_status(&s, pinned, key)
 }

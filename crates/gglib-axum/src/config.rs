@@ -29,9 +29,9 @@ pub struct ServerConfig {
     pub sd_server_path: PathBuf,
     /// Maximum concurrent agent loop sessions.
     ///
-    /// Each `POST /api/agent/chat` request holds one permit for the lifetime
-    /// of its SSE stream.  When all permits are taken, new requests receive
-    /// `429 Too Many Requests` immediately rather than queuing.
+    /// Each agent run holds one permit until it ends. When all permits are
+    /// taken, a new turn is refused `429 agent_busy` immediately rather than
+    /// queued.
     pub max_concurrent_agent_loops: usize,
     /// Database file to open. `None` resolves through [`database_path`](gglib_core::paths::database_path).
     ///

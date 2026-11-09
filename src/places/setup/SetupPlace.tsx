@@ -153,8 +153,8 @@ const Steps: FC<StepsProps> = ({ status, rec, onDone }) => {
   useEffect(() => {
     if (step < 4 || had.endpoint !== false || !up || facts.baseUrl === null || model === null || proved.current === model.id) return;
     proved.current = model.id;
-    void test(facts.pinnedModel !== null ? null : model.id);
-  }, [step, had.endpoint, up, facts.baseUrl, facts.pinnedModel, model, test]);
+    void test(facts.pinned !== null ? null : model.id);
+  }, [step, had.endpoint, up, facts.baseUrl, facts.pinned, model, test]);
 
   const open = async () => {
     try {
@@ -192,7 +192,7 @@ const Steps: FC<StepsProps> = ({ status, rec, onDone }) => {
           alreadyDone={had.endpoint === true}
           advance={advanced.includes(4) ? null : next}
           waitingOn={first.choice === 'get' && first.model === null ? (first.row?.text.title ?? recommended?.repo ?? null) : null}
-          onRetryProof={() => model && void test(facts.pinnedModel !== null ? null : model.id)}
+          onRetryProof={() => model && void test(facts.pinned !== null ? null : model.id)}
           onNext={next}
           onBack={back}
         />

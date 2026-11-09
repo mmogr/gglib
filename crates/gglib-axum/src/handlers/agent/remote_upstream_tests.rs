@@ -1,162 +1,8 @@
-//! Which upstream a request drives, and the model each turn is made by.
+//! The paired machine's model as a turn drives it: looked up there, sent by
+//! its id, and counted and made under that machine's name for it.
 
 use super::*;
 use crate::handlers::remote::fake_far::{FINGERPRINT, carries_key, far as fake_far, only};
-
-fn req(json: &str) -> AgentChatRequest {
-    serde_json::from_str(json).expect("parses")
-}
-
-/// The model the port is actually serving, for the three ways a local
-/// request declines to name one.
-fn running(name: &str) -> ServerInfo {
-    ServerInfo {
-        model_id: 1,
-        model_name: name.to_owned(),
-        pid: Some(4242),
-        port: 9000,
-        started_at: 0,
-        runtime: gglib_core::domain::RuntimeKind::Llama,
-        launch: None,
-    }
-}
-
-/// Locally an absent model means "whatever is loaded", and that is a real
-/// model with a real name — so the count goes under it rather than under a
-/// placeholder, which would put real traffic in a bucket that is not a
-/// model.
-#[test]
-fn a_request_naming_no_model_is_counted_under_the_running_one() {
-    assert_eq!(
-        counted_as(&req(r#"{"port":9000,"messages":[]}"#), &running("qwen3")),
-        "qwen3"
-    );
-}
-
-/// A name of only spaces is an absence, read as one.
-#[test]
-fn a_whitespace_model_name_is_no_name_at_all() {
-    assert_eq!(
-        counted_as(
-            &req(r#"{"port":9000,"messages":[],"model":"   "}"#),
-            &running("qwen3")
-        ),
-        "qwen3",
-        "a name of only spaces is an absence, not a model called \"   \""
-    );
-}
-
-/// And the fallback is a fallback: a request that named a model is counted
-/// under that name even when the port is serving something else, because
-/// the name the client chose is the key it will look the count up by.
-///
-/// Close to, but not identical with, what the proxy would key the same
-/// traffic under. The proxy counts after `resolve_route`, so a
-/// `model:profile` request lands under the base model, where this path
-/// talks straight to llama-server and would count the suffixed string;
-/// and this trims where the name that goes on the wire does not.
-#[test]
-fn a_named_model_is_counted_under_its_own_name() {
-    assert_eq!(
-        counted_as(
-            &req(r#"{"port":9000,"messages":[],"model":" llama3 "}"#),
-            &running("qwen3")
-        ),
-        "llama3"
-    );
-}
-
-/// A model in this machine's catalogue, with `quantization`.
-async fn catalogued(state: &AppState, quantization: Option<&str>) -> i64 {
-    let mut model = gglib_core::domain::NewModel::new(
-        "catalogue-name".to_owned(),
-        std::path::PathBuf::from("/models/served.gguf"),
-        7.0,
-        chrono::Utc::now(),
-    );
-    model.variant_label = quantization.map(ToOwned::to_owned);
-    state.core.models().add(model).await.expect("added").id
-}
-
-/// Each turn is made by the model the port serves, whatever the request
-/// asked for, with the quantisation its catalogue entry names.
-#[tokio::test]
-async fn a_local_run_is_made_by_the_model_its_port_serves() {
-    let (_dir, state) = super::super::run_fixture::state().await;
-    let id = catalogued(&state, Some("Q4_K_M")).await;
-    let server = ServerInfo {
-        model_id: id,
-        ..running("served-7b")
-    };
-    let asked = req(r#"{"port":9000,"messages":[],"model":"asked-for"}"#);
-    let upstream = local(&state, &asked, server).await.unwrap();
-    assert_eq!(upstream.made_by.model, "served-7b");
-    assert_eq!(upstream.made_by.quantization.as_deref(), Some("Q4_K_M"));
-}
-
-/// A catalogue entry that names no quantisation gives none, not a guess.
-#[tokio::test]
-async fn a_local_model_without_a_quantisation_has_none() {
-    let (_dir, state) = super::super::run_fixture::state().await;
-    let id = catalogued(&state, None).await;
-    let server = ServerInfo {
-        model_id: id,
-        ..running("served-7b")
-    };
-    let asked = req(r#"{"port":9000,"messages":[]}"#);
-    let upstream = local(&state, &asked, server).await.unwrap();
-    assert_eq!(upstream.made_by.quantization, None);
-}
-
-/// A local run is shaped for the model its port serves, by that model's
-/// catalogue row, and not for a model the request's `model` happens to name:
-/// that name goes on the wire and picks nothing here. Beneath it sit this
-/// machine's global sampling defaults, and no profile; the agentic switch,
-/// which these settings do not store, is on.
-#[tokio::test]
-async fn a_local_run_is_shaped_for_the_model_its_port_serves_over_the_global_defaults() {
-    let (_dir, state) = super::super::run_fixture::state().await;
-    let tagged = |name: &str, tag: &str| {
-        let path = std::path::PathBuf::from(format!("/models/{name}.gguf"));
-        let mut model =
-            gglib_core::domain::NewModel::new(name.to_owned(), path, 7.0, chrono::Utc::now());
-        model.tags = vec![tag.to_owned()];
-        model
-    };
-    let models = state.core.models();
-    let on_port = models.add(tagged("served", "reasoning")).await.unwrap().id;
-    models.add(tagged("asked-for", "agent")).await.unwrap();
-    let global = gglib_core::domain::InferenceConfig {
-        temperature: Some(0.42),
-        ..Default::default()
-    };
-    let update = gglib_core::settings::SettingsUpdate {
-        inference_defaults: Some(Some(global.clone())),
-        ..Default::default()
-    };
-    state.core.settings().update(update).await.unwrap();
-    let server = ServerInfo {
-        model_id: on_port,
-        ..running("served")
-    };
-
-    for body in [
-        r#"{"port":9000,"messages":[]}"#,
-        r#"{"port":9000,"messages":[],"model":"asked-for"}"#,
-    ] {
-        let asked = req(body);
-        let upstream = local(&state, &asked, server.clone()).await.unwrap();
-        assert!(upstream.model_context.catalog_resolved, "{body}");
-        assert_eq!(upstream.model_context.tags, ["reasoning"], "{body}");
-        assert_eq!(upstream.model, asked.model, "the name on the wire");
-        let layers = SamplingLayers {
-            global: Some(global.clone()),
-            agentic_adjustments: true,
-            ..SamplingLayers::default()
-        };
-        assert_eq!(upstream.layers, layers, "{body}");
-    }
-}
 
 /// A model of the paired machine, by its id there.
 fn far_ref(id: i64) -> ModelRef {
@@ -172,20 +18,6 @@ fn far_ref(id: i64) -> ModelRef {
 const LOOKUP: &str = r#"{"detail":{"id":3,"name":"org/qwen3","paramCountB":8.0,
     "quantization":"Q4_K_M","addedAt":"2026-10-01 09:00:00","isServing":false,"metadata":{}}}"#;
 
-/// A ref to this machine names a model that is driven by its port: refused
-/// before the connection is read, so with no tunnel up it is still a `400`.
-#[tokio::test]
-async fn a_far_ref_to_this_machine_is_refused() {
-    let (_dir, state) = super::super::run_fixture::state().await;
-    let body = r#"{"port":0,"messages":[],"far":{"machine":{"kind":"local"},"id":3}}"#;
-
-    let Err(err) = resolve(&state, &req(body)).await else {
-        panic!("a local ref was driven as a far model");
-    };
-
-    assert!(matches!(err, HttpError::BadRequest(_)), "got {err:?}");
-}
-
 /// A far chat's saved profile goes on the id the turn sends, which that
 /// machine routes to a profile of its own; the lookup asks for the id alone.
 #[tokio::test]
@@ -200,6 +32,29 @@ async fn a_far_chats_profile_rides_on_the_id_it_sends() {
 
     assert_eq!(upstream.model.as_deref(), Some("3:coding"));
     assert_eq!(only(&fake).uri, "/v1/models/3/detail");
+}
+
+/// A turn reached through [`far`] carries what its chat saved: its profile
+/// rides on the id it sends.
+#[tokio::test]
+async fn a_far_turn_carries_its_chats_saved_profile() {
+    let (_fake, proxy) = fake_far(200, LOOKUP).await;
+    let saved = ChatSampling {
+        profile: Some("coding".to_owned()),
+        ..ChatSampling::default()
+    };
+    let reach = async |machine: &Machine| {
+        assert_eq!(
+            *machine,
+            far_ref(3).machine,
+            "the chat's machine is reached"
+        );
+        Ok(proxy)
+    };
+
+    let upstream = far(reach, &far_ref(3), &saved).await.expect("reached");
+
+    assert_eq!(upstream.model.as_deref(), Some("3:coding"));
 }
 
 /// The far model is looked up by its id, sent by its id, and counted and
@@ -241,7 +96,7 @@ async fn a_far_run_sends_the_id_and_is_made_by_the_far_name() {
 #[tokio::test]
 async fn a_far_turn_with_tools_is_sent_nothing_this_machine_stores() {
     use super::super::compose::{Prepared, prepare_over};
-    use super::super::turn_fixture::{REPLY, TOOL, agentic_sampling, global, temperature};
+    use super::super::turn_fixture::{REPLY, TOOL, agentic_sampling, global, page, temperature};
 
     for stored in [None, Some(true), Some(false)] {
         let (_dir, state) = super::super::run_fixture::state().await;
@@ -254,9 +109,8 @@ async fn a_far_turn_with_tools_is_sent_nothing_this_machine_stores() {
         *fake.body.lock().unwrap() = REPLY.to_owned();
         *fake.content_type.lock().unwrap() = "text/event-stream";
 
-        let hi = r#"{"role":"user","content":"hi"}"#;
-        let chat = format!(r#"{{"port":0,"messages":[{hi}],"tool_filter":["{TOOL}"]}}"#);
-        let prepared = prepare_over(&state, req(&chat), upstream, None).await;
+        let chat = page(serde_json::json!({ "tool_filter": [TOOL] }));
+        let prepared = prepare_over(&state, chat, upstream, None).await;
         let Prepared {
             agent_loop,
             messages,

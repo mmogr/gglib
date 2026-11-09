@@ -65,7 +65,7 @@ A chat is its own address: the conversation list (left) and the messages panel (
 - **`ToolExecutionProgress/`**: A reply's tool calls as its fold lists them, and a running tool's progress
 
 ### Server Management
-- **`ConnectClient.tsx`**: Connect a client on the endpoint place and setup's Connect step: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker, and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable
+- **`ConnectClient.tsx`**: Connect a client on the endpoint place and setup's Connect step: Base URL, the API key line (a required key revealed only on Show, `KeyReveal`, which the address line shares), the Model ID with a picker (a pin the picker does not offer, an image model, named alone instead, `only`), and ▸ Recipes, the daemon's per-client lines from `GET /api/proxy/clients` said as the CLI says them (`readings/connect`), each copyable
 
 ### Support Components
 - **`Toast/`**: Reusable toast notification system for success/error/info messages

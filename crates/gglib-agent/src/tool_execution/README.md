@@ -8,9 +8,9 @@ Parallel tool execution with bounded concurrency and per-tool timeout.
 
 - All tool calls in a batch are dispatched concurrently via a
   [`tokio::task::JoinSet`].  When the future returned by
-  [`execute_tools_parallel`] is dropped (e.g. because `AgentTaskGuard`
-  aborts the parent agent task on client disconnect), the `JoinSet` is
-  dropped and every in-flight sub-task is cancelled — no resource leak.
+  [`execute_tools_parallel`] is dropped (e.g. because the daemon cancels
+  the run that drives the agent loop), the `JoinSet` is dropped and every
+  in-flight sub-task is cancelled — no resource leak.
 - A [`tokio::sync::Semaphore`] caps the number of *simultaneously running*
   tool calls at [`AgentConfig::max_parallel_tools`].
 - Each call is wrapped in a [`tokio::time::timeout`]: the tool's own

@@ -12,8 +12,8 @@ impl ProxyOps {
     ///
     /// Available whether or not a proxy is running: it lives on the
     /// supervisor for the process's lifetime. A loop whose turns do not go
-    /// through this machine's endpoint (the chat route, a turn on a paired
-    /// machine's model) composes its loop with this, so a loop or stagnation
+    /// through this machine's endpoint (a turn on a paired machine's model)
+    /// composes its loop with this, so a loop or stagnation
     /// trip there reaches a counter (#1091) instead of ending the run and
     /// leaving no trace. A turn through the endpoint is counted by the
     /// endpoint's own loop guard.

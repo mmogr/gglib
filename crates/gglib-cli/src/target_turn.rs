@@ -32,8 +32,8 @@ pub(crate) struct TurnModel {
     /// name that goes on the wire.
     pub identifier: String,
     /// The model, named by its machine. `None` for an identifier this
-    /// catalogue does not hold, which only a server named with `--port`
-    /// answers to.
+    /// catalogue does not hold, which a turn refuses
+    /// (`require_a_model`).
     pub model_ref: Option<ModelRef>,
     /// The name the model goes by on its machine, as it is shown and saved;
     /// the identifier when it did not resolve.

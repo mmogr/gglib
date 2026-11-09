@@ -14,13 +14,12 @@
 //! result the model reads (`success: false`), not a fault of the loop.
 //!
 //! Whether the tool is offered at all is [`DrawArm`]'s: armed for a run sent
-//! with `draw: true`, or for the next message after `/draw` in `gglib chat`.
+//! with `draw: true`.
 //! Such a run does not leave drawing to the model: its first reply must
 //! call this tool, and it calls it once ([`DrawingTool::first_call`]).
 
 use std::fmt;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use gglib_core::domain::agent::{FirstCall, ToolProgressSink, ToolProgressUpdate, ToolStage};
@@ -59,23 +58,19 @@ pub const THEN_SAY: &str = gglib_core::request_pipeline::DRAW_THEN_SAY;
 /// What the model is told instead when the tool answered with an error.
 pub const THEN_SAY_FAILED: &str = gglib_core::request_pipeline::DRAW_THEN_SAY_FAILED;
 
-/// Whether the drawing tool is offered right now.
+/// Whether the drawing tool is offered.
 #[derive(Debug, Clone)]
 pub enum DrawArm {
     /// Fixed for the life of a run: `true` for one sent with `draw: true`.
     Fixed(bool),
-    /// A session's switch, set by `/draw` and cleared after each send.
-    Shared(Arc<AtomicBool>),
 }
 
 impl DrawArm {
     /// Whether the tool may be listed and called.
     #[must_use]
     pub fn is_armed(&self) -> bool {
-        match self {
-            Self::Fixed(armed) => *armed,
-            Self::Shared(armed) => armed.load(Ordering::SeqCst),
-        }
+        let Self::Fixed(armed) = self;
+        *armed
     }
 }
 
@@ -90,9 +85,7 @@ impl Default for DrawArm {
 /// for the one a request that names no model draws with.
 ///
 /// A cell, shared with whoever composed the tool: a run's door sets it once
-/// ([`DrawWith::model`]), and `gglib chat` changes it between messages
-/// (`/draw <model>`) without composing its loop again. The chat model never
-/// reads or fills it.
+/// ([`DrawWith::model`]). The chat model never reads or fills it.
 #[derive(Debug, Clone, Default)]
 pub struct DrawWith(Arc<Mutex<Option<u32>>>);
 

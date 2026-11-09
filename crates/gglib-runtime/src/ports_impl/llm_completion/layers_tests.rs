@@ -7,8 +7,6 @@
 //! person chose from one nobody did, and that the request it sends carries
 //! what the fold resolved.
 
-use std::sync::Mutex;
-
 use gglib_core::domain::agent::ToolDefinition;
 use gglib_core::domain::{DefaultsOrigin, ModelSamplingContext};
 
@@ -275,36 +273,4 @@ fn a_turn_with_no_tools_sends_what_the_stored_ladder_resolves_and_no_more() {
             }
         }
     }
-}
-
-/// The observer is told the decision each request was sampled by, and that
-/// decision names the rung a value came from: `global` for the global layer,
-/// never the caller's own rung, which is where a value folded before the
-/// adapter would land.
-#[test]
-fn the_observer_is_told_each_requests_decision_with_the_rung_that_supplied_it() {
-    let seen = Arc::new(Mutex::new(Vec::new()));
-    let told = Arc::clone(&seen);
-    let adapter = adapter(model(None), Some(temperature(0.9)))
-        .with_layers(SamplingLayers {
-            global: Some(InferenceConfig {
-                top_k: Some(33),
-                ..temperature(0.42)
-            }),
-            ..SamplingLayers::default()
-        })
-        .with_sampling_observer(Some(Arc::new(move |decision: &SamplingDecision| {
-            told.lock().unwrap().push(decision.clone());
-        })));
-
-    body_of(&adapter, &[user("hi")]);
-    body_of(&adapter, &[user("again")]);
-
-    let seen = std::mem::take(&mut *seen.lock().unwrap());
-    assert_eq!(seen.len(), 2, "one decision a request");
-    let from = seen[0].sources.describe(&seen[0].layer_names);
-    assert_eq!(seen[0].resolved.temperature, Some(0.9));
-    assert!(from.contains("temperature=client"), "{from}");
-    assert_eq!(seen[0].resolved.top_k, Some(33));
-    assert!(from.contains("top_k=global"), "{from}");
 }

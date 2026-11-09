@@ -55,7 +55,7 @@ export function shownAddress(baseUrl: string): string {
 export function secondLine(facts: EndpointFacts, loaded: number): string {
   if (facts.state === 'off') return `${ENDPOINT_WORDS.off} · click to turn on`;
   if (facts.state === 'starting') return ENDPOINT_WORDS.starting;
-  if (facts.pinnedModel !== null) return facts.pinnedModel;
+  if (facts.pinned !== null) return facts.pinned.name;
   if (loaded === 0) return 'nothing loaded yet';
   return `${loaded} loaded`;
 }

@@ -14,10 +14,10 @@ use gglib_core::domain::hub_chats::HubTurn;
 use super::hub_turn_tests::{chat, device, refused, turn};
 use super::{begin, plan, start};
 use crate::handlers::agent::compose::take_permit;
-use crate::handlers::agent::launch::launch;
 use crate::handlers::agent::launch::{Transcript, ready};
+use crate::handlers::agent::run_fixture::launch;
 use crate::handlers::agent::run_fixture::{
-    End, finished_reply, paced, prepared, saving, settled, state,
+    End, finished_reply, logged, paced, prepared, saving, settled, state,
 };
 use crate::handlers::agent::run_thinking_tests::remembered;
 use crate::state::AppState;
@@ -58,9 +58,9 @@ async fn run(state: &AppState, id: &str, turn: HubTurn) -> Option<i32> {
 async fn hang(state: &AppState, id: &str, transcript: Transcript) {
     let (p, _) = paced(finished_reply(), End::Hang, Duration::from_millis(1));
     let free = take_permit(state);
-    launch(state, id, device("phone"), transcript, p, free.unwrap())
-        .await
-        .unwrap();
+    launch(state, id, device("phone"), transcript, p, free.unwrap()).unwrap();
+    // Its rows are written before its first event is logged.
+    logged(state, id, 1).await;
 }
 
 /// A permit of a semaphore of its own, for a launch while that slot is held.
@@ -161,7 +161,7 @@ async fn a_repeated_run_id_writes_nothing_again() {
         ..saving(id)
     };
     let (p, _) = prepared(finished_reply(), End::Finish);
-    let again = launch(&state, "d1", device("phone"), forget, p, spare_permit()).await;
+    let again = launch(&state, "d1", device("phone"), forget, p, spare_permit());
     assert!(!again.unwrap().created);
 
     assert_eq!(remembered(&state, id).await, Some(Thinking::Off));

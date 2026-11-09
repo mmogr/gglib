@@ -2,5 +2,5 @@
 pub mod llm_completion;
 pub mod model_runtime;
 
-pub use llm_completion::{Door, LlmCompletionAdapter, SamplingObserver};
+pub use llm_completion::{Door, LlmCompletionAdapter};
 pub use model_runtime::RuntimePortImpl;

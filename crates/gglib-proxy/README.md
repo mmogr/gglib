@@ -1196,8 +1196,7 @@ GUI, a paired phone or a phone-kept chat run with builtins, sends each of its
 requests here, with the endpoint's key, as any client does. So its reuse is in
 this one "Prompt cache" figure, beside every other client's, and there is no
 second, agent-path figure: a turn is shaped, guarded, admitted and counted
-here like the rest. (The chat route, `POST /api/agent/chat`, still talks to
-llama-server's port until it is retired, and is counted nowhere.)
+here like the rest.
 
 Raw counts only. Nothing is derived or extrapolated — in particular there is
 no "time saved" figure: reuse is measured exactly, but what it saved depends
