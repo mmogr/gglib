@@ -7,7 +7,9 @@
  * its flag line, an active request's prompt progress, the queue, the
  * second slot's room in the daemon's own sentence (`secondary_slot.detail`),
  * what gglib did to a request in the proxy's own words
- * (`Intervention.word`), the counters. State words are
+ * (`Intervention.word`), a request's rate (`tokens_per_second`), the
+ * cache's reuse in its own sentence (`CacheUsage.summary`), the counters
+ * and the loop-guard trips total. State words are
  * `components/status/words.ts`'s. The sentences around them are this
  * place's own, listed in its README.
  *
@@ -16,7 +18,7 @@
 
 import { RESIDENCY_WORDS } from '../../components/status/words';
 import type { ServerViewModel } from '../../hooks/useServers';
-import { rateWords, requestRate } from '../../readings/throughput';
+import { rateWords } from '../../readings/rate';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 import type { ResidencyState } from '../../types/generated/ResidencyState';
 import { formatCount } from '../../utils/format';
@@ -134,14 +136,13 @@ export function recentRows(snapshot: DashboardSnapshot | null, shown = RECENT_SH
     .slice(-shown)
     .reverse()
     .map((r, i) => {
-      const rate = requestRate(r);
       return {
         key: `${r.recorded_at_secs}-${i}`,
         time: new Date(r.recorded_at_secs * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         model: r.model_name,
         figures: [
           r.completion_tokens != null ? `${formatCount(r.completion_tokens)} ${r.completion_tokens === 1 ? 'token' : 'tokens'}` : null,
-          rate !== null ? rateWords(rate) : null,
+          r.tokens_per_second != null ? rateWords(r.tokens_per_second) : null,
         ]
           .filter(Boolean)
           .join(' · '),
@@ -150,22 +151,14 @@ export function recentRows(snapshot: DashboardSnapshot | null, shown = RECENT_SH
     });
 }
 
-/** The share of prompt tokens served from the cache, as a whole percent; `null` before any was measured. */
-export function cacheReusePercent(snapshot: DashboardSnapshot | null): number | null {
-  const usage = snapshot?.cache?.usage;
-  if (!usage || usage.reporting_requests === 0 || usage.prompt_tokens === 0) return null;
-  return Math.round((usage.cached_tokens / usage.prompt_tokens) * 100);
-}
-
 /** The dashboard's other sections as short sentences, each only when it has something to say. */
 export function activitySentences(snapshot: DashboardSnapshot | null): string[] {
   if (!snapshot) return [];
   const plural = (n: number, one: string, many: string) => `${formatCount(n)} ${n === 1 ? one : many}`;
-  const reuse = cacheReusePercent(snapshot);
-  const trips = Object.values(snapshot.per_model_defects).reduce((sum, d) => sum + d.loop_guard_trips, 0);
+  const trips = snapshot.loop_guard_trips_total;
   const ignored = snapshot.sampling_audit.client_fields_discarded;
   return [
-    reuse !== null ? `Prompt cache ${reuse}% reused` : null,
+    snapshot.cache?.usage.summary ?? null,
     snapshot.tool_repairs_succeeded > 0 ? `${plural(snapshot.tool_repairs_succeeded, 'tool call', 'tool calls')} repaired` : null,
     trips > 0 ? plural(trips, 'loop-guard trip', 'loop-guard trips') : null,
     ignored > 0 ? `${plural(ignored, 'client sampling field', 'client sampling fields')} ignored` : null,

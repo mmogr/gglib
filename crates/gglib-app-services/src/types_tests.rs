@@ -188,6 +188,7 @@ mod mcp_server_info_shape_tests {
                 "is_valid": true,
             },
             "status": "running",
+            "state": "running",
             "tools": [],
         }))
         .expect("deserializes");
@@ -195,7 +196,7 @@ mod mcp_server_info_shape_tests {
         let json = serde_json::to_value(&info).expect("serializes");
 
         assert!(json.is_object(), "the response is an object, not an array");
-        for key in ["server", "status", "tools"] {
+        for key in ["server", "status", "state", "tools"] {
             assert!(json.get(key).is_some(), "missing {key}");
         }
         assert!(json["tools"].is_array(), "tools live inside the envelope");

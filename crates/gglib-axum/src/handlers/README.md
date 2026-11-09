@@ -7,8 +7,8 @@ HTTP request handlers for the Axum web server.
 Handlers are organized into domain-scoped subdirectories:
 - [`model`]  — CRUD, verification, downloads, `HuggingFace` discovery
 - [`config`] — settings, system setup
-- [`agent`]  — `POST /api/agent/chat`, the server-side agentic loop, and the
-  agent runs the daemon and a paired device start
+- [`agent`]  — the server-side agentic loop: the agent runs this machine
+  and a paired device start
 - [`benchmark`] — compare, perf, tune and agentic runs, and the run history
 - [`proxy`]  — the OpenAI-compatible proxy's status, start, stop and loop-guard log
 - [`remote`] — the remote tunnel, both sides, and the far machine's chats,
@@ -18,13 +18,6 @@ Handlers are organized into domain-scoped subdirectories:
 `attachments.rs` is `POST /api/attachments` and `GET /api/attachments/{id}`:
 an image the chat page sends once, as the raw body, and names by its id in
 every message after. Both are thin over core's `AttachmentService`.
-
-`generation.rs` is `GET /api/generation/turn`: an LLM turn on the daemon's
-generation gate, held for as long as the connection stays open. It streams
-`waiting` while a render is in the way, then `granted`, then only
-keep-alives until the client goes, or `refused` and the end. `gglib chat`
-opens it around each send, since its replies come from a llama-server port
-past the proxy.
 
 `images.rs` is `POST /api/images/generations`: the proxy's
 `/v1/images/generations` handler body, mounted at the daemon's door over the

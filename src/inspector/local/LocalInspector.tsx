@@ -48,7 +48,6 @@ import { LogLink } from './LogLink';
 import type { Update } from './Change';
 import { Details } from './Details';
 import { HowItRuns } from './HowItRuns';
-import { fitSentence } from '../../readings/launchFit';
 import { useExplain } from './useExplain';
 import { useLaunchFacts } from './useLaunchFacts';
 import { useLoad } from './useLoad';
@@ -172,7 +171,7 @@ export const LocalInspector: FC<LocalInspectorProps> = (props) => {
     { label: 'Remove from library…', onPick: () => void remove(), gapBefore: true, danger: true },
   ];
 
-  const fit = loaded ? null : fitSentence(explain.explanation?.plan.fit ?? null);
+  const fit = loaded ? null : (explain.explanation?.plan.fit?.sentence ?? null);
   const installing = load.needsLlama && install.installing;
 
   if (sheet)

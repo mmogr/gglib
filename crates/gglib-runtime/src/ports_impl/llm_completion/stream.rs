@@ -50,9 +50,12 @@ pub(super) fn normalized_event_stream(
 /// Decode SSE bytes into events, waiting at most `idle` for each read.
 ///
 /// A read that waits longer ends the stream with an `Err` that names the
-/// bound. A run sends to llama-server's port itself, past the proxy, and holds
-/// its model while it does, so without this a llama-server gone silent
-/// mid-answer would keep the run, and the model, for good (#1212). The adapter
+/// bound. A benchmark arm sends to llama-server's port itself, past the
+/// proxy, while it holds the model's lease, so without this a llama-server
+/// gone silent mid-answer would keep the arm, and the model, for good
+/// (#1212). A run reads its reply from an endpoint, this machine's or the
+/// paired machine's, and holds an agent slot while it does: an endpoint, or
+/// a tunnel, that stops writing would keep the slot for good. The adapter
 /// passes the proxy's own bound, [`gglib_proxy::STREAM_IDLE_TIMEOUT`], whose
 /// docs say what it times and why prefill sets its floor.
 fn sse_events<S, B, E>(byte_stream: S, idle: Duration) -> EventStream

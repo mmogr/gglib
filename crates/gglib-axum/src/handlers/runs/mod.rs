@@ -43,8 +43,9 @@ pub(crate) struct PutQuery {
 
 /// `PUT /api/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the run that already has the id. 201 new, 200 existing.
-/// With `?kind=agent` the body is an agent chat request, and the run is
-/// the agent loop.
+/// With `?kind=agent` the body is this machine's turn on one of its chats
+/// ([`LocalTurn`](gglib_core::domain::hub_chats::LocalTurn)), and the run is
+/// the agent loop, on the model, tools and limits the chat's settings save.
 pub(crate) async fn put(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -57,7 +58,9 @@ pub(crate) async fn put(
         Some(RunKind::Agent) if query.draw || query.image_model.is_some() => {
             return Err(invalid(gglib_proxy::runs::AGENT_DRAW_IN_QUERY.to_owned()));
         }
-        Some(RunKind::Agent) => crate::handlers::agent::create_run(&state, &id, body).await?,
+        Some(RunKind::Agent) => {
+            crate::handlers::agent::hub_turn::start_local(&state, &id, body).await?
+        }
         Some(RunKind::Chat) | None => state.runs.create(SCOPE, &id, body)?,
     };
     let status = if created.created {

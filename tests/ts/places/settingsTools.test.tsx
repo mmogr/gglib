@@ -584,14 +584,17 @@ describe('one list (ST-8)', () => {
 });
 
 describe('the rest of Tools', () => {
-  it('holds the agent limits, this device\'s among them, under one disclosure', async () => {
+  it('holds the agent limits, this machine\'s for every chat, under one disclosure, with no per-device ones', async () => {
     const user = await openTools();
     const limits = screen.getByRole('button', { name: 'Agent limits' });
     expect(screen.queryByLabelText('Max tool rounds')).not.toBeInTheDocument();
     await user.click(limits);
-    expect(screen.getByLabelText('Max tool rounds')).toBeInTheDocument();
-    expect(screen.getByLabelText('Max stuck steps')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'This device' })).getByText('applies to all chats on this device')).toBeInTheDocument();
+    expect(
+      ['Max tool rounds', 'Max stuck steps', 'Parallel tool calls', 'Tool timeout (ms)'].map((label) => screen.getByLabelText(label).id),
+    ).toEqual(['max-tool-iterations-input', 'max-stagnation-steps-input', 'max-parallel-tools-input', 'tool-timeout-ms-input']);
+    expect(screen.queryByRole('region', { name: 'This device' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Observation tools')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Reasoning budget')).not.toBeInTheDocument();
   });
 
   it('puts the tool servers first and the footnote last', async () => {

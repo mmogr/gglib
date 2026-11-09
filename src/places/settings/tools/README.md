@@ -31,7 +31,7 @@ without its value (ADR 0027).
 | `ToolServers.tsx` | The list, its one-sentence empty state, + Add a server, and the sheet for an add or an edit |
 | `ServerRow.tsx` | One server: name, state, tool count; Test, Start/Stop, Edit, ⋯ Remove… with their greyed reasons; Needs relink and Fix; the opened row; the last action's outcome |
 | `useServerActions.ts` | What the row actions do over the one list: the servers each busy on its own, one test at a time, each outcome kept to its row, Fix reading the list again once it resolves |
-| `serverState.ts` | A status from the server routes as a shape and a word (`SERVER_STATE_WORDS`, `FAILED_WORD`), with a failure's reason |
+| `serverState.ts` | A server's state from the server routes as a shape and its `TOOL_SERVER_WORDS` word, with a failure's reason from its status |
 | `ServerSheet.tsx` | The add and edit sheet: quick starts, Name, Command, Arguments, Environment variables, Use in chats, ▸ More (Working directory, Extra PATH, Start when gglib starts); `serverSent`, what a save sends |
 | `TemplatePicker.tsx` | The quick starts (`SERVER_TEMPLATES`: Tavily Web Search, GitHub, Brave Search) and the line saying reading files is built in |
 | `EnvVarManager.tsx` | The variables: a kept one by its key with its value held (`SecretField`), a typed one masked with an eye; `envSent`, what a save sends for them |
@@ -39,9 +39,8 @@ without its value (ADR 0027).
 
 ## Words this folder says that Rust does not
 
-The state words "Running", "Starting", "Stopped", "Not supported yet" and
-"Failed" (`gglib mcp list` prints the first four in lower case and
-`error: <reason>` for the fifth; Rust has no MCP state word yet); "N tools" / "1 tool"; "Tool servers", "No tool servers
+"N tools" / "1 tool" (a server's state is `TOOL_SERVER_WORDS`, the words
+`gglib mcp list` prints); "Tool servers", "No tool servers
 yet. Add one to give chats tools such as web search.", "Add a server",
 "Asking gglib"; "Test", "Start", "Stop", "Edit", "More for <name>",
 "Remove…", "Remove "<name>"?", "This cannot be undone.", "Remove"; "Not

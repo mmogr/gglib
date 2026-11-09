@@ -144,7 +144,6 @@ async fn a_request_that_turns_thinking_off_runs_with_no_thinking_budget() {
     let (_, chat) = read(&state, &off, false.into()).await.unwrap();
 
     assert_eq!(chat.reasoning_budget_tokens, Some(0));
-    assert_eq!(chat.reasoning_effort, None);
     let body = sent(&state, served, chat).await;
     assert_eq!(body["reasoning_budget_tokens"], json!(0));
 }
@@ -165,7 +164,6 @@ async fn a_thinking_budget_above_zero_is_sampling_and_is_not_read() {
     let (_, chat) = read(&state, &sampled, false.into()).await.unwrap();
 
     assert_eq!(chat.reasoning_budget_tokens, None);
-    assert_eq!(chat.reasoning_effort, None);
     let body = sent(&state, served, chat).await;
     assert_ne!(body["reasoning_budget_tokens"], json!(4096));
     assert_ne!(body["reasoning_budget_tokens"], json!(0));

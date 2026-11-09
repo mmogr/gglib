@@ -155,6 +155,8 @@ fn profiles_use_camel_case_on_the_wire() {
         max_download_queue_size: None,
         max_tool_iterations: None,
         max_stagnation_steps: None,
+        max_parallel_tools: None,
+        tool_timeout_ms: None,
         default_model_id: None,
         default_image_model_id: None,
         inference_defaults: None,
@@ -318,6 +320,37 @@ async fn update_settings_json_null_clears_title_generation_prompt() {
     );
 }
 
+/// The two tool limits Settings › Tools writes are stored and read back
+/// under their own names, through the service and the database, and a
+/// `null` clears each back to the run's default.
+#[tokio::test]
+async fn the_tool_limits_round_trip_through_the_settings_api() {
+    let core = test_core().await;
+    let ops = make_ops(core, MockSystemProbePort::default());
+
+    let set: UpdateSettingsRequest =
+        serde_json::from_str(r#"{"maxParallelTools": 4, "toolTimeoutMs": 5000}"#).unwrap();
+    let updated = ops.update(set).await.expect("update should succeed");
+    assert_eq!(
+        (updated.max_parallel_tools, updated.tool_timeout_ms),
+        (Some(4), Some(5_000))
+    );
+    let read = ops.get().await.expect("get should succeed");
+    let wire = serde_json::to_value(&read).unwrap();
+    assert_eq!(
+        (&wire["maxParallelTools"], &wire["toolTimeoutMs"]),
+        (&serde_json::json!(4), &serde_json::json!(5000))
+    );
+
+    let clear: UpdateSettingsRequest =
+        serde_json::from_str(r#"{"maxParallelTools": null, "toolTimeoutMs": null}"#).unwrap();
+    let cleared = ops.update(clear).await.expect("update should succeed");
+    assert_eq!(
+        (cleared.max_parallel_tools, cleared.tool_timeout_ms),
+        (None, None)
+    );
+}
+
 /// A write that names the queue size hands the running download manager the
 /// size now stored: the one set, or the default once it is cleared. A write
 /// that leaves the field alone tells the manager nothing.
@@ -342,4 +375,41 @@ async fn a_queue_size_write_reaches_the_running_download_manager() {
 
     let calls = downloads.calls.lock().unwrap().clone();
     assert_eq!(calls, ["set_max_queue_size 3", "set_max_queue_size 10"]);
+}
+
+/// The folder's state is what a write to the disk finds: a folder that is
+/// not there will be created where its parent can be written, one there is
+/// writable.
+#[test]
+fn the_folder_state_is_read_from_the_disk() {
+    let root = tempfile::tempdir().expect("a temp folder");
+    let missing = directory_info_at(&root.path().join("models"), "default", String::new());
+    assert_eq!(missing.state, ModelsDirState::Absent);
+    assert!(!missing.exists && missing.writable);
+
+    let there = directory_info_at(root.path(), "explicit", String::new());
+    assert_eq!(there.state, ModelsDirState::Writable);
+    assert!(there.exists && there.writable);
+    assert_eq!(there.source, "explicit");
+}
+
+/// A folder whose mode refuses a write is not writable, and a missing
+/// folder under one will not be created there: both are Not writable, as
+/// the first download's write would find.
+#[cfg(unix)]
+#[test]
+fn a_folder_that_refuses_a_write_or_sits_under_one_is_not_writable() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().expect("a temp folder");
+    let locked = root.path().join("locked");
+    std::fs::create_dir(&locked).expect("a folder to lock");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).expect("0555");
+    let folder = directory_info_at(&locked, "explicit", String::new());
+    let under = directory_info_at(&locked.join("models"), "explicit", String::new());
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+        .expect("writable again, to clean up");
+    assert_eq!(folder.state, ModelsDirState::NotWritable);
+    assert!(folder.exists && !folder.writable);
+    assert_eq!(under.state, ModelsDirState::NotWritable);
+    assert!(!under.exists && !under.writable);
 }

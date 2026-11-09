@@ -1,6 +1,8 @@
 //! The iteration and stagnation limits a turn's loop runs with, resolved by
 //! the one rule every caller of the agent loop uses: the daemon, for the
-//! page's run and a paired device's turn, and the CLI's `chat` and `q`.
+//! page's run and a paired device's turn, and the CLI's `chat` and `q`. The
+//! tool limits ([`ToolLimits`]) follow the iteration limit's rule, in the
+//! daemon's turns.
 
 use super::config::DEFAULT_MAX_ITERATIONS;
 use crate::settings::Settings;
@@ -34,6 +36,39 @@ impl TurnLimits {
                 .or_else(|| stored(settings.and_then(|s| s.max_tool_iterations)))
                 .unwrap_or(DEFAULT_MAX_ITERATIONS),
             max_stagnation_steps: stored(settings.and_then(|s| s.max_stagnation_steps)),
+        }
+    }
+}
+
+/// The tool limits one turn's loop runs with, as
+/// [`AgentConfig::from_user_params`](super::AgentConfig::from_user_params)
+/// takes them: `None` keeps the built-in default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolLimits {
+    /// How many tool calls one step makes at once.
+    pub max_parallel_tools: Option<usize>,
+    /// How long one tool call may take, in milliseconds.
+    pub tool_timeout_ms: Option<u64>,
+}
+
+impl ToolLimits {
+    /// Resolve a turn's tool limits against this machine's `settings`, each
+    /// by the iteration limit's rule: the one the turn names (its chat's),
+    /// then the stored `max_parallel_tools` or `tool_timeout_ms`, then the
+    /// built-in default. `settings` is `None` when they could not be read.
+    #[must_use]
+    pub fn resolve(
+        parallel: Option<usize>,
+        timeout_ms: Option<u64>,
+        settings: Option<&Settings>,
+    ) -> Self {
+        Self {
+            max_parallel_tools: parallel.or_else(|| {
+                settings
+                    .and_then(|s| s.max_parallel_tools)
+                    .map(|n| n as usize)
+            }),
+            tool_timeout_ms: timeout_ms.or_else(|| settings.and_then(|s| s.tool_timeout_ms)),
         }
     }
 }

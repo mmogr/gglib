@@ -6,8 +6,9 @@
  * a turn's frames as the loop logs them, and the metadata the daemon saves
  * from them. The page draws the frames (`dispatchAgentEvent`) and loads the
  * metadata (`buildLoadedMessage`); both must give the same figures, the
- * figure line and its tooltip the same words and the composer's ring the
- * same context reading.
+ * figure line and its tooltip the same words, the line the same as `gglib
+ * chat` prints it (`TurnUsage::figure_line`, recorded beside them), and the
+ * composer's ring the same context reading.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -35,6 +36,7 @@ import {
 const CONTRACT = JSON.parse(rust('contracts/runs/turn_made.json')) as {
   frames: AgentEvent[];
   metadata: Record<string, unknown>;
+  figure_line: string;
 };
 
 function drawn(): GglibMessage {
@@ -67,8 +69,9 @@ describe('turn_made contract', () => {
     expect(Object.keys(custom(loaded()) as object).sort()).toEqual(Object.keys(CONTRACT.metadata).sort());
   });
 
-  it('says the same figures either way, the rate computed from what was saved', () => {
-    const line = '41 s · 13 tok/s · 2,100 tokens reused';
+  it('says the same figures either way, the daemon\'s rate as it sent and saved it, as gglib chat prints them', () => {
+    const line = '41 s · 13 t/s · 2,100 tokens reused';
+    expect(CONTRACT.figure_line).toBe(line);
     expect(figureParts(facts(drawn())).join(' · ')).toBe(line);
     expect(figureParts(facts(loaded())).join(' · ')).toBe(line);
     const detail = figureDetail(facts(loaded()));

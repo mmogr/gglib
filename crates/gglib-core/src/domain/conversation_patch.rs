@@ -1,7 +1,8 @@
 //! A change to some of a conversation's settings.
 //!
 //! Its model, its tools and its tool limits: each field sent replaces its
-//! setting, one sent as `null` clears it, and one left out keeps it.
+//! setting, one sent as `null` clears it, and one left out keeps it. A model
+//! on another machine clears the chat's profile too.
 //! `PUT /api/conversations/{id}` reads it, and
 //! [`ChatHistoryService::update_conversation`] writes it.
 //!
@@ -95,11 +96,17 @@ impl ConversationSettingsPatch {
 
     /// Make this patch to `settings`. A new model brings `model_name`, the
     /// name it goes by, in place of the old model's name: none when it is
-    /// not known here, or when the model is cleared. Tools switched back on
-    /// are stored as no `no_tools`, as a conversation that never switched
-    /// them off stores them.
+    /// not known here, or when the model is cleared. A model on another
+    /// machine than the one held, or none where one was, clears the chat's
+    /// profile, which is a profile configured on that machine. Tools
+    /// switched back on are stored as no `no_tools`, as a conversation that
+    /// never switched them off stores them.
     pub fn apply(self, settings: &mut ConversationSettings, model_name: Option<String>) {
         if let Some(model) = self.model {
+            let machine = |m: &Option<ModelRef>| m.as_ref().map(|m| m.machine.clone());
+            if machine(&model) != machine(&settings.model) {
+                settings.profile = None;
+            }
             settings.model = model;
             settings.model_name = model_name;
         }

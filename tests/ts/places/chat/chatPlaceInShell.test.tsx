@@ -22,6 +22,7 @@ vi.mock('../../../../src/places/library/LibraryPlace', () => ({ default: () => <
 import { resetChats } from '../../../../src/services/chatRegistry';
 import { ingestServerEvent } from '../../../../src/services/serverRegistry';
 import { cleanupServerEvents, forgetServerList, initServerEvents } from '../../../../src/services/serverEvents';
+import { cleanupModelEvents, initModelEvents } from '../../../../src/services/modelEvents';
 import { renderShell } from '../harness';
 
 let fixture: ChatFixture;
@@ -37,15 +38,15 @@ beforeEach(() => {
     ...chatTransport(fixture),
     listConversations: vi.fn(async () => [...fixture.conversations]),
     // The daemon saves the question as the run starts.
-    startAgentRun: vi.fn(async (id: string, request: { conversation_id: number; messages: Array<{ content: unknown }> }) => {
+    startAgentRun: vi.fn(async (id: string, request: { conversation_id: number; content: string }) => {
       const cid = request.conversation_id;
-      const content = String(request.messages.at(-1)?.content ?? '');
+      const content = request.content;
       fixture.rows[cid] = [...(fixture.rows[cid] ?? []), { id: 1, conversation_id: cid, role: 'user', content, created_at: '2026-11-07T09:00:00Z' }];
       return agentRun(id, cid, 'queued');
     }),
     stopServer,
     listModels: vi.fn(async () => []),
-    getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null })),
+    getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null })),
     getRemoteStatus: vi.fn(async () => null),
     revealSecret: vi.fn(async () => null),
     // The list the app's server bridge reads before a chat decides what serves it.
@@ -56,9 +57,12 @@ beforeEach(() => {
   act(() => ingestServerEvent({ type: 'running', modelId: '41', port: 5041, updatedAt: Date.now(), modelName: 'qwen3-8b' }));
   forgetServerList();
   initServerEvents();
+  // The library, which a new chat's model is picked against, as the app reads it at start.
+  initModelEvents();
 });
 afterEach(() => {
   cleanupServerEvents();
+  cleanupModelEvents();
   act(() => ingestServerEvent({ type: 'stopped', modelId: '41', port: 5041, updatedAt: Date.now() + 1 }));
 });
 

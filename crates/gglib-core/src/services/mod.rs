@@ -16,6 +16,7 @@ mod model_registrar;
 mod model_row_roles;
 mod model_service;
 mod model_verification;
+mod model_verification_health;
 mod model_verification_remote;
 mod projector_choices;
 mod secrets;
@@ -38,9 +39,10 @@ pub use model_links::{LinkError, LinkRole};
 pub use model_registrar::ModelRegistrar;
 pub use model_service::{ImportMode, ModelService, RetagDiff};
 pub use model_verification::{
-    ModelVerificationService, OverallHealth, ShardHealth, ShardHealthReport, ShardProgress,
+    Damage, ModelVerificationService, OverallHealth, ShardHealth, ShardHealthReport, ShardProgress,
     UpdateCheckResult, UpdateDetails, VerificationProgress, VerificationReport, VerifiedFileKind,
 };
+pub use model_verification_health::damaged_line;
 pub use model_verification_remote::{RepairStarted, missing_after_repair};
 pub use projector_choices::projector_choices;
 pub use secrets::SecretsService;

@@ -90,6 +90,7 @@ import { resetEngineInstall } from '../../../src/places/library/engineInstall';
 import { RESIDENCY_WORDS } from '../../../src/components/status/words';
 import { appLogger } from '../../../src/services/platform';
 import { REASONING_KEYS, SAMPLING_KEYS } from '../../../src/inspector/local/rows';
+import type { ContextFit } from '../../../src/types/generated/ContextFit';
 import type { LaunchPlan } from '../../../src/types/generated/LaunchPlan';
 import { renderApp } from './harness';
 import { guiModel } from '../fixtures/model';
@@ -148,17 +149,22 @@ describe('the inspector, a model on this machine', () => {
     serve('stopped');
   });
 
-  it('says the context it would serve, of the trained window, and a refusal as a refusal', async () => {
+  it('says the fit sentence the daemon serves, a refusal as a refusal, and the Context row its note', async () => {
     renderInspector();
-    expect(await screen.findByText('Fits this Mac with 32K context, of 128K trained.')).toBeInTheDocument();
+    expect(await screen.findByText('Fits this machine with 32K context, of 128K trained.')).toBeInTheDocument();
+    expect(row('Context')).toHaveTextContent('32,768 · fits (35.81 GiB of 43.20 GiB usable)');
     cleanup();
 
-    const fit = chatPlan().fit!;
-    explain.answer = launchExplanation(samplingExplanation(), chatPlan({ fit: { ...fit, servesAt: 4096, fitted: null, budgetBytes: null, source: 'built_in_default' } }));
+    // The fit Rust records for a machine whose memory could not be read.
+    const recorded = JSON.parse(rust('contracts/models/fit_sentence.json')) as ContextFit[];
+    const refused = recorded.find((f) => f.fitted === null && f.budgetBytes === null)!;
+    explain.answer = launchExplanation(samplingExplanation(), chatPlan({ fit: refused }));
     renderInspector();
     expect(
-      await screen.findByText("Serves at 4K context, of 128K trained; gglib could not fit one to this Mac: this Mac's memory could not be read."),
+      await screen.findByText("Serves at 4K context, of 128K trained; gglib could not fit one to this machine: this machine's memory could not be read."),
     ).toBeInTheDocument();
+    // A fit that did not know every figure has no note.
+    expect(row('Context').textContent).not.toContain('fit (');
   });
 
   it('groups the arguments by their decision, each row saying whose choice and why on hover', async () => {
@@ -198,6 +204,29 @@ describe('the inspector, a model on this machine', () => {
     const note = screen.getByRole('note', { name: '--mmproj' });
     expect(note).toHaveTextContent('why');
     expect(note).toHaveTextContent('chosen by you');
+  });
+
+  it('⧉ beside the launch line copies the whole command as one shell line, then says Copied for one second', async () => {
+    const recorded = JSON.parse(rust('contracts/models/launch_line.json')) as { plan: LaunchPlan; line: string }[];
+    explain.answer = launchExplanation(samplingExplanation(), { ...recorded[1].plan, fit: chatPlan().fit });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderInspector();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(await screen.findByRole('button', { name: 'Copy as command' }));
+
+      expect(await navigator.clipboard.readText()).toBe(
+        "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf'" +
+          " --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e",
+      );
+      expect(await screen.findByText('Copied')).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(900));
+      expect(screen.getByText('Copied')).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(200));
+      expect(screen.queryByText('Copied')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('loads on one click with nothing typed, and opens no chat', async () => {

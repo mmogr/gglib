@@ -6,18 +6,19 @@
  * start that just served it); the conversation's own; the one this route
  * just opened the chat on (a first send, a branch, Start over, before a run
  * has named it); for an empty chat, `?far=` or `?model=`. Failing those
- * (a chat that has not run, or `/chat/new` alone): the last one used if it
- * is loaded, else the default model if it is, else the first loaded; with
- * none loaded, the inspector of the last one used (or the default), where
- * Load is, else the library.
+ * (a chat that has not run, or `/chat/new` alone): the last one used, else
+ * the default model, each while the library has it, else the first loaded;
+ * with none of those, the library. A new chat keeps the model it opened on
+ * when its first send makes the conversation.
  *
- * A chat on this machine's model needs its port: the server registry's, or
- * the handoff's, since the registry may not have heard of it yet; with
- * neither, the model is not running, and the address goes to its inspector.
+ * A chat on this machine's model opens whether or not the model is running:
+ * a send loads it, and the run says so while it waits. The port it answers
+ * on, the server registry's or the handoff's, names it for a title only.
  * Once open, the chat keeps the last port it had: a model unloaded or
- * crashed while it is open leaves it open, its composer saying so.
- * Neither "nothing serves it" nor the fallback is decided before the server
- * list's first read lands: a cold load renders before the registry is filled.
+ * crashed while it is open leaves it open, its composer live, and the next
+ * send loads it again. The
+ * fallback is not decided before the server list's and the library's first
+ * reads land: a cold load renders before the registries are filled.
  * A chat on the paired machine's model is `PairedChat`. One route serves
  * `/chat/new` and `/chat/:id`, and the place is keyed by its model, so the
  * address a first send replaces keeps the page. Leaving keeps the model
@@ -33,7 +34,8 @@ import { useServers, type ServerViewModel } from '../hooks/useServers';
 import { useServerListHeard } from '../services/serverEvents';
 import { useSettings } from '../hooks/useSettings';
 import { lastUsedModel, modelOf, refreshChats, useChats, type ChatModel } from '../services/chatRegistry';
-import { useModel } from '../services/modelRegistry';
+import { useModel, useModelLibrary } from '../services/modelRegistry';
+import type { GgufModel } from '../types';
 import type { ConversationSummary } from '../services/transport';
 import type { Machine } from '../types/generated/Machine';
 import { clearChatHandoff, peekChatHandoff, wasHanded, type ChatHandoff } from './chatHandoff';
@@ -50,15 +52,20 @@ type Target = { kind: 'local'; id: number } | { kind: 'paired'; id: number; mach
 
 /**
  * The model for a chat that names none: the last used, then the default,
- * whichever is loaded; else the first loaded; else the inspector of one of
- * them, where Load is; else the library.
+ * whichever the library still has, loaded or not; else the first loaded;
+ * else the library.
  */
-function fallback(list: readonly ConversationSummary[], defaultId: number | null, servers: ServerViewModel[]): Target {
-  const running = servers.filter((s) => s.status === 'running').map((s) => s.modelId);
-  const wanted = [lastUsedModel(list), defaultId].filter((id): id is number => id !== null);
-  const loaded = wanted.find((id) => running.includes(id)) ?? running[0];
-  if (loaded !== undefined) return { kind: 'local', id: loaded };
-  return { kind: 'go', to: wanted[0] === undefined ? paths.library() : paths.model(wanted[0]) };
+function fallback(
+  list: readonly ConversationSummary[],
+  defaultId: number | null,
+  servers: ServerViewModel[],
+  library: readonly GgufModel[],
+): Target {
+  const kept = (id: number | null) => id !== null && library.some((m) => m.id === id);
+  const wanted = [lastUsedModel(list), defaultId].find(kept);
+  const running = servers.find((s) => s.status === 'running')?.modelId;
+  const id = wanted ?? running;
+  return id === undefined || id === null ? { kind: 'go', to: paths.library() } : { kind: 'local', id };
 }
 
 function targetOf(model: ChatModel): Target | null {
@@ -94,30 +101,26 @@ function LocalChat({ modelId, conversationId, handoff, onOpened, onDeleted }: Lo
   const navigate = useNavigate();
   const { servers, stopServer } = useServers();
   const server = servers.find((s) => s.modelId === modelId);
-  const { startingModel, switchTo } = useChatSwitch(servers);
+  const { switchTo } = useChatSwitch();
   const inLibrary = useModel(modelId);
   const handed = handoff?.modelId === modelId ? handoff : null;
 
-  // The port last served on is kept: a model unloaded or crashed mid-chat
-  // keeps the chat open, its composer saying so. Only a chat opened on a
-  // model nothing serves goes to its inspector, where Load is.
+  // The port last served on is kept, for a title: a model unloaded or
+  // crashed mid-chat keeps the chat open, and a send loads it again. A chat
+  // opened on a model nothing serves opens all the same; a send loads it.
   const live = server?.port ?? handed?.port;
   const [held, setHeld] = useState(live);
   if (live !== undefined && live !== held) setHeld(live);
   const port = live ?? held;
-  // Nothing serves it only once the server list has been heard: a cold load
-  // renders before the registry's first read lands.
-  const heard = useServerListHeard();
-  if (port === undefined) return heard ? <Navigate to={paths.model(modelId)} replace /> : CHAT_LOADING;
+  const modelName = server?.modelName ?? handed?.modelName ?? inLibrary?.name ?? `Model #${modelId}`;
 
   return (
     <ChatPlace
       serverPort={port}
       modelId={modelId}
-      modelName={server?.modelName ?? handed?.modelName ?? inLibrary?.name ?? `Model #${modelId}`}
+      modelName={modelName}
       conversationId={conversationId}
       draft={handed?.draft}
-      startingModel={startingModel}
       onSwitchModel={switchTo}
       onUnloadModel={() => stopServer(modelId)}
       onOpened={onOpened}
@@ -137,6 +140,7 @@ export function ChatRoute() {
   const { list, failed } = useChats('this');
   const { servers } = useServers();
   const heard = useServerListHeard();
+  const library = useModelLibrary();
   const { settings } = useSettings();
   // The chat this route just opened, and on what: kept until a run names it.
   const [opened, setOpened] = useState<{ id: number; target: Target } | null>(null);
@@ -180,9 +184,9 @@ export function ChatRoute() {
   if (target === null) {
     if (missing) return rechecked === location.key ? <Navigate to={paths.newChat()} replace /> : CHAT_LOADING;
     if (unread) return reread === location.key ? <ChatUnread onRetry={() => setReread(null)} /> : CHAT_LOADING;
-    // The fallback picks among the models loaded: not before they are heard.
-    if (list === null || !heard) return CHAT_LOADING;
-    target = fallback(list, settings?.defaultModelId ?? null, servers);
+    // The fallback reads the models loaded and the library: not before both are heard.
+    if (list === null || !heard || library.loading) return CHAT_LOADING;
+    target = fallback(list, settings?.defaultModelId ?? null, servers, library.models);
   }
   if (target.kind === 'go') return <Navigate to={target.to} replace />;
 

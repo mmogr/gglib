@@ -36,7 +36,6 @@ pub(crate) mod subcommands;
 pub(crate) mod target;
 pub(crate) mod thinking_arg;
 pub(crate) mod tool_limit_args;
-pub(crate) mod upstream_args;
 pub(crate) mod utils;
 
 // Re-export primary types for convenient access

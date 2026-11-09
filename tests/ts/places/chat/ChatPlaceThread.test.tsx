@@ -69,6 +69,8 @@ const MADE = {
   completionTokens: 496,
   turnDurationMs: 41_000,
   writingDurationMs: 40_992,
+  /** The daemon's rate, saved with the counts it is made from. */
+  tokensPerSecond: 12.09992193598751,
 };
 
 let fixture: ChatFixture;
@@ -83,6 +85,11 @@ function renderLocal() {
 const turnOf = (element: HTMLElement) => element.closest('[data-turn]') as HTMLElement;
 /** Whether the action line an action is on is shown. */
 const lineShown = (action: HTMLElement) => action.closest('[data-shown]')?.getAttribute('data-shown');
+
+/** A second question after the saved exchange, which the run going answers. */
+function secondQuestion() {
+  fixture.rows[1].push({ id: 14, conversation_id: 1, role: 'user', content: 'And when it crashes?', created_at: '2026-09-01T09:14:00Z' });
+}
 
 /** A second exchange after the saved one, its reply's row keeping `metadata`. */
 function secondExchange(metadata: Record<string, unknown> = {}) {
@@ -171,7 +178,8 @@ describe('ChatPlace, the thread', () => {
       savedExchange()[0],
       { ...savedExchange()[1], content: '', metadata: { tool_calls: [{ id: 'c1', name: 'read_file', arguments: {} }] } },
       savedExchange()[2],
-      { id: 14, conversation_id: 1, role: 'assistant', content: '', created_at: '2026-09-01T09:14:00Z', metadata: { thinking: 'Only thought.', thinkingDurationSeconds: 2 } },
+      { id: 14, conversation_id: 1, role: 'user', content: 'And?', created_at: '2026-09-01T09:14:00Z' },
+      { id: 15, conversation_id: 1, role: 'assistant', content: '', created_at: '2026-09-01T09:14:00Z', metadata: { thinking: 'Only thought.', thinkingDurationSeconds: 2 } },
     ];
     renderLocal();
     expect(await screen.findByRole('button', { name: '1 tool call' })).toBeInTheDocument();
@@ -179,7 +187,76 @@ describe('ChatPlace, the thread', () => {
     expect(screen.queryByText('No text.')).not.toBeInTheDocument();
   });
 
+  it('draws one fold for a reply whose tool round and answer are two saved rows', async () => {
+    const user = userEvent.setup();
+    fixture.rows[1] = [
+      savedExchange()[0],
+      {
+        ...savedExchange()[1],
+        content: '',
+        metadata: { thinking: 'Read the plist first.', thinkingDurationSeconds: 3, tool_calls: [{ id: 'c1', name: 'read_file', arguments: {} }] },
+      },
+      savedExchange()[2],
+      { id: 14, conversation_id: 1, role: 'assistant', content: ANSWER, created_at: '2026-09-01T09:14:00Z', metadata: { thinking: 'It says KeepAlive.', thinkingDurationSeconds: 2 } },
+    ];
+    renderLocal();
+    await screen.findByText(ANSWER);
+
+    const folds = screen.getAllByRole('button', { name: /^Thought for|tool call/ });
+    expect(folds.map((f) => f.textContent)).toEqual(['Thought for 5 s · 1 tool call']);
+    await user.click(folds[0]);
+    const body = document.getElementById(folds[0].getAttribute('aria-controls')!)!;
+    expect(within(body).getByText('Read the plist first.')).toBeVisible();
+    expect(within(body).getByText('It says KeepAlive.')).toBeVisible();
+    expect(within(body).getByRole('button', { name: 'Read File' })).toBeVisible();
+    // The answer is the reply's text, under the one fold.
+    expect(folds[0].compareDocumentPosition(screen.getByText(ANSWER)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('No text.')).not.toBeInTheDocument();
+  });
+
+  it('draws one fold, live, for a reply whose second round is being written', async () => {
+    secondQuestion();
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    fixture.frames.r1 = [
+      { type: 'reasoning_delta', content: 'Read the plist first.' },
+      { type: 'tool_call_start', tool_call: { id: 'c9', name: 'read_file', arguments: { path: 'job.plist' } }, display_name: 'Read File' },
+      { type: 'tool_call_complete', tool_name: 'read_file', result: { tool_call_id: 'c9', content: '<plist/>', success: true }, display_name: 'Read File', duration_display: '1ms', execute_duration_ms: 1 },
+      { type: 'iteration_complete', iteration: 1, tool_calls: 1 },
+      { type: 'reasoning_delta', content: 'It says KeepAlive.' },
+    ];
+    renderLocal();
+
+    const fold = await screen.findByRole('button', { name: /^Thinking….* · 1 tool call$/ });
+    // The saved exchange's fold, then this reply's one.
+    expect(screen.getAllByRole('button', { name: /^Thinking…|^Thought for|tool call/ }).map((b) => b.textContent)).toEqual([
+      'Thought for 19 s · 1 tool call',
+      fold.textContent,
+    ]);
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Read the plist first.')).toBeVisible();
+    expect(screen.getByText('It says KeepAlive.')).toBeVisible();
+  });
+
+  it("between a reply's tool rounds, shows the next round's wait in the daemon's words, never an error", async () => {
+    secondQuestion();
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    fixture.frames.r1 = [
+      { type: 'tool_call_start', tool_call: { id: 'c9', name: 'read_file', arguments: {} }, display_name: 'Read File' },
+      { type: 'tool_call_complete', tool_name: 'read_file', result: { tool_call_id: 'c9', content: '<plist/>', success: true }, display_name: 'Read File', duration_display: '1ms', execute_duration_ms: 1 },
+      { type: 'iteration_complete', iteration: 1, tool_calls: 1 },
+      { type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'Qwen3.8-27B', elapsed_ms: 2_000, said: 'Loading Qwen3.8-27B… 2 s' },
+    ];
+    renderLocal();
+
+    const wait = await screen.findByText('Loading Qwen3.8-27B… 2 s');
+    expect(wait.closest('[role="status"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: '1 tool call' })).toBeInTheDocument();
+    expect(screen.queryByText(/failed|error/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('toasts')).toBeEmptyDOMElement();
+  });
+
   it('keeps the fold live and open while the reply thinks', async () => {
+    secondQuestion();
     fixture.runs = [agentRun('r1', 1, 'in_progress')];
     fixture.frames.r1 = [{ type: 'reasoning_delta', content: 'Looking at the plist.' }];
     renderLocal();
@@ -187,6 +264,34 @@ describe('ChatPlace, the thread', () => {
     const fold = await screen.findByRole('button', { name: /^Thinking…/ });
     expect(fold).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Looking at the plist.')).toBeVisible();
+  });
+
+  it('ends "Thinking…" once the reply writes its text, while the reply still arrives', async () => {
+    secondQuestion();
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    fixture.frames.r1 = [
+      { type: 'reasoning_delta', content: 'Looking at the plist.' },
+      { type: 'text_delta', content: 'It restarts it.' },
+    ];
+    renderLocal();
+
+    await screen.findByText('It restarts it.');
+    expect(screen.queryByRole('button', { name: /^Thinking…/ })).not.toBeInTheDocument();
+    // The saved exchange's fold, then this reply's, no longer live.
+    expect(screen.getAllByRole('button', { name: /^Thought/ })).toHaveLength(2);
+  });
+
+  it('draws no fold for a reply of text alone', async () => {
+    fixture.rows[1] = [
+      savedExchange()[0],
+      { id: 12, conversation_id: 1, role: 'assistant', content: ANSWER, created_at: '2026-09-01T09:13:00Z' },
+    ];
+    renderLocal();
+    await screen.findByText(ANSWER);
+    expect(screen.queryByRole('button', { name: /^Thinking…|^Thought|tool call/ })).not.toBeInTheDocument();
+    const turn = screen.getByText(ANSWER).closest('[data-turn="reply"]') as HTMLElement;
+    // Nothing above the text: the turn's first control is its action line's Copy.
+    expect(within(turn).getAllByRole('button')[0]).toHaveTextContent(/^Copy/);
   });
 
   it('shows a reply arriving as how far its prompt has been read, with a bar', async () => {
@@ -379,7 +484,7 @@ describe('ChatPlace, a reply\'s figures', () => {
     renderLocal();
     await screen.findByText(ANSWER);
 
-    const line = screen.getByText('41 s · 12 tok/s · 2,100 tokens reused');
+    const line = screen.getByText('41 s · 12 t/s · 2,100 tokens reused');
     expect(line.getAttribute('title')!.split('\n')).toEqual([
       'Qwen3.8-27B · Q8_0',
       'thought for 19 s',
@@ -387,7 +492,7 @@ describe('ChatPlace, a reply\'s figures', () => {
       '3,180 tokens read',
       '2,100 tokens reused',
       '496 tokens written',
-      '41 s · 12 tok/s',
+      '41 s · 12 t/s',
     ]);
   });
 
@@ -401,7 +506,7 @@ describe('ChatPlace, a reply\'s figures', () => {
 
     expect(within(earlier).queryByText(/tokens reused/)).not.toBeInTheDocument();
     await user.hover(earlier);
-    expect(within(earlier).getByText('41 s · 12 tok/s · 2,100 tokens reused')).toBeInTheDocument();
+    expect(within(earlier).getByText('41 s · 12 t/s · 2,100 tokens reused')).toBeInTheDocument();
     await user.unhover(earlier);
     expect(within(earlier).queryByText(/tokens reused/)).not.toBeInTheDocument();
   });
@@ -412,7 +517,7 @@ describe('ChatPlace, a reply\'s figures', () => {
     await screen.findByText(ANSWER);
     const word = screen.getByText('unfinished');
     expect(word).toHaveClass('text-warning');
-    expect(word.parentElement).toHaveTextContent('unfinished · 41 s · 12 tok/s · 2,100 tokens reused');
+    expect(word.parentElement).toHaveTextContent('unfinished · 41 s · 12 t/s · 2,100 tokens reused');
   });
 
   it('says no rate for a reply of one token', async () => {

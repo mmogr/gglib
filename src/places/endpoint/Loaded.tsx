@@ -10,7 +10,8 @@
  * launch's flag line. Hover offers Unload and Chat; ⋯ offers Chat with it,
  * Change launch options… (the Load with options sheet), Pin the endpoint to
  * it, Show log and Unload. Clicking a row inspects the model beside the
- * place. The queue and the room for a second model are lines of their own,
+ * place; the rows are one Tab stop, and ↑ ↓ inspect the next row as they
+ * move (`Listbox`). The queue and the room for a second model are lines of their own,
  * and Load a model… under them opens the palette (`LoadPalette`).
  *
  * Unload asks the daemon whatever this window believes (TX-12): the rows
@@ -27,6 +28,7 @@ import { paths } from '../../app/paths';
 import { RESIDENCY_MARK, StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
+import { Listbox, tabStop } from '../../components/ui/Listbox';
 import type { PairedModelsState } from '../../hooks/usePairedModels';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 import { cn } from '../../utils/cn';
@@ -50,7 +52,9 @@ interface LoadedProps {
   pinning: boolean;
 }
 
-const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapshot' | 'rows' | 'inspected' | 'paired'>> = ({ row, selected, onUnload, onPin, pinning }) => {
+type RowProps = { row: LoadedRow; selected: boolean; tabIndex: 0 | -1 } & Omit<LoadedProps, 'snapshot' | 'rows' | 'inspected' | 'paired'>;
+
+const Row: FC<RowProps> = ({ row, selected, tabIndex, onUnload, onPin, pinning }) => {
   const navigate = useNavigate();
   const inspect = () => navigate(paths.endpointInspect(row.modelId));
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -65,13 +69,13 @@ const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapsho
     <div
       role="option"
       aria-selected={selected}
-      tabIndex={0}
+      tabIndex={tabIndex}
       onClick={inspect}
       onKeyDown={onKeyDown}
       className={cn(
         'group relative mx-sm flex min-h-[52px] cursor-pointer items-center gap-md rounded-base px-sm py-sm outline-none',
-        'hover:bg-background-hover focus-visible:bg-background-hover',
-        selected && 'bg-surface-hover hover:bg-surface-hover',
+        'hover:bg-background-hover focus-visible:bg-background-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
+        selected && 'bg-surface-hover hover:bg-surface-hover focus-visible:bg-surface-hover',
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-xs">
@@ -114,17 +118,27 @@ const Row: FC<{ row: LoadedRow; selected: boolean } & Omit<LoadedProps, 'snapsho
 };
 
 export const Loaded: FC<LoadedProps> = ({ snapshot, rows, inspected, paired, onUnload, onPin, pinning }) => {
+  const navigate = useNavigate();
   const room = roomLine(snapshot);
+  const picked = rows.findIndex((row) => row.modelId === inspected);
   return (
     <Group label="Loaded" aside={room && <span className="font-normal">{room}</span>}>
       {rows.length === 0 ? (
         <Note>Nothing loaded. An app loads a model by asking for it by name, or load one now.</Note>
       ) : (
-        <div role="listbox" aria-label="Loaded models">
-          {rows.map((row) => (
-            <Row key={row.modelId} row={row} selected={row.modelId === inspected} onUnload={onUnload} onPin={onPin} pinning={pinning} />
+        <Listbox label="Loaded models" onPick={(i, replace) => navigate(paths.endpointInspect(rows[i].modelId), { replace })}>
+          {rows.map((row, i) => (
+            <Row
+              key={row.modelId}
+              row={row}
+              selected={i === picked}
+              tabIndex={tabStop(i, picked)}
+              onUnload={onUnload}
+              onPin={onPin}
+              pinning={pinning}
+            />
           ))}
-        </div>
+        </Listbox>
       )}
       {queuedLines(snapshot).map((line) => (
         <Note key={line}>{line}</Note>

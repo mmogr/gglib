@@ -1,27 +1,25 @@
 //! How an agent run starts: the id reserved in the caller's scope, the
 //! user's message saved, the loop started, and the reply saved when it ends.
 //!
-//! The page's run prepares its loop first and reserves after
-//! ([`launch`]). A turn on one of the hub's chats, a paired device's or
-//! this machine's own, is reserved first ([`launch_turn`]): its model may
-//! have to load, or wait behind an image render, for longer than the
-//! client waits for its `PUT`, so the load happens inside the run, which
-//! says it is waiting. What such a run is
-//! refused for after that ends it `failed` with the code the `PUT` would
-//! have answered, and it has written nothing. Both write a turn's rows
-//! through [`begin_writes`].
+//! A turn on one of this machine's chats, a paired device's or this
+//! machine's own, is reserved first ([`launch_turn`]): its model may have
+//! to load, or wait behind an image render, for longer than the client
+//! waits for its `PUT`, so the load happens inside the run, which says it
+//! is waiting. What such a run is refused for after that ends it `failed`
+//! with the code the `PUT` would have answered, and it has written nothing.
+//! A turn's rows are written through [`begin_writes`].
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use axum::http::StatusCode;
 use futures_util::future::BoxFuture;
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
+use tokio::time::{Duration, Instant, MissedTickBehavior};
 
 use gglib_app_services::transcript::{FrameTimes, remember_folder, remember_thinking};
 use gglib_app_services::{Reservation, RunEnded, RunLog, RunSpec};
 use gglib_core::domain::Machine;
-use gglib_core::domain::agent::{AgentEvent, WaitingFor};
+use gglib_core::domain::agent::AgentEvent;
 use gglib_core::domain::runs::{RunError, RunKind};
 use gglib_core::domain::thinking::Remember;
 use gglib_core::ports::{Created, RunScope};
@@ -42,7 +40,7 @@ pub(super) struct Transcript {
     pub(super) answer_saved: bool,
     pub(super) remember: Remember,
     /// The folder the conversation is to remember once the run starts.
-    /// Only the page's run says one.
+    /// Only this machine's own turn says one.
     pub(super) remember_folder: RememberFolder,
 }
 
@@ -50,82 +48,6 @@ pub(super) struct Transcript {
 /// writes nothing, `Some(folder)` sets it to `folder`, a canonical path,
 /// and `Some(None)` forgets it.
 pub(super) type RememberFolder = Option<Option<String>>;
-
-/// Reserve the id in `scope`, refuse a run on another machine than its
-/// conversation's, save the user's message (naming the device, for a
-/// device's run), the model the run uses, the Thinking choice its turn
-/// said and the folder the run said, and start the loop, in one task of its
-/// own: a request dropped part-way cannot split them, so
-/// a retry finds the run rather than saving the message, or replacing rows,
-/// again. A run that is refused, or whose id is already a run, writes none
-/// of them.
-pub(super) async fn launch(
-    state: &AppState,
-    id: &str,
-    scope: RunScope,
-    transcript: Transcript,
-    prepared: Prepared,
-    permit: OwnedSemaphorePermit,
-) -> Result<Created, HttpError> {
-    let task = tokio::spawn(reserve_and_start(
-        Arc::clone(state),
-        id.to_owned(),
-        scope,
-        transcript,
-        prepared,
-        permit,
-    ));
-    task.await.unwrap_or_else(|_| {
-        Err(HttpError::Coded {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            code: "internal_error",
-            message: "the run could not be started".to_owned(),
-        })
-    })
-}
-
-async fn reserve_and_start(
-    state: AppState,
-    id: String,
-    scope: RunScope,
-    transcript: Transcript,
-    mut prepared: Prepared,
-    permit: OwnedSemaphorePermit,
-) -> Result<Created, HttpError> {
-    let conversation_id = transcript.conversation_id;
-    let id = id.as_str();
-    let state = &state;
-    // A device's turn says so, on its message and on each turn of the reply.
-    prepared.made_by.device = scope.device().map(str::to_owned);
-    let spec = RunSpec {
-        kind: RunKind::Agent,
-        model: Some(prepared.model.clone()),
-        conversation_id,
-    };
-    let reserved = match state.runs.reserve(scope, id, spec)? {
-        Reservation::Existing(info) => {
-            return Ok(Created {
-                info,
-                created: false,
-            });
-        }
-        Reservation::New(reserved) => reserved,
-    };
-    let times = FrameTimes::new();
-    // Dropping `reserved` on the way out leaves no run behind. Held, it
-    // keeps any other run off the conversation, so the machine read here is
-    // still the conversation's when the model is named.
-    begin_writes(state, transcript, &prepared).await?;
-    let ended = conversation_id.map_or_else(nothing_to_save, |conversation_id| {
-        save_reply(Arc::clone(&state.core), conversation_id, times.clone())
-    });
-    let info = reserved.start(|log| Box::pin(work(prepared, permit, log, times)), ended);
-    tracing::debug!(run = %id, saved = conversation_id.is_some(), "agent run started");
-    Ok(Created {
-        info,
-        created: true,
-    })
-}
 
 /// An end with nothing to save.
 fn nothing_to_save() -> RunEnded {
@@ -191,18 +113,24 @@ pub(super) async fn begin_writes(
 
 /// Told that a turn's model is not running and has to load.
 #[derive(Debug, Clone)]
-pub(super) struct Loading(mpsc::UnboundedSender<()>);
+pub(super) struct Loading(mpsc::UnboundedSender<String>);
 
 impl Loading {
-    /// The model is about to be loaded: the run says it is waiting.
-    pub(super) fn waiting(&self) {
-        let _ = self.0.send(());
+    /// `model`, by the name the catalogue shows, is about to be loaded: the
+    /// run says it is waiting for it, and says so again each
+    /// [`LOAD_TICK`] with how long the load has taken.
+    pub(super) fn waiting(&self, model: &str) {
+        let _ = self.0.send(model.to_owned());
     }
 }
 
-/// What a turn does once its run exists: find or load its model,
-/// hold it and compose its loop, telling `Loading` when the model has to
-/// load.
+/// How often a run waiting for its model to load says so again, with the
+/// time the load has taken: a client that joins part-way can then show
+/// "Loading Qwen3-4B… 12 s" to the second.
+pub(super) const LOAD_TICK: Duration = Duration::from_secs(1);
+
+/// What a turn does once its run exists: find or load its model and
+/// compose its loop, telling `Loading` when the model has to load.
 pub(super) type LatePrepare =
     Box<dyn FnOnce(Loading) -> BoxFuture<'static, Result<Prepared, HttpError>> + Send>;
 
@@ -215,7 +143,7 @@ pub(super) fn ready(prepared: Prepared) -> LatePrepare {
 /// Start a turn: reserve `id` in `scope` for a run of `kind` (an agent run
 /// for a turn on a hub chat, a chat run for a chat a device keeps itself;
 /// either logs the agent loop's events) on `model`, and only then, as the
-/// run's own work, hold its model and prepare its loop (`late`), write its
+/// run's own work, load its model and prepare its loop (`late`), write its
 /// rows ([`begin_writes`]) and run it. The caller's `PUT` is answered as
 /// soon as the run is reserved.
 ///
@@ -311,15 +239,29 @@ impl Turn {
         let (loading, mut waits) = mpsc::unbounded_channel();
         let preparing = late(Loading(loading));
         tokio::pin!(preparing);
+        // The model being loaded, and since when.
+        let mut load: Option<(String, Instant)> = None;
+        let mut tick = tokio::time::interval(LOAD_TICK);
+        tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let prepared = loop {
             tokio::select! {
                 biased;
-                Some(()) = waits.recv() => say_waiting(&log, &times),
+                Some(model) = waits.recv() => {
+                    let since = Instant::now();
+                    say_waiting(&log, &times, &model, since);
+                    load = Some((model, since));
+                    tick.reset();
+                }
+                _ = tick.tick(), if load.is_some() => {
+                    if let Some((model, since)) = &load {
+                        say_waiting(&log, &times, model, *since);
+                    }
+                }
                 prepared = &mut preparing => break prepared,
             }
         };
-        while waits.try_recv().is_ok() {
-            say_waiting(&log, &times);
+        while let Ok(model) = waits.try_recv() {
+            say_waiting(&log, &times, &model, Instant::now());
         }
         let mut prepared = prepared.map_err(refused)?;
         // A device's turn says so, on its message and on each turn of the reply.
@@ -332,14 +274,10 @@ impl Turn {
     }
 }
 
-/// Log that the run waits for its model to load.
-fn say_waiting(log: &RunLog, times: &FrameTimes) {
-    let waiting = AgentEvent::Waiting {
-        reason: WaitingFor::ModelLoad,
-        step: 0,
-        total: 0,
-        position: 0,
-    };
+/// Log that the run waits for `model` to load, which began at `since`.
+fn say_waiting(log: &RunLog, times: &FrameTimes, model: &str, since: Instant) {
+    let elapsed = u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let waiting = AgentEvent::model_load_wait(model, elapsed);
     if log.append(frame(&waiting)).is_ok() {
         times.logged();
     }

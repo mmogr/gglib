@@ -323,12 +323,7 @@ fn progress_and_waiting_frames_change_no_row() {
         text("Here it is."),
     ];
     let with_progress = [
-        AgentEvent::Waiting {
-            reason: crate::domain::agent::WaitingFor::ImageRender,
-            step: 3,
-            total: 20,
-            position: 1,
-        },
+        AgentEvent::image_render_wait(3, 20, 1),
         started("c1"),
         AgentEvent::ToolProgress {
             tool_call_id: "c1".to_owned(),

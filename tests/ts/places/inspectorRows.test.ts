@@ -1,8 +1,7 @@
 /**
- * The fit sentence (`readings/launchFit`) for each shape of fit, and
- * `inspector/local/rows`: the Context row's note, which decisions become
- * rows and in what order, how a row's arguments read, and how the Sampling
- * row counts what the daemon resolved.
+ * `inspector/local/rows`: which decisions become rows and in what order,
+ * how a row's arguments read, and how the Sampling row counts what the
+ * daemon resolved.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -10,63 +9,22 @@ import { describe, it, expect } from 'vitest';
 import {
   argsValue,
   chosenBy,
-  contextNote,
   narrated,
   runRows,
   samplingValue,
   setByYou,
   SAMPLING_KEYS,
 } from '../../../src/inspector/local/rows';
-import { fitSentence } from '../../../src/readings/launchFit';
-import type { ContextFit } from '../../../src/types/generated/ContextFit';
 import type { LaunchArg } from '../../../src/types/generated/LaunchArg';
 import { chatPlan, samplingExplanation } from '../fixtures/explain';
 import { resolvedConfig } from '../fixtures/inference';
 
-const FIT = chatPlan().fit as ContextFit;
 const arg = (flag: string, decision: string, value?: string, source: LaunchArg['source'] = 'gglib'): LaunchArg => ({
   flag,
   value,
   decision,
   source,
   reason: 'why',
-});
-
-describe('the fit sentence', () => {
-  it('says the served context of the trained window when it fits', () => {
-    expect(fitSentence(FIT)).toBe('Fits this Mac with 32K context, of 128K trained.');
-  });
-
-  it('says what fits when the served context is more than that', () => {
-    expect(fitSentence({ ...FIT, servesAt: 65536, source: 'model_server_defaults' })).toBe(
-      'Serves at 64K context, of 128K trained; 32K fits this Mac.',
-    );
-  });
-
-  it('names what a refusal was missing, and leaves out a window it does not know', () => {
-    expect(fitSentence({ ...FIT, servesAt: 4096, fitted: null, budgetBytes: null, kvBytesPerToken: null, trainedCtx: null })).toBe(
-      "Serves at 4K context; gglib could not fit one to this Mac: this Mac's memory could not be read, the model does not say what its context costs.",
-    );
-  });
-
-  it('writes a context that is not whole thousands as its number', () => {
-    expect(fitSentence({ ...FIT, servesAt: 30000, fitted: 30000 })).toBe('Fits this Mac with 30,000 context, of 128K trained.');
-  });
-
-  it('says nothing for an image model, which has no context', () => {
-    expect(fitSentence(null)).toBeNull();
-  });
-});
-
-describe("the Context row's note", () => {
-  it('is the weights and that much KV cache against the budget', () => {
-    // 2.5e9 + 200,000 × 32,768 bytes, of 48 GiB.
-    expect(contextNote(FIT)).toBe('fits (8.43 GiB of 48.00 GiB)');
-  });
-
-  it('is absent when the fit did not know a figure', () => {
-    expect(contextNote({ ...FIT, kvBytesPerToken: null })).toBeNull();
-  });
 });
 
 describe('the rows', () => {

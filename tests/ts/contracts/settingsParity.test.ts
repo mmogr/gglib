@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, it, expect } from 'vitest';
-import { MAX_STAGNATION_STEPS } from '../../../src/constants/settingsDefaults';
+import { MAX_PARALLEL_TOOLS, MAX_STAGNATION_STEPS, TOOL_TIMEOUT_MS } from '../../../src/constants/settingsDefaults';
 import { REASONING_EFFORT_LEVELS } from '../../../src/constants/reasoningEffort';
 
 import { fnSource, rust } from './rustSource';
@@ -96,5 +96,27 @@ describe('max stagnation steps tracks the agent default', () => {
     expect(ceilingMatch, 'MAX_STAGNATION_STEPS_CEILING not found').not.toBeNull();
     expect(MAX_STAGNATION_STEPS.default).toBe(defaultMatch![1]);
     expect(MAX_STAGNATION_STEPS.max).toBe(ceilingMatch![1]);
+  });
+});
+
+/** A Rust integer constant or field literal, its digit separators dropped. */
+function rustNumber(source: string, pattern: RegExp, what: string): string {
+  const match = source.match(pattern);
+  expect(match, `${what} not found`).not.toBeNull();
+  return match![1].replace(/_/g, '');
+}
+
+describe('the tool limits state the agent loop\'s defaults and clamps', () => {
+  const CONFIG_RS = rust('crates/gglib-core/src/domain/agent/config.rs');
+
+  it('parallel tool calls: the default and the ceiling', () => {
+    expect(MAX_PARALLEL_TOOLS.default).toBe(rustNumber(CONFIG_RS, /DEFAULT_MAX_PARALLEL_TOOLS[^=]*=\s*([\d_]+)/, 'DEFAULT_MAX_PARALLEL_TOOLS'));
+    expect(MAX_PARALLEL_TOOLS.max).toBe(rustNumber(CONFIG_RS, /MAX_PARALLEL_TOOLS_CEILING[^=]*=\s*([\d_]+)/, 'MAX_PARALLEL_TOOLS_CEILING'));
+  });
+
+  it('tool timeout: the default, the floor and the ceiling', () => {
+    expect(TOOL_TIMEOUT_MS.default).toBe(rustNumber(CONFIG_RS, /\btool_timeout_ms:\s*([\d_]+),/, 'the default tool_timeout_ms'));
+    expect(TOOL_TIMEOUT_MS.min).toBe(rustNumber(CONFIG_RS, /MIN_TOOL_TIMEOUT_MS[^=]*=\s*([\d_]+)/, 'MIN_TOOL_TIMEOUT_MS'));
+    expect(TOOL_TIMEOUT_MS.max).toBe(rustNumber(CONFIG_RS, /MAX_TOOL_TIMEOUT_MS_CEILING[^=]*=\s*([\d_]+)/, 'MAX_TOOL_TIMEOUT_MS_CEILING'));
   });
 });

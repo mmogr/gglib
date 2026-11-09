@@ -26,16 +26,20 @@ pub(super) struct DashboardSnapshot {
     #[serde(default)]
     pub(super) slots_status: Option<String>,
     pub(super) total_requests: u64,
+    /// Turns whose tool call was re-issued and came back conformant.
+    /// `None` on a proxy older than the field, which prints no count rather
+    /// than a zero it never counted.
+    #[serde(default)]
+    pub(super) tool_repairs_succeeded: Option<u64>,
+    /// Requests the proxy's loop guard tripped on, across every model.
+    /// `None` on a proxy older than the field, which prints no total rather
+    /// than a zero it never counted.
+    #[serde(default)]
+    pub(super) loop_guard_trips_total: Option<u64>,
     /// Prompt-cache configuration and reuse. `None` until the first request
     /// resolves a model, and on a proxy older than this field.
     #[serde(default)]
     pub(super) cache: Option<CacheStatus>,
-    /// Agent-path prompt-cache reuse (GUI chat) — a separate
-    /// population from [`CacheStatus::usage`]. Top-level and always present,
-    /// since it does not depend on a resolved model; `default` on a proxy older
-    /// than this field.
-    #[serde(default)]
-    pub(super) agent_usage: CacheUsage,
     /// VRAM residency and the admission queue. `default` on a proxy older than
     /// this field, which renders as an empty resident set.
     #[serde(default)]
@@ -232,8 +236,8 @@ pub(super) struct CacheStatus {
 
 /// Mirror of `gglib_core::cache_metrics::CacheUsage`.
 ///
-/// Raw counts only — the server publishes no derived "time saved" figure, so
-/// there is none to render here either.
+/// Raw counts and the server's reuse percent — the server publishes no
+/// "time saved" figure, so there is none to render here either.
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct CacheUsage {
     #[serde(default)]
@@ -248,6 +252,15 @@ pub(super) struct CacheUsage {
     pub(super) last_prompt_tokens: Option<u32>,
     #[serde(default)]
     pub(super) last_cached_tokens: Option<u32>,
+    /// The cached tokens as a whole percent of the prompt tokens, the
+    /// server's; `None` before any was measured, and on a proxy older than
+    /// the field, which prints no percent rather than a guess.
+    #[serde(default)]
+    pub(super) reuse_percent: Option<u8>,
+    /// The last request's reuse as a whole percent, the server's; `None` as
+    /// [`Self::reuse_percent`] is.
+    #[serde(default)]
+    pub(super) last_reuse_percent: Option<u8>,
 }
 
 #[derive(Debug, Deserialize)]

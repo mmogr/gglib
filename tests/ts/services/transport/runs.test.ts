@@ -19,7 +19,7 @@ import {
   startAgentRun,
   type RunStreamItem,
 } from '../../../../src/services/transport/api/runs';
-import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../../src/types/generated/LocalTurn';
 import type { RunInfo } from '../../../../src/types/generated/RunInfo';
 
 const fetchMock = vi.fn();
@@ -33,17 +33,7 @@ const info: RunInfo = {
   last_seq: 0,
 };
 
-const request: AgentRunRequest = {
-  conversation_id: 4,
-  port: 9000,
-  far: null,
-  messages: [{ role: 'user', content: 'hi' }],
-  config: null,
-  tool_filter: null,
-  model: null,
-  reasoning_effort: null,
-  reasoning_budget_tokens: null,
-};
+const request: LocalTurn = { conversation_id: 4, content: 'hi' };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

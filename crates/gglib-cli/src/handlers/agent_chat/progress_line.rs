@@ -1,5 +1,6 @@
 //! A long tool's progress, and a wait before a reply, as one line on stderr
-//! that each new report rewrites: "drawing: sampling 2/4".
+//! that each new report rewrites: "drawing: sampling 2/4", or "Loading
+//! Qwen3-4B… 12 s" while the daemon loads the chat's model.
 //!
 //! On a terminal the line is redrawn in place and wiped when the tool
 //! completes; written to a pipe, each report is its own line (the agent loop
@@ -7,7 +8,7 @@
 
 use std::io::{self, IsTerminal as _, Write as _};
 
-use gglib_core::domain::agent::{AgentEvent, ToolStage, WaitingFor};
+use gglib_core::domain::agent::{AgentEvent, ToolStage};
 
 use crate::presentation::style::{DIM, RESET};
 
@@ -43,20 +44,9 @@ pub(super) fn progress_line(event: &AgentEvent) -> Option<String> {
             ToolStage::Decoding => "drawing: decoding".to_owned(),
             ToolStage::Finishing => "drawing: finishing".to_owned(),
         }),
-        AgentEvent::Waiting {
-            reason: WaitingFor::ImageRender,
-            step,
-            total,
-            ..
-        } => Some(if *total > 0 {
-            format!("waiting for an image render, step {step} of {total}")
-        } else {
-            "waiting for an image render".to_owned()
-        }),
-        AgentEvent::Waiting {
-            reason: WaitingFor::ModelLoad,
-            ..
-        } => Some("waiting for the model to load".to_owned()),
+        // A wait's words are core's, shared with every surface that shows
+        // one: "Loading Qwen3-4B… 12 s".
+        AgentEvent::Waiting { .. } => event.waiting_sentence(),
         _ => None,
     }
 }
@@ -137,24 +127,31 @@ mod tests {
     }
 
     #[test]
-    fn a_wait_names_the_render_and_its_step() {
-        let wait = |reason, step, total| AgentEvent::Waiting {
+    fn a_wait_is_said_in_cores_words_with_the_model_and_its_seconds() {
+        use gglib_core::domain::agent::WaitingFor;
+        let wait = |reason, step, total, model: Option<&str>, elapsed_ms| AgentEvent::Waiting {
             reason,
             step,
             total,
             position: 1,
+            model: model.map(str::to_owned),
+            elapsed_ms,
+            said: None,
         };
         assert_eq!(
-            progress_line(&wait(WaitingFor::ImageRender, 3, 20)).as_deref(),
-            Some("waiting for an image render, step 3 of 20")
+            progress_line(&wait(WaitingFor::ImageRender, 3, 20, None, None)).as_deref(),
+            Some("Waiting for an image render, step 3 of 20")
         );
         assert_eq!(
-            progress_line(&wait(WaitingFor::ImageRender, 0, 0)).as_deref(),
-            Some("waiting for an image render")
-        );
-        assert_eq!(
-            progress_line(&wait(WaitingFor::ModelLoad, 0, 0)).as_deref(),
-            Some("waiting for the model to load")
+            progress_line(&wait(
+                WaitingFor::ModelLoad,
+                0,
+                0,
+                Some("Qwen3-4B"),
+                Some(12_000)
+            ))
+            .as_deref(),
+            Some("Loading Qwen3-4B… 12 s")
         );
     }
 

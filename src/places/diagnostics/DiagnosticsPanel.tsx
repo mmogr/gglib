@@ -11,6 +11,7 @@ import { FC } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Banner } from '../../components/ui/Banner';
 import { Stack } from '../../components/primitives';
+import { FAST_DOWNLOADS_WORDS } from '../../components/status/words';
 import { useDiagnostics } from './useDiagnostics';
 import type { DependencyInfo, ResolvedPaths } from '../../types/setup';
 
@@ -182,7 +183,7 @@ export const DiagnosticsPanel: FC = () => {
           <div className="flex items-baseline justify-between gap-md">
             <span className="text-xs text-text-muted">Status</span>
             <span className="text-xs text-text-secondary">
-              {fastDownloads.provisioned ? 'Enabled' : 'Not enabled'}
+              {FAST_DOWNLOADS_WORDS[fastDownloads.state]}
             </span>
           </div>
           {fastDownloads.provisioned && fastDownloads.builder && (

@@ -15,6 +15,7 @@ pub(crate) mod tool_progress;
 pub(crate) mod tool_types;
 mod transcript;
 mod turn_usage;
+mod waiting;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
 pub use config::{
@@ -24,7 +25,7 @@ pub use config::{
     MIN_TOOL_TIMEOUT_MS,
 };
 pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent, WaitingFor};
-pub use limits::TurnLimits;
+pub use limits::{ToolLimits, TurnLimits};
 pub use loop_detection::results::{batch_results_hash, hash_result_content, hash_result_text};
 pub use loop_detection::{
     BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,
@@ -36,7 +37,7 @@ pub use openai_history::{
 };
 pub use replay::{
     INCOMPLETE_KEY, MADE_KEYS, MadeKeys, THINKING_DURATION_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL,
-    rows_from_frames, rows_from_timed_frames,
+    fill_made_rate, rows_from_frames, rows_from_timed_frames,
 };
 pub use stagnation::StagnationDetector;
 pub use tool_call_writing::ToolCallWriting;

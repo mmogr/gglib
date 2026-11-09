@@ -8,6 +8,7 @@
 use gglib_core::Settings;
 use gglib_core::access::endpoint_base_url;
 use gglib_core::domain::{EndpointState, KeyState};
+use gglib_core::ports::PinnedSpec;
 use gglib_core::server_config::{ServerConfigOptions, chosen_context_size};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
@@ -18,7 +19,7 @@ use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ProxyStatus {
     pub running: bool,
-    /// The same fact as `running` and `pinned_model`, said as the one word
+    /// The same fact as `running` and `pinned_model_id`, said as the one word
     /// every surface uses: `on`, `off` or `pinned`.
     pub state: EndpointState,
     pub port: Option<u16>,
@@ -29,9 +30,19 @@ pub(crate) struct ProxyStatus {
     /// surface uses. `None` while not listening, and while listening when
     /// the daemon could not read its settings to say.
     pub key: Option<KeyState>,
-    /// The model this proxy run is pinned to, when started in pinned mode
-    /// (`gglib serve`). `None` for the ordinary auto-swapping proxy.
+    /// The name of the model this proxy run is pinned to, when started in
+    /// pinned mode (`gglib serve`), for showing. `None` for the ordinary
+    /// auto-swapping proxy.
     pub pinned_model: Option<String>,
+    /// The pinned state said with its model, `Pinned to <model>`
+    /// (`EndpointState::pinned_to`), as every surface says it. `None` when
+    /// nothing is pinned.
+    pub pinned_to: Option<String>,
+    /// The catalogue id of the pinned model: the pin's identity, which every
+    /// surface matches a model to. Two models can share a name, and a
+    /// rename keeps the id. `None` exactly when `pinned_model` is.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub pinned_model_id: Option<i64>,
 }
 
 /// Optional configuration for starting the proxy.
@@ -104,22 +115,27 @@ pub(crate) struct StartPinnedBody {
     pub proxy: StartProxyConfig,
 }
 
-/// Convert runtime `ProxyStatus` to API `ProxyStatus`. `key` is what the
-/// proxy demands now, or `None` when that could not be read; it is
-/// reported only while the proxy listens.
+/// Convert runtime `ProxyStatus` to API `ProxyStatus`. `pinned` is the
+/// run's pin, its id and name reported together; `key` is what the proxy
+/// demands now, or `None` when that could not be read. Both are reported
+/// only while the proxy listens.
 pub(super) fn to_api_status(
     s: &RuntimeProxyStatus,
-    pinned_model: Option<String>,
+    pinned: Option<PinnedSpec>,
     key: Option<KeyState>,
 ) -> ProxyStatus {
     match s {
         RuntimeProxyStatus::Running { address } => ProxyStatus {
             running: true,
-            state: EndpointState::listening(pinned_model.is_some()),
+            state: EndpointState::listening(pinned.is_some()),
             port: Some(address.port()),
             base_url: Some(endpoint_base_url(*address)),
             key,
-            pinned_model,
+            pinned_model_id: pinned.as_ref().map(|pin| pin.id),
+            pinned_to: pinned
+                .as_ref()
+                .map(|pin| EndpointState::pinned_to(&pin.name)),
+            pinned_model: pinned.map(|pin| pin.name),
         },
         // A crashed proxy is not serving, so it reports exactly as a stopped
         // one does: no port to hand out, and no pin still in force.
@@ -130,6 +146,8 @@ pub(super) fn to_api_status(
             base_url: None,
             key: None,
             pinned_model: None,
+            pinned_to: None,
+            pinned_model_id: None,
         },
     }
 }

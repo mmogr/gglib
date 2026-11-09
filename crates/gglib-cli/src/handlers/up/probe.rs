@@ -41,7 +41,7 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
     row(
         "models",
         &status.models_directory.path,
-        (!status.models_directory.exists).then_some("will be created"),
+        status.models_directory.state.note(),
     );
 
     step(2, "Engines");

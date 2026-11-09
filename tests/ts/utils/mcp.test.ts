@@ -9,6 +9,7 @@ import {
   getServerErrorMessage,
 } from '../../../src/utils/mcp';
 import type { McpServerInfo } from '../../../src/services/transport/types/mcp';
+import { stateOf } from '../fixtures/mcp';
 
 const serverInfo = (status: McpServerInfo['status']): McpServerInfo => ({
   server: {
@@ -24,6 +25,7 @@ const serverInfo = (status: McpServerInfo['status']): McpServerInfo => ({
     created_at: '2024-01-01',
   },
   status,
+  state: stateOf(status),
   tools: [],
 });
 

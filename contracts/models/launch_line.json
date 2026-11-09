@@ -120,6 +120,27 @@
           "decision": "model",
           "source": "gglib",
           "reason": "why"
+        },
+        {
+          "flag": "--alias",
+          "value": "$HOME",
+          "decision": "model",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "-ot",
+          "value": "blk\\.\\d+\\.ffn_.*=CPU",
+          "decision": "model",
+          "source": "gglib",
+          "reason": "why"
+        },
+        {
+          "flag": "--override-kv",
+          "value": "k=v,a+b%c:d@e",
+          "decision": "model",
+          "source": "gglib",
+          "reason": "why"
         }
       ],
       "narration": {
@@ -130,7 +151,7 @@
       },
       "fit": null
     },
-    "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty ''"
+    "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e"
   },
   {
     "plan": {

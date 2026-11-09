@@ -15,22 +15,24 @@ use gglib_core::RemotePairing;
 use gglib_core::domain::chat::{Conversation, ConversationSettings};
 use gglib_core::domain::{InferenceProfile, Machine, UNNAMED_PAIRED};
 
-use super::session_profile;
+use super::named_over;
+use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
 use crate::target::{Target, TurnModel, far_wire};
 
-/// The settings a resumed session saves in place of `saved`, when its turn
-/// is on another model than the one stored: that model, its name and the
-/// session's profile, with every other setting kept. `None` when the stored
-/// model is the turn's, whose profile `--profile` replaces for this session
-/// only.
+/// The settings a resumed session saves in place of `saved`: what the
+/// conversation saved, with what this command line names in its place
+/// ([`named_over`]), and, when its turn is on another model than the one
+/// stored, that model, its name and the session's profile. `None` when that
+/// changes nothing.
 ///
 /// # Errors
 ///
 /// A conversation whose stored model, the one it resumes with, is no longer
-/// in this library and no `--port` serves: said here, rather than as a miss
-/// that sends the user to the paired machine this chat never ran on.
-pub(crate) fn resumed_settings(
+/// in this library: said here, rather than as a miss that sends the user to
+/// the paired machine this chat never ran on.
+pub(crate) async fn resumed_settings(
+    ctx: &CliContext,
     saved: Option<ConversationSettings>,
     args: &ChatArgs,
     typed: bool,
@@ -38,7 +40,7 @@ pub(crate) fn resumed_settings(
     turn: &TurnModel,
 ) -> Result<Option<ConversationSettings>> {
     let stored = saved.as_ref().and_then(|s| s.model.as_ref());
-    if let Some(model) = stored.filter(|_| !typed && args.port.is_none())
+    if let Some(model) = stored.filter(|_| !typed)
         && turn.model_ref.is_none()
     {
         bail!(
@@ -52,14 +54,15 @@ pub(crate) fn resumed_settings(
             args.continue_id.unwrap_or_default()
         );
     }
-    if stored == turn.model_ref.as_ref() {
-        return Ok(None);
+    super::require_a_model(ctx, turn).await?;
+    let held = saved.unwrap_or_default();
+    let mut kept = named_over(held.clone(), args, profile, turn);
+    if held.model.as_ref() != turn.model_ref.as_ref() {
+        kept.model.clone_from(&turn.model_ref);
+        kept.model_name = Some(turn.name.clone());
+        kept.profile = super::session_settings(args, profile, turn).profile;
     }
-    let mut kept = saved.unwrap_or_default();
-    kept.model.clone_from(&turn.model_ref);
-    kept.model_name = Some(turn.name.clone());
-    kept.profile = session_profile(profile, turn);
-    Ok(Some(kept))
+    Ok((kept != held).then_some(kept))
 }
 
 /// [`stored_machine`] applied to a resume's `args`, against the pairing
@@ -76,8 +79,7 @@ pub(crate) fn follow_stored_machine(
 ) -> Result<()> {
     let named = !args.identifier.is_empty();
     let paired_with = |fingerprint: &str| far_credentials(pairing, fingerprint).is_ok();
-    let port = args.port.is_some();
-    let Some((target, identifier)) = stored_machine(stored, args.target, port, named, paired_with)?
+    let Some((target, identifier)) = stored_machine(stored, args.target, named, paired_with)?
     else {
         return Ok(());
     };
@@ -102,19 +104,17 @@ pub(crate) fn follow_stored_machine(
 /// `None` when the flag decides: a row that names no model, or a model
 /// named on the command line. And for a row that stores only a `model_id`,
 /// once it is not refused: it ran here, and resumes by the name it saved.
-/// `port` says whether `--port` names a server here; `paired_with`, whether
+/// `paired_with` says whether
 /// the pairing this machine holds now is with the machine a fingerprint
 /// names.
 ///
 /// # Errors
 ///
 /// A conversation that ran here, resumed with `--remote`; one that ran on a
-/// machine this one is no longer paired with; one that ran on the paired
-/// machine, resumed with `--port`. One sentence each.
+/// machine this one is no longer paired with. One sentence each.
 pub(crate) fn stored_machine(
     stored: &Conversation,
     flag: Target,
-    port: bool,
     named: bool,
     paired_with: impl Fn(&str) -> bool,
 ) -> Result<Option<(Target, String)>> {
@@ -131,10 +131,6 @@ pub(crate) fn stored_machine(
         Machine::Paired { fingerprint } if !paired_with(fingerprint) => bail!(
             "this chat ran on a machine this one is no longer paired with, so it cannot be \
              resumed here"
-        ),
-        Machine::Paired { .. } if port => bail!(
-            "this chat ran on the paired machine, and --port names a server on this one; drop \
-             --port to resume it there"
         ),
         Machine::Paired { .. } => model.map(|model| {
             let profile = saved.and_then(|saved| saved.profile.as_deref());

@@ -171,6 +171,7 @@ pub(in crate::handlers) async fn started(
             "base_url": answer.map(|p| format!("http://127.0.0.1:{p}/v1")),
             "key": answer.map(|_| "none_needed"),
             "pinned_model": null,
+            "pinned_model_id": null,
         })
         .to_string();
         let _ = write!(

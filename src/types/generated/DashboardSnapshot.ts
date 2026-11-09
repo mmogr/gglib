@@ -2,7 +2,6 @@
 import type { ActiveConnectionSnapshot } from "./ActiveConnectionSnapshot";
 import type { AdmissionSnapshot } from "./AdmissionSnapshot";
 import type { CacheStatus } from "./CacheStatus";
-import type { CacheUsage } from "./CacheUsage";
 import type { ContextSnapshot } from "./ContextSnapshot";
 import type { LaunchNarration } from "./LaunchNarration";
 import type { ModelDefectCounts } from "./ModelDefectCounts";
@@ -85,22 +84,18 @@ upstream_health: UpstreamHealthSnapshot,
  */
 per_model_defects: { [key in string]: ModelDefectCounts }, 
 /**
+ * Requests the proxy's loop guard tripped on, across every model: the
+ * sum of [`Self::per_model_defects`]' `loop_guard_trips`, so it is
+ * process-lifetime like them, and empty of the agent loop's own trips,
+ * which are counted beside them.
+ */
+loop_guard_trips_total: number, 
+/**
  * How prompt caching is configured for the running model. `None` until
  * the first request resolves a model, since the RAM budget isn't known
  * until something is launched.
  */
 cache: CacheStatus | null, 
-/**
- * Prompt-cache reuse for the in-process **agent path** — GUI
- * chat, which talk to llama-server directly rather than through
- * [`crate::forward`]. Reported as a separate population from [`Self::cache`]'s
- * `usage`, never merged into it: an agent turn's many small tool-driven calls
- * have a reuse profile nothing like a user's conversation. Top-level rather
- * than nested under [`Self::cache`] because it does not depend on the
- * proxy's cache configuration and must surface even before a proxied
- * request has resolved a model.
- */
-agent_usage: CacheUsage, 
 /**
  * What the running model's launch decided, and why — the same record the
  * CLI banner prints at startup (see

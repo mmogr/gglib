@@ -128,9 +128,94 @@ pub struct HubTurn {
     pub image_model: Option<u32>,
 }
 
+/// A turn this machine's own page adds to one of its chats.
+///
+/// The body of `PUT /api/runs/{id}?kind=agent` on the daemon's door: a
+/// [`HubTurn`], key for key, and the chat's folder, which only this
+/// machine's turn may say (ADR 0023). The daemon rebuilds the history from
+/// its record, and runs the turn on the model, tools and limits the chat's
+/// settings save. Any other key is refused, so a page sending `messages`,
+/// `port` or `tool_filter` learns none is honoured.
+///
+/// Its fields are [`HubTurn`]'s written out, not flattened: a flattened
+/// struct cannot refuse an unknown key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct LocalTurn {
+    /// The chat the turn is added to.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub conversation_id: i64,
+    /// The user's message. Empty when the turn is its images alone, and
+    /// when it answers the question already saved.
+    pub content: String,
+    /// The images the message carries, by the ids their uploads answered,
+    /// in order. Left out of the body when there are none.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Array<string>", optional))]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<AttachmentId>,
+    /// The chat's Thinking choice, said only on the turn that changes it,
+    /// as [`HubTurn::thinking`].
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<Thinking>,
+    /// Whether the turn answers the question the chat ends in, already
+    /// saved, as an edit, a regenerate or Retry leaves it, rather than
+    /// adding a message. Left out of the body when false.
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub answer_saved: bool,
+    /// The message was sent with Draw pressed, as [`HubTurn::draw`].
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub draw: bool,
+    /// The image model chosen for this turn's picture, as
+    /// [`HubTurn::image_model`]: only with `draw`, and remembered nowhere.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_model: Option<u32>,
+    /// The chat's folder, where gglib's own file tools read, said only on
+    /// the turn that changes it: an absolute path to a folder on this
+    /// machine sets it, and `""` forgets it. Left out, the turn reads the
+    /// folder the chat remembers, or has no file tools.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+}
+
+impl LocalTurn {
+    /// The turn as a [`HubTurn`], and the folder it says.
+    #[must_use]
+    pub fn split(self) -> (HubTurn, Option<String>) {
+        let Self {
+            conversation_id,
+            content,
+            images,
+            thinking,
+            answer_saved,
+            draw,
+            image_model,
+            folder,
+        } = self;
+        let turn = HubTurn {
+            conversation_id,
+            content,
+            images,
+            thinking,
+            answer_saved,
+            draw,
+            image_model,
+        };
+        (turn, folder)
+    }
+}
+
 #[cfg(test)]
 #[path = "hub_chats_branch_tests.rs"]
 mod hub_chats_branch_tests;
+#[cfg(test)]
+#[path = "hub_chats_local_tests.rs"]
+mod hub_chats_local_tests;
 #[cfg(test)]
 #[path = "hub_chats_tests.rs"]
 mod hub_chats_tests;

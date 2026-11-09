@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.31.0-rc.9](https://github.com/mmogr/gglib/compare/v0.31.0-rc.8...v0.31.0-rc.9) (2026-11-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **agent:** the old door is gone ([#1858](https://github.com/mmogr/gglib/issues/1858))
+* **gui:** sending loads the model; the read-only lock is gone ([#1856](https://github.com/mmogr/gglib/issues/1856))
+* **cli:** gglib chat and q are clients of the door ([#1855](https://github.com/mmogr/gglib/issues/1855))
+* **agent:** every chat turn goes through the endpoint ([#1854](https://github.com/mmogr/gglib/issues/1854))
+* **gui:** the GUI sends a turn, and gglib decides the rest ([#1847](https://github.com/mmogr/gglib/issues/1847))
+
+### What gglib now does
+
+* **agent:** every chat turn goes through the endpoint ([#1854](https://github.com/mmogr/gglib/issues/1854)) ([f76dabb](https://github.com/mmogr/gglib/commit/f76dabb9602c5926181a9fea86dec8d44135badf))
+* **cli:** gglib chat and q are clients of the door ([#1855](https://github.com/mmogr/gglib/issues/1855)) ([3f54a78](https://github.com/mmogr/gglib/commit/3f54a7850bc38cdb5c5332df1c1042d5c55d8b46))
+* **core:** engine, tool server, download and folder states speak Rust's words ([#1850](https://github.com/mmogr/gglib/issues/1850)) ([b651f69](https://github.com/mmogr/gglib/commit/b651f69beefc51e366ec98e8b3b080c626080e5e))
+* **core:** the fit sentence is Rust's, and model explain prints it ([#1848](https://github.com/mmogr/gglib/issues/1848)) ([6ed8c8b](https://github.com/mmogr/gglib/commit/6ed8c8b581b8da66c92e2c4b49daab152efa12f8))
+* **gui:** a chat's tools and limits are saved, not kept in the page ([#1853](https://github.com/mmogr/gglib/issues/1853)) ([010c5e2](https://github.com/mmogr/gglib/commit/010c5e2283a06f32dc2ef534e2b8937257cbbb34))
+* **gui:** rows answer the arrow keys, and the launch line copies as a command ([#1846](https://github.com/mmogr/gglib/issues/1846)) ([0caa087](https://github.com/mmogr/gglib/commit/0caa087af154159f6382b8983961e0ddf32e3f49))
+* **gui:** sending loads the model; the read-only lock is gone ([#1856](https://github.com/mmogr/gglib/issues/1856)) ([ebae746](https://github.com/mmogr/gglib/commit/ebae746cfc85d6853dd48f758b0226d8f95d6b56))
+* **gui:** the GUI sends a turn, and gglib decides the rest ([#1847](https://github.com/mmogr/gglib/issues/1847)) ([e1aca48](https://github.com/mmogr/gglib/commit/e1aca48f6128356b64fd95144c05ae27066f56ef))
+* **proxy:** the rate and cache figures are Rust's, and the CLI prints them ([#1859](https://github.com/mmogr/gglib/issues/1859)) ([062c495](https://github.com/mmogr/gglib/commit/062c4956c7120fbf96ad1dac0d4a75af85bc254d))
+
+
+### What it stopped getting wrong
+
+* **models:** verify and the inspector say one verdict, from Rust ([#1849](https://github.com/mmogr/gglib/issues/1849)) ([d1bae58](https://github.com/mmogr/gglib/commit/d1bae586023b11be460fe60fb650ba4f6f0fef2b))
+* **proxy:** a pinned endpoint names its model by id, and every match on the pin uses it ([#1857](https://github.com/mmogr/gglib/issues/1857)) ([7a2338d](https://github.com/mmogr/gglib/commit/7a2338dc4b81084eb1efeb90708415c2e67c4ee5))
+
+
+### Internal
+
+* **agent:** the old door is gone ([#1858](https://github.com/mmogr/gglib/issues/1858)) ([3722252](https://github.com/mmogr/gglib/commit/372225223fc2f4db553fcbca7e3f832d57a947b3))
+
 ## [0.31.0-rc.8](https://github.com/mmogr/gglib/compare/v0.31.0-rc.7...v0.31.0-rc.8) (2026-11-08)
 
 

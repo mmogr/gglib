@@ -31,4 +31,20 @@ last_prompt_tokens: number | null,
 /**
  * Tokens reused from cache in the most recent reporting request.
  */
-last_cached_tokens: number | null, };
+last_cached_tokens: number | null, 
+/**
+ * [`Self::cached_tokens`] as a whole percent of [`Self::prompt_tokens`],
+ * a half rounded up; `None` before any prompt token was measured.
+ */
+reuse_percent: number | null, 
+/**
+ * The reuse as every surface says it, "Prompt cache 71% reused"; `None`
+ * with [`Self::reuse_percent`].
+ */
+summary: string | null, 
+/**
+ * [`Self::last_cached_tokens`] as a whole percent of
+ * [`Self::last_prompt_tokens`], a half rounded up; `None` before a
+ * request reported, and for one with an empty prompt.
+ */
+last_reuse_percent: number | null, };

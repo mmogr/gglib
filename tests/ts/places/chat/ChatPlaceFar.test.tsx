@@ -229,16 +229,17 @@ describe('ChatPlace, the far machine’s chats', () => {
     expect(screen.queryByRole('button', { name: /^Context: / })).not.toBeInTheDocument();
   });
 
-  it('a far chat whose reply waits for its model to load says so without naming one: its machine picks it', async () => {
+  it("a far chat whose reply waits for its model to load says so in the far machine's words, and its composer stays live", async () => {
     joined();
     const far = farTransport();
     far.listFarChats = vi.fn(async () => FAR_CHATS.map((c) => (c.id === 1 ? { ...c, live_run: 'r9' } : c)));
     far.readFarRunEvents = (_id: string, _after: number, signal: AbortSignal) =>
-      framesThenWait([{ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0 }], signal);
+      framesThenWait([{ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'Llama-3.3-70B', elapsed_ms: 4_000, said: 'Loading Llama-3.3-70B… 4 s' }], signal);
     transport.current = far;
     renderDesk();
-    expect(await screen.findByText(/^Loading the model… \d+ s$/)).toHaveAttribute('role', 'status');
+    expect(await screen.findByText('Loading Llama-3.3-70B… 4 s')).toBeInTheDocument();
     expect(screen.queryByText(/picks the model…/)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
   });
 
   it('a far chat offers no Unload and no picker: its model is the other machine’s', async () => {

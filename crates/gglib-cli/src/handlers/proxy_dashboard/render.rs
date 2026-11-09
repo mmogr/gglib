@@ -136,13 +136,6 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
         Some(cache) => out.push_str(&render_cache_section(cache, term_width)),
     }
 
-    // A separate population from the proxied figure above: GUI-chat
-    // runs talk to llama-server directly, so their reuse profile is nothing
-    // like a user's conversation and must not be averaged into it.
-    out.push('\n');
-    out.push_str("Agent cache (GUI chat)\n");
-    out.push_str(&render_usage_rows(&snapshot.agent_usage));
-
     out.push('\n');
     out.push_str(&render_defects_section(&snapshot.per_model_defects));
 
@@ -159,6 +152,12 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
 
     out.push('\n');
     let _ = writeln!(out, "Total requests served: {}", snapshot.total_requests);
+    if let Some(repaired) = snapshot.tool_repairs_succeeded {
+        let _ = writeln!(out, "Tool calls repaired:   {}", thousands(repaired));
+    }
+    if let Some(trips) = snapshot.loop_guard_trips_total {
+        let _ = writeln!(out, "Loop-guard trips:      {}", thousands(trips));
+    }
     out
 }
 
@@ -274,9 +273,15 @@ pub(super) fn render_usage_rows(usage: &CacheUsage) -> String {
     if usage.reporting_requests == 0 {
         out.push_str("  (no cache activity recorded yet)\n");
     } else {
+        // The percent is the server's (`CacheUsage::reuse_percent`), the
+        // one the GUI's "Prompt cache N% reused" says.
+        let percent = usage
+            .reuse_percent
+            .map(|percent| format!(" ({percent}%)"))
+            .unwrap_or_default();
         let _ = writeln!(
             out,
-            "  {:<14} {} of {} prompt tokens ({} requests)",
+            "  {:<14} {} of {} prompt tokens{percent} in {} requests",
             "Reused",
             thousands(usage.cached_tokens),
             thousands(usage.prompt_tokens),
@@ -285,9 +290,13 @@ pub(super) fn render_usage_rows(usage: &CacheUsage) -> String {
         if let (Some(last_cached), Some(last_prompt)) =
             (usage.last_cached_tokens, usage.last_prompt_tokens)
         {
+            let percent = usage
+                .last_reuse_percent
+                .map(|percent| format!(" ({percent}%)"))
+                .unwrap_or_default();
             let _ = writeln!(
                 out,
-                "  {:<14} {} of {} tokens from cache",
+                "  {:<14} {} of {} tokens from cache{percent}",
                 "Last request",
                 thousands(u64::from(last_cached)),
                 thousands(u64::from(last_prompt)),
@@ -375,3 +384,7 @@ pub(super) fn thousands(value: u64) -> String {
 #[cfg(test)]
 #[path = "render_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "render_figures_tests.rs"]
+mod figures_tests;

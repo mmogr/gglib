@@ -3,7 +3,11 @@
 <!-- module-docs:start -->
 
 [`FilteredToolExecutor`] and [`EmptyToolExecutor`] — decorators that
-restrict a [`ToolExecutorPort`] to a named allowlist of tools.
+restrict a [`ToolExecutorPort`] to a named allowlist of tools. An entry
+names a tool by its qualified name (`{id}:{tool}`, `builtin:{tool}`), by its
+bare name, or every tool of one MCP server as `{id}:*`, where `{id}` is a
+number: `builtin:*` names nothing, so no entry reaches the image tool, which
+only Draw offers.
 
 # Architectural placement
 

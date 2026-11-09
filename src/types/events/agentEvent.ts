@@ -163,6 +163,16 @@ export interface AgentWaitingEvent {
   total: number;
   /** This wait's place in line, 1 being next; 0 when not in a line. */
   position: number;
+  /** The model being loaded, by the catalogue's name; absent from a render's wait. */
+  model?: string;
+  /** How long the load has taken so far, in ms; said again each second. Absent from a render's wait. */
+  elapsed_ms?: number;
+  /**
+   * The wait as a person reads it, worded by the daemon
+   * (`AgentEvent::waiting_sentence`): "Loading Qwen3-4B… 12 s". Shown
+   * verbatim. Absent from a frame logged by a daemon older than it.
+   */
+  said?: string;
 }
 
 /**

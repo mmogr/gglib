@@ -60,7 +60,7 @@ export default function LibraryPlace() {
   const subjectKey = subject && (subject.kind === 'hf' ? `hf:${subject.repo}` : `${subject.kind}:${subject.id}`);
 
   const pickHf = useCallback(
-    (model: HfModelSummary) => navigate(paths.hf(model.id), { state: { hf: model } satisfies HfPickState }),
+    (model: HfModelSummary, replace = false) => navigate(paths.hf(model.id), { replace, state: { hf: model } satisfies HfPickState }),
     [navigate],
   );
   const search = useLibrarySearch(pickHf);
@@ -87,8 +87,9 @@ export default function LibraryPlace() {
         .catch(() => setAdding('typed'));
   }, [intent.add, location.key, location.pathname, navigate]);
 
-  const pickLocal = useCallback((id: number) => navigate(paths.model(id)), [navigate]);
-  const pickFar = useCallback((id: number) => navigate(paths.far(id)), [navigate]);
+  // `replace`: a pick made with the arrow keys from the row picked before (`Listbox`).
+  const pickLocal = useCallback((id: number, replace = false) => navigate(paths.model(id), { replace }), [navigate]);
+  const pickFar = useCallback((id: number, replace = false) => navigate(paths.far(id), { replace }), [navigate]);
   const removeModel = useCallback(
     async (id: number) => {
       await removeLibraryModel(id);

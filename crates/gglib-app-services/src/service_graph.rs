@@ -27,9 +27,9 @@ use std::sync::Arc;
 
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{
-    AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GenerationGate, GgufParserPort,
-    HfClientPort, ImageGenerationPort, LoopGuardTripSink, ModelCatalogPort, ModelRepository,
-    ModelRuntimePort, RemoteGatewayPort, Repos, ResidencyObserver, RunsPort, SystemProbePort,
+    AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
+    ImageGenerationPort, LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort,
+    RemoteGatewayPort, Repos, ResidencyObserver, RunsPort, SystemProbePort,
     ToolSupportDetectorPort,
 };
 use gglib_core::server_config::ServerConfigOptions;
@@ -127,8 +127,6 @@ pub struct AppServices {
     pub catalog: Arc<dyn ModelCatalogPort>,
     /// The shared runtime — one llama-server at a time, system-wide.
     pub runtime: Arc<dyn ModelRuntimePort>,
-    /// The shared manager's generation gate: whose turn it is on the GPU.
-    pub generation_gate: Arc<dyn GenerationGate>,
     /// Drawing: the one `sd-server` job driver, over the same manager, so a
     /// render queues, takes its turn and is retired through the same
     /// admission queue as every chat.
@@ -200,7 +198,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     ));
     let runtime: Arc<dyn ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
-    let generation_gate = process_manager.generation_gate();
     let images: Arc<dyn ImageGenerationPort> = Arc::new(SdImageDriver::new(
         Arc::clone(&catalog),
         repos.settings.clone(),
@@ -312,7 +309,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         model_repo,
         catalog,
         runtime,
-        generation_gate,
         images,
     })
 }

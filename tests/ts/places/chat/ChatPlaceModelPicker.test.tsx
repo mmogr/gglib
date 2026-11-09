@@ -123,7 +123,7 @@ describe('ChatPlace, model picker', () => {
 
   it("says a running model's state as the endpoint's live stream gives it", async () => {
     const user = userEvent.setup();
-    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null }));
+    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null }));
     renderPage();
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     await waitFor(() => expect(dashboard.send).not.toBeNull());
@@ -138,7 +138,7 @@ describe('ChatPlace, model picker', () => {
   it('while the endpoint is pinned, greys every model but the pinned one, the pin its reason', async () => {
     const user = userEvent.setup();
     act(() =>
-      applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b' }),
+      applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b', pinned_to: 'Pinned to llama-3.2-3b', pinned_model_id: 8 }),
     );
     renderPage();
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
@@ -158,6 +158,29 @@ describe('ChatPlace, model picker', () => {
     expect(onSwitchModel).not.toHaveBeenCalled();
   });
 
+  it('greys by the pin\'s id: of two models sharing the pinned one\'s name, only the pinned one is offered', async () => {
+    const user = userEvent.setup();
+    applyLibraryRead({
+      models: [
+        guiModel({ id: 7, name: 'Qwen3.8-27B' }),
+        guiModel({ id: 8, name: 'llama-3.2-3b' }),
+        guiModel({ id: 10, name: 'llama-3.2-3b' }),
+      ],
+    });
+    act(() =>
+      applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b', pinned_to: 'Pinned to llama-3.2-3b', pinned_model_id: 8 }),
+    );
+    renderPage();
+    await screen.findByRole('heading', { name: 'launchd KeepAlive' });
+    await pickerGroup(user, 'Loaded');
+    const pinned = screen.getByRole('menuitemradio', { name: 'llama-3.2-3b · Loaded' });
+    expect(pinned).toBeEnabled();
+    expect(pinned).not.toHaveAttribute('aria-describedby');
+    const namesake = screen.getByRole('menuitemradio', { name: 'llama-3.2-3b · Not loaded' });
+    expect(namesake).toBeDisabled();
+    expect(namesake).toHaveAccessibleDescription('Pinned · only llama-3.2-3b');
+  });
+
   it('draws no Loaded heading while nothing runs', async () => {
     const user = userEvent.setup();
     act(() => ingestServerEvent({ type: 'stopped', modelId: '8', port: 5555, updatedAt: Date.now() + 1, modelName: 'llama-3.2-3b' }));
@@ -169,7 +192,7 @@ describe('ChatPlace, model picker', () => {
 
   it('greys nothing and names no pin while the endpoint serves any model', async () => {
     const user = userEvent.setup();
-    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null }));
+    act(() => applyProxyStatus({ running: true, state: 'on', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null }));
     renderPage();
     await screen.findByRole('heading', { name: 'launchd KeepAlive' });
     await pickerGroup(user, 'Loaded');
@@ -199,9 +222,10 @@ describe('ChatPlace, model picker', () => {
     expect(context().conversationId).toBe(1);
   });
 
-  it('says why a model would not start, and stays on the model it was on', async () => {
+  it('says why the daemon refused the pick, in its words alone, and stays on the model it was on', async () => {
     const user = userEvent.setup();
-    onSwitchModel.mockRejectedValueOnce(new Error('not enough memory'));
+    const refusal = 'this chat ran on another machine, and its model is that machine\'s, not this one\'s';
+    onSwitchModel.mockRejectedValueOnce(new Error(refusal));
     renderPage();
     // The composer is remounted as the conversation's messages load, so the
     // pick waits for one to be open, as the test above does.
@@ -211,8 +235,11 @@ describe('ChatPlace, model picker', () => {
 
     await pickModel(user, 'gemma-3-12b · Not loaded');
 
-    // The inspector's sentence, the daemon's reason as it came.
-    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't load: not enough memory"));
+    await waitFor(() =>
+      expect(screen.getByTestId('toasts')).toHaveTextContent(refusal),
+    );
+    // A pick starts nothing, so it never says a load failed.
+    expect(screen.getByTestId('toasts')).not.toHaveTextContent("Didn't load");
     expect(modelPicker()).toHaveTextContent('Qwen3.8-27B');
     expect(modelPicker()).toBeEnabled();
   });
@@ -314,7 +341,7 @@ describe('ChatPlace, model picker', () => {
       const user = userEvent.setup();
       joinDesk();
       act(() =>
-        applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b' }),
+        applyProxyStatus({ running: true, state: 'pinned', port: 9931, base_url: 'http://127.0.0.1:9931/v1', key: 'none_needed', pinned_model: 'llama-3.2-3b', pinned_to: 'Pinned to llama-3.2-3b', pinned_model_id: 8 }),
       );
       renderOn(null);
       await screen.findByRole('textbox', { name: 'Message' });
@@ -330,32 +357,5 @@ describe('ChatPlace, model picker', () => {
       await pickerGroup(user, 'Loaded');
       expect(screen.queryByRole('group', { name: 'On desk' })).not.toBeInTheDocument();
     });
-  });
-
-  it('stays locked while a model starts, across a change of conversation', async () => {
-    const user = userEvent.setup();
-    render(
-      <ChatPlace
-        modelName="Qwen3.8-27B"
-        modelId={7}
-        serverPort={4321}
-        startingModel="gemma-3-12b"
-        onSwitchModel={onSwitchModel}
-        conversationId={fixture.conversations[0]?.id ?? null}
-      />,
-      { wrapper },
-    );
-    const locked = async () => {
-      await waitFor(() => expect(screen.getByText('Loading gemma-3-12b…')).toHaveAttribute('role', 'status'));
-      expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
-    };
-    await locked();
-
-    // The composer, picker and all, remounts with the conversation.
-    await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
-    await waitFor(() =>
-      expect(screen.getByRole('option', { name: /Parsing GGUF/ })).toHaveAttribute('aria-selected', 'true'),
-    );
-    await locked();
   });
 });

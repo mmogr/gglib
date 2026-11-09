@@ -209,3 +209,40 @@ fn a_cleared_model_takes_its_name_and_cleared_limits_their_defaults() {
     };
     assert_eq!(settings, expected);
 }
+
+/// A model on another machine clears the chat's profile, which is a profile
+/// of the machine it ran on; another model on the same machine keeps it,
+/// and so does a patch that names no model.
+#[test]
+fn a_model_on_another_machine_clears_the_chats_profile() {
+    let profiled = || ConversationSettings {
+        profile: Some("coding".to_owned()),
+        ..held()
+    };
+    let paired = ModelRef {
+        machine: Machine::Paired {
+            fingerprint: "0123456789ab".to_owned(),
+        },
+        id: 3,
+    };
+    let moved = |model: Option<ModelRef>| {
+        let mut settings = profiled();
+        let patch = ConversationSettingsPatch {
+            model: Some(model),
+            ..ConversationSettingsPatch::default()
+        };
+        patch.apply(&mut settings, None);
+        settings.profile
+    };
+
+    assert_eq!(moved(Some(paired)), None);
+    assert_eq!(moved(None), None);
+    assert_eq!(moved(Some(local(2))).as_deref(), Some("coding"));
+    let mut untouched = profiled();
+    let tools = ConversationSettingsPatch {
+        tools: Some(Vec::new()),
+        ..ConversationSettingsPatch::default()
+    };
+    tools.apply(&mut untouched, None);
+    assert_eq!(untouched.profile.as_deref(), Some("coding"));
+}

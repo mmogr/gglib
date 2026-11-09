@@ -1,24 +1,23 @@
-//! A daemon turn for a test: the page's run and a paired device's turn, each
-//! read as its door reads it, run as `prepare` runs it once its model is
-//! found on a port, against a model server that records what it is sent.
+//! A daemon turn for a test: a turn on one of this machine's chats or a
+//! device's, or a phone-kept chat run, run as `late_on` runs it once its
+//! model is loaded: through this machine's endpoint, against a server that
+//! records what it is sent, standing in for the endpoint.
 
 use std::path::PathBuf;
 use std::time::Duration;
 
-use gglib_app_services::types::ServerInfo;
-use gglib_core::domain::agent::AgentEvent;
+use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::domain::chat::{ConversationSettings, NewConversation};
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::{
     DefaultsOrigin, InferenceConfig, Machine, ModelCapabilities, ModelRef, NewModel,
 };
 use gglib_core::settings::SettingsUpdate;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use super::compose::{Prepared, held_over, prepare_over};
-use crate::handlers::agent::AgentChatRequest;
-use crate::handlers::agent::dto::AgentRunRequest;
-use crate::handlers::agent::remote_upstream::local;
+use super::compose::{Prepared, prepare_over};
+use super::loop_request::LoopRequest;
+use crate::handlers::agent::remote_upstream::endpoint;
 use crate::handlers::agent::run_fixture::device;
 use crate::handlers::remote::fake_far::far;
 use crate::state::AppState;
@@ -43,62 +42,45 @@ pub(super) const DRAWS: &str = concat!(
 /// The built-in tool, as a tool filter names it.
 pub(super) const TOOL: &str = "builtin:get_current_time";
 
-/// What a turn did: each request its model server received, the events its
-/// loop sent, and whether the loop ended well.
+/// The key this machine's endpoint demands in a test's turn through it.
+pub(super) const ENDPOINT_KEY: &str = "sk-this-machines-endpoint";
+
+/// What a turn did: each request its model server received, the bearer each
+/// carried, the events its loop sent, and whether the loop ended well.
 pub(super) struct Turn {
     pub(super) requests: Vec<Value>,
+    pub(super) bearers: Vec<Option<String>>,
     pub(super) events: Vec<AgentEvent>,
     pub(super) ended_well: bool,
 }
 
-/// Run `chat` as `prepare` does once model `model_id` is found on its port,
-/// against a model server that answers every request with `reply`.
-pub(super) async fn turn(
-    state: &AppState,
-    model_id: i64,
-    chat: AgentChatRequest,
-    reply: &str,
-) -> Turn {
-    turn_as(state, model_id, chat, reply, Prep::Over(None)).await
+/// Run `chat` as `hub_turn::late_on` does once model `model_id` is loaded:
+/// through this machine's endpoint, which a server answering every request
+/// with `reply` stands in for, demanding [`ENDPOINT_KEY`], with no folder.
+pub(super) async fn turn(state: &AppState, model_id: i64, chat: LoopRequest, reply: &str) -> Turn {
+    turn_in(state, model_id, chat, reply, None).await
 }
 
-/// How a test's turn is prepared once its upstream is settled.
-enum Prep {
-    /// As `prepare_over` prepares it, with this folder.
-    Over(Option<PathBuf>),
-    /// As `prepare_held` prepares a run, and `hub_turn::late_on` a device's
-    /// turn: its model held on `state.runtime` before the loop is composed,
-    /// with no folder.
-    Held,
-}
-
-/// [`turn`], prepared as `prep` says.
-async fn turn_as(
+/// [`turn`], with gglib's own file tools reading `folder`.
+async fn turn_in(
     state: &AppState,
     model_id: i64,
-    mut chat: AgentChatRequest,
+    chat: LoopRequest,
     reply: &str,
-    prep: Prep,
+    folder: Option<PathBuf>,
 ) -> Turn {
     let (fake, at) = far(200, reply).await;
     *fake.content_type.lock().unwrap() = "text/event-stream";
     let root = at.server_root();
     let port: u16 = root.rsplit(':').next().unwrap().parse().unwrap();
-    chat.port = port;
-    let server = ServerInfo {
-        model_id,
-        model_name: "served".to_owned(),
-        pid: None,
-        port,
-        started_at: 0,
-        runtime: gglib_core::domain::RuntimeKind::Llama,
-        launch: None,
+    let door = gglib_runtime::Door {
+        root_url: root,
+        key: Some(ENDPOINT_KEY.to_owned()),
+        name: None,
     };
-    let upstream = local(state, &chat, server).await.unwrap();
-    let prepared = match prep {
-        Prep::Over(folder) => prepare_over(state, chat, upstream, folder).await,
-        Prep::Held => held_over(state, chat, upstream, None).await.unwrap(),
-    };
+    let loaded = super::hub_model::Loaded { id: model_id, port };
+    let upstream = endpoint(state, &chat, loaded, door).await.unwrap();
+    let prepared = prepare_over(state, chat, upstream, folder).await;
     let Prepared {
         agent_loop,
         messages,
@@ -127,42 +109,25 @@ async fn turn_as(
         .collect();
     Turn {
         requests,
+        bearers: seen.into_iter().map(|request| request.bearer).collect(),
         events,
         ended_well: ended.is_ok(),
     }
 }
 
 /// The body of the one request a turn that ends well makes.
-pub(super) async fn sent(state: &AppState, model_id: i64, chat: AgentChatRequest) -> Value {
-    sent_as(state, model_id, chat, Prep::Over(None)).await
-}
-
-/// [`sent`], for a run that holds its model on `state.runtime`.
-pub(super) async fn sent_held(state: &AppState, model_id: i64, chat: AgentChatRequest) -> Value {
-    sent_as(state, model_id, chat, Prep::Held).await
-}
-
-/// [`sent`], for a paired device's turn once its model is found.
-pub(super) async fn sent_by_device(
-    state: &AppState,
-    model_id: i64,
-    chat: AgentChatRequest,
-) -> Value {
-    sent_as(state, model_id, chat, Prep::Held).await
+pub(super) async fn sent(state: &AppState, model_id: i64, chat: LoopRequest) -> Value {
+    sent_in(state, model_id, chat, None).await
 }
 
 /// [`sent`], for a run whose folder is `folder`.
 pub(super) async fn sent_in(
     state: &AppState,
     model_id: i64,
-    chat: AgentChatRequest,
+    chat: LoopRequest,
     folder: Option<PathBuf>,
 ) -> Value {
-    sent_as(state, model_id, chat, Prep::Over(folder)).await
-}
-
-async fn sent_as(state: &AppState, model_id: i64, chat: AgentChatRequest, prep: Prep) -> Value {
-    let mut turn = turn_as(state, model_id, chat, REPLY, prep).await;
+    let mut turn = turn_in(state, model_id, chat, REPLY, folder).await;
     assert!(turn.ended_well, "{:?}", turn.events);
     assert_eq!(turn.requests.len(), 1, "one request");
     turn.requests.remove(0)
@@ -172,7 +137,7 @@ async fn sent_as(state: &AppState, model_id: i64, chat: AgentChatRequest, prep: 
 /// request with a call for the picture: the one held to that call, and the
 /// one made once the tool has run. There are only two: the second reply's
 /// call is not run, and the turn ends there.
-pub(super) async fn drawn(state: &AppState, model_id: i64, chat: AgentChatRequest) -> [Value; 2] {
+pub(super) async fn drawn(state: &AppState, model_id: i64, chat: LoopRequest) -> [Value; 2] {
     let mut turn = turn(state, model_id, chat, DRAWS).await;
     assert_eq!(turn.requests.len(), 2, "{:?}", turn.events);
     let later = turn.requests.remove(1);
@@ -208,12 +173,6 @@ pub(super) fn stored(
     }
 }
 
-/// A reasoning-tagged model as its import leaves it: the tag, and nothing
-/// stored, so resolution supplies the `reasoning` recipe.
-pub(super) fn reasoning(entry: &mut NewModel) {
-    entry.tags = vec!["reasoning".to_owned()];
-}
-
 pub(super) async fn global(state: &AppState, config: InferenceConfig) {
     let update = SettingsUpdate {
         inference_defaults: Some(Some(config)),
@@ -238,22 +197,39 @@ pub(super) fn temperature(value: f32) -> InferenceConfig {
     }
 }
 
-/// The page's run, read as its door reads it.
-pub(super) async fn page(state: &AppState, more: Value) -> AgentChatRequest {
-    let mut body = json!({
-        "port": 0,
-        "messages": [{ "role": "user", "content": "hi" }],
-        "model": null,
-    });
-    body.as_object_mut()
-        .unwrap()
-        .extend(more.as_object().unwrap().clone());
-    let request: AgentRunRequest = serde_json::from_value(body).unwrap();
-    super::run::plan(state, request).await.unwrap().0
+/// A loop's request as a test names it: `{"messages", "tool_filter",
+/// "draw", "image_model", "reasoning_budget_tokens", "far"}`, any of them,
+/// over one user message that says "hi" and every tool. A key it does not
+/// know fails the test, so none is dropped in silence.
+pub(super) fn page(more: Value) -> LoopRequest {
+    let mut chat = LoopRequest {
+        messages: vec![AgentMessage::User {
+            content: "hi".to_owned(),
+            images: Vec::new(),
+        }],
+        ..LoopRequest::default()
+    };
+    let Value::Object(more) = more else {
+        panic!("a loop's request is an object: {more}");
+    };
+    for (key, value) in more {
+        match key.as_str() {
+            "messages" => chat.messages = serde_json::from_value(value).unwrap(),
+            "tool_filter" => chat.tool_filter = serde_json::from_value(value).unwrap(),
+            "draw" => chat.draw = serde_json::from_value(value).unwrap(),
+            "image_model" => chat.image_model = serde_json::from_value(value).unwrap(),
+            "reasoning_budget_tokens" => {
+                chat.reasoning_budget_tokens = serde_json::from_value(value).unwrap();
+            }
+            "far" => chat.far = serde_json::from_value(value).unwrap(),
+            other => panic!("a loop's request has no `{other}`"),
+        }
+    }
+    chat
 }
 
 /// A paired device's turn on a chat of `model_id`, read as its door reads it.
-pub(super) async fn phone(state: &AppState, model_id: i64) -> AgentChatRequest {
+pub(super) async fn phone(state: &AppState, model_id: i64) -> LoopRequest {
     let settings = ConversationSettings {
         model: Some(ModelRef {
             machine: Machine::Local,
@@ -289,28 +265,6 @@ pub(super) fn hi(conversation_id: i64) -> HubTurn {
         draw: false,
         image_model: None,
     }
-}
-
-/// The same turn from each door: the page's run, and a paired device's on a
-/// chat of `model_id`. With [`TOOL`] when `tools`, and otherwise none.
-pub(super) async fn doors(
-    state: &AppState,
-    model_id: i64,
-    tools: bool,
-) -> [(&'static str, AgentChatRequest); 2] {
-    let filter: Vec<String> = tools.then(|| TOOL.to_owned()).into_iter().collect();
-    let page = page(state, json!({ "tool_filter": &filter })).await;
-    let mut phone = phone(state, model_id).await;
-    // As a device's plan would hold it were it offered this tool; the
-    // filter, not where it came from, is what these tests are about.
-    phone.tool_filter = Some(filter);
-    [("the page", page), ("a paired device", phone)]
-}
-
-pub(super) fn carries_tools(body: &Value) -> bool {
-    body["tools"]
-        .as_array()
-        .is_some_and(|tools| !tools.is_empty())
 }
 
 /// Every sampling parameter a request carries, read as the pipeline reads a

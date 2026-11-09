@@ -18,12 +18,12 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ChatMessage, ConversationSettings } from '../../../../src/services/transport';
-import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../../src/types/generated/LocalTurn';
 import type { HubChat } from '../../../../src/types/generated/HubChat';
 import type { ModelInfo } from '../../../../src/types/generated/ModelInfo';
 import type { ModelRef } from '../../../../src/types/generated/ModelRef';
 import type { Thinking } from '../../../../src/types/generated/Thinking';
-import { agentRun, chatTransport, conversation, plusButton, plusItem, plusSubmenu, wrapper, type ChatFixture } from './chatPlaceHarness';
+import { agentRun, chatTransport, conversation, plusButton, plusItem, wrapper, type ChatFixture } from './chatPlaceHarness';
 import { FAR_FINGERPRINT, farEntry, pairedModels } from '../../fixtures/fakeFarDaemon';
 import { guiModel } from '../../fixtures/model';
 import type { GgufModel } from '../../../../src/types';
@@ -38,13 +38,12 @@ vi.mock('../../../../src/services/transport', async () => {
 
 import { ChatPlaceWithList as ChatPlace } from './chatPlaceHarness';
 
-const OVERRIDES_KEY = 'gglib.chat.agentOverrides';
 const ON_TITLE = 'Thinking is on for this chat. Click to switch it off from the next message.';
 const OFF_TITLE = 'Thinking is off for this chat. Click to switch it back on from the next message.';
 
 let fixture: ChatFixture;
 /** The body of each run the page started, in order. */
-let started: AgentRunRequest[];
+let started: LocalTurn[];
 /** What the far machine remembers of its chat 1, and what it lists. */
 let farSettings: ConversationSettings | undefined;
 let farRows: ChatMessage[];
@@ -67,7 +66,7 @@ function pageTransport(model: Partial<GgufModel> = { tags: ['reasoning'] }) {
   return {
     ...chatTransport(fixture),
     getModel: vi.fn(async (): Promise<GgufModel> => guiModel({ id: 7, quantization: 'Q8_0', ...model })),
-    startAgentRun: vi.fn(async (id: string, request: AgentRunRequest) => {
+    startAgentRun: vi.fn(async (id: string, request: LocalTurn) => {
       started.push(request);
       const cid = request.conversation_id as number;
       const said = request.thinking;
@@ -76,7 +75,7 @@ function pageTransport(model: Partial<GgufModel> = { tags: ['reasoning'] }) {
           c.id === cid ? { ...c, settings: remembering(c.settings, said) } : c,
         );
       }
-      const asked = String(request.messages.at(-1)?.content ?? '');
+      const asked = request.content;
       fixture.rows[cid] = [
         ...(fixture.rows[cid] ?? []),
         { id: nextRow++, conversation_id: cid, role: 'user', content: asked, created_at: '2026-09-01T10:00:00Z' },
@@ -159,19 +158,13 @@ async function answered(fn: { mock: { results: Array<{ value: unknown }> } }) {
 
 const composer = () => screen.getByRole('textbox', { name: 'Message' });
 
-/** Open the agent limits: `[+]` › Tools ▸ › Agent limits…. */
-async function openLimits(user: ReturnType<typeof userEvent.setup>) {
-  const tools = await plusSubmenu(user, 'Tools');
-  await user.click(within(tools).getByRole('menuitem', { name: 'Agent limits…' }));
-  await screen.findByRole('dialog', { name: 'Agent limits' });
-}
 /** The composer an element is in: its form. */
 const rowOf = (element: HTMLElement) => element.closest('form') as HTMLElement;
 /** The switch, in the composer; null when the page draws none. */
 const chip = () => within(rowOf(composer())).queryByRole('switch', { name: 'Thinking' });
 
 /** Send `text` from the composer, and wait for its run to start and end and for this machine's list to be read after it. */
-async function exchange(user: ReturnType<typeof userEvent.setup>, text: string): Promise<AgentRunRequest> {
+async function exchange(user: ReturnType<typeof userEvent.setup>, text: string): Promise<LocalTurn> {
   const runs = started.length;
   const reads = stub().listConversations.mock.calls.length;
   await user.type(composer(), `${text}{Enter}`);
@@ -306,13 +299,11 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     expect(chip()).toHaveAttribute('aria-checked', 'false');
   });
 
-  it('says off on the send after a click and never again, then default once after a click back, with the device-wide effort and budget on every send', async () => {
+  it('says off on the send after a click and never again, then default once after a click back, and is the only reasoning control a send carries', async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(OVERRIDES_KEY, JSON.stringify({ reasoningEffort: 'high', reasoningBudgetTokens: 2048 }));
     renderLocal();
     await screen.findByText('What does KeepAlive do?');
     await waitFor(() => expect(chip()).toBeInTheDocument());
-    // The device-wide budget says nothing of this chat: the switch shows on.
     expect(chip()).toHaveAttribute('aria-checked', 'true');
 
     expect(Object.keys(await exchange(user, 'one'))).not.toContain('thinking');
@@ -331,22 +322,12 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     expect(chip()).toHaveAttribute('aria-checked', 'true');
 
     expect(started).toHaveLength(5);
+    // No effort or budget travels: they are Settings › Models › Sampling defaults'.
     for (const request of started) {
-      expect(request).toMatchObject({ conversation_id: 1, reasoning_effort: 'high', reasoning_budget_tokens: 2048 });
+      expect(request.conversation_id).toBe(1);
+      expect(Object.keys(request)).not.toContain('reasoning_effort');
+      expect(Object.keys(request)).not.toContain('reasoning_budget_tokens');
     }
-  });
-
-  it('a device-wide budget of 0 neither switches a chat off nor is replaced by the switch', async () => {
-    const user = userEvent.setup();
-    window.localStorage.setItem(OVERRIDES_KEY, JSON.stringify({ reasoningBudgetTokens: 0 }));
-    renderLocal();
-    await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toHaveAttribute('aria-checked', 'true'));
-
-    const sent = await exchange(user, 'one');
-    expect(sent.reasoning_budget_tokens).toBe(0);
-    expect(Object.keys(sent)).not.toContain('thinking');
-    expect(chip()).toHaveAttribute('aria-checked', 'true');
   });
 
   it('a send gglib refused keeps the choice: the next send says it', async () => {
@@ -545,34 +526,10 @@ describe("ChatPlace, the Thinking switch on this machine's model", () => {
     expect(chip()).toHaveAttribute('aria-checked', 'false');
     expect(fixture.conversations.find((c) => c.id === 1)?.settings?.thinking).toBe('off');
   });
-
-  it("asks for the model's template support when the agent limits first open, and shows a note in place of the effort dropdown where the template reads none", async () => {
-    const user = userEvent.setup();
-    const page = pageTransport();
-    page.getModelDetail = vi.fn(async () => ({ reasoningEffortSupport: 'no' }));
-    transport.current = page;
-    renderLocal();
-    await screen.findByText('What does KeepAlive do?');
-    await waitFor(() => expect(chip()).toBeInTheDocument());
-    expect(page.getModelDetail).not.toHaveBeenCalled();
-
-    await openLimits(user);
-    expect(page.getModelDetail).toHaveBeenCalledTimes(1);
-    expect(page.getModelDetail).toHaveBeenCalledWith(7);
-    expect(await screen.findByText(/template does not declare reasoning effort/)).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Reasoning Effort' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Reasoning budget')).toBeInTheDocument();
-
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    await openLimits(user);
-    expect(screen.getByText(/template does not declare reasoning effort/)).toBeInTheDocument();
-    expect(page.getModelDetail).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("ChatPlace, the Thinking switch on the paired machine's model", () => {
-  it("is shown by the row that machine lists for the model, and its send says off beside the model's ref", async () => {
+  it("is shown by the row that machine lists for the model, and its send says off and names no model", async () => {
     const user = userEvent.setup();
     connect();
     renderPaired();
@@ -584,10 +541,9 @@ describe("ChatPlace, the Thinking switch on the paired machine's model", () => {
 
     await user.click(button);
     expect(chip()).toHaveAttribute('aria-checked', 'false');
-    expect(await exchange(user, 'one')).toMatchObject({ far: farRef, thinking: 'off' });
-    const next = await exchange(user, 'two');
-    expect(next).toMatchObject({ far: farRef });
-    expect(Object.keys(next)).not.toContain('thinking');
+    // The turn names no model: the conversation saved the paired machine's.
+    expect(await exchange(user, 'one')).toStrictEqual({ conversation_id: 1, content: 'one', thinking: 'off' });
+    expect(await exchange(user, 'two')).toStrictEqual({ conversation_id: 1, content: 'two' });
   });
 
   it('opens not pressed on a chat that remembers Off', async () => {
@@ -780,14 +736,5 @@ describe('ChatPlace, the Thinking switch on a far chat', () => {
     await openFar();
     expect(chip()).not.toBeInTheDocument();
     expect((await farExchange(user, 'one'))[4]).toBeUndefined();
-  });
-
-  it('asks this machine nothing about a template for the agent limits, which say where the effort level applies', async () => {
-    const user = userEvent.setup();
-    await openFar();
-    await openLimits(user);
-    expect(screen.getByRole('combobox', { name: 'Reasoning Effort' })).toBeInTheDocument();
-    expect(screen.getByText('Applies to models whose template declares reasoning effort; others ignore it.')).toBeInTheDocument();
-    expect(stub().getModelDetail).not.toHaveBeenCalled();
   });
 });

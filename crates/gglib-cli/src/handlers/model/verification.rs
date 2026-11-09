@@ -4,8 +4,11 @@
 //! and repairing corrupt models.
 
 use anyhow::{Context as _, Result};
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Instant;
+
+use gglib_core::services::{OverallHealth, ShardHealth, ShardHealthReport, VerificationReport};
 
 use super::{download, resolver};
 use crate::bootstrap::CliContext;
@@ -25,10 +28,6 @@ use crate::utils::input;
 /// spelled `--verbose`: that id belongs to the global logging flag, and a
 /// local one by the same name stops the global from ever reaching this
 /// command.
-#[expect(
-    clippy::too_many_lines,
-    reason = "the progress lines and the report, printed in the order a run produces them"
-)]
 pub(crate) async fn execute_verify(
     ctx: &CliContext,
     identifier: &str,
@@ -78,20 +77,7 @@ pub(crate) async fn execute_verify(
                     );
                 }
                 ShardProgress::Completed { health } => {
-                    use gglib_core::services::ShardHealth;
-                    let status = match health {
-                        ShardHealth::Healthy => "✓ Healthy".to_string(),
-                        ShardHealth::Corrupt { expected, actual } => {
-                            format!(
-                                "✗ Corrupt (expected: {}, actual: {})",
-                                short_sha(expected),
-                                short_sha(actual)
-                            )
-                        }
-                        ShardHealth::Missing => "✗ Missing".to_string(),
-                        ShardHealth::NoOid => "⚠ No OID available".to_string(),
-                    };
-                    println!("  {}: {}", progress.kind.label(), status);
+                    println!("  {}: {}", progress.kind.label(), file_status(health));
                 }
             }
         }
@@ -108,45 +94,10 @@ pub(crate) async fn execute_verify(
     println!("═══════════════════════════════════════════════════════════");
     println!("Verification completed in {:.1}s", elapsed.as_secs_f64());
     println!();
-    println!(
-        "Overall Health: {}",
-        match report.overall_health {
-            gglib_core::services::OverallHealth::Healthy => "✓ Healthy",
-            gglib_core::services::OverallHealth::Unhealthy => "✗ Unhealthy",
-            gglib_core::services::OverallHealth::Unverifiable => "⚠ Unverifiable",
-        }
-    );
-    println!();
-
-    // Show shard details
-    for shard in &report.shards {
-        use gglib_core::services::ShardHealth;
-        let status = match &shard.health {
-            ShardHealth::Healthy => "✓".to_string(),
-            ShardHealth::Corrupt { .. } | ShardHealth::Missing => "✗".to_string(),
-            ShardHealth::NoOid => "⚠".to_string(),
-        };
-        println!(
-            "  {} {}: {} (file {})",
-            status,
-            shard.kind.label(),
-            shard.file_path,
-            shard.index
-        );
-
-        if let ShardHealth::Corrupt { expected, actual } = &shard.health {
-            println!("      Expected: {expected}");
-            println!("      Actual:   {actual}");
-        }
-    }
-
+    print!("{}", summary(&report));
     println!("═══════════════════════════════════════════════════════════");
 
-    // Return error if unhealthy
-    if matches!(
-        report.overall_health,
-        gglib_core::services::OverallHealth::Unhealthy
-    ) {
+    if fails(&report.overall_health) {
         println!();
         println!(
             "⚠️  Model has integrity issues. Run 'gglib model repair {}' to fix.",
@@ -156,6 +107,77 @@ pub(crate) async fn execute_verify(
     }
 
     Ok(())
+}
+
+/// Whether `gglib model verify` exits 1 on this verdict: only when a file
+/// is corrupt or missing. A model with nothing to compare does not fail.
+pub(super) fn fails(health: &OverallHealth) -> bool {
+    *health == OverallHealth::Unhealthy
+}
+
+/// The report under the run's timing: the verdict's line, with how many
+/// files are damaged when any is, then a row per file, a corrupt file's two
+/// hashes under it.
+pub(super) fn summary(report: &VerificationReport) -> String {
+    let mut out = overall_line(&report.overall_health);
+    if let Some(damage) = &report.damage {
+        out.push_str(" · ");
+        out.push_str(&damage.line);
+    }
+    out.push_str("\n\n");
+    for shard in &report.shards {
+        out.push_str(&summary_row(shard));
+        out.push('\n');
+        if let ShardHealth::Corrupt { expected, actual } = &shard.health {
+            let _ = writeln!(out, "      Expected: {expected}\n      Actual:   {actual}");
+        }
+    }
+    out
+}
+
+/// The verdict's line: `Overall Health: ⚠ Unverifiable`.
+pub(super) fn overall_line(health: &OverallHealth) -> String {
+    let mark = match health {
+        OverallHealth::Healthy => "✓",
+        OverallHealth::Unhealthy => "✗",
+        OverallHealth::Unverifiable => "⚠",
+    };
+    format!("Overall Health: {mark} {}", health.word())
+}
+
+/// A file's row in the summary: `  ✓ Shard 1/2: path (file 0)`.
+pub(super) fn summary_row(shard: &ShardHealthReport) -> String {
+    format!(
+        "  {} {}: {} (file {})",
+        file_mark(&shard.health),
+        shard.kind.label(),
+        shard.file_path,
+        shard.index
+    )
+}
+
+/// The mark a file's health is printed with: ✓ matched, ✗ damaged, ⚠ not
+/// compared.
+fn file_mark(health: &ShardHealth) -> &'static str {
+    match health {
+        ShardHealth::Healthy => "✓",
+        ShardHealth::Corrupt { .. } | ShardHealth::Missing => "✗",
+        ShardHealth::NoOid => "⚠",
+    }
+}
+
+/// A file's health as `--per-shard` prints it once the file is checked: the
+/// mark and the word, and a corrupt file's two hashes, shortened.
+pub(super) fn file_status(health: &ShardHealth) -> String {
+    let said = format!("{} {}", file_mark(health), health.word());
+    match health {
+        ShardHealth::Corrupt { expected, actual } => format!(
+            "{said} (expected: {}, actual: {})",
+            short_sha(expected),
+            short_sha(actual)
+        ),
+        _ => said,
+    }
 }
 
 /// Execute the repair command.
@@ -211,3 +233,7 @@ pub(crate) async fn execute_repair(
     let repair = handle.repair_model(model.id, shard_indices);
     download::monitor_repair(&handle, Arc::clone(&ctx.console), folder, repair).await
 }
+
+#[cfg(test)]
+#[path = "verification_tests.rs"]
+mod tests;

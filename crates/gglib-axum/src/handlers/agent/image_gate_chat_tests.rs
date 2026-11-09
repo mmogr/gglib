@@ -1,24 +1,21 @@
 //! A run for a model that draws images is refused with
-//! `image_model_cannot_chat` at each daemon door, before anything is
-//! admitted, held or written: a device's turn on a hub chat whose model
-//! draws, and a page's run on a port an `sd-server` serves.
+//! `image_model_cannot_chat` before anything is admitted, held or written:
+//! here a device's turn on a hub chat whose model draws.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
-use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::chat::NewConversation;
 use gglib_core::domain::hub_chats::HubTurn;
-use gglib_core::domain::{ImageFamily, NewModel, RuntimeKind};
+use gglib_core::domain::{ImageFamily, NewModel};
 use gglib_core::ports::{
     Admission, AdmissionLease, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget,
     RunsPort as _,
 };
 
 use super::super::hub_turn::start;
-use super::super::remote_upstream::local;
 use super::super::run_fixture::{device, saved};
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -156,48 +153,4 @@ async fn a_hub_turn_on_a_chat_whose_model_draws_is_refused_before_admit() {
             .runs
             .is_empty()
     );
-}
-
-#[tokio::test]
-async fn a_page_run_on_a_port_an_sd_server_serves_is_refused_before_its_hold() {
-    let runtime = Arc::new(Counting::default());
-    let (_dir, state) = state_over(Arc::clone(&runtime)).await;
-    let model_id = flux(&state).await;
-    let req = serde_json::from_str(r#"{"port":19555,"messages":[]}"#).unwrap();
-    let server = ServerInfo {
-        model_id,
-        model_name: "flux".to_owned(),
-        pid: None,
-        port: 19_555,
-        started_at: 0,
-        runtime: RuntimeKind::StableDiffusion,
-        launch: None,
-    };
-
-    let (status, code, message) = coded(local(&state, &req, server).await);
-
-    assert_eq!((status, code), (400, "image_model_cannot_chat"));
-    assert!(message.contains("'flux'"), "{message}");
-    assert_eq!(runtime.admitted.load(Ordering::SeqCst), 0);
-    assert_eq!(runtime.held.load(Ordering::SeqCst), 0);
-}
-
-/// The same door lets a llama-server's port through: the refusal is about
-/// the runtime, not the port.
-#[tokio::test]
-async fn a_page_run_on_a_llama_server_port_goes_on() {
-    let runtime = Arc::new(Counting::default());
-    let (_dir, state) = state_over(runtime).await;
-    let req = serde_json::from_str(r#"{"port":19555,"messages":[]}"#).unwrap();
-    let server = ServerInfo {
-        model_id: 3,
-        model_name: "qwen".to_owned(),
-        pid: None,
-        port: 19_555,
-        started_at: 0,
-        runtime: RuntimeKind::Llama,
-        launch: None,
-    };
-
-    assert!(local(&state, &req, server).await.is_ok());
 }

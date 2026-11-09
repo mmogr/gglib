@@ -4,7 +4,9 @@
  *
  * Base URL ⧉ (the daemon's address), the API key line ("none needed · type
  * any text", or "required" with Show: the key is revealed only when asked,
- * EP-5), and the Model ID ⧉ with a picker of the library's chat models.
+ * EP-5), and the Model ID ⧉ with a picker of the library's chat models,
+ * or, for a pin the picker does not offer (an image model), that model
+ * named alone with no picker.
  * ▸ Recipes are the daemon's for that model (`GET /api/proxy/clients`),
  * each line copyable, said as the CLI says them (`readings/connect`): a
  * key the endpoint checks is named as the stored secret, never printed.
@@ -52,6 +54,8 @@ interface ConnectClientProps {
   /** The model picked, by gglib id; `null` before there is one. */
   modelId: number | null;
   onModel: (modelId: number) => void;
+  /** A pin that is not among `models`: the only model a client can name, so it is named alone, with no picker, and stands for `modelId`. */
+  only?: { id: number; name: string };
 }
 
 const Line: FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
@@ -61,7 +65,8 @@ const Line: FC<{ label: string; children: React.ReactNode }> = ({ label, childre
   </div>
 );
 
-export const ConnectClient: FC<ConnectClientProps> = ({ baseUrl, keyState, models, modelId, onModel }) => {
+export const ConnectClient: FC<ConnectClientProps> = ({ baseUrl, keyState, models, modelId: picked, onModel, only }) => {
+  const modelId = only?.id ?? picked;
   const [answer, setAnswer] = useState<{ for: number; recipes: ClientRecipes } | { for: number; failed: string } | null>(null);
 
   useEffect(() => {
@@ -104,19 +109,23 @@ export const ConnectClient: FC<ConnectClientProps> = ({ baseUrl, keyState, model
             <CopyValue value={shownId} label="Copy the Model ID" />
           </>
         )}
-        <select
-          aria-label="Model to connect with"
-          className="rounded-base bg-surface-elevated px-sm py-xs text-xs text-text"
-          value={modelId ?? ''}
-          onChange={(e) => onModel(Number(e.target.value))}
-        >
-          {modelId === null && <option value="">any library name</option>}
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
+        {only ? (
+          <span className="text-xs text-text">{only.name}</span>
+        ) : (
+          <select
+            aria-label="Model to connect with"
+            className="rounded-base bg-surface-elevated px-sm py-xs text-xs text-text"
+            value={modelId ?? ''}
+            onChange={(e) => onModel(Number(e.target.value))}
+          >
+            {modelId === null && <option value="">any library name</option>}
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        )}
       </Line>
       {held && 'failed' in held && <p className="m-0 text-xs text-text-secondary">{held.failed}</p>}
       {recipes && (

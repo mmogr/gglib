@@ -17,9 +17,11 @@
 //!
 //! A send to another machine is not limited here: that machine's proxy
 //! resolves its own settings for the model, and a `max_tokens` from this
-//! side would outrank them.
+//! side would outrank them. A send through this machine's endpoint is, once
+//! the endpoint's ladder is known to name none ([`limit_proxied_turn`]).
 
-use gglib_core::domain::InferenceConfig;
+use gglib_core::domain::{InferenceConfig, capability_tags};
+use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use serde_json::Value;
 
 /// A turn's limit when nothing names one and it has no thinking budget.
@@ -68,6 +70,31 @@ pub(super) fn limit_turn(body: &mut Value, reasoning: bool) {
         .unwrap_or(0);
     let limit = base.max(thinking.saturating_add(ANSWER_TOKENS));
     obj.insert("max_tokens".to_owned(), Value::from(limit));
+}
+
+/// [`limit_turn`] for a body this machine's endpoint will fold.
+///
+/// The endpoint takes `max_tokens` as the client's own budget, which it
+/// honours whether or not it trusts clients' sampling, so a limit written
+/// here outranks a `max_tokens` its ladder would name (a stored setting, the
+/// model's recipe). The ladder is therefore folded on a copy, with the model
+/// and the stored `layers` the endpoint folds with, and the limit is written
+/// only when that fold names none: a turn ends at the number the ladder
+/// names, as it did when the fold was this side's.
+pub(super) fn limit_proxied_turn(body: &mut Value, model: &ModelContext, layers: &SamplingLayers) {
+    let mut folded = body.clone();
+    let layers = SamplingLayers {
+        trust_client_sampling: true,
+        ..layers.clone()
+    };
+    let decision = request_pipeline::resolve_sampling(&mut folded, model, &layers);
+    if decision.resolved.max_tokens.is_some() {
+        return;
+    }
+    limit_turn(&mut folded, capability_tags::is_reasoning(&model.tags));
+    if let Some(limit) = folded.get("max_tokens").cloned() {
+        body["max_tokens"] = limit;
+    }
 }
 
 #[cfg(test)]

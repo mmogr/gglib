@@ -6,21 +6,19 @@
 //! process, as it is on disk: the message then names it by id. A file that
 //! is missing, is not a PNG or a JPEG, or is over the cap is an error that
 //! names its path, before anything is asked of a model. What an image
-//! costs is said once, on stderr, when it is attached. A session is then
-//! refused as the daemon refuses a run ([`TurnImages::judge`]).
+//! costs is said once, on stderr, when it is attached. Whether the chat's
+//! model can read it is the daemon's to say, when the turn that carries it
+//! is sent.
 
 use std::fmt::Write as _;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
-use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::attachment::{AttachmentId, AttachmentInfo, AttachmentUpload};
 use gglib_core::ports::attachment_store::AttachmentError;
 use gglib_core::request_pipeline::MAX_IMAGE_BYTES;
 use gglib_core::services::AttachmentService;
-
-use super::sight::Sight;
 
 /// What `/image` with no path answers.
 const USAGE: &str = "usage: /image <path>  (a PNG or a JPEG, attached to your next message)";
@@ -28,7 +26,6 @@ const USAGE: &str = "usage: /image <path>  (a PNG or a JPEG, attached to your ne
 /// The images waiting for the next user message, and what attaches more.
 pub(crate) struct TurnImages<'a> {
     service: &'a AttachmentService,
-    sight: Sight,
     pending: Vec<AttachmentId>,
 }
 
@@ -48,7 +45,6 @@ impl<'a> TurnImages<'a> {
     ) -> Result<Self> {
         let mut images = Self {
             service,
-            sight: Sight::unjudged(),
             pending: Vec::new(),
         };
         for path in paths {
@@ -58,35 +54,6 @@ impl<'a> TurnImages<'a> {
             }
         }
         Ok(images)
-    }
-
-    /// Take `sight` as what the session's model can read, and refuse the
-    /// session as the daemon refuses a run, before its model is asked for
-    /// anything: when an image it carries, in `history` or waiting for the
-    /// first message, is not stored, or they are over the cap together
-    /// ([`AttachmentService::check_request`]), and when the model cannot
-    /// read one. The whole history is sent again each turn.
-    ///
-    /// # Errors
-    ///
-    /// Core's refusals, in its words.
-    pub(crate) async fn judge(&mut self, sight: Sight, history: &[AgentMessage]) -> Result<()> {
-        // The first message, as far as the checks read it: its images.
-        let waiting = AgentMessage::User {
-            content: String::new(),
-            images: self.pending.clone(),
-        };
-        let carried: Vec<AgentMessage> = history
-            .iter()
-            .filter(|message| message.has_images())
-            .cloned()
-            .chain([waiting])
-            .collect();
-        self.service.check_request(&carried).await?;
-        let has_images = carried.iter().any(AgentMessage::has_images);
-        sight.admit(has_images).await?;
-        self.sight = sight;
-        Ok(())
     }
 
     /// The images for the message being sent; none wait after it.
@@ -102,9 +69,6 @@ impl<'a> TurnImages<'a> {
             ImageCommand::Attach(path) => path,
             ImageCommand::Usage => return Some(USAGE.to_owned()),
         };
-        if let Err(refusal) = self.sight.admit(true).await {
-            return Some(refusal.to_string());
-        }
         Some(match self.add(&path).await {
             Ok(receipt) => receipt,
             Err(refused) => refused.to_string(),
@@ -197,10 +161,6 @@ pub(crate) fn markers(images: &[AttachmentInfo]) -> String {
         markers
     })
 }
-
-#[cfg(test)]
-#[path = "images_check_tests.rs"]
-mod images_check_tests;
 
 #[cfg(test)]
 #[path = "images_tests.rs"]

@@ -13,7 +13,7 @@ Found 1 MCP server(s):
 
 ID   Name                      Type   Enabled   Remote  Lifecycle   Status     Tools 
 -----------------------------------------------------------------------------------
-2    filesystem                stdio  yes       no      lazy        stopped    0     
+2    filesystem                stdio  yes       no      lazy        Stopped    0     
 $ gglib mcp test filesystem
 Testing connection to 'filesystem'...
 ✓ Connection successful — 14 tool(s) discovered
@@ -38,13 +38,16 @@ Testing connection to 'filesystem'...
 
 `list` reads each server's configuration from this machine's database, and
 its Status and Tools from the daemon, whose copy of a server is the one its
-chats use. With no daemon running, those two columns show `—` and a line
-under the table says why; `list` never starts a daemon.
+chats use. Status is the state in the word the app shows too: Running,
+Starting, Stopped, Failed or Not supported yet; a failed server's reason is
+said on its own line under the table. With no daemon running, those two
+columns show `—` and a line under the table says why; `list` never starts a
+daemon.
 
 - A server is `stdio`: `--command` and `--args` (comma-separated) say what
   to run, `--working-dir`, `--env KEY=VALUE` and `--path-extra` shape its
   process. `sse` (HTTP) servers are not supported yet: `add` refuses one,
-  and one already stored is listed as `not supported yet`, is never
+  and one already stored is listed as `Not supported yet`, is never
   started, and can still be removed.
 - A server's name is its own: `add` refuses a name another server already
   has.

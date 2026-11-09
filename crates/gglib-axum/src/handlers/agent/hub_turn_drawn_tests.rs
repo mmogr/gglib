@@ -115,7 +115,8 @@ async fn a_hub_turn_after_a_draw_shows_a_model_that_reads_images_the_picture() {
         json!({ "type": "text", "text": "what is in the corner?" })
     );
     assert_eq!(request.to_string().matches("\"image_url\":").count(), 1);
-    assert!(sent[0]["content"].as_str().unwrap().ends_with(DRAWN_NOTE));
+    // The note that the picture exists is the endpoint's to write.
+    assert!(!request.to_string().contains(DRAWN_NOTE), "{request}");
 
     assert_eq!(before, after, "a row was changed");
     assert!(!after.concat().contains(DRAWN_PICTURE_LINE));
@@ -133,6 +134,6 @@ async fn a_hub_turn_after_a_draw_is_not_refused_for_a_model_that_reads_none() {
     );
     assert!(!request.to_string().contains("image_url"), "{request}");
     assert!(!request.to_string().contains(DRAWN_PICTURE_LINE));
-    assert!(sent[0]["content"].as_str().unwrap().ends_with(DRAWN_NOTE));
+    assert!(!request.to_string().contains(DRAWN_NOTE), "{request}");
     assert_eq!(before, after, "a row was changed");
 }

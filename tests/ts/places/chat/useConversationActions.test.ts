@@ -35,13 +35,13 @@ const open: ConversationSummary = {
   updated_at: '2026-09-30 09:13:07',
 };
 
-function actions(far: boolean, pairedModel?: ModelRef) {
+function actions(far: boolean, model?: ModelRef) {
   const confirm = vi.fn(async () => true);
   const onOpened = vi.fn();
   const onDeleted = vi.fn();
   const onError = vi.fn();
   const { result } = renderHook(() =>
-    useConversationActions({ far, activeConversation: open, confirm, onError, onOpened, onDeleted, pairedModel }),
+    useConversationActions({ far, activeConversation: open, confirm, onError, onOpened, onDeleted, model }),
   );
   return { ...result.current, confirm, onOpened, onDeleted, onError };
 }
@@ -96,5 +96,11 @@ describe('useConversationActions', () => {
     const far: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
     await actions(false, far).startOver();
     expect(transport.createConversation).toHaveBeenCalledWith(expect.objectContaining({ model: far }));
+  });
+
+  it("Start over on a chat with this machine's model makes the copy for that model, so its next turn runs there", async () => {
+    const here: ModelRef = { machine: { kind: 'local' }, id: 7 };
+    await actions(false, here).startOver();
+    expect(transport.createConversation).toHaveBeenCalledWith(expect.objectContaining({ model: here }));
   });
 });

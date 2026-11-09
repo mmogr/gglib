@@ -155,8 +155,11 @@ export function useRunReader(
     setBeside(said);
   }, []);
 
-  /** Read run `runId` from its first event, then show what the daemon saved. */
-  const follow = useCallback(async (cid: number, runId: string, signal: AbortSignal) => {
+  /**
+   * Read run `runId` from its first event, then show what the daemon saved:
+   * how the run ended, or `null` when the reading was left first.
+   */
+  const follow = useCallback(async (cid: number, runId: string, signal: AbortSignal): Promise<RunOutcome | null> => {
     runRef.current = runId;
     runningRef.current = true;
     setIsRunning(true);
@@ -179,20 +182,21 @@ export function useRunReader(
         setPreviews: unlessLeft(setPreviews),
       });
     } catch (error) {
-      if (signal.aborted) return;
+      if (signal.aborted) return null;
       outcome = { info: null, error: error as Error };
     }
-    if (signal.aborted) return;
+    if (signal.aborted) return null;
     try {
       await showSaved(cid, signal);
     } catch (error) {
       outcome.error ??= error as Error;
     }
-    if (signal.aborted) return;
+    if (signal.aborted) return null;
     endReading(signal);
     setEndedRun(outcome.info);
     latest.current.onConversationChanged?.(cid);
     if (outcome.error) latest.current.onError?.(outcome.error);
+    return outcome;
   }, [endReading, showSaved, timingTracker]);
 
   /** Learn whether a run is live in `cid`, show its rows, then read the run. */

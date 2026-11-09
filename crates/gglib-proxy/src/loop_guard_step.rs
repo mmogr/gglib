@@ -226,6 +226,7 @@ fn record_unforwarded(
         tool_calls: 0,
         finish_reason: None,
         generation_ms: None,
+        tokens_per_second: None,
         seq: 0,
         model_name: model_name.to_owned(),
         payload_chars_before: body_len,

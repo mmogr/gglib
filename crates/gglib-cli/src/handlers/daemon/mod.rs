@@ -50,19 +50,20 @@ pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<(
     outcome
 }
 
-/// The report's lines for the proxy: its state and, while it listens, where
-/// a client reaches it, whether a request needs the key, and the model it
-/// is pinned to. Every word is the daemon's.
+/// The report's lines for the proxy: its state (a pinned one with its model,
+/// `Pinned to <model>`) and, while it listens, where a client reaches it and
+/// whether a request needs the key. Every word is the daemon's.
 fn proxy_lines(proxy: &ProxyStatusDto) -> Vec<String> {
+    let state = proxy
+        .pinned_to
+        .clone()
+        .unwrap_or_else(|| proxy.state.to_string());
     let mut lines = vec![proxy.base_url.as_ref().map_or_else(
-        || format!("  Proxy:   {}", proxy.state),
-        |url| format!("  Proxy:   {} at {url}", proxy.state),
+        || format!("  Proxy:   {state}"),
+        |url| format!("  Proxy:   {state} at {url}"),
     )];
     if let Some(key) = proxy.key {
         lines.push(format!("  API key: {key}"));
-    }
-    if let Some(pinned) = &proxy.pinned_model {
-        lines.push(format!("  Pinned:  {pinned}"));
     }
     lines
 }

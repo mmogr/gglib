@@ -4,7 +4,8 @@
 
 The inspector for a model on this machine. From the top: its name (⧉
 copies the Model ID), ⋯ and ×; the library row's line of facts; the fit
-sentence; Load and Chat (Chat and Unload once loaded, with its state word);
+sentence the daemon serves (`plan.fit.sentence`, the words `gglib model
+explain` prints); Load and Chat (Chat and Unload once loaded, with its state word);
 the Model ID to use it by; How it runs (How it ran once loaded); ▸ Log with
 the server's last line once loaded (it opens the Log subject); Details,
 closed and remembered. A failed load's line offers Show log. × closes to
@@ -23,7 +24,9 @@ How it runs is the plan's arguments grouped by `LaunchArg.decision`, one
 row per labelled decision (`rows.ts` holds the one label table), each
 saying the plan's narration for that decision where it has one (the words
 How it ran says), else its arguments, and whose choice it was and why on
-hover; Templates is always drawn (Auto with no flag), Speculative too once
+hover; Templates is always drawn (Auto with no flag), the Context row adds the
+daemon's note (`plan.fit.note`, "fits (35.81 GiB of 43.20 GiB usable)"),
+Speculative too once
 the person has set it, under the launch line
 (`LaunchPlan::command_line` drawn token by token). Sampling and Reasoning
 rows count the explanation's sources. Change turns a row into its control
@@ -32,13 +35,18 @@ reads `set by you · Reset`. A token of the launch line whose decision the Load
 with options sheet holds offers Change for this model…, which opens the
 sheet on that field; a token the person chose is underlined. A per-token
 override field and `+ flag` wait for a Rust surface that sets any flag.
+⧉ beside the launch line copies the whole command as one shell line, the
+line drawn (a value quoted where a shell would read it, `$` included).
 
 ⋯ Verify files and Check for updates (the second only for a model from
 Hugging Face) start the check at once and open Details on Source, where
-its line is: the file the daemon is hashing, with a bar; then `✓ Files
-intact`, `▲ N files damaged [Re-download them]` with every file's health
-in a list opened from the line, or, when no file has a hash, that nothing
-was compared (the daemon calls that healthy, so the line reads the files);
+its line is: the file the daemon is hashing, with a bar; then the
+daemon's verdict in its word (`VERDICT_WORDS`): `✓ Healthy`, or
+`▲ Unverifiable` when no file has a hash; when files are corrupt or
+missing, the report's damaged line in its place, `▲ 2 files damaged
+[Re-download them]`, the re-download naming the report's damaged files;
+with every file's health (`FILE_HEALTH_WORDS`) in a list opened from the
+line;
 for updates, up to date, or a newer revision with Download changed files
 and Re-download at latest…;
 a refusal in the daemon's words with Retry. Each repair and re-download asks
@@ -47,20 +55,20 @@ across leaving it and never shown on another; a file check answered here
 is the "files checked" time, since the daemon stores none.
 
 Words with no Rust twin, composed from Rust's fields here: "loaded 4m 10s"
-and the rate's "34 t/s" on a loaded model's status line, the fit sentence
-and its refusal, the Context row's note, the Sampling row's count, "set by
-you", "Auto", "On", "Off", "Applies at next load.", "Didn't load:" and
-"Didn't unload:" (`utils/errors` `loadFailed`), "Copied" beside ⋯ after
-⋯ › Copy path, "Drawing needs
+and the rate's "34 t/s" on a loaded model's status line, the Sampling row's count, "set by
+you", "Auto", "On", "Off", "Applies at next load.", "Copy as command",
+"Didn't load:" and "Didn't unload:" (`utils/errors` `loadFailed`),
+"Copied" beside ⋯ after ⋯ › Copy path and beside Copy as command, "Drawing needs
 stable-diffusion.cpp.", and the verification line's "Checking files…",
-"Checking … N%", "Files intact", "N files damaged", "Re-download it/them",
-"No file has a hash to check against", "Checking for
+"Checking … N%", "Re-download it/them", "Checking for
 updates…", "Up to date", "A newer revision exists (may be README only)",
 "A newer revision exists: N files changed", "No revision is recorded for
 this model, so there is nothing to compare.", "Download changed files",
 "Re-download at latest…", "Sent to the download queue.", "Retry", and the confirms' words (kept from the verification
-dialog). The per-file health words are those `gglib model verify
---per-shard` prints, which no Rust function returns.
+dialog; the re-download's names the damaged line and "This will
+re-download it/them."). The verdict and per-file health words are
+`OverallHealth::word` and `ShardHealth::word`, from `words.ts`; the
+damaged line is `damaged_line`, served on the report's `damage`.
 
 | File | Role |
 |------|------|
@@ -70,10 +78,10 @@ dialog). The per-file health words are those `gglib model verify
 | `Change.tsx` | Each row's control (Context field, Templates and Speculative selects, Images and Parts file menus, the compact sampling form) and each row's Reset, saving one field of the update |
 | `LaunchLine.tsx` | The launch line in mono, each argument a button opening a note with its reason and source, and Change for this model… where the sheet holds its decision; a token the person chose underlined |
 | `commandLine.ts` | Pure: `commandLine`, `argText` and `shellToken`, the command line as `LaunchPlan::command_line` writes it |
-| `rows.ts` | Pure: the decision labels, the rows of a plan, a row's value and hover, the caption, the Context note, the Sampling and Reasoning lines, and whether the person set them |
+| `rows.ts` | Pure: the decision labels, the rows of a plan, a row's value and hover, the caption, the Sampling and Reasoning lines, and whether the person set them |
 | `Details.tsx` | Details ▸: file, source (with the verification line and the last file check), name and quant label (click to edit), architecture, trained context, tags, abilities, reasoning support, measured speed, the loaded server's llama-server port ("port 9001, internal"), raw GGUF metadata; open or closed remembered per viewer (the far model's Details share its fold, `Item` and `When`) |
 | `LogLink.tsx` | `▸ Log` on a loaded model: the label opens `/models/:id/log`, the server's last line follows it in tertiary mono, cut with an ellipsis |
-| `SourceStatus.tsx` | The line under Source a file check or update check writes: progress and bar, the answer and its action, the file list opened from it, a refusal with Retry |
+| `SourceStatus.tsx` | The line under Source a file check or update check writes: progress and bar, the daemon's verdict in its word and its action, the file list opened from it, a refusal with Retry |
 | `useVerification.ts` | Each model's file check and update check, held per model outside the inspector: the `verification` stream's progress, the daemon's answers, a later run overtaking an earlier, and the confirmed repair, changed-files download and re-download |
 | `Tags.tsx` | The tags as chips with ×, and a field that adds one |
 | `Abilities.tsx` | The four capability flags as boxes, with one footnote |

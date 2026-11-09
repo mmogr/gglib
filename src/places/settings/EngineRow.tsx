@@ -22,11 +22,13 @@ import { MoreHorizontal } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
 import { StatusMark, type MarkKind } from '../../components/status/StatusMark';
+import { ENGINE_WORDS } from '../../components/status/words';
 import { InstallProgress } from '../../components/InstallProgress';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { useEngine } from '../../hooks/useEngine';
 import { ENGINE_PRODUCT } from '../../types/setup';
 import type { EngineStatus, RuntimeKind } from '../../types/setup';
+import type { EngineState } from '../../types/generated/EngineState';
 import { Menu, type MenuItem } from '../../components/ui/Menu';
 import { Disclosure } from './Disclosure';
 import { EngineDetails } from './EngineDetails';
@@ -38,12 +40,12 @@ const WORDS: Record<RuntimeKind, { serves: string; removes: string }> = {
   stable_diffusion: { serves: 'image models', removes: 'sd-server, its library and its install record' },
 };
 
-/** Installed, installed and not working, or absent: a shape and a word. */
-function stateOf(status: EngineStatus): { kind: MarkKind; word: string } {
-  if (!status.installed) return { kind: 'off', word: 'Not installed' };
-  if (status.broken) return { kind: 'failed', word: 'Installed, not working' };
-  return { kind: 'on', word: 'Installed' };
-}
+/** The shape each engine state is drawn as; its word is `ENGINE_WORDS`'. */
+const MARK: Record<EngineState, MarkKind> = {
+  installed: 'on',
+  not_working: 'failed',
+  not_installed: 'off',
+};
 
 /** The row's one line: what is installed and how, or what an install would take. */
 function lineOf(status: EngineStatus): string {
@@ -113,7 +115,6 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
       : []),
     { label: 'Remove…', danger: true, disabled: busy, title: stopFirst, onPick: () => void remove() },
   ];
-  const state = status ? stateOf(status) : null;
 
   return (
     <section aria-labelledby={heading} className="flex flex-col gap-sm">
@@ -122,10 +123,10 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
           <h3 id={heading} className="m-0 text-sm font-semibold text-text">
             {product}
           </h3>
-          {status && state && (
+          {status && (
             <div className="flex flex-wrap items-center gap-x-md gap-y-xs">
               <span className="text-xs text-text-secondary tabular-nums">{lineOf(status)}</span>
-              <StatusMark kind={state.kind} word={state.word} className="text-xs" />
+              <StatusMark kind={MARK[status.state]} word={ENGINE_WORDS[status.state]} className="text-xs" />
             </div>
           )}
           {engine.loadingStatus && !status && <Line>Reading {product}…</Line>}

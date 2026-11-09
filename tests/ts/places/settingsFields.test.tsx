@@ -126,6 +126,8 @@ const changes: [string, string, Change, UpdateSettingsRequest][] = [
   ['tools', 'MCP drawing', tick('mcp-drawing-input'), { mcpDrawing: false }],
   ['tools', 'tool rounds', disclosed('Agent limits', retype('max-tool-iterations-input', '20')), { maxToolIterations: 20 }],
   ['tools', 'stuck steps', disclosed('Agent limits', retype('max-stagnation-steps-input', '9')), { maxStagnationSteps: 9 }],
+  ['tools', 'parallel tool calls', disclosed('Agent limits', retype('max-parallel-tools-input', '4')), { maxParallelTools: 4 }],
+  ['tools', 'tool timeout', disclosed('Agent limits', retype('tool-timeout-ms-input', '5000')), { toolTimeoutMs: 5000 }],
   ['tools', 'title prompt', retype('title-prompt-input', 'another prompt'), { titleGenerationPrompt: 'another prompt' }],
   ['tools', 'title prompt Reset', async (user) => user.click(screen.getByRole('button', { name: 'Reset' })), { titleGenerationPrompt: null }],
 ];
@@ -158,6 +160,8 @@ describe('the number fields', () => {
     ['models', 'context-size-input', null, 'auto', /the server sizes each launch/, '512', '1000000'],
     ['tools', 'max-tool-iterations-input', 'Agent limits', '25', 'Default: 25', '1', '50'],
     ['tools', 'max-stagnation-steps-input', 'Agent limits', '5', 'Default: 5', '1', '100'],
+    ['tools', 'max-parallel-tools-input', 'Agent limits', '25', 'Default: 25', '1', '50'],
+    ['tools', 'tool-timeout-ms-input', 'Agent limits', '30000', 'Default: 30000', '100', '60000'],
   ];
 
   it.each(NUMBERS)(
@@ -211,6 +215,8 @@ describe('when a change takes effect', () => {
     ['tools', 'mcp-drawing-input', null, null],
     ['tools', 'max-tool-iterations-input', 'Agent limits', null],
     ['tools', 'max-stagnation-steps-input', 'Agent limits', null],
+    ['tools', 'max-parallel-tools-input', 'Agent limits', null],
+    ['tools', 'tool-timeout-ms-input', 'Agent limits', null],
     ['tools', 'title-prompt-input', null, null],
   ];
 
@@ -238,7 +244,7 @@ describe('the models folder', () => {
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenCalledWith('/models'));
     expect(transport.setModelsDirectory).toHaveBeenCalledTimes(1);
     expect(writes()).toEqual([]);
-    expect(await screen.findByText('exists · writable')).toBeInTheDocument();
+    expect(await screen.findByText('Writable')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenLastCalledWith('/custom/models'));
   });
@@ -257,16 +263,23 @@ describe('the models folder', () => {
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenCalledWith('/Volumes/big/models'));
   });
 
-  it('says a folder that is not there yet, or cannot be written, with the attention mark', async () => {
-    daemon.folder = { ...daemon.folder, exists: false, writable: false };
+  it('says a folder that is not there yet, or cannot be written, in the served word with the attention mark', async () => {
+    daemon.folder = { ...daemon.folder, exists: false, writable: true, state: 'absent' };
+    const first = renderApp('/settings/models');
+    const absent = await screen.findByText('Will be created');
+    expect(absent.closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
+    expect(screen.queryByText(/not writable/i)).not.toBeInTheDocument();
+    first.unmount();
+
+    daemon.folder = { ...daemon.folder, exists: true, writable: false, state: 'not_writable' };
     renderApp('/settings/models');
-    const said = await screen.findByText('will be created · not writable');
-    expect(said.closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
+    const locked = await screen.findByText('Not writable');
+    expect(locked.closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
   });
 
   it('says a folder that is there and writable plainly, with no mark', async () => {
     renderApp('/settings/models');
-    const said = await screen.findByText('exists · writable');
+    const said = await screen.findByText('Writable');
     expect(said.closest('[data-kind]')).toBeNull();
   });
 });

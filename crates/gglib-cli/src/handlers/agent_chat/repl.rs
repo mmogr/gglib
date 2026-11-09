@@ -15,10 +15,8 @@
 //!
 //! ## Ctrl+C cancellation
 //!
-//! A Ctrl+C **during an agent response** is handled via a `tokio::select!` in
-//! `run_repl_with_history`: the agent-loop task is aborted, the channel drained,
-//! and the REPL returns to the prompt — the `handle.abort()` side effect is
-//! explicit at the call site, not hidden inside `collect_events`.
+//! A Ctrl+C **during an agent response** is handled in [`super::turn`]: the
+//! daemon's run is cancelled, and the REPL returns to the prompt.
 //!
 //! A Ctrl+C **at the readline prompt** is signalled by rustyline as
 //! [`ReadlineError::Interrupted`]; the REPL prints a hint and continues to
@@ -30,21 +28,19 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 
-use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, TurnLimits};
-use gglib_core::ports::AgentLoopPort;
+use gglib_core::domain::Thinking;
+use gglib_core::domain::attachment::AttachmentId;
+use gglib_core::domain::hub_chats::LocalTurn;
 
-use crate::handlers::inference::chat::ChatArgs;
+use crate::daemon_client::DaemonHandle;
 
 use super::branches;
-use super::drain::drain_event_stream;
 use super::draw::DrawSwitch;
 use super::images::TurnImages;
 use super::persistence::Conversation;
 use super::repl_line::{self, Line};
+use super::turn::{self, Shown};
 
 // =============================================================================
 // Help text
@@ -70,79 +66,107 @@ const REPL_HELP: &str = "\
 // Public entry point
 // =============================================================================
 
-/// Run the interactive agent REPL until the user quits or reaches EOF, with
-/// optional prior messages from a resumed conversation.
-///
-/// Takes the agent loop as `Arc<dyn AgentLoopPort>` so the REPL can cheaply
-/// clone the reference for each spawned per-turn task without requiring
-/// `AgentLoop` to implement [`Clone`].
-///
-/// When `prior_messages` is non-empty, the REPL begins with those messages
-/// already in the history (no system prompt is prepended — it is already
-/// in the prior messages). Pass an empty vector to start fresh. `limits`
-/// are the session's, resolved by its caller. `draw` is the session's Draw
-/// switch, armed by `/draw` for one message.
-pub(crate) async fn run_repl_with_prior(
-    agent_loop: Arc<dyn AgentLoopPort>,
-    args: &ChatArgs,
-    limits: TurnLimits,
-    persistence: Option<Conversation<'_>>,
-    prior_messages: Vec<AgentMessage>,
-    images: TurnImages<'_>,
-    draw: DrawSwitch,
-) -> Result<()> {
-    let config = AgentConfig::from_user_params(
-        Some(limits.max_iterations),
-        args.max_parallel,
-        args.tool_timeout_ms,
-        // Some(vec) replaces defaults; empty vec passes None to preserve defaults.
-        Some(args.observation_tools.clone()).filter(|v| !v.is_empty()),
-        args.max_observation_steps,
-        limits.max_stagnation_steps,
-    )
-    .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
-
-    let messages = if prior_messages.is_empty() {
-        // Fresh session: optionally prepend system prompt.
-        let mut msgs = Vec::new();
-        if let Some(ref system) = args.system_prompt {
-            msgs.push(AgentMessage::System {
-                content: system.clone(),
-            });
-        }
-        msgs
-    } else {
-        prior_messages
-    };
-
-    run_repl_with_history(
-        agent_loop,
-        messages,
-        config,
-        args.verbose,
-        persistence,
-        images,
-        draw,
-    )
-    .await
+/// A session at the prompt: the daemon its turns go to, the conversation
+/// they are added to, and what each turn carries besides what is typed.
+pub(crate) struct Session<'a> {
+    pub daemon: DaemonHandle,
+    pub conversation: Conversation<'a>,
+    /// The images attached to the next message.
+    pub images: TurnImages<'a>,
+    /// The Draw switch (`/draw`).
+    pub draw: DrawSwitch,
+    /// The folder each turn says (`files`); `None` says none.
+    pub folder: Option<String>,
+    /// The Thinking choice this command line named, said on each turn.
+    pub thinking: Option<Thinking>,
+    pub shown: Shown,
 }
 
-/// Run the interactive agent REPL with a pre-populated conversation history.
+impl Session<'_> {
+    /// The turn that adds `content` and `images` to the conversation, or,
+    /// with `answer_saved`, answers the question it already ends in.
+    fn turn(&self, content: String, images: Vec<AttachmentId>, answer_saved: bool) -> LocalTurn {
+        let (draw, image_model) = self.draw.turn();
+        LocalTurn {
+            conversation_id: self.conversation.id,
+            content,
+            images,
+            thinking: self.thinking,
+            answer_saved,
+            draw,
+            image_model,
+            folder: self.folder.clone(),
+        }
+    }
+
+    /// Send `turn`, and show its reply. Draw is for one message, so whatever
+    /// the turn did, finished, failed, refused or cancelled, the message
+    /// after it is offered no image tool. `true` when the reply gave its
+    /// answer; a refusal is said on stderr.
+    pub(crate) async fn send(&self, turn: &LocalTurn) -> bool {
+        let sent = turn::send(&self.daemon, turn, self.shown).await;
+        self.draw.sent();
+        sent.unwrap_or_else(|refused| {
+            eprintln!("  ✗  {refused}");
+            false
+        })
+    }
+}
+
+/// What a line typed at the prompt comes to.
+#[derive(Debug)]
+pub(super) enum Typed {
+    /// `/quit` or `/exit`.
+    Quit,
+    /// A command, done: nothing to send.
+    Done,
+    /// A turn to send.
+    Turn(LocalTurn),
+}
+
+impl Session<'_> {
+    /// Do what `input`, a trimmed line, asks: a command is done here, and a
+    /// message, or a change that leaves a question to answer, is a turn.
+    pub(super) async fn typed(&mut self, input: &str) -> Typed {
+        match repl_line::read(input, &mut self.images).await {
+            Line::Empty => Typed::Done,
+            Line::Quit => Typed::Quit,
+            Line::Help => {
+                println!("{REPL_HELP}");
+                Typed::Done
+            }
+            Line::Image(reply) => {
+                eprintln!("{reply}");
+                Typed::Done
+            }
+            Line::Branches => {
+                branches::list(&self.conversation).await;
+                Typed::Done
+            }
+            // A change that leaves a question to answer is answered by a
+            // turn that adds no message.
+            Line::Change(ask) => {
+                if branches::go(&self.daemon, &mut self.conversation, ask).await {
+                    Typed::Turn(self.turn(String::new(), Vec::new(), true))
+                } else {
+                    Typed::Done
+                }
+            }
+            Line::Draw(what) => {
+                eprintln!("{}", self.draw.say(what.as_deref()).await);
+                Typed::Done
+            }
+            Line::Send { content, images } => Typed::Turn(self.turn(content, images, false)),
+        }
+    }
+}
+
+/// Run the interactive agent REPL until the user quits or reaches EOF.
 ///
-/// This is the core REPL implementation.  [`run_repl_with_prior`] delegates
-/// here after building the message list and config from [`ChatArgs`].  It is
-/// also called directly by `gglib q --agent` to transition from a single-turn
-/// question into an interactive session, carrying the full conversation
-/// history forward.
-pub(crate) async fn run_repl_with_history(
-    agent_loop: Arc<dyn AgentLoopPort>,
-    mut messages: Vec<AgentMessage>,
-    config: AgentConfig,
-    verbose: bool,
-    mut persistence: Option<Conversation<'_>>,
-    mut images: TurnImages<'_>,
-    draw: DrawSwitch,
-) -> Result<()> {
+/// Each message typed is a turn on the session's conversation, which the
+/// daemon answers from the history it keeps. Also called by `gglib q` to go
+/// on from a question as a chat.
+pub(crate) async fn run_repl(mut session: Session<'_>) -> Result<()> {
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.
     let editor: Arc<Mutex<DefaultEditor>> =
@@ -151,15 +175,12 @@ pub(crate) async fn run_repl_with_history(
         })?));
 
     println!("Agentic chat ready. Type /help for help, /quit to exit.");
-    if let Some(ref conv) = persistence {
-        println!(
-            "{}Session #{} — resume later with: gglib chat --continue {}{}",
-            crate::presentation::style::DIM,
-            conv.id,
-            conv.id,
-            crate::presentation::style::RESET,
-        );
-    }
+    let id = session.conversation.id;
+    println!(
+        "{}Session #{id} — resume later with: gglib chat --continue {id}{}",
+        crate::presentation::style::DIM,
+        crate::presentation::style::RESET,
+    );
 
     // ── REPL outer loop ──────────────────────────────────────────────────────
     loop {
@@ -184,189 +205,25 @@ pub(crate) async fn run_repl_with_history(
             Err(e) => return Err(anyhow::anyhow!("readline error: {e}")),
         };
 
-        // Whether the turn asks a question of its own, which it then saves;
-        // a turn that answers one already saved saves none.
-        let asks = match repl_line::read(input.trim(), &mut images).await {
-            Line::Empty => continue,
-            Line::Quit => break,
-            Line::Help => {
-                println!("{REPL_HELP}");
-                continue;
+        match session.typed(input.trim()).await {
+            Typed::Quit => break,
+            Typed::Done => {}
+            Typed::Turn(turn) => {
+                session.send(&turn).await;
             }
-            Line::Image(reply) => {
-                eprintln!("{reply}");
-                continue;
-            }
-            Line::Branches => {
-                branches::list(persistence.as_ref()).await;
-                continue;
-            }
-            Line::Change(ask) => {
-                let Some(next) = branches::go(&mut persistence, ask, &messages).await else {
-                    continue;
-                };
-                messages = next.history;
-                if !next.answer {
-                    continue;
-                }
-                false
-            }
-            Line::Draw(what) => {
-                eprintln!("{}", draw.say(what.as_deref()).await);
-                continue;
-            }
-            Line::Send(message) => {
-                messages.push(message);
-                true
-            }
-        };
-
-        // ── 2–4. Run turn and update history ─────────
-        // Context pruning is handled by the agent loop itself (`prune_for_budget`
-        // is called before the first LLM call and after each tool-execution
-        // iteration).  The returned `output.history` is already within budget,
-        // so a redundant prune here is unnecessary.
-        //
-        // Move `messages` into the turn; the function moves it into the
-        // spawned task and returns either the updated history (success) or
-        // the original snapshot (failure / Ctrl+C) — one clone total instead
-        // of the previous two. The turn saves itself as it runs: what comes
-        // back is the model's context, not a record of what was said.
-        let saved_to = persistence.as_ref();
-        let config = config.clone();
-        messages = send(
-            &agent_loop,
-            messages,
-            config,
-            verbose,
-            saved_to,
-            asks,
-            &draw,
-        )
-        .await;
+        }
     }
 
-    if let Some(ref conv) = persistence {
-        println!(
-            "{}Session #{} saved. Resume with: gglib chat --continue {}{}",
-            crate::presentation::style::DIM,
-            conv.id,
-            conv.id,
-            crate::presentation::style::RESET,
-        );
-    }
+    let id = session.conversation.id;
+    println!(
+        "{}Session #{id} saved. Resume with: gglib chat --continue {id}{}",
+        crate::presentation::style::DIM,
+        crate::presentation::style::RESET,
+    );
 
     Ok(())
 }
 
-// =============================================================================
-// Private helpers
-// =============================================================================
-
-/// One send: the turn ([`run_single_turn`]), then the Draw switch off again.
-/// Draw is for one message, so whatever the turn did, finished, failed or
-/// cancelled, the message after it is offered no image tool.
-async fn send(
-    agent_loop: &Arc<dyn AgentLoopPort>,
-    messages: Vec<AgentMessage>,
-    config: AgentConfig,
-    verbose: bool,
-    saved_to: Option<&Conversation<'_>>,
-    asks: bool,
-    draw: &DrawSwitch,
-) -> Vec<AgentMessage> {
-    // Sent while `/draw` is armed, the turn's first reply must be the call
-    // for the picture.
-    let mut config = config;
-    config.first_call = draw.first_call();
-    let after = run_single_turn(agent_loop, messages, config, verbose, saved_to, asks).await;
-    draw.sent();
-    after
-}
-
-/// Run one agent turn: spawn the loop task, consume events, handle Ctrl+C,
-/// and return the updated conversation history.
-///
-/// With `saved_to`, the turn is saved there as the daemon saves an agent
-/// run's: its last message, the user's, before the loop starts, when it
-/// `asks` it (a turn that answers a question already saved does not), and
-/// the reply once the loop has ended, from the events it sent. A turn that
-/// failed or was cancelled saves what arrived of its reply, marked
-/// incomplete. Best-effort: a turn that cannot be saved still runs.
-///
-/// Takes ownership of `messages` to avoid a redundant clone at the call site.
-/// A single clone is made internally as a backup (`pre_turn`); the original
-/// is moved into the spawned task.
-///
-/// On success, returns the full `output.history` from the agent loop (which
-/// includes assistant + tool-result messages appended during the turn).
-///
-/// On cancellation or agent error, returns the `pre_turn` snapshot so the
-/// user's prior conversation context is preserved.
-async fn run_single_turn(
-    agent_loop: &Arc<dyn AgentLoopPort>,
-    messages: Vec<AgentMessage>,
-    config: AgentConfig,
-    verbose: bool,
-    saved_to: Option<&Conversation<'_>>,
-    asks: bool,
-) -> Vec<AgentMessage> {
-    // Single clone: keep a backup so a failed or cancelled turn restores the
-    // exact conversation state (including the user message that triggered
-    // this turn).  The original `messages` is moved into the spawned task.
-    let pre_turn = messages.clone();
-
-    let mut reply = saved_to.map(Conversation::reply);
-    if let Some(conversation) = saved_to.filter(|_| asks) {
-        conversation.save_user(messages.last()).await;
-    }
-
-    let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
-    let agent = Arc::clone(agent_loop);
-    let handle: JoinHandle<Option<Vec<AgentMessage>>> = tokio::spawn(async move {
-        match agent.run(messages, config, tx).await {
-            Ok(output) => Some(output.history),
-            Err(e) => {
-                tracing::debug!("agent loop ended: {e}");
-                None
-            }
-        }
-    });
-
-    let completed = tokio::select! {
-        biased;
-        result = drain_event_stream(&mut rx, verbose, false, reply.as_mut()) => result,
-        _ = tokio::signal::ctrl_c() => {
-            handle.abort();
-            while rx.try_recv().is_ok() {}
-            eprintln!("\n[agent response cancelled — Ctrl+C]");
-            false
-        }
-    };
-
-    // Always await the handle — even after abort() — so any panic is not
-    // silently dropped and the task is fully cleaned up.
-    let loop_result = handle.await;
-
-    if let Some((conversation, reply)) = saved_to.zip(reply.as_ref()) {
-        conversation.save_reply(reply, completed).await;
-    }
-
-    if completed && let Ok(Some(new_messages)) = loop_result {
-        return new_messages;
-    }
-    pre_turn
-}
-
 #[cfg(test)]
-#[path = "turn_draw_tests.rs"]
-mod turn_draw_tests;
-#[cfg(test)]
-#[path = "turn_drawn_picture_tests.rs"]
-mod turn_drawn_picture_tests;
-#[cfg(test)]
-#[path = "turn_resumed_tests.rs"]
-mod turn_resumed_tests;
-#[cfg(test)]
-#[path = "turn_rows_tests.rs"]
-mod turn_rows_tests;
+#[path = "repl_turn_tests.rs"]
+mod repl_turn_tests;

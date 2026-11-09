@@ -3,9 +3,10 @@
 //! (`hub_turn`) and a chat the phone keeps itself (`chat_turn`), each driven
 //! through its own `PUT`.
 //!
-//! A run's late step cannot finish in a test: its model is admitted on a
-//! port where no llama-server runs, so the run ends `failed` at the port
-//! check, after its tools are settled and before its loop is composed. What
+//! A run's late step cannot finish in a test: its model is admitted, and
+//! the endpoint it then dials cannot be turned on (the fixture holds its
+//! port), so the run ends `failed` at the door, after its tools are settled
+//! and before its loop is composed. What
 //! the step leaves behind is whether the open server was started; what the
 //! run is offered is `settle` of the run's own chat and `Asked`, read as the
 //! late step reads it.
@@ -149,7 +150,8 @@ impl Opened {
     }
 
     /// Let the run's model load, and wait for the run to end where a test's
-    /// must: at the port check, past its late step's tools.
+    /// must: at the endpoint's door, which the fixture's held port keeps
+    /// shut, past its late step's tools.
     async fn loaded_and_ended(&self, device: &str, id: &str) {
         self.loaded_and_ended_in(&RunScope::Device(device.to_owned()), id)
             .await;
@@ -162,7 +164,7 @@ impl Opened {
         let run = self.state.runs.existing(scope, id).unwrap().unwrap();
         assert_eq!(run.status, RunStatus::Failed);
         let message = run.error.unwrap().message;
-        assert!(message.contains("No running server found"), "{message}");
+        assert!(message.contains("already in use"), "{message}");
     }
 }
 
@@ -459,6 +461,11 @@ fn a_bare_tool_name_starts_every_enabled_server() {
     assert_eq!(
         local(&["builtin:get_current_time"]),
         Some(Starts::Only(BTreeSet::new()))
+    );
+    // Every tool of one server starts that server, and only it.
+    assert_eq!(
+        local(&["7:*", "builtin:get_current_time"]),
+        Some(Starts::Only(BTreeSet::from([7])))
     );
     let off = Asked::of_local(&ConversationSettings::default(), false, false);
     assert_eq!(off.here_servers(), None);

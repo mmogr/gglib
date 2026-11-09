@@ -8,7 +8,7 @@ use crate::handlers::agent_chat::images::images_tests::{attached, file, png, ser
 /// The message `input` sends: its text and the ids of its images.
 async fn sent(input: &str, images: &mut TurnImages<'_>) -> (String, Vec<AttachmentId>) {
     match read(input, images).await {
-        Line::Send(AgentMessage::User { content, images }) => (content, images),
+        Line::Send { content, images } => (content, images),
         other => panic!("{input:?} sends a user message, not {other:?}"),
     }
 }
@@ -104,7 +104,7 @@ async fn a_change_to_the_chat_is_asked_for_and_not_sent() {
     ));
     assert!(matches!(
         read("/editor of mine", &mut images).await,
-        Line::Send(_)
+        Line::Send { .. }
     ));
 }
 
@@ -129,6 +129,6 @@ async fn a_draw_line_is_the_switch_and_sends_nothing() {
     }
     assert!(matches!(
         read("/drawing a fox", &mut images).await,
-        Line::Send(_)
+        Line::Send { .. }
     ));
 }

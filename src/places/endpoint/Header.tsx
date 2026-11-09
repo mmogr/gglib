@@ -79,11 +79,11 @@ export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
       {up && (
         <div className="flex items-center gap-md pl-lg">
           <p className="m-0 flex-1 text-sm text-text-secondary">
-            {facts.pinnedModel !== null
-              ? `only ${facts.pinnedModel}, other names are refused`
+            {facts.pinned !== null
+              ? `only ${facts.pinned.name}, other names are refused`
               : 'Every model in your library answers here by name.'}
           </p>
-          {facts.pinnedModel !== null && (
+          {facts.pinned !== null && (
             <Button variant="ghost" size="sm" onClick={() => void actions.serve(null)}>
               Unpin
             </Button>

@@ -40,10 +40,10 @@ pub use process::{
 };
 
 // Re-export port implementations for runtime adapters
-pub use ports_impl::{Door, LlmCompletionAdapter, RuntimePortImpl, SamplingObserver};
+pub use ports_impl::{Door, LlmCompletionAdapter, RuntimePortImpl};
 
 // Re-export composition root factory
-pub use compose::{LoopGeneration, compose_agent_loop, compose_agent_loop_with_sampling};
+pub use compose::compose_agent_loop;
 
 // Re-export system probe implementation
 pub use system::DefaultSystemProbe;

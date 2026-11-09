@@ -12,6 +12,7 @@ Current application settings:
   llama-base-port          9300
   loop-guard-mode          None
   max-download-queue-size  None
+  max-parallel-tools       None
   max-stagnation-steps     None
   max-tool-iterations      None
   mcp-drawing              None (off)
@@ -29,6 +30,7 @@ Current application settings:
   start-at-login           None
   title-generation-prompt  None
   tool-call-repair         None
+  tool-timeout-ms          None
   trust-client-sampling    None
 
   Inference Defaults

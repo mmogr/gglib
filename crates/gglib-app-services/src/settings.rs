@@ -3,9 +3,10 @@
 use std::sync::Arc;
 
 use gglib_core::SettingsUpdate;
+use gglib_core::domain::ModelsDirState;
 use gglib_core::paths::{
-    DirectoryCreationStrategy, ModelsDirSource, PathError, default_models_dir, resolve_models_dir,
-    set_models_dir,
+    DirectoryCreationStrategy, ModelsDirSource, PathError, can_write_folder, default_models_dir,
+    resolve_models_dir, set_models_dir,
 };
 use gglib_core::ports::{DownloadManagerPort, SystemProbePort};
 use gglib_core::services::AppCore;
@@ -29,24 +30,39 @@ fn format_source(source: ModelsDirSource) -> &'static str {
 /// The models directory as it resolves now: where it is, how it was chosen,
 /// the default it would otherwise be, and whether it is there to write to.
 ///
-/// The one description of the directory, for the settings page and the setup
-/// status alike. The default is core's own, and is blank where there is no
-/// home directory to put one under.
-pub(crate) fn models_directory_info() -> Result<ModelsDirectoryInfo, PathError> {
+/// The one description of the directory, for the settings page, the setup
+/// status and `gglib config models-dir show` alike. The default is core's
+/// own, and is blank where there is no home directory to put one under.
+pub fn models_directory_info() -> Result<ModelsDirectoryInfo, PathError> {
     let resolution = resolve_models_dir(None)?;
-    let exists = resolution.path.exists();
-    let writable =
-        exists && std::fs::metadata(&resolution.path).is_ok_and(|m| !m.permissions().readonly());
-
-    Ok(ModelsDirectoryInfo {
-        path: resolution.path.to_string_lossy().to_string(),
-        source: format_source(resolution.source).to_string(),
-        default_path: default_models_dir()
+    Ok(directory_info_at(
+        &resolution.path,
+        format_source(resolution.source),
+        default_models_dir()
             .map(|path| path.to_string_lossy().to_string())
             .unwrap_or_default(),
+    ))
+}
+
+/// The description of the folder at `path`, chosen from `source`: whether
+/// it is there, whether it can be written (made, for one that is not
+/// there: `can_write_folder` writes a probe to it or to the folder it would
+/// be made in), and so its state.
+fn directory_info_at(
+    path: &std::path::Path,
+    source: &str,
+    default_path: String,
+) -> ModelsDirectoryInfo {
+    let exists = path.exists();
+    let writable = can_write_folder(path);
+    ModelsDirectoryInfo {
+        path: path.to_string_lossy().to_string(),
+        source: source.to_owned(),
+        default_path,
         exists,
         writable,
-    })
+        state: ModelsDirState::of(exists, writable),
+    }
 }
 
 /// The probe's memory reading, or `None` for a figure too small to be one.

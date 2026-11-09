@@ -13,7 +13,6 @@ fn empty_state() -> Arc<DashboardState> {
         Arc::new(UpstreamHealth::new()),
         Arc::new(CacheStatusCache::new()),
         Arc::new(CacheMetricsStore::new()),
-        Arc::new(CacheMetricsStore::new()),
         Arc::new(gglib_core::ports::NoopModelRuntime),
         Arc::new(SamplingAuditStore::new()),
     ))
@@ -32,7 +31,6 @@ fn build_aggregates_empty_stores() {
         &metrics,
         &upstream_health,
         &CacheStatusCache::new(),
-        &CacheMetricsStore::new(),
         &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
@@ -62,6 +60,7 @@ fn build_reflects_active_connection_and_metrics() {
         tool_calls: 0,
         finish_reason: None,
         generation_ms: None,
+        tokens_per_second: None,
         seq: 0,
         model_name: "qwen-3b".to_string(),
         payload_chars_before: 100,
@@ -81,7 +80,6 @@ fn build_reflects_active_connection_and_metrics() {
         &metrics,
         &upstream_health,
         &CacheStatusCache::new(),
-        &CacheMetricsStore::new(),
         &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
@@ -108,7 +106,6 @@ fn build_reports_available_slots() {
         &metrics,
         &upstream_health,
         &CacheStatusCache::new(),
-        &CacheMetricsStore::new(),
         &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
@@ -142,7 +139,6 @@ fn snapshot_is_serializable_regardless_of_slots_state() {
             &metrics,
             &upstream_health,
             &CacheStatusCache::new(),
-            &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
@@ -412,7 +408,6 @@ fn snapshot_surfaces_the_recorded_launch_narration() {
             &upstream_health,
             &CacheStatusCache::new(),
             &CacheMetricsStore::new(),
-            &CacheMetricsStore::new(),
             launch,
             None,
             &SamplingAuditStore::new(),
@@ -446,7 +441,6 @@ fn snapshot_surfaces_the_recorded_cache_status() {
         &upstream_health,
         &cache,
         &cache_metrics,
-        &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
         &SamplingAuditStore::new(),
@@ -465,7 +459,6 @@ fn snapshot_surfaces_the_recorded_cache_status() {
         &upstream_health,
         &cache,
         &cache_metrics,
-        &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
         &SamplingAuditStore::new(),
@@ -502,7 +495,6 @@ fn snapshot_reads_usage_live_rather_than_from_the_cached_config() {
             &upstream_health,
             &cache,
             cm,
-            &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
             &SamplingAuditStore::new(),
@@ -530,39 +522,43 @@ fn snapshot_reads_usage_live_rather_than_from_the_cached_config() {
     );
 }
 
-/// The agent population is reported alongside the proxied one and never
-/// merged into it — and it surfaces even before any proxied request has
-/// resolved a model (so `cache` is still `None`).
+/// Chat turns go through the endpoint, so their prompt-cache reuse is in
+/// the one proxied figure: the snapshot carries no second, agent-path one.
 #[test]
-fn agent_usage_is_a_separate_population_from_the_proxied_figure() {
-    let connections = ActiveConnectionsRegistry::new();
-    let slots = SlotsCache::new();
-    let metrics = ContextMetricsStore::new();
-    let upstream_health = UpstreamHealth::new();
-    let cache = CacheStatusCache::new();
-    let proxied = CacheMetricsStore::new();
-    let agent = CacheMetricsStore::new();
+fn the_snapshot_has_one_cache_figure() {
+    let snapshot = empty_state().snapshot();
+    let body = serde_json::to_value(&snapshot).expect("the snapshot serialises");
 
-    // Only the agent store records — e.g. an agent turn with no proxied
-    // traffic and no model config resolved yet.
-    agent.record(8_000, Some(7_600));
+    assert!(body.get("agent_usage").is_none(), "{body}");
+    assert!(body.get("cache").is_some(), "{body}");
+}
 
-    let snap = DashboardSnapshot::build(
-        &connections,
-        &slots,
+/// The trips total is the proxy's trips summed over every model, and the
+/// agent loop's own trips, counted beside them, are not in it.
+#[test]
+fn the_trips_total_sums_every_models_proxy_trips() {
+    use gglib_core::domain::defects::{LoopGuardTrip, ModelDefectLedger};
+    let ledger = Arc::new(ModelDefectLedger::new());
+    ledger.record_loop_guard_trip("qwen", LoopGuardTrip::Loop);
+    ledger.record_loop_guard_trip("qwen", LoopGuardTrip::Stagnation);
+    ledger.record_loop_guard_trip("gemma", LoopGuardTrip::Loop);
+    ledger.record_agent_guard("gemma", Some(LoopGuardTrip::Loop));
+    ledger.record_request("phi");
+    let metrics = ContextMetricsStore::new().with_ledger(ledger);
+
+    let snapshot = DashboardSnapshot::build(
+        &ActiveConnectionsRegistry::new(),
+        &SlotsCache::new(),
         &metrics,
-        &upstream_health,
-        &cache,
-        &proxied,
-        &agent,
+        &UpstreamHealth::new(),
+        &CacheStatusCache::new(),
+        &CacheMetricsStore::new(),
         &LaunchNarrationCache::new(),
         None,
         &SamplingAuditStore::new(),
     );
 
-    assert_eq!(snap.agent_usage.reporting_requests, 1);
-    assert_eq!(snap.agent_usage.cached_tokens, 7_600);
-    assert_eq!(snap.agent_usage.last_prompt_tokens, Some(8_000));
-    // Proxied config never resolved, yet agent_usage still surfaced.
-    assert_eq!(snap.cache, None);
+    assert_eq!(snapshot.loop_guard_trips_total, 3);
+    let json = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(json["loop_guard_trips_total"], 3);
 }

@@ -120,8 +120,8 @@ import {
 } from '../fixtures/dashboard';
 import { renderApp, renderShell } from './harness';
 
-const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
-const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null };
+const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null };
 
 function renderAt(path: string, status: ProxyStatus = UP) {
   act(() => applyProxyStatus(status));
@@ -141,7 +141,17 @@ const CACHE = {
   ram_state: 'healthy' as const,
   needs_attention: false,
   warnings: [],
-  usage: { reporting_requests: 4, unreported_requests: 0, prompt_tokens: 1000, cached_tokens: 710, last_prompt_tokens: null, last_cached_tokens: null },
+  usage: {
+    reporting_requests: 4,
+    unreported_requests: 0,
+    prompt_tokens: 1000,
+    cached_tokens: 710,
+    last_prompt_tokens: null,
+    last_cached_tokens: null,
+    reuse_percent: 71,
+    summary: 'Prompt cache 71% reused',
+    last_reuse_percent: null,
+  },
 };
 
 /** A frame in which every section has something. */
@@ -151,7 +161,6 @@ const FULL: Partial<DashboardSnapshot> = {
   admission: { ...dashboardSnapshot().admission, slots: [residentSlot(1, 'Qwen3-4B')] },
   launch: { model_name: 'Qwen3-4B', quantization: 'Q4_K_M', weights_bytes: 2_684_354_560, decisions: [{ label: 'Context', value: '8192', source: 'model author' }] },
   cache: CACHE,
-  agent_usage: { ...CACHE.usage, reporting_requests: 2 },
   sampling_audit: samplingAudit({ state: { state: 'blind', reason: 'no slot has reported yet' } }),
   per_model_defects: { 'Qwen3-4B': modelDefectCounts({ requests: 1 }) },
   slots_available: true,
@@ -278,7 +287,6 @@ describe('the diagnostics place', () => {
         'Loaded and queue',
         'Launch decisions',
         'Prompt cache',
-        'Agent cache',
         'Sampling readback',
         'Per-model signals',
         'Tune activity',
@@ -298,7 +306,7 @@ describe('the diagnostics place', () => {
       await waitFor(() => expect(reads.trips).toHaveBeenCalled());
       expect(sectionNames()).toEqual([]);
       expect(fold()).toHaveTextContent(
-        'Nothing yet: Requests · Loaded and queue · Launch decisions · Prompt cache · Agent cache · Sampling readback · Per-model signals · Tune activity · Slots · Loop-guard trips.',
+        'Nothing yet: Requests · Loaded and queue · Launch decisions · Prompt cache · Sampling readback · Per-model signals · Tune activity · Slots · Loop-guard trips.',
       );
       expect(fold()).toHaveClass('text-xs');
     });
@@ -308,7 +316,7 @@ describe('the diagnostics place', () => {
       await frame({ launch: FULL.launch, slots_available: true, slots_status: null, slots: FULL.slots });
       expect(sectionNames()).toEqual(['Launch decisions', 'Slots']);
       expect(fold()).toHaveTextContent(
-        'Nothing yet: Requests · Loaded and queue · Prompt cache · Agent cache · Sampling readback · Per-model signals · Tune activity · Loop-guard trips.',
+        'Nothing yet: Requests · Loaded and queue · Prompt cache · Sampling readback · Per-model signals · Tune activity · Loop-guard trips.',
       );
     });
 
@@ -322,8 +330,6 @@ describe('the diagnostics place', () => {
       ['Loaded and queue', { admission: { ...NONE.admission, generation: { render: null, llm_inflight: 0, waiting: 2 } } }],
       ['Loaded and queue', { admission: { ...NONE.admission, total_queued: 3 } }],
       ['Loaded and queue', { admission: { ...NONE.admission, total_swaps: 1 } }],
-      ['Agent cache', { agent_usage: { ...NONE.agent_usage, reporting_requests: 1 } }],
-      ['Agent cache', { agent_usage: { ...NONE.agent_usage, unreported_requests: 1 } }],
       ['Sampling readback', { sampling_audit: samplingAudit({ state: { state: 'comparing', comparisons: 2, divergences: 0 } }) }],
       ['Sampling readback', { sampling_audit: samplingAudit({ baseline: { state: 'unreadable', reason: '/props timed out' } }) }],
       ['Sampling readback', { sampling_audit: samplingAudit({ client_fields_discarded: 1 }) }],
@@ -486,7 +492,7 @@ describe('the diagnostics place', () => {
         slots_available: true,
         slots_status: null,
         slots: FULL.slots,
-        recent_requests: [recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000 })],
+        recent_requests: [recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000, tokens_per_second: 33.8 })],
       });
       const picker = screen.getByRole('combobox', { name: 'Model' });
       expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Qwen3-4B', 'Gemma-3-4B-It']);
@@ -642,5 +648,5 @@ const DIAGNOSTICS = {
     modelsSource: 'default',
   },
   acceleration: { detected: 'Metal', detectionError: null },
-  fastDownloads: { provisioned: false, envDir: null, legacyPath: false, builder: null, availableBuilder: 'uv', error: null },
+  fastDownloads: { provisioned: false, envDir: null, legacyPath: false, builder: null, availableBuilder: 'uv', error: null, state: 'off' },
 };

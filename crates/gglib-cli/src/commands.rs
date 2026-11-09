@@ -16,15 +16,12 @@ use crate::model_commands::ModelCommand;
 use crate::profile_args::ProfileArgs;
 use crate::proxy_bind_args::ProxyBindArgs;
 use crate::remote_flag::RemoteFlag;
-use crate::shared_args::{
-    AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
-};
+use crate::shared_args::{AccessArgs, CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 pub(crate) use crate::subcommands::{
     AttachmentCommand, ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand,
 };
 use crate::thinking_arg::ThinkingArg;
 use crate::tool_limit_args::ToolLimitArgs;
-use crate::upstream_args::UpstreamArgs;
 
 /// Top-level commands for the GGUF library management tool.
 #[derive(Subcommand)]
@@ -117,6 +114,9 @@ pub enum Commands {
     },
 
     /// Chat with a model interactively, or manage chat history
+    ///
+    /// The daemon runs each turn, through the endpoint, and saves it to the
+    /// chat; the flags here are saved with the chat, which its turns read.
     #[command(display_order = 11, subcommand_negates_reqs = true)]
     Chat {
         /// Name or ID of the model to chat with (optional with --continue, which
@@ -124,8 +124,6 @@ pub enum Commands {
         /// paired machine's, as `gglib model list --remote` shows it.
         #[arg(default_value = "")]
         identifier: String,
-        #[command(flatten)]
-        context: ContextArgs,
         /// Set a system prompt for the conversation
         #[arg(long = "system-prompt", short = 's')]
         system_prompt: Option<String>,
@@ -133,13 +131,9 @@ pub enum Commands {
         sampling: SamplingArgs,
         #[command(flatten)]
         profile: ProfileArgs,
-        #[command(flatten)]
-        retry: RetryArgs,
         /// Disable tool access (plain LLM chat without filesystem or MCP tools)
         #[arg(long = "no-tools")]
         no_tools: bool,
-        #[command(flatten)]
-        upstream: UpstreamArgs,
         #[command(flatten)]
         remote: RemoteFlag,
         /// Maximum agent iterations before giving up
@@ -149,49 +143,23 @@ pub enum Commands {
         max_iterations: Option<usize>,
         /// Tool allowlist; may be repeated or comma-separated.
         /// Omit to allow all tools. (e.g. "`mcp_search,builtin_time`")
-        /// Note: the filter is evaluated once at session start. To change the
-        /// available tools mid-session, exit and restart with a new --tools list.
+        /// Saved with the chat, whose later turns read it.
         #[arg(long, value_delimiter = ',')]
         tools: Vec<String>,
         #[command(flatten)]
         limits: ToolLimitArgs,
         #[command(flatten)]
         images: ImageArgs,
-        /// Model name put in the request body, overriding the positional
-        ///
-        /// Omitted locally, llama-server serves whichever model it loaded;
-        /// omitted with --remote, the positional's ID there is sent instead.
-        #[arg(long)]
-        model: Option<String>,
         /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
         #[arg(long = "continue")]
         continue_id: Option<i64>,
         /// Switch the chat's Thinking on or off, as the chat page's switch does
         ///
         /// The choice applies to this session and the chat remembers it. `off`
-        /// runs with a thinking budget of 0, whatever --reasoning-budget-tokens
-        /// says; `on` runs with the budget typed, if any. Omitted, a resumed
-        /// chat runs as it remembers.
+        /// runs with a thinking budget of 0; `on` runs with the model's
+        /// default. Omitted, a resumed chat runs as it remembers.
         #[arg(long, value_enum)]
         thinking: Option<ThinkingArg>,
-        /// Observation-only tool name patterns for the dual-threshold loop guard.
-        /// A tool whose name ends with or contains any pattern is classified as
-        /// observation-only and subject to the higher --max-observation-steps limit.
-        /// Omit to use the built-in defaults, which cover the read-only tools
-        /// browser and coding agents repeat — snapshot, screenshot, `read_file`,
-        /// `list_dir`, `grep_search` and similar. Passing any value replaces that
-        /// list entirely rather than adding to it.
-        /// Pass an empty string to disable observation classification entirely.
-        #[arg(long = "observation-tool", value_delimiter = ',')]
-        observation_tools: Vec<String>,
-        /// Maximum times an observation-only batch may repeat, getting the same
-        /// answer back each time, before loop detection fires. A repeat whose
-        /// answer changed is not counted. This is also the ceiling on how far
-        /// changing answers may carry a batch that is *not* observation-only,
-        /// so raising it loosens the guard for every batch. Clamped to 100.
-        /// Defaults to 15.
-        #[arg(long = "max-observation-steps")]
-        max_observation_steps: Option<usize>,
         /// Subcommand (e.g. `history`)
         #[command(subcommand)]
         command: Option<ChatCommand>,
@@ -213,8 +181,6 @@ pub enum Commands {
         /// Read context from file instead of stdin
         #[arg(short, long)]
         file: Option<String>,
-        #[command(flatten)]
-        context: ContextArgs,
         /// Show the constructed prompt before sending
         #[arg(long = "show-prompt")]
         show_prompt: bool,
@@ -229,8 +195,6 @@ pub enum Commands {
         #[arg(long = "no-tools")]
         no_tools: bool,
         #[command(flatten)]
-        upstream: UpstreamArgs,
-        #[command(flatten)]
         remote: RemoteFlag,
         /// Maximum agent iterations
         /// [default: persisted setting, or 25 if unset]
@@ -243,23 +207,6 @@ pub enum Commands {
         limits: ToolLimitArgs,
         #[command(flatten)]
         images: ImageArgs,
-        /// Observation-only tool name patterns for the dual-threshold loop guard.
-        /// A tool whose name ends with or contains any pattern is classified as
-        /// observation-only and subject to the higher --max-observation-steps limit.
-        /// Omit to use the built-in defaults, which cover the read-only tools
-        /// browser and coding agents repeat — snapshot, screenshot, `read_file`,
-        /// `list_dir`, `grep_search` and similar. Passing any value replaces that
-        /// list entirely rather than adding to it.
-        #[arg(long = "observation-tool", value_delimiter = ',')]
-        observation_tools: Vec<String>,
-        /// Maximum times an observation-only batch may repeat, getting the same
-        /// answer back each time, before loop detection fires. A repeat whose
-        /// answer changed is not counted. This is also the ceiling on how far
-        /// changing answers may carry a batch that is *not* observation-only,
-        /// so raising it loosens the guard for every batch. Clamped to 100.
-        /// Defaults to 15.
-        #[arg(long = "max-observation-steps")]
-        max_observation_steps: Option<usize>,
     },
     /// Run benchmark comparisons and performance tests across local models
     ///

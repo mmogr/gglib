@@ -749,6 +749,7 @@ pub(crate) async fn forward_chat_completion(
                 tool_calls: 0,
                 finish_reason: None,
                 generation_ms: None,
+                tokens_per_second: None,
                 // A conversation long and repetitive enough to trip the guard
                 // is exactly the shape that reaches the context ceiling, so a
                 // noted-then-clamped request must still count its trip.
@@ -823,6 +824,7 @@ pub(crate) async fn forward_chat_completion(
         tool_calls: 0,
         finish_reason: None,
         generation_ms: None,
+        tokens_per_second: None,
         loop_guard_trip,
         loop_guard_ended: false,
         seq: 0,

@@ -339,19 +339,16 @@ pub struct DashboardSnapshot {
     /// defect rate is a claim about *recent* traffic on *this* build.
     pub per_model_defects:
         std::collections::HashMap<String, gglib_core::domain::defects::ModelDefectCounts>,
+    /// Requests the proxy's loop guard tripped on, across every model: the
+    /// sum of [`Self::per_model_defects`]' `loop_guard_trips`, so it is
+    /// process-lifetime like them, and empty of the agent loop's own trips,
+    /// which are counted beside them.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub loop_guard_trips_total: u64,
     /// How prompt caching is configured for the running model. `None` until
     /// the first request resolves a model, since the RAM budget isn't known
     /// until something is launched.
     pub cache: Option<CacheStatus>,
-    /// Prompt-cache reuse for the in-process **agent path** — GUI
-    /// chat, which talk to llama-server directly rather than through
-    /// [`crate::forward`]. Reported as a separate population from [`Self::cache`]'s
-    /// `usage`, never merged into it: an agent turn's many small tool-driven calls
-    /// have a reuse profile nothing like a user's conversation. Top-level rather
-    /// than nested under [`Self::cache`] because it does not depend on the
-    /// proxy's cache configuration and must surface even before a proxied
-    /// request has resolved a model.
-    pub agent_usage: CacheUsage,
     /// What the running model's launch decided, and why — the same record the
     /// CLI banner prints at startup (see
     /// [`gglib_core::domain::LaunchNarration`]). `None` until a request has
@@ -400,7 +397,6 @@ impl DashboardSnapshot {
         upstream_health: &UpstreamHealth,
         cache: &CacheStatusCache,
         cache_metrics: &CacheMetricsStore,
-        agent_metrics: &CacheMetricsStore,
         launch: &LaunchNarrationCache,
         runtime: Option<&dyn ModelRuntimePort>,
         sampling_audit: &SamplingAuditStore,
@@ -415,6 +411,11 @@ impl DashboardSnapshot {
             SlotsPollResult::Unreachable(reason) => (false, Vec::new(), Some(reason)),
         };
 
+        let per_model_defects = metrics.defect_counts();
+        let loop_guard_trips_total = per_model_defects
+            .values()
+            .map(|counts| counts.loop_guard_trips)
+            .sum();
         Self {
             active_connections: connections.snapshot(),
             slots_available,
@@ -426,12 +427,12 @@ impl DashboardSnapshot {
             tool_repairs_attempted: metrics.tool_repairs_attempted(),
             tool_repairs_succeeded: metrics.tool_repairs_succeeded(),
             upstream_health: upstream_health.snapshot(),
-            per_model_defects: metrics.defect_counts(),
+            per_model_defects,
+            loop_guard_trips_total,
             // Stored config plus live reuse totals — see `CacheStatusCache`.
             cache: cache
                 .get()
                 .map(|status| status.with_usage(cache_metrics.snapshot())),
-            agent_usage: agent_metrics.snapshot(),
             launch: launch.get(),
             // `None` only in tests that build a snapshot without a runtime to
             // ask; an empty resident set is the honest answer there.
@@ -460,12 +461,6 @@ pub struct DashboardState {
     pub cache: Arc<CacheStatusCache>,
     /// Running prompt-cache reuse totals, recorded by the forward paths.
     pub cache_metrics: Arc<CacheMetricsStore>,
-    /// Agent-path prompt-cache reuse totals — a separate population from
-    /// [`Self::cache_metrics`], recorded by GUI-chat runs (which
-    /// bypass [`crate::forward`]) via [`gglib_core::ports::UsageSink`].
-    /// Owned by the supervisor and passed in, so it outlives a single proxy
-    /// run and can be shared with the embedded axum server.
-    pub agent_metrics: Arc<CacheMetricsStore>,
     /// Latest launch narration, populated by the request path as models
     /// resolve. Created here rather than passed in: unlike
     /// [`Self::cache_metrics`], nothing outside the proxy writes to it.
@@ -493,7 +488,6 @@ impl DashboardState {
         upstream_health: Arc<UpstreamHealth>,
         cache: Arc<CacheStatusCache>,
         cache_metrics: Arc<CacheMetricsStore>,
-        agent_metrics: Arc<CacheMetricsStore>,
         runtime: Arc<dyn ModelRuntimePort>,
         sampling_audit: Arc<SamplingAuditStore>,
     ) -> Self {
@@ -505,7 +499,6 @@ impl DashboardState {
             broadcaster: Arc::new(Broadcaster::new(BROADCAST_CAPACITY)),
             cache,
             cache_metrics,
-            agent_metrics,
             launch: Arc::new(LaunchNarrationCache::new()),
             runtime,
             sampling_audit,
@@ -523,7 +516,6 @@ impl DashboardState {
             &self.upstream_health,
             &self.cache,
             &self.cache_metrics,
-            &self.agent_metrics,
             &self.launch,
             Some(self.runtime.as_ref()),
             &self.sampling_audit,
@@ -568,3 +560,7 @@ pub fn spawn_dashboard_publisher(
 #[cfg(test)]
 #[path = "dashboard_tests.rs"]
 mod dashboard_tests;
+
+#[cfg(test)]
+#[path = "dashboard_figures_tests.rs"]
+mod dashboard_figures_tests;

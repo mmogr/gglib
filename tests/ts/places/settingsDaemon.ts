@@ -26,7 +26,7 @@ import { appSettings } from '../fixtures/settings';
 export const daemon = {
   settings: appSettings(),
   key: null as string | null,
-  folder: { path: '/models', source: 'default', default_path: '/models', exists: true, writable: true } as ModelsDirectoryInfo,
+  folder: { path: '/models', source: 'default', default_path: '/models', exists: true, writable: true, state: 'writable' } as ModelsDirectoryInfo,
   servers: [] as McpServerInfo[],
   /** What a started server offers. */
   tools: [] as McpServerInfo['tools'],
@@ -46,7 +46,7 @@ export const daemon = {
 export function resetDaemon(overrides: Partial<AppSettings> = {}, key: string | null = null): void {
   daemon.settings = appSettings({ ...overrides, hasProxyApiKey: key !== null });
   daemon.key = key;
-  daemon.folder = { path: '/models', source: 'default', default_path: '/models', exists: true, writable: true };
+  daemon.folder = { path: '/models', source: 'default', default_path: '/models', exists: true, writable: true, state: 'writable' };
   daemon.servers = [];
   daemon.tools = [];
   daemon.tested = { ok: true, error: null, tools: [] };
@@ -102,11 +102,11 @@ export const transport = {
   startMcpServer: vi.fn(async (id: number) => {
     if (daemon.startHold !== null) await daemon.startHold;
     if (daemon.refuse !== null) throw new Error(daemon.refuse);
-    patchServer(id, (info) => ({ ...info, status: 'running', tools: daemon.tools }));
+    patchServer(id, (info) => ({ ...info, status: 'running', state: 'running', tools: daemon.tools }));
     return found(id);
   }),
   stopMcpServer: vi.fn(async (id: number) => {
-    patchServer(id, (info) => ({ ...info, status: 'stopped', tools: [] }));
+    patchServer(id, (info) => ({ ...info, status: 'stopped', state: 'stopped', tools: [] }));
     return found(id);
   }),
   testMcpServer: vi.fn(async (): Promise<McpTestResult> => {

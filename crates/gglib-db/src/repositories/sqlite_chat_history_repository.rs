@@ -5,6 +5,7 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqlitePool};
 
 use gglib_core::{
+    domain::agent::fill_made_rate,
     domain::attachment::{AttachmentId, AttachmentInfo},
     domain::branching::LineChat,
     domain::chat::{
@@ -185,7 +186,14 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
                 let role_str: String = row.get("role");
                 let role = MessageRole::parse(&role_str).unwrap_or(MessageRole::User);
                 let metadata_str: Option<String> = row.get("metadata");
-                let metadata = metadata_str.and_then(|s| serde_json::from_str(&s).ok());
+                // A reply saved before its rate was saved is given it here,
+                // from its own counts, so every read says the same rate.
+                let metadata = metadata_str
+                    .and_then(|s| serde_json::from_str(&s).ok())
+                    .map(|mut metadata| {
+                        fill_made_rate(&mut metadata);
+                        metadata
+                    });
                 Message {
                     id,
                     conversation_id: row.get("conversation_id"),

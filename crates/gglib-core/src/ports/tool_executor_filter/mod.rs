@@ -9,7 +9,7 @@ mod tests;
 mod progress_tests;
 
 pub use empty::EmptyToolExecutor;
-pub use filtered::FilteredToolExecutor;
+pub use filtered::{EVERY_TOOL_OF_SERVER, FilteredToolExecutor, names_whole_server};
 
 /// Sentinel phrase embedded in every tool-rejection error produced by this module.
 ///

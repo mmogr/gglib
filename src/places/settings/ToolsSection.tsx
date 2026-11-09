@@ -4,15 +4,15 @@
  * prompt, and a footnote to what MCP is. Each setting saves on change.
  *
  * The tool servers are read once here and handed down, one list for the
- * rows and the sheet alike (ST-8). "This device" is the chat's per-device
- * limits (`AgentLimitsSection`), kept in this browser.
+ * rows and the sheet alike (ST-8). The agent limits are this machine's, for
+ * every agent run on it; a chat's own limits, where it saved any, outrank
+ * the tool timeout and the parallel calls.
  *
  * @module places/settings/ToolsSection
  */
 
 import type { FC } from 'react';
-import { AgentLimitsSection } from '../../components/AgentLimitsSection';
-import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../constants/settingsDefaults';
+import { MAX_PARALLEL_TOOLS, MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS, TOOL_TIMEOUT_MS } from '../../constants/settingsDefaults';
 import { useMcpServers } from '../../hooks/useMcpServers';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../services/transport';
 import { Disclosure } from './Disclosure';
@@ -45,10 +45,20 @@ export const ToolsSection: FC = () => {
           spec={MAX_STAGNATION_STEPS}
           description="Repeats of one reply, anywhere in the run, before an agent stops. The built-in agent and the endpoint's loop guard share it."
         />
-        <section aria-label="This device" className="flex flex-col gap-xs">
-          <span className="text-sm font-semibold text-text">This device</span>
-          <AgentLimitsSection />
-        </section>
+        <NumberSetting
+          k="maxParallelTools"
+          id="max-parallel-tools-input"
+          label="Parallel tool calls"
+          spec={MAX_PARALLEL_TOOLS}
+          description="How many tool calls an agent run makes at once."
+        />
+        <NumberSetting
+          k="toolTimeoutMs"
+          id="tool-timeout-ms-input"
+          label="Tool timeout (ms)"
+          spec={TOOL_TIMEOUT_MS}
+          description="How long one tool call may take before it is stopped."
+        />
       </Disclosure>
 
       <TextSetting

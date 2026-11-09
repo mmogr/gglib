@@ -4,10 +4,9 @@
 //! the paired machine ([`RemoteFlag`](crate::remote_flag::RemoteFlag), ADR
 //! 0028), and this is the value it becomes. Every
 //! question whose answer depends on which machine a turn runs on is asked
-//! of a [`Target`] and answered here — which upstream, whether this
-//! machine's catalogue applies, how the request pipeline shapes the turn,
-//! what the model on the wire is called, and what a turn is for when
-//! nobody named a model. A handler holds a `Target` and calls; it never
+//! of a [`Target`] and answered here — whether this machine's catalogue
+//! applies, which model a turn resolves to and on which machine, and what a
+//! turn is for when nobody named a model. A handler holds a `Target` and calls; it never
 //! tests it.
 //!
 //! Before this the same flag was a `bool` threaded by hand through six
@@ -24,13 +23,9 @@ use std::sync::LazyLock;
 
 use anyhow::{Result, bail};
 use gglib_core::domain::{Model, ModelAction};
-use gglib_core::request_pipeline::{self, ModelContext};
-use gglib_runtime::Door;
 
 use crate::bootstrap::CliContext;
 use crate::commands::{ChatCommand, Commands, DaemonCommand, ProxyCommand};
-use crate::handlers::agent_chat::config::{AgentSessionParams, BannerInfo};
-use crate::handlers::agent_chat::upstream;
 
 #[path = "target_model.rs"]
 mod model;
@@ -41,7 +36,6 @@ mod turn;
 #[path = "target_use.rs"]
 mod use_side;
 use model::{model_action, reach_of};
-use remote::remote_upstream;
 pub(crate) use turn::{TurnModel, far_wire};
 
 /// The machine a command runs against.
@@ -160,25 +154,6 @@ impl Target {
         }
     }
 
-    /// The model name that goes on the wire, from `--model` and the
-    /// positional.
-    ///
-    /// Locally the positional names a catalogue entry and `compose` looks it
-    /// up, so an absent `--model` correctly leaves the wire name empty and
-    /// llama-server serves whatever it loaded. On the paired machine the
-    /// positional is what that machine resolved it to, `<id>` or
-    /// `<id>:<profile>` ([`TurnModel`]), and *is* the wire name — dropping it
-    /// would send `""`, which the far proxy answers with `404 Model '' not
-    /// found`.
-    pub(crate) fn wire_model_name(self, model: Option<String>, identifier: &str) -> Option<String> {
-        match self {
-            Self::Local => model,
-            Self::Remote => {
-                model.or_else(|| (!identifier.is_empty()).then(|| identifier.to_owned()))
-            }
-        }
-    }
-
     /// The model a turn is for, when the command line may have named none.
     ///
     /// `here` is what this machine does about an empty name — `q` looks up
@@ -205,31 +180,6 @@ impl Target {
         }
     }
 
-    /// Where the completion adapter points, and with what.
-    ///
-    /// # Errors
-    ///
-    /// Locally, whatever starting or finding the llama-server says; on the
-    /// paired machine, a daemon that is not running or not connected, or a
-    /// pairing this machine holds no key for.
-    pub(crate) async fn upstream(
-        self,
-        ctx: &CliContext,
-        params: &AgentSessionParams,
-        banner: &BannerInfo,
-    ) -> Result<Upstream> {
-        match self {
-            Self::Local => {
-                let port = upstream::resolve_port(ctx, params, banner).await?;
-                Ok(Upstream {
-                    base_url: format!("http://127.0.0.1:{port}"),
-                    door: None,
-                })
-            }
-            Self::Remote => remote_upstream(ctx, params.turn.as_ref(), banner).await,
-        }
-    }
-
     /// This machine's catalogue entry for `identifier`, when this machine's
     /// catalogue is the one that applies; `None` when it holds no such
     /// model. The paired machine runs the sampling ladder over *its* models,
@@ -249,25 +199,6 @@ impl Target {
             Self::Remote => Ok(None),
         }
     }
-
-    /// How the request pipeline shapes a turn. The paired machine's models
-    /// are not in this catalogue; passthrough lets its proxy shape the
-    /// request, which it does for every client.
-    pub(crate) async fn model_context(self, ctx: &CliContext, identifier: &str) -> ModelContext {
-        match self {
-            Self::Local => request_pipeline::resolve(ctx.catalog.as_ref(), Some(identifier)).await,
-            Self::Remote => ModelContext::passthrough(),
-        }
-    }
-}
-
-/// Where the completion adapter points, and with what.
-pub(crate) struct Upstream {
-    /// `http://127.0.0.1:<port>`, without the `/v1` — the adapter adds it.
-    pub base_url: String,
-    /// The far machine's door on the remote path — its key and the name it
-    /// is shown by; nothing for a local server.
-    pub door: Option<Door>,
 }
 
 #[cfg(test)]

@@ -9,13 +9,13 @@
 //! answers that question. The hub rebuilds the history from its
 //! own record, as the chat page would send it: the conversation's system
 //! prompt, then every saved row but a system one, then the new message,
-//! with the limits the conversation's settings name (`prepare` takes an
-//! iteration limit they do not name from this machine's settings, as it
-//! does for the page), and with thinking off
+//! with the limits the conversation's settings name (`prepare_over` takes an
+//! iteration limit they do not name from this machine's settings), and with
+//! thinking off
 //! when the turn says so or the chat remembers it (`thinking`). The reply
 //! runs on the chat's model, loaded as `/v1/models/{name}/load` loads it
-//! when it is not running, as an agent run in the turn's scope, saved to
-//! the chat.
+//! when it is not running, as an agent run in the turn's scope whose every
+//! request goes through this machine's endpoint, saved to the chat.
 //!
 //! The scopes differ in three things only:
 //!
@@ -29,7 +29,7 @@
 //!   none when the chat turned them off or the catalogue says its model
 //!   calls none (`Asked::of_local`).
 //! - **Folder.** This machine's own turn may say the chat's folder, settled
-//!   as the page's run settles it (`run::settle_folder`), and gglib's file
+//!   by `run::settle_folder`, and gglib's file
 //!   tools read there. A device's turn never has one, whatever its chat
 //!   remembers (ADR 0023), and is refused one it says.
 //!
@@ -43,23 +43,24 @@ use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum::response::IntoResponse as _;
 
+use gglib_core::domain::Machine;
 use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::branching;
 use gglib_core::domain::chat::ConversationSettings;
-use gglib_core::domain::hub_chats::HubTurn;
+use gglib_core::domain::hub_chats::{HubTurn, LocalTurn};
 use gglib_core::domain::runs::RunKind;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentRunStarter, Created, RunScope, RunsError, TurnRefused};
 use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
-use super::AgentChatRequest;
+use super::chat_sampling::ChatSampling;
 use super::chat_turn::{ChatQuery, Drawing};
-use super::compose::{held_over, refuse_unavailable_drawing, take_permit};
+use super::compose::{prepare_over, refuse_unavailable_drawing, take_permit};
 use super::device_tools::{self, Asked};
-use super::dto::AgentRequestConfig;
 use super::hub_model::{calls_tools, on_model, paired, turn_model};
 use super::launch::{LatePrepare, Transcript, launch_turn};
+use super::loop_request::{LoopRequest, NamedLimits};
 use super::remote_upstream;
 use super::run::{coded, settle_folder, with_code};
 use crate::bootstrap::AxumContext;
@@ -125,6 +126,32 @@ impl AgentRunStarter for HubTurns {
     }
 }
 
+/// What a body that is not this machine's turn is refused with: the shape,
+/// never the body, which can hold the message.
+const LOCAL_TURN_BODY: &str = "a turn's body is {\"conversation_id\": <number>, \"content\": <text>, \
+     \"images\": [<id>], \"thinking\": \"off\" or \"default\", \"answer_saved\": true or false, \
+     \"draw\": true, \"image_model\": <id>, \"folder\": <path> or \"\"}, and no other key";
+
+/// `PUT /api/runs/{id}?kind=agent`: start this machine's own turn on one of
+/// its chats ([`LocalTurn`]), or answer with its run that has the id.
+///
+/// # Errors
+///
+/// `invalid_request` (400) for a body that is not a turn, an unknown key
+/// included; then what [`start`] refuses, coded.
+pub(crate) async fn start_local(
+    state: &AppState,
+    id: &str,
+    body: serde_json::Value,
+) -> Result<Created, HttpError> {
+    let turn: LocalTurn = serde_json::from_value(body)
+        .map_err(|_| coded(StatusCode::BAD_REQUEST, "invalid_request", LOCAL_TURN_BODY))?;
+    let (turn, folder) = turn.split();
+    start(state, RunScope::Local, id, turn, folder)
+        .await
+        .map_err(with_code)
+}
+
 /// A refusal as the daemon's door would answer it.
 fn refusal(error: HttpError) -> TurnRefused {
     match with_code(error) {
@@ -146,16 +173,16 @@ fn refusal(error: HttpError) -> TurnRefused {
 }
 
 /// Start a turn in `scope` under `id`, or answer with its run that has the
-/// id. `folder` is what this machine's own turn says of its chat's folder,
-/// as the page's run says it (`""` forgets it, and none keeps the one the
-/// chat remembers); a device's turn says none.
+/// id. `folder` is what this machine's own turn says of its chat's folder
+/// (`""` forgets it, and none keeps the one the chat remembers); a device's
+/// turn says none.
 ///
 /// # Errors
 ///
 /// `invalid_request` (400) for a message with neither text nor an image, or
 /// a turn that answers the saved question and carries one, or a device's
 /// turn that says a folder; `folder_unusable` (400) and `folder_missing`
-/// (409) for this machine's, as the page's run has them; `nothing_to_answer`
+/// (409) for this machine's; `nothing_to_answer`
 /// (409) for such a turn on a chat that ends in no question;
 /// `attachment_not_found` (400) for an image the turn or the chat's history
 /// names that is not stored; `request_images_too_large` (400) when they are
@@ -222,32 +249,41 @@ pub(super) async fn start(
 /// What a run on `model` does once it exists: find the model on its port
 /// or load it, unless it is the paired machine's (`chat.far`), settle the
 /// tools it is offered as `asked` (starting an MCP server open to devices
-/// that is not running, for a device's run), then hold the model and
-/// compose `chat`'s loop with gglib's file tools reading `folder`. A
-/// device's run has none: a folder is this machine's choice, and a device's
-/// turn reaches no tool of this machine's but the image tool its Draw asks
-/// for and the tools of the servers open to devices (ADR 0025), which name
-/// no file tool.
+/// that is not running, for a device's run), then compose `chat`'s loop
+/// with gglib's file tools reading `folder`. A device's run has none: a
+/// folder is this machine's choice, and a device's turn reaches no tool of
+/// this machine's but the image tool its Draw asks for and the tools of the
+/// servers open to devices (ADR 0025), which name no file tool.
+///
+/// A loop on this machine's model dials this machine's endpoint, turning it
+/// on when it is off, as any client does (`remote_upstream::endpoint`): its
+/// requests are shaped, guarded and counted there, and are in its ledger.
+/// The model is loaded first, so the wait has a name, then the run holds
+/// nothing: each request is admitted by the endpoint, and a model swapped
+/// out between two of them is loaded again by the next.
 pub(super) fn late_on(
     state: AppState,
     model: String,
-    chat: AgentChatRequest,
+    chat: LoopRequest,
     asked: Asked,
     folder: Option<PathBuf>,
 ) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
-            let chat = if chat.far.is_some() {
-                chat
-            } else {
-                on_model(&state, &model, chat, &loading).await?
+            let loaded = match &chat.far {
+                Some(far) => Err(far.clone()),
+                None => Ok(on_model(&state, &model, &loading).await?),
             };
             let chat = device_tools::settle(&state, chat, &asked).await;
-            let upstream = remote_upstream::resolve(&state, &chat).await;
+            let upstream = match loaded {
+                Err(far) => {
+                    let reach = async |machine: &Machine| state.remote.far_for(machine).await;
+                    remote_upstream::far(reach, &far, &chat.saved).await
+                }
+                Ok(loaded) => remote_upstream::through_endpoint(&state, &chat, loaded).await,
+            };
             let upstream = upstream.map_err(with_code)?;
-            held_over(&state, chat, upstream, folder)
-                .await
-                .map_err(with_code)
+            Ok(prepare_over(&state, chat, upstream, folder).await)
         })
     })
 }
@@ -260,11 +296,10 @@ pub(super) async fn shown_model(state: &AppState, model: &str) -> String {
 }
 
 /// Start the run `id` on `model`, reserved in `scope` before `late` finds
-/// or loads the model and composes the loop. The run
-/// then holds its model and is saved as `transcript` says: its message and
-/// reply to the chat, which then remembers what the turn said of thinking.
-/// What `late`, the hold or the first write refuses ends the run `failed`
-/// with that code, with nothing written.
+/// or loads the model and composes the loop. The run is then saved as
+/// `transcript` says: its message and reply to the chat, which then
+/// remembers what the turn said of thinking. What `late` or the first write
+/// refuses ends the run `failed` with that code, with nothing written.
 pub(super) fn begin(
     state: &AppState,
     scope: RunScope,
@@ -278,8 +313,8 @@ pub(super) fn begin(
     launch_turn(state, id, scope, run, transcript, late, permit)
 }
 
-/// A turn read against the hub's record: the model it runs on, the chat
-/// request the page would send, less the port, and where the run is saved,
+/// A turn read against the hub's record: the model it runs on, the
+/// request the loop is composed from, and where the run is saved,
 /// with what the chat is to remember of thinking and of its folder once it
 /// starts, what it asks of this machine's tools, settled once the run
 /// starts, and the folder gglib's file tools read in.
@@ -287,7 +322,7 @@ pub(super) struct Plan {
     /// This machine's model, as its catalogue resolves it; or, when
     /// `chat.far` names the paired machine's, the name the chat has for it.
     pub(super) model: String,
-    pub(super) chat: AgentChatRequest,
+    pub(super) chat: LoopRequest,
     pub(super) transcript: Transcript,
     pub(super) asked: Asked,
     /// A canonical path, on this machine's own turn only.
@@ -352,15 +387,15 @@ pub(super) async fn plan(
     let far = paired(scope, &conversation);
     let model = turn_model(state, far.as_ref(), &conversation, &rows).await?;
     let settings = conversation.settings.clone().unwrap_or_default();
-    // Before the run is reserved, as the page's run has it: a folder the turn
-    // says that is no folder here, or the one the chat remembers that is gone.
+    // Before the run is reserved: a folder the turn says that is no folder
+    // here, or the one the chat remembers that is gone.
     let (folder, remember_folder) = if local {
         let saved = settings.folder.as_deref();
         settle_folder(folder.as_deref(), Some(id), saved)?
     } else {
         (None, None)
     };
-    // The prompt comes from the conversation, as the page takes it. A turn
+    // The prompt comes from the conversation, as the page shows it. A turn
     // that answers the question already saved adds none (ADR 0017).
     let mut messages = saved_history(conversation.system_prompt.as_deref(), &rows);
     if !turn.answer_saved {
@@ -386,17 +421,15 @@ pub(super) async fn plan(
     } else {
         Asked::of_chat(&settings, turn.draw)
     };
-    let chat = AgentChatRequest {
-        port: 0,
+    let chat = LoopRequest {
         far,
         messages,
-        config: config_of(&settings),
+        limits: limits_of(&settings),
         tool_filter: asked.planned(),
-        model: None,
-        reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
         draw: turn.draw,
         image_model: turn.image_model,
+        saved: ChatSampling::of(&settings),
     };
     // A turn sent with Draw pressed that the hub cannot draw for, or with
     // the image model it chose, is refused
@@ -417,18 +450,13 @@ pub(super) async fn plan(
     })
 }
 
-/// The loop's limits the conversation's settings name, if any.
-fn config_of(settings: &ConversationSettings) -> Option<AgentRequestConfig> {
-    let config = AgentRequestConfig {
+/// The loop's limits the conversation's settings name.
+const fn limits_of(settings: &ConversationSettings) -> NamedLimits {
+    NamedLimits {
         max_iterations: settings.max_iterations,
         max_parallel_tools: settings.max_parallel,
         tool_timeout_ms: settings.tool_timeout_ms,
-        ..AgentRequestConfig::default()
-    };
-    let named = config.max_iterations.is_some()
-        || config.max_parallel_tools.is_some()
-        || config.tool_timeout_ms.is_some();
-    named.then_some(config)
+    }
 }
 
 #[cfg(test)]
@@ -437,6 +465,9 @@ mod hub_turn_answer_tests;
 #[cfg(test)]
 #[path = "hub_turn_drawn_tests.rs"]
 mod hub_turn_drawn_tests;
+#[cfg(test)]
+#[path = "hub_turn_endpoint_tests.rs"]
+mod hub_turn_endpoint_tests;
 #[cfg(test)]
 #[path = "hub_turn_forget_tests.rs"]
 mod hub_turn_forget_tests;
@@ -455,6 +486,9 @@ mod hub_turn_local_tests;
 #[cfg(test)]
 #[path = "hub_turn_plan_tests.rs"]
 mod hub_turn_plan_tests;
+#[cfg(test)]
+#[path = "hub_turn_sampling_tests.rs"]
+mod hub_turn_sampling_tests;
 #[cfg(test)]
 #[path = "hub_turn_tests.rs"]
 mod hub_turn_tests;

@@ -9,14 +9,13 @@
 //! Either way the answer is a [`TurnModel`]: the model named by its machine,
 //! the name it is shown by, and, on the paired machine, the `<id>` or
 //! `<id>:<profile>` the turn then puts on the wire. That one answer is what
-//! the banner names, what the conversation stores and what is remembered on
+//! the conversation stores, which the daemon's turn then runs on, and what is remembered on
 //! the pairing, so a name that two models share cannot send the turn to one
 //! and record the other, and a model the far machine does not have is
 //! refused before a turn starts.
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use gglib_app_services::far_credentials;
-use gglib_app_services::transcript::MadeBy;
 use gglib_core::Settings;
 use gglib_core::domain::{Machine, Model, ModelLookup, ModelRef};
 use gglib_core::ports::SettingsRepository;
@@ -33,14 +32,12 @@ pub(crate) struct TurnModel {
     /// name that goes on the wire.
     pub identifier: String,
     /// The model, named by its machine. `None` for an identifier this
-    /// catalogue does not hold, which only a server named with `--port`
-    /// answers to.
+    /// catalogue does not hold, which a turn refuses
+    /// (`require_a_model`).
     pub model_ref: Option<ModelRef>,
     /// The name the model goes by on its machine, as it is shown and saved;
     /// the identifier when it did not resolve.
     pub name: String,
-    /// The quantisation that machine's catalogue has for the model, if any.
-    pub quantization: Option<String>,
     /// The profile the identifier named on the paired machine, which that
     /// machine applies. A profile here is `profile_selection`'s.
     pub far_profile: Option<String>,
@@ -56,9 +53,6 @@ impl TurnModel {
             name: model
                 .as_ref()
                 .map_or_else(|| identifier.clone(), |m| m.name.clone()),
-            quantization: model
-                .as_ref()
-                .and_then(|m| m.quant_label().map(str::to_owned)),
             model_ref: model.map(|m| ModelRef {
                 machine: Machine::Local,
                 id: m.id,
@@ -80,31 +74,9 @@ impl TurnModel {
                 id,
             }),
             name: lookup.detail.name,
-            quantization: lookup.detail.quantization,
             far_profile: lookup.profile,
             machine: Some(machine),
         }
-    }
-
-    /// The model as each reply of a saved turn names it, the way an agent
-    /// run's does: its name and quantisation on its machine. The context it
-    /// was launched with is not known here, so it is left out.
-    pub(crate) fn made_by(&self) -> MadeBy {
-        MadeBy {
-            model: self.name.clone(),
-            quantization: self.quantization.clone(),
-            device: None,
-            context_size: None,
-        }
-    }
-
-    /// The model as a person reads it, in forms they can type: `qwen3 (3) on
-    /// desk`, or `qwen3 (3:coding) on desk` with a profile.
-    pub(crate) fn shown(&self) -> String {
-        self.machine.as_ref().map_or_else(
-            || self.name.clone(),
-            |machine| format!("{} ({}) on {machine}", self.name, self.identifier),
-        )
     }
 }
 

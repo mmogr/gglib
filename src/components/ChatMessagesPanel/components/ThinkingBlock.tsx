@@ -10,15 +10,19 @@ import { Icon } from '../../ui/Icon';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { foldSummary } from '../../../readings/turnFigures';
 
-interface ThinkingBlockProps {
-  /** Message ID for timing tracker lookup */
+/** One message of the reply the fold is over, and its thinking time once saved. */
+export interface FoldSegment {
+  /** The message's id, for the timing tracker. */
   messageId: string;
-  /** Segment index within the message (for multiple thinking blocks) */
-  segmentIndex: number;
+  /** Its thinking time from its saved row, or null if not saved yet. */
+  durationSeconds: number | null;
+}
+
+interface ThinkingBlockProps {
+  /** The messages of the reply, one per round of tool calls, in order. */
+  segments: readonly FoldSegment[];
   /** The reasoning text; empty for a reply that called tools without it. */
   thinking: string;
-  /** Duration in seconds from parsed transcript, or null if not persisted yet */
-  durationSeconds: number | null;
   /** Whether thinking is still in progress (streaming) */
   isStreaming?: boolean;
   /** Open until the person chooses: while the reply arrives. */
@@ -46,16 +50,15 @@ const COMPONENTS: Partial<Components> = {
 
 /**
  * A reply's fold: one 12 px line, `▸ Thought for 3 s · 2 tool calls`,
- * that opens in place onto the reasoning and one row per tool call. While
- * the reply thinks the line is live ("Thinking… 4.2 s", from the timing
- * tracker until the transcript has a duration). It is open while the reply
- * arrives and closed after, unless the person has chosen.
+ * that opens in place onto the reasoning and one row per tool call. Its
+ * time is the sum of each message's: the saved row's, else the timing
+ * tracker's, and while the reply thinks the live elapsed time of the one
+ * thinking ("Thinking… 4.2 s"). It is open while the reply arrives and
+ * closed after, unless the person has chosen.
  */
 const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
-  messageId,
-  segmentIndex,
+  segments,
   thinking,
-  durationSeconds,
   isStreaming = false,
   defaultExpanded = false,
   toolCalls = 0,
@@ -66,15 +69,17 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   const bodyId = useId();
   const timing = useThinkingTiming();
 
-  // Live elapsed time while thinking; the transcript's, or the tracker's, after.
+  // Each message's time: the transcript's, else the tracker's once its
+  // thinking ended, else, while the reply thinks, how long it has so far.
   // The tick is read so that every tick draws the seconds again.
   const tracker = timing?.timingTracker ?? null;
   void timing?.tick;
-  const liveElapsedMs =
-    isStreaming && durationSeconds == null ? (tracker?.getElapsedMs(messageId, segmentIndex) ?? null) : null;
-  const finalSeconds =
-    durationSeconds ?? (!isStreaming ? (tracker?.getDurationSec(messageId, segmentIndex) ?? null) : null);
-  const seconds = finalSeconds ?? (liveElapsedMs != null ? liveElapsedMs / 1000 : null);
+  let seconds: number | null = null;
+  for (const { messageId, durationSeconds } of segments) {
+    const live = isStreaming ? (tracker?.getElapsedMs(messageId, 0) ?? null) : null;
+    const own = durationSeconds ?? tracker?.getDurationSec(messageId, 0) ?? (live != null ? live / 1000 : null);
+    if (own != null) seconds = (seconds ?? 0) + own;
+  }
 
   const summary = foldSummary({ thinking: !!thinking, live: isStreaming, seconds, toolCalls });
 

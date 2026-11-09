@@ -1,179 +1,91 @@
-//! Which flags the warning names, read off the decision a request was
-//! sampled by, and that a session says it once.
-
-use std::sync::Mutex;
-
-use gglib_core::domain::{DefaultsOrigin, ReasoningEffort, TemplateCaps};
-use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
-use serde_json::{Value, json};
+//! What a session says about the sampling flags it was started with.
 
 use super::*;
 
-const PENALTY_PASSED_OVER: &str = "  Warning: --presence-penalty did not take effect.";
+const NOTE: &str = "\"Let clients set sampling\" is on: gglib config settings set \
+                    --trust-client-sampling true";
 
-fn temperature(value: f32) -> InferenceConfig {
-    InferenceConfig {
-        temperature: Some(value),
-        ..InferenceConfig::default()
+fn trusting(trusted: Option<bool>) -> Settings {
+    Settings {
+        trust_client_sampling: trusted,
+        ..Settings::default()
     }
 }
 
-fn penalty() -> InferenceConfig {
-    InferenceConfig {
-        presence_penalty: Some(1.2),
-        ..InferenceConfig::default()
+/// While the endpoint does not trust a client's sampling, the session says
+/// once that the chat keeps the flags it names and the endpoint uses its own,
+/// naming the setting and the command that turns it on.
+#[test]
+fn an_untrusted_endpoint_is_named_once_with_the_setting_and_its_command() {
+    let sampling = SamplingArgs {
+        temperature: Some(0.9),
+        top_p: Some(0.5),
+        top_k: Some(20),
+        ..SamplingArgs::default()
+    };
+    for trusted in [None, Some(false)] {
+        let lines = notices(&sampling, Target::Local, &trusting(trusted));
+
+        assert_eq!(
+            lines,
+            [format!(
+                "  Note: this chat keeps --temperature, --top-p and --top-k, but the endpoint \
+                 uses its own sampling until {NOTE}"
+            )],
+            "{trusted:?}"
+        );
     }
 }
 
-/// A penalty JSON cannot carry, which never reaches the wire.
-fn unsendable_penalty() -> InferenceConfig {
-    InferenceConfig {
-        presence_penalty: Some(f32::NAN),
-        ..InferenceConfig::default()
+/// A trusted endpoint, a session on the paired machine, and a session that
+/// names no flag the endpoint gates, `--max-tokens` alone included, say
+/// nothing.
+#[test]
+fn nothing_is_said_when_the_endpoint_takes_what_the_chat_keeps() {
+    let named = SamplingArgs {
+        repeat_penalty: Some(1.1),
+        ..SamplingArgs::default()
+    };
+    let max_tokens = SamplingArgs {
+        max_tokens: Some(256),
+        ..SamplingArgs::default()
+    };
+
+    assert!(notices(&named, Target::Local, &trusting(Some(true))).is_empty());
+    assert!(notices(&named, Target::Remote, &trusting(None)).is_empty());
+    assert!(notices(&max_tokens, Target::Local, &trusting(None)).is_empty());
+    assert!(notices(&SamplingArgs::default(), Target::Local, &trusting(None)).is_empty());
+    let one = notices(&named, Target::Local, &trusting(None));
+    assert!(one[0].contains("keeps --repeat-penalty, but"), "{one:?}");
+}
+
+/// A flag no chat keeps did not take effect, and the session says so,
+/// trusted or not, here or there, naming each and the five a chat keeps.
+#[test]
+fn a_flag_no_chat_keeps_is_said_not_to_take_effect() {
+    let sampling = SamplingArgs {
+        min_p: Some(0.05),
+        reasoning_budget_tokens: Some(0),
+        ..SamplingArgs::default()
+    };
+    for target in [Target::Local, Target::Remote] {
+        let lines = notices(&sampling, target, &trusting(Some(true)));
+
+        assert_eq!(
+            lines,
+            [
+                "  Warning: --min-p and --reasoning-budget-tokens did not take effect: a chat keeps \
+              only --temperature, --top-p, --top-k, --max-tokens and --repeat-penalty."
+            ],
+            "{target:?}"
+        );
     }
 }
 
-/// A model of this catalogue with `defaults` as its author published them.
-fn model(defaults: Option<InferenceConfig>) -> ModelContext {
-    ModelContext {
-        defaults_origin: defaults.as_ref().map(|_| DefaultsOrigin::Published),
-        inference_defaults: defaults,
-        catalog_resolved: true,
-        ..ModelContext::passthrough()
-    }
-}
-
-fn profile(config: InferenceConfig) -> SamplingLayers {
-    SamplingLayers {
-        profile: Some(config),
-        ..SamplingLayers::default()
-    }
-}
-
-/// The decision the pipeline makes for a turn with `flags` typed, as the
-/// adapter asks for it: the flags in the body, the stored layers beside it.
-fn decided(
-    flags: &InferenceConfig,
-    ctx: &ModelContext,
-    stored: SamplingLayers,
-) -> SamplingDecision {
-    let mut body = Value::Object(flags.to_openai_json_patch());
-    body["messages"] = json!([{ "role": "user", "content": "hi" }]);
-    let layers = SamplingLayers {
-        trust_client_sampling: true,
-        agentic_adjustments: true,
-        ..stored
-    };
-    request_pipeline::apply(&mut body, ctx, &layers, None)
-        .expect("the pipeline applies")
-        .sampling
-}
-
-/// `--profile chat --presence-penalty 1.2`, and the same flag on a model
-/// whose stored defaults name a temperature: the flags sit above the rung
-/// that claims the temperature, so the penalty stands (ADR 0022) and there
-/// is nothing to say.
 #[test]
-fn a_bare_penalty_stands_when_a_profile_or_the_model_sets_the_temperature() {
-    let by_profile = decided(&penalty(), &model(None), profile(temperature(0.8)));
-    assert_eq!(by_profile.resolved.presence_penalty, Some(1.2));
-    assert_eq!(warning(&penalty(), &by_profile), None);
-
-    let stored = model(Some(temperature(1.0)));
-    let by_model = decided(&penalty(), &stored, SamplingLayers::default());
-    assert_eq!(by_model.resolved.presence_penalty, Some(1.2));
-    assert_eq!(warning(&penalty(), &by_model), None);
-}
-
-/// A value JSON cannot carry never reaches the wire, whatever rung wins.
-#[test]
-fn an_unsendable_flag_is_named() {
-    let decision = decided(
-        &unsendable_penalty(),
-        &model(None),
-        SamplingLayers::default(),
-    );
-    assert_eq!(
-        warning(&unsendable_penalty(), &decision).as_deref(),
-        Some(PENALTY_PASSED_OVER)
-    );
-}
-
-/// A penalty typed with its temperature, or over layers that name none, is
-/// what the turn runs with: nothing to say.
-#[test]
-fn a_flag_that_took_effect_is_not_named() {
-    let both = InferenceConfig {
-        temperature: Some(0.5),
-        ..penalty()
-    };
-    let with_temperature = decided(&both, &model(None), profile(temperature(0.8)));
-    assert_eq!(with_temperature.resolved.presence_penalty, Some(1.2));
-    assert_eq!(warning(&both, &with_temperature), None);
-
-    let nothing_claims_it = decided(&penalty(), &model(None), SamplingLayers::default());
-    assert_eq!(nothing_claims_it.resolved.presence_penalty, Some(1.2));
-    assert_eq!(warning(&penalty(), &nothing_claims_it), None);
-}
-
-/// An effort level the model's template does not read is deleted by that
-/// gate, which has its own note, so the level is not named; a penalty lost
-/// beside it still is.
-#[test]
-fn an_effort_level_the_template_does_not_read_is_not_blamed_on_the_temperature() {
-    let unread = ModelContext {
-        template_caps: Some(TemplateCaps {
-            supports_reasoning_effort: Some(false),
-            ..TemplateCaps::default()
-        }),
-        ..model(None)
-    };
-    let effort = InferenceConfig {
-        reasoning_effort: Some(ReasoningEffort::High),
-        ..InferenceConfig::default()
-    };
-    let dropped = decided(&effort, &unread, SamplingLayers::default());
-    assert_eq!(
-        dropped.sources.reasoning_effort,
-        ParamSource::SuppressedByTemplate
-    );
-    assert_eq!(warning(&effort, &dropped), None);
-
-    let with_penalty = InferenceConfig {
-        reasoning_effort: Some(ReasoningEffort::High),
-        ..unsendable_penalty()
-    };
-    let both = decided(&with_penalty, &unread, profile(temperature(0.8)));
-    assert_eq!(
-        warning(&with_penalty, &both).as_deref(),
-        Some(PENALTY_PASSED_OVER)
-    );
-}
-
-/// The flags are read back at the rung the pipeline names `client`.
-#[test]
-fn the_flags_rung_is_the_one_the_pipeline_reads_the_callers_parameters_at() {
-    let decision = decided(&temperature(0.5), &model(None), SamplingLayers::default());
-    assert_eq!(decision.layer_names[FLAGS_RUNG], "client");
-    assert_eq!(decision.sources.temperature, ParamSource::Layer(FLAGS_RUNG));
-}
-
-/// The first request of a session says it, and no later one does again.
-#[test]
-fn a_session_is_told_once() {
-    let said = Arc::new(Mutex::new(Vec::new()));
-    let heard = Arc::clone(&said);
-    let observer = telling(unsendable_penalty(), move |warning| {
-        heard.lock().unwrap().push(warning.to_owned());
-    });
-    let decision = decided(
-        &unsendable_penalty(),
-        &model(None),
-        SamplingLayers::default(),
-    );
-
-    observer(&decision);
-    observer(&decision);
-
-    assert_eq!(*said.lock().unwrap(), [PENALTY_PASSED_OVER]);
+fn flags_read_as_a_list() {
+    assert_eq!(flags(&[]), "");
+    assert_eq!(flags(&["--a"]), "--a");
+    assert_eq!(flags(&["--a", "--b"]), "--a and --b");
+    assert_eq!(flags(&["--a", "--b", "--c"]), "--a, --b and --c");
 }

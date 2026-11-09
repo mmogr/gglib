@@ -297,6 +297,38 @@ fn test_trust_client_sampling_defaults_to_none_and_merges_like_any_bool_setting(
     assert_eq!(settings.trust_client_sampling, None);
 }
 
+/// The two tool limits are unset by default, so a run keeps the built-in
+/// ones, and are set and cleared like any other limit.
+#[test]
+fn the_tool_limits_default_to_none_and_merge_like_the_other_limits() {
+    let defaults = Settings::with_defaults();
+    assert_eq!(
+        (defaults.max_parallel_tools, defaults.tool_timeout_ms),
+        (None, None)
+    );
+
+    let mut settings = Settings::with_defaults();
+    settings.merge(&SettingsUpdate {
+        max_parallel_tools: Some(Some(4)),
+        tool_timeout_ms: Some(Some(5_000)),
+        ..Default::default()
+    });
+    assert_eq!(
+        (settings.max_parallel_tools, settings.tool_timeout_ms),
+        (Some(4), Some(5_000))
+    );
+
+    settings.merge(&SettingsUpdate {
+        max_parallel_tools: Some(None),
+        tool_timeout_ms: Some(None),
+        ..Default::default()
+    });
+    assert_eq!(
+        (settings.max_parallel_tools, settings.tool_timeout_ms),
+        (None, None)
+    );
+}
+
 /// The stored port, and the default only when none is stored.
 #[test]
 fn the_effective_proxy_port_is_the_stored_one_then_the_default() {

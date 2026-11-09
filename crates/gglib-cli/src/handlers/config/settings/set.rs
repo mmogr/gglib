@@ -29,6 +29,8 @@ fn update_from(args: SettingsSetArgs, image_model: Option<i64>) -> SettingsUpdat
         max_download_queue_size: args.max_download_queue_size.map(Some),
         max_tool_iterations: args.max_tool_iterations.map(Some),
         max_stagnation_steps: args.max_stagnation_steps.map(Some),
+        max_parallel_tools: args.max_parallel_tools.map(Some),
+        tool_timeout_ms: args.tool_timeout_ms.map(Some),
         default_model_id: None,
         default_image_model_id: image_model.map(Some),
         inference_defaults: None,

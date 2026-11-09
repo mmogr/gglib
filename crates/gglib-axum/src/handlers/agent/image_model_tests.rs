@@ -1,6 +1,6 @@
 //! The image model a person chose, at every door that runs a message sent
-//! with Draw: the page's run, a device's turn on a hub chat, and a chat run
-//! with builtins. It goes with `draw` or is refused; one that cannot draw
+//! with Draw: this machine's turn, a device's turn on a hub chat, and a chat
+//! run with builtins. It goes with `draw` or is refused; one that cannot draw
 //! refuses the request with its own code before anything is written; and it
 //! reaches the drawing tool's request and nothing the chat model is sent.
 
@@ -18,10 +18,8 @@ use gglib_core::ports::{
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-use super::AgentChatRequest;
 use super::chat_turn::{self, ChatQuery, Drawing};
-use super::dto::AgentRunRequest;
-use super::run::create_run;
+use super::loop_request::LoopRequest;
 use super::run_fixture::{device, saved, state};
 use super::turn_fixture::{DRAWS, model, turn};
 use crate::error::HttpError;
@@ -122,12 +120,11 @@ fn hub_turn(chat: i64, draw: bool, image_model: Option<u32>) -> HubTurn {
     }
 }
 
-/// The page's run body on `chat`, with `more`.
+/// This machine's turn on `chat`, with `more`.
 fn page_run(chat: i64, more: &Value) -> Value {
     let mut body = json!({
-        "port": 0,
-        "messages": [{ "role": "user", "content": "a fox in the snow" }],
         "conversation_id": chat,
+        "content": "a fox in the snow",
     });
     let extra = more.as_object().unwrap().clone();
     body.as_object_mut().unwrap().extend(extra);
@@ -163,7 +160,7 @@ async fn at_every_door(
     served: i64,
     draw: bool,
     image_model: Option<u32>,
-) -> ([(&'static str, (u16, &'static str, String)); 4], [i64; 2]) {
+) -> ([(&'static str, (u16, &'static str, String)); 3], [i64; 2]) {
     let mut said = serde_json::Map::new();
     if draw {
         said.insert("draw".to_owned(), json!(true));
@@ -175,7 +172,7 @@ async fn at_every_door(
     let page_chat = hub_chat(state, served).await;
     let hub = hub_chat(state, served).await;
 
-    let page = refused(create_run(state, "r1", page_run(page_chat, &said)).await);
+    let page = refused(super::hub_turn::start_local(state, "r1", page_run(page_chat, &said)).await);
     let device = refused(
         super::hub_turn::start(
             state,
@@ -192,20 +189,11 @@ async fn at_every_door(
         ..ChatQuery::default()
     };
     let kept = refused(chat_turn::start(state, "phone", "p1", phone_request(), query).await);
-    let mut route = serde_json::from_value::<AgentRunRequest>(page_run(page_chat, &said))
-        .unwrap()
-        .chat;
-    route.port = 1;
-    let route = match super::chat(axum::extract::State(state.clone()), axum::Json(route)).await {
-        Ok(_) => panic!("the chat route ran"),
-        Err(error) => refused::<()>(Err(error)),
-    };
     (
         [
-            ("the page's run", page),
+            ("this machine's turn", page),
             ("a device's turn", device),
             ("a chat run with builtins", kept),
-            ("the chat route", route),
         ],
         [page_chat, hub],
     )
@@ -264,20 +252,22 @@ async fn a_chosen_model_that_cannot_draw_is_refused_with_its_code_and_writes_not
 }
 
 /// The chat request each door reads a message sent with Draw and
-/// `image_model` as: the page's run, a device's turn, a chat run with
+/// `image_model` as: this machine's turn, a device's turn, a chat run with
 /// builtins.
 async fn read_at_each_door(
     state: &AppState,
     served: i64,
     image_model: Option<u32>,
-) -> [(&'static str, AgentChatRequest); 3] {
+) -> [(&'static str, LoopRequest); 3] {
     let mut said = json!({ "draw": true });
     if let Some(id) = image_model {
         said["image_model"] = json!(id);
     }
-    let page: AgentRunRequest =
-        serde_json::from_value(page_run(hub_chat(state, served).await, &said)).unwrap();
-    let page = super::run::plan(state, page).await.unwrap().0;
+    let page = hub_turn(hub_chat(state, served).await, true, image_model);
+    let page = super::hub_turn::plan(state, &RunScope::Local, page, None)
+        .await
+        .unwrap()
+        .chat;
     let hub = hub_turn(hub_chat(state, served).await, true, image_model);
     let device = super::hub_turn::plan(state, &device("phone"), hub, None)
         .await
@@ -291,7 +281,7 @@ async fn read_at_each_door(
         .await
         .unwrap();
     [
-        ("the page's run", page),
+        ("this machine's turn", page),
         ("a device's turn", device),
         ("a chat run with builtins", kept),
     ]

@@ -97,7 +97,7 @@ import { FAR_FINGERPRINT, farEntry, pairedModels } from '../fixtures/fakeFarDaem
 import { guiModel } from '../fixtures/model';
 import { renderApp } from './harness';
 
-const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null };
 const DESK: RemoteStatus = {
   ...IDLE_STATUS,
   connected: { port: 41234, base_url: 'http://127.0.0.1:41234/v1', ticket_fingerprint: FAR_FINGERPRINT, path: 'direct', away_for_s: null },
@@ -114,7 +114,7 @@ const LLAMA = model(3, 'Llama-3.2-3B');
 const FLUX = model(4, 'Flux-Schnell', { imageFamily: 'flux1', quantization: null });
 
 const fitting = (plan: Partial<LaunchPlan> = {}) => launchExplanation(samplingExplanation(), chatPlan(plan));
-const FIT_WORDS = 'Fits this Mac with 32K context, of 128K trained.';
+const FIT_WORDS = 'Fits this machine with 32K context, of 128K trained.';
 const UNLOAD_WORDS = 'Unloads Qwen3-30B-A3B first: it would not fit beside it.';
 
 /** Play a dashboard frame in which the models `loaded` names are resident. */

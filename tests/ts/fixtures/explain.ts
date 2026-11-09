@@ -68,15 +68,19 @@ export function chatPlan(overrides: Partial<LaunchPlan> = {}): LaunchPlan {
       { flag: '--cache-type-v', value: 'q8_0', decision: 'kv', source: 'gglib', reason: 'q8_0 halves the KV cache at no measured cost' },
     ],
     narration: { model_name: 'gemma', quantization: 'Q4_K_M', weights_bytes: 2_500_000_000, decisions: [] },
+    // The first fit `contracts/models/fit_sentence.json` records, words and
+    // all (`tests/ts/contracts/fitSentence.test.ts` holds it there).
     fit: {
       servesAt: 32768,
       source: 'fitted_to_hardware',
       fitted: 32768,
       budgetBytes: 48 * 1024 ** 3,
       weightsBytes: 2_500_000_000,
-      kvBytesPerToken: 200_000,
+      kvBytesPerToken: 1_097_000,
       trainedCtx: 131072,
-      unsnapped: 40000,
+      unsnapped: 40005,
+      sentence: 'Fits this machine with 32K context, of 128K trained.',
+      note: 'fits (35.81 GiB of 43.20 GiB usable)',
     },
     ...overrides,
   };

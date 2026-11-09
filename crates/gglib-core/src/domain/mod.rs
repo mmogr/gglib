@@ -16,7 +16,9 @@ mod defects_agent;
 pub mod device_budget;
 pub mod dialect;
 pub mod engine_pins;
+pub mod figures;
 mod file_type;
+mod fit_sentence;
 pub mod folder;
 pub(crate) mod generation_config;
 pub mod gguf;
@@ -53,6 +55,7 @@ pub(crate) mod runtime_capabilities;
 mod runtime_kind;
 pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
+pub mod send_line;
 mod server_config;
 pub mod slot_eviction;
 pub mod state_words;
@@ -93,7 +96,11 @@ pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};
-pub use state_words::{EndpointState, KeyState, ReachState, ResidencyState};
+pub use send_line::{ModelAbsence, NamedModel, send_line};
+pub use state_words::{
+    EndpointState, EngineState, FastDownloadsState, KeyState, McpState, ModelsDirState, ReachState,
+    ResidencyState,
+};
 
 // Re-export the template-capability self-report (ADR 0007) at the domain level
 pub use template_caps::{

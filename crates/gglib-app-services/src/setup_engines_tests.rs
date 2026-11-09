@@ -212,6 +212,7 @@ fn a_llama_install_is_read_from_its_record_its_validation_and_its_binary() {
         status.broken.as_deref(),
         Some("llama-server will not start")
     );
+    assert_eq!(json_state(&status), "not_working");
     assert_eq!(status.binary_path, "/data/.llama/bin/llama-server");
     assert_eq!(status.update_command, "gglib config llama update");
 }
@@ -239,6 +240,7 @@ fn an_sd_download_is_not_built_and_a_bad_record_says_why() {
         Ok(("macOS universal (Metal)".to_owned(), None)),
     );
 
+    assert_eq!(json_state(&downloaded), "installed");
     assert_eq!(downloaded.install.map(|install| install.built), Some(false));
     assert_eq!(unreadable.install, None);
     assert_eq!(
@@ -298,6 +300,7 @@ fn a_llama_source_build_is_the_install_and_the_binary_names_its_build() {
     );
     assert_eq!(status.reports.as_deref(), Some("b11429"));
     assert_eq!(status.broken, None);
+    assert_eq!(json_state(&status), "installed");
 }
 
 /// The wire shape the web reads, keys included.
@@ -315,6 +318,7 @@ fn the_status_serializes_in_camel_case_with_its_kind() {
 
     assert_eq!(json["kind"], "stable_diffusion");
     assert_eq!(json["installed"], false);
+    assert_eq!(json["state"], "not_installed");
     assert_eq!(json["pin"]["targetRelease"], PINNED_SD_RELEASE);
     assert_eq!(json["download"], "macOS universal (Metal)");
     assert_eq!(json["downloadUnavailable"], serde_json::Value::Null);
@@ -526,4 +530,12 @@ async fn an_install_over_a_source_build_of_a_release_is_left_to_the_terminal() {
         matches!(&refused, GuiError::Conflict(m) if m == "stable-diffusion.cpp was built from source here, so it is updated from a terminal, which builds it again: run 'gglib config sd update'."),
         "{refused:?}"
     );
+}
+
+/// The state an engine status is on the wire as.
+fn json_state(status: &EngineStatus) -> String {
+    serde_json::to_value(status).unwrap()["state"]
+        .as_str()
+        .expect("the state is a string")
+        .to_owned()
 }

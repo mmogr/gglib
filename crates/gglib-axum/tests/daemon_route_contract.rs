@@ -172,22 +172,14 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
             daemon::run_events_path("run-1", 0),
         ),
         (daemon::RUN_CANCEL_METHODS, daemon::run_cancel_path("run-1")),
+        (
+            daemon::CONVERSATION_CHANGES_METHODS,
+            daemon::conversation_changes_path(1),
+        ),
     ] {
         if let Some(complaint) = check(&app, methods, &path).await {
             broken.push(format!("  {complaint}"));
         }
-    }
-    // A held generation turn's `GET` does not end, so `check` would read it
-    // forever: the `TRACE` probe alone says the route is there with its verb.
-    let turn = daemon::GENERATION_TURN_PATH;
-    let (status, allow, _) = probe(&app, Method::TRACE, turn).await;
-    let allowed: Vec<&str> = allow.split(',').map(str::trim).collect();
-    if status != StatusCode::METHOD_NOT_ALLOWED
-        || !daemon::GENERATION_TURN_METHODS
-            .iter()
-            .all(|m| allowed.contains(m))
-    {
-        broken.push(format!("  {turn}: {status}, allows [{allow}]"));
     }
     for (methods, path) in daemon::remote_route_contract() {
         if let Some(complaint) = check(&app, methods, &path).await {
