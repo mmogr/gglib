@@ -49,8 +49,8 @@ const onSwitchModel = vi.fn(async (_choice: { modelId: number; modelName: string
 const onShowModel = vi.fn();
 const onShowLog = vi.fn();
 
-const ON = { running: true, state: 'on' as const, port: 9946, base_url: 'http://127.0.0.1:9946/v1', key: 'none_needed' as const, pinned_model: null };
-const OFF = { running: false, state: 'off' as const, port: null, base_url: null, key: null, pinned_model: null };
+const ON = { running: true, state: 'on' as const, port: 9946, base_url: 'http://127.0.0.1:9946/v1', key: 'none_needed' as const, pinned_model: null, pinned_to: null };
+const OFF = { running: false, state: 'off' as const, port: null, base_url: null, key: null, pinned_model: null, pinned_to: null };
 
 /** The frames a started run is read as; none until a test says. */
 let runFrames: object[];
@@ -216,11 +216,11 @@ describe('ChatPlace, leaving and Unload', () => {
   it('with the endpoint pinned to another model, the line says a send is refused; pinned to this one, that a send loads it', async () => {
     renderLocal(26);
     await head();
-    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'Qwen3-8B' }));
+    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'Qwen3-8B', pinned_to: 'Pinned to Qwen3-8B' }));
     expect(await lineSaying('The endpoint is Pinned to Qwen3-8B and cannot serve qwen3 · sending is refused')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
 
-    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'qwen3' }));
+    act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'qwen3', pinned_to: 'Pinned to qwen3' }));
     expect(await lineSaying("qwen3 isn't loaded · sending loads it")).toBeInTheDocument();
   });
 
