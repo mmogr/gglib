@@ -178,30 +178,25 @@ describe('arrivingPhase', () => {
 
 describe('a reply that waits', () => {
   const none = {};
-  const render = { reason: 'image_render' as const, step: 3, total: 20, position: 1, said: 'Waiting for an image render, step 3 of 20' };
   const load = { reason: 'model_load' as const, step: 0, total: 0, position: 0, said: 'Loading Qwen3-4B… 12 s' };
 
   it("says the daemon's words for what it waits for, until the model reads the prompt", () => {
-    expect(arrivingPhase({ ...none, waiting: render })).toBe('Waiting for an image render, step 3 of 20');
     expect(arrivingPhase({ ...none, waiting: load })).toBe('Loading Qwen3-4B… 12 s');
     // A wait still on the turn is newer than its prompt reading, which takes an older one off.
-    expect(arrivingPhase({ ...none, waiting: render, prompt: { processed: 2, total: 2, cached: 0 } })).toBe(
-      'Waiting for an image render, step 3 of 20',
+    expect(arrivingPhase({ ...none, waiting: load, prompt: { processed: 2, total: 2, cached: 0 } })).toBe(
+      'Loading Qwen3-4B… 12 s',
     );
   });
 
   it('says only that it waits for a wait from a daemon too old to word it', () => {
-    expect(arrivingPhase({ ...none, waiting: { reason: 'image_render', step: 3, total: 20, position: 2 } })).toBe(
-      'Waiting for the model',
-    );
     expect(arrivingPhase({ ...none, waiting: { reason: 'model_load', step: 0, total: 0, position: 0 } })).toBe(
       'Waiting for the model',
     );
   });
 
   it('is read from the turn drawn from a run', () => {
-    const message = { id: 'live', content: [], metadata: { custom: { waiting: render } } };
-    expect(replyFacts(message).waiting).toEqual(render);
+    const message = { id: 'live', content: [], metadata: { custom: { waiting: load } } };
+    expect(replyFacts(message).waiting).toEqual(load);
     expect(replyFacts({ id: 'live', content: [] }).waiting).toBeUndefined();
   });
 });

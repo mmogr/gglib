@@ -284,10 +284,9 @@ fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
         | ModelRuntimeError::ImageModelIncomplete { .. } => {
             GuiError::ValidationFailed(err.to_string())
         }
-        // Not the server failing: nothing to draw with yet, or no room beside
-        // a held model. The runtime's words name the remedy.
-        ModelRuntimeError::ImageRuntimeNotInstalled
-        | ModelRuntimeError::ImageModelDoesNotFit { .. } => GuiError::Unavailable(err.to_string()),
+        // Not the server failing: nothing to draw with yet. The runtime's
+        // words name the remedy.
+        ModelRuntimeError::ImageRuntimeNotInstalled => GuiError::Unavailable(err.to_string()),
         _ => GuiError::Internal(format!("Failed to start server: {err}")),
     }
 }
@@ -476,17 +475,6 @@ mod tests {
         assert!(
             matches!(&not_installed, GuiError::Unavailable(m) if m.contains("gglib config sd install")),
             "{not_installed:?}"
-        );
-
-        let no_room = map_runtime_error(&ModelRuntimeError::ImageModelDoesNotFit {
-            model: "flux".to_owned(),
-            held_model: "qwen".to_owned(),
-            needed_bytes: Some(1),
-            free_bytes: None,
-        });
-        assert!(
-            matches!(&no_room, GuiError::Unavailable(m) if m.contains("'qwen'")),
-            "{no_room:?}"
         );
     }
 }

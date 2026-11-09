@@ -415,14 +415,9 @@ async fn partial_images_are_spread_across_every_pass() {
 async fn a_runtime_refusal_is_answered_as_the_proxy_answers_one() {
     let port = Scripted::new(
         Vec::new(),
-        Err(ImageError::Runtime(
-            ModelRuntimeError::ImageModelDoesNotFit {
-                model: "flux".into(),
-                held_model: "qwen".into(),
-                needed_bytes: None,
-                free_bytes: None,
-            },
-        )),
+        Err(ImageError::Runtime(ModelRuntimeError::AdmissionTimeout(
+            "the queue made no progress".into(),
+        ))),
     );
     let response = generations(
         Some(port as Arc<dyn ImageGenerationPort>),

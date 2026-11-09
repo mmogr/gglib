@@ -106,14 +106,6 @@
     "total": 0,
     "type": "waiting"
   },
-  "image_render": {
-    "position": 2,
-    "reason": "image_render",
-    "said": "Waiting for an image render, step 3 of 20, 2 in line",
-    "step": 3,
-    "total": 20,
-    "type": "waiting"
-  },
   "list": {
     "runs": [
       {

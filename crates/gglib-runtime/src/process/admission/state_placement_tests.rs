@@ -1,4 +1,5 @@
-//! Where an image model is placed, and what a held slot does to the line.
+//! Where an image model is placed, and what one too large for its place
+//! does to the line.
 //!
 //! Driven through the real [`AdmissionQueue`], as `queue_tests.rs` is; its
 //! own module because that file is frozen at its size, so the helpers are
@@ -156,7 +157,7 @@ async fn a_granted_image_model_loads_beside_the_chat_model() {
     );
 }
 
-/// No room beside an idle, unheld chat model, or no reading at all: an
+/// No room beside an idle chat model, or no reading at all: an
 /// ordinary swap into the primary, not a squeeze into the second slot.
 #[tokio::test]
 async fn without_room_an_image_model_swaps_into_the_primary() {
@@ -214,106 +215,6 @@ async fn an_empty_second_slot_is_taken_before_the_turn_rules() {
             slot: 1,
             evict: None
         }
-    );
-}
-
-/// A held primary and no room beside it: refused on the first poll, naming
-/// the held model and the bytes, with the ticket gone from the line.
-#[tokio::test]
-async fn a_held_primary_refuses_an_image_model_at_once() {
-    let q = queue();
-    chat_resident(&q, "qwen", 1);
-    let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
-
-    let ticket = q.enqueue(FLUX, "flux");
-    assert_eq!(
-        q.poll(&ticket, IMAGE_NO_ROOM),
-        AdmissionDecision::Refuse(Refusal::HeldSlot {
-            held_model: "qwen".to_owned(),
-            needed_bytes: Some(20 * GIB),
-            free_bytes: Some(6 * GIB),
-        })
-    );
-    assert!(
-        q.snapshot().queued.is_empty(),
-        "the refused ticket is forgotten"
-    );
-
-    // An unreadable budget is refused the same way, with no bytes to name.
-    assert_eq!(
-        poll_once(&q, FLUX, "flux", IMAGE_UNKNOWN),
-        AdmissionDecision::Refuse(Refusal::HeldSlot {
-            held_model: "qwen".to_owned(),
-            needed_bytes: None,
-            free_bytes: None,
-        })
-    );
-    let words = Refusal::HeldSlot {
-        held_model: "qwen".to_owned(),
-        needed_bytes: Some(20 * GIB),
-        free_bytes: Some(6 * GIB),
-    }
-    .describe("flux");
-    for part in [
-        "'flux'",
-        "'qwen'",
-        "21474836480 bytes",
-        "6442450944 bytes",
-        "held",
-    ] {
-        assert!(words.contains(part), "{words:?} names {part}");
-    }
-}
-
-/// A held primary does not stop a granted image model taking the second
-/// slot.
-#[tokio::test]
-async fn a_held_primary_does_not_refuse_an_image_model_that_fits_beside_it() {
-    let q = queue();
-    chat_resident(&q, "qwen", 1);
-    let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
-
-    assert_eq!(
-        poll_once(&q, FLUX, "flux", IMAGE_FITS),
-        AdmissionDecision::Launch {
-            slot: 1,
-            evict: None
-        }
-    );
-}
-
-/// A waiter that only a held slot could take is passed over at the front of
-/// the line, so a younger request for another model launches instead of
-/// waiting out the deadline behind it; it goes once the hold ends.
-#[tokio::test]
-async fn a_waiter_for_a_held_slot_does_not_block_the_line() {
-    let q = queue();
-    chat_resident(&q, "qwen", 1);
-    let hold = q.hold(8001, 1).expect("qwen is resident on its port");
-
-    let older = q.enqueue(4, "llama-70b");
-    assert_eq!(q.poll(&older, NEVER_FITS), AdmissionDecision::Wait);
-
-    let younger = q.enqueue(7, "embedder");
-    assert_eq!(
-        q.poll(&younger, ALWAYS_FITS),
-        AdmissionDecision::Launch {
-            slot: 1,
-            evict: None
-        },
-        "the held-only waiter must not hold the front of the line"
-    );
-    drop(q.install(1, resident(7, "embedder")));
-
-    assert_eq!(q.poll(&older, NEVER_FITS), AdmissionDecision::Wait);
-    drop(hold);
-    assert_eq!(
-        q.poll(&older, NEVER_FITS),
-        AdmissionDecision::Launch {
-            slot: PRIMARY_SLOT,
-            evict: Some(1)
-        },
-        "once the hold ends the older waiter goes"
     );
 }
 
@@ -400,33 +301,6 @@ async fn a_picked_image_model_replaces_the_idle_one_and_the_chat_model_stays() {
         );
         assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1)], "the chat model stays");
     }
-}
-
-/// A chat model a run holds does not refuse a second image model that fits
-/// in the idle one's place: it swaps in there. With no other image model
-/// loaded the same request is still refused, as before.
-#[tokio::test]
-async fn under_a_held_chat_model_a_picked_image_model_swaps_in_and_is_not_refused() {
-    let q = queue();
-    chat_resident(&q, "qwen", 1);
-    let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
-    assert!(
-        matches!(
-            poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
-            AdmissionDecision::Refuse(Refusal::HeldSlot { .. })
-        ),
-        "precondition: alone, it is refused under the held chat model"
-    );
-
-    let q = chat_and_flux();
-    let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
-    assert_eq!(
-        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
-        AdmissionDecision::Launch {
-            slot: 1,
-            evict: Some(FLUX)
-        }
-    );
 }
 
 /// An image model that is rendering is waited for: it is not evicted, and
@@ -580,15 +454,14 @@ async fn a_model_that_chats_is_placed_as_before_beside_an_image_model() {
     );
 }
 
-/// A picked image model too large for a small Flux's place, beside a chat
-/// model a run holds, is refused at once, naming the held model. With the
-/// chat model idle it waits instead: loading it in Flux's place would
-/// over-commit memory, taking the chat model's place would leave two image
-/// models loaded, and nothing evicts both. It is passed over at the front of
-/// the line meanwhile, so the chat model serves and another model's request
-/// goes first.
+/// A picked image model too large for a small Flux's place, beside an idle
+/// chat model, waits: loading it in Flux's place would over-commit memory,
+/// taking the chat model's place would leave two image models loaded, and
+/// nothing evicts both. It is passed over at the front of the line
+/// meanwhile, so the chat model serves and another model's request goes
+/// first.
 #[tokio::test]
-async fn under_a_held_chat_model_an_image_model_too_large_for_the_idle_ones_place_is_refused() {
+async fn an_image_model_too_large_for_the_idle_ones_place_waits_without_leading() {
     let q = chat_and_flux();
     drop(q.install(
         1,
@@ -598,21 +471,6 @@ async fn under_a_held_chat_model_an_image_model_too_large_for_the_idle_ones_plac
             ..resident(FLUX, "flux")
         },
     ));
-    let hold = q.hold(8001, 1).expect("qwen is resident on its port");
-    assert_eq!(
-        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
-        AdmissionDecision::Refuse(Refusal::HeldSlot {
-            held_model: "qwen".to_owned(),
-            needed_bytes: Some(20 * GIB),
-            free_bytes: Some(6 * GIB),
-        })
-    );
-    assert!(
-        q.snapshot().queued.is_empty(),
-        "the refused ticket is forgotten"
-    );
-
-    drop(hold);
     assert_eq!(
         poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
         AdmissionDecision::Wait
@@ -688,28 +546,6 @@ async fn alone_a_picked_image_model_replaces_the_other_whatever_the_budget() {
             slot: 1,
             evict: Some(FLUX)
         }
-    );
-}
-
-/// Under a chat model a run holds, an image model still loading is waited
-/// for, not refused: it gives no memory back until it lands, so the
-/// newcomer is judged then.
-#[tokio::test]
-async fn under_a_held_chat_model_an_image_model_still_loading_is_waited_for() {
-    let q = queue();
-    chat_resident(&q, "qwen", 1);
-    assert_eq!(
-        poll_once(&q, FLUX, "flux", IMAGE_FITS),
-        AdmissionDecision::Launch {
-            slot: 1,
-            evict: None
-        }
-    );
-    let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
-
-    assert_eq!(
-        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
-        AdmissionDecision::Wait
     );
 }
 

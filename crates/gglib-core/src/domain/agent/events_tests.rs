@@ -196,22 +196,9 @@ fn tool_call_writing_serialises_flat() {
     );
 }
 
-/// A wait on the wire, for each thing waited for.
+/// A wait on the wire.
 #[test]
 fn waiting_serialises_its_reason() {
-    let evt = AgentEvent::Waiting {
-        reason: WaitingFor::ImageRender,
-        step: 3,
-        total: 20,
-        position: 1,
-        model: None,
-        elapsed_ms: None,
-        said: None,
-    };
-    assert_eq!(
-        serde_json::to_string(&evt).unwrap(),
-        r#"{"type":"waiting","reason":"image_render","step":3,"total":20,"position":1}"#
-    );
     let load = AgentEvent::Waiting {
         reason: WaitingFor::ModelLoad,
         step: 0,
@@ -227,7 +214,7 @@ fn waiting_serialises_its_reason() {
     );
 }
 
-/// An agent run's frames while it draws: a wait, the call, its progress
+/// An agent run's frames while it draws: the call, its progress
 /// through every stage, and its completion with the image it made. No
 /// `tool_preview`: a preview is never a logged frame.
 fn drawing_frames() -> Vec<AgentEvent> {
@@ -251,15 +238,6 @@ fn drawing_frames() -> Vec<AgentEvent> {
         height: 1024,
     }];
     vec![
-        AgentEvent::Waiting {
-            reason: WaitingFor::ImageRender,
-            step: 12,
-            total: 20,
-            position: 1,
-            model: None,
-            elapsed_ms: None,
-            said: None,
-        },
         AgentEvent::ToolCallStart {
             tool_call: ToolCall {
                 id: "call_1".into(),

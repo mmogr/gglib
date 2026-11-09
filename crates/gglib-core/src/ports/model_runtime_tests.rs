@@ -118,13 +118,7 @@ fn pinned_defaults_to_unpinned() {
     assert!(MinimalRuntime.pinned().is_none());
 }
 
-/// A runtime with no resident set holds nothing.
-#[test]
-fn hold_defaults_to_none() {
-    assert!(MinimalRuntime.hold(5500, 1).is_none());
-}
-
-/// A runtime with no holds recycles by stopping, and passes on the stop's
+/// A runtime recycles by stopping by default, and passes on the stop's
 /// answer: the benchmark's pinned target refuses its stop so the watchdog
 /// re-arms.
 #[tokio::test]
@@ -316,44 +310,6 @@ fn an_incomplete_image_model_is_a_400_that_names_every_missing_role() {
         one.to_string(),
         "Image model 'sdxl' has no VAE linked, so it cannot draw. Link it with \
          `gglib model update \"sdxl\" --component vae=<path>`."
-    );
-}
-
-/// No room beside a held model is a retryable 503, and the words name the
-/// held model and both sizes, or say the free memory could not be read.
-#[test]
-fn an_image_model_that_does_not_fit_is_a_retryable_503_naming_the_held_model_and_bytes() {
-    const GIB: u64 = 1024 * 1024 * 1024;
-    let refused = ModelRuntimeError::ImageModelDoesNotFit {
-        model: "flux1-schnell".to_owned(),
-        held_model: "qwen3-27b".to_owned(),
-        needed_bytes: Some(28 * GIB),
-        free_bytes: Some(9 * GIB),
-    };
-
-    assert_eq!(refused.suggested_status_code(), 503);
-    assert!(refused.is_retryable());
-    let envelope = RuntimeErrorEnvelope::from(&refused);
-    assert_eq!(envelope.r#type, error_type::SERVICE_UNAVAILABLE);
-    assert!(envelope.retryable);
-    assert_eq!(
-        envelope.message,
-        "Image model 'flux1-schnell' needs 28.00 GiB; 9.00 GiB is free beside 'qwen3-27b', \
-         which a chat is using. Use a smaller family, stop the chat model, or draw from a chat \
-         on the paired machine."
-    );
-
-    let unknown = ModelRuntimeError::ImageModelDoesNotFit {
-        model: "flux1-schnell".to_owned(),
-        held_model: "qwen3-27b".to_owned(),
-        needed_bytes: None,
-        free_bytes: None,
-    };
-    assert_eq!(
-        unknown.to_string(),
-        "Image model 'flux1-schnell' needs more memory than is free; how much is free beside \
-         'qwen3-27b' cannot be read, which a chat is using. Use a smaller family, stop the chat \
-         model, or draw from a chat on the paired machine."
     );
 }
 

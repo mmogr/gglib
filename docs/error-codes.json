@@ -57,12 +57,6 @@
       "meaning": "An image model was asked for and stable-diffusion.cpp's sd-server is not installed; install it with gglib config sd install. Retrying will not help."
     },
     {
-      "code": "image_model_does_not_fit",
-      "type": "service_unavailable",
-      "status": 503,
-      "meaning": "An image model needs more memory than is free, and the model it would displace is held by a run; refused at once, retry when that run ends."
-    },
-    {
       "code": "model_does_not_fit",
       "type": "server_error",
       "status": 507,

@@ -36,7 +36,6 @@ use crate::sd::fake_server::FakeSdServer;
 /// model id into this binary's data root.
 const STOPPED_ID: u32 = 999_501;
 const RECYCLED_ID: u32 = 999_502;
-const HELD_ID: u32 = 999_503;
 const DISPLACED_ID: u32 = 999_504;
 const LATE_ID: u32 = 999_505;
 const PLACED_ID: u32 = 999_506;
@@ -222,7 +221,7 @@ async fn a_stop_announces_the_model_unloaded_before_its_server_is_stopped() {
 }
 
 #[tokio::test]
-async fn a_recycle_announces_the_model_unloaded_and_a_held_model_is_not_recycled() {
+async fn a_recycle_announces_the_model_unloaded() {
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let (binary, _) = sleeper(dir.path(), "server");
@@ -235,26 +234,10 @@ async fn a_recycle_announces_the_model_unloaded_and_a_held_model_is_not_recycled
     )
     .await;
 
-    set.recycle(PRIMARY_SLOT, &core).await.unwrap();
+    set.recycle(PRIMARY_SLOT, &core).await;
 
     assert_eq!(told.all(), [unloaded_while_running(RECYCLED_ID)]);
     assert!(!core.read().await.is_running(RECYCLED_ID));
-
-    // A run holds the next resident: the recycle is refused, the model
-    // stays, and nothing is announced.
-    let port = running(
-        &set,
-        &core,
-        dir.path(),
-        (HELD_ID, "held", PRIMARY_SLOT, RuntimeKind::Llama),
-    )
-    .await;
-    let hold = set.queue().hold(port, HELD_ID).expect("held");
-    assert!(set.recycle(PRIMARY_SLOT, &core).await.is_err());
-    assert_eq!(told.all().len(), 1);
-    assert!(core.read().await.is_running(HELD_ID));
-    drop(hold);
-    core.write().await.kill(HELD_ID).await.unwrap();
 }
 
 /// The queue granted the launch and forgot the resident; the launch then
@@ -389,7 +372,7 @@ async fn a_launched_model_is_announced_loaded_once_healthy_with_its_port_and_pid
     assert_eq!(admission.target.port, port);
     drop(admission);
 
-    set.recycle(1, &core).await.unwrap();
+    set.recycle(1, &core).await;
     assert_eq!(told.all().last(), Some(&unloaded_while_running(PLACED_ID)));
 }
 

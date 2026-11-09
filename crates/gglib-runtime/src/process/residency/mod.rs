@@ -22,8 +22,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::process::admission::{
-    AdmissionDecision, AdmissionQueue, Candidate, PRIMARY_SLOT, Refusal, Resident, Ticket,
-    launch_timeout,
+    AdmissionDecision, AdmissionQueue, Candidate, PRIMARY_SLOT, Resident, Ticket, launch_timeout,
 };
 use crate::process::core::GuiProcessCore;
 use crate::process::health::check_http_health;
@@ -334,21 +333,6 @@ impl ResidentSet {
                         () = tokio::time::sleep(POLL_TICK) => {}
                     }
                 }
-                // Only an image model is refused outright: every slot it
-                // could take is held by a run, which may last as long as the
-                // run does, so waiting would only time out.
-                AdmissionDecision::Refuse(Refusal::HeldSlot {
-                    held_model,
-                    needed_bytes,
-                    free_bytes,
-                }) => {
-                    return Err(ModelRuntimeError::ImageModelDoesNotFit {
-                        model: model_name,
-                        held_model,
-                        needed_bytes,
-                        free_bytes,
-                    });
-                }
                 AdmissionDecision::Expired => {
                     warn!(
                         model = %model_name,
@@ -416,8 +400,7 @@ impl ResidentSet {
     /// Returns `None` when the resident cannot serve this request after all —
     /// it was launched with a different context size or projector, or it has
     /// stopped answering its health check. Each of these evicts it, so the
-    /// caller's next pass launches a fresh instance — unless a run holds it:
-    /// then it is kept, and this request refused.
+    /// caller's next pass launches a fresh instance.
     async fn serve<'a>(
         &self,
         slot: usize,
@@ -434,7 +417,7 @@ impl ResidentSet {
 
         if resident_match::launched_differently(&resident, request) {
             drop(lease);
-            self.recycle(slot, core).await?;
+            self.recycle(slot, core).await;
             return Ok(None);
         }
 
@@ -445,7 +428,7 @@ impl ResidentSet {
                 "resident model failed health check; recycling degraded instance"
             );
             drop(lease);
-            self.recycle(slot, core).await?;
+            self.recycle(slot, core).await;
             return Ok(None);
         }
 
@@ -553,13 +536,9 @@ impl ResidentSet {
         }
     }
 
-    /// Stop and forget whatever is in `slot`, unless a run holds it.
-    pub(super) async fn recycle(
-        &self,
-        slot: usize,
-        core: &Arc<RwLock<GuiProcessCore>>,
-    ) -> Result<(), ModelRuntimeError> {
-        if let Some(previous) = self.queue.evict_unheld(slot)? {
+    /// Stop and forget whatever is in `slot`.
+    pub(super) async fn recycle(&self, slot: usize, core: &Arc<RwLock<GuiProcessCore>>) {
+        if let Some(previous) = self.queue.evict(slot) {
             // Told before the kill, so a watcher stops looking at the server
             // before it goes.
             self.observer.unloaded(previous.model_id);
@@ -568,7 +547,6 @@ impl ResidentSet {
                 warn!(error = %e, "Failed to stop resident model cleanly, continuing");
             }
         }
-        Ok(())
     }
 
     /// The primary slot's resident, projected as a routing target.
@@ -576,8 +554,8 @@ impl ResidentSet {
         self.queue.primary().map(target_of)
     }
 
-    /// Stop model `model_id` in whichever slot holds it, even one a run
-    /// holds; `false` when no slot does.
+    /// Stop model `model_id` in whichever slot holds it; `false` when no
+    /// slot does.
     ///
     /// An image model a render holds is never emptied under the render: the
     /// render is asked to stop, and this waits, up to
@@ -637,7 +615,7 @@ impl ResidentSet {
         }
     }
 
-    /// Stop the primary resident, if there is one, even one a run holds.
+    /// Stop the primary resident, if there is one.
     ///
     /// By its id, through [`Self::stop_model`]: an image model that swapped
     /// into the primary slot and is drawing is asked to stop and waited for,
@@ -835,9 +813,6 @@ fn target_of(resident: Resident) -> RunningTarget {
 #[path = "announce_tests.rs"]
 mod announce_tests;
 #[cfg(test)]
-#[path = "hold_tests.rs"]
-mod hold_tests;
-#[cfg(test)]
 #[path = "launch_sd_tests.rs"]
 mod launch_sd_tests;
 #[cfg(test)]
@@ -849,6 +824,9 @@ mod plan_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 pub(in crate::process) mod residency_tests;
+#[cfg(test)]
+#[path = "serve_tests.rs"]
+mod serve_tests;
 #[cfg(test)]
 #[path = "stop_model_tests.rs"]
 mod stop_model_tests;

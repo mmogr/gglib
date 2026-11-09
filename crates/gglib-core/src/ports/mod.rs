@@ -71,8 +71,7 @@ pub use download_manager::{DownloadManagerConfig, DownloadManagerPort};
 pub use download_manager_fixture::AskedDownloads;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use generation_gate::{
-    GateError, GateRelease, GateWait, GateWaitObserver, GenerationGate, GenerationTurn, TurnKind,
-    WaitReason,
+    GateError, GateRelease, GateWait, GateWaitObserver, GenerationGate, GenerationTurn, WaitReason,
 };
 pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, NoopGgufParser,

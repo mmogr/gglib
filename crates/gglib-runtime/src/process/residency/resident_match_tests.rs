@@ -7,7 +7,7 @@ use std::path::Path;
 use super::launched_differently;
 use crate::process::admission::{PRIMARY_SLOT, Resident};
 use crate::process::residency::ResidentSet;
-use crate::process::residency::hold_tests::{core, granted, resident, set_with_resident};
+use crate::process::residency::serve_tests::{core, granted, resident, set_with_resident};
 
 const PROJECTOR: &str = "/models/mmproj-F16.gguf";
 

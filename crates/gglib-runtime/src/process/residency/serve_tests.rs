@@ -1,5 +1,6 @@
-//! A resident a run holds is not recycled: the request that would have
-//! recycled it is refused, retryably, and the model stays.
+//! A resident that cannot serve a request is recycled: one launched at
+//! another context, or one that fails its health check, is stopped and its
+//! slot emptied, and the request's count goes back.
 
 use super::*;
 use crate::process::RuntimeBinaries;
@@ -72,58 +73,36 @@ pub(super) fn core() -> Arc<RwLock<GuiProcessCore>> {
 }
 
 /// What a `Serve` leaves for `serve` to claim: a request counted against
-/// `qwen`'s slot. Counted past the queue, where a held model's request waits.
+/// `qwen`'s slot, as `poll` counts it.
 pub(super) fn granted(set: &ResidentSet) {
     let counted = set.queue().lease(PRIMARY_SLOT).expect("qwen is resident");
     counted.disarm();
 }
 
-fn inflight(set: &ResidentSet) -> u32 {
-    set.queue().slot(PRIMARY_SLOT).map_or(0, |r| r.inflight)
-}
-
 #[tokio::test]
-async fn a_request_at_another_context_is_refused_while_the_model_is_held() {
-    let port = dead_port();
-    let set = set_with_resident(port);
-    let hold = set.queue().hold(port, 1).unwrap();
+async fn a_request_at_another_context_recycles_the_model() {
+    let set = set_with_resident(dead_port());
 
-    granted(&set);
-    let refused = set
-        .serve(PRIMARY_SLOT, (1, 8192, None), &core())
-        .await
-        .unwrap_err();
-
-    assert!(matches!(refused, ModelRuntimeError::AdmissionTimeout(_)));
-    assert_eq!(refused.suggested_status_code(), 503);
-    assert!(set.queue().slot(PRIMARY_SLOT).is_some(), "the model stays");
-    assert_eq!(inflight(&set), 0, "the refused request's count is released");
-
-    drop(hold);
     granted(&set);
     let recycled = set
         .serve(PRIMARY_SLOT, (1, 8192, None), &core())
         .await
         .unwrap();
-    assert!(recycled.is_none());
-    assert!(
-        set.queue().slot(PRIMARY_SLOT).is_none(),
-        "recycled once free"
-    );
+
+    assert!(recycled.is_none(), "the next pass launches it again");
+    assert!(set.queue().slot(PRIMARY_SLOT).is_none(), "recycled");
 }
 
 #[tokio::test]
-async fn a_failed_health_check_does_not_recycle_a_held_model() {
-    let port = dead_port();
-    let set = set_with_resident(port);
-    let _hold = set.queue().hold(port, 1).unwrap();
+async fn a_failed_health_check_recycles_the_model() {
+    let set = set_with_resident(dead_port());
 
     granted(&set);
-    let refused = set
+    let recycled = set
         .serve(PRIMARY_SLOT, (1, 4096, None), &core())
         .await
-        .unwrap_err();
+        .unwrap();
 
-    assert!(refused.is_retryable());
-    assert!(set.queue().slot(PRIMARY_SLOT).is_some(), "the model stays");
+    assert!(recycled.is_none(), "the next pass launches it again");
+    assert!(set.queue().slot(PRIMARY_SLOT).is_none(), "recycled");
 }

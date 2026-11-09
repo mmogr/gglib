@@ -153,26 +153,3 @@ async fn image_model_incomplete_is_a_400_naming_every_missing_role() {
         assert!(message.contains(named), "{named} missing from {message}");
     }
 }
-
-/// No room beside a held model is the one image refusal worth retrying: a
-/// 503 with Retry-After, naming the held model and the bytes.
-#[tokio::test]
-async fn image_model_does_not_fit_is_a_retryable_503_naming_the_held_model() {
-    const GIB: u64 = 1024 * 1024 * 1024;
-    let (status, body, retry_after) = image_refusal(ModelRuntimeError::ImageModelDoesNotFit {
-        model: "flux1-schnell".to_owned(),
-        held_model: "qwen3-27b".to_owned(),
-        needed_bytes: Some(28 * GIB),
-        free_bytes: Some(9 * GIB),
-    })
-    .await;
-
-    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert!(retry_after, "a hold ends; the client may come back");
-    assert_eq!(body["error"]["type"], "service_unavailable");
-    assert_eq!(body["error"]["code"], "image_model_does_not_fit");
-    let message = body["error"]["message"].as_str().unwrap();
-    for named in ["'flux1-schnell'", "'qwen3-27b'", "28.00 GiB", "9.00 GiB"] {
-        assert!(message.contains(named), "{named} missing from {message}");
-    }
-}

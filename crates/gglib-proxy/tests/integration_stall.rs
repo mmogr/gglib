@@ -13,8 +13,8 @@
 //!
 //! A person who stops reading the stalled answer does not change this: the
 //! stream still ends at the idle bound as a stall, and asks for the recycle
-//! the next request needs. An agent run that holds the model does: the
-//! recycle waits for it.
+//! the next request needs. A runtime that refuses the recycle does: the
+//! request for it stays standing.
 
 mod fixtures;
 
@@ -236,19 +236,19 @@ async fn a_stalled_answer_its_reader_stopped_still_leaves_the_next_request_to_th
     cancel.cancel();
 }
 
-/// A recycle that meets a run's hold is not carried out, and stays asked for:
-/// the first request after the run ends carries it out (#1212).
+/// A recycle the runtime refuses is not carried out, and stays asked for:
+/// the first idle request after the refusal ends carries it out (#1212).
 #[tokio::test]
-async fn a_recycle_waits_for_the_run_that_holds_the_model() {
+async fn a_refused_recycle_stays_asked_for() {
     let cancel = CancellationToken::new();
     // The cache is off, so nothing is ever saved into this directory.
     let (port, upstream) = spawn_upstream(std::env::temp_dir(), cancel.clone()).await;
     let runtime = Arc::new(StallRuntime::new(port, Arc::clone(&upstream), false));
-    runtime.held.store(true, Ordering::SeqCst);
+    runtime.refusing.store(true, Ordering::SeqCst);
     let base = spawn_proxy(Arc::clone(&runtime), None, cancel.clone()).await;
 
-    // The first stalls and asks for a recycle; the second finds the model
-    // held, so it goes to the wedged server and gives up there.
+    // The first stalls and asks for a recycle; the second finds it refused,
+    // so it goes to the wedged server and gives up there.
     read_body(ask(&base, "first").await).await;
     status_when_idle(&base).await;
     let (_, codes) = text_and_errors(&read_body(ask(&base, "second").await).await);
@@ -258,7 +258,7 @@ async fn a_recycle_waits_for_the_run_that_holds_the_model() {
         "the model stays"
     );
 
-    runtime.held.store(false, Ordering::SeqCst);
+    runtime.refusing.store(false, Ordering::SeqCst);
     status_when_idle(&base).await;
     let (answer, codes) = text_and_errors(&read_body(ask(&base, "third").await).await);
     assert_eq!(answer, "fresh", "the recycled model answered it");

@@ -301,7 +301,7 @@ crates/gglib-runtime/src/ports_impl/llm_completion/retry/classify_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/turn_tests.rs 344
-crates/gglib-runtime/src/process/admission/gate_tests.rs 585
+crates/gglib-runtime/src/process/admission/gate_tests.rs 617
 crates/gglib-runtime/src/process/admission/queue_tests.rs 1045
 crates/gglib-runtime/src/process/admission/snapshot_tests.rs 355
 crates/gglib-runtime/src/process/admission/state.rs 801
@@ -322,8 +322,8 @@ crates/gglib-runtime/src/proxy/supervisor.rs 504
 crates/gglib-runtime/src/sd/install/install_tests.rs 320
 crates/gglib-runtime/src/sd/install/release_tests.rs 350
 crates/gglib-runtime/src/sd/server/job.rs 396
-crates/gglib-runtime/src/sd/server/job_leave_tests.rs 537
-crates/gglib-runtime/src/sd/server/job_tests.rs 1105
+crates/gglib-runtime/src/sd/server/job_leave_tests.rs 565
+crates/gglib-runtime/src/sd/server/job_tests.rs 1119
 crates/gglib-runtime/src/server_config_tests.rs 311
 crates/gglib-runtime/src/system/gpu.rs 331
 crates/gglib-runtime/src/system/mod.rs 659

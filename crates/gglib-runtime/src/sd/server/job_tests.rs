@@ -17,9 +17,10 @@ use gglib_core::domain::{
     SecondarySlotDecision,
 };
 use gglib_core::ports::{
-    Admission, AdmitObserver, CatalogError, GenerationGate, GenerationTurn, ImageError,
-    ImageGenerationPort, ImageProgress, ImageRequest, ImageSize, ImageStage, InMemorySettings,
-    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
+    Admission, AdmissionLease, AdmitObserver, CatalogError, GenerationGate, GenerationTurn,
+    ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageSize, ImageStage,
+    InMemorySettings, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelSummary,
+    RunningTarget,
 };
 use gglib_core::settings::Settings;
 use tokio::sync::mpsc;
@@ -119,6 +120,11 @@ struct Host {
     queued_first: Option<usize>,
     log: Arc<Mutex<Vec<String>>>,
     installed: bool,
+    /// A model that takes the image model's slot as soon as a retire empties
+    /// it, before anything waiting can run.
+    arriving: Mutex<Option<Resident>>,
+    /// The request in flight on the model that arrived.
+    newcomer: Mutex<Option<AdmissionLease>>,
 }
 
 impl Host {
@@ -129,6 +135,8 @@ impl Host {
             queued_first: None,
             log: Arc::default(),
             installed: true,
+            arriving: Mutex::new(None),
+            newcomer: Mutex::new(None),
         })
     }
 
@@ -216,6 +224,12 @@ impl RenderHost for Host {
             .lock()
             .unwrap()
             .push(format!("retired, slot {after:?}"));
+        let arriving = self.arriving.lock().unwrap().take();
+        if let Some(resident) = arriving
+            && after.is_none()
+        {
+            *self.newcomer.lock().unwrap() = Some(self.queue.install(SLOT, resident));
+        }
     }
 
     fn stop_asked(&self, model_id: u32) -> bool {

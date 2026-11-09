@@ -1,16 +1,14 @@
 //! A turn on one of this machine's models goes through this machine's
 //! endpoint: to the door's root, with its key, naming the model by its
-//! catalogue id. It holds nothing, and its turns say the context its model
-//! was launched with. The endpoint is turned on when it is off; one whose
+//! catalogue id. Its turns say the context its model was launched with. The endpoint is turned on when it is off; one whose
 //! port another process holds refuses the turn in its own words.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use gglib_core::domain::agent::{AgentEvent, MADE_KEYS, TurnUsage};
 use gglib_core::ports::{
-    Admission, AdmissionLease, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget,
+    Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget,
 };
 use gglib_runtime::Door;
 use gglib_runtime::proxy::ProxyStatus;
@@ -30,11 +28,10 @@ use crate::state::AppState;
 const PORT: u16 = 19_555;
 
 /// A runtime whose primary slot holds `primary`, by its port and id,
-/// launched at a context of 8192. It counts the holds asked of it.
+/// launched at a context of 8192.
 #[derive(Debug, Default)]
 struct Primary {
     primary: Option<(u16, u32)>,
-    holds: AtomicUsize,
 }
 
 #[async_trait]
@@ -66,11 +63,6 @@ impl ModelRuntimePort for Primary {
 
     async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
         Ok(false)
-    }
-
-    fn hold(&self, _port: u16, _model_id: u32) -> Option<AdmissionLease> {
-        self.holds.fetch_add(1, Ordering::SeqCst);
-        None
     }
 }
 
@@ -141,15 +133,13 @@ async fn a_model_without_a_quantisation_has_none() {
 }
 
 /// Once its model is loaded the turn reads the context it was launched with,
-/// for the size its turns report (#1272), and takes no hold: the endpoint
-/// admits each request.
+/// for the size its turns report (#1272).
 #[tokio::test]
-async fn a_turn_reports_its_models_launched_context_and_holds_nothing() {
+async fn a_turn_reports_its_models_launched_context() {
     let runtime = Arc::new(Primary::default());
     let (_dir, mut state, id) = on(&runtime).await;
     let primary = Arc::new(Primary {
         primary: Some((PORT, as_u32(id))),
-        ..Primary::default()
     });
     Arc::get_mut(&mut state).expect("not yet shared").runtime =
         Arc::clone(&primary) as Arc<dyn ModelRuntimePort>;
@@ -157,7 +147,6 @@ async fn a_turn_reports_its_models_launched_context_and_holds_nothing() {
     let upstream = endpoint(&state, &turn(), served(id), door()).await.unwrap();
 
     assert_eq!(upstream.made_by.context_size, Some(8192));
-    assert_eq!(primary.holds.load(Ordering::SeqCst), 0, "a hold was taken");
 }
 
 /// The primary slot's context is another model's unless both its port and
@@ -168,10 +157,7 @@ async fn another_model_in_the_primary_slot_gives_no_context() {
     let (_dir, mut state, id) = on(&runtime).await;
     let other = as_u32(id) + 1;
     for primary in [Some((PORT, other)), Some((PORT + 1, as_u32(id))), None] {
-        Arc::get_mut(&mut state).expect("not yet shared").runtime = Arc::new(Primary {
-            primary,
-            ..Primary::default()
-        });
+        Arc::get_mut(&mut state).expect("not yet shared").runtime = Arc::new(Primary { primary });
 
         let upstream = endpoint(&state, &turn(), served(id), door()).await.unwrap();
 
@@ -188,7 +174,6 @@ async fn a_hub_chats_turn_saves_its_models_launched_context() {
     let (_dir, mut state, id) = on(&runtime).await;
     Arc::get_mut(&mut state).expect("not yet shared").runtime = Arc::new(Primary {
         primary: Some((PORT, as_u32(id))),
-        ..Primary::default()
     });
     let chat = conversation(&state).await;
     let reply = vec![

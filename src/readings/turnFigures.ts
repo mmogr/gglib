@@ -135,7 +135,7 @@ export type ArrivingPhase = 'Waiting for the model' | 'Reading the prompt' | 'St
 
 /**
  * The arrival line's words. A wait is the daemon's own sentence, verbatim
- * ("Loading Qwen3-4B… 12 s", "Waiting for an image render, step 3 of 20"),
+ * ("Loading Qwen3-4B… 12 s"),
  * and one from a daemon too old to word it says only that the reply waits.
  * A wait is said only until the model reads the prompt: a prompt reading
  * that comes after it takes it off the turn, so one still there is the

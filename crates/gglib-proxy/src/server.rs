@@ -945,9 +945,8 @@ async fn attempt(
 /// something only before the calling request registers its own connection.
 /// With `--parallel 1` a request in flight owns the only slot, and a stop
 /// would kill its live generation. The `&&` leaves the request untaken when
-/// busy, for the next request that finds the upstream idle. An agent run is
-/// not in the registry; it holds the model instead, and `recycle_current`
-/// refuses while it does, so the request is re-armed for later (#1212).
+/// busy, for the next request that finds the upstream idle. A recycle the
+/// runtime refuses is re-armed for later (#1212).
 async fn recycle_if_asked_and_idle(state: &AppState) {
     if !(state.dashboard.connections.is_empty() && state.upstream_health.take_recycle_request()) {
         return;
@@ -955,8 +954,8 @@ async fn recycle_if_asked_and_idle(state: &AppState) {
     warn!("upstream watchdog: recycling degraded model before next request");
     // Taking the request already cleared the flag and zeroed the streak, so a
     // swallowed failure here spends the watchdog's entire case against a
-    // server that is still sick. Put it back instead. With gglib's runtime the
-    // failure is a run's hold: a kill that fails is logged, the slot emptied.
+    // server that is still sick. Put it back instead. gglib's own runtime
+    // never refuses: a kill that fails is logged, the slot emptied.
     if let Err(e) = state.runtime_port.recycle_current().await {
         warn!(
             error = %e,

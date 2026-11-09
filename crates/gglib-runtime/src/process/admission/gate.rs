@@ -12,7 +12,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use gglib_core::ports::{
     AdmissionLease, GateError, GateRelease, GateWaitObserver, GenerationGate, GenerationTurn,
-    TurnKind,
 };
 use tokio::time::Instant;
 
@@ -32,21 +31,12 @@ struct QueueGate(Arc<AdmissionQueue>);
 
 #[async_trait]
 impl GenerationGate for QueueGate {
-    async fn llm_turn(
-        &self,
-        observer: Option<Arc<dyn GateWaitObserver>>,
-    ) -> Result<GenerationTurn, GateError> {
-        self.0.wait_for_turn(TurnKind::Llm, None, observer).await
-    }
-
     async fn render_turn(
         &self,
         lease: AdmissionLease,
         observer: Option<Arc<dyn GateWaitObserver>>,
     ) -> Result<GenerationTurn, GateError> {
-        self.0
-            .wait_for_turn(TurnKind::Render, Some(lease), observer)
-            .await
+        self.0.wait_for_turn(lease, observer).await
     }
 }
 
@@ -71,20 +61,15 @@ impl AdmissionQueue {
         Arc::new(QueueGate(Arc::clone(self)))
     }
 
-    /// Wait for a turn of `kind`, holding `lease` (a render's) meanwhile.
+    /// Wait for a render's turn, holding its `lease` meanwhile.
     async fn wait_for_turn(
         self: &Arc<Self>,
-        kind: TurnKind,
-        lease: Option<AdmissionLease>,
+        lease: AdmissionLease,
         observer: Option<Arc<dyn GateWaitObserver>>,
     ) -> Result<GenerationTurn, GateError> {
         let queued = QueuedTurn {
             queue: self,
-            ticket: self.lock().gate_enqueue(
-                kind,
-                lease.as_ref().map(AdmissionLease::slot),
-                Instant::now(),
-            ),
+            ticket: self.lock().gate_enqueue(lease.slot(), Instant::now()),
         };
         let mut told = None;
         loop {
@@ -98,7 +83,7 @@ impl AdmissionQueue {
             match verdict {
                 GateVerdict::Granted { id } => {
                     let owner = Arc::clone(self) as Arc<dyn GateRelease>;
-                    return Ok(GenerationTurn::new(owner, id, kind, lease));
+                    return Ok(GenerationTurn::new(owner, id, lease));
                 }
                 GateVerdict::Stalled(waited) => return Err(GateError::Stalled(waited)),
                 // The lease drops with this, on a slot the Stop has not

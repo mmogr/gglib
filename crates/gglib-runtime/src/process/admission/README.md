@@ -31,7 +31,7 @@ Three rules, and they compose to bound the wait:
 |---|---|
 | Global FIFO | The oldest waiting request decides which model is up next, so a model with a hundred requests behind it cannot bury one with a single older request |
 | [`DRAIN_QUANTUM`] | A turn ends once it has run this long with a rival waiting — or immediately, if nothing is left queued for the turn holder |
-| `SERVER_PARALLEL` | A resident model is admitted at most this many requests at once, matching what its llama-server can actually start; a run's hold counts as one |
+| `SERVER_PARALLEL` | A resident model is admitted at most this many requests at once, matching what its llama-server can actually start |
 
 The first two decide *whose* turn it is. The third is what makes a turn able to
 end at all, and it is worth being exact about why.
@@ -63,7 +63,7 @@ in flight, and which of the woken requesters claims that instant is a race.
 What none of this covers is a single generation that simply runs for a very long
 time — it is indivisible, so the rival behind it waits. While that generation is
 still streaming the wait is not a stall: the proxy reports progress on its lease
-every few seconds, and an agent run on its hold. [`ADMISSION_DEADLINE`] is the
+every few seconds. [`ADMISSION_DEADLINE`] is the
 backstop for one that has gone quiet: the request gives up and gets a 503 with
 `Retry-After`, and the caller controls its own backoff from there.
 
@@ -76,21 +76,6 @@ waiter, which is exactly the hog-or-wedge case the backstop exists for.
 
 This is why admission returns a lease rather than just a target — see
 [`AdmissionLease`](gglib_core::ports::AdmissionLease).
-
-A run that talks to llama-server's port directly (an agent run) takes a
-*hold* instead (`hold.rs`): while held, the resident is neither swapped out
-nor recycled, and the hold counts as one request against its
-`SERVER_PARALLEL` capacity, though it takes no lease. An explicit stop, or the
-proxy's restart of a dead server, still takes it. A request for the held model
-waits here, visible and ordered, for the whole run, as long as the run reports
-progress; one that waits through a run quiet for the whole deadline (a long
-prefill sends no events) gets the ordinary stall 503. When the hold drops it is
-served, and one at another context is recycled then. A rival that only a held
-slot could take is passed over at the front of the line, so
-it never blocks a request for another model that could go; it waits until its
-own [`ADMISSION_DEADLINE`] and then gets the ordinary stall 503, which does not
-mention the hold. An image model in that position is refused at once instead
-([`Refusal::HeldSlot`]), naming the held model.
 
 # Two slots
 
@@ -112,40 +97,40 @@ program serves a request in its [`Candidate`].
 One image model is loaded at a time. While another image model is in a slot,
 loaded or still loading, that slot is the only one an image model may use: it
 swaps in there once that model is idle, and waits while it renders or loads.
-It never loads beside it and never evicts the chat model to do so, and a chat
-model a run holds does not refuse one that fits there. A slot that is loading
-names its runtime for this.
+It never loads beside it and never evicts the chat model to do so. A slot that
+is loading names its runtime for this.
 
 A swap into that slot, or into the primary, is made only when the image model
 fits in the memory the model it replaces gives back: the memory check's free
 reading with that model's weights added back. With nothing loaded or loading
 beside the other image model there is nothing to share memory with, so the
 newcomer replaces it whatever the budget, as on a cold daemon. One too large for its
-place is refused at once when a run holds the chat model, since it would need
-that memory too. With the chat model idle, nothing evicts both, so it waits:
-like a waiter for a held slot it is passed over at the front of the line, so
-the chat model keeps serving and other requests go, and it gets the ordinary
-stall 503 at its deadline.
+place waits, since nothing evicts both: it is passed over at the front of the
+line, so the chat model keeps serving and other requests go, and it gets the
+ordinary stall 503 at its deadline.
 
 # The generation gate
 
 Residency says which models are loaded; the gate says which of them may
 generate (`state_gate.rs` for the rules, `gate.rs` for the waiting). An image
-render on `sd-server` needs the GPU to itself, LLM generations may share it,
-and the queue hands out turns first come first served, in one order with the
-tickets above. A render starts once no LLM turn is in flight and nothing
-asked before it; LLM turns, and llama-server serves and launches, wait while a
-render holds the GPU or waits ahead of them, so a stream of chats cannot
-starve it.
+render on `sd-server` needs the GPU to itself, LLM generations may share it.
+Only renders take turns: they wait in the gate's line, first come first
+served among themselves, in one arrival order with the tickets above. A
+render starts once no LLM request is in flight, no render holds the GPU and
+none asked before it. A llama-server serve or launch, which is how every
+chat reaches the GPU, waits as a ticket while a render holds the GPU or
+waits ahead of it, so a stream of chats cannot starve a render.
 
-Only requests on llama-server residents count as LLM turns. A render takes its
-`sd-server` lease first and gives it to the turn, so its own lease never holds
-it back, and requests for an `sd-server` resident skip the gate on the fast
-path. A hold is not a turn either: it takes no lease, so a run's own render
-does not wait on it. Tickets waiting for a slot are not turns: an older chat
-waiting to evict the slot a waiting render pins would otherwise wait on the
-render while the render waited on it, the self-wait shape of
-[#721](https://github.com/mmogr/gglib/issues/721) in another form.
+The LLM requests in flight are the leases on llama-server residents. A render
+takes its `sd-server` lease first and gives it to the turn, so its own lease
+never holds it back, and requests for an `sd-server` resident skip the gate on
+the fast path. Tickets are not turns, so a render does not wait for a chat
+that has not been served yet: an older chat waiting to evict the slot a
+waiting render pins would otherwise wait on the render while the render waited
+on it, the self-wait shape of
+[#721](https://github.com/mmogr/gglib/issues/721) in another form. It follows
+that a render can start ahead of an older chat still waiting behind the
+render before it, when the render asks first once that render ends.
 
 A render step is progress, so nobody behind a long render reaches
 [`ADMISSION_DEADLINE`] while it keeps stepping, and a gate waiter expires
@@ -157,13 +142,13 @@ model, then the turn ends. A person's Stop on an image model a render holds
 goes the same way: `ask_render_stop` notes it and empties nothing; a render
 still waiting for its turn leaves the line with its lease, and the driver of
 one that is drawing reads `render_stop_asked` at its next look at the job and
-retires it. Requests through the proxy take leases and so count
-already; the callers that take explicit turns arrive with image drawing.
+retires it. Chat requests through the proxy take leases and so count as they
+are served.
 
 The dashboard reads the gate as `AdmissionSnapshot::generation`: the render
-holding it (its image model, step and total), the LLM turns in flight, and how
-many callers wait for a turn, so a chat held behind a render is seen waiting
-for its turn rather than for a slot.
+holding it (its image model, step and total), the LLM requests in flight, and
+how many renders wait for a turn. A chat held behind a render waits in the
+queue as a ticket.
 
 # What this module is not responsible for
 

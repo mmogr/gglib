@@ -28,9 +28,6 @@ struct Recorded {
     /// in: the model by the catalogue's name, how long it has taken, and
     /// the sentence it is shown as.
     model_load: Value,
-    /// A turn's wait behind an image render, second in line, with the
-    /// sentence it is shown as.
-    image_render: Value,
     list: RunList,
 }
 
@@ -148,7 +145,6 @@ fn recorded() -> Recorded {
             .map(|event| serde_json::to_value(event).unwrap())
             .collect(),
         model_load: serde_json::to_value(AgentEvent::model_load_wait("Qwen3-4B", 1_000)).unwrap(),
-        image_render: serde_json::to_value(AgentEvent::image_render_wait(3, 20, 2)).unwrap(),
         list,
     }
 }
