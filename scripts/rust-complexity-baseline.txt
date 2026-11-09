@@ -326,6 +326,6 @@ crates/gglib-runtime/src/sd/server/job_leave_tests.rs 537
 crates/gglib-runtime/src/sd/server/job_tests.rs 1105
 crates/gglib-runtime/src/server_config_tests.rs 311
 crates/gglib-runtime/src/system/gpu.rs 331
-crates/gglib-runtime/src/system/mod.rs 657
+crates/gglib-runtime/src/system/mod.rs 659
 crates/gglib-runtime/src/unified_server_config.rs 465
 src-tauri/src/tray/icon.rs 367
