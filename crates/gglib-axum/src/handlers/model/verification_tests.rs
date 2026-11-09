@@ -175,6 +175,7 @@ async fn verify_answers_the_report_of_a_healthy_download() {
         "model_id": id,
         "overall_health": "healthy",
         "shards": [shard],
+        "damage": null,
         "verified_at": null,
     });
     assert_eq!(body, json!({ "report": report }));

@@ -13,12 +13,14 @@
  */
 
 import { useState, type FC } from 'react';
+import { CopyValue } from '../../components/CopyValue';
 import { Select } from '../../components/ui/Select';
 import type { GgufModel, InferenceProfile, LaunchExplanation, ModelDetail } from '../../types';
 import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import { caveats, describePublished } from '../../utils/samplingProvenance';
 import type { SheetField } from '../loadOptions';
 import { CHANGEABLE, Change, reset, type Update } from './Change';
+import { commandLine } from './commandLine';
 import { LaunchLine } from './LaunchLine';
 import { Row } from './Row';
 import {
@@ -157,7 +159,12 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
   return (
     <section aria-label="How it runs" className="flex flex-col gap-xs">
       <Caption title="How it runs" aside={chosenBy(plan.args)} />
-      <LaunchLine plan={plan} onChange={onChangeToken} />
+      <div className="flex items-start gap-xs">
+        <div className="min-w-0 flex-1">
+          <LaunchLine plan={plan} onChange={onChangeToken} />
+        </div>
+        <CopyValue value={commandLine(plan)} label="Copy as command" />
+      </div>
       <dl className="m-0">
         {rows.map((row) => (
           <Row

@@ -10,7 +10,7 @@ so every caller of the loop does those alike. The limits are resolved by
 core's `TurnLimits::resolve`, which the CLI's `chat` and `q` call too: the
 iteration limit the request names, then the one its chat's settings saved
 (put in the request's place by `hub_turn::plan` for a turn on a hub chat and by
-`run::plan` for the page's run, as the CLI's resume puts it in its flag's),
+for this machine's own turn, as the CLI's resume puts it in its flag's),
 then this machine's stored `max_tool_iterations`, then the default; and the
 stored `max_stagnation_steps`, which no request names. So a client that
 sends no iteration limit, as the chat page and a paired device do, runs with
@@ -45,7 +45,7 @@ most recent drawn picture, on the message that followed it
 adapter and held by no row or event); a model that does not is sent none and
 is not refused for it. The tools a filter names are not offered to
 such a run at any point. That holds for every run composed here with
-`draw`: the page's, a device's turn, and a chat run with builtins. Without
+`draw`: this machine's turn, a device's turn, and a chat run with builtins. Without
 `draw` the tool is in no list and
 cannot be called, `tool_filter: null` included. Both doors first ask
 `compose::refuse_unavailable_drawing`, before a slot is taken or a row
@@ -151,23 +151,24 @@ Axum drops the SSE response and therefore the [`guard::AgentTaskGuard`] stream
 wrapper. Its [`Drop`] impl calls [`tokio::task::JoinHandle::abort`], which cancels the
 spawned `AgentLoop` task at its next `await` point — immediately stopping
 LLM token generation and any in-flight tool calls without leaking compute
-or resources. An agent run (`run.rs`, `PUT /api/runs/{id}?kind=agent`)
-runs the same prepared loop detached from any response, so only cancel or
-shutdown stops it, and saves the transcript to the request's conversation,
+or resources. An agent run, this machine's turn at
+`PUT /api/runs/{id}?kind=agent` or a device's at the proxy's door, runs the
+same prepared loop detached from any response (`run::work`), so only cancel
+or shutdown stops it, and saves the transcript to its conversation,
 through `gglib_app_services::transcript`, the one writer of a turn's rows,
 which the CLI's chat saves through too.
-Before it takes a slot, its messages' images, history included, are checked
-by their sizes alone (`AttachmentService::check_request`): an id not stored
-is `400 attachment_not_found`, and images over 16 MiB together `400
-request_images_too_large`, on this machine's model or the paired machine's,
-whose images are read here too.
+Before it takes a slot, the images of the turn and of the history it
+rebuilds are checked by their sizes alone (`AttachmentService::check_request`):
+an id not stored is `400 attachment_not_found`, and images over 16 MiB
+together `400 request_images_too_large`, on this machine's model or the
+paired machine's, whose images are read here too.
 A local run holds its model until it ends (`remote_upstream::hold`), so no
 proxy request swaps it out or recycles it mid-run, and the proxy's stall
 watchdog waits for the run to end; a person's stop does not. A llama-server
 that goes silent mid-reply for five minutes, the proxy's own idle bound, ends
 the run with an error (one that never sends headers ends it at the ten-minute
-send timeout), so a silent server cannot keep the hold. `launch` reserves the id
-in the caller's scope, refuses a run on another machine than the one its
+send timeout), so a silent server cannot keep the hold. A turn's run
+(`launch::launch_turn`, then `launch::begin_writes`) refuses a run on another machine than the one its
 conversation ran on (a `409`: a chat's machine is fixed for its life, and a
 paired machine is told apart by its fingerprint), saves the user's message,
 names the run's model on the
@@ -180,21 +181,19 @@ its run said, and starts the loop.
 # The Thinking choice
 
 Core's `gglib_core::domain::thinking::settle` is the one rule for it, read at
-every door a turn comes through: a device's turn (`hub_turn::plan`), which is
-also how the page's turn on a paired machine arrives there, and this
-machine's own run (`run::plan`). The CLI reads its chat by the same rule,
+every door a turn comes through: `hub_turn::plan` reads a device's turn,
+which is also how the page's turn on a paired machine's own chat arrives
+there, and this machine's own. The CLI reads its chat by the same rule,
 with `gglib chat --thinking` as what the turn says. A turn says `off`,
 `default` or nothing. `off` runs it with a
 thinking budget of `0` and the conversation remembers; `default` runs it with
 the request's own `reasoning_budget_tokens` and the conversation forgets;
 nothing runs it as the conversation remembers, and a remembered `off` beats
-the request's own budget, which a device's turn never has and the page's run
-carries once one is set in its agent limits (Tools ▸ › Agent limits…). A request's own budget and
-effort level are never remembered. What is remembered is
-`ConversationSettings.thinking`,
-written by `launch` beside the run's model, so a refused run, or a repeated
-id that starts nothing, writes nothing, and a run with no conversation
-applies what it said and remembers nothing. The write is
+the request's own budget, which no turn has: only the chat route's request
+names one. A request's own budget and effort level are never remembered.
+What is remembered is `ConversationSettings.thinking`, written by
+`launch::begin_writes` beside the run's model, so a refused run, or a
+repeated id that starts nothing, writes nothing. The write is
 `gglib_app_services::transcript::remember_thinking`, which the CLI's chat
 remembers a named choice through too.
 
@@ -202,27 +201,25 @@ remembers a named choice through too.
 
 A chat's folder is where gglib's own file tools (`builtin:read_file`,
 `builtin:list_directory`, `builtin:grep_search`) read in its runs; a run
-with none is not offered them. Only this machine's page names one: the
-run's body says `folder` on the run that changes it, an absolute path to a
+with none is not offered them. Only this machine's own turn names one: its
+body says `folder` on the turn that changes it, an absolute path to a
 folder on this machine to set it, or `""` to forget it, and says nothing
-otherwise. `run::plan` settles it before a slot is taken: `""` forgets it
+otherwise. `run::settle_folder` settles it in `hub_turn::plan`, before a slot is taken: `""` forgets it
 unchecked; a path goes through core's `folder::chosen` (absolute, exists,
 a folder) and is the run's by its canonical path, refused `400
 folder_unusable` when it fails; and with nothing said the run reads the
 folder the conversation remembers, checked again and refused `409
 folder_missing` when it is gone. Either refusal writes nothing. The
-canonical path is what `launch` writes to `ConversationSettings.folder`
-beside the Thinking choice
+canonical path is what `launch::begin_writes` writes to
+`ConversationSettings.folder` beside the Thinking choice
 (`gglib_app_services::transcript::remember_folder`), so what the page shows
-is what is read. Without a `conversation_id` a path is that run's alone and
-`""` is the same as saying nothing. The decision is
+is what is read. The decision is
 [ADR 0023](../../../../../docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md).
 
 `compose::prepare_over` passes the folder to `compose_agent_loop` as the
 file tools' root, whose descriptions name it, and `compose::with_folder`
 adds the three qualified names to a tool filter that lists names; `[]`, a
-model that calls no tool, stays `[]`, and `null` admits them already. This
-machine's own turn through `hub_turn` settles its folder the same way. The
+model that calls no tool, stays `[]`, and `null` admits them already. The
 chat route (`POST /api/agent/chat`) and every turn a paired device sends
 pass no folder, whatever the conversation remembers: a device's turn calls
 no tool of this machine's but the image tool its Draw asks for and the
@@ -289,8 +286,17 @@ the name the chat stored, which is that machine's; with neither, it is
 
 `hub_turn::start` takes the turn's scope, and `RunScope::Local` is this
 machine's own turn on one of its chats, the same `HubTurn` read the same
-way, reserved before its model and saved alike. No route sends one yet. It
-differs from a device's in three things only:
+way, reserved before its model and saved alike. The page sends it at
+`PUT /api/runs/{id}?kind=agent` (`hub_turn::start_local`) as a `LocalTurn`:
+a `HubTurn`, key for key, and `folder`, and any other key refused `400
+invalid_request` in fixed words that quote nothing of the body. So the page
+names no history, port, model, tool filter or limit: the history is
+`saved_history` over the chat's rows, the model is the one the chat saved
+(`PUT /api/conversations/{id}` when the page's picker changes it, or the
+conversation's `model` when it is made), and the tools and limits are its
+settings'. The history the page used to send is pinned against
+`saved_history` by `contracts/chats/history.json`. It differs from a
+device's in three things only:
 
 - **Model.** A chat that stored the paired machine's model runs there
   (`hub_model::paired`): the chat request names it as `far`, the late step
@@ -307,9 +313,9 @@ differs from a device's in three things only:
   enabled servers it reads (`McpService::start_enabled`): every one, or
   only those whose ids the chat's list names when it names each tool as
   `{id}:{tool}`, and none when it calls no tool. The image tool and the
-  file tools are added as the loop is composed, as for the page's run.
+  file tools are added as the loop is composed.
 - **Folder.** The turn may say the chat's folder, settled by
-  `run::settle_folder` as the page's run settles it: `folder_unusable` and
+  `run::settle_folder`: `folder_unusable` and
   `folder_missing` before anything runs, the canonical path remembered once
   the run starts, and the file tools reading there. A device's turn has no
   folder: `HubTurn` names none, and `plan` refuses one said in its scope
@@ -333,8 +339,9 @@ the device's scope whose `frames` say `agent`.
 The run exists before its model does (`launch::launch_turn`). The `PUT`
 reads the turn, takes a slot, reserves the run and answers; finding or
 loading the model, composing the loop, holding the model and writing the
-turn's rows (`launch::begin_writes`, which the page's run calls at its
-reservation) are the run's own work. A cold load, or a load queued behind an
+turn's rows (`launch::begin_writes`) are the run's own work. The test
+driver `launch::launch` (test builds only, until the old door is retired)
+prepares a loop first and runs it through the same writes and work. A cold load, or a load queued behind an
 image render, is then a `waiting` event (`model_load`) in the run's log, not
 a `PUT` that hangs past the bound a device or the tunnel gives it. What is
 refused once the run exists ends it `failed`: `model_not_found`, naming

@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-High-level interactive UI primitives: `Button`, `IconButton`, `Menu`, `Tabs`, `Chip`, `Banner`, `Checkbox`, `Input`, `SecretInput`, `SecretField`, `Modal`, `Select`, `Textarea`, `Icon`, and `ConfirmDialog`. Built on Radix UI primitives and styled with Tailwind design tokens. Every clickable or form-input element in the app uses components from here — enforced by ESLint (`no-restricted-syntax` bans raw `<button>`/checkbox inputs outside this directory).
+High-level interactive UI primitives: `Button`, `IconButton`, `Menu`, `Tabs`, `Chip`, `Banner`, `Checkbox`, `Input`, `SecretInput`, `SecretField`, `Modal`, `Select`, `Textarea`, `Icon`, `ConfirmDialog`, and `Listbox`. Built on Radix UI primitives and styled with Tailwind design tokens. Every clickable or form-input element in the app uses components from here — enforced by ESLint (`no-restricted-syntax` bans raw `<button>`/checkbox inputs outside this directory).
 
 ## Key Files
 
@@ -23,6 +23,7 @@ High-level interactive UI primitives: `Button`, `IconButton`, `Menu`, `Tabs`, `C
 | `Textarea.tsx` | Multi-line input with same variant/size system as `Input` |
 | `Icon.tsx` | Lucide icon wrapper with standardised `size` prop |
 | `ConfirmDialog.tsx` | Confirm/cancel dialog for destructive action confirmation |
+| `Listbox.tsx` | Rows moved through with the arrow keys: one Tab stop for the list (the picked row's, else the first, `tabStop`), ↑ ↓ Home End moving the focus and the pick; `listMove`, where those keys go, is the Load a model… palette's too |
 
 All components accept `className` for overrides and use `cn()` for Tailwind class merging.
 

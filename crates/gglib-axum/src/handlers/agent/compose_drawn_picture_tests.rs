@@ -1,5 +1,5 @@
 //! The message after a drawn picture, by the two doors that are sent their
-//! history: the page's run, whose tool message names the picture by id,
+//! history: the chat route, whose tool message names the picture by id,
 //! and a chat run with builtins, whose client keeps the chat and the
 //! picture and sends it inline on its own message. The first is shown the
 //! picture by the daemon; the second is sent on as it came, with nothing
@@ -44,7 +44,7 @@ fn page_history(picture: &str) -> Value {
     ])
 }
 
-/// A page's run for a model that reads images: the picture is on the
+/// A chat route request for a model that reads images: the picture is on the
 /// message after it, once, and the tool message is its text. Saved as a
 /// run's rows are, the turn has no row that holds the line or an image,
 /// and no event of its loop does.

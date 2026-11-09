@@ -3,16 +3,15 @@
  * conversation that exists, no turn saved by the page, and the reply shown
  * as the daemon saved it once the run ends.
  *
- * A chat with the paired machine's model goes through the same door, naming
- * that model by its machine and its id there; a conversation it makes is
- * made for that model, so its machine is fixed from the start.
- *
- * A send names no iteration limit: the daemon resolves it from the stored
- * setting, so the page and a paired device run with the same one.
+ * A send is the conversation and the new message: no history, no model, no
+ * port, no tools and no limits, which the daemon takes from what the
+ * conversation saved. A conversation a send makes is made for the model the
+ * chat opened on, this machine's or the paired machine's, so its model is
+ * saved from the start and its machine fixed. A chat whose model is not
+ * running sends all the same: the daemon loads it.
  *
  * A send says the chat's Thinking choice when the caller's `thinking` gives
- * one, asked as the send starts, and the device-wide reasoning controls go
- * with it as they always have. The caller is told once the daemon has
+ * one, asked as the send starts. The caller is told once the daemon has
  * accepted the run that said it, and never for a run it refused.
  */
 
@@ -43,7 +42,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const local = { conversationId: 1, conversation: conversation(1), selectedServerPort: 9000 };
+const here: ModelRef = { machine: { kind: 'local' }, id: 7 };
+const local = { conversationId: 1, conversation: conversation(1), model: here };
 const far: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
 
 describe('useGglibRuntime send', () => {
@@ -57,13 +57,7 @@ describe('useGglibRuntime send', () => {
     expect(daemon.requests.find((r) => r.method === 'PUT')!.url).toBe(
       `/api/runs/${run.info.id}?kind=agent`,
     );
-    expect(run.request).toMatchObject({
-      conversation_id: 1,
-      messages: [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'user', content: 'hello' },
-      ],
-    });
+    expect(run.request).toStrictEqual({ conversation_id: 1, content: 'hello' });
 
     daemon.emit(run.info.id, { type: 'text_delta', content: 'Hi' });
     await waitFor(() => expect(shown(hook.result.current.messages).at(-1)?.[2]).toBe('Hi'));
@@ -83,25 +77,16 @@ describe('useGglibRuntime send', () => {
     expect(daemon.count('PUT', '/api/messages')).toBe(0);
   });
 
-  it('names no iteration limit, alone or beside the agent limits: the daemon takes the stored one', async () => {
-    const hook = await mount(local);
-    send(hook, 'hello');
-    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-    expect(daemon.only().request!.config).toBeNull();
-    daemon.finish(daemon.only().info.id, 'completed', [{ role: 'assistant', content: 'ok' }]);
-    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
-
-    localStorage.setItem('gglib.chat.agentOverrides', JSON.stringify({ maxParallelTools: 4 }));
+  it('sends no limits, tools or reasoning, whatever the Agent limits sheet stored: the daemon decides them', async () => {
+    localStorage.setItem(
+      'gglib.chat.agentOverrides',
+      JSON.stringify({ maxParallelTools: 4, toolTimeoutMs: 5000, reasoningEffort: 'high', reasoningBudgetTokens: 2048 }),
+    );
     try {
-      send(hook, 'again');
-      await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(2));
-      expect([...daemon.runs.values()].at(-1)!.request!.config).toEqual({
-        max_iterations: null,
-        max_parallel_tools: 4,
-        tool_timeout_ms: null,
-        observation_tools: null,
-        max_observation_steps: null,
-      });
+      const hook = await mount(local);
+      send(hook, 'hello');
+      await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+      expect(daemon.only().request).toStrictEqual({ conversation_id: 1, content: 'hello' });
     } finally {
       localStorage.removeItem('gglib.chat.agentOverrides');
     }
@@ -109,7 +94,7 @@ describe('useGglibRuntime send', () => {
 
   it('creates the conversation first when none is open, so the run has one', async () => {
     const onConversationChanged = vi.fn();
-    const hook = await mount({ selectedServerPort: 9000, onConversationChanged });
+    const hook = await mount({ model: here, onConversationChanged });
     send(hook, 'hello');
 
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
@@ -134,38 +119,36 @@ describe('useGglibRuntime send', () => {
     expect(daemon.saved(1).map((r) => r.content)).toEqual(['hello']);
   });
 
-  it('a turn on a far model goes through the same door, by its ref and with no local server', async () => {
-    const hook = await mount({ conversationId: 1, conversation: conversation(1), pairedModel: far });
+  it('a turn on a far model goes through the same door, and names no model: the conversation saved it', async () => {
+    const hook = await mount({ conversationId: 1, conversation: conversation(1), model: far });
     send(hook, 'hello');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-    expect(daemon.only().request).toMatchObject({ far, model: null, conversation_id: 1 });
+    expect(daemon.only().request).toStrictEqual({ conversation_id: 1, content: 'hello' });
   });
 
   it('the first turn on a far model makes its conversation for that model', async () => {
-    const hook = await mount({ pairedModel: far });
+    const hook = await mount({ model: far });
     send(hook, 'hello');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
     const made = daemon.requests.find((r) => r.method === 'POST' && r.url === '/api/conversations');
     expect(made?.body).toMatchObject({ model: far, model_id: null });
-    expect(daemon.only().request).toMatchObject({ far });
   });
 
-  it('the conversation a local turn makes is made for no model', async () => {
-    const hook = await mount({ selectedServerPort: 9000 });
+  it('the conversation a local turn makes keeps the model the chat opened on', async () => {
+    const hook = await mount({ model: here });
     send(hook, 'hello');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
     const made = daemon.requests.find((r) => r.method === 'POST' && r.url === '/api/conversations');
-    expect(made?.body).toMatchObject({ model: null });
-    expect(daemon.only().request).toMatchObject({ far: null });
+    expect(made?.body).toMatchObject({ model: { machine: { kind: 'local' }, id: 7 }, model_id: null });
+    expect(daemon.settings.get(100)?.model).toEqual({ machine: { kind: 'local' }, id: 7 });
   });
 
-  it('a local turn with no server selected never reaches the wire', async () => {
+  it('a chat whose model nothing serves still sends: the daemon loads it', async () => {
     const onError = vi.fn();
     const hook = await mount({ conversationId: 1, conversation: conversation(1), onError });
     send(hook, 'hello');
-    await waitFor(() => expect(onError).toHaveBeenCalled());
-    expect(onError.mock.calls[0][0].message).toBe('No server selected. Please serve a model first.');
-    expect(daemon.count('PUT', '/api/runs/')).toBe(0);
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -203,6 +186,60 @@ describe('useGglibRuntime send', () => {
     const last = hook.result.current.messages.at(-1)!;
     expect(last.id).toBe('db-2');
     expect(last.status).toEqual({ type: 'incomplete', reason: 'cancelled' });
+  });
+
+  it.each([
+    ["the paired machine is away", far, { code: 'conflict', message: 'not connected to the machine this chat ran on' }],
+    ['its model cannot load', here, { code: 'model_unavailable', message: "the chat's model could not be loaded on the hub" }],
+  ] as const)('a turn refused once its run exists (%s) gives the text back, and says why', async (_why, model, refusal) => {
+    const onError = vi.fn();
+    daemon.refuseLate = { ...refusal };
+    const hook = await mount({ conversationId: 1, conversation: conversation(1), model, onError });
+    send(hook, 'hello');
+
+    await waitFor(() => expect(hook.result.current.endedRun?.status).toBe('failed'));
+    // Nothing was saved: the question is not in the thread, and goes back to the composer.
+    expect(daemon.saved(1)).toEqual([]);
+    expect(shown(hook.result.current.messages)).toEqual([['system-1', 'system', 'You are a helpful assistant.']]);
+    await waitFor(() => expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello'));
+    expect(hook.result.current.endedRun?.error).toEqual(refusal);
+    expect(onError).toHaveBeenCalledWith(new Error(refusal.message));
+  });
+
+  it('a turn stopped while its model loads gives the text back: nothing was saved', async () => {
+    daemon.loadsSlowly = true;
+    const hook = await mount(local);
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+
+    act(() => hook.result.current.runtime.thread.cancelRun());
+
+    await waitFor(() => expect(hook.result.current.endedRun?.status).toBe('cancelled'));
+    expect(daemon.saved(1)).toEqual([]);
+    await waitFor(() => expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello'));
+  });
+
+  it('a draft typed while the turn waited stays, after the question handed back', async () => {
+    daemon.loadsSlowly = true;
+    const hook = await mount(local);
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    act(() => hook.result.current.runtime.thread.composer.setText('a new draft'));
+
+    act(() => hook.result.current.runtime.thread.cancelRun());
+
+    await waitFor(() => expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello\n\na new draft'));
+  });
+
+  it('a failed run whose question was saved gives nothing back: the question is in the thread', async () => {
+    const hook = await mount(local);
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    await daemon.finish(daemon.only().info.id, 'failed', [], { code: 'agent_error', message: 'The agent loop failed.' });
+
+    await waitFor(() => expect(hook.result.current.endedRun?.status).toBe('failed'));
+    expect(shown(hook.result.current.messages).map(([, role, text]) => [role, text])).toContainEqual(['user', 'hello']);
+    expect(hook.result.current.runtime.thread.composer.getState().text).toBe('');
   });
 
   it('keeps nothing of the run in browser storage, and logs nothing new', async () => {
@@ -266,20 +303,15 @@ describe('useGglibRuntime send, the Thinking choice', () => {
     expect(Object.keys(await exchange(hook, 'hello'))).not.toContain('thinking');
   });
 
-  it('sends the device-wide effort and budget unchanged, whatever the choice says', async () => {
-    localStorage.setItem(
-      'gglib.chat.agentOverrides',
-      JSON.stringify({ reasoningEffort: 'high', reasoningBudgetTokens: 2048 }),
-    );
+  it('says the choice and nothing beside it', async () => {
     let said: Thinking | undefined;
     const hook = await mount({ ...local, thinking: () => said && { said, accepted: () => {} } });
 
-    const device = { reasoning_effort: 'high', reasoning_budget_tokens: 2048 };
-    expect(await exchange(hook, 'one')).toMatchObject(device);
+    expect(await exchange(hook, 'one')).toStrictEqual({ conversation_id: 1, content: 'one' });
     said = 'off';
-    expect(await exchange(hook, 'two')).toMatchObject({ ...device, thinking: 'off' });
+    expect(await exchange(hook, 'two')).toStrictEqual({ conversation_id: 1, content: 'two', thinking: 'off' });
     said = 'default';
-    expect(await exchange(hook, 'three')).toMatchObject({ ...device, thinking: 'default' });
+    expect(await exchange(hook, 'three')).toStrictEqual({ conversation_id: 1, content: 'three', thinking: 'default' });
   });
 
   it('a send gglib refused is asked again at the next send, and its choice is not called accepted: it is the caller\'s to keep', async () => {
@@ -345,8 +377,8 @@ describe('useGglibRuntime send, the Thinking choice', () => {
 
   it('a turn on a far model says it through the same door', async () => {
     const accepted = vi.fn();
-    const hook = await mount({ conversationId: 1, conversation: conversation(1), pairedModel: far, thinking: () => ({ said: 'off', accepted }) });
-    expect(await exchange(hook, 'hello')).toMatchObject({ far, thinking: 'off' });
+    const hook = await mount({ conversationId: 1, conversation: conversation(1), model: far, thinking: () => ({ said: 'off', accepted }) });
+    expect(await exchange(hook, 'hello')).toStrictEqual({ conversation_id: 1, content: 'hello', thinking: 'off' });
     expect(accepted).toHaveBeenCalledTimes(1);
   });
 });

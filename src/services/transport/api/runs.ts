@@ -7,7 +7,7 @@
  * stop the run. Only `cancelRun` does.
  */
 
-import type { AgentRunRequest } from '../../../types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../types/generated/LocalTurn';
 import type { RunInfo } from '../../../types/generated/RunInfo';
 import type { RunList } from '../../../types/generated/RunList';
 import { readSse } from '../../../utils/sse';
@@ -29,12 +29,14 @@ function runPath(id: string): string {
 }
 
 /**
- * Start an agent run under `id`, or get the run that already has it. Refused
- * with the daemon's coded error: `agent_busy` (429), `conversation_not_found`
- * (404), `unavailable` (503) and the chat route's own.
+ * Start this machine's turn under `id`, or get the run that already has it.
+ * Refused before the run is made with the daemon's coded error:
+ * `agent_busy` (429), `conversation_not_found` (404), `no_model` (422),
+ * `folder_unusable`, `attachment_not_found`, `drawing_unavailable` and the
+ * like; what is refused once the run exists ends it `failed`, with the code.
  */
-export async function startAgentRun(id: string, request: AgentRunRequest): Promise<RunInfo> {
-  return put<RunInfo>(`${runPath(id)}?kind=agent`, request);
+export async function startAgentRun(id: string, turn: LocalTurn): Promise<RunInfo> {
+  return put<RunInfo>(`${runPath(id)}?kind=agent`, turn);
 }
 
 /** Every run this machine has, newest first. */

@@ -17,7 +17,7 @@ interface ModelGoneLineProps {
 /**
  * The line that stands in for the composer while this machine's model is
  * gone. Unloaded: "<model> was unloaded. [Load it again]", which loads it
- * and keeps the chat (the picker's switch, back onto the same model);
+ * and keeps the chat;
  * crashed: "<model> stopped unexpectedly · Show log". No banner, no toast.
  *
  * This is the read-only lock: H2 (`feat(gui)/chat-without-lock`) removes

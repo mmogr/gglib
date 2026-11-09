@@ -32,7 +32,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const open: UseGglibRuntimeOptions = { conversationId: 1, conversation: conversation(1), selectedServerPort: 9000 };
+const open: UseGglibRuntimeOptions = { conversationId: 1, conversation: conversation(1) };
 
 /** A run going in conversation 1, its question saved and its answer drawn so far. */
 function live() {
@@ -161,7 +161,7 @@ describe('useGglibRuntime opening a conversation while its run ends', () => {
       daemon.save(1, { role: 'assistant', content: 'a' });
     }
 
-    it('the rows still load, and a send carries the whole history', async () => {
+    it('the rows still load, and a send goes on from them', async () => {
       saved();
       failing({ 'GET /api/runs': 1 });
       const onError = vi.fn();
@@ -176,7 +176,7 @@ describe('useGglibRuntime opening a conversation while its run ends', () => {
 
       send(hook, 'next');
       await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-      expect(daemon.only().request!.messages.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+      expect(daemon.only().request).toStrictEqual({ conversation_id: 1, content: 'next' });
     });
 
     it('rows that cannot load leave nothing to send from, until it is opened again', async () => {

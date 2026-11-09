@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { FakeDaemon } from '../fixtures/fakeDaemon';
+import type { LocalTurn } from '../../../src/types/generated/LocalTurn';
 import { rust } from './rustSource';
 
 type Body = Record<string, unknown>;
@@ -24,17 +25,7 @@ const ALLOWED = new Set([...STATUSES.flatMap((s) => Object.keys(RECORDED[s])), '
 /** The keys every recording carries. */
 const REQUIRED = Object.keys(RECORDED.queued).filter((k) => STATUSES.every((s) => k in RECORDED[s]));
 
-const request = (content: string) => ({
-  conversation_id: 1,
-  port: 9000,
-  far: null,
-  messages: [{ role: 'user', content }],
-  config: null,
-  tool_filter: null,
-  model: null,
-  reasoning_effort: null,
-  reasoning_budget_tokens: null,
-});
+const request = (content: string): LocalTurn => ({ conversation_id: 1, content });
 
 async function put(daemon: FakeDaemon, id: string): Promise<[number, Body]> {
   const response = await daemon.fetch(`/api/runs/${id}?kind=agent`, {
@@ -114,5 +105,28 @@ describe('the fake daemon against the recorded runs', () => {
     const list = await get(daemon, '/api/runs');
     expect(Object.keys(list)).toEqual(Object.keys(RECORDED.list));
     expect((list.runs as Body[]).map((r) => r.id)).toEqual(['newer', 'older']);
+  });
+
+  it('takes a turn and nothing else: a key a turn does not name is refused, and no run is made', async () => {
+    const daemon = new FakeDaemon();
+    for (const key of ['messages', 'port', 'tool_filter', 'config']) {
+      const response = await daemon.fetch('/api/runs/r1?kind=agent', {
+        method: 'PUT',
+        body: JSON.stringify({ ...request('hi'), [key]: null }),
+      });
+      expect(response.status, key).toBe(400);
+      expect(((await response.json()) as Body).type, key).toBe('invalid_request');
+    }
+    expect(daemon.runs.size).toBe(0);
+    expect(daemon.saved(1)).toEqual([]);
+  });
+
+  it('a run that fails with a code reads as the real failed one, with that code', async () => {
+    const daemon = new FakeDaemon();
+    await put(daemon, 'r1');
+    await daemon.finish('r1', 'failed', [], { code: 'conflict', message: 'the paired machine is away' });
+    const run = await listed(daemon, 'r1');
+    expectShaped(run, 'failed');
+    expect(run.error).toEqual({ code: 'conflict', message: 'the paired machine is away' });
   });
 });

@@ -10,8 +10,8 @@
 //! own record, as the chat page would send it: the conversation's system
 //! prompt, then every saved row but a system one, then the new message,
 //! with the limits the conversation's settings name (`prepare` takes an
-//! iteration limit they do not name from this machine's settings, as it
-//! does for the page), and with thinking off
+//! iteration limit they do not name from this machine's settings), and with
+//! thinking off
 //! when the turn says so or the chat remembers it (`thinking`). The reply
 //! runs on the chat's model, loaded as `/v1/models/{name}/load` loads it
 //! when it is not running, as an agent run in the turn's scope, saved to
@@ -29,7 +29,7 @@
 //!   none when the chat turned them off or the catalogue says its model
 //!   calls none (`Asked::of_local`).
 //! - **Folder.** This machine's own turn may say the chat's folder, settled
-//!   as the page's run settles it (`run::settle_folder`), and gglib's file
+//!   by `run::settle_folder`, and gglib's file
 //!   tools read there. A device's turn never has one, whatever its chat
 //!   remembers (ADR 0023), and is refused one it says.
 //!
@@ -46,7 +46,7 @@ use axum::response::IntoResponse as _;
 use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::branching;
 use gglib_core::domain::chat::ConversationSettings;
-use gglib_core::domain::hub_chats::HubTurn;
+use gglib_core::domain::hub_chats::{HubTurn, LocalTurn};
 use gglib_core::domain::runs::RunKind;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentRunStarter, Created, RunScope, RunsError, TurnRefused};
@@ -125,6 +125,32 @@ impl AgentRunStarter for HubTurns {
     }
 }
 
+/// What a body that is not this machine's turn is refused with: the shape,
+/// never the body, which can hold the message.
+const LOCAL_TURN_BODY: &str = "a turn's body is {\"conversation_id\": <number>, \"content\": <text>, \
+     \"images\": [<id>], \"thinking\": \"off\" or \"default\", \"answer_saved\": true or false, \
+     \"draw\": true, \"image_model\": <id>, \"folder\": <path> or \"\"}, and no other key";
+
+/// `PUT /api/runs/{id}?kind=agent`: start this machine's own turn on one of
+/// its chats ([`LocalTurn`]), or answer with its run that has the id.
+///
+/// # Errors
+///
+/// `invalid_request` (400) for a body that is not a turn, an unknown key
+/// included; then what [`start`] refuses, coded.
+pub(crate) async fn start_local(
+    state: &AppState,
+    id: &str,
+    body: serde_json::Value,
+) -> Result<Created, HttpError> {
+    let turn: LocalTurn = serde_json::from_value(body)
+        .map_err(|_| coded(StatusCode::BAD_REQUEST, "invalid_request", LOCAL_TURN_BODY))?;
+    let (turn, folder) = turn.split();
+    start(state, RunScope::Local, id, turn, folder)
+        .await
+        .map_err(with_code)
+}
+
 /// A refusal as the daemon's door would answer it.
 fn refusal(error: HttpError) -> TurnRefused {
     match with_code(error) {
@@ -146,16 +172,16 @@ fn refusal(error: HttpError) -> TurnRefused {
 }
 
 /// Start a turn in `scope` under `id`, or answer with its run that has the
-/// id. `folder` is what this machine's own turn says of its chat's folder,
-/// as the page's run says it (`""` forgets it, and none keeps the one the
-/// chat remembers); a device's turn says none.
+/// id. `folder` is what this machine's own turn says of its chat's folder
+/// (`""` forgets it, and none keeps the one the chat remembers); a device's
+/// turn says none.
 ///
 /// # Errors
 ///
 /// `invalid_request` (400) for a message with neither text nor an image, or
 /// a turn that answers the saved question and carries one, or a device's
 /// turn that says a folder; `folder_unusable` (400) and `folder_missing`
-/// (409) for this machine's, as the page's run has them; `nothing_to_answer`
+/// (409) for this machine's; `nothing_to_answer`
 /// (409) for such a turn on a chat that ends in no question;
 /// `attachment_not_found` (400) for an image the turn or the chat's history
 /// names that is not stored; `request_images_too_large` (400) when they are
@@ -279,7 +305,7 @@ pub(super) fn begin(
 }
 
 /// A turn read against the hub's record: the model it runs on, the chat
-/// request the page would send, less the port, and where the run is saved,
+/// request the loop is composed from, less the port, and where the run is saved,
 /// with what the chat is to remember of thinking and of its folder once it
 /// starts, what it asks of this machine's tools, settled once the run
 /// starts, and the folder gglib's file tools read in.
@@ -352,15 +378,15 @@ pub(super) async fn plan(
     let far = paired(scope, &conversation);
     let model = turn_model(state, far.as_ref(), &conversation, &rows).await?;
     let settings = conversation.settings.clone().unwrap_or_default();
-    // Before the run is reserved, as the page's run has it: a folder the turn
-    // says that is no folder here, or the one the chat remembers that is gone.
+    // Before the run is reserved: a folder the turn says that is no folder
+    // here, or the one the chat remembers that is gone.
     let (folder, remember_folder) = if local {
         let saved = settings.folder.as_deref();
         settle_folder(folder.as_deref(), Some(id), saved)?
     } else {
         (None, None)
     };
-    // The prompt comes from the conversation, as the page takes it. A turn
+    // The prompt comes from the conversation, as the page shows it. A turn
     // that answers the question already saved adds none (ADR 0017).
     let mut messages = saved_history(conversation.system_prompt.as_deref(), &rows);
     if !turn.answer_saved {

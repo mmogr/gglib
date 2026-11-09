@@ -1,7 +1,8 @@
 /**
- * Agent limits — the GUI surface for `AgentRequestConfig`'s BYO-MCP knobs.
- * Values persist client-side (`services/agentOverrides`), apply to every
- * chat sent from this client, and are read fresh at each send.
+ * Agent limits — the tool and reasoning knobs, kept client-side
+ * (`services/agentOverrides`). No turn carries them since a turn became its
+ * conversation and its message: D6 (`feat(gui)/chat-settings-saved`) moves
+ * them to saved settings, and until then they do nothing.
  *
  * Interim home: the composer's `[+]` › Tools ▸ › "Agent limits…" opens it in
  * a small sheet (`ChatMessagesPanel/components/AgentLimitsSheet`) until
@@ -162,11 +163,8 @@ export const AgentLimitsSection: FC<AgentLimitsSectionProps> = ({ effortSupport 
       {/*
         Not an agent limit, and shown here anyway: this is the popover for
         "settings that apply to the chats I send", and a per-turn reasoning
-        level is one. It reaches the request as a top-level field rather than
-        through `AgentConfig` — see `reasoningOverridesToWire`. The field is
-        the settings surfaces' own, so the three answers about a template
-        read the same here: a stored level is still sent where the dropdown
-        is replaced by its note, and the daemon removes it.
+        level is one. The field is the settings surfaces' own, so the three
+        answers about a template read the same here.
       */}
       <ReasoningEffortField
         id="chat-reasoning-effort"

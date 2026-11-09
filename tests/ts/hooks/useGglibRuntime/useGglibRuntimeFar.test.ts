@@ -125,7 +125,7 @@ describe('useGglibRuntime on the far machine', () => {
     const { capabilities } = farHook.result.current.runtime.thread.getState();
     expect([capabilities.edit, capabilities.reload]).toEqual([false, false]);
 
-    const hereHook = await mount({ conversationId: 1, selectedServerPort: 9000 });
+    const hereHook = await mount({ conversationId: 1 });
     const here = hereHook.result.current.runtime.thread.getState().capabilities;
     expect([here.edit, here.reload]).toEqual([true, true]);
   });
@@ -340,7 +340,7 @@ describe('useGglibRuntime on the far machine, the Thinking choice', () => {
 
   it('this machine\'s chat hands up nothing: its settings are in its list', async () => {
     const onFarOpened = vi.fn();
-    const hook = await mount({ conversationId: 1, selectedServerPort: 9000, onFarOpened });
+    const hook = await mount({ conversationId: 1, onFarOpened });
     await waitFor(() => expect(hook.result.current.isLoading).toBe(false));
     expect(onFarOpened).not.toHaveBeenCalled();
   });

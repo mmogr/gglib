@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import type { AgentRunRequest } from '../../../../src/types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../../src/types/generated/LocalTurn';
 import type { DrawingAvailability } from '../../../../src/types/generated/DrawingAvailability';
 import type { RunInfo } from '../../../../src/types/generated/RunInfo';
 import { NO_DRAWING, agentRun, chatTransport, conversation, plusItem, wrapper, type ChatFixture } from './chatPlaceHarness';
@@ -45,7 +45,7 @@ let fixture: ChatFixture;
 /** What this machine answers when asked whether a message can draw. */
 let availability: DrawingAvailability;
 /** The bodies of the runs started, in order. */
-let started: AgentRunRequest[];
+let started: LocalTurn[];
 /** The next run start is refused with this, once. */
 let refuseNext: Error | null;
 /** Hands an item to the reader of the run going, and ends that run. */
@@ -56,7 +56,7 @@ function pageTransport() {
   return {
     ...chatTransport(fixture),
     drawingAvailability: vi.fn(async () => availability),
-    startAgentRun: vi.fn(async (id: string, request: AgentRunRequest) => {
+    startAgentRun: vi.fn(async (id: string, request: LocalTurn) => {
       if (refuseNext) {
         const refusal = refuseNext;
         refuseNext = null;

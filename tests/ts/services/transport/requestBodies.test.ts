@@ -17,6 +17,7 @@ vi.mock('../../../../src/services/platform', () => ({
 }));
 
 import {
+  createConversation,
   updateConversationSettings,
   updateConversationSystemPrompt,
   updateConversationTitle,
@@ -31,6 +32,7 @@ import {
   updateModel,
 } from '../../../../src/services/transport/api/models/local';
 import { killRemote } from '../../../../src/services/transport/api/remote';
+import { startAgentRun } from '../../../../src/services/transport/api/runs';
 import { stopServer } from '../../../../src/services/transport/api/servers';
 import { installProfileTemplates } from '../../../../src/services/transport/api/settings';
 import { addModelTag } from '../../../../src/services/transport/api/tags';
@@ -232,6 +234,31 @@ describe('what a typed request body sends', () => {
           max_parallel: 2,
         },
       },
+    });
+  });
+
+  it("choosing this machine's model for a conversation sends it by its machine and id, and nothing else", async () => {
+    const model = { machine: { kind: 'local' as const }, id: 9 };
+    expect((await sent(() => updateConversationSettings(5, { model }))).body).toStrictEqual({
+      title: null,
+      settings: { model: { machine: { kind: 'local' }, id: 9 } },
+    });
+  });
+
+  it("a conversation made for this machine's model names it as `model`, and no `model_id`", async () => {
+    const model = { machine: { kind: 'local' as const }, id: 9 };
+    expect(await sent(() => createConversation({ title: 'New Chat', model }))).toStrictEqual({
+      method: 'POST',
+      path: '/api/conversations',
+      body: { title: 'New Chat', model_id: null, system_prompt: null, model: { machine: { kind: 'local' }, id: 9 } },
+    });
+  });
+
+  it('a turn is the conversation and the message on the run route, and a key it leaves out is not sent', async () => {
+    expect(await sent(() => startAgentRun('r1', { conversation_id: 5, content: 'hi', images: ['a1'] }))).toStrictEqual({
+      method: 'PUT',
+      path: '/api/runs/r1?kind=agent',
+      body: { conversation_id: 5, content: 'hi', images: ['a1'] },
     });
   });
 

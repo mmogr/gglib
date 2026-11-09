@@ -38,6 +38,7 @@ const wrapper = ({ children }: { children: ReactNode }) =>
 
 const onUnloadModel = vi.fn(async () => {});
 const onSwitchModel = vi.fn(async (_choice: { modelId: number; modelName: string }) => {});
+const onLoadModel = vi.fn(async () => {});
 const onShowModel = vi.fn();
 const onShowLog = vi.fn();
 
@@ -49,6 +50,7 @@ function renderLocal(modelId = 7, startingModel: string | null = null) {
       serverPort={4321}
       startingModel={startingModel}
       onSwitchModel={onSwitchModel}
+      onLoadModel={onLoadModel}
       onUnloadModel={onUnloadModel}
       onShowModel={onShowModel}
       onShowLog={onShowLog}
@@ -75,6 +77,7 @@ beforeEach(() => {
   onUnloadModel.mockReset();
   onUnloadModel.mockImplementation(async () => {});
   onSwitchModel.mockClear();
+  onLoadModel.mockClear();
   onShowModel.mockClear();
   onShowLog.mockClear();
   transport.current = chatTransport({
@@ -112,15 +115,15 @@ describe('ChatPlace, leaving and Unload', () => {
     expect(within(line).getAllByRole('button').map((b) => b.textContent)).toEqual(['Load it again']);
     expect(onUnloadModel).not.toHaveBeenCalled();
 
-    // Load it again is the picker's switch, back onto the same model.
+    // Load it again starts the model; it is not a switch, which only saves a model.
     await user.click(within(line).getByRole('button', { name: 'Load it again' }));
-    expect(onSwitchModel).toHaveBeenCalledTimes(1);
-    expect(onSwitchModel.mock.calls[0][0]).toEqual({ modelId: 17, modelName: 'qwen3' });
+    expect(onLoadModel).toHaveBeenCalledTimes(1);
+    expect(onSwitchModel).not.toHaveBeenCalled();
   });
 
   it('Load it again that fails says why, in the sentence every load failure is said in', async () => {
     const user = userEvent.setup();
-    onSwitchModel.mockRejectedValueOnce(new Error('out of memory'));
+    onLoadModel.mockRejectedValueOnce(new Error('out of memory'));
     renderLocal(19);
     await head();
     act(() => ingestServerEvent({ type: 'stopped', modelId: '19', port: 4321, updatedAt: Date.now(), modelName: 'qwen3' }));
@@ -169,14 +172,8 @@ describe('ChatPlace, leaving and Unload', () => {
     expect(onShowModel).toHaveBeenCalledTimes(1);
   });
 
-  it('Unload is out of reach while a model starts, and says why an unload failed', async () => {
+  it('Unload says why an unload failed', async () => {
     const user = userEvent.setup();
-    const page = renderLocal(7, 'gemma-3-12b');
-    await head();
-    expect(await screen.findByText('Loading gemma-3-12b…')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Model: / })).not.toBeInTheDocument();
-    page.unmount();
-
     onUnloadModel.mockRejectedValueOnce(new Error('daemon unreachable'));
     renderLocal();
     await head();

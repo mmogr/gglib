@@ -136,8 +136,13 @@ describe("ChatPlace, the title ▾", () => {
 
     await waitFor(() => expect(onOpened).toHaveBeenCalledTimes(1));
     expect(call('deleteConversation')).toHaveBeenCalledWith(1);
+    // The copy keeps this machine's model the chat is on, so its next turn runs there.
     expect(call('createConversation')).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'launchd KeepAlive', systemPrompt: 'Answer in haiku.' }),
+      expect.objectContaining({
+        title: 'launchd KeepAlive',
+        systemPrompt: 'Answer in haiku.',
+        model: { machine: { kind: 'local' }, id: 7 },
+      }),
     );
     // The copy the daemon made is the one opened.
     expect(onOpened).toHaveBeenCalledWith(await call('createConversation').mock.results[0].value);
