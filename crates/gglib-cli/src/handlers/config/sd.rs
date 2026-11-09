@@ -17,7 +17,7 @@ use super::llama_install::go_ahead;
 use crate::bootstrap::CliContext;
 use crate::sd_commands::SdCommand;
 use crate::utils::input;
-use gglib_core::domain::RuntimeKind;
+use gglib_core::domain::{EngineState, RuntimeKind};
 use gglib_core::paths::{SD_INSTALL_COMMAND, sd_server_path};
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, LlamaProgressEvent, build_tool_install_lines, build_tools,
@@ -144,14 +144,17 @@ fn built(version: &str, acceleration: &str) -> Vec<String> {
 
 /// What `config sd status` prints for `status`.
 ///
-/// Mirrors `config llama status`: installed or not, how (a download or a
+/// Mirrors `config llama status`: installed or not, in the engine state's
+/// word, how (a download or a
 /// source build) with its release, platform and date, and then what the
 /// binary itself says, with the commit its line names. Not installed says
 /// the command that installs it.
 fn status_lines(status: &SdStatus) -> Vec<String> {
+    // sd-server's binary is not checked, so it is installed or it is not.
+    let state = format!("Status: {}", EngineState::of(status.installed, false));
     if !status.installed {
         return vec![
-            "Status: Not installed".to_owned(),
+            state,
             String::new(),
             format!(
                 "Run '{SD_INSTALL_COMMAND}' to install {PRODUCT} ({}).",
@@ -160,10 +163,7 @@ fn status_lines(status: &SdStatus) -> Vec<String> {
         ];
     }
 
-    let mut lines = vec![
-        "Status: Installed".to_owned(),
-        format!("Binary: {}", status.binary_path),
-    ];
+    let mut lines = vec![state, format!("Binary: {}", status.binary_path)];
     lines.extend(gglib_runtime::engine::standing_line(&status.pin));
     lines.push(String::new());
     let release = status.release.as_deref().unwrap_or("unknown");

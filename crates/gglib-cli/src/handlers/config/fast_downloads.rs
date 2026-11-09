@@ -20,6 +20,8 @@ use gglib_download::cli_exec::{
     fast_helper_status, preflight_fast_helper, remove_fast_helper,
 };
 
+use gglib_core::domain::FastDownloadsState;
+
 use crate::config_commands::FastDownloadsCommand;
 use crate::presentation::style::{BOLD, INFO, RESET, SUCCESS, WARNING};
 use crate::utils::input::prompt_confirmation_default_yes;
@@ -43,29 +45,42 @@ pub(crate) async fn dispatch(command: Option<FastDownloadsCommand>) -> Result<()
 /// Report what is on disk.
 fn status() -> Result<()> {
     let status = fast_helper_status().context("Failed to inspect the download accelerator")?;
+    for line in status_lines(&status) {
+        println!("{line}");
+    }
+    Ok(())
+}
 
+/// What `status` prints for `status`: the accelerator's state in the word
+/// every surface uses, then where it is and what built it, or where it would
+/// go and how to set it up.
+fn status_lines(status: &FastHelperStatus) -> Vec<String> {
+    let state = FastDownloadsState::of(status.provisioned);
     if status.provisioned {
-        println!("{SUCCESS}✓ Fast downloads are enabled{RESET}");
-        println!("  environment  {}", status.env_dir.display());
+        let mut lines = vec![
+            format!("{SUCCESS}✓ Fast downloads: {state}{RESET}"),
+            format!("  environment  {}", status.env_dir.display()),
+        ];
         if let Some(builder) = &status.builder {
-            println!("  built with   {builder}");
+            lines.push(format!("  built with   {builder}"));
         }
         if status.legacy_path {
-            println!(
+            lines.push(format!(
                 "  {WARNING}note{RESET}         at the pre-0.13 location; it keeps working, and \
                  re-enabling after `disable` moves it"
-            );
+            ));
         }
+        lines
     } else {
-        println!("{INFO}○ Fast downloads are not enabled{RESET}");
-        println!("  downloads run natively over HTTP, which always works");
-        println!("  would install to  {}", status.env_dir.display());
-        println!("  would build with  {}", status.available_builder);
-        println!();
-        println!("{BOLD}Enable with:{RESET} gglib config fast-downloads enable");
+        vec![
+            format!("{INFO}○ Fast downloads: {state}{RESET}"),
+            "  downloads run natively over HTTP, which always works".to_owned(),
+            format!("  would install to  {}", status.env_dir.display()),
+            format!("  would build with  {}", status.available_builder),
+            String::new(),
+            format!("{BOLD}Enable with:{RESET} gglib config fast-downloads enable"),
+        ]
     }
-
-    Ok(())
 }
 
 /// Build the environment.
@@ -217,6 +232,33 @@ fn preseed() -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn helper(provisioned: bool) -> FastHelperStatus {
+        FastHelperStatus {
+            provisioned,
+            env_dir: std::path::PathBuf::from("/data/.fast-downloads"),
+            legacy_path: false,
+            builder: provisioned.then(|| "uv".to_owned()),
+            available_builder: "uv",
+        }
+    }
+
+    /// The first line is the accelerator's state in the word every surface
+    /// uses, On or Off.
+    #[test]
+    fn the_status_says_on_or_off_in_the_shared_word() {
+        assert_eq!(
+            status_lines(&helper(true)),
+            [
+                "\x1b[32m\u{2713} Fast downloads: On\x1b[0m",
+                "  environment  /data/.fast-downloads",
+                "  built with   uv",
+            ]
+        );
+        let off = status_lines(&helper(false));
+        assert_eq!(off[0], format!("{INFO}\u{25cb} Fast downloads: Off{RESET}"));
+        assert_eq!(off[2], "  would install to  /data/.fast-downloads");
+    }
 
     /// These spellings are what an install script or CI job will reach for,
     /// and getting one wrong silently means the opposite of what was asked.

@@ -157,15 +157,23 @@ describe('setup', () => {
     expect(api.getSetupStatus).toHaveBeenCalledTimes(before);
   });
 
+  it("says a models folder that cannot be written in the served word", async () => {
+    const status = setupStatus();
+    start(setupStatus({ modelsDirectory: { ...status.modelsDirectory, exists: false, writable: false, state: 'not_writable' } }));
+    const folder = within(await step('This Mac')).getByRole('group', { name: 'Models folder' });
+    expect(folder).toHaveTextContent('/Users/me/.local/share/llama_models(Not writable)');
+    expect(folder).not.toHaveTextContent('Will be created');
+  });
+
   it("says This Mac in the daemon's words, and Change saves the folder typed and shows the one read back", async () => {
     // The route names a stored folder `environment`, as it names GGLIB_MODELS_DIR (`paths/models.rs`).
-    transport.getModelsDirectory.mockResolvedValue({ path: '/Volumes/big/models', source: 'environment', default_path: '/x', exists: true, writable: true });
+    transport.getModelsDirectory.mockResolvedValue({ path: '/Volumes/big/models', source: 'environment', default_path: '/x', exists: true, writable: true, state: 'writable' });
     const { user } = start();
     const region = await step('This Mac');
 
     expect(region).toHaveTextContent('macOS ARM64 (Metal) · 43.2 GiB unified memory');
     const folder = within(region).getByRole('group', { name: 'Models folder' });
-    expect(folder).toHaveTextContent('/Users/me/.local/share/llama_models(will be created)');
+    expect(folder).toHaveTextContent('/Users/me/.local/share/llama_models(Will be created)');
 
     await user.click(within(folder).getByRole('button', { name: 'Change' }));
     const field = screen.getByRole('textbox', { name: 'Models folder' });
@@ -178,7 +186,7 @@ describe('setup', () => {
     await waitFor(() => expect(transport.setModelsDirectory).toHaveBeenCalledWith('/Volumes/big/models'));
     const shown = await within(region).findByRole('group', { name: 'Models folder' });
     expect(shown).toHaveTextContent('/Volumes/big/models');
-    expect(shown).not.toHaveTextContent('will be created');
+    expect(shown).not.toHaveTextContent('Will be created');
     // Where it was set is not said: the route cannot tell a chosen folder from the variable.
     expect(region).not.toHaveTextContent('GGLIB_MODELS_DIR');
   });
@@ -259,20 +267,20 @@ describe('setup', () => {
       order.push('queue');
       return { id: REC.repo };
     });
-    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    const { user } = start(setupStatus({ fastDownloads: 'off', pythonAvailable: true }));
     await reach(user, 'First model');
     expect(api.enableFastDownloads).not.toHaveBeenCalled();
 
     await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
     await waitFor(() => expect(order).toEqual(['fast', 'queue']));
     await press(user, 'Back');
-    expect(within(await step('Engines')).getByRole('group', { name: 'Faster downloads' })).toHaveTextContent('set up');
+    expect(within(await step('Engines')).getByRole('group', { name: 'Faster downloads' })).toHaveTextContent(/^Faster downloadsOn$/);
   });
 
   it('queues the model only once the set-up has landed, saying so meanwhile; a Skip then queues nothing', async () => {
     let landed: () => void = () => {};
     api.enableFastDownloads.mockImplementationOnce(() => new Promise<void>((resolve) => (landed = resolve)));
-    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    const { user } = start(setupStatus({ fastDownloads: 'off', pythonAvailable: true }));
     await reach(user, 'First model');
     const first = await step('First model');
     await user.click(within(first).getByRole('button', { name: 'Get it' }));
@@ -292,7 +300,7 @@ describe('setup', () => {
   it('queues the model once the set-up lands', async () => {
     let landed: () => void = () => {};
     api.enableFastDownloads.mockImplementationOnce(() => new Promise<void>((resolve) => (landed = resolve)));
-    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    const { user } = start(setupStatus({ fastDownloads: 'off', pythonAvailable: true }));
     await reach(user, 'First model');
     await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
     await act(async () => {});
@@ -303,7 +311,7 @@ describe('setup', () => {
 
   it("warns of a failed accelerator in the daemon's words and downloads anyway, and Retry sets it up", async () => {
     api.enableFastDownloads.mockRejectedValueOnce(new Error('pip failed'));
-    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    const { user } = start(setupStatus({ fastDownloads: 'off', pythonAvailable: true }));
     await reach(user, 'First model');
     await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
     await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(1));
@@ -313,12 +321,12 @@ describe('setup', () => {
     expect(within(fast).getByRole('status')).toHaveTextContent('pip failed');
     expect(fast).toHaveTextContent('downloads still work');
     await user.click(within(fast).getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(fast).toHaveTextContent('set up'));
+    await waitFor(() => expect(fast).toHaveTextContent(/^Faster downloadsOn$/));
     expect(api.enableFastDownloads).toHaveBeenCalledTimes(2);
   });
 
   it('sets nothing up on Get it where Python 3 is not there', async () => {
-    const { user } = start(setupStatus({ fastDownloadReady: false, pythonAvailable: false }));
+    const { user } = start(setupStatus({ fastDownloads: 'off', pythonAvailable: false }));
     await reach(user, 'First model');
     await user.click(within(await step('First model')).getByRole('button', { name: 'Get it' }));
     await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(1));

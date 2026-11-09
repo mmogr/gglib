@@ -23,8 +23,8 @@ so Back starts nothing twice.
 |------|------|
 | `SetupPlace.tsx` | The column, the setup status the gate read (not read again), the one read of the recommendation ("Can't reach gglib." with Try again), the step switch, the endpoint turned on once on step 4, the proof once the model is here, "Already done" moving on once, and Open gglib writing `setupCompleted` and landing on `/models/:id` (the Library's Hugging Face search after Choose another) |
 | `Step.tsx` | The frame every step is drawn in, the item line (name, state, what is said under it), an error or a warning under it with Retry, and `useAdvance` for "Already done" |
-| `ThisMacStep.tsx` | Step 1: the machine and its memory (the recommendation's budget, else the machine's RAM), the models folder with "(will be created)", Change saving through the models-directory route and showing the folder read back |
-| `EnginesStep.tsx` | Step 2: llama.cpp installing then ready, an error with Retry, or the source build's command with Check again; stable-diffusion.cpp ready or skipped, a warning; faster downloads set up, to be set up with the first model, or needing Python 3 |
+| `ThisMacStep.tsx` | Step 1: the machine and its memory (the recommendation's budget, else the machine's RAM), the models folder with its state beside it unless it is writable (`MODELS_DIR_WORDS`), Change saving through the models-directory route and showing the folder read back |
+| `EnginesStep.tsx` | Step 2: llama.cpp installing then its `ENGINE_WORDS` state (with why, when it does not work), an error with Retry, or Not installed with the source build's command and Check again; stable-diffusion.cpp installed or skipped, a warning; faster downloads On (`FAST_DOWNLOADS_WORDS`), to be set up with the first model, or needing Python 3 |
 | `useEngines.ts` | Step 2's state: the engines read and installed on the first arrival, llama.cpp first and stable-diffusion.cpp after it whatever llama.cpp did, a stream that closes without a result ended with a reason, a source build looked for every few seconds until found; leaving setup stops reading the streams and starts no further install |
 | `useFastDownloads.ts` | The download accelerator: set up, unasked, when Get it is pressed and before the download is queued, as `gglib up` does once a download is agreed; never where Python 3 is not there; a failure a warning with Retry, the download going ahead |
 | `FirstModelStep.tsx` | Step 3: the suggestion in the route's words, Get it (faster downloads set up first) with the download's row, Choose another, Skip, and the pairing field for another machine's models |
@@ -36,12 +36,11 @@ so Back starts nothing twice.
 
 GUI words with no Rust source, kept in one list so they can be moved to
 the daemon if a second surface needs them: the headlines (This Mac,
-Engines, First model, Endpoint, Connect); "n of 5"; "(will be created)",
-"(not writable)"; the engine states
-"reading", "installing", "ready", "did not install", "needs building",
-"waiting", "skipped — chat works without it"; "This Mac needs llama.cpp
+Engines, First model, Endpoint, Connect); "n of 5"; the brackets around the folder's state; the install's phases
+"reading", "installing", "did not install", "waiting", "skipped — chat
+works without it" (the engine states themselves are `ENGINE_WORDS`); "This Mac needs llama.cpp
 built from source. In a terminal:", "gglib looks again every few
-seconds."; "Faster downloads", "set up", "set up when you get a model",
+seconds."; "Faster downloads", "set up when you get a model",
 "setting up", "needs Python 3; downloads still work", "not set up;
 downloads still work", "setting up faster downloads first"; "Suggested",
 "Nothing gglib would suggest fits."; the suggestion's "Needs … of …",

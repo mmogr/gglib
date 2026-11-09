@@ -103,7 +103,7 @@ describe("setup's engines", () => {
 
     answer('llama', engine('llama', true));
     act(() => llama.onEvent({ type: 'completed', version: 'b11429' }));
-    await waitFor(() => expect(line(region, 'llama.cpp')).toHaveTextContent('ready'));
+    await waitFor(() => expect(line(region, 'llama.cpp')).toHaveTextContent('Installed'));
     await stream('stable_diffusion');
     expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
     expect(within(region).queryByRole('button', { name: 'Skip' })).not.toBeInTheDocument();
@@ -162,6 +162,7 @@ describe("setup's engines", () => {
     const llama = line(region, 'llama.cpp');
     expect(await within(llama).findByText(/This Mac needs llama.cpp built from source\. In a terminal:/)).toBeInTheDocument();
     expect(within(llama).getByText('gglib config llama install', { selector: 'code' })).toBeInTheDocument();
+    expect(within(llama).getByText('Not installed')).toBeInTheDocument();
     expect(api.streams).toHaveLength(0);
 
     const before = api.getEngineStatus.mock.calls.length;
@@ -170,7 +171,7 @@ describe("setup's engines", () => {
 
     answer('llama', engine('llama', true));
     act(() => vi.advanceTimersByTime(BUILD_POLL_MS));
-    await waitFor(() => expect(llama).toHaveTextContent('ready'));
+    await waitFor(() => expect(llama).toHaveTextContent('Installed'));
     expect(api.streams).toHaveLength(0);
 
     // Found: the poll stops. Its interval is cleared by a passive effect,
@@ -184,23 +185,22 @@ describe("setup's engines", () => {
   });
 
   it('sets nothing up for faster downloads on arrival, and says it is set up with a model', async () => {
-    const { region } = await reachEngines(setupStatus({ fastDownloadReady: false, pythonAvailable: true }));
+    const { region } = await reachEngines(setupStatus({ fastDownloads: 'off', pythonAvailable: true }));
     expect(line(region, 'Faster downloads')).toHaveTextContent('set up when you get a model');
     await stream('llama');
     expect(api.enableFastDownloads).not.toHaveBeenCalled();
   });
 
   it('says faster downloads need Python 3 where it is not there, and sets nothing up', async () => {
-    const { region } = await reachEngines(setupStatus({ fastDownloadReady: false, pythonAvailable: false }));
+    const { region } = await reachEngines(setupStatus({ fastDownloads: 'off', pythonAvailable: false }));
     expect(line(region, 'Faster downloads')).toHaveTextContent('needs Python 3; downloads still work');
     await stream('llama');
     expect(api.enableFastDownloads).not.toHaveBeenCalled();
   });
 
   it('says faster downloads are set up when they are', async () => {
-    const { region } = await reachEngines(setupStatus({ fastDownloadReady: true }));
-    expect(line(region, 'Faster downloads')).toHaveTextContent('set up');
-    expect(line(region, 'Faster downloads')).not.toHaveTextContent('when you get a model');
+    const { region } = await reachEngines(setupStatus({ fastDownloads: 'on' }));
+    expect(line(region, 'Faster downloads')).toHaveTextContent(/^Faster downloadsOn$/);
   });
 
   it('says an engine it cannot read, and Retry reads and installs', async () => {
@@ -219,7 +219,17 @@ describe("setup's engines", () => {
 
     await stream('stable_diffusion');
     expect(api.streams.map((s) => s.kind)).toEqual(['stable_diffusion']);
-    expect(line(region, 'llama.cpp')).toHaveTextContent('ready');
+    expect(line(region, 'llama.cpp')).toHaveTextContent('Installed');
+  });
+
+  it('says an installed llama.cpp that fails its check in the served word, with why', async () => {
+    answer('llama', engine('llama', true, { state: 'not_working', broken: 'llama-server exited: missing libggml' }));
+    answer('stable_diffusion', engine('stable_diffusion', true));
+    const { region } = await reachEngines();
+    const llama = line(region, 'llama.cpp');
+    expect(await within(llama).findByText('Installed, not working')).toBeInTheDocument();
+    expect(within(llama).getByText('Installed, not working').closest('[data-kind]')).toHaveAttribute('data-kind', 'failed');
+    expect(within(llama).getByRole('alert')).toHaveTextContent('llama-server exited: missing libggml');
   });
 
   it('shows what it reads under StrictMode, as a development build renders it', async () => {
@@ -227,8 +237,8 @@ describe("setup's engines", () => {
     answer('llama', engine('llama', true));
     answer('stable_diffusion', engine('stable_diffusion', true));
     const { region } = await reachEngines();
-    await waitFor(() => expect(line(region, 'llama.cpp')).toHaveTextContent('ready'));
-    expect(line(region, 'stable-diffusion.cpp (for drawing)')).toHaveTextContent('ready');
+    await waitFor(() => expect(line(region, 'llama.cpp')).toHaveTextContent('Installed'));
+    expect(line(region, 'stable-diffusion.cpp (for drawing)')).toHaveTextContent('Installed');
   });
 
   it('still installs stable-diffusion.cpp after llama.cpp fails', async () => {

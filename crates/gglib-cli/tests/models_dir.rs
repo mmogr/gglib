@@ -49,10 +49,11 @@ fn text(out: &Output) -> String {
     )
 }
 
-/// What `show` prints for a directory the store, not a default, supplied.
+/// What `show` prints for a directory the store, not a default, supplied,
+/// and that is there to write to.
 fn shown(dir: &Path) -> String {
     format!(
-        "Current models directory: {} (source: EnvVar)",
+        "Current models directory: {} (source: environment)\nStatus: Writable",
         dir.display()
     )
 }

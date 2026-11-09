@@ -35,7 +35,7 @@ async function loadFresh() {
 const PORT = 51733;
 
 /** The daemon's status with nothing listening. */
-const OFF = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+const OFF = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null };
 
 /** The daemon's status with the proxy up on `PORT`, as `GET /api/proxy/status` answers. */
 const UP = {
@@ -45,6 +45,7 @@ const UP = {
   base_url: `http://127.0.0.1:${PORT}/v1`,
   key: 'none_needed',
   pinned_model: null,
+  pinned_to: null,
 };
 
 describe('initProxyEvents', () => {
@@ -240,6 +241,7 @@ describe('initProxyEvents', () => {
       base_url: null,
       key: null,
       pinned_model: null,
+      pinned_to: null,
     });
 
     const { initProxyEvents, cleanupProxyEvents } = await loadFresh();

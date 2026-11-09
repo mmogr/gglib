@@ -15,7 +15,10 @@
 mod tests {
     use std::path::PathBuf;
 
-    use gglib_core::domain::{ChoiceSource, EndpointState, KeyState, ReachState, ResidencyState};
+    use gglib_core::domain::{
+        ChoiceSource, EndpointState, EngineState, FastDownloadsState, KeyState, McpState,
+        ModelsDirState, ReachState, ResidencyState,
+    };
     use gglib_core::services::{OverallHealth, ShardHealth, damaged_line};
     use serde::Serialize;
 
@@ -26,10 +29,10 @@ mod tests {
         word: String,
     }
 
-    /// The tables as the file holds them, each in display order: the four
-    /// state tables, whose choice a launch argument is, a file check's
-    /// verdict, each file's health, and the line for one damaged file and
-    /// for several, by their count.
+    /// The tables as the file holds them, each in display order: the state
+    /// tables, whose choice a launch argument is, a file check's verdict,
+    /// each file's health, and the line for one damaged file and for
+    /// several, by their count.
     #[derive(Serialize)]
     struct Words {
         endpoint: Vec<Recorded>,
@@ -37,6 +40,10 @@ mod tests {
         reach: Vec<Recorded>,
         key: Vec<Recorded>,
         choice: Vec<Recorded>,
+        engine: Vec<Recorded>,
+        tool_server: Vec<Recorded>,
+        fast_downloads: Vec<Recorded>,
+        models_dir: Vec<Recorded>,
         verdict: Vec<Recorded>,
         file_health: Vec<Recorded>,
         damaged: Vec<Recorded>,
@@ -81,6 +88,16 @@ mod tests {
             reach: ReachState::ALL.iter().map(|s| row(s, s.word())).collect(),
             key: KeyState::ALL.iter().map(|s| row(s, s.word())).collect(),
             choice: ChoiceSource::ALL.iter().map(|s| row(s, s.word())).collect(),
+            engine: EngineState::ALL.iter().map(|s| row(s, s.word())).collect(),
+            tool_server: McpState::ALL.iter().map(|s| row(s, s.word())).collect(),
+            fast_downloads: FastDownloadsState::ALL
+                .iter()
+                .map(|s| row(s, s.word()))
+                .collect(),
+            models_dir: ModelsDirState::ALL
+                .iter()
+                .map(|s| row(s, s.word()))
+                .collect(),
             verdict: OverallHealth::ALL
                 .iter()
                 .map(|s| row(s, s.word()))

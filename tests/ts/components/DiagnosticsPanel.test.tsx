@@ -68,6 +68,7 @@ const base: Diagnostics = {
     builder: null,
     availableBuilder: 'uv',
     error: null,
+    state: 'off',
   },
 };
 
@@ -177,10 +178,13 @@ describe('DiagnosticsPanel', () => {
   it('offers disabling when already provisioned', async () => {
     mockGet.mockResolvedValue({
       ...base,
-      fastDownloads: { ...base.fastDownloads, provisioned: true, builder: 'uv' },
+      fastDownloads: { ...base.fastDownloads, provisioned: true, builder: 'uv', state: 'on' },
     });
 
     render(<DiagnosticsPanel />);
+    // The accelerator's state in the served word, the one Settings says.
+    expect(await screen.findByText('On')).toBeInTheDocument();
+    expect(screen.queryByText('Enabled')).not.toBeInTheDocument();
 
     await userEvent.click(await screen.findByRole('button', { name: /Disable accelerator/ }));
     await waitFor(() => expect(disableFastDownloads).toHaveBeenCalled());

@@ -22,9 +22,10 @@ const UP: ProxyStatus = {
   base_url: 'http://192.168.1.20:8080/v1',
   key: 'required',
   pinned_model: null,
+  pinned_to: null,
 };
 
-const OFF: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+const OFF: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null };
 
 describe('the proxy registry', () => {
   beforeEach(() => resetProxyState());
@@ -67,7 +68,7 @@ describe('the proxy registry', () => {
     ingestProxyEvent({ type: 'proxy_stopped' });
     ingestProxyEvent({ type: 'proxy_started', port: 9090 });
     expect(getProxyState().port).toBe(9090);
-    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null });
+    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null });
   });
 });
 
@@ -76,16 +77,17 @@ describe('the endpoint facts', () => {
 
   it('say off, with no address and no key rule, while the proxy is down', () => {
     applyProxyStatus(OFF);
-    expect(endpointFacts(getProxyState())).toEqual({ state: 'off', baseUrl: null, key: null, pinnedModel: null });
+    expect(endpointFacts(getProxyState())).toEqual({ state: 'off', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null });
   });
 
   it('say the daemon\'s word, address, key rule and pin once its status agrees the proxy is up', () => {
-    applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'qwen3-8b' });
+    applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'qwen3-8b', pinned_to: 'Pinned to qwen3-8b' });
     expect(endpointFacts(getProxyState())).toEqual({
       state: 'pinned',
       baseUrl: 'http://192.168.1.20:8080/v1',
       key: 'required',
       pinnedModel: 'qwen3-8b',
+      pinnedTo: 'Pinned to qwen3-8b',
     });
   });
 
@@ -97,18 +99,18 @@ describe('the endpoint facts', () => {
   it('between a start event and the read after it, say on and nothing the old status knew', () => {
     applyProxyStatus(OFF);
     ingestProxyEvent({ type: 'proxy_started', port: 8080 });
-    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null });
+    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null });
   });
 
   it('between a stop event and the read after it, say off, whatever the old status said', () => {
     applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'qwen3-8b' });
     ingestProxyEvent({ type: 'proxy_crashed' });
-    expect(endpointFacts(getProxyState())).toEqual({ state: 'off', baseUrl: null, key: null, pinnedModel: null });
+    expect(endpointFacts(getProxyState())).toEqual({ state: 'off', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null });
   });
 
   it('before any read, a start event alone says on and no more', () => {
     ingestProxyEvent({ type: 'proxy_started', port: 8080 });
-    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null });
+    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null });
   });
 
   /**
@@ -119,7 +121,7 @@ describe('the endpoint facts', () => {
   it('a status from a daemon that predates the fields says on and nothing more, not a crash', () => {
     const older = { running: true, port: 8080, pinned_model: null } as unknown as ProxyStatus;
     applyProxyStatus(older);
-    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null });
+    expect(endpointFacts(getProxyState())).toEqual({ state: 'on', baseUrl: null, key: null, pinnedModel: null, pinnedTo: null });
 
     applyProxyStatus({ ...older, pinned_model: 'qwen3-8b' });
     expect(endpointFacts(getProxyState()).state).toBe('pinned');

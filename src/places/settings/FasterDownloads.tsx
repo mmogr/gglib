@@ -9,9 +9,9 @@
  * the row names the command that builds it once one is installed, with a
  * ⧉. A failure is said in the daemon's words, which name the remedy.
  *
- * The state is the daemon's setup status: `fastDownloadReady` (the same
- * check that picks a download's backend) and `pythonAvailable` (its
- * preflight). It is the one route that says whether Python is there.
+ * The state is the daemon's setup status: `fastDownloads` (the same
+ * check that picks a download's backend, as the state `FAST_DOWNLOADS_WORDS`
+ * words) and `pythonAvailable` (its preflight). It is the one route that says whether Python is there.
  *
  * @module places/settings/FasterDownloads
  */
@@ -21,16 +21,21 @@ import { MoreHorizontal } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { CopyValue } from '../../components/CopyValue';
 import { Icon } from '../../components/ui/Icon';
-import { StatusMark } from '../../components/status/StatusMark';
+import { StatusMark, type MarkKind } from '../../components/status/StatusMark';
+import { FAST_DOWNLOADS_WORDS } from '../../components/status/words';
 import { disableFastDownloads, enableFastDownloads, getSetupStatus } from '../../services/transport/api/setup';
 import { formatError } from '../../utils/errors';
 import { Menu } from '../../components/ui/Menu';
+import type { FastDownloadsState } from '../../types/generated/FastDownloadsState';
 
 /** The command that builds the accelerator from a terminal (`gglib config fast-downloads enable`). */
 const ENABLE_COMMAND = 'gglib config fast-downloads enable';
 
+/** The shape each state is drawn as; its word is `FAST_DOWNLOADS_WORDS`'. */
+const MARK: Record<FastDownloadsState, MarkKind> = { on: 'on', off: 'off' };
+
 interface Accelerator {
-  on: boolean;
+  state: FastDownloadsState;
   python: boolean;
 }
 
@@ -42,7 +47,7 @@ export const FasterDownloads: FC = () => {
   const read = useCallback(
     () =>
       getSetupStatus()
-        .then((status) => setState({ on: status.fastDownloadReady, python: status.pythonAvailable }))
+        .then((status) => setState({ state: status.fastDownloads, python: status.pythonAvailable }))
         .catch((err: unknown) => setError(formatError(err))),
     [],
   );
@@ -77,15 +82,15 @@ export const FasterDownloads: FC = () => {
           <p className="m-0 text-xs text-text-secondary">
             Hugging Face's hf_xet transfer, quicker than plain HTTP for large files. Downloads work without it.
           </p>
-          {state && <StatusMark kind={state.on ? 'on' : 'off'} word={state.on ? 'On' : 'Off'} className="text-xs" />}
+          {state && <StatusMark kind={MARK[state.state]} word={FAST_DOWNLOADS_WORDS[state.state]} className="text-xs" />}
         </div>
         <div className="flex shrink-0 items-center gap-xs">
-          {state && !state.on && state.python && (
+          {state?.state === 'off' && state.python && (
             <Button variant="secondary" size="sm" disabled={changing} onClick={() => void change(true)}>
               Set up
             </Button>
           )}
-          {state?.on && (
+          {state?.state === 'on' && (
             <Menu
               iconOnly
               name="More for Faster downloads"
@@ -96,10 +101,10 @@ export const FasterDownloads: FC = () => {
         </div>
       </div>
 
-      {changing && state && !state.on && (
+      {changing && state?.state === 'off' && (
         <p className="m-0 text-xs text-text-secondary">Setting up. This can take a minute.</p>
       )}
-      {state && !state.on && !state.python && (
+      {state?.state === 'off' && !state.python && (
         <div className="flex flex-wrap items-center gap-xs text-xs text-text-secondary">
           <span>It needs Python 3.10 or newer. Once that is installed:</span>
           <code className="font-mono">{ENABLE_COMMAND}</code>

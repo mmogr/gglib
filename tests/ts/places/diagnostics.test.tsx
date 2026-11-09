@@ -120,8 +120,8 @@ import {
 } from '../fixtures/dashboard';
 import { renderApp, renderShell } from './harness';
 
-const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null };
-const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null };
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null };
+const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null };
 
 function renderAt(path: string, status: ProxyStatus = UP) {
   act(() => applyProxyStatus(status));
@@ -642,5 +642,5 @@ const DIAGNOSTICS = {
     modelsSource: 'default',
   },
   acceleration: { detected: 'Metal', detectionError: null },
-  fastDownloads: { provisioned: false, envDir: null, legacyPath: false, builder: null, availableBuilder: 'uv', error: null },
+  fastDownloads: { provisioned: false, envDir: null, legacyPath: false, builder: null, availableBuilder: 'uv', error: null, state: 'off' },
 };

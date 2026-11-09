@@ -27,4 +27,10 @@ key: KeyState | null,
  * The model this proxy run is pinned to, when started in pinned mode
  * (`gglib serve`). `None` for the ordinary auto-swapping proxy.
  */
-pinned_model: string | null, };
+pinned_model: string | null, 
+/**
+ * The pinned state said with its model, `Pinned to <model>`
+ * (`EndpointState::pinned_to`), as every surface says it. `None` when
+ * nothing is pinned.
+ */
+pinned_to: string | null, };

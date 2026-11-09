@@ -99,7 +99,7 @@ const Steps: FC<StepsProps> = ({ status, rec, onDone }) => {
   const [step, setStep] = useState(1);
   const [folder, setFolder] = useState(status.modelsDirectory);
   const engines = useEngines();
-  const fast = useFastDownloads(status.fastDownloadReady, status.pythonAvailable);
+  const fast = useFastDownloads(status.fastDownloads, status.pythonAvailable);
   const recommended = rec;
   const first = useFirstModel(recommended, fast.setUp);
   const endpoint = useEndpointActions();

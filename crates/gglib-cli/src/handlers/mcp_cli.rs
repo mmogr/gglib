@@ -10,6 +10,7 @@ use anyhow::{Result, anyhow};
 use gglib_app_services::types::{McpServerInfo, McpServerStatusDto, McpToolInfo};
 use gglib_core::McpServiceError;
 use gglib_core::daemon_port;
+use gglib_core::domain::McpState;
 use gglib_core::domain::mcp::{McpLifecycle, McpServerType, NewMcpServer};
 use gglib_mcp::McpService;
 
@@ -79,6 +80,7 @@ async fn list(ctx: &CliContext) -> Result<()> {
     print_separator(83);
 
     let daemon = daemon_servers(ctx).await;
+    let mut failures = Vec::new();
     for s in &servers {
         let type_str = s.server_type.to_string();
         let yes_no = |on: bool| if on { "yes" } else { "no" };
@@ -94,6 +96,13 @@ async fn list(ctx: &CliContext) -> Result<()> {
             lifecycle_str,
             status_and_tools(s, daemon.as_deref().ok())
         );
+        failures.extend(failure_line(s, daemon.as_deref().ok()));
+    }
+    if !failures.is_empty() {
+        println!();
+        for line in failures {
+            println!("{line}");
+        }
     }
     if let Err(why) = daemon {
         println!("\nStatus and Tools are unknown: {why}.");
@@ -119,30 +128,47 @@ async fn daemon_servers(ctx: &CliContext) -> Result<Vec<McpServerInfo>, String> 
 }
 
 /// A row's Status and Tools cells: the daemon's copy of `server`, from
-/// `daemon`'s list, and a dash in each when there is no daemon to read.
+/// `daemon`'s list, its state in the word every surface uses, and a dash in
+/// each when there is no daemon to read. A failed server's reason is said
+/// under the table ([`failure_line`]).
 ///
 /// A server gglib cannot run has no status and no tools to count, daemon or
-/// not. It says so across the two cells, which the words fill exactly.
+/// not. Its word says so across the two cells, which it fills exactly.
 fn status_and_tools(server: &gglib_core::McpServer, daemon: Option<&[McpServerInfo]>) -> String {
     if server.server_type == McpServerType::Sse {
-        return "not supported yet".to_string();
+        return McpState::Unsupported.word().to_owned();
     }
-    let Some(info) = daemon.and_then(|infos| infos.iter().find(|i| i.server.id == server.id))
-    else {
+    let Some(info) = in_daemon(server, daemon) else {
         return format!("{:<10} {:<6}", "—", "—");
     };
-    let status = match &info.status {
-        McpServerStatusDto::Unsupported => return "not supported yet".to_string(),
-        McpServerStatusDto::Stopped => "stopped".to_string(),
-        McpServerStatusDto::Starting => "starting".to_string(),
-        McpServerStatusDto::Running => "running".to_string(),
-        McpServerStatusDto::Error(e) => format!("error: {}", truncate_string(e, 20)),
-    };
-    format!(
-        "{:<10} {:<6}",
-        truncate_string(&status, 9),
-        info.tools.len()
-    )
+    if info.state == McpState::Unsupported {
+        return McpState::Unsupported.word().to_owned();
+    }
+    format!("{:<10} {:<6}", info.state.word(), info.tools.len())
+}
+
+/// The daemon's copy of `server`, when there is a daemon to read.
+fn in_daemon<'a>(
+    server: &gglib_core::McpServer,
+    daemon: Option<&'a [McpServerInfo]>,
+) -> Option<&'a McpServerInfo> {
+    daemon.and_then(|infos| infos.iter().find(|i| i.server.id == server.id))
+}
+
+/// The line under the table for a server the daemon has as failed: its name
+/// and the daemon's reason. Nothing for any other.
+fn failure_line(
+    server: &gglib_core::McpServer,
+    daemon: Option<&[McpServerInfo]>,
+) -> Option<String> {
+    match &in_daemon(server, daemon)?.status {
+        McpServerStatusDto::Error(reason) => Some(format!(
+            "{} \u{2014} {}: {reason}",
+            server.name,
+            McpState::Failed
+        )),
+        _ => None,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

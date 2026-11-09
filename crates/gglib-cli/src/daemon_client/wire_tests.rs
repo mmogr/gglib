@@ -202,6 +202,7 @@ fn a_status_with_every_contract_field_is_read_whole() {
         "base_url" => serde_json::json!("http://127.0.0.1:8080/v1"),
         "key" => serde_json::json!("required"),
         "pinned_model" => serde_json::json!("qwen"),
+        "pinned_to" => serde_json::json!("Pinned to qwen"),
         other => panic!("no sample value for contract field `{other}` — add one"),
     };
     let answer: serde_json::Map<String, serde_json::Value> = PROXY_STATUS_FIELDS
@@ -219,8 +220,9 @@ fn a_status_with_every_contract_field_is_read_whole() {
         base_url,
         key,
         pinned_model,
+        pinned_to,
     } = status;
-    let fields: [(&str, bool); 6] = [
+    let fields: [(&str, bool); 7] = [
         ("running", running),
         ("state", state == EndpointState::On),
         ("port", port == Some(8080)),
@@ -230,6 +232,7 @@ fn a_status_with_every_contract_field_is_read_whole() {
         ),
         ("key", key == Some(KeyState::Required)),
         ("pinned_model", pinned_model.as_deref() == Some("qwen")),
+        ("pinned_to", pinned_to.as_deref() == Some("Pinned to qwen")),
     ];
     assert_eq!(fields.len(), PROXY_STATUS_FIELDS.len());
     for (name, read) in fields {

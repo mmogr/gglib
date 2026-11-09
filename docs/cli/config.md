@@ -99,7 +99,9 @@ and `--profile coding` does the same on `serve`, `chat` and `q`.
 
 The download folder: where `gglib model download`, `gglib up` and the app
 put the files they fetch. A model you `add` stays where it is, so the library
-need not be one folder. `show` prints the directory; `prompt` asks; `set <PATH>`
+need not be one folder. `show` prints the directory, where it was chosen
+(`explicit`, `environment` or `default`) and its state, the word Settings
+shows: Writable, Will be created or Not writable; `prompt` asks; `set <PATH>`
 stores one.
 
 - A running daemon's next download goes to the new directory; a download
@@ -112,7 +114,9 @@ stores one.
 The two engines: llama.cpp's `llama-server`, which serves chat models, and
 stable-diffusion.cpp's `sd-server`, which serves image models. Each is
 pinned to a release, and `status` says where the install stands against the
-pin.
+pin. Its first line is the engine's state in the word Settings shows:
+Installed, Installed, not working (llama.cpp's binary failed its check) or
+Not installed.
 
 <!-- snippet: config-llama-status -->
 ```console
@@ -168,7 +172,8 @@ while a required dependency is missing.
 ## `fast-downloads`
 
 The optional `hf_xet` download accelerator: `status`, `enable`, `disable`,
-`prompt`. Downloads work without it, over native HTTP.
+`prompt`. Downloads work without it, over native HTTP. `status` says
+`Fast downloads: On` or `Off`, the word Settings shows.
 
 - `enable` builds a Python environment gglib owns, under its own data
   directory, using `uv` when it is available; `--python <path>` names the

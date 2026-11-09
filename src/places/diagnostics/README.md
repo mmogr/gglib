@@ -49,7 +49,7 @@ log shows here while it is loaded."; "Loading".
 | `DiagnosticsPlace.tsx` | The route: the tablist, the open tab by the address, Benchmarks lazy with `?models=`, System's column |
 | `LogsTab.tsx` | Logs: the loaded models' picker, the facts column, and the picked model's log |
 | `logFacts.ts` | The facts beside a log, each once and only when the daemon has it |
-| `DiagnosticsPanel.tsx` | System: `gglib config check-deps`, `paths` and `fast-downloads status` as one panel, with Re-check |
+| `DiagnosticsPanel.tsx` | System: `gglib config check-deps`, `paths` and `fast-downloads status` as one panel (the accelerator's state in `FAST_DOWNLOADS_WORDS`), with Re-check |
 | `useDiagnostics.ts` | System's one read, Re-check, and the accelerator's toggle |
 | `live/` | The Live tab and the dashboard's panels: its own `README.md` |
 | `benchmarks/` | The Benchmarks tab: its own `README.md` |

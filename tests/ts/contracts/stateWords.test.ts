@@ -16,10 +16,14 @@ import { describe, it, expect } from 'vitest';
 import {
   CHOICE_WORDS,
   ENDPOINT_WORDS,
+  ENGINE_WORDS,
+  FAST_DOWNLOADS_WORDS,
   FILE_HEALTH_WORDS,
   KEY_WORDS,
+  MODELS_DIR_WORDS,
   REACH_WORDS,
   RESIDENCY_WORDS,
+  TOOL_SERVER_WORDS,
   VERDICT_WORDS,
 } from '../../../src/components/status/words';
 
@@ -36,6 +40,10 @@ const WORDS = JSON.parse(rust('contracts/vocabulary/words.json')) as {
   reach: Recorded[];
   key: Recorded[];
   choice: Recorded[];
+  engine: Recorded[];
+  tool_server: Recorded[];
+  fast_downloads: Recorded[];
+  models_dir: Recorded[];
   verdict: Recorded[];
   file_health: Recorded[];
 };
@@ -51,9 +59,32 @@ describe('the state words are the ones the CLI records', () => {
     ['reach', REACH_WORDS, WORDS.reach],
     ['key', KEY_WORDS, WORDS.key],
     ['choice', CHOICE_WORDS, WORDS.choice],
+    ['engine', ENGINE_WORDS, WORDS.engine],
+    ['tool_server', TOOL_SERVER_WORDS, WORDS.tool_server],
+    ['fast_downloads', FAST_DOWNLOADS_WORDS, WORDS.fast_downloads],
+    ['models_dir', MODELS_DIR_WORDS, WORDS.models_dir],
     ['verdict', VERDICT_WORDS, WORDS.verdict],
     ['file_health', FILE_HEALTH_WORDS, WORDS.file_health],
   ] as const)('%s: the same states, in the same order, with the same words', (_name, map, recorded) => {
     expect(asRows(map)).toEqual(recorded);
+  });
+
+  it('every table the file records has a map here, but damaged, a fixture', () => {
+    expect(Object.keys(WORDS)).toEqual([
+      'endpoint',
+      'residency',
+      'reach',
+      'key',
+      'choice',
+      'engine',
+      'tool_server',
+      'fast_downloads',
+      'models_dir',
+      'verdict',
+      'file_health',
+      // `damaged_line` by count, served on the report: the fixture
+      // places/verification.test.tsx reads, not a map of states.
+      'damaged',
+    ]);
   });
 });

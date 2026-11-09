@@ -1,8 +1,8 @@
 /**
  * Settings › Models › Models folder: where the library lives, saved when the
  * box is left or Enter is pressed, or picked with Change… in the desktop
- * app, with Reset back to the default and whether the folder exists and can
- * be written. Undo puts the folder before back. The folder is its own write
+ * app, with Reset back to the default and the folder's state (`MODELS_DIR_WORDS`:
+ * writable, will be created, not writable). Undo puts the folder before back. The folder is its own write
  * (`setModelsDirectory`), not a settings field.
  *
  * @module places/settings/ModelsFolder
@@ -12,9 +12,9 @@ import { useCallback, useState, type FC } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { StatusMark } from '../../components/status/StatusMark';
+import { MODELS_DIR_WORDS } from '../../components/status/words';
 import { useModelsDirectory } from '../../hooks/useModelsDirectory';
 import { isDesktop, pickFolder } from '../../services/platform';
-import type { ModelsDirectoryInfo } from '../../types';
 import { SettingField, settingDescriptionId } from './SettingField';
 import { useUndoableWrite } from './useFieldSave';
 
@@ -27,11 +27,6 @@ const SOURCES: Record<string, string> = {
   default: 'The default.',
 };
 
-/** Whether the folder is there and can be written: both said in every state. */
-function folderState(info: ModelsDirectoryInfo): string {
-  const there = info.exists ? 'exists' : 'will be created';
-  return `${there} · ${info.writable ? 'writable' : 'not writable'}`;
-}
 
 export const ModelsFolder: FC = () => {
   const { info, save } = useModelsDirectory();
@@ -90,10 +85,10 @@ export const ModelsFolder: FC = () => {
         }}
       />
       <span className="text-xs text-text-secondary">
-        {info.exists && info.writable ? (
-          folderState(info)
+        {info.state === 'writable' ? (
+          MODELS_DIR_WORDS.writable
         ) : (
-          <StatusMark kind="attention" word={folderState(info)} />
+          <StatusMark kind="attention" word={MODELS_DIR_WORDS[info.state]} />
         )}
       </span>
     </SettingField>

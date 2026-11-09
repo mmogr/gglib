@@ -7,15 +7,18 @@ mod set;
 mod settings_display;
 mod unset;
 
+#[cfg(test)]
+#[path = "models_dir_tests.rs"]
+mod models_dir_tests;
+
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::config_commands::{ModelsDirCommand, SettingsCommand};
 use crate::handlers::model::resolver;
 use crate::utils::input::prompt_string_with_default;
-use gglib_core::paths::{
-    DirectoryCreationStrategy, default_models_dir, resolve_models_dir, set_models_dir,
-};
+use gglib_app_services::types::ModelsDirectoryInfo;
+use gglib_core::paths::{DirectoryCreationStrategy, default_models_dir, set_models_dir};
 use gglib_core::{Settings, SettingsUpdate};
 
 use settings_display::{print_sections, settings_display_rows, settings_to_sections};
@@ -95,15 +98,25 @@ pub(crate) async fn handle_default_model(
     Ok(())
 }
 
+/// What `gglib config models-dir show` prints for `info`, the folder the
+/// settings page shows: where it is and how it was chosen, then its state in
+/// the word every surface uses.
+fn models_dir_lines(info: &ModelsDirectoryInfo) -> [String; 2] {
+    [
+        format!(
+            "Current models directory: {} (source: {})",
+            info.path, info.source
+        ),
+        format!("Status: {}", info.state),
+    ]
+}
+
 pub(crate) fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
     match command {
         ModelsDirCommand::Show => {
-            let resolved = resolve_models_dir(None)?;
-            println!(
-                "Current models directory: {} (source: {:?})",
-                resolved.path.display(),
-                resolved.source
-            );
+            for line in models_dir_lines(&gglib_app_services::models_directory_info()?) {
+                println!("{line}");
+            }
             Ok(())
         }
         ModelsDirCommand::Prompt => {

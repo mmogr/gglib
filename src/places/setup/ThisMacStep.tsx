@@ -8,7 +8,8 @@
  * RAM`); either is left out when the daemon has none. Where the folder was
  * set is not said: the route names a stored folder and `GGLIB_MODELS_DIR`
  * alike as `environment`. The models folder
- * is the resolved one, "(will be created)" while it is not there, with
+ * is the resolved one, with its state beside it while it is not there to
+ * write to (`MODELS_DIR_WORDS`: "(Will be created)", "(Not writable)"), with
  * Change: the folder typed, saved through the models-directory route, then
  * read back, so what is shown is what the daemon resolved.
  *
@@ -16,6 +17,7 @@
  */
 
 import { useState, type FC } from 'react';
+import { MODELS_DIR_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { getTransport } from '../../services/transport';
@@ -33,11 +35,9 @@ interface ThisMacStepProps {
   onNext: () => void;
 }
 
-/** The folder's state beside its path, when there is one to say. */
+/** The folder's state beside its path, when it is not simply there to write to. */
 function folderNote(folder: ModelsDirectoryInfo): string | null {
-  if (!folder.exists) return '(will be created)';
-  if (!folder.writable) return '(not writable)';
-  return null;
+  return folder.state === 'writable' ? null : `(${MODELS_DIR_WORDS[folder.state]})`;
 }
 
 export const ThisMacStep: FC<ThisMacStepProps> = ({ status, rec, folder, onFolder, onNext }) => {

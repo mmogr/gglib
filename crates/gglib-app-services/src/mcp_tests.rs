@@ -6,6 +6,7 @@ use gglib_core::{McpLifecycle, McpServerRepository};
 use gglib_db::{SqliteMcpRepository, setup_test_database};
 
 use super::*;
+use crate::types::McpServerStatusDto;
 
 /// The ops, with the service and the repository under them for a test that
 /// has to compare against the one or store what the other would refuse.
@@ -94,6 +95,7 @@ async fn a_stored_sse_server_is_listed_as_unsupported_refused_a_run_and_an_edit_
         "got {:?}",
         listed[0].status
     );
+    assert_eq!(listed[0].state, gglib_core::domain::McpState::Unsupported);
 
     let started = ops.start(id).await;
     assert!(is_the_sse_refusal(&started), "got {started:?}");
@@ -326,4 +328,23 @@ async fn an_unknown_server_is_not_found_and_an_sse_one_is_refused_opening() {
     let opened = ops.set_allow_remote(id, true).await;
     assert!(is_the_sse_refusal(&opened), "got {opened:?}");
     assert!(!ops.set_allow_remote(id, false).await.unwrap().allow_remote);
+}
+
+/// A server that errored is served as failed, with its reason kept in its
+/// status; the state is on the wire beside the status.
+#[tokio::test]
+async fn an_errored_server_is_served_failed_with_its_reason() {
+    let (_, _, repo) = make_ops_over().await;
+    let stored = repo
+        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
+        .await
+        .unwrap();
+    let info = McpServerInfo::new(
+        McpOps::server_to_dto(&stored),
+        McpServerStatus::Error("spawn npx: not found".to_owned()),
+        Vec::new(),
+    );
+    let json = serde_json::to_value(&info).unwrap();
+    assert_eq!(json["state"], "failed");
+    assert_eq!(json["status"]["error"], "spawn npx: not found");
 }
