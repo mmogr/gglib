@@ -166,7 +166,8 @@ describe('the chat routes', () => {
     daemon.chats = [chat(3, 23)];
     const { at } = renderApp('/chat/3');
     await waitFor(() => expect(at()).toBe('/models/23'));
-    expect(screen.getByRole('main', { name: 'Library' })).toBeInTheDocument();
+    // The address moves a moment before the place under it is drawn.
+    expect(await screen.findByRole('main', { name: 'Library' })).toBeInTheDocument();
   });
 
   describe('on a cold load, before the server list is heard', () => {

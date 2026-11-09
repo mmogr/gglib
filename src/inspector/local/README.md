@@ -32,6 +32,8 @@ reads `set by you · Reset`. A token of the launch line whose decision the Load
 with options sheet holds offers Change for this model…, which opens the
 sheet on that field; a token the person chose is underlined. A per-token
 override field and `+ flag` wait for a Rust surface that sets any flag.
+⧉ beside the launch line copies the whole command as one shell line, the
+line drawn (a value quoted where a shell would read it, `$` included).
 
 ⋯ Verify files and Check for updates (the second only for a model from
 Hugging Face) start the check at once and open Details on Source, where
@@ -49,9 +51,9 @@ is the "files checked" time, since the daemon stores none.
 Words with no Rust twin, composed from Rust's fields here: "loaded 4m 10s"
 and the rate's "34 t/s" on a loaded model's status line, the fit sentence
 and its refusal, the Context row's note, the Sampling row's count, "set by
-you", "Auto", "On", "Off", "Applies at next load.", "Didn't load:" and
-"Didn't unload:" (`utils/errors` `loadFailed`), "Copied" beside ⋯ after
-⋯ › Copy path, "Drawing needs
+you", "Auto", "On", "Off", "Applies at next load.", "Copy as command",
+"Didn't load:" and "Didn't unload:" (`utils/errors` `loadFailed`),
+"Copied" beside ⋯ after ⋯ › Copy path and beside Copy as command, "Drawing needs
 stable-diffusion.cpp.", and the verification line's "Checking files…",
 "Checking … N%", "Files intact", "N files damaged", "Re-download it/them",
 "No file has a hash to check against", "Checking for
