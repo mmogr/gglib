@@ -60,6 +60,7 @@ fn build_reflects_active_connection_and_metrics() {
         tool_calls: 0,
         finish_reason: None,
         generation_ms: None,
+        tokens_per_second: None,
         seq: 0,
         model_name: "qwen-3b".to_string(),
         payload_chars_before: 100,
@@ -530,4 +531,34 @@ fn the_snapshot_has_one_cache_figure() {
 
     assert!(body.get("agent_usage").is_none(), "{body}");
     assert!(body.get("cache").is_some(), "{body}");
+}
+
+/// The trips total is the proxy's trips summed over every model, and the
+/// agent loop's own trips, counted beside them, are not in it.
+#[test]
+fn the_trips_total_sums_every_models_proxy_trips() {
+    use gglib_core::domain::defects::{LoopGuardTrip, ModelDefectLedger};
+    let ledger = Arc::new(ModelDefectLedger::new());
+    ledger.record_loop_guard_trip("qwen", LoopGuardTrip::Loop);
+    ledger.record_loop_guard_trip("qwen", LoopGuardTrip::Stagnation);
+    ledger.record_loop_guard_trip("gemma", LoopGuardTrip::Loop);
+    ledger.record_agent_guard("gemma", Some(LoopGuardTrip::Loop));
+    ledger.record_request("phi");
+    let metrics = ContextMetricsStore::new().with_ledger(ledger);
+
+    let snapshot = DashboardSnapshot::build(
+        &ActiveConnectionsRegistry::new(),
+        &SlotsCache::new(),
+        &metrics,
+        &UpstreamHealth::new(),
+        &CacheStatusCache::new(),
+        &CacheMetricsStore::new(),
+        &LaunchNarrationCache::new(),
+        None,
+        &SamplingAuditStore::new(),
+    );
+
+    assert_eq!(snapshot.loop_guard_trips_total, 3);
+    let json = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(json["loop_guard_trips_total"], 3);
 }

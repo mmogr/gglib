@@ -5,7 +5,9 @@
  * backend raised, followed by measured reuse totals.
  *
  * Every figure shown is grounded in counts the upstream actually reported:
- * the hit-rate readouts are ratios of exact reported totals. Speculative
+ * the hit-rate readouts are the proxy's own ratios of exact reported totals
+ * (`CacheUsage.reuse_percent`, `last_reuse_percent`), the percents `gglib
+ * proxy dashboard` prints beside the same counts. Speculative
  * projections stay out — in particular there is no "time saved", because
  * reuse counts are exact while what that reuse saved depends on a prefill
  * that never ran. See `gglib_core::cache_metrics` for the same reasoning.
@@ -46,15 +48,8 @@ function Row({ label, value }: { label: string; value: string }) {
  */
 const CacheUsageRows: FC<{ usage?: CacheUsage | null }> = ({ usage }) => {
   const hasMeasurements = (usage?.reporting_requests ?? 0) > 0;
-
-  const hitRatePct =
-    usage && hasMeasurements && usage.prompt_tokens > 0
-      ? Math.round((usage.cached_tokens / usage.prompt_tokens) * 100)
-      : null;
-  const lastRatePct =
-    usage && usage.last_cached_tokens != null && usage.last_prompt_tokens
-      ? Math.round((usage.last_cached_tokens / usage.last_prompt_tokens) * 100)
-      : null;
+  const hitRatePct = usage?.reuse_percent ?? null;
+  const lastRatePct = usage?.last_reuse_percent ?? null;
 
   return (
     <div className="flex flex-col gap-xs p-md rounded-base bg-surface-elevated">

@@ -166,6 +166,7 @@ const SNAPSHOT: DashboardSnapshot = {
     total_recycle_failures: 0,
   },
   per_model_defects: {},
+  loop_guard_trips_total: 0,
   cache: null,
   launch: null,
   admission: {
@@ -229,6 +230,7 @@ const REQUEST: ContextSnapshot = {
   tool_calls: 0,
   finish_reason: null,
   generation_ms: null,
+  tokens_per_second: null,
   loop_guard_trip: null,
   loop_guard_ended: false,
   recorded_at_secs: 0,

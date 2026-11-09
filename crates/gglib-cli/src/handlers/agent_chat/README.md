@@ -27,11 +27,15 @@ independently readable:
 - [`sampling_warning`] — the one line, before the first turn, that says
   the endpoint uses its own sampling until "Let clients set sampling" is on,
   and the one that names a sampling flag no chat keeps
-- [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output
+- [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output,
+  and a reply's figure line ("41 s · 13 t/s · 2,100 tokens reused", core's
+  `TurnUsage::figure_line`, the GUI thread's words)
 - `progress_line` — a long tool's progress ("drawing: sampling 2/4") and a
   wait before a reply ("Loading Qwen3-4B… 12 s", core's words), as one
   stderr line each report rewrites; a preview frame is not shown
-- [`drain`]    — async event-stream consumer (spinner, thinking accumulator)
+- [`drain`]    — async event-stream consumer (spinner, thinking accumulator);
+  prints the reply's figure line on stderr after it, from its last turn's
+  usage, unless `--quiet`
 - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input,
   each line a turn on the session's chat
 - [`repl_line`] — what one line typed at the prompt asks for: a command, or

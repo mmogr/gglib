@@ -119,6 +119,9 @@ infrastructure concerns (database, filesystem, etc.).
 - `variant_fit` - Whether a repository's variant fits this machine, as a
   listing says it (`VariantFit`, with its words), the picker's verdict on
   the wire
+- `figures` - How fast a model wrote (`tokens_per_second`), and a rate,
+  seconds and a count in the words every surface says them (`rate_words`,
+  `seconds_words`, `count_words`)
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
 - `fit_sentence` - A context fit in words (`ContextFit::new` composes them):

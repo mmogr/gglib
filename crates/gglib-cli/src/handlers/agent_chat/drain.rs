@@ -12,12 +12,12 @@
 
 use std::io::{self, IsTerminal, Write as _};
 
-use gglib_core::domain::agent::AgentEvent;
+use gglib_core::domain::agent::{AgentEvent, TurnUsage};
 use tokio::sync::mpsc;
 
 use super::markdown::render_markdown;
 use super::progress_line;
-use super::renderer::render_event;
+use super::renderer::{figure_line, render_event};
 use super::thinking_dispatch::{
     RenderContext, close_thinking, emit_content, emit_reasoning, suspend_or_run,
 };
@@ -38,7 +38,8 @@ use super::thinking_dispatch::{
 ///
 /// Reasoning tokens (already classified upstream into
 /// [`AgentEvent::ReasoningDelta`]) are routed to stderr through a
-/// "Thinking" banner; content tokens go to stdout.
+/// "Thinking" banner; content tokens go to stdout. Once the reply is shown,
+/// its figure line follows on stderr, unless `quiet`.
 ///
 pub(crate) async fn drain_event_stream(
     rx: &mut mpsc::UnboundedReceiver<AgentEvent>,
@@ -52,6 +53,10 @@ pub(crate) async fn drain_event_stream(
     // A progress line is on stderr, unfinished, until the next other event
     // wipes it.
     let mut progress_showing = false;
+    // How the reply's last model call was made: a turn that called tools
+    // made one per call, and the reply's figure line is its last one's, as
+    // the GUI's is.
+    let mut made: Option<TurnUsage> = None;
 
     while let Some(event) = rx.recv().await {
         let is_progress = matches!(
@@ -103,7 +108,15 @@ pub(crate) async fn drain_event_stream(
                     println!();
                 }
 
+                if !quiet && let Some(usage) = &made {
+                    eprintln!("{}", figure_line(usage));
+                }
                 return true;
+            }
+
+            AgentEvent::TurnUsage(usage) => {
+                close_thinking(&mut ctx);
+                made = Some(usage.clone());
             }
 
             // ── Tool / progress / error events ───────────────────────

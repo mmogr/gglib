@@ -4,8 +4,10 @@
  * A figure the page does not have is left out, never drawn as zero, a dash
  * or a guess. How a turn was made (its model, token counts and times) comes
  * from its `turn_usage` event while drawn and from its saved row once
- * loaded: the same figures, so both say the same. The rate is tokens
- * written over the time writing (`readings/throughput`); nothing saves it.
+ * loaded: the same figures, so both say the same. The rate is the
+ * daemon's (`tokensPerSecond`, in `readings/rate`'s words), sent and saved
+ * with the counts it is made from; a reply saved before the daemon sent
+ * one has none.
  *
  * A reply says its figures in three places, each read here: the fold's
  * summary (how long it thought, how many tools it called), the figure line
@@ -18,8 +20,7 @@
 import type { GglibMessageCustom, PromptReading, TurnWaiting } from '../types/messages';
 import type { TurnMade } from '../utils/messages/turnMade';
 import { formatCount } from '../utils/format';
-import { formatPerSecond } from '../utils/formatPerSecond';
-import { tokensPerSecond } from './throughput';
+import { rateWords } from './rate';
 
 /**
  * Seconds as a turn says them: "0.4 s", "4.7 s" and "3 s" under ten, "19 s",
@@ -53,15 +54,6 @@ export interface ReplyFacts {
   made?: TurnMade;
 }
 
-/**
- * Tokens written per second of writing; null without both figures, and for
- * a turn of one token or one not streamed, which have no time writing.
- */
-export function writingRate(made: TurnMade | undefined): number | null {
-  if (made?.completionTokens != null && made.completionTokens < 2) return null;
-  return tokensPerSecond(made?.completionTokens, made?.writingDurationMs);
-}
-
 function toolCallWords(count: number): string {
   return `${count} tool call${count === 1 ? '' : 's'}`;
 }
@@ -92,11 +84,10 @@ export const UNFINISHED = 'unfinished';
  */
 export function figureParts(facts: ReplyFacts): string[] {
   const made = facts.made;
-  const rate = writingRate(made);
   return [
     facts.unfinished ? UNFINISHED : null,
     made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
-    rate != null ? `${formatPerSecond(rate)} tok/s` : null,
+    made?.tokensPerSecond != null ? rateWords(made.tokensPerSecond) : null,
     made?.cachedTokens != null ? `${formatCount(made.cachedTokens)} tokens reused` : null,
   ].filter((part): part is string => part !== null);
 }
@@ -114,10 +105,9 @@ export function figureDetail(facts: ReplyFacts): string[] {
   if (made?.promptTokens != null) lines.push(`${formatCount(made.promptTokens)} tokens read`);
   if (made?.cachedTokens != null) lines.push(`${formatCount(made.cachedTokens)} tokens reused`);
   if (made?.completionTokens != null) lines.push(`${formatCount(made.completionTokens)} tokens written`);
-  const rate = writingRate(made);
   const timing = [
     made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
-    rate != null ? `${formatPerSecond(rate)} tok/s` : null,
+    made?.tokensPerSecond != null ? rateWords(made.tokensPerSecond) : null,
   ].filter((part): part is string => part !== null);
   if (timing.length > 0) lines.push(timing.join(' · '));
   return lines;

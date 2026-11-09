@@ -34,7 +34,8 @@ pub const THINKING_DURATION_KEY: &str = "thinkingDurationSeconds";
 ///
 /// Each is set only when the turn's [`TurnUsage`] had it: the model's name
 /// and quantisation, tokens read, of them from the cache, tokens written,
-/// how long the turn took and spent writing, in ms, the paired device whose
+/// how long the turn took and spent writing, in ms, how fast it wrote
+/// ([`TurnUsage::tokens_per_second`]), the paired device whose
 /// turn it answered, why it stopped, and its [`ContextReading`](super::ContextReading):
 /// the context's size and the earlier messages missing from its request.
 /// A device's own message row carries `device` too.
@@ -46,6 +47,7 @@ pub const MADE_KEYS: MadeKeys = MadeKeys {
     completion_tokens: "completionTokens",
     duration_ms: "turnDurationMs",
     writing_ms: "writingDurationMs",
+    tokens_per_second: "tokensPerSecond",
     device: "device",
     finish_reason: "finishReason",
     context_size: "contextSize",
@@ -61,6 +63,7 @@ pub struct MadeKeys {
     pub completion_tokens: &'static str,
     pub duration_ms: &'static str,
     pub writing_ms: &'static str,
+    pub tokens_per_second: &'static str,
     pub device: &'static str,
     pub finish_reason: &'static str,
     pub context_size: &'static str,
@@ -200,6 +203,9 @@ fn name_calls(row: &mut NewMessage, calls: &[Started]) {
 /// is left out.
 fn set_made(row: &mut NewMessage, usage: TurnUsage) {
     let k = &MADE_KEYS;
+    if let Some(rate) = usage.tokens_per_second() {
+        set(row, k.tokens_per_second, Value::from(rate));
+    }
     let text = [
         (k.model, usage.model),
         (k.quantization, usage.quantization),

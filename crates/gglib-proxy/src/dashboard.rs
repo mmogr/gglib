@@ -339,6 +339,12 @@ pub struct DashboardSnapshot {
     /// defect rate is a claim about *recent* traffic on *this* build.
     pub per_model_defects:
         std::collections::HashMap<String, gglib_core::domain::defects::ModelDefectCounts>,
+    /// Requests the proxy's loop guard tripped on, across every model: the
+    /// sum of [`Self::per_model_defects`]' `loop_guard_trips`, so it is
+    /// process-lifetime like them, and empty of the agent loop's own trips,
+    /// which are counted beside them.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub loop_guard_trips_total: u64,
     /// How prompt caching is configured for the running model. `None` until
     /// the first request resolves a model, since the RAM budget isn't known
     /// until something is launched.
@@ -405,6 +411,11 @@ impl DashboardSnapshot {
             SlotsPollResult::Unreachable(reason) => (false, Vec::new(), Some(reason)),
         };
 
+        let per_model_defects = metrics.defect_counts();
+        let loop_guard_trips_total = per_model_defects
+            .values()
+            .map(|counts| counts.loop_guard_trips)
+            .sum();
         Self {
             active_connections: connections.snapshot(),
             slots_available,
@@ -416,7 +427,8 @@ impl DashboardSnapshot {
             tool_repairs_attempted: metrics.tool_repairs_attempted(),
             tool_repairs_succeeded: metrics.tool_repairs_succeeded(),
             upstream_health: upstream_health.snapshot(),
-            per_model_defects: metrics.defect_counts(),
+            per_model_defects,
+            loop_guard_trips_total,
             // Stored config plus live reuse totals — see `CacheStatusCache`.
             cache: cache
                 .get()
@@ -548,3 +560,7 @@ pub fn spawn_dashboard_publisher(
 #[cfg(test)]
 #[path = "dashboard_tests.rs"]
 mod dashboard_tests;
+
+#[cfg(test)]
+#[path = "dashboard_figures_tests.rs"]
+mod dashboard_figures_tests;

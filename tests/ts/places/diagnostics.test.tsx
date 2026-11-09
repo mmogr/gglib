@@ -141,7 +141,17 @@ const CACHE = {
   ram_state: 'healthy' as const,
   needs_attention: false,
   warnings: [],
-  usage: { reporting_requests: 4, unreported_requests: 0, prompt_tokens: 1000, cached_tokens: 710, last_prompt_tokens: null, last_cached_tokens: null },
+  usage: {
+    reporting_requests: 4,
+    unreported_requests: 0,
+    prompt_tokens: 1000,
+    cached_tokens: 710,
+    last_prompt_tokens: null,
+    last_cached_tokens: null,
+    reuse_percent: 71,
+    summary: 'Prompt cache 71% reused',
+    last_reuse_percent: null,
+  },
 };
 
 /** A frame in which every section has something. */
@@ -482,7 +492,7 @@ describe('the diagnostics place', () => {
         slots_available: true,
         slots_status: null,
         slots: FULL.slots,
-        recent_requests: [recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000 })],
+        recent_requests: [recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000, tokens_per_second: 33.8 })],
       });
       const picker = screen.getByRole('combobox', { name: 'Model' });
       expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Qwen3-4B', 'Gemma-3-4B-It']);

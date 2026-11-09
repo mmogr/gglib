@@ -83,6 +83,9 @@ vi.mock('../../../src/places/chat/ChatPlace', () => ({
 }));
 
 import { ENDPOINT_WORDS, KEY_WORDS, RESIDENCY_WORDS } from '../../../src/components/status/words';
+import type { CacheUsage } from '../../../src/types/generated/CacheUsage';
+import type { ContextSnapshot } from '../../../src/types/generated/ContextSnapshot';
+import { rust } from '../contracts/rustSource';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { applyProxyStatus, resetProxyState } from '../../../src/services/proxyRegistry';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
@@ -96,6 +99,14 @@ import type { RemoteDevice } from '../../../src/types/generated/RemoteDevice';
 import { activeConnection, dashboardSnapshot, modelDefectCounts, recentRequest, residentSlot, samplingAudit } from '../fixtures/dashboard';
 import { guiModel } from '../fixtures/model';
 import { renderApp } from './harness';
+
+/** The proxy's figures from known traffic, as `gglib-proxy` serves them. */
+const FIGURES = JSON.parse(rust('contracts/proxy/figures.json')) as {
+  recent_requests: ContextSnapshot[];
+  rate_words: (string | null)[];
+  cache_usage: CacheUsage;
+  loop_guard_trips_total: number;
+};
 
 const QWEN = guiModel({ id: 1, name: 'Qwen3-4B', openaiId: 'Qwen3-4B' });
 const GEMMA = guiModel({ id: 2, name: 'Gemma-3-4B-It', openaiId: 'Gemma-3-4B-It' });
@@ -708,23 +719,24 @@ describe('the endpoint place', () => {
       await frame({
         recent_requests: [
           ...[0, 1, 2, 3].map((n) => recentRequest({ model_name: `m${n}`, recorded_at_secs: when(n) })),
-          recentRequest({ model_name: 'm4', recorded_at_secs: when(4), completion_tokens: 1, generation_ms: 0 }),
+          { ...FIGURES.recent_requests[2], model_name: 'm4', recorded_at_secs: when(4) },
           recentRequest({ model_name: 'm5', recorded_at_secs: when(5) }),
-          recentRequest({
+          {
+            ...FIGURES.recent_requests[0],
             model_name: 'Qwen3-4B',
             recorded_at_secs: when(6),
-            completion_tokens: 812,
-            generation_ms: 24_000,
             interventions: [
               { what: { kind: 'repaired_tool_call' }, word: 'Repaired a tool call' },
               { what: { kind: 'trimmed', messages: 4 }, word: 'Trimmed 4 old messages' },
             ],
-          }),
+          },
         ],
       });
       const rows = within(screen.getByRole('list', { name: 'Recent requests' })).getAllByRole('listitem');
       expect(rows.map((r) => r.children[1].textContent)).toEqual(['Qwen3-4B', 'm5', 'm4', 'm3', 'm2']);
-      expect(rows[0]).toHaveTextContent('812 tokens · 34 t/s');
+      // The proxy's rate, in the words it is recorded beside.
+      expect(rows[0]).toHaveTextContent(`812 tokens · ${FIGURES.rate_words[0]}`);
+      expect(FIGURES.rate_words[0]).toBe('34 t/s');
       expect(rows[0]).toHaveTextContent('Repaired a tool call · Trimmed 4 old messages');
       expect(rows[1].textContent).not.toMatch(/token|t\/s/);
       // One token, written in no time: singular, and no rate.
@@ -748,7 +760,11 @@ describe('the endpoint place', () => {
       const { user } = renderEndpoint({ ...UP, key: 'required' });
       await frame({
         tool_repairs_succeeded: 3,
-        per_model_defects: { 'Qwen3-4B': modelDefectCounts({ loop_guard_trips: 1 }) },
+        per_model_defects: {
+          'Qwen3-8B': modelDefectCounts({ loop_guard_trips: 2 }),
+          'gemma-3-12b': modelDefectCounts({ loop_guard_trips: 1 }),
+        },
+        loop_guard_trips_total: FIGURES.loop_guard_trips_total,
         sampling_audit: samplingAudit({ client_fields_discarded: 12 }),
         cache: {
           disk_enabled: false,
@@ -757,11 +773,12 @@ describe('the endpoint place', () => {
           ram_state: 'healthy',
           needs_attention: false,
           warnings: [],
-          usage: { reporting_requests: 4, unreported_requests: 0, prompt_tokens: 1000, cached_tokens: 710, last_prompt_tokens: null, last_cached_tokens: null },
+          usage: FIGURES.cache_usage,
         },
       });
       const activity = screen.getByRole('group', { name: 'Activity' });
-      expect(activity).toHaveTextContent('Prompt cache 71% reused · 3 tool calls repaired · 1 loop-guard trip · 12 client sampling fields ignored');
+      // The cache's sentence and the trips total are the proxy's, as recorded.
+      expect(activity).toHaveTextContent('Prompt cache 66% reused · 3 tool calls repaired · 3 loop-guard trips · 12 client sampling fields ignored');
 
       await user.click(within(activity).getByRole('button', { name: 'Clear prompt cache' }));
       expect(dashboard.clear).toHaveBeenCalledWith('127.0.0.1', 8080, 'k3y');
@@ -886,9 +903,11 @@ describe('the endpoint place', () => {
         ...admitted([residentSlot(1, 'Qwen3-4B', { resident_for_secs: 250, launch: { ...residentSlot(1, 'x').launch!, state: 'working' } })]),
         // Oldest first, as the proxy sends them: the newest with a rate is said.
         recent_requests: [
-          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000 }),
-          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 50, generation_ms: 1_000 }),
-          recentRequest({ model_name: 'Gemma-3-4B-It', completion_tokens: 10, generation_ms: 1_000 }),
+          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000, tokens_per_second: 33.8 }),
+          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 50, generation_ms: 1_000, tokens_per_second: 50 }),
+          recentRequest({ model_name: 'Gemma-3-4B-It', completion_tokens: 10, generation_ms: 1_000, tokens_per_second: 10 }),
+          // The proxy sent no rate for these: the page divides nothing.
+          recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 40, generation_ms: 1_000 }),
           recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 1, generation_ms: 0 }),
         ],
       });

@@ -16,6 +16,7 @@ mod defects_agent;
 pub mod device_budget;
 pub mod dialect;
 pub mod engine_pins;
+pub mod figures;
 mod file_type;
 mod fit_sentence;
 pub mod folder;
