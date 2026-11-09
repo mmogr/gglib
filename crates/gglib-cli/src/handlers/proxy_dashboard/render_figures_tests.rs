@@ -119,7 +119,7 @@ fn a_measured_zero_says_zero_percent() {
     });
     assert_eq!(
         reused(&usage),
-        "  Reused         0 of 5,000 prompt tokens (0%) in 1 requests"
+        "  Reused         0 of 5,000 prompt tokens (0%) in 1 request"
     );
 }
 

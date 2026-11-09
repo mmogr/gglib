@@ -1,7 +1,7 @@
 //! Each figure from known inputs, and each in the words the GUI says it in
 //! (`readings/turnFigures.ts`, `readings/rate.ts`).
 
-use super::{count_words, rate_words, seconds_words, tokens_per_second};
+use super::{count_words, rate_words, seconds_words, tokens_per_second, tokens_words};
 
 #[test]
 fn a_rate_is_tokens_over_the_seconds_writing() {
@@ -60,4 +60,12 @@ fn a_count_has_commas_between_its_thousands() {
     assert_eq!(count_words(999), "999");
     assert_eq!(count_words(2_100), "2,100");
     assert_eq!(count_words(1_234_567), "1,234,567");
+}
+
+#[test]
+fn one_token_is_a_token() {
+    assert_eq!(tokens_words(0), "0 tokens");
+    assert_eq!(tokens_words(1), "1 token");
+    assert_eq!(tokens_words(2), "2 tokens");
+    assert_eq!(tokens_words(2_100), "2,100 tokens");
 }

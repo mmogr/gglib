@@ -90,7 +90,7 @@ crates/gglib-cli/src/handlers/model/download/interactive.rs 400
 crates/gglib-cli/src/handlers/model/list_tests.rs 360
 crates/gglib-cli/src/handlers/model/update.rs 683
 crates/gglib-cli/src/handlers/model/update_surface_tests.rs 368
-crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 390
+crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 395
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 685
 crates/gglib-cli/src/handlers/proxy_dashboard/wire.rs 328
 crates/gglib-cli/src/handlers/up/choose.rs 351
@@ -115,7 +115,7 @@ crates/gglib-core/src/domain/agent/events_tests.rs 312
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 414
 crates/gglib-core/src/domain/agent/openai_history.rs 301
 crates/gglib-core/src/domain/agent/replay.rs 369
-crates/gglib-core/src/domain/agent/replay_made_tests.rs 334
+crates/gglib-core/src/domain/agent/replay_made_tests.rs 351
 crates/gglib-core/src/domain/agent/replay_tests.rs 377
 crates/gglib-core/src/domain/benchmark/agentic.rs 1101
 crates/gglib-core/src/domain/benchmark/agentic_tests.rs 864

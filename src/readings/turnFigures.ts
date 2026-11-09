@@ -58,6 +58,11 @@ function toolCallWords(count: number): string {
   return `${count} tool call${count === 1 ? '' : 's'}`;
 }
 
+/** A count of tokens, as Rust's `tokens_words` says it: "1 token", "2,100 tokens". */
+function tokensWords(count: number): string {
+  return `${formatCount(count)} ${count === 1 ? 'token' : 'tokens'}`;
+}
+
 /**
  * The fold's summary: how long the reply thought, then how many tools it
  * called. While it thinks, "Thinking…" and the seconds so far; `seconds` is
@@ -88,7 +93,7 @@ export function figureParts(facts: ReplyFacts): string[] {
     facts.unfinished ? UNFINISHED : null,
     made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
     made?.tokensPerSecond != null ? rateWords(made.tokensPerSecond) : null,
-    made?.cachedTokens != null ? `${formatCount(made.cachedTokens)} tokens reused` : null,
+    made?.cachedTokens != null ? `${tokensWords(made.cachedTokens)} reused` : null,
   ].filter((part): part is string => part !== null);
 }
 
@@ -102,9 +107,9 @@ export function figureDetail(facts: ReplyFacts): string[] {
   if (made?.finishReason === 'length') lines.push('cut off before it finished');
   if (facts.thinkingSeconds != null) lines.push(`thought for ${secondsWords(facts.thinkingSeconds)}`);
   if (facts.toolCalls > 0) lines.push(toolCallWords(facts.toolCalls));
-  if (made?.promptTokens != null) lines.push(`${formatCount(made.promptTokens)} tokens read`);
-  if (made?.cachedTokens != null) lines.push(`${formatCount(made.cachedTokens)} tokens reused`);
-  if (made?.completionTokens != null) lines.push(`${formatCount(made.completionTokens)} tokens written`);
+  if (made?.promptTokens != null) lines.push(`${tokensWords(made.promptTokens)} read`);
+  if (made?.cachedTokens != null) lines.push(`${tokensWords(made.cachedTokens)} reused`);
+  if (made?.completionTokens != null) lines.push(`${tokensWords(made.completionTokens)} written`);
   const timing = [
     made?.turnDurationMs != null ? secondsWords(made.turnDurationMs / 1000) : null,
     made?.tokensPerSecond != null ? rateWords(made.tokensPerSecond) : null,
@@ -155,8 +160,8 @@ export function arrivingPhase(parts: { prompt?: PromptReading; waiting?: TurnWai
 export function promptLines(prompt: PromptReading, phase: string): string[] {
   return [
     phase === 'Reading the prompt'
-      ? `${formatCount(prompt.processed)} of ${formatCount(prompt.total)} tokens read`
-      : `${formatCount(prompt.total)} tokens read`,
+      ? `${formatCount(prompt.processed)} of ${tokensWords(prompt.total)} read`
+      : `${tokensWords(prompt.total)} read`,
     `${formatCount(prompt.cached)} from cache`,
   ];
 }

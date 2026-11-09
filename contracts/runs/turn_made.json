@@ -38,5 +38,12 @@
     "trimmedMessages": 3,
     "turnDurationMs": 41000,
     "writingDurationMs": 38200
+  },
+  "one_token": {
+    "figure_line": "0.5 s · 1 token reused",
+    "metadata": {
+      "cachedTokens": 1,
+      "turnDurationMs": 500
+    }
   }
 }

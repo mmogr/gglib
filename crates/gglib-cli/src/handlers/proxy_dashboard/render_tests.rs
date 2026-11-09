@@ -517,7 +517,10 @@ fn cache_section_shows_reuse_totals_with_separators() {
         last_cached_tokens: Some(9_500),
         ..CacheUsage::default()
     })));
-    assert!(frame.contains("29,450 of 30,342 prompt tokens"), "{frame}");
+    assert!(
+        frame.contains("29,450 of 30,342 prompt tokens in 3 requests"),
+        "{frame}"
+    );
     assert!(
         frame.contains("9,500 of 10,000 tokens from cache"),
         "{frame}"
@@ -550,7 +553,7 @@ fn cache_section_distinguishes_no_activity_from_a_measured_zero() {
         "{measured_zero}"
     );
     assert!(
-        measured_zero.contains("0 of 5,000 prompt tokens"),
+        measured_zero.contains("0 of 5,000 prompt tokens in 1 request\n"),
         "{measured_zero}"
     );
 }

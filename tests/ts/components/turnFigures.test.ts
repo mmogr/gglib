@@ -81,6 +81,7 @@ describe('figureParts', () => {
     expect(line({ toolCalls: 0, unfinished: false, made: MADE })).toBe('41 s · 12 t/s · 2,100 tokens reused');
     expect(line({ toolCalls: 0, unfinished: true, made: { turnDurationMs: 900 } })).toBe('unfinished · 0.9 s');
     expect(line({ toolCalls: 0, unfinished: false, made: { cachedTokens: 0 } })).toBe('0 tokens reused');
+    expect(line({ toolCalls: 0, unfinished: false, made: { turnDurationMs: 500, cachedTokens: 1 } })).toBe('0.5 s · 1 token reused');
   });
 
   it('says the daemon\'s rate, one decimal under ten, and none where it sent none', () => {
@@ -117,6 +118,11 @@ describe('figureDetail', () => {
   it('leaves out each figure the turn lacks', () => {
     expect(figureDetail({ toolCalls: 0, unfinished: false })).toEqual([]);
     expect(figureDetail({ toolCalls: 1, unfinished: false, made: { modelName: 'qwen3' } })).toEqual(['qwen3', '1 tool call']);
+    expect(figureDetail({ toolCalls: 0, unfinished: false, made: { promptTokens: 1, cachedTokens: 1, completionTokens: 1 } })).toEqual([
+      '1 token read',
+      '1 token reused',
+      '1 token written',
+    ]);
   });
 });
 
