@@ -54,7 +54,9 @@ pub struct NamedModel<'a> {
 ///   model, whatever `model`'s state: `The endpoint is Pinned to Qwen3-8B
 ///   and cannot serve Qwen3-4B · sending is refused`, since a pinned
 ///   endpoint refuses every other model (`pinned_model_mismatch`). Another
-///   model is another id: one that shares `model`'s name is refused too.
+///   model is another id: one that shares `model`'s name is refused too,
+///   said so the two do not read as one: `The endpoint is Pinned to another
+///   model named Qwen3-4B and cannot serve this one · sending is refused`.
 ///   Pinned to `model` itself, a send loads it as on any endpoint.
 ///
 /// `None` when the model is resident and the endpoint is not off: a send is
@@ -68,12 +70,18 @@ pub fn send_line(
 ) -> Option<String> {
     if let Some(pin) = pinned.filter(|pin| endpoint == EndpointState::Pinned && pin.id != model.id)
     {
-        return Some(format!(
-            "The endpoint is {} to {} and cannot serve {} · sending is refused",
-            EndpointState::Pinned.word(),
-            pin.name,
-            model.name
-        ));
+        let pinned = EndpointState::Pinned.word();
+        return Some(if pin.name == model.name {
+            format!(
+                "The endpoint is {pinned} to another model named {} and cannot serve this one · sending is refused",
+                pin.name
+            )
+        } else {
+            format!(
+                "The endpoint is {pinned} to {} and cannot serve {} · sending is refused",
+                pin.name, model.name
+            )
+        });
     }
     let model = model.name;
     let off = endpoint == EndpointState::Off;

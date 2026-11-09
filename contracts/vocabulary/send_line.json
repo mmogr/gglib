@@ -56,7 +56,7 @@
       "id": 5,
       "name": "Qwen3-4B"
     },
-    "line": "The endpoint is Pinned to Qwen3-4B and cannot serve Qwen3-4B · sending is refused"
+    "line": "The endpoint is Pinned to another model named Qwen3-4B and cannot serve this one · sending is refused"
   },
   {
     "model": {
@@ -125,7 +125,7 @@
       "id": 5,
       "name": "Qwen3-4B"
     },
-    "line": "The endpoint is Pinned to Qwen3-4B and cannot serve Qwen3-4B · sending is refused"
+    "line": "The endpoint is Pinned to another model named Qwen3-4B and cannot serve this one · sending is refused"
   },
   {
     "model": {
@@ -194,7 +194,7 @@
       "id": 5,
       "name": "Qwen3-4B"
     },
-    "line": "The endpoint is Pinned to Qwen3-4B and cannot serve Qwen3-4B · sending is refused"
+    "line": "The endpoint is Pinned to another model named Qwen3-4B and cannot serve this one · sending is refused"
   },
   {
     "model": {

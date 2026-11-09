@@ -47,7 +47,7 @@ describe('the send line is the one Rust records', () => {
     expect(line('not_loaded', 'pinned', 8)).toBe('The endpoint is Pinned to Qwen3-8B and cannot serve Qwen3-4B · sending is refused');
     expect(line('not_loaded', 'pinned', 4)).toBe("Qwen3-4B isn't loaded · sending loads it");
     // Pinned to another model of the same name: another id, so refused.
-    expect(line('not_loaded', 'pinned', 5)).toBe('The endpoint is Pinned to Qwen3-4B and cannot serve Qwen3-4B · sending is refused');
+    expect(line('not_loaded', 'pinned', 5)).toBe('The endpoint is Pinned to another model named Qwen3-4B and cannot serve this one · sending is refused');
   });
 
   it.each(RECORDED.map((r) => [`${r.absence ?? 'resident'} / ${r.endpoint}${r.pinned ? ` to ${r.pinned.name} (${r.pinned.id})` : ''}`, r] as const))('%s', (_case, recorded) => {

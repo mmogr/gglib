@@ -166,6 +166,28 @@ async fn a_pin_on_one_of_two_same_named_models_names_that_one_by_id() {
 
     let response = start_pinned(&app, second, "twin").await;
     assert_eq!(response.status(), StatusCode::OK);
+    let status = status_of(&app).await;
+    assert_eq!(status["pinned_model"], "twin", "{status}");
+    assert_eq!(status["pinned_model_id"], second, "{status}");
+
+    let stopped = app
+        .clone()
+        .oneshot(
+            authed()
+                .method("POST")
+                .uri("/api/proxy/stop")
+                .header("Host", "127.0.0.1:9887")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stopped.status(), StatusCode::OK);
+}
+
+/// `GET /api/proxy/status`, read whole.
+async fn status_of(app: &axum::Router) -> serde_json::Value {
     let response = app
         .clone()
         .oneshot(
@@ -178,9 +200,32 @@ async fn a_pin_on_one_of_two_same_named_models_names_that_one_by_id() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    let status = body_json(response).await;
-    assert_eq!(status["pinned_model"], "twin", "{status}");
-    assert_eq!(status["pinned_model_id"], second, "{status}");
+    body_json(response).await
+}
+
+/// A model renamed while it is pinned is named in the status, and in its
+/// Pinned to sentence, by its new name, since the pin is its id; a model
+/// gone from the catalogue is named as it was pinned.
+#[tokio::test]
+async fn a_pinned_model_renamed_is_named_anew_and_one_removed_as_it_was_pinned() {
+    let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let id = catalogued(&state, "before-rename").await;
+    let response = start_pinned(&app, id, "before-rename").await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let mut model = state.core.models().get_by_id(id).await.unwrap().unwrap();
+    model.name = "after-rename".to_owned();
+    state.core.models().update(&model).await.unwrap();
+    let status = status_of(&app).await;
+    assert_eq!(status["pinned_model"], "after-rename", "{status}");
+    assert_eq!(status["pinned_to"], "Pinned to after-rename", "{status}");
+    assert_eq!(status["pinned_model_id"], id, "{status}");
+
+    state.core.models().delete(id).await.unwrap();
+    let status = status_of(&app).await;
+    assert_eq!(status["pinned_model"], "before-rename", "{status}");
+    assert_eq!(status["pinned_to"], "Pinned to before-rename", "{status}");
+    assert_eq!(status["pinned_model_id"], id, "{status}");
 
     let stopped = app
         .clone()

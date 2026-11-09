@@ -111,7 +111,11 @@ export function endpointFacts({ running, status }: ProxyState): EndpointFacts {
   }
   // A daemon older than this GUI answers without the fields E2 added. The
   // two ship together, but a dev build adopting an installed daemon does
-  // not, and a missing field is then "not said", never a crash.
+  // not. A missing address, key rule or Pinned-to sentence is then `null`
+  // (the tray says the bare Pinned word for the last); a missing word is
+  // guessed from the pin's name (Pinned or On); a missing pin id names no
+  // pin, so nothing is greyed or refused for one even while the word says
+  // Pinned.
   return {
     state: status.state ?? (status.pinned_model ? 'pinned' : 'on'),
     baseUrl: status.base_url ?? null,

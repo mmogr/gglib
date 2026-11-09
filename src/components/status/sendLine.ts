@@ -36,7 +36,8 @@ export interface NamedModel {
  * The line for `model`, by the name the catalogue shows; `null` when the
  * model is resident and the endpoint is not off. `pinned` is the model a
  * pinned endpoint is pinned to: pinned to another (another id, whatever
- * its name), it refuses the send, whatever `model` is doing.
+ * its name), it refuses the send, whatever `model` is doing; a pin that
+ * shares `model`'s name is said as "another model named …".
  */
 export function sendLine(
   model: NamedModel,
@@ -45,7 +46,9 @@ export function sendLine(
   pinned: NamedModel | null,
 ): string | null {
   if (endpoint === 'pinned' && pinned !== null && pinned.id !== model.id) {
-    return `The endpoint is ${ENDPOINT_WORDS.pinned} to ${pinned.name} and cannot serve ${model.name} · sending is refused`;
+    return pinned.name === model.name
+      ? `The endpoint is ${ENDPOINT_WORDS.pinned} to another model named ${pinned.name} and cannot serve this one · sending is refused`
+      : `The endpoint is ${ENDPOINT_WORDS.pinned} to ${pinned.name} and cannot serve ${model.name} · sending is refused`;
   }
   const off = endpoint === 'off';
   if (absence === null) return off ? `The endpoint is ${ENDPOINT_WORDS.off} · sending turns it on` : null;

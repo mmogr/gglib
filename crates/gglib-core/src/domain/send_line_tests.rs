@@ -95,7 +95,9 @@ fn an_endpoint_pinned_to_another_model_says_a_send_is_refused() {
 fn a_pin_is_matched_by_id_not_by_name() {
     assert_eq!(
         line(NOT_LOADED, EndpointState::Pinned, Some(NAMESAKE)).as_deref(),
-        Some("The endpoint is Pinned to Qwen3-4B and cannot serve Qwen3-4B · sending is refused")
+        Some(
+            "The endpoint is Pinned to another model named Qwen3-4B and cannot serve this one · sending is refused"
+        )
     );
     let renamed = NamedModel {
         id: OWN.id,

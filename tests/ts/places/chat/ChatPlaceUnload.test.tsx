@@ -228,7 +228,7 @@ describe('ChatPlace, leaving and Unload', () => {
     renderLocal(28);
     await head();
     act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'qwen3', pinned_to: 'Pinned to qwen3', pinned_model_id: 31 }));
-    expect(await lineSaying('The endpoint is Pinned to qwen3 and cannot serve qwen3 · sending is refused')).toBeInTheDocument();
+    expect(await lineSaying('The endpoint is Pinned to another model named qwen3 and cannot serve this one · sending is refused')).toBeInTheDocument();
 
     // Pinned to this chat's model under a name it no longer has, a send loads it.
     act(() => applyProxyStatus({ ...ON, state: 'pinned', pinned_model: 'qwen3-old', pinned_to: 'Pinned to qwen3-old', pinned_model_id: 28 }));

@@ -74,7 +74,8 @@ prints it ("4s", "1m 5s"); the inspector's "loaded 4m 10s" is
 Connect a client's Model ID starts at the inspected model, else the pinned
 one, else the last loaded, else the default model setting, else the
 library's smallest chat model, so Test it never asks the endpoint to load
-the biggest. ⋯ Live numbers, Activity's Live numbers › and Recent's All ›
+the biggest; pinned to a model that is not a chat model (an image model),
+it is that model alone, with no picker. ⋯ Live numbers, Activity's Live numbers › and Recent's All ›
 open Diagnostics › Live (`/diagnostics/live`). Clear prompt cache is offered
 only while it can act (the endpoint up and its key revealed), and a row's
 ⋯ Pin waits while a pin change is on its way.
