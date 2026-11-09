@@ -1,105 +1,49 @@
 /**
- * The body of an agent run, `PUT /api/runs/{id}?kind=agent`: the history in
- * wire form, the conversation the daemon saves it to, and where it is sent.
+ * The body of this machine's turn, `PUT /api/runs/{id}?kind=agent`: the
+ * conversation it is added to and the new message, nothing more. The daemon
+ * rebuilds the history from what the conversation saved, and runs the turn
+ * on the model, tools and limits the conversation's settings name.
  *
  * @module runRequest
  */
 
-import { agentOverridesToWire, reasoningOverridesToWire } from '../../services/agentOverrides';
-import { getToolRegistry } from '../../services/tools';
-import type { GglibMessage } from '../../types/messages';
-import type { AgentRequestConfig } from '../../types/generated/AgentRequestConfig';
-import type { AgentRunRequest } from '../../types/generated/AgentRunRequest';
-import type { ModelRef } from '../../types/generated/ModelRef';
-import type { ReasoningEffort } from '../../types/generated/ReasoningEffort';
+import type { LocalTurn } from '../../types/generated/LocalTurn';
 import type { Thinking } from '../../types/generated/Thinking';
-import { convertToWireMessages } from './wireMessages';
 
-/**
- * Partial `AgentConfig` forwarded to the backend.
- *
- * Only includes fields exposed by `AgentRequestConfig` in `gglib-axum`.
- * Internal tuning parameters (`max_stagnation_steps`, `context_budget_chars`,
- * `max_repeated_batch_steps`, `prune_*`) are intentionally absent from the
- * backend DTO to prevent resource exhaustion by untrusted callers.
- *
- * All fields are optional; omitted fields use the backend's
- * `AgentConfig::default()` values. `max_iterations` is not among them: the
- * page names no iteration limit, and for a run that names none the daemon
- * takes the limit its conversation saved, then the stored
- * `maxToolIterations` setting.
- */
-export interface PartialAgentConfig {
-  /** Maps to `AgentConfig::max_parallel_tools` (default 25). */
-  max_parallel_tools?: number;
-  /** Maps to `AgentConfig::tool_timeout_ms` (default 30 000). */
-  tool_timeout_ms?: number;
-  /** Tool names classified as observations; `[]` disables classification. */
-  observation_tools?: string[];
-  /** Maps to `AgentConfig::max_observation_steps` (default 15). */
-  max_observation_steps?: number;
-}
-
-export interface RunRequestOptions {
-  /** The history the run answers, its last message the user's; none for an answer run. */
-  messages: GglibMessage[];
+export interface TurnOptions {
   /** The conversation the daemon saves the user's message and the reply to. */
   conversationId: number;
+  /** The user's message; `''` for an answer turn, and for images alone. */
+  content: string;
+  /** The images the message carries, by the ids their uploads answered. */
+  images?: readonly string[];
   /**
-   * Whether the run answers the question the conversation already ends in,
-   * as an edit, a regenerate or Retry leaves it: `messages` is then empty,
-   * and the daemon runs from what is saved and saves only the reply.
+   * Whether the turn answers the question the conversation already ends in,
+   * as an edit, a regenerate or Retry leaves it: it then says no message,
+   * and the daemon saves only the reply.
    */
   answerSaved?: boolean;
   /**
-   * The local server this turn is for. Absent for a turn on a far model,
-   * which has none: the body still carries a `port` because the wire type
-   * requires a number, and the backend does not consult it on that branch.
-   */
-  selectedServerPort?: number;
-  /** Optional partial `AgentConfig` overrides; omitted fields use backend defaults. */
-  config?: PartialAgentConfig;
-  /**
-   * The two reasoning controls, which the request takes at the **top level**
-   * rather than inside `config` — they are per-turn shape, not agent-loop
-   * tuning. An omitted field resolves, on a local turn, from the served
-   * model's own values, this machine's global defaults and the floor.
-   */
-  reasoning?: { reasoning_effort?: string; reasoning_budget_tokens?: number };
-  /**
-   * The conversation's Thinking choice, on the run that changes it: `off`
+   * The conversation's Thinking choice, on the turn that changes it: `off`
    * or `default`. Left out of the body otherwise, and the daemon runs the
-   * turn as the conversation remembers. `reasoning` is sent whatever this
-   * says: weighing the two is the daemon's.
+   * turn as the conversation remembers.
    */
   thinking?: Thinking;
   /**
    * The conversation's folder, where gglib's own file tools read, on the
-   * run that changes it: a path sets it, `""` forgets it. Left out of the
-   * body otherwise, and the daemon runs the turn in the folder the
-   * conversation remembers, or with no file tools.
+   * turn that changes it: a path sets it, `""` forgets it. Left out of the
+   * body otherwise, and the daemon reads the folder the conversation
+   * remembers, or offers no file tools.
    */
   folder?: string;
-  /**
-   * Sent with Draw pressed: the daemon offers this run its drawing tool.
-   * The key is in the body only then; a run without it is offered no
-   * drawing tool, whatever its `tool_filter` says.
-   */
+  /** Sent with Draw pressed: the daemon offers this turn its drawing tool. */
   draw?: boolean;
   /**
    * The image model chosen for this chat's pictures, by its id. In the body
-   * only on a run that says `draw`, and on every one that does while the
+   * only on a turn that says `draw`, and on every one that does while the
    * choice stands: the daemon remembers nothing of it.
    */
   imageModel?: number;
-  /** `false` exposes no tools (an empty `tool_filter`); otherwise permissive. */
-  supportsToolCalls?: boolean | null;
-  /**
-   * The paired machine's model this turn is for, by that machine and its id
-   * there, instead of the server on `selectedServerPort` (ADR 0012). The
-   * daemon sends the id, so no other model of its name answers.
-   */
-  far?: ModelRef;
 }
 
 /** A run id the hub accepts: 1–64 of `[A-Za-z0-9_-]`. */
@@ -107,74 +51,17 @@ export function mintRunId(): string {
   return `chat-${crypto.randomUUID()}`;
 }
 
-/** The config to send: `null` unless at least one field was set. */
-function wireConfig(config: PartialAgentConfig | undefined): AgentRequestConfig | null {
-  if (!config) return null;
-  const defined = Object.fromEntries(Object.entries(config).filter(([, v]) => v !== undefined));
-  if (Object.keys(defined).length === 0) return null;
-  return {
-    max_iterations: null,
-    max_parallel_tools: null,
-    tool_timeout_ms: null,
-    observation_tools: null,
-    max_observation_steps: null,
-    ...defined,
-  };
-}
-
-/**
- * The enabled tools in the backend's qualified form (`serverId:name`); `[]`
- * when the model is known not to call tools; `null` (no filter) when the
- * registry has none enabled.
- */
-function toolFilter(supportsToolCalls: boolean | null | undefined): string[] | null {
-  if (supportsToolCalls === false) return [];
-  const registry = getToolRegistry();
-  const enabled = registry.getEnabledDefinitions();
-  if (enabled.length === 0) return null;
-  return enabled.map((def) => registry.getBackendName(def.function.name));
-}
-
-/**
- * Build the run's body. Locally its `model` is left empty, which lets
- * llama-server serve whatever it loaded; a far model is named by `far`.
- */
-export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
+/** The turn's body: a key with nothing to say is left out. */
+export function buildTurn(options: TurnOptions): LocalTurn {
+  const images = options.images ?? [];
   return {
     conversation_id: options.conversationId,
-    ...(options.answerSaved && { answer_saved: true }),
-    port: options.selectedServerPort ?? 0,
-    far: options.far ?? null,
-    messages: convertToWireMessages(options.messages),
-    config: wireConfig(options.config),
-    tool_filter: toolFilter(options.supportsToolCalls),
-    model: null,
-    reasoning_effort: (options.reasoning?.reasoning_effort as ReasoningEffort | undefined) ?? null,
-    reasoning_budget_tokens: options.reasoning?.reasoning_budget_tokens ?? null,
+    content: options.content,
+    ...(images.length > 0 && { images: [...images] }),
     ...(options.thinking !== undefined && { thinking: options.thinking }),
-    ...(options.folder !== undefined && { folder: options.folder }),
+    ...(options.answerSaved && { answer_saved: true }),
     ...(options.draw === true && { draw: true }),
     ...(options.draw === true && options.imageModel !== undefined && { image_model: options.imageModel }),
+    ...(options.folder !== undefined && { folder: options.folder }),
   };
-}
-
-/** Where a chat's runs go: the same for every run of it. */
-export type RunTarget = Pick<RunRequestOptions, 'selectedServerPort' | 'supportsToolCalls' | 'far'>;
-
-/**
- * The body of a run sent now to `target`, with the limits from the Tools
- * popover and the reasoning controls as they are at this send. It names no
- * iteration limit: for a run that names none the daemon takes the
- * conversation's saved one, then the stored setting.
- */
-export function runBodyFor(
-  target: RunTarget,
-  run: Pick<RunRequestOptions, 'conversationId' | 'messages' | 'answerSaved' | 'thinking' | 'folder' | 'draw' | 'imageModel'>,
-): AgentRunRequest {
-  return buildRunRequest({
-    ...target,
-    ...run,
-    config: agentOverridesToWire(),
-    reasoning: reasoningOverridesToWire(),
-  });
 }

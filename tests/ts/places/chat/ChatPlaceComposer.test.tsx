@@ -262,6 +262,16 @@ describe('ChatPlace, the composer', () => {
     expect(box).toHaveAttribute('placeholder', 'Ask Qwen3.8-27B anything');
   });
 
+  it("makes a new chat's conversation for the model the chat is on, on its first send", async () => {
+    const user = userEvent.setup();
+    const t = transport.current as Record<string, unknown>;
+    t.startAgentRun = vi.fn(async (id: string, turn: { conversation_id: number }) => agentRun(id, turn.conversation_id, 'queued'));
+    renderLocal(null);
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'Hello{Enter}');
+    await waitFor(() => expect(t.startAgentRun).toHaveBeenCalledTimes(1));
+    expect(t.createConversation).toHaveBeenCalledWith(expect.objectContaining({ model: { machine: { kind: 'local' }, id: 7 } }));
+  });
+
   it('has Send, in ink, which becomes Stop while a reply is written', async () => {
     const page = renderLocal();
     await screen.findByText('It restarts the job whenever it exits.');
@@ -331,6 +341,19 @@ describe('ChatPlace, a chat on the paired machine', () => {
     renderPaired();
     expect(await screen.findByText(/^Loading qwen3… \d+ s$/)).toHaveAttribute('role', 'status');
     expect(screen.queryByText(/on desk…/)).not.toBeInTheDocument();
+  });
+
+  it("makes a new chat's conversation for the paired machine's model, on its first send", async () => {
+    const user = userEvent.setup();
+    act(() => applyRemoteStatus(away(null)));
+    const t = transport.current as Record<string, unknown>;
+    t.startAgentRun = vi.fn(async (id: string, turn: { conversation_id: number }) => agentRun(id, turn.conversation_id, 'queued'));
+    renderPaired(null);
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'Hello{Enter}');
+    await waitFor(() => expect(t.startAgentRun).toHaveBeenCalledTimes(1));
+    expect(t.createConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ model: { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 } }),
+    );
   });
 
   const startAgentRun = vi.fn(async () => {});

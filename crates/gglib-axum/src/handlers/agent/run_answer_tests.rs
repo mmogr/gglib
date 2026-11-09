@@ -4,7 +4,8 @@
 
 use gglib_core::domain::chat::{MessageRole, NewMessage};
 
-use super::launch::{Transcript, launch};
+use super::launch::Transcript;
+use super::launch::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, prepared, saved, settled, state,
 };

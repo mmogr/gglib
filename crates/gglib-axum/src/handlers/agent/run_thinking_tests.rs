@@ -1,19 +1,18 @@
-//! This machine's own run and its conversation's Thinking choice: the rule
-//! a device's turn is read by, over a request that may carry a budget of
-//! its own, and what a run writes of it once it starts.
+//! This machine's own turn and its chat's Thinking choice: the rule a
+//! device's turn is read by, and what a run writes of it once it starts.
 
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::attachment::AttachmentId;
 use gglib_core::domain::chat::{Conversation, ConversationSettings, NewConversation};
+use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::{Machine, ModelRef, Thinking};
 use serde_json::{Value, json};
 
 use super::compose::{Prepared, take_permit};
-use super::dto::AgentRunRequest;
+use super::hub_turn::{plan, start_local};
 use super::launch::{Transcript, launch};
-use super::run::{create_run, plan};
 use super::run_fixture::{
-    End, LOCAL, conversation, finished_reply, prepared, saving, settled, state,
+    End, LOCAL, conversation, finished_reply, prepared, qwen, saving, settled, state,
 };
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -29,10 +28,12 @@ pub(super) async fn remembered(state: &AppState, id: i64) -> Option<Thinking> {
     read(state, id).await.settings.and_then(|s| s.thinking)
 }
 
-/// A conversation that remembers `off`.
-async fn switched_off(state: &AppState) -> i64 {
+/// A chat on this machine's `qwen`, by its id, that remembers `thinking`.
+async fn chat(state: &AppState, thinking: Option<Thinking>) -> i64 {
     let settings = ConversationSettings {
-        thinking: Some(Thinking::Off),
+        model: Some(qwen(state).await),
+        model_name: Some("qwen".to_owned()),
+        thinking,
         ..ConversationSettings::default()
     };
     state
@@ -48,27 +49,26 @@ async fn switched_off(state: &AppState) -> i64 {
         .unwrap()
 }
 
-/// A run's body saved to `conversation`, with `more` keys beside the chat
-/// request's.
-fn body(conversation: Option<i64>, more: &Value) -> Value {
-    let mut body = json!({
-        "port": 9000,
-        "messages": [{ "role": "user", "content": "hi" }],
-        "conversation_id": conversation,
-    });
-    let more = more.as_object().expect("keys").clone();
-    body.as_object_mut().expect("an object").extend(more);
-    body
+/// This machine's turn on chat `id`, saying `thinking`.
+fn turn(id: i64, thinking: Option<Thinking>) -> HubTurn {
+    HubTurn {
+        conversation_id: id,
+        content: "hi".to_owned(),
+        images: Vec::new(),
+        thinking,
+        answer_saved: false,
+        draw: false,
+        image_model: None,
+    }
 }
 
-/// Read a run's request as the door does and run it to its end as run
+/// Read this machine's turn as the door does and run it to its end as run
 /// `id`: the thinking budget it ran with.
-async fn run(state: &AppState, id: &str, conversation: Option<i64>, more: Value) -> Option<i32> {
-    let request: AgentRunRequest = serde_json::from_value(body(conversation, &more)).unwrap();
-    let (chat, transcript, _) = plan(state, request).await.unwrap();
-    start(state, id, transcript).await.unwrap();
+async fn run(state: &AppState, id: &str, chat: i64, said: Option<Thinking>) -> Option<i32> {
+    let planned = plan(state, &LOCAL, turn(chat, said), None).await.unwrap();
+    start(state, id, planned.transcript).await.unwrap();
     settled(state).await;
-    chat.reasoning_budget_tokens
+    planned.chat.reasoning_budget_tokens
 }
 
 async fn start(state: &AppState, id: &str, transcript: Transcript) -> Result<bool, HttpError> {
@@ -91,72 +91,38 @@ async fn start_on(
 }
 
 #[tokio::test]
-async fn this_machines_own_run_remembers_the_same_way() {
+async fn this_machines_own_turn_remembers_the_same_way() {
     let (_dir, state) = state().await;
-    let id = conversation(&state).await;
+    let id = chat(&state, None).await;
 
-    let off = run(&state, "r1", Some(id), json!({ "thinking": "off" })).await;
+    let off = run(&state, "r1", id, Some(Thinking::Off)).await;
     assert_eq!(off, Some(0));
     assert_eq!(remembered(&state, id).await, Some(Thinking::Off));
-    let next = run(&state, "r2", Some(id), json!({})).await;
-    assert_eq!(next, Some(0), "the next run says nothing and is off");
+    let next = run(&state, "r2", id, None).await;
+    assert_eq!(next, Some(0), "the next turn says nothing and is off");
 
-    let back = run(&state, "r3", Some(id), json!({ "thinking": "default" })).await;
+    let back = run(&state, "r3", id, Some(Thinking::Default)).await;
     assert_eq!(back, None);
     assert_eq!(remembered(&state, id).await, None);
 }
 
-/// The page sends its device-wide budget with every message; a chat
-/// switched off stays off, and stays remembered.
+/// A chat switched off stays off, and stays remembered, until a turn says
+/// `default`: the page sends no budget of its own.
 #[tokio::test]
-async fn a_remembered_off_beats_a_requests_own_budget() {
+async fn a_remembered_off_holds_until_a_turn_says_default() {
     let (_dir, state) = state().await;
-    let id = switched_off(&state).await;
-    let own = json!({ "reasoning_budget_tokens": 4096 });
-    assert_eq!(run(&state, "r1", Some(id), own).await, Some(0));
+    let id = chat(&state, Some(Thinking::Off)).await;
+    assert_eq!(run(&state, "r1", id, None).await, Some(0));
     assert_eq!(remembered(&state, id).await, Some(Thinking::Off));
-}
-
-#[tokio::test]
-async fn a_run_that_says_default_forgets_and_uses_the_requests_own_budget() {
-    let (_dir, state) = state().await;
-    let id = switched_off(&state).await;
-    let said = json!({ "thinking": "default", "reasoning_budget_tokens": 4096 });
-    assert_eq!(run(&state, "r1", Some(id), said).await, Some(4096));
+    assert_eq!(run(&state, "r2", id, Some(Thinking::Default)).await, None);
     assert_eq!(remembered(&state, id).await, None);
-    let own = json!({ "reasoning_budget_tokens": 2048 });
-    assert_eq!(run(&state, "r2", Some(id), own).await, Some(2048));
+    assert_eq!(run(&state, "r3", id, None).await, None);
 }
 
-/// A request's own `0` stops that run's thinking, and its effort level is
-/// that run's: neither is written, and the next run thinks.
-#[tokio::test]
-async fn a_requests_own_budget_is_never_remembered() {
-    let (_dir, state) = state().await;
-    let id = conversation(&state).await;
-    let own = json!({ "reasoning_budget_tokens": 0, "reasoning_effort": "low" });
-    assert_eq!(run(&state, "r1", Some(id), own).await, Some(0));
-    assert_eq!(read(&state, id).await.settings, None, "nothing was written");
-    assert_eq!(run(&state, "r2", Some(id), json!({})).await, None);
-}
-
-/// A run saved to no conversation applies what it says, with nowhere to
-/// remember it.
-#[tokio::test]
-async fn a_run_with_no_conversation_applies_what_it_says_and_remembers_nothing() {
-    let (_dir, state) = state().await;
-    let said = |word: &str| json!({ "thinking": word, "reasoning_budget_tokens": 4096 });
-    assert_eq!(run(&state, "r1", None, said("off")).await, Some(0));
-    assert_eq!(run(&state, "r2", None, said("default")).await, Some(4096));
-    assert_eq!(run(&state, "r3", None, json!({})).await, None);
-    let chats = state.core.chat_history().list_conversations().await;
-    assert!(chats.unwrap().is_empty());
-}
-
-/// The door's refusal of `said` beside a run's body: its status, its code
-/// and its message.
-async fn refused(state: &AppState, id: i64, said: &Value) -> (u16, &'static str, String) {
-    match create_run(state, "r1", body(Some(id), said)).await {
+/// The door's refusal of the turn `body`: its status, its code and its
+/// message.
+async fn refused(state: &AppState, body: Value) -> (u16, &'static str, String) {
+    match start_local(state, "r1", body).await {
         Err(HttpError::Coded {
             status,
             code,
@@ -166,40 +132,23 @@ async fn refused(state: &AppState, id: i64, said: &Value) -> (u16, &'static str,
     }
 }
 
-/// A word that is neither is not a run's body: it does not parse, and the
-/// door refuses it as a body, before a conversation is read or a run is
-/// made. Nothing serves this harness's port, so the door refuses a valid
-/// body too, with the same status and code. Only the message tells the two
-/// apart: a bad word is refused as a body, and `off` is read and then
-/// refused for its port.
+/// A word that is neither is not a turn: the door refuses it as a body,
+/// before a chat is read or a run is made. `off` is read, and refused for
+/// what the chat lacks (here, a model), not as a body.
 #[tokio::test]
 async fn an_unknown_thinking_value_is_refused_400() {
-    const NOT_A_BODY: &str = "an agent run's body is an agent chat request";
+    const NOT_A_BODY: &str = "a turn's body is";
     let (_dir, state) = state().await;
     let id = conversation(&state).await;
-    let parsed = |said: &Value| serde_json::from_value::<AgentRunRequest>(body(Some(id), said));
+    let body = |word: Value| json!({ "conversation_id": id, "content": "hi", "thinking": word });
 
     for word in [json!("on"), json!("OFF"), json!(0)] {
-        let said = json!({ "thinking": word });
-        assert!(parsed(&said).is_err(), "{said} is not a run's body");
-        let (status, code, message) = refused(&state, id, &said).await;
-        assert_eq!((status, code), (400, "invalid_request"));
-        assert!(message.starts_with(NOT_A_BODY), "{said}: {message}");
+        let (status, code, message) = refused(&state, body(word.clone())).await;
+        assert_eq!((status, code), (400, "invalid_request"), "{word}");
+        assert!(message.starts_with(NOT_A_BODY), "{word}: {message}");
     }
-    for said in [
-        json!({ "thinking": "off" }),
-        json!({ "thinking": "default" }),
-        json!({}),
-    ] {
-        assert!(parsed(&said).is_ok(), "{said} is a run's body");
-    }
-    let (status, code, message) = refused(&state, id, &json!({ "thinking": "off" })).await;
-    assert_eq!((status, code), (400, "invalid_request"));
-    assert!(!message.starts_with(NOT_A_BODY), "{message}");
-    assert!(
-        message.contains("port 9000"),
-        "the port's refusal: {message}"
-    );
+    let (status, code, message) = refused(&state, body(json!("off"))).await;
+    assert_eq!((status, code), (422, "no_model"), "{message}");
 
     assert_eq!(remembered(&state, id).await, None);
     assert!(state.runs.get(&LOCAL, "r1").is_err(), "no run was made");
@@ -219,17 +168,16 @@ async fn a_run_on_a_registered_model_writes_its_model_and_the_choice_and_keeps_b
         chrono::Utc::now(),
     );
     let model = state.core.models().add(model).await.unwrap().id;
-    let id = conversation(&state).await;
+    let id = chat(&state, None).await;
     let here = ModelRef {
         machine: Machine::Local,
         id: model,
     };
-    for (run_id, said) in [("r1", json!({ "thinking": "off" })), ("r2", json!({}))] {
-        let request = serde_json::from_value(body(Some(id), &said)).unwrap();
-        let (_, transcript, _) = plan(&state, request).await.unwrap();
+    for (run_id, said) in [("r1", Some(Thinking::Off)), ("r2", None)] {
+        let planned = plan(&state, &LOCAL, turn(id, said), None).await.unwrap();
         let (mut p, _) = prepared(finished_reply(), End::Finish);
         p.local_model = Some((19_555, model));
-        let started = start_on(&state, run_id, transcript, p).await;
+        let started = start_on(&state, run_id, planned.transcript, p).await;
         assert!(started.unwrap(), "{run_id}");
         settled(&state).await;
 

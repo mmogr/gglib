@@ -50,7 +50,8 @@ infrastructure concerns (database, filesystem, etc.).
   without the bytes (`AttachmentInfo`), and the answer to an upload
   (`AttachmentUpload`)
 - `hub_chats` - The hub's chats as a paired device reads them (`HubChat`, `HubChatOpen`),
-  and the turn it adds (`HubTurn`)
+  the turn it adds (`HubTurn`), and this machine's own turn, a `HubTurn` and
+  the chat's folder (`LocalTurn`)
 - `runs` - Wire shapes of a run, a reply the daemon owns (`RunInfo`, `RunStatus`)
 - `gguf` - GGUF metadata and capability types
 - `tensor_table` - The names and outermost-first shapes of the tensors a GGUF or

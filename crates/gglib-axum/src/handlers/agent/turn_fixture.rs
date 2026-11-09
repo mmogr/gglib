@@ -1,5 +1,5 @@
-//! A daemon turn for a test: the page's run and a paired device's turn, each
-//! read as its door reads it, run as `prepare` runs it once its model is
+//! A daemon turn for a test: a chat route request and a paired device's
+//! turn, each read as its door reads it, run as `prepare` runs it once its model is
 //! found on a port, against a model server that records what it is sent.
 
 use std::path::PathBuf;
@@ -17,7 +17,6 @@ use serde_json::{Value, json};
 
 use super::compose::{Prepared, held_over, prepare_over};
 use crate::handlers::agent::AgentChatRequest;
-use crate::handlers::agent::dto::AgentRunRequest;
 use crate::handlers::agent::remote_upstream::local;
 use crate::handlers::agent::run_fixture::device;
 use crate::handlers::remote::fake_far::far;
@@ -66,8 +65,8 @@ pub(super) async fn turn(
 enum Prep {
     /// As `prepare_over` prepares it, with this folder.
     Over(Option<PathBuf>),
-    /// As `prepare_held` prepares a run, and `hub_turn::late_on` a device's
-    /// turn: its model held on `state.runtime` before the loop is composed,
+    /// As `held_over` prepares a run, for `hub_turn::late_on`'s turns: its
+    /// model held on `state.runtime` before the loop is composed,
     /// with no folder.
     Held,
 }
@@ -238,8 +237,9 @@ pub(super) fn temperature(value: f32) -> InferenceConfig {
     }
 }
 
-/// The page's run, read as its door reads it.
-pub(super) async fn page(state: &AppState, more: Value) -> AgentChatRequest {
+/// A request to the chat route (`POST /api/agent/chat`), which names its
+/// history, tool filter and Draw itself: what `prepare_over` composes from.
+pub(super) async fn page(_state: &AppState, more: Value) -> AgentChatRequest {
     let mut body = json!({
         "port": 0,
         "messages": [{ "role": "user", "content": "hi" }],
@@ -248,8 +248,7 @@ pub(super) async fn page(state: &AppState, more: Value) -> AgentChatRequest {
     body.as_object_mut()
         .unwrap()
         .extend(more.as_object().unwrap().clone());
-    let request: AgentRunRequest = serde_json::from_value(body).unwrap();
-    super::run::plan(state, request).await.unwrap().0
+    serde_json::from_value(body).unwrap()
 }
 
 /// A paired device's turn on a chat of `model_id`, read as its door reads it.
@@ -291,8 +290,8 @@ pub(super) fn hi(conversation_id: i64) -> HubTurn {
     }
 }
 
-/// The same turn from each door: the page's run, and a paired device's on a
-/// chat of `model_id`. With [`TOOL`] when `tools`, and otherwise none.
+/// The same turn from each door: a chat route request, and a paired
+/// device's on a chat of `model_id`. With [`TOOL`] when `tools`, and otherwise none.
 pub(super) async fn doors(
     state: &AppState,
     model_id: i64,

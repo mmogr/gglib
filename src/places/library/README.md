@@ -7,7 +7,10 @@ Loaded, On this Mac, the paired machine's), a model in one of them; one
 search that filters them as you type and takes the text to Hugging Face on
 Enter (`hf/`); a sort; and the inspector on the right while it has a
 subject. Rows are options in a listbox per group, and picking
-one changes its fill and nothing else.
+one changes its fill and nothing else. Each listbox is one Tab stop (the
+picked row, else the first); ↑ ↓ Home End move the focus and pick as they go
+(`components/ui/Listbox`), a run of keys leaving one history entry, and
+the Hugging Face inspector following 150 ms after the last key.
 
 Every word on a row is the daemon's: a loaded model's state is
 `RESIDENCY_WORDS` for the state the proxy's live dashboard gives its

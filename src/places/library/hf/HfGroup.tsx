@@ -6,7 +6,8 @@
  * With the field empty it holds the model `gglib up` would suggest for this
  * machine, from the daemon's shortlist, with the figures it was sized by.
  * After Enter it holds the Hub's repos as rows (a pick opens the repo's
- * preview in the inspector) and "More results" while the Hub has more, or
+ * preview in the inspector; with the arrow keys, the repo a run of keys
+ * ends on, `KEY_PICK_MS` after the last) and "More results" while the Hub has more, or
  * a `user/repo:QUANT` download as its one row, or why it failed.
  *
  * Every figure is the daemon's: a repo's parameter count is the summary's
@@ -17,9 +18,10 @@
  * @module places/library/hf/HfGroup
  */
 
-import { useEffect, useState, type FC, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { Button } from '../../../components/ui/Button';
 import { Chip } from '../../../components/ui/Chip';
+import { Listbox, tabStop } from '../../../components/ui/Listbox';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { useToolSupportCache } from '../../../hooks/useToolSupportCache';
 import { queueDownload } from '../../../services/downloadsEvents';
@@ -45,7 +47,8 @@ interface HfGroupProps {
   search: LibrarySearch;
   /** The repo in the inspector. */
   pickedId: string | null;
-  onPick: (model: HfModelSummary) => void;
+  /** `replace`: picked with the arrow keys from the repo picked before. */
+  onPick: (model: HfModelSummary, replace?: boolean) => void;
   /** The daemon would refuse another download. */
   queueFull: boolean;
 }
@@ -117,7 +120,7 @@ const Suggestion: FC<{ queueFull: boolean }> = ({ queueFull }) => {
 };
 
 /** One repo: its id, then params, tool calling and downloads. */
-const HfRow: FC<{ model: HfModelSummary; picked: boolean; onPick: () => void }> = ({ model, picked, onPick }) => {
+const HfRow: FC<{ model: HfModelSummary; picked: boolean; tabIndex: 0 | -1; onPick: () => void }> = ({ model, picked, tabIndex, onPick }) => {
   const { supports } = useToolSupportCache(model.id);
   return (
     <ModelRow
@@ -128,14 +131,41 @@ const HfRow: FC<{ model: HfModelSummary; picked: boolean; onPick: () => void }> 
         `${formatNumber(model.downloads)} downloads`,
       ]}
       selected={picked}
+      tabIndex={tabIndex}
       onSelect={onPick}
     />
   );
 };
 
+/**
+ * How long a pick made with the arrow keys waits before the address follows
+ * it, in ms: a run of keys opens the repo it ends on, and the inspector reads
+ * that one from the Hub rather than each repo passed over.
+ */
+const KEY_PICK_MS = 150;
+
 export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull }) => {
   const { shown, hf, openError, setQuery } = search;
   const queue = useQueue();
+  // The key pick waiting, and whether the run it ends began on the picked repo.
+  const pending = useRef<{ timer: ReturnType<typeof setTimeout>; replace: boolean } | null>(null);
+  /** Forget a key pick still waiting: a click, a new search or an opened repo says where the person is now. */
+  const cancelKeyPick = () => {
+    clearTimeout(pending.current?.timer);
+    pending.current = null;
+  };
+  useEffect(() => cancelKeyPick, []);
+  useEffect(cancelKeyPick, [hf.models, shown?.kind]);
+  const pickByKey = (model: HfModelSummary, replace: boolean) => {
+    const run = pending.current;
+    clearTimeout(run?.timer);
+    const keep = run ? run.replace : replace;
+    const timer = setTimeout(() => {
+      pending.current = null;
+      onPick(model, keep);
+    }, KEY_PICK_MS);
+    pending.current = { timer, replace: keep };
+  };
   // Nothing to say while a named repo is still being read.
   if (shown === null || (shown.kind === 'open' && openError === null)) return null;
 
@@ -199,11 +229,20 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
         <>
           {hf.models.length === 0 && !hf.hasMore && <Note>{`No GGUF repos match '${shown.query}'.`}</Note>}
           {hf.models.length > 0 && (
-            <div role="listbox" aria-label="Hugging Face">
-              {hf.models.map((m) => (
-                <HfRow key={m.id} model={m} picked={m.id === pickedId} onPick={() => onPick(m)} />
+            <Listbox label="Hugging Face" onPick={(i, replace) => pickByKey(hf.models[i], replace)}>
+              {hf.models.map((m, i) => (
+                <HfRow
+                  key={m.id}
+                  model={m}
+                  picked={m.id === pickedId}
+                  tabIndex={tabStop(i, hf.models.findIndex((h) => h.id === pickedId))}
+                  onPick={() => {
+                    cancelKeyPick();
+                    onPick(m);
+                  }}
+                />
               ))}
-            </div>
+            </Listbox>
           )}
           {hf.hasMore && (
             <Button variant="ghost" size="sm" className="mx-md self-start" isLoading={hf.loadingMore} onClick={hf.loadMore}>

@@ -140,5 +140,47 @@
       "state": "not_writable",
       "word": "Not writable"
     }
+  ],
+  "verdict": [
+    {
+      "state": "healthy",
+      "word": "Healthy"
+    },
+    {
+      "state": "unhealthy",
+      "word": "Unhealthy"
+    },
+    {
+      "state": "unverifiable",
+      "word": "Unverifiable"
+    }
+  ],
+  "file_health": [
+    {
+      "state": "healthy",
+      "word": "Healthy"
+    },
+    {
+      "state": "corrupt",
+      "word": "Corrupt"
+    },
+    {
+      "state": "missing",
+      "word": "Missing"
+    },
+    {
+      "state": "no_oid",
+      "word": "No OID available"
+    }
+  ],
+  "damaged": [
+    {
+      "state": "1",
+      "word": "1 file damaged"
+    },
+    {
+      "state": "2",
+      "word": "2 files damaged"
+    }
   ]
 }

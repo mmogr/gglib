@@ -30,7 +30,7 @@ import { conversation, mount, send } from './runtimeHarness';
 import { resetRemoteState } from '../../../../src/services/remoteRegistry';
 import type { GglibMessage } from '../../../../src/types/messages';
 
-const local = { conversationId: 1, conversation: conversation(1), selectedServerPort: 9000 };
+const local = { conversationId: 1, conversation: conversation(1) };
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACA';
 const frame = (step: number, b64 = `${PNG}${step}`) => ({ mime: 'image/png', step, total: 20, b64 });
 
@@ -270,7 +270,7 @@ describe('useGglibRuntime, a render\'s frames and progress', () => {
     daemon.preview(id, 'call_1', frame(7));
     await waitFor(() => expect(hook.result.current.previews.size).toBe(1));
 
-    hook.rerender({ conversationId: 2, conversation: conversation(2), selectedServerPort: 9000 });
+    hook.rerender({ conversationId: 2, conversation: conversation(2) });
     await waitFor(() => expect(hook.result.current.previews.size).toBe(0));
     await waitFor(() => expect(hook.result.current.isLoading).toBe(false));
     expect(hook.result.current.previews.size).toBe(0);
@@ -281,7 +281,7 @@ describe('useGglibRuntime, a render\'s frames and progress', () => {
     daemon.preview(id, 'call_1', frame(7));
     await waitFor(() => expect(hook.result.current.previews.size).toBe(1));
 
-    hook.rerender({ selectedServerPort: 9000 });
+    hook.rerender({});
     await waitFor(() => expect(hook.result.current.previews.size).toBe(0));
     // The run carries on at the daemon; a frame it sends now has no reader.
     expect(daemon.only().streams).toHaveLength(0);

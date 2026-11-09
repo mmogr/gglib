@@ -19,8 +19,8 @@ use tokio::sync::mpsc;
 use super::model_links::resolved_or_literal;
 use super::model_row_roles::row_roles;
 use super::model_verification::{
-    FilePlace, ModelVerificationService, OperationType, ShardHealth, ShardUpdate,
-    UpdateCheckResult, UpdateDetails, VerifiedFileKind,
+    FilePlace, ModelVerificationService, OperationType, ShardUpdate, UpdateCheckResult,
+    UpdateDetails, VerifiedFileKind,
 };
 use crate::domain::{Model, ModelFile, ModelFolder, NO_HUB_LABEL};
 use crate::download::{DownloadId, GgufFileRole};
@@ -422,7 +422,7 @@ impl ModelVerificationService {
                 kind,
             };
             let health = Self::verify_shard(file, &resolved_path, model_id, place, &tx).await;
-            if matches!(health, ShardHealth::Corrupt { .. } | ShardHealth::Missing) {
+            if health.is_damaged() {
                 unhealthy.push(file);
             }
         }
@@ -476,3 +476,7 @@ mod label_tests;
 #[cfg(test)]
 #[path = "model_verification_unknown_tests.rs"]
 mod unknown_tests;
+
+#[cfg(test)]
+#[path = "model_verification_health_tests.rs"]
+mod health_tests;

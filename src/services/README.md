@@ -83,7 +83,7 @@ not because it belongs here.
 | `dashboardRegistry.ts` | One `/v1/proxy/status/stream` per endpoint and credential, ref-counted: opened by the first surface that wants it, closed by the last, reopened when the key changes |
 | `createEventStore.ts` | Shared store factory behind the registries: one value, replaced whole on each write, with a `useSyncExternalStore` hook over it |
 | `bridgeEvents.ts` | Shared bridge behind the `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event (or only the events `overtakes` names) or a cleanup overtook |
-| `agentOverrides.ts` | Per-session chat overrides, in two halves: `agentOverridesToWire()` builds the `config` object, `reasoningOverridesToWire()` builds the top-level reasoning fields the request declares separately |
+| `agentOverrides.ts` | The Agent limits sheet's client-wide store (localStorage); no turn reads it, until D6 moves the controls to saved settings |
 
 ## Clients
 

@@ -33,9 +33,6 @@ pub(crate) struct Prepared {
     pub(crate) tx: mpsc::Sender<AgentEvent>,
     /// Where the loop's events arrive.
     pub(crate) rx: mpsc::Receiver<AgentEvent>,
-    /// The model the loop is counted under: the request's, or the one
-    /// running on its port.
-    pub(crate) model: String,
     /// The model each turn was made by, for its `turn_usage` event. Its
     /// context's size is read once the run holds the model
     /// (`remote_upstream::hold_model`).
@@ -46,7 +43,7 @@ pub(crate) struct Prepared {
     /// otherwise none.
     pub(crate) far_model: Option<ModelRef>,
     /// A run's hold on that model (`remote_upstream::hold`), taken by
-    /// [`prepare_held`]; `prepare` takes none.
+    /// [`held_over`]; `prepare` takes none.
     pub(crate) hold: Option<AdmissionLease>,
 }
 
@@ -67,8 +64,8 @@ pub(crate) const DRAW_TOOL: &str = gglib_core::request_pipeline::DRAW_TOOL_NAME;
 /// request without `draw` passes, unless it chose an image model: it is
 /// offered no image tool at all, so the choice would be dropped in silence.
 ///
-/// The one place every door's `draw` and `image_model` are judged: the
-/// page's run, a device's turn, a chat run with builtins and the chat
+/// The one place every door's `draw` and `image_model` are judged: this
+/// machine's turn, a device's turn, a chat run with builtins and the chat
 /// route.
 ///
 /// # Errors
@@ -178,27 +175,13 @@ pub(crate) async fn prepare(
     Ok(prepare_over(state, req, upstream, None).await)
 }
 
-/// [`prepare`] for a run, which holds its model while it lives: the page's
-/// run and a device's turn. The hold is taken, and the context the model was
-/// launched with read, before the loop is composed, so the loop trims the
-/// conversation to that context (`remote_upstream::hold_model`). `folder` is
-/// the run's, where gglib's own file tools read: the page's run passes its
-/// conversation's, and a device's turn none.
-///
-/// # Errors
-///
-/// Whatever [`remote_upstream::resolve`] or the hold refuses.
-pub(crate) async fn prepare_held(
-    state: &AppState,
-    req: AgentChatRequest,
-    folder: Option<PathBuf>,
-) -> Result<Prepared, HttpError> {
-    let upstream = remote_upstream::resolve(state, &req).await?;
-    held_over(state, req, upstream, folder).await
-}
-
-/// [`prepare_held`], once the upstream is settled; drivable in a test, as
-/// [`prepare_over`] is.
+/// [`prepare_over`] for a run, which holds its model while it lives: a
+/// turn, this machine's or a paired device's. The hold is taken, and the
+/// context the model was launched with read, before the loop is composed,
+/// so the loop trims the conversation to that context
+/// (`remote_upstream::hold_model`). `folder` is the run's, where gglib's own
+/// file tools read: this machine's turn passes its chat's, and a device's
+/// turn none.
 ///
 /// # Errors
 ///
@@ -255,7 +238,6 @@ pub(super) async fn prepare_over(
     let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
 
-    let model = upstream.counted_as.clone();
     let local_model = upstream.local_model;
     let far_model = upstream.far_model.clone();
     let agent_loop = compose_agent_loop(
@@ -297,7 +279,7 @@ pub(super) async fn prepare_over(
     // must be the call for the picture, offered that tool alone, and is
     // never left to the model to decide. The picture is asked for once:
     // the reply after it is offered no tools. Every door that composes a run
-    // with `draw` comes through here: the page's runs, a device's turn and
+    // with `draw` comes through here: this machine's turns, a device's and
     // a chat run with builtins. A run on another machine's model was
     // refused `draw` before this.
     config.first_call = draw.then(DrawingTool::first_call);
@@ -308,7 +290,6 @@ pub(super) async fn prepare_over(
         config,
         tx,
         rx,
-        model,
         made_by: upstream.made_by,
         local_model,
         far_model,
@@ -319,8 +300,8 @@ pub(super) async fn prepare_over(
 /// The loop config a request runs with: what it names, and for the limits
 /// it leaves out this machine's stored ones (`TurnLimits::resolve`). A
 /// turn on a saved chat reaches here with that chat's saved iteration limit
-/// already standing in for one it did not name (`hub_turn::plan` for a
-/// paired device's turn, `run::plan` for the page's run). So a client that
+/// already standing in for one it did not name (`hub_turn::plan`, for this
+/// machine's turn and a paired device's). So a client that
 /// names no iteration limit runs with its chat's, and failing that with
 /// `max_tool_iterations`, and none has to send either. A settings read that
 /// fails leaves the built-in defaults.

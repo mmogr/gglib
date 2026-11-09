@@ -8,7 +8,8 @@ use gglib_core::domain::runs::RunStatus;
 use gglib_core::ports::RunsPort as _;
 use tokio::sync::Semaphore;
 
-use super::launch::{Transcript, launch};
+use super::launch::Transcript;
+use super::launch::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, logged, prepared, reply, saved, settled, start, state,
 };

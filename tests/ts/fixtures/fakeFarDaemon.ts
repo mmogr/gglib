@@ -20,7 +20,7 @@
  * model is serving.
  */
 
-import type { AgentRunRequest } from '../../../src/types/generated/AgentRunRequest';
+import type { LocalTurn } from '../../../src/types/generated/LocalTurn';
 import type { LoadResponse } from '../../../src/types/generated/LoadResponse';
 import type { ModelDetailDto } from '../../../src/types/generated/ModelDetailDto';
 import type { ModelInfo } from '../../../src/types/generated/ModelInfo';
@@ -159,10 +159,11 @@ export class FakeFarDaemon {
         return json({ error: 'unknown field `images`', status: 400, type: 'invalid_request' }, 400);
       }
       // As the hub takes a device's turn: the history is its own record.
-      const request = {
+      const request: LocalTurn = {
         conversation_id: Number(m[1]),
-        messages: [{ role: 'user', content, ...(images && { images }) }],
-      } as unknown as AgentRunRequest;
+        content,
+        ...(images && { images }),
+      };
       return this.hub.fetch(`/api/runs/${m[2]}?kind=agent`, { method: 'PUT', body: JSON.stringify(request) });
     }
     if (method === 'GET' && path === '/api/remote/models') {

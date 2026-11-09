@@ -75,8 +75,10 @@ interface ChatMessagesPanelProps {
   modelId?: number;
   /** Move the chat to another model, from the composer's margin. */
   onPickModel?: (choice: ModelChoice) => Promise<void>;
-  /** The model a switch is starting; the picker is locked until it lands. */
+  /** The model Load it again is starting, which the line says until it lands. */
   startingModel?: string | null;
+  /** Load the model again, from the line that says it was unloaded. */
+  onLoadModel?: () => Promise<void>;
   /** Unload the model, from beside the picker; the chat stays open. */
   onUnloadModel?: () => Promise<void>;
   /** Its quantisation, from its catalogue entry, when known. */
@@ -147,6 +149,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   modelName,
   modelId,
   onPickModel,
+  onLoadModel,
   startingModel,
   onUnloadModel,
   quantization,
@@ -333,6 +336,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       modelName={modelName}
                       modelId={modelId}
                       onPickModel={onPickModel}
+                      onLoadModel={onLoadModel}
                       startingModel={startingModel}
                       onUnloadModel={onUnloadModel}
                       quantization={quantization}
