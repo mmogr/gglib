@@ -65,3 +65,39 @@ impl RetryObserver for RetryNotice {
         ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The words a run's notice says, in order, from the events it is sent.
+    fn said(rx: &mut mpsc::Receiver<AgentEvent>) -> Vec<String> {
+        let mut said = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                AgentEvent::SystemWarning { message, .. } => said.push(message),
+                other => panic!("not a notice: {other:?}"),
+            }
+        }
+        said
+    }
+
+    /// A backoff and the give-up each reach the events the loop sends, the
+    /// same channel the run logs, as a `system_warning` in these words.
+    #[test]
+    fn a_retry_and_its_give_up_reach_the_runs_events() {
+        let (tx, mut rx) = mpsc::channel(4);
+        let notice = RetryNotice::new(tx);
+
+        notice.on_retry(2, Duration::from_millis(1500), "503");
+        notice.on_exhausted(4, Duration::from_secs(31), "deadline");
+
+        assert_eq!(
+            said(&mut rx),
+            [
+                "Model unavailable — retrying in 1.5s (attempt 2)",
+                "Model still unavailable after 4 attempts over 31s — giving up",
+            ]
+        );
+    }
+}

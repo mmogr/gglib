@@ -110,9 +110,9 @@ impl LlmCompletionAdapter {
     /// Read the images a message names from `store`.
     ///
     /// Every caller whose messages can carry an image passes the store: the
-    /// chat routes and the CLI. `None` (the default) is for one whose
-    /// messages are text alone, such as a benchmark; an image then ends the
-    /// request before it is sent.
+    /// daemon's runs (`compose_agent_loop`). `None` (the default) is for one
+    /// whose messages are text alone, such as a benchmark arm; an image then
+    /// ends the request before it is sent.
     #[must_use]
     pub fn with_attachments(mut self, store: Option<Arc<dyn AttachmentStore>>) -> Self {
         self.attachments = store;
@@ -154,10 +154,12 @@ impl LlmCompletionAdapter {
     /// Set the resolved per-model context, from
     /// [`gglib_core::request_pipeline::resolve()`].
     ///
-    /// This is what gives the in-process agent path the same per-model handling
-    /// the proxy has always had: capability-aware message coalescing, the
-    /// per-model layer of the sampling hierarchy, and a dialect-specific
-    /// response parser. Pass [`ModelContext::passthrough`] (the default) when
+    /// This is what gives a send to llama-server, a benchmark arm's, the same
+    /// per-model handling the proxy has: capability-aware message coalescing,
+    /// the per-model layer of the sampling hierarchy, and a dialect-specific
+    /// response parser. Through a door the endpoint does all three, and the
+    /// context decides only whether the most recent drawn picture is shown
+    /// and a turn's limit. Pass [`ModelContext::passthrough`] (the default) when
     /// the model is unknown — every transform becomes a no-op and the identity
     /// parser is selected, which is the right choice for any model that already
     /// speaks strict `OpenAI` tool-calling.
@@ -185,8 +187,7 @@ impl LlmCompletionAdapter {
 
     /// Override the retry budget for transient upstream failures.
     ///
-    /// Pass `RetryPolicy { max_attempts: 1, .. }` to disable retrying — that is
-    /// what the CLI's `--no-retry` resolves to.
+    /// Pass `RetryPolicy { max_attempts: 1, .. }` to disable retrying.
     #[must_use]
     pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
         self.retry_policy = policy;

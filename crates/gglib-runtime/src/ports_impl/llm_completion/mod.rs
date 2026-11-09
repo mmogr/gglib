@@ -96,9 +96,9 @@ pub struct LlmCompletionAdapter {
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     send_timeout_secs: u64,
-    /// How long one read of the reply may wait before the run's stream ends:
-    /// the proxy's bound, [`gglib_proxy::STREAM_IDLE_TIMEOUT`], since a run
-    /// reads llama-server past the proxy. Tests shorten it.
+    /// How long one read of the reply may wait before the stream ends: the
+    /// proxy's bound, [`gglib_proxy::STREAM_IDLE_TIMEOUT`] (see
+    /// `stream::sse_events` for who needs it). Tests shorten it.
     stream_idle_timeout: std::time::Duration,
     /// The resolved per-model facts, from
     /// [`gglib_core::request_pipeline::resolve()`].  Drives request shaping
@@ -111,9 +111,9 @@ pub struct LlmCompletionAdapter {
     /// When set, the completed response's trailing `usage` is recorded into
     /// this sink — the single point that covers every agent-path consumer of
     /// the stream, and the only one that still reports when the agent loop
-    /// aborts mid-run. `None` (the default) means nowhere to report, so
-    /// recording is skipped: the case for CLI `gglib chat`/`q`, which run in a
-    /// process with no dashboard.
+    /// aborts mid-run. A benchmark arm passes one. `None` (the default) means
+    /// nowhere to report, so recording is skipped: the case for the daemon's
+    /// runs, whose turns the endpoint counts.
     usage_sink: Option<Arc<dyn UsageSink>>,
     /// Bounds on retrying a transient upstream failure — see
     /// [`retry`] for why that is safe to do here.
@@ -126,12 +126,11 @@ pub struct LlmCompletionAdapter {
     /// Optional destination for this request's retry activity.
     ///
     /// When set, each backoff and the eventual give-up are reported here — the
-    /// agent HTTP handler turns them into
+    /// daemon's runs turn them into
     /// [`AgentEvent::SystemWarning`](gglib_core::domain::agent::AgentEvent::SystemWarning)
     /// frames so a waiting user sees "retrying" rather than a frozen cursor.
     /// `None` (the default) means nowhere to report, so the calls are no-ops:
-    /// the case for CLI `gglib chat`/`q`, which render the loop's events
-    /// directly.
+    /// the case for a benchmark arm, which no one watches turn by turn.
     retry_observer: Option<Arc<dyn RetryObserver>>,
     /// Skip the request-shaping pipeline entirely and send the bare body.
     ///
@@ -255,7 +254,7 @@ impl LlmCompletionAdapter {
         // gates an *external* client's request body against a boilerplate value it
         // may have no user-facing control over (VS Code Copilot's hardcoded
         // `temperature: 0`, for one). `self.sampling` is not that — it is gglib's own
-        // typed caller config (terminal flags, a run's reasoning controls), built by
+        // typed caller config (a benchmark arm's candidate sampling), built by
         // trusted in-process code, so it must always resolve as the top layer
         // regardless of that setting.
         //

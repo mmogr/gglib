@@ -3,7 +3,6 @@
 
 use super::*;
 use crate::handlers::remote::fake_far::{FINGERPRINT, carries_key, far as fake_far, only};
-use gglib_core::domain::Machine;
 
 /// A model of the paired machine, by its id there.
 fn far_ref(id: i64) -> ModelRef {
@@ -33,6 +32,29 @@ async fn a_far_chats_profile_rides_on_the_id_it_sends() {
 
     assert_eq!(upstream.model.as_deref(), Some("3:coding"));
     assert_eq!(only(&fake).uri, "/v1/models/3/detail");
+}
+
+/// A turn reached through [`far`] carries what its chat saved: its profile
+/// rides on the id it sends.
+#[tokio::test]
+async fn a_far_turn_carries_its_chats_saved_profile() {
+    let (_fake, proxy) = fake_far(200, LOOKUP).await;
+    let saved = ChatSampling {
+        profile: Some("coding".to_owned()),
+        ..ChatSampling::default()
+    };
+    let reach = async |machine: &Machine| {
+        assert_eq!(
+            *machine,
+            far_ref(3).machine,
+            "the chat's machine is reached"
+        );
+        Ok(proxy)
+    };
+
+    let upstream = far(reach, &far_ref(3), &saved).await.expect("reached");
+
+    assert_eq!(upstream.model.as_deref(), Some("3:coding"));
 }
 
 /// The far model is looked up by its id, sent by its id, and counted and

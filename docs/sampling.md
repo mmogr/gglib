@@ -633,8 +633,8 @@ sanctioned way for a client to express a sampling preference without needing to 
 trusted (see below). gglib's own chats (`gglib chat`, `gglib q`, a chat in the
 app) are clients of the endpoint too: the sampling a chat saved, `gglib chat`'s
 flags, is sent as a client's and honoured only while this is on, and `gglib chat`
-says so in one line when it is off. A profile a chat saved is applied either way,
-and so is Thinking off.
+says so in one line when it is off. Its `max_tokens` is the client's own budget
+and applies either way, as a profile a chat saved does, and Thinking off.
 
 ## Inference profiles (`<model>:<profile>`)
 

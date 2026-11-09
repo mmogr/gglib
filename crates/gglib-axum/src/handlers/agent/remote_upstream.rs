@@ -14,7 +14,7 @@ use gglib_app_services::FarProxy;
 use gglib_app_services::GuiError;
 use gglib_app_services::transcript::MadeBy;
 use gglib_core::Settings;
-use gglib_core::domain::{InferenceProfile, ModelRef};
+use gglib_core::domain::{InferenceProfile, Machine, ModelRef};
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::ports::ModelRuntimePort;
@@ -214,8 +214,9 @@ pub(super) async fn through_endpoint(
     endpoint(state, req, loaded, door).await
 }
 
-/// The upstream of a turn on `model`, a model of the paired machine: what
-/// [`remote`] makes of the far proxy this machine reaches it by.
+/// The upstream of a turn on `model`, a model of the paired machine, with
+/// what its chat `saved`: what [`remote`] makes of the far proxy `reach`
+/// finds for that machine (`RemoteOps::far_for`, in the daemon).
 ///
 /// # Errors
 ///
@@ -225,11 +226,11 @@ pub(super) async fn through_endpoint(
 /// machine's refusal of the model, such as a `404` for an id it does not
 /// have.
 pub(super) async fn far(
-    state: &AppState,
+    reach: impl AsyncFnOnce(&Machine) -> Result<FarProxy, GuiError>,
     model: &ModelRef,
     saved: &ChatSampling,
 ) -> Result<Upstream, HttpError> {
-    let proxy = state.remote.far_for(&model.machine).await?;
+    let proxy = reach(&model.machine).await?;
     remote(&proxy, model, saved).await
 }
 

@@ -155,7 +155,8 @@ async fn a_far_run_with_an_image_is_not_refused_here() {
         id: 1,
     };
 
-    let Err(err) = far(&state, &named, &ChatSampling::default()).await else {
+    let reach = async |machine: &Machine| state.remote.far_for(machine).await;
+    let Err(err) = far(reach, &named, &ChatSampling::default()).await else {
         panic!("nothing is connected");
     };
 

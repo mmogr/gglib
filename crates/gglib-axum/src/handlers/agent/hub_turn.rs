@@ -43,6 +43,7 @@ use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum::response::IntoResponse as _;
 
+use gglib_core::domain::Machine;
 use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::branching;
 use gglib_core::domain::chat::ConversationSettings;
@@ -275,7 +276,10 @@ pub(super) fn late_on(
             };
             let chat = device_tools::settle(&state, chat, &asked).await;
             let upstream = match loaded {
-                Err(far) => remote_upstream::far(&state, &far, &chat.saved).await,
+                Err(far) => {
+                    let reach = async |machine: &Machine| state.remote.far_for(machine).await;
+                    remote_upstream::far(reach, &far, &chat.saved).await
+                }
                 Ok(loaded) => remote_upstream::through_endpoint(&state, &chat, loaded).await,
             };
             let upstream = upstream.map_err(with_code)?;

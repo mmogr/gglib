@@ -126,7 +126,7 @@ Prefer constructing one adapter **per request** via
 [`LlmCompletionAdapter::with_client`] and passing a clone of the
 application-level `reqwest::Client` (stored in `AppState`) so all requests
 share a single connection pool.  The `new` constructor is still available
-for standalone use (e.g. CLI) and allocates its own pool.
+for standalone use (a test, say) and allocates its own pool.
 
 ```ignore
 let adapter = LlmCompletionAdapter::new("http://127.0.0.1:9000", None::<String>);
