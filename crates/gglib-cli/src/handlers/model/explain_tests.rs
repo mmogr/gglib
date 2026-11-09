@@ -249,12 +249,13 @@ async fn the_launch_is_the_runtimes_plan_through_the_one_shot_runtime() {
     // header says neither what its context costs nor its trained window.
     // Whether this machine's memory is read depends on where the test runs,
     // so that reason may come first.
-    let sentence = text
+    let Some((sentence, _)) = text
         .split("\nContext\n  ")
         .nth(1)
         .and_then(|rest| rest.split_once("\n  serves at"))
-        .map(|(sentence, _)| sentence)
-        .unwrap_or_else(|| panic!("{text}"));
+    else {
+        panic!("{text}")
+    };
     assert!(
         sentence.starts_with("Serves at 4K context; gglib could not fit one to this machine: "),
         "{text}"
