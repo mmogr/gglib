@@ -10,6 +10,7 @@ use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::run_path;
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
+use gglib_core::domain::{Machine, ModelRef};
 use serde_json::{Value, json};
 
 use common::harness::test_state_and_app;
@@ -20,6 +21,27 @@ async fn put(app: &Router, id: &str, body: Value) -> (StatusCode, Value) {
     call_json(app, Method::PUT, &uri, Some(body)).await
 }
 
+/// This machine's `qwen`, by its id, catalogued on first use: a chat names
+/// its model by id, and a name alone is never looked up.
+async fn qwen(state: &gglib_axum::AppState) -> ModelRef {
+    let found = state.core.models().get("qwen").await.unwrap();
+    let id = if let Some(model) = found {
+        model.id
+    } else {
+        let model = gglib_core::domain::NewModel::new(
+            "qwen".to_owned(),
+            std::path::PathBuf::from("/models/qwen.gguf"),
+            7.0,
+            chrono::Utc::now(),
+        );
+        state.core.models().add(model).await.unwrap().id
+    };
+    ModelRef {
+        machine: Machine::Local,
+        id,
+    }
+}
+
 /// A conversation holding `rows`, in order; its id.
 async fn conversation(state: &gglib_axum::AppState, rows: &[(MessageRole, &str)]) -> i64 {
     let history = state.core.chat_history();
@@ -27,6 +49,7 @@ async fn conversation(state: &gglib_axum::AppState, rows: &[(MessageRole, &str)]
         .create_conversation(NewConversation {
             title: "t".into(),
             settings: Some(ConversationSettings {
+                model: Some(qwen(state).await),
                 model_name: Some("qwen".to_owned()),
                 ..ConversationSettings::default()
             }),

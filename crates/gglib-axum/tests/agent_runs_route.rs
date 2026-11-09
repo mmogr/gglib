@@ -28,9 +28,15 @@ fn agent(id: &str) -> String {
     format!("{}?kind=agent", run_path(id))
 }
 
-/// A chat whose settings are `settings`, on `qwen` unless they name a model.
+/// A chat whose settings are `settings`, on this machine's `qwen` by its id
+/// unless they store a model.
 async fn chat(state: &gglib_axum::AppState, settings: ConversationSettings) -> i64 {
+    let model = match settings.model {
+        Some(model) => model,
+        None => qwen(state).await,
+    };
     let settings = ConversationSettings {
+        model: Some(model),
         model_name: settings.model_name.or_else(|| Some("qwen".to_owned())),
         ..settings
     };
@@ -44,6 +50,27 @@ async fn chat(state: &gglib_axum::AppState, settings: ConversationSettings) -> i
         })
         .await
         .unwrap()
+}
+
+/// This machine's `qwen`, by its id, catalogued on first use: a chat names
+/// its model by id, and a name alone is never looked up.
+async fn qwen(state: &gglib_axum::AppState) -> ModelRef {
+    let found = state.core.models().get("qwen").await.unwrap();
+    let id = if let Some(model) = found {
+        model.id
+    } else {
+        let model = gglib_core::domain::NewModel::new(
+            "qwen".to_owned(),
+            std::path::PathBuf::from("/models/qwen.gguf"),
+            7.0,
+            chrono::Utc::now(),
+        );
+        state.core.models().add(model).await.unwrap().id
+    };
+    ModelRef {
+        machine: Machine::Local,
+        id,
+    }
 }
 
 /// The paired machine's model 3.

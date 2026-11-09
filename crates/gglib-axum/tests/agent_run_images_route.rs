@@ -11,13 +11,15 @@
 
 mod common;
 
+use std::time::Duration;
+
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::{RUNS_PATH, run_path};
 use gglib_core::domain::AttachmentId;
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
-use gglib_core::domain::runs::RunList;
+use gglib_core::domain::runs::{RunInfo, RunList, RunStatus};
 use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::request_pipeline::{MAX_IMAGE_BYTES, MAX_REQUEST_IMAGE_BYTES};
 use serde_json::{Value, json};
@@ -76,9 +78,34 @@ async fn chat(state: &gglib_axum::AppState, model: Option<ModelRef>, earlier: &[
     id
 }
 
-/// A chat on this machine's model, with `earlier` in its history.
+/// A chat on this machine's `qwen`, by its id, with `earlier` in its
+/// history.
 async fn here(state: &gglib_axum::AppState, earlier: &[&str]) -> i64 {
-    chat(state, None, earlier).await
+    let model = qwen(state).await;
+    chat(state, Some(model), earlier).await
+}
+
+/// This machine's `qwen`, by its id, catalogued on first use with a
+/// projector, so it reads images: a chat names its model by id, and a name
+/// alone is never looked up.
+async fn qwen(state: &gglib_axum::AppState) -> ModelRef {
+    let found = state.core.models().get("qwen").await.unwrap();
+    let id = if let Some(model) = found {
+        model.id
+    } else {
+        let mut model = gglib_core::domain::NewModel::new(
+            "qwen".to_owned(),
+            std::path::PathBuf::from("/models/qwen.gguf"),
+            7.0,
+            chrono::Utc::now(),
+        );
+        model.projector_path = Some(std::path::PathBuf::from("/models/mmproj-qwen.gguf"));
+        state.core.models().add(model).await.unwrap().id
+    };
+    ModelRef {
+        machine: Machine::Local,
+        id,
+    }
 }
 
 /// A chat on the paired machine's model 3, with `earlier` in its history.
@@ -90,6 +117,23 @@ async fn there(state: &gglib_axum::AppState, earlier: &[&str]) -> i64 {
         id: 3,
     };
     chat(state, Some(model), earlier).await
+}
+
+/// Wait for run `id` to end, so the slot it held is free again.
+async fn ended(app: &Router, id: &str) {
+    let read = async {
+        loop {
+            let (_, info) = call_json(app, Method::GET, &run_path(id), None).await;
+            let info: RunInfo = serde_json::from_value(info).unwrap();
+            if !matches!(info.status, RunStatus::Queued | RunStatus::InProgress) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(10), read)
+        .await
+        .expect("the run ends");
 }
 
 /// This machine's turn on `chat`, with `last`.
@@ -136,6 +180,8 @@ async fn an_image_the_turn_names_that_is_not_stored_is_refused_by_code() {
     no_runs(&app).await;
 
     assert_eq!(put(&app, "a1", turn(local, &[&kept])).await, made());
+    // The local run loads its model, holding the one slot until it ends.
+    ended(&app, "a1").await;
     assert_eq!(put(&app, "a2", turn(far, &[&kept])).await, made());
 }
 
@@ -159,6 +205,7 @@ async fn images_over_16_mib_together_are_refused_by_code() {
     no_runs(&app).await;
 
     assert_eq!(put(&app, "a1", turn(local, &[&big])).await, made());
+    ended(&app, "a1").await;
     assert_eq!(put(&app, "a2", turn(far, &[&big])).await, made());
 }
 

@@ -12,7 +12,7 @@ use super::compose::{Prepared, take_permit};
 use super::hub_turn::{plan, start_local};
 use super::launch::{Transcript, launch};
 use super::run_fixture::{
-    End, LOCAL, conversation, finished_reply, prepared, saving, settled, state,
+    End, LOCAL, conversation, finished_reply, prepared, qwen, saving, settled, state,
 };
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -28,9 +28,10 @@ pub(super) async fn remembered(state: &AppState, id: i64) -> Option<Thinking> {
     read(state, id).await.settings.and_then(|s| s.thinking)
 }
 
-/// A chat on `qwen` that remembers `thinking`.
+/// A chat on this machine's `qwen`, by its id, that remembers `thinking`.
 async fn chat(state: &AppState, thinking: Option<Thinking>) -> i64 {
     let settings = ConversationSettings {
+        model: Some(qwen(state).await),
         model_name: Some("qwen".to_owned()),
         thinking,
         ..ConversationSettings::default()

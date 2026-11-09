@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolResult};
 use gglib_core::domain::chat::{Message, NewConversation};
 use gglib_core::domain::runs::RunInfo;
+use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, RunScope, RunsPort as _};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -325,4 +326,23 @@ pub(super) async fn drain(mut events: gglib_core::ports::RunEvents) -> (usize, O
     .await
     .expect("the stream ends within five seconds");
     (frames, read)
+}
+
+/// This machine's `qwen`, by its id: the one catalogued, else one added. A
+/// chat names its model by id; a name alone is never looked up.
+pub(super) async fn qwen(state: &AppState) -> ModelRef {
+    let found = state.core.models().get("qwen").await.unwrap();
+    let id = if let Some(model) = found {
+        model.id
+    } else {
+        super::turn_fixture::model(state, |m| {
+            "qwen".clone_into(&mut m.name);
+            m.file_path = "/models/qwen.gguf".into();
+        })
+        .await
+    };
+    ModelRef {
+        machine: Machine::Local,
+        id,
+    }
 }

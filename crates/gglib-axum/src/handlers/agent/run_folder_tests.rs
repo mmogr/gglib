@@ -13,7 +13,9 @@ use serde_json::{Value, json};
 use super::compose::{context_tests::LaunchedAt, take_permit};
 use super::hub_turn::{Plan, plan, start_local};
 use super::launch::launch;
-use super::run_fixture::{End, LOCAL, device, finished_reply, prepared, saved, settled, state};
+use super::run_fixture::{
+    End, LOCAL, device, finished_reply, prepared, qwen, saved, settled, state,
+};
 use super::turn_fixture::{TOOL, hi, model, sent_by_device, sent_in};
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -70,10 +72,15 @@ async fn remembered(state: &AppState, id: i64) -> Option<String> {
     conversation.settings.and_then(|settings| settings.folder)
 }
 
-/// A conversation whose settings are `settings`, on `qwen` unless they
-/// name a model.
+/// A conversation whose settings are `settings`, on this machine's `qwen`
+/// by its id unless they store a model.
 async fn chat_with(state: &AppState, settings: ConversationSettings) -> i64 {
+    let model = match settings.model {
+        Some(model) => model,
+        None => qwen(state).await,
+    };
     let settings = ConversationSettings {
+        model: Some(model),
         model_name: settings.model_name.or_else(|| Some("qwen".to_owned())),
         ..settings
     };
