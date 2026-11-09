@@ -17,7 +17,7 @@ const transport = vi.hoisted(() => ({
   subscribe: vi.fn(() => () => {}),
   listModels: vi.fn(async () => [guiModel({ id: 7, name: 'qwen3-8b' }), guiModel({ id: 9, name: 'gemma-3-12b' })]),
   getSettings: vi.fn(async () => ({})),
-  getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null })),
+  getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null })),
   getRemoteStatus: vi.fn(async () => null),
   revealSecret: vi.fn(async () => null),
   listConversations: vi.fn(async (): Promise<unknown[]> => []),

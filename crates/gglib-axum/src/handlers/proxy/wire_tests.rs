@@ -10,6 +10,15 @@ use gglib_core::contracts::http::daemon::{
 use gglib_core::domain::KeyState;
 use gglib_core::settings::DEFAULT_PROXY_PORT;
 
+/// A pin on model `id`, named `name`.
+fn pin(id: i64, name: &str) -> PinnedSpec {
+    PinnedSpec {
+        id,
+        name: name.to_owned(),
+        launch_overrides: gglib_core::server_config::ServerConfigOptions::default(),
+    }
+}
+
 /// An omitted port must come from settings, not from the compile-time
 /// default. The tray panel sends no port at all, and starting it on 8080
 /// while every other surface used the configured port is exactly the
@@ -150,7 +159,7 @@ fn default_context_is_the_context_somebody_chose() {
 fn a_crashed_proxy_reports_as_stopped() {
     let status = to_api_status(
         &RuntimeProxyStatus::Crashed,
-        Some("qwen".to_owned()),
+        Some(pin(7, "qwen")),
         Some(KeyState::Required),
     );
 
@@ -161,6 +170,7 @@ fn a_crashed_proxy_reports_as_stopped() {
     assert_eq!(status.key, None);
     assert_eq!(status.pinned_model, None);
     assert_eq!(status.pinned_to, None);
+    assert_eq!(status.pinned_model_id, None);
 }
 
 /// A listening proxy says `on`, or `pinned` when a model is pinned: the one
@@ -183,19 +193,38 @@ fn a_listening_proxy_says_on_or_pinned() {
 
     let pinned = to_api_status(
         &RuntimeProxyStatus::Running { address },
-        Some("qwen".to_owned()),
+        Some(pin(7, "qwen")),
         Some(KeyState::Required),
     );
     assert_eq!(pinned.state, EndpointState::Pinned);
     assert_eq!(pinned.pinned_model.as_deref(), Some("qwen"));
     assert_eq!(pinned.pinned_to.as_deref(), Some("Pinned to qwen"));
     assert_eq!(open.pinned_to, None);
+    assert_eq!(pinned.pinned_model_id, Some(7));
     assert_eq!(pinned.key, Some(KeyState::Required));
+    assert_eq!(open.pinned_model, None);
+    assert_eq!(open.pinned_model_id, None);
 
     // A key the daemon could not read is said as nothing, not guessed.
     let unread = to_api_status(&RuntimeProxyStatus::Running { address }, None, None);
     assert!(unread.running);
     assert_eq!(unread.key, None);
+}
+
+/// The pin is told on the wire by its model's id, beside the name it shows:
+/// the id is what a surface matches a model to.
+#[test]
+fn a_pinned_status_names_its_model_by_id() {
+    let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let status = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        Some(pin(12, "qwen")),
+        None,
+    );
+    let json = serde_json::to_value(&status).expect("the status serialises");
+    assert_eq!(json["pinned_model_id"], 12);
+    assert_eq!(json["pinned_model"], "qwen");
+    assert_eq!(json["pinned_to"], "Pinned to qwen");
 }
 
 /// A proxy bound to every interface is reached on loopback, and one bound
@@ -227,7 +256,7 @@ fn the_status_sends_exactly_the_contract_fields() {
     let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
     let status = to_api_status(
         &RuntimeProxyStatus::Running { address },
-        Some("qwen".to_owned()),
+        Some(pin(7, "qwen")),
         Some(KeyState::Required),
     );
 

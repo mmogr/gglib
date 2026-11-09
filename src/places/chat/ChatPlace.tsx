@@ -233,9 +233,9 @@ export default function ChatPlace(props: ChatPlaceProps) {
   const resident = status === 'running' || status === 'stopping';
   const absence: ModelAbsence | null =
     !local || !serversHeard || resident ? null : status === 'crashed' ? 'crashed' : 'not_loaded';
-  // A pin is compared by name, as the picker compares models.
+  // A pin is matched by the model's id, as the picker matches models.
   const facts = local && proxy.status !== null ? endpointFacts(proxy) : null;
-  const line = sendLine(modelName, absence, facts?.state ?? 'on', facts?.pinnedModel ?? null);
+  const line = sendLine({ id: modelId ?? -1, name: modelName }, absence, facts?.state ?? 'on', facts?.pinned ?? null);
   const sendNote = line === null ? null : { line, crashed: absence === 'crashed' };
 
   // An error belongs to the conversation it happened in.

@@ -50,6 +50,7 @@ pub const PROXY_STATUS_FIELDS: &[&str] = &[
     "key",
     "pinned_model",
     "pinned_to",
+    "pinned_model_id",
 ];
 
 /// How a client connects to the endpoint for one model (`?model=<gglib id>`).

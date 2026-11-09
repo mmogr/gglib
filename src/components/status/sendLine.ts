@@ -26,23 +26,29 @@ const AGAIN: Readonly<Record<ModelAbsence, string>> = {
   crashed: ' again',
 };
 
+/** A model as the line knows it: its catalogue id, which a pin is matched by, and the name it shows. */
+export interface NamedModel {
+  id: number;
+  name: string;
+}
+
 /**
  * The line for `model`, by the name the catalogue shows; `null` when the
  * model is resident and the endpoint is not off. `pinned` is the model a
- * pinned endpoint is pinned to: pinned to another, it refuses the send,
- * whatever `model` is doing.
+ * pinned endpoint is pinned to: pinned to another (another id, whatever
+ * its name), it refuses the send, whatever `model` is doing.
  */
 export function sendLine(
-  model: string,
+  model: NamedModel,
   absence: ModelAbsence | null,
   endpoint: EndpointState,
-  pinned: string | null,
+  pinned: NamedModel | null,
 ): string | null {
-  if (endpoint === 'pinned' && pinned !== null && pinned !== model) {
-    return `The endpoint is ${ENDPOINT_WORDS.pinned} to ${pinned} and cannot serve ${model} · sending is refused`;
+  if (endpoint === 'pinned' && pinned !== null && pinned.id !== model.id) {
+    return `The endpoint is ${ENDPOINT_WORDS.pinned} to ${pinned.name} and cannot serve ${model.name} · sending is refused`;
   }
   const off = endpoint === 'off';
   if (absence === null) return off ? `The endpoint is ${ENDPOINT_WORDS.off} · sending turns it on` : null;
   const does = off ? `sending turns the endpoint on and loads it${AGAIN[absence]}` : `sending loads it${AGAIN[absence]}`;
-  return `${model} ${WHAT[absence]} · ${does}`;
+  return `${model.name} ${WHAT[absence]} · ${does}`;
 }

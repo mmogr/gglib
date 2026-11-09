@@ -23,9 +23,14 @@ async fn body_json(response: axum::response::Response) -> serde_json::Value {
 
 /// Add a model named `name` to the context's catalog, returning its id.
 async fn catalogued(state: &gglib_axum::AxumContext, name: &str) -> i64 {
+    catalogued_at(state, name, name).await
+}
+
+/// Add a model named `name`, its file `/models/<file>.gguf`, returning its id.
+async fn catalogued_at(state: &gglib_axum::AxumContext, name: &str, file: &str) -> i64 {
     let model = gglib_core::domain::NewModel::new(
         name.to_owned(),
-        std::path::PathBuf::from(format!("/models/{name}.gguf")),
+        std::path::PathBuf::from(format!("/models/{file}.gguf")),
         7.0,
         chrono::Utc::now(),
     );
@@ -68,6 +73,13 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
         Some("pinned-model"),
         "status must report the pin: {status}"
     );
+    assert_eq!(
+        status
+            .get("pinned_model_id")
+            .and_then(serde_json::Value::as_i64),
+        Some(pinned),
+        "status must report the pin's id: {status}"
+    );
 
     // The shared runtime now refuses a foreign model once it has resolved it,
     // and says a model it does not hold is not found, pinned or not.
@@ -103,6 +115,14 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
     assert_eq!(response.status(), StatusCode::CONFLICT);
     let response = start_pinned(&app, pinned, "renamed-model").await;
     assert_eq!(response.status(), StatusCode::OK);
+    let status = body_json(response).await;
+    assert_eq!(
+        status
+            .get("pinned_model_id")
+            .and_then(serde_json::Value::as_i64),
+        Some(pinned),
+        "a renamed pin keeps its id: {status}"
+    );
 
     // Stop clears the pin.
     let response = app
@@ -126,6 +146,56 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
             .is_none_or(serde_json::Value::is_null),
         "stop must clear the pin: {status}"
     );
+    assert!(
+        status
+            .get("pinned_model_id")
+            .is_none_or(serde_json::Value::is_null),
+        "stop must clear the pin's id: {status}"
+    );
+}
+
+/// Of two models that share a name, the status read back names the pinned
+/// one by its id, so a surface that matches by id counts only that one as
+/// pinned.
+#[tokio::test]
+async fn a_pin_on_one_of_two_same_named_models_names_that_one_by_id() {
+    let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let first = catalogued_at(&state, "twin", "twin-a").await;
+    let second = catalogued_at(&state, "twin", "twin-b").await;
+    assert_ne!(first, second);
+
+    let response = start_pinned(&app, second, "twin").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = app
+        .clone()
+        .oneshot(
+            authed()
+                .uri("/api/proxy/status")
+                .header("Host", "127.0.0.1:9887")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let status = body_json(response).await;
+    assert_eq!(status["pinned_model"], "twin", "{status}");
+    assert_eq!(status["pinned_model_id"], second, "{status}");
+
+    let stopped = app
+        .clone()
+        .oneshot(
+            authed()
+                .method("POST")
+                .uri("/api/proxy/stop")
+                .header("Host", "127.0.0.1:9887")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stopped.status(), StatusCode::OK);
 }
 
 /// `POST /api/daemon/shutdown` on a server that is not hosted by

@@ -95,7 +95,7 @@ pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};
-pub use send_line::{ModelAbsence, send_line};
+pub use send_line::{ModelAbsence, NamedModel, send_line};
 pub use state_words::{
     EndpointState, EngineState, FastDownloadsState, KeyState, McpState, ModelsDirState, ReachState,
     ResidencyState,

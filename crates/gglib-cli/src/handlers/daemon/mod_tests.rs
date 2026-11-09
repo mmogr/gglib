@@ -19,6 +19,7 @@ fn the_proxy_report_says_where_it_is_reached_and_whether_a_key_is_needed() {
         key: Some(KeyState::Required),
         pinned_model: Some("qwen".to_owned()),
         pinned_to: Some("Pinned to qwen".to_owned()),
+        pinned_model_id: Some(12),
     };
     assert_eq!(
         proxy_lines(&listening),
@@ -33,6 +34,7 @@ fn the_proxy_report_says_where_it_is_reached_and_whether_a_key_is_needed() {
         key: Some(KeyState::NoneNeeded),
         pinned_model: None,
         pinned_to: None,
+        pinned_model_id: None,
         ..listening
     };
     assert_eq!(
@@ -58,6 +60,7 @@ fn the_proxy_report_says_where_it_is_reached_and_whether_a_key_is_needed() {
         key: None,
         pinned_model: None,
         pinned_to: None,
+        pinned_model_id: None,
     };
     assert_eq!(proxy_lines(&off), ["  Proxy:   Off"]);
 }

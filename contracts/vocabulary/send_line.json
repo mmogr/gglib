@@ -1,104 +1,206 @@
 [
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": null,
     "endpoint": "on",
     "pinned": null,
     "line": null
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": null,
     "endpoint": "off",
     "pinned": null,
     "line": "The endpoint is Off · sending turns it on"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": null,
     "endpoint": "pinned",
-    "pinned": "Qwen3-4B",
+    "pinned": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "line": null
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": null,
     "endpoint": "pinned",
-    "pinned": "Qwen3-8B",
+    "pinned": {
+      "id": 8,
+      "name": "Qwen3-8B"
+    },
     "line": "The endpoint is Pinned to Qwen3-8B and cannot serve Qwen3-4B · sending is refused"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
+    "absence": null,
+    "endpoint": "pinned",
+    "pinned": {
+      "id": 5,
+      "name": "Qwen3-4B"
+    },
+    "line": "The endpoint is Pinned to Qwen3-4B and cannot serve Qwen3-4B · sending is refused"
+  },
+  {
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": null,
     "endpoint": "starting",
     "pinned": null,
     "line": null
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "not_loaded",
     "endpoint": "on",
     "pinned": null,
     "line": "Qwen3-4B isn't loaded · sending loads it"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "not_loaded",
     "endpoint": "off",
     "pinned": null,
     "line": "Qwen3-4B isn't loaded · sending turns the endpoint on and loads it"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "not_loaded",
     "endpoint": "pinned",
-    "pinned": "Qwen3-4B",
+    "pinned": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "line": "Qwen3-4B isn't loaded · sending loads it"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "not_loaded",
     "endpoint": "pinned",
-    "pinned": "Qwen3-8B",
+    "pinned": {
+      "id": 8,
+      "name": "Qwen3-8B"
+    },
     "line": "The endpoint is Pinned to Qwen3-8B and cannot serve Qwen3-4B · sending is refused"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
+    "absence": "not_loaded",
+    "endpoint": "pinned",
+    "pinned": {
+      "id": 5,
+      "name": "Qwen3-4B"
+    },
+    "line": "The endpoint is Pinned to Qwen3-4B and cannot serve Qwen3-4B · sending is refused"
+  },
+  {
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "not_loaded",
     "endpoint": "starting",
     "pinned": null,
     "line": "Qwen3-4B isn't loaded · sending loads it"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "crashed",
     "endpoint": "on",
     "pinned": null,
     "line": "Qwen3-4B stopped unexpectedly · sending loads it again"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "crashed",
     "endpoint": "off",
     "pinned": null,
     "line": "Qwen3-4B stopped unexpectedly · sending turns the endpoint on and loads it again"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "crashed",
     "endpoint": "pinned",
-    "pinned": "Qwen3-4B",
+    "pinned": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "line": "Qwen3-4B stopped unexpectedly · sending loads it again"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "crashed",
     "endpoint": "pinned",
-    "pinned": "Qwen3-8B",
+    "pinned": {
+      "id": 8,
+      "name": "Qwen3-8B"
+    },
     "line": "The endpoint is Pinned to Qwen3-8B and cannot serve Qwen3-4B · sending is refused"
   },
   {
-    "model": "Qwen3-4B",
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
+    "absence": "crashed",
+    "endpoint": "pinned",
+    "pinned": {
+      "id": 5,
+      "name": "Qwen3-4B"
+    },
+    "line": "The endpoint is Pinned to Qwen3-4B and cannot serve Qwen3-4B · sending is refused"
+  },
+  {
+    "model": {
+      "id": 4,
+      "name": "Qwen3-4B"
+    },
     "absence": "crashed",
     "endpoint": "starting",
     "pinned": null,

@@ -19,7 +19,7 @@ use wire::{to_api_status, to_runtime_config};
 /// Fetch current proxy status from backend.
 async fn fetch_status(state: &AppState) -> ProxyStatus {
     let s = state.proxy.status().await;
-    let pinned = state.proxy.pinned().map(|pin| pin.name);
+    let pinned = state.proxy.pinned();
     let key = state.proxy.key_state().await;
     to_api_status(&s, pinned, key)
 }

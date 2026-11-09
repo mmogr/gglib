@@ -100,8 +100,8 @@ import { renderApp } from './harness';
 const QWEN = guiModel({ id: 1, name: 'Qwen3-4B', openaiId: 'Qwen3-4B' });
 const GEMMA = guiModel({ id: 2, name: 'Gemma-3-4B-It', openaiId: 'Gemma-3-4B-It' });
 
-const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null };
-const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null };
+const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null };
+const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null };
 
 function renderEndpoint(status: ProxyStatus = UP, path = '/endpoint') {
   library.models = [QWEN, GEMMA];
@@ -226,7 +226,7 @@ describe('the endpoint place', () => {
     });
 
     it('pinned: says Pinned and the one model it serves; Unpin stops, then starts every model', async () => {
-      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_model_id: 1 });
       expect(screen.getByText(ENDPOINT_WORDS.pinned)).toBeInTheDocument();
       expect(screen.getByText('only Qwen3-4B, other names are refused')).toBeInTheDocument();
 
@@ -427,7 +427,7 @@ describe('the endpoint place', () => {
     });
 
     it('a pinned endpoint shows its model chosen, and Every model unpins it', async () => {
-      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_model_id: 1 });
       await screen.findByRole('option', { name: 'Only Qwen3-4B' });
       const serves = screen.getByRole('combobox', { name: 'Serves' });
       await waitFor(() => expect(serves).toHaveValue('1'));
@@ -435,6 +435,18 @@ describe('the endpoint place', () => {
       await user.selectOptions(serves, 'Every model');
       await waitFor(() => expect(transport.startProxy).toHaveBeenCalledWith({}));
       expect(transport.stopProxy.mock.invocationCallOrder[0]).toBeLessThan(transport.startProxy.mock.invocationCallOrder[0]);
+    });
+
+    it('a pinned endpoint is matched to its model by id, never to another of the same name', async () => {
+      const twin = guiModel({ id: 3, name: 'Qwen3-4B', openaiId: 'Qwen3-4B' });
+      library.models = [QWEN, twin, GEMMA];
+      act(() => applyProxyStatus({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_model_id: 3 }));
+      initModelEvents();
+      renderApp('/endpoint');
+      const serves = await screen.findByRole('combobox', { name: 'Serves' });
+      await waitFor(() => expect(serves).toHaveValue('3'));
+      // Connect a client names the pinned one too.
+      await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(3));
     });
   });
 
@@ -462,7 +474,7 @@ describe('the endpoint place', () => {
 
     it('an unpin whose start fails after the stop says the daemon\'s message as it said it', async () => {
       transport.startProxy.mockRejectedValueOnce(new Error('port 8080 is in use'));
-      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' });
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_model_id: 1 });
       await user.click(screen.getByRole('button', { name: 'Unpin' }));
       await waitFor(() => expect(alert()).toHaveTextContent(/^port 8080 is in use$/));
       expect(transport.stopProxy).toHaveBeenCalledTimes(1);
@@ -498,7 +510,7 @@ describe('the endpoint place', () => {
     });
 
     it('names the pinned model before the last loaded one', async () => {
-      renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Gemma-3-4B-It' });
+      renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Gemma-3-4B-It', pinned_model_id: 2 });
       await frame(admitted([residentSlot(1, 'Qwen3-4B')]));
       await waitFor(() => expect(transport.getProxyClients).toHaveBeenLastCalledWith(2));
     });
@@ -597,7 +609,7 @@ describe('the endpoint place', () => {
     });
 
     it('a pinned endpoint is proved with its pin', async () => {
-      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' }, '/endpoint?inspect=model:2');
+      const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_model_id: 1 }, '/endpoint?inspect=model:2');
       await user.click(screen.getByRole('button', { name: 'Test it' }));
       expect(transport.proveProxy).toHaveBeenCalledWith(null);
     });
@@ -685,7 +697,7 @@ describe('the endpoint place', () => {
         scrolled.push(this);
       };
       try {
-        const { at } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B' }, '/endpoint?connect=1');
+        const { at } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_model_id: 1 }, '/endpoint?connect=1');
         const connect = await screen.findByRole('region', { name: 'Connect a client' });
         await waitFor(() => expect(at()).toBe('/endpoint'));
         expect(scrolled.filter((el) => el.contains(connect))).toHaveLength(1);

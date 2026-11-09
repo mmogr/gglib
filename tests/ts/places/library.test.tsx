@@ -207,6 +207,7 @@ describe('the library place', () => {
         key: 'none_needed',
         pinned_model: null,
         pinned_to: null,
+        pinned_model_id: null,
       }),
     );
     renderLibrary();
