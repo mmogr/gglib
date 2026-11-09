@@ -112,5 +112,15 @@
       "state": "no_oid",
       "word": "No OID available"
     }
+  ],
+  "damaged": [
+    {
+      "state": "1",
+      "word": "1 file damaged"
+    },
+    {
+      "state": "2",
+      "word": "2 files damaged"
+    }
   ]
 }

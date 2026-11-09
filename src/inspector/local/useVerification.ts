@@ -20,6 +20,7 @@ import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { getTransport, type UpdateCheckResult, type VerificationReport } from '../../services/transport';
 import type { VerificationEvent } from '../../services/transport/types/events';
 import type { UpgradeCheck } from '../../types';
+import type { Damage } from '../../types/generated/Damage';
 import { formatError } from '../../utils/errors';
 
 export type VerifyStatus =
@@ -106,11 +107,6 @@ async function runCheck(id: number): Promise<void> {
   }
 }
 
-/** The files a report calls damaged: corrupt or missing (a file with no hash is neither). */
-export function damagedFiles(report: VerificationReport) {
-  return report.shards.filter((s) => s.health.type === 'corrupt' || s.health.type === 'missing');
-}
-
 export interface Verification {
   status: VerifyStatus;
   /** A repair or re-download being asked or queued. */
@@ -118,7 +114,7 @@ export interface Verification {
   verify: () => void;
   checkUpdates: () => void;
   /** Ask, then re-download the damaged files the report names. */
-  repairDamaged: (report: VerificationReport) => Promise<void>;
+  repairDamaged: (damage: Damage) => Promise<void>;
   /** Ask, then download the files the update check says changed. */
   downloadChanged: (updates: UpdateCheckResult) => Promise<void>;
   /** Ask, then re-download the whole model at the latest revision. */
@@ -156,15 +152,14 @@ export function useVerification(modelId: number, modelName: string): Verificatio
     }
   };
 
-  const repairDamaged = async (report: VerificationReport) => {
-    const damaged = damagedFiles(report);
+  const repairDamaged = async (damage: Damage) => {
     const asked = await confirm({
       title: 'Re-download unhealthy files?',
-      description: `This will re-download ${damaged.length} unhealthy file(s) for "${modelName}".`,
+      description: `${damage.line} in "${modelName}". This will re-download ${damage.files.length === 1 ? 'it' : 'them'}.`,
       confirmLabel: 'Re-download',
     });
     await queue(asked, 'verify', async () => {
-      await getTransport().repairModel(modelId, damaged.map((s) => s.index));
+      await getTransport().repairModel(modelId, damage.files);
       return true;
     });
   };

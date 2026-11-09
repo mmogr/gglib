@@ -4,10 +4,11 @@
 //! and repairing corrupt models.
 
 use anyhow::{Context as _, Result};
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Instant;
 
-use gglib_core::services::{OverallHealth, ShardHealth};
+use gglib_core::services::{OverallHealth, ShardHealth, ShardHealthReport, VerificationReport};
 
 use super::{download, resolver};
 use crate::bootstrap::CliContext;
@@ -93,29 +94,10 @@ pub(crate) async fn execute_verify(
     println!("═══════════════════════════════════════════════════════════");
     println!("Verification completed in {:.1}s", elapsed.as_secs_f64());
     println!();
-    println!("{}", overall_line(&report.overall_health));
-    println!();
-
-    // Show shard details
-    for shard in &report.shards {
-        println!(
-            "  {} {}: {} (file {})",
-            file_mark(&shard.health),
-            shard.kind.label(),
-            shard.file_path,
-            shard.index
-        );
-
-        if let ShardHealth::Corrupt { expected, actual } = &shard.health {
-            println!("      Expected: {expected}");
-            println!("      Actual:   {actual}");
-        }
-    }
-
+    print!("{}", summary(&report));
     println!("═══════════════════════════════════════════════════════════");
 
-    // Return error if unhealthy
-    if report.overall_health == OverallHealth::Unhealthy {
+    if fails(&report.overall_health) {
         println!();
         println!(
             "⚠️  Model has integrity issues. Run 'gglib model repair {}' to fix.",
@@ -127,6 +109,32 @@ pub(crate) async fn execute_verify(
     Ok(())
 }
 
+/// Whether `gglib model verify` exits 1 on this verdict: only when a file
+/// is corrupt or missing. A model with nothing to compare does not fail.
+pub(super) fn fails(health: &OverallHealth) -> bool {
+    *health == OverallHealth::Unhealthy
+}
+
+/// The report under the run's timing: the verdict's line, with how many
+/// files are damaged when any is, then a row per file, a corrupt file's two
+/// hashes under it.
+pub(super) fn summary(report: &VerificationReport) -> String {
+    let mut out = overall_line(&report.overall_health);
+    if let Some(damage) = &report.damage {
+        out.push_str(" · ");
+        out.push_str(&damage.line);
+    }
+    out.push_str("\n\n");
+    for shard in &report.shards {
+        out.push_str(&summary_row(shard));
+        out.push('\n');
+        if let ShardHealth::Corrupt { expected, actual } = &shard.health {
+            let _ = writeln!(out, "      Expected: {expected}\n      Actual:   {actual}");
+        }
+    }
+    out
+}
+
 /// The verdict's line: `Overall Health: ⚠ Unverifiable`.
 pub(super) fn overall_line(health: &OverallHealth) -> String {
     let mark = match health {
@@ -135,6 +143,17 @@ pub(super) fn overall_line(health: &OverallHealth) -> String {
         OverallHealth::Unverifiable => "⚠",
     };
     format!("Overall Health: {mark} {}", health.word())
+}
+
+/// A file's row in the summary: `  ✓ Shard 1/2: path (file 0)`.
+pub(super) fn summary_row(shard: &ShardHealthReport) -> String {
+    format!(
+        "  {} {}: {} (file {})",
+        file_mark(&shard.health),
+        shard.kind.label(),
+        shard.file_path,
+        shard.index
+    )
 }
 
 /// The mark a file's health is printed with: ✓ matched, ✗ damaged, ⚠ not

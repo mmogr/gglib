@@ -3,7 +3,7 @@
  * writes: how far the check is (the file the daemon is hashing, with a 2 px
  * bar), then its answer and the one action it offers, or the daemon's
  * refusal with Retry. A file check's answer is the daemon's verdict in its
- * word, and opens a list of every file, closed until asked, each named by
+ * word, or its line for how many files are damaged, and opens a list of every file, closed until asked, each named by
  * what it is and its health's word, a damaged file's expected and actual
  * hash on hover.
  *
@@ -18,7 +18,7 @@ import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
 import type { VerificationReport } from '../../services/transport';
 import type { VerifiedFileKind } from '../../types/generated/VerifiedFileKind';
-import { damagedFiles, type Verification } from './useVerification';
+import type { Verification } from './useVerification';
 
 /** A file named by what it is, as `VerifiedFileKind::label` names it: a shard counted over the weights alone, from 1. */
 const fileLabel = (kind: VerifiedFileKind): string => {
@@ -73,10 +73,10 @@ const FileList: FC<{ report: VerificationReport }> = ({ report }) => (
   </details>
 );
 
-/** The daemon's verdict in its word, with Re-download for the damaged files when there are any. */
+/** The daemon's verdict in its word, or how many files are damaged in its line, with Re-download for those. */
 const Verified: FC<{ v: Verification; report: VerificationReport }> = ({ v, report }) => {
   const verdict = report.overall_health;
-  const damaged = damagedFiles(report).length;
+  const { damage } = report;
   return (
     <>
       <Line>
@@ -84,12 +84,12 @@ const Verified: FC<{ v: Verification; report: VerificationReport }> = ({ v, repo
           {verdict === 'healthy' ? (
             <Good>{VERDICT_WORDS[verdict]}</Good>
           ) : (
-            <StatusMark kind="attention" word={VERDICT_WORDS[verdict]} className="text-xs text-text" />
+            <StatusMark kind="attention" word={damage?.line ?? VERDICT_WORDS[verdict]} className="text-xs text-text" />
           )}
         </span>
-        {damaged > 0 && (
-          <Action onClick={() => void v.repairDamaged(report)} disabled={v.busy}>
-            {damaged === 1 ? 'Re-download it' : 'Re-download them'}
+        {damage && (
+          <Action onClick={() => void v.repairDamaged(damage)} disabled={v.busy}>
+            {damage.files.length === 1 ? 'Re-download it' : 'Re-download them'}
           </Action>
         )}
       </Line>

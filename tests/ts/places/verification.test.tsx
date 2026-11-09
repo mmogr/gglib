@@ -2,9 +2,9 @@
  * Verify files and Check for updates, from the inspector's ⋯: each opens
  * Details and writes its line under Source. The file check's progress comes
  * from the `verification` stream; its answer is the daemon's verdict in
- * its word (Healthy, Unhealthy with a re-download that asks first and names
- * the damaged files, Unverifiable), and opens a list of every file with its
- * health's word. The update check composes the revision check and the file
+ * its word (Healthy, Unverifiable) or, when files are damaged, the daemon's
+ * line for how many with a re-download that asks first and names those
+ * files; it opens a list of every file with its health's word. The update check composes the revision check and the file
  * check: up to date, or a newer revision with Download changed files and
  * Re-download at latest…, each asking first. A refusal is the daemon's
  * words with Retry. A status is the model's own: it survives leaving the
@@ -79,6 +79,7 @@ import { TransportError } from '../../../src/services/transport/errors';
 import type { VerificationReport } from '../../../src/services/transport';
 import type { UpgradeCheck } from '../../../src/types';
 import { renderApp } from './harness';
+import { rust } from '../contracts/rustSource';
 import { guiModel } from '../fixtures/model';
 
 const GEMMA = guiModel({ id: 9, name: 'Gemma-3-4B-It', hfRepoId: 'unsloth/gemma-3-4b-it-GGUF' });
@@ -95,8 +96,15 @@ const shard = (index: number, health: VerificationReport['shards'][number]['heal
   health,
 });
 
-function report(shards: VerificationReport['shards'], overall: VerificationReport['overall_health']): VerificationReport {
-  return { model_id: 9, overall_health: overall, shards, verified_at: new Date().toISOString() };
+/** The damaged line for each count, as `gglib-cli`'s state-words test records `damaged_line`. */
+const DAMAGED_LINE = Object.fromEntries(
+  (JSON.parse(rust('contracts/vocabulary/words.json')) as { damaged: { state: string; word: string }[] }).damaged.map((r) => [r.state, r.word]),
+);
+
+/** A report as the daemon serves it; `damaged` the indices it names damaged, with the recorded line for their count. */
+function report(shards: VerificationReport['shards'], overall: VerificationReport['overall_health'], damaged: number[] = []): VerificationReport {
+  const damage = damaged.length > 0 ? { files: damaged, line: DAMAGED_LINE[String(damaged.length)]! } : null;
+  return { model_id: 9, overall_health: overall, shards, damage, verified_at: new Date().toISOString() };
 }
 
 /** A file check the test answers when it chooses. */
@@ -201,10 +209,12 @@ describe('verify and update results, in Details › Source', () => {
     const expected = 'e'.repeat(64);
     const actual = 'f'.repeat(64);
     run.answer(
-      report([shard(0, { type: 'healthy' }), shard(1, { type: 'corrupt', expected, actual }), shard(2, { type: 'missing' })], 'unhealthy'),
+      report([shard(0, { type: 'healthy' }), shard(1, { type: 'corrupt', expected, actual }), shard(2, { type: 'missing' })], 'unhealthy', [1, 2]),
     );
 
-    expect((await screen.findByText('Unhealthy', VERDICT)).closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
+    // The line says how many, in the daemon's words, in place of the bare verdict.
+    expect((await screen.findByText('2 files damaged', VERDICT)).closest('[data-kind]')).toHaveAttribute('data-kind', 'attention');
+    expect(screen.queryByText('Unhealthy', VERDICT)).not.toBeInTheDocument();
     // The list is closed until opened from the line.
     const list = screen.getByRole('list', { name: 'Files checked', hidden: true });
     expect(list.closest('details')).not.toHaveAttribute('open');
@@ -221,7 +231,7 @@ describe('verify and update results, in Details › Source', () => {
     // Cancelled, nothing is sent.
     await user.click(screen.getByRole('button', { name: 'Re-download them' }));
     const ask = await screen.findByRole('dialog', { name: 'Re-download unhealthy files?' });
-    expect(ask).toHaveTextContent('This will re-download 2 unhealthy file(s) for "Gemma-3-4B-It".');
+    expect(ask).toHaveTextContent('2 files damaged in "Gemma-3-4B-It". This will re-download them.');
     await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(posts('/repair')).toHaveLength(0);
@@ -232,13 +242,17 @@ describe('verify and update results, in Details › Source', () => {
     expect(await screen.findByText('Sent to the download queue.')).toBeInTheDocument();
   });
 
-  it('counts a missing file as damaged and one with no hash as not, and one file is "it"', async () => {
+  it('says one damaged file as the daemon does, re-downloads only the file it names, and one file is "it"', async () => {
     const run = pendingVerify();
     renderInspector();
-    await pick('Verify files');
-    run.answer(report([shard(0, { type: 'missing' }), shard(1, { type: 'no_oid' })], 'unhealthy'));
-    expect(await screen.findByText('Unhealthy', VERDICT)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Re-download it' })).toBeInTheDocument();
+    const user = await pick('Verify files');
+    run.answer(report([shard(0, { type: 'missing' }), shard(1, { type: 'no_oid' })], 'unhealthy', [0]));
+    expect(await screen.findByText('1 file damaged', VERDICT)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Re-download it' }));
+    const ask = await screen.findByRole('dialog', { name: 'Re-download unhealthy files?' });
+    expect(ask).toHaveTextContent('1 file damaged in "Gemma-3-4B-It". This will re-download it.');
+    await user.click(within(ask).getByRole('button', { name: 'Re-download' }));
+    await waitFor(() => expect(posts('/models/9/repair')).toEqual([['/api/models/9/repair', { shards: [0] }]]));
   });
 
   it("says the daemon's refusal and asks again on Retry", async () => {
@@ -469,7 +483,7 @@ describe('verify and update results, in Details › Source', () => {
     });
     renderInspector();
     const user = await pick('Verify files');
-    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy'));
+    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy', [0]));
     await user.click(await screen.findByRole('button', { name: 'Re-download it' }));
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Re-download' }));
     expect(await screen.findByRole('alert')).toHaveTextContent("Failed to list unsloth/gemma-3-4b-it-GGUF's variants: offline");
@@ -485,7 +499,7 @@ describe('verify and update results, in Details › Source', () => {
     });
     renderInspector();
     const user = await pick('Verify files');
-    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy'));
+    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy', [0]));
     await user.click(await screen.findByRole('button', { name: 'Re-download it' }));
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Re-download' }));
     await waitFor(() => expect(posts('/repair')).toHaveLength(1));
@@ -508,7 +522,7 @@ describe('verify and update results, in Details › Source', () => {
     });
     renderInspector();
     const user = await pick('Verify files');
-    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy'));
+    run.answer(report([shard(0, { type: 'missing' })], 'unhealthy', [0]));
     await user.click(await screen.findByRole('button', { name: 'Re-download it' }));
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Re-download' }));
     await waitFor(() => expect(posts('/repair')).toHaveLength(1));

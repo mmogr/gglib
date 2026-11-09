@@ -36,9 +36,12 @@ override field and `+ flag` wait for a Rust surface that sets any flag.
 ⋯ Verify files and Check for updates (the second only for a model from
 Hugging Face) start the check at once and open Details on Source, where
 its line is: the file the daemon is hashing, with a bar; then the
-daemon's verdict in its word (`VERDICT_WORDS`): `✓ Healthy`, `▲ Unhealthy
-[Re-download them]`, or `▲ Unverifiable` when no file has a hash, with
-every file's health (`FILE_HEALTH_WORDS`) in a list opened from the line;
+daemon's verdict in its word (`VERDICT_WORDS`): `✓ Healthy`, or
+`▲ Unverifiable` when no file has a hash; when files are corrupt or
+missing, the report's damaged line in its place, `▲ 2 files damaged
+[Re-download them]`, the re-download naming the report's damaged files;
+with every file's health (`FILE_HEALTH_WORDS`) in a list opened from the
+line;
 for updates, up to date, or a newer revision with Download changed files
 and Re-download at latest…;
 a refusal in the daemon's words with Retry. Each repair and re-download asks
@@ -58,8 +61,10 @@ updates…", "Up to date", "A newer revision exists (may be README only)",
 "A newer revision exists: N files changed", "No revision is recorded for
 this model, so there is nothing to compare.", "Download changed files",
 "Re-download at latest…", "Sent to the download queue.", "Retry", and the confirms' words (kept from the verification
-dialog). The verdict and per-file health words are
-`OverallHealth::word` and `ShardHealth::word`, from `words.ts`.
+dialog; the re-download's names the damaged line and "This will
+re-download it/them."). The verdict and per-file health words are
+`OverallHealth::word` and `ShardHealth::word`, from `words.ts`; the
+damaged line is `damaged_line`, served on the report's `damage`.
 
 | File | Role |
 |------|------|

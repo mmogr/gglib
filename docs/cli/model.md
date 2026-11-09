@@ -258,8 +258,9 @@ edit among them); `upgrade <model>` replaces the file with that revision.
 `verify` computes SHA-256 over a model's files and compares them with what
 was recorded. `repair` re-downloads the shards that fail.
 
-- `verify` ends with one verdict, the word the app's inspector shows too:
-  `Unhealthy` (and exit status 1) when any file is corrupt or missing;
+- `verify` ends with one verdict, the one the app's inspector shows too:
+  `Unhealthy`, with how many files are damaged (`✗ Unhealthy · 2 files
+  damaged`), and exit status 1 when any file is corrupt or missing;
   else `Healthy` when at least one file was compared with its hash and
   matched; else `Unverifiable`, when no file has a hash to compare with.
   A model with some files matched and some with no hash is `Healthy`, and
