@@ -37,7 +37,7 @@ pub use openai_history::{
 };
 pub use replay::{
     INCOMPLETE_KEY, MADE_KEYS, MadeKeys, THINKING_DURATION_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL,
-    rows_from_frames, rows_from_timed_frames,
+    fill_made_rate, rows_from_frames, rows_from_timed_frames,
 };
 pub use stagnation::StagnationDetector;
 pub use tool_call_writing::ToolCallWriting;

@@ -15,7 +15,6 @@ import {
   promptLines,
   replyFacts,
   secondsWords,
-  writingRate,
 } from '../../../src/readings/turnFigures';
 
 const MADE = {
@@ -26,6 +25,8 @@ const MADE = {
   completionTokens: 496,
   turnDurationMs: 41_000,
   writingDurationMs: 40_992,
+  /** The daemon's rate for these counts: 496 tokens over 40.992 s. */
+  tokensPerSecond: 12.09992193598751,
 };
 
 describe('secondsWords', () => {
@@ -77,15 +78,16 @@ describe('figureParts', () => {
   });
 
   it('says how long it took, how fast it wrote and what the cache saved', () => {
-    expect(line({ toolCalls: 0, unfinished: false, made: MADE })).toBe('41 s · 12 tok/s · 2,100 tokens reused');
+    expect(line({ toolCalls: 0, unfinished: false, made: MADE })).toBe('41 s · 12 t/s · 2,100 tokens reused');
     expect(line({ toolCalls: 0, unfinished: true, made: { turnDurationMs: 900 } })).toBe('unfinished · 0.9 s');
     expect(line({ toolCalls: 0, unfinished: false, made: { cachedTokens: 0 } })).toBe('0 tokens reused');
   });
 
-  it('says no rate for a turn of one token, nor one not streamed', () => {
-    expect(line({ toolCalls: 0, unfinished: false, made: { completionTokens: 1, writingDurationMs: 0, turnDurationMs: 300 } })).toBe('0.3 s');
-    expect(line({ toolCalls: 0, unfinished: false, made: { completionTokens: 1, writingDurationMs: 40 } })).toBe('');
-    expect(line({ toolCalls: 0, unfinished: false, made: { completionTokens: 50 } })).toBe('');
+  it('says the daemon\'s rate, one decimal under ten, and none where it sent none', () => {
+    expect(line({ toolCalls: 0, unfinished: false, made: { tokensPerSecond: 8.46 } })).toBe('8.5 t/s');
+    expect(line({ toolCalls: 0, unfinished: false, made: { tokensPerSecond: 8.25 } })).toBe('8.3 t/s');
+    // The counts a rate is made from, with no rate: the page divides nothing.
+    expect(line({ toolCalls: 0, unfinished: false, made: { completionTokens: 50, writingDurationMs: 4000, turnDurationMs: 300 } })).toBe('0.3 s');
   });
 });
 
@@ -108,7 +110,7 @@ describe('figureDetail', () => {
       '3,180 tokens read',
       '2,100 tokens reused',
       '496 tokens written',
-      '41 s · 12 tok/s',
+      '41 s · 12 t/s',
     ]);
   });
 
@@ -201,12 +203,5 @@ describe('a reply that waits', () => {
     const message = { id: 'live', content: [], metadata: { custom: { waiting: render } } };
     expect(replyFacts(message).waiting).toEqual(render);
     expect(replyFacts({ id: 'live', content: [] }).waiting).toBeUndefined();
-  });
-});
-
-describe('writingRate', () => {
-  it('is tokens written over seconds writing', () => {
-    expect(writingRate({ completionTokens: 50, writingDurationMs: 4000 })).toBe(12.5);
-    expect(writingRate({ completionTokens: 50 })).toBeNull();
   });
 });

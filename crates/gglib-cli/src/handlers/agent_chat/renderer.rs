@@ -27,7 +27,7 @@
 
 use std::io::{self, Write as _};
 
-use gglib_core::domain::agent::AgentEvent;
+use gglib_core::domain::agent::{AgentEvent, TurnUsage};
 
 use crate::presentation::style::{BOLD, DANGER, DIM, RESET, SUCCESS, WARNING};
 
@@ -150,10 +150,20 @@ pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_t
         | AgentEvent::TurnUsage(_)
         | AgentEvent::ToolPreview { .. }
         | AgentEvent::ToolCallWriting(_) => {
-            // Pre-fill progress, a turn's usage, a tool's preview frame and
-            // how far a call has been written: not shown in the CLI.
+            // Pre-fill progress, a tool's preview frame and how far a call
+            // has been written: not shown in the CLI. A turn's usage is
+            // shown once its reply is, as its figure line (`figure_line`,
+            // printed by the drain).
         }
     }
+}
+
+/// A reply's figure line as the session prints it after the reply, dim, on
+/// stderr: the daemon's words for the turn's last model call
+/// ([`TurnUsage::figure_line`]), the line under the reply in the GUI's
+/// thread.
+pub(crate) fn figure_line(usage: &TurnUsage) -> String {
+    format!("  {DIM}{}{RESET}", usage.figure_line())
 }
 
 // =============================================================================
@@ -164,7 +174,35 @@ pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_t
 mod tests {
     use gglib_core::domain::agent::{AgentEvent, ToolResult};
 
-    use super::render_event;
+    use super::{figure_line, render_event};
+    use crate::presentation::style::{DIM, RESET};
+
+    /// The turn's `turn_usage` frame as `contracts/runs/turn_made.json` pins
+    /// it, read as the session reads a run's frames, prints the line the
+    /// GUI's thread shows under that reply, in the same words.
+    #[test]
+    fn a_reply_s_figure_line_is_said_as_the_gui_says_it() {
+        let made: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../../contracts/runs/turn_made.json"))
+                .unwrap();
+        let usage = made["frames"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find_map(|frame| match serde_json::from_value(frame.clone()) {
+                Ok(AgentEvent::TurnUsage(usage)) => Some(usage),
+                _ => None,
+            })
+            .expect("the contract's turn_usage frame");
+        assert_eq!(
+            figure_line(&usage),
+            format!("  {DIM}41 s \u{b7} 13 t/s \u{b7} 2,100 tokens reused{RESET}")
+        );
+        assert_eq!(
+            made["figure_line"],
+            "41 s \u{b7} 13 t/s \u{b7} 2,100 tokens reused"
+        );
+    }
 
     /// Convenience: call `render_event` and assert it does not panic.
     fn smoke(event: &AgentEvent) {

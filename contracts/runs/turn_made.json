@@ -1,4 +1,5 @@
 {
+  "figure_line": "41 s · 13 t/s · 2,100 tokens reused",
   "frames": [
     {
       "content": "It restarts.",
@@ -14,6 +15,7 @@
       "model": "Qwen3.8-27B",
       "prompt_tokens": 3180,
       "quantization": "Q8_0",
+      "tokens_per_second": 12.984293193717276,
       "trimmed_messages": 3,
       "type": "turn_usage",
       "writing_ms": 38200
@@ -32,6 +34,7 @@
     "modelName": "Qwen3.8-27B",
     "modelQuantization": "Q8_0",
     "promptTokens": 3180,
+    "tokensPerSecond": 12.984293193717276,
     "trimmedMessages": 3,
     "turnDurationMs": 41000,
     "writingDurationMs": 38200

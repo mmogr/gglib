@@ -51,7 +51,7 @@ tool_repaired: boolean,
 /**
  * `usage.completion_tokens` as the upstream reported it.
  *
- * This and the four fields after it are what the turn generated. They
+ * This and the five fields after it are what the turn generated. They
  * keep their defaults until the turn is over, when
  * [`ContextMetricsStore::flag_generation`] writes them. They stay at
  * their defaults on any turn that ended before an answer was read, for
@@ -116,6 +116,13 @@ finish_reason: string | null,
  * tokens to time.
  */
 generation_ms: number | null, 
+/**
+ * Tokens written per second of writing: `completion_tokens` over
+ * `generation_ms` (`gglib_core::domain::figures::tokens_per_second`),
+ * written with them. `None` without both, and with no time writing:
+ * a turn of one token, and every non-streaming turn.
+ */
+tokens_per_second: number | null, 
 /**
  * The detector that made the pre-dispatch loop guard act on this request
  * — forward it with a note, end the run, or refuse it with an HTTP 400

@@ -69,6 +69,8 @@ const MADE = {
   completionTokens: 496,
   turnDurationMs: 41_000,
   writingDurationMs: 40_992,
+  /** The daemon's rate, saved with the counts it is made from. */
+  tokensPerSecond: 12.09992193598751,
 };
 
 let fixture: ChatFixture;
@@ -482,7 +484,7 @@ describe('ChatPlace, a reply\'s figures', () => {
     renderLocal();
     await screen.findByText(ANSWER);
 
-    const line = screen.getByText('41 s · 12 tok/s · 2,100 tokens reused');
+    const line = screen.getByText('41 s · 12 t/s · 2,100 tokens reused');
     expect(line.getAttribute('title')!.split('\n')).toEqual([
       'Qwen3.8-27B · Q8_0',
       'thought for 19 s',
@@ -490,7 +492,7 @@ describe('ChatPlace, a reply\'s figures', () => {
       '3,180 tokens read',
       '2,100 tokens reused',
       '496 tokens written',
-      '41 s · 12 tok/s',
+      '41 s · 12 t/s',
     ]);
   });
 
@@ -504,7 +506,7 @@ describe('ChatPlace, a reply\'s figures', () => {
 
     expect(within(earlier).queryByText(/tokens reused/)).not.toBeInTheDocument();
     await user.hover(earlier);
-    expect(within(earlier).getByText('41 s · 12 tok/s · 2,100 tokens reused')).toBeInTheDocument();
+    expect(within(earlier).getByText('41 s · 12 t/s · 2,100 tokens reused')).toBeInTheDocument();
     await user.unhover(earlier);
     expect(within(earlier).queryByText(/tokens reused/)).not.toBeInTheDocument();
   });
@@ -515,7 +517,7 @@ describe('ChatPlace, a reply\'s figures', () => {
     await screen.findByText(ANSWER);
     const word = screen.getByText('unfinished');
     expect(word).toHaveClass('text-warning');
-    expect(word.parentElement).toHaveTextContent('unfinished · 41 s · 12 tok/s · 2,100 tokens reused');
+    expect(word.parentElement).toHaveTextContent('unfinished · 41 s · 12 t/s · 2,100 tokens reused');
   });
 
   it('says no rate for a reply of one token', async () => {

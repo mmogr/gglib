@@ -84,6 +84,13 @@ upstream_health: UpstreamHealthSnapshot,
  */
 per_model_defects: { [key in string]: ModelDefectCounts }, 
 /**
+ * Requests the proxy's loop guard tripped on, across every model: the
+ * sum of [`Self::per_model_defects`]' `loop_guard_trips`, so it is
+ * process-lifetime like them, and empty of the agent loop's own trips,
+ * which are counted beside them.
+ */
+loop_guard_trips_total: number, 
+/**
  * How prompt caching is configured for the running model. `None` until
  * the first request resolves a model, since the RAM budget isn't known
  * until something is launched.

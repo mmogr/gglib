@@ -63,8 +63,10 @@ fn assistants(rows: &[NewMessage]) -> Vec<&NewMessage> {
         .collect()
 }
 
-/// The frames of one finished turn with usage, and its saved row's made
-/// metadata: the page's contract, in `contracts/runs/turn_made.json`.
+/// The frames of one finished turn with usage, its saved row's made
+/// metadata, and its figure line as `gglib chat` prints it: the page's
+/// contract, in `contracts/runs/turn_made.json`. The page says the same line
+/// from either.
 fn turn_made() -> Value {
     let events = [
         text("It restarts."),
@@ -78,7 +80,11 @@ fn turn_made() -> Value {
         .iter()
         .map(|e| serde_json::to_value(e).unwrap())
         .collect();
-    json!({ "frames": frames, "metadata": made(assistants(&saved)[0]) })
+    json!({
+        "frames": frames,
+        "metadata": made(assistants(&saved)[0]),
+        "figure_line": full_usage().figure_line(),
+    })
 }
 
 #[test]
@@ -94,6 +100,7 @@ fn a_turn_with_usage_saves_each_figure_under_its_key() {
             "completionTokens": 496,
             "turnDurationMs": 41_000,
             "writingDurationMs": 38_200,
+            "tokensPerSecond": 496.0 / 38.2,
             "device": "phone-7c2e",
             "finishReason": "stop",
             "contextSize": 8192,
@@ -102,21 +109,67 @@ fn a_turn_with_usage_saves_each_figure_under_its_key() {
     );
 }
 
-/// No rate and no share of the context is saved: the page computes them
-/// from what is.
+/// The rate is saved, the daemon's own (`TurnUsage::tokens_per_second`), so
+/// a reply loaded later says the rate it was drawn with; no share of the
+/// context is saved: the page computes it from the counts and the size
+/// (`contracts/context/readings.json`).
 #[test]
-fn nothing_derived_is_saved() {
+fn the_rate_is_saved_and_no_share_of_the_context_is() {
     let saved = turn_made();
+    assert_eq!(saved["metadata"]["tokensPerSecond"], json!(496.0 / 38.2));
     let keys: Vec<&String> = saved["metadata"].as_object().unwrap().keys().collect();
-    assert!(
-        keys.iter()
-            .all(|k| !k.to_lowercase().contains("rate") && !k.contains("PerSecond"))
-    );
     let derived = ["percent", "used"];
     for key in keys {
         let key = key.to_lowercase();
         assert!(derived.iter().all(|word| !key.contains(word)), "{key}");
     }
+}
+
+/// A row saved before the rate was is given it, from its own counts, the
+/// rate the page once worked out; one that says its rate keeps it, and one
+/// without both counts, or with one token, gets none.
+#[test]
+fn an_old_row_is_given_its_rate_from_its_counts() {
+    let mut old =
+        json!({ "completionTokens": 496, "writingDurationMs": 38_200, "turnDurationMs": 41_000 });
+    fill_made_rate(&mut old);
+    assert_eq!(old["tokensPerSecond"], json!(496.0 / 38.2));
+    assert_eq!(old["turnDurationMs"], 41_000);
+
+    let mut said =
+        json!({ "completionTokens": 496, "writingDurationMs": 38_200, "tokensPerSecond": 9.5 });
+    fill_made_rate(&mut said);
+    assert_eq!(said["tokensPerSecond"], 9.5);
+
+    for mut lacking in [
+        json!({ "completionTokens": 496 }),
+        json!({ "writingDurationMs": 38_200 }),
+        json!({ "completionTokens": 1, "writingDurationMs": 0 }),
+        json!({ "tool_call_id": "c1" }),
+    ] {
+        let before = lacking.clone();
+        fill_made_rate(&mut lacking);
+        assert_eq!(lacking, before);
+    }
+    let mut not_an_object = json!("text");
+    fill_made_rate(&mut not_an_object);
+    assert_eq!(not_an_object, json!("text"));
+}
+
+/// A turn with no time writing saves no rate, never a zero.
+#[test]
+fn a_turn_without_time_writing_saves_no_rate() {
+    let usage = TurnUsage {
+        completion_tokens: Some(1),
+        duration_ms: 300,
+        writing_ms: Some(0),
+        ..TurnUsage::default()
+    };
+    let events = [text("A."), AgentEvent::TurnUsage(usage)];
+    let saved = rows(&events, true);
+    let made = made(assistants(&saved)[0]);
+    assert!(!made.contains_key(MADE_KEYS.tokens_per_second), "{made:?}");
+    assert_eq!(made["completionTokens"], 1);
 }
 
 #[test]

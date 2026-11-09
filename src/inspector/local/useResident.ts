@@ -5,7 +5,7 @@
  *
  * All three are the dashboard's (`useEndpointDashboard`): the resident
  * slot's state and `resident_for_secs`, and the newest recorded request on
- * the model (`readings/throughput`). Without the dashboard (the endpoint
+ * the model that has a rate, the proxy's (`readings/rate`). Without the dashboard (the endpoint
  * off, its key not yet read) the word is the server list's launch state,
  * else Loaded, and the figures are left out.
  *
@@ -14,7 +14,7 @@
 
 import { RESIDENCY_WORDS } from '../../components/status/words';
 import { useEndpointDashboard } from '../../places/library/useResidency';
-import { latestRate, rateWords } from '../../readings/throughput';
+import { latestRate, rateWords } from '../../readings/rate';
 import type { ResidencyState } from '../../types/generated/ResidencyState';
 import { formatDuration } from '../../utils/format';
 

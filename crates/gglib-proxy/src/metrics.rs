@@ -29,6 +29,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use gglib_core::domain::defects::LoopGuardTrip;
+use gglib_core::domain::figures::tokens_per_second;
 use gglib_core::domain::{Intervention, InterventionKind};
 
 use crate::generation::TurnGeneration;
@@ -82,7 +83,7 @@ pub struct ContextSnapshot {
     pub tool_repaired: bool,
     /// `usage.completion_tokens` as the upstream reported it.
     ///
-    /// This and the four fields after it are what the turn generated. They
+    /// This and the five fields after it are what the turn generated. They
     /// keep their defaults until the turn is over, when
     /// [`ContextMetricsStore::flag_generation`] writes them. They stay at
     /// their defaults on any turn that ended before an answer was read, for
@@ -139,6 +140,11 @@ pub struct ContextSnapshot {
     /// tokens to time.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub generation_ms: Option<u64>,
+    /// Tokens written per second of writing: `completion_tokens` over
+    /// `generation_ms` (`gglib_core::domain::figures::tokens_per_second`),
+    /// written with them. `None` without both, and with no time writing:
+    /// a turn of one token, and every non-streaming turn.
+    pub tokens_per_second: Option<f64>,
     /// The detector that made the pre-dispatch loop guard act on this request
     /// — forward it with a note, end the run, or refuse it with an HTTP 400
     /// (see `loop_guard`) — or `None`.
@@ -406,6 +412,8 @@ impl ContextMetricsStore {
             snapshot.tool_calls = generation.tool_calls;
             snapshot.finish_reason = generation.finish_reason;
             snapshot.generation_ms = generation.generation_ms;
+            snapshot.tokens_per_second =
+                tokens_per_second(generation.completion_tokens, generation.generation_ms);
         }
     }
 

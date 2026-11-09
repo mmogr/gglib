@@ -56,10 +56,10 @@ for a slot · N requests · 4s", "Testing…", the row
 ⋯'s "Chat with it", "Change launch options…", "Pin the endpoint to it",
 "Show log", "Unload"; "Serves", "Every model", "Only <model>"; "Apps on this
 Mac · N requests now" / "· no requests now", "No app has used it yet.",
-"Connect a client"; Recent's clock time and "812 tokens · 34 t/s" (the rate
-is `readings/throughput`'s, which no Rust computes); Activity's "Prompt cache
-71% reused", "N tool calls repaired", "N loop-guard trips", "N client
-sampling fields ignored", "Nothing to report yet.", "Clear prompt cache",
+"Connect a client"; Recent's clock time and "812 tokens" (its "34 t/s" is
+the proxy's rate in `rate_words`' words, `readings/rate`); Activity's "N tool
+calls repaired", "N loop-guard trips" (the proxy's
+`loop_guard_trips_total`), "N client sampling fields ignored", "Nothing to report yet.", "Clear prompt cache",
 "Live numbers ›", "All ›"; ⋯'s "Live numbers", "Endpoint settings…"; and the palette's "Load a
 model" (its field), "fit unknown", "No model matches.", "No models on this
 Mac.", "Every model on this Mac is loaded.", "On <machine>", "Load on
@@ -92,7 +92,7 @@ only while it can act (the endpoint up and its key revealed), and a row's
 | `UsingIt.tsx` | Requests in flight from apps on this machine, one line per joined device in the daemon's words, or the empty sentence with Connect a client |
 | `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what gglib did; All ›; not drawn when empty |
 | `Activity.tsx` | ▸ Activity: the dashboard's other sections as sentences, Clear prompt cache, Live numbers › |
-| `lines.ts` | Pure: the loaded rows (`residentRows`: the dashboard's, else the running servers once the list's read has landed, the tray's too), the queue's lines, the room line, the recent rows, the cache's reuse and the activity sentences, from one dashboard frame |
+| `lines.ts` | Pure: the loaded rows (`residentRows`: the dashboard's, else the running servers once the list's read has landed, the tray's too), the queue's lines, the room line, the recent rows with the proxy's rate, and the activity sentences (the cache's reuse in the proxy's own sentence, `CacheUsage.summary`), from one dashboard frame |
 | `useClearCache.ts` | Clear prompt cache with the revealed key, its toast either way; also Diagnostics › Live's Clear |
 | `useEndpointActions.ts` | Turn on (no port), Turn off, serve one model or every model (stop, then start), and Test it, with the daemon's message for a failure |
 
