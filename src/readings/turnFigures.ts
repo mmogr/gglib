@@ -59,7 +59,7 @@ function toolCallWords(count: number): string {
 }
 
 /** A count of tokens, as Rust's `tokens_words` says it: "1 token", "2,100 tokens". */
-function tokensWords(count: number): string {
+export function tokensWords(count: number): string {
   return `${formatCount(count)} ${count === 1 ? 'token' : 'tokens'}`;
 }
 

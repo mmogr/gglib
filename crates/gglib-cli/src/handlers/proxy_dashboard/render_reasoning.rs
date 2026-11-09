@@ -70,9 +70,10 @@ pub(super) fn render_reasoning_section(audit: Option<&SamplingAudit>, term_width
             let _ = writeln!(out, "  {:<24} none resolved", "Budget");
         }
         Some(rung) => {
+            let unit = if rung.tokens == 1 { "token" } else { "tokens" };
             let _ = writeln!(
                 out,
-                "  {:<24} {} tokens ({})",
+                "  {:<24} {} {unit} ({})",
                 "Budget",
                 budget_tokens(rung.tokens),
                 rung.source

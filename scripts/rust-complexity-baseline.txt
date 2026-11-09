@@ -76,11 +76,11 @@ crates/gglib-cli/src/handlers/agent_chat/repl.rs 372
 crates/gglib-cli/src/handlers/agent_chat/sight_tests.rs 331
 crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 472
 crates/gglib-cli/src/handlers/agent_chat/turn_tests.rs 349
-crates/gglib-cli/src/handlers/benchmark.rs 1705
+crates/gglib-cli/src/handlers/benchmark.rs 1710
 crates/gglib-cli/src/handlers/config/engine.rs 507
 crates/gglib-cli/src/handlers/config/engine_tests.rs 350
 crates/gglib-cli/src/handlers/config/sd.rs 326
-crates/gglib-cli/src/handlers/config/settings/profiles.rs 416
+crates/gglib-cli/src/handlers/config/settings/profiles.rs 417
 crates/gglib-cli/src/handlers/image_tests.rs 328
 crates/gglib-cli/src/handlers/inference/agent_question.rs 303
 crates/gglib-cli/src/handlers/inference/proxy_tests.rs 320

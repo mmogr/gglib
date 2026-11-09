@@ -56,9 +56,6 @@ standard behaviour rather than disabling retry. Shortening the deadline pulls
 overrun the budget and silently turn retrying off for someone who thought they
 were only tightening it.
 
-`RetryPolicy::disabled()` is the one-attempt policy, asked for by name rather
-than by knowing that `max_attempts: 1` means "off".
-
 # Who uses this, and who deliberately does not
 
 gglib is periodically observed to have "five retry implementations with only
