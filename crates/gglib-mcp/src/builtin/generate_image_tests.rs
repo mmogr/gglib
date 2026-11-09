@@ -2,7 +2,6 @@
 //! reports become the tool's progress; what it drew is stored and named in
 //! one sentence; a refusal is a result the model reads.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -129,7 +128,7 @@ fn one_image() -> Arc<Scripted> {
 // ── offered only when armed ──────────────────────────────────────────────
 
 /// Listed only with a drawing tool that is armed; with its deadline, which
-/// is the driver's; a session's switch is read at each listing.
+/// is the driver's.
 #[tokio::test]
 async fn generate_image_is_listed_only_when_armed() {
     let driver = one_image();
@@ -158,14 +157,6 @@ async fn generate_image_is_listed_only_when_armed() {
         schema["properties"].get("model").is_none(),
         "no model argument"
     );
-
-    let switch = Arc::new(AtomicBool::new(false));
-    let session = adapter(&driver, DrawArm::Shared(Arc::clone(&switch)));
-    assert!(!names(&session).await.contains(&DRAW.to_owned()));
-    switch.store(true, Ordering::SeqCst);
-    assert!(names(&session).await.contains(&DRAW.to_owned()));
-    switch.store(false, Ordering::SeqCst);
-    assert!(!names(&session).await.contains(&DRAW.to_owned()));
     assert_eq!(driver.asked(), 0);
 }
 
@@ -177,7 +168,6 @@ async fn generate_image_is_refused_when_not_armed() {
     for unarmed in [
         BuiltinToolExecutorAdapter::default(),
         adapter(&driver, DrawArm::Fixed(false)),
-        adapter(&driver, DrawArm::Shared(Arc::new(AtomicBool::new(false)))),
     ] {
         let refused = unarmed.execute(&call(json!({"prompt": "a fox"}))).await;
         assert!(refused.unwrap_err().to_string().contains("Draw pressed"));

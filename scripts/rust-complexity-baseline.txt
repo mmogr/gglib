@@ -49,7 +49,7 @@ crates/gglib-axum/src/handlers/agent/image_model_tests.rs 356
 crates/gglib-axum/src/handlers/agent/launch.rs 389
 crates/gglib-axum/src/handlers/agent/remote_upstream.rs 413
 crates/gglib-axum/src/handlers/agent/remote_upstream_tests.rs 314
-crates/gglib-axum/src/handlers/agent/run_fixture.rs 354
+crates/gglib-axum/src/handlers/agent/run_fixture.rs 372
 crates/gglib-axum/src/handlers/agent/run_folder_tests.rs 306
 crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 357
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 342

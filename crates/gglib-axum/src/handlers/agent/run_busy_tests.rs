@@ -9,7 +9,7 @@ use gglib_core::ports::RunsPort as _;
 use tokio::sync::Semaphore;
 
 use super::launch::Transcript;
-use super::launch::launch;
+use super::run_fixture::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, logged, prepared, reply, saved, settled, start, state,
 };
@@ -39,7 +39,7 @@ async fn a_second_run_for_a_live_conversation_is_a_conflict_and_writes_nothing()
             remember: None,
             remember_folder: None,
         };
-        let refused = launch(&state, "e2", LOCAL, transcript, p, spare_permit()).await;
+        let refused = launch(&state, "e2", LOCAL, transcript, p, spare_permit());
 
         let Err(HttpError::Coded {
             status,

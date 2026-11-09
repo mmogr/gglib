@@ -18,8 +18,8 @@ use gglib_core::ports::{
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-use super::AgentChatRequest;
 use super::chat_turn::{self, ChatQuery, Drawing};
+use super::loop_request::LoopRequest;
 use super::run_fixture::{device, saved, state};
 use super::turn_fixture::{DRAWS, model, turn};
 use crate::error::HttpError;
@@ -160,7 +160,7 @@ async fn at_every_door(
     served: i64,
     draw: bool,
     image_model: Option<u32>,
-) -> ([(&'static str, (u16, &'static str, String)); 4], [i64; 2]) {
+) -> ([(&'static str, (u16, &'static str, String)); 3], [i64; 2]) {
     let mut said = serde_json::Map::new();
     if draw {
         said.insert("draw".to_owned(), json!(true));
@@ -189,25 +189,11 @@ async fn at_every_door(
         ..ChatQuery::default()
     };
     let kept = refused(chat_turn::start(state, "phone", "p1", phone_request(), query).await);
-    let mut route = json!({
-        "port": 1,
-        "messages": [{ "role": "user", "content": "a fox in the snow" }],
-    });
-    route
-        .as_object_mut()
-        .unwrap()
-        .extend(said.as_object().unwrap().clone());
-    let route: AgentChatRequest = serde_json::from_value(route).unwrap();
-    let route = match super::chat(axum::extract::State(state.clone()), axum::Json(route)).await {
-        Ok(_) => panic!("the chat route ran"),
-        Err(error) => refused::<()>(Err(error)),
-    };
     (
         [
             ("this machine's turn", page),
             ("a device's turn", device),
             ("a chat run with builtins", kept),
-            ("the chat route", route),
         ],
         [page_chat, hub],
     )
@@ -272,7 +258,7 @@ async fn read_at_each_door(
     state: &AppState,
     served: i64,
     image_model: Option<u32>,
-) -> [(&'static str, AgentChatRequest); 3] {
+) -> [(&'static str, LoopRequest); 3] {
     let mut said = json!({ "draw": true });
     if let Some(id) = image_model {
         said["image_model"] = json!(id);

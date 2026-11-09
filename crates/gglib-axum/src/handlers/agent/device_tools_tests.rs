@@ -175,7 +175,7 @@ async fn resolve_offers_the_floor_while_no_session_is_live() {
     );
     let chat = named(&[echo.as_str(), "echo"]);
     assert_eq!(resolve(&state, &Asked::of_chat(&chat, true)).await, [DRAW]);
-    let request = serde_json::from_value(json!({ "port": 0, "messages": [] })).unwrap();
+    let request = crate::handlers::agent::loop_request::LoopRequest::default();
     let settled = settle(&state, request, &Asked::of_chat(&chat, true)).await;
     assert_eq!(settled.tool_filter, Some(vec![DRAW.to_owned()]));
     state.mcp.shutdown().await;

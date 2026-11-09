@@ -8,11 +8,11 @@ use gglib_core::domain::chat::MessageRole;
 use gglib_core::ports::{RunEvent, RunsPort as _};
 use serde_json::{Value, json};
 
-use gglib_app_services::types::ServerInfo;
-
-use super::remote_upstream::local;
+use super::hub_model::Loaded;
+use super::loop_request::LoopRequest;
+use super::remote_upstream::endpoint;
 use super::run_fixture::{
-    End, LOCAL, conversation, meta, prepared, saved, saving, settled, start, state,
+    End, LOCAL, conversation, launch, meta, prepared, saved, saving, settled, start, state,
 };
 
 fn turn() -> Vec<AgentEvent> {
@@ -38,7 +38,7 @@ fn turn() -> Vec<AgentEvent> {
 async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
     let (_dir, state) = state().await;
     let id = conversation(&state).await;
-    // The model as `resolve` gives it for a port serving a catalogued model.
+    // The model as `remote_upstream::endpoint` gives it for a catalogued one.
     let mut entry = gglib_core::domain::NewModel::new(
         "catalogue-name".to_owned(),
         std::path::PathBuf::from("/models/served.gguf"),
@@ -47,18 +47,18 @@ async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
     );
     entry.variant_label = Some("Q4_K_M".to_owned());
     let model_id = state.core.models().add(entry).await.unwrap().id;
-    let server = ServerInfo {
-        model_id,
-        model_name: "served-7b".to_owned(),
-        pid: None,
-        port: 9000,
-        started_at: 0,
-        runtime: gglib_core::domain::RuntimeKind::Llama,
-        launch: None,
+    let door = gglib_runtime::Door {
+        root_url: "http://127.0.0.1:9950".to_owned(),
+        key: Some("k".to_owned()),
+        name: None,
     };
-    let req = serde_json::from_str(r#"{"port":9000,"messages":[]}"#).unwrap();
+    let loaded = Loaded {
+        id: model_id,
+        port: 9951,
+    };
     let (mut p, _) = prepared(turn(), End::Finish);
-    p.made_by = local(&state, &req, server).await.unwrap().made_by;
+    let upstream = endpoint(&state, &LoopRequest::default(), loaded, door).await;
+    p.made_by = upstream.unwrap().made_by;
     start(&state, "a1", Some(id), p).await;
     settled(&state).await;
 
@@ -73,7 +73,7 @@ async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
     let usage = usage.expect("the turn's usage was logged");
     assert_eq!(
         (&usage["model"], &usage["quantization"]),
-        (&json!("served-7b"), &json!("Q4_K_M"))
+        (&json!("catalogue-name"), &json!("Q4_K_M"))
     );
 
     let rows = saved(&state, id).await;
@@ -109,9 +109,7 @@ async fn a_device_run_saves_its_name_and_a_hub_run_does_not() {
         let id = conversation(&state).await;
         let (p, _) = prepared(turn(), End::Finish);
         let permit = super::compose::take_permit(&state);
-        super::launch::launch(&state, run, scope, saving(id), p, permit.unwrap())
-            .await
-            .unwrap();
+        launch(&state, run, scope, saving(id), p, permit.unwrap()).unwrap();
         settled(&state).await;
 
         let mut events = state.runs.events(&LOCAL, run, 0).unwrap();

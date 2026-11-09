@@ -89,7 +89,7 @@ pub(crate) async fn send_with_retry(
                     observer.on_retry(attempt, after, reason);
                 }
                 // A plain awaited sleep, deliberately: when the caller's future
-                // is dropped (the GUI's abort signal, a cancelled CLI turn) this
+                // is dropped (a cancelled run, a benchmark that stops) this
                 // is dropped with it. A detached task would outlive the request
                 // it belongs to.
                 tokio::time::sleep(after).await;
@@ -138,8 +138,8 @@ fn terminal(failure: &Failure, door: Option<&Door>) -> anyhow::Error {
     let explained = door.and_then(|door| Some((door, door.refusal(failure.code())?)));
     match explained {
         Some((door, message)) => {
-            // The name is not a credential — `gglib remote status` and the
-            // CLI's pre-turn banner both print it — so a log reader gets the
+            // The name is not a credential — `gglib remote status` prints
+            // it — so a log reader gets the
             // same name the user is being shown.
             tracing::warn!(
                 machine = door.name.as_deref().unwrap_or("this machine"),

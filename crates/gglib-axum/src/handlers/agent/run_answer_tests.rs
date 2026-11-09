@@ -5,7 +5,7 @@
 use gglib_core::domain::chat::{MessageRole, NewMessage};
 
 use super::launch::Transcript;
-use super::launch::launch;
+use super::run_fixture::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, prepared, saved, settled, state,
 };
@@ -35,11 +35,10 @@ fn answering(conversation: i64) -> Transcript {
     }
 }
 
-async fn launch_answering(state: &AppState, run: &str, conversation: i64) -> bool {
+fn launch_answering(state: &AppState, run: &str, conversation: i64) -> bool {
     let (p, _) = prepared(finished_reply(), End::Finish);
     let permit = super::compose::take_permit(state).expect("a free slot");
     launch(state, run, LOCAL, answering(conversation), p, permit)
-        .await
         .unwrap()
         .created
 }
@@ -59,7 +58,7 @@ async fn an_answer_saves_no_message_of_its_own_and_its_reply_follows_the_questio
     )
     .await;
 
-    assert!(launch_answering(&state, "e1", id).await);
+    assert!(launch_answering(&state, "e1", id));
     settled(&state).await;
 
     let rows = saved(&state, id).await;
@@ -77,11 +76,11 @@ async fn a_repeated_create_answers_once() {
     let (_dir, state) = state().await;
     let id = conversation(&state).await;
     seed(&state, id, &[(MessageRole::User, "Q")]).await;
-    assert!(launch_answering(&state, "e1", id).await);
+    assert!(launch_answering(&state, "e1", id));
     settled(&state).await;
     let before: Vec<i64> = saved(&state, id).await.iter().map(|r| r.id).collect();
 
-    assert!(!launch_answering(&state, "e1", id).await);
+    assert!(!launch_answering(&state, "e1", id));
 
     let after: Vec<i64> = saved(&state, id).await.iter().map(|r| r.id).collect();
     assert_eq!(after, before);

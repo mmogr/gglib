@@ -10,7 +10,8 @@ use serde_json::{Value, json};
 
 use super::compose::{Prepared, take_permit};
 use super::hub_turn::{plan, start_local};
-use super::launch::{Transcript, launch};
+use super::launch::Transcript;
+use super::run_fixture::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, prepared, qwen, saving, settled, state,
 };
@@ -66,28 +67,26 @@ fn turn(id: i64, thinking: Option<Thinking>) -> HubTurn {
 /// `id`: the thinking budget it ran with.
 async fn run(state: &AppState, id: &str, chat: i64, said: Option<Thinking>) -> Option<i32> {
     let planned = plan(state, &LOCAL, turn(chat, said), None).await.unwrap();
-    start(state, id, planned.transcript).await.unwrap();
+    start(state, id, planned.transcript).unwrap();
     settled(state).await;
     planned.chat.reasoning_budget_tokens
 }
 
-async fn start(state: &AppState, id: &str, transcript: Transcript) -> Result<bool, HttpError> {
+fn start(state: &AppState, id: &str, transcript: Transcript) -> Result<bool, HttpError> {
     let (p, _) = prepared(finished_reply(), End::Finish);
-    start_on(state, id, transcript, p).await
+    start_on(state, id, transcript, p)
 }
 
 /// Launch `p` as this machine's run `id`, saved as `transcript` says:
 /// whether a run was made.
-async fn start_on(
+fn start_on(
     state: &AppState,
     id: &str,
     transcript: Transcript,
     p: Prepared,
 ) -> Result<bool, HttpError> {
     let free = take_permit(state).expect("a free slot");
-    launch(state, id, LOCAL, transcript, p, free)
-        .await
-        .map(|created| created.created)
+    launch(state, id, LOCAL, transcript, p, free).map(|created| created.created)
 }
 
 #[tokio::test]
@@ -177,7 +176,7 @@ async fn a_run_on_a_registered_model_writes_its_model_and_the_choice_and_keeps_b
         let planned = plan(&state, &LOCAL, turn(id, said), None).await.unwrap();
         let (mut p, _) = prepared(finished_reply(), End::Finish);
         p.local_model = Some((19_555, model));
-        let started = start_on(&state, run_id, planned.transcript, p).await;
+        let started = start_on(&state, run_id, planned.transcript, p);
         assert!(started.unwrap(), "{run_id}");
         settled(&state).await;
 
@@ -191,7 +190,8 @@ async fn a_run_on_a_registered_model_writes_its_model_and_the_choice_and_keeps_b
 }
 
 /// A run refused after its id is reserved, here for an image its message
-/// names that is not stored, has written nothing of thinking either.
+/// names that is not stored, ends `failed` with that code, and has written
+/// nothing of thinking either.
 #[tokio::test]
 async fn a_run_refused_at_its_launch_remembers_nothing() {
     let (_dir, state) = state().await;
@@ -205,11 +205,13 @@ async fn a_run_refused_at_its_launch_remembers_nothing() {
         content: "Look.".to_owned(),
         images: vec![AttachmentId::of(b"never stored")],
     }];
-    let refused = start_on(&state, "r1", transcript, p).await;
-    assert!(
-        matches!(&refused, Err(HttpError::Coded { code, .. }) if *code == "attachment_not_found"),
-        "{refused:?}"
-    );
+    assert!(start_on(&state, "r1", transcript, p).unwrap());
+    settled(&state).await;
+
+    let ended = state.runs.get(&LOCAL, "r1").unwrap();
+    assert_eq!(ended.status, gglib_core::domain::runs::RunStatus::Failed);
+    let code = ended.error.map(|e| e.code);
+    assert_eq!(code.as_deref(), Some("attachment_not_found"));
     assert_eq!(remembered(&state, id).await, None);
 }
 
@@ -223,7 +225,7 @@ async fn forgetting_what_was_never_remembered_writes_nothing() {
         remember: Some(None),
         ..saving(id)
     };
-    assert!(start(&state, "r1", forget).await.unwrap());
+    assert!(start(&state, "r1", forget).unwrap());
     settled(&state).await;
     assert_eq!(read(&state, id).await.settings, None);
 }

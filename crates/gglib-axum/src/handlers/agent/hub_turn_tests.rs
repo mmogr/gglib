@@ -13,9 +13,9 @@ use serde_json::json;
 use super::{plan, start};
 use crate::error::HttpError;
 use crate::handlers::agent::compose::take_permit;
-use crate::handlers::agent::launch::launch;
 use crate::handlers::agent::launch::ready;
 pub(super) use crate::handlers::agent::run_fixture::device;
+use crate::handlers::agent::run_fixture::launch;
 use crate::handlers::agent::run_fixture::{
     End, finished_reply, meta, paced, prepared, saved, saving, settled, state,
 };
@@ -213,7 +213,6 @@ async fn a_second_turn_on_a_chat_with_a_live_reply_is_409() {
         p,
         take_permit(&state).unwrap(),
     )
-    .await
     .unwrap();
 
     let refusal = refused(start(&state, device("laptop"), "d2", turn(id, "again"), None).await);
@@ -237,7 +236,6 @@ async fn a_repeated_id_answers_with_the_devices_run() {
         p,
         take_permit(&state).unwrap(),
     )
-    .await
     .unwrap();
     let again = start(&state, device("phone"), "d1", turn(id, "again"), None)
         .await

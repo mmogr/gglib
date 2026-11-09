@@ -132,8 +132,8 @@ pub(crate) async fn execute_tools_parallel(
     let timeout_ms = config.tool_timeout_ms;
 
     // Spawn each tool call into a JoinSet rather than as detached tasks.
-    // When this future is dropped (e.g. because AgentTaskGuard aborts the
-    // parent agent task on client disconnect), the JoinSet is dropped and
+    // When this future is dropped (e.g. because the daemon cancels the run
+    // that drives the agent loop), the JoinSet is dropped and
     // every in-flight tool task is cancelled automatically — no resource leak.
     let mut set: JoinSet<(usize, ToolResult)> = JoinSet::new();
 

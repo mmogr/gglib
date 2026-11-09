@@ -5,15 +5,15 @@
 //! writes the dialect's grammar and parses the dialect's markup; what comes
 //! back is read as the `OpenAI` reply it already is.
 
-use gglib_core::domain::agent::AgentEvent;
+use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
 use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use serde_json::json;
 
 use crate::handlers::agent::run_fixture::{drawing_state, state};
 use crate::handlers::agent::turn_fixture::{
-    DRAWS, ENDPOINT_KEY, TOOL, global, model, offers_nothing, phone, sampling_of,
-    sent_through_endpoint, stored, temperature, turn_through_endpoint,
+    DRAWS, ENDPOINT_KEY, REPLY, TOOL, global, model, offers_nothing, phone, sampling_of, sent,
+    stored, temperature, turn,
 };
 
 /// The key and the model's id travel; the sampling the ladder resolves does
@@ -31,7 +31,7 @@ async fn a_turn_carries_the_key_and_the_models_id_and_no_folded_sampling() {
     global(&state, temperature(0.42)).await;
     let chat = phone(&state, id).await;
 
-    let done = turn_through_endpoint(&state, id, chat, super::super::turn_fixture::REPLY).await;
+    let done = turn(&state, id, chat, REPLY).await;
 
     assert!(done.ended_well, "{:?}", done.events);
     assert_eq!(done.bearers, [Some(format!("Bearer {ENDPOINT_KEY}"))]);
@@ -55,7 +55,7 @@ async fn a_limit_a_setting_names_is_left_for_the_endpoint() {
     };
     global(&state, limit).await;
 
-    let body = sent_through_endpoint(&state, id, phone(&state, id).await).await;
+    let body = sent(&state, id, phone(&state, id).await).await;
 
     assert!(body.get("max_tokens").is_none(), "{body}");
 }
@@ -69,7 +69,7 @@ async fn thinking_off_reaches_the_endpoint() {
     let mut chat = phone(&state, id).await;
     chat.reasoning_budget_tokens = Some(0);
 
-    let body = sent_through_endpoint(&state, id, chat).await;
+    let body = sent(&state, id, chat).await;
 
     assert_eq!(body["reasoning_budget_tokens"], json!(0));
 }
@@ -85,7 +85,7 @@ async fn a_draw_demands_its_call_through_the_endpoint() {
     chat.draw = true;
     chat.tool_filter = Some(vec![TOOL.to_owned()]);
 
-    let done = turn_through_endpoint(&state, id, chat, DRAWS).await;
+    let done = turn(&state, id, chat, DRAWS).await;
 
     assert_eq!(done.requests.len(), 2, "{:?}", done.events);
     let first = &done.requests[0];
@@ -101,8 +101,7 @@ async fn a_draw_demands_its_call_through_the_endpoint() {
 }
 
 /// A dialect model's markup is parsed by the endpoint, so a reply that still
-/// carries it is text: nothing here dispatches it as a call. On the chat
-/// route the same reply is a call (`compose_context_tests`).
+/// carries it is text: nothing here dispatches it as a call.
 #[tokio::test]
 async fn markup_through_the_endpoint_is_not_parsed_again() {
     let markup = format!(
@@ -120,7 +119,7 @@ async fn markup_through_the_endpoint_is_not_parsed_again() {
     })
     .await;
 
-    let done = turn_through_endpoint(&state, dialect, phone(&state, dialect).await, &reply).await;
+    let done = turn(&state, dialect, phone(&state, dialect).await, &reply).await;
 
     let called = done
         .events
@@ -152,7 +151,7 @@ async fn the_endpoints_loop_guard_ending_the_run_ends_it_cleanly() {
     let (_dir, state) = state().await;
     let id = model(&state, |_| {}).await;
 
-    let done = turn_through_endpoint(&state, id, phone(&state, id).await, &reply).await;
+    let done = turn(&state, id, phone(&state, id).await, &reply).await;
 
     assert!(done.ended_well, "{:?}", done.events);
     let answer = done.events.iter().find_map(|event| match event {
@@ -163,8 +162,7 @@ async fn the_endpoints_loop_guard_ending_the_run_ends_it_cleanly() {
 }
 
 /// A loop through this machine's endpoint leaves its guard's count to the
-/// endpoint; one on a paired machine's model, or on llama-server's port,
-/// still counts its own here.
+/// endpoint; one on a paired machine's model still counts its own here.
 #[test]
 fn only_a_loop_through_this_machines_endpoint_leaves_its_guard_uncounted() {
     let door = |name: Option<&str>| gglib_runtime::Door {
@@ -173,12 +171,40 @@ fn only_a_loop_through_this_machines_endpoint_leaves_its_guard_uncounted() {
         name: name.map(str::to_owned),
     };
     assert!(
-        !super::reports_its_guard(Some(&door(None))),
+        !super::reports_its_guard(&door(None)),
         "this machine's endpoint"
     );
     assert!(
-        super::reports_its_guard(Some(&door(Some("desk")))),
+        super::reports_its_guard(&door(Some("desk"))),
         "a paired machine's"
     );
-    assert!(super::reports_its_guard(None), "llama-server's port");
+}
+
+/// ~60k characters of tool output, outside the protected tail.
+fn conversation() -> Vec<AgentMessage> {
+    let mut messages: Vec<_> = ["call_1", "call_2"]
+        .map(|id| AgentMessage::Tool {
+            tool_call_id: id.to_owned(),
+            content: "x".repeat(30_000),
+            images: Vec::new(),
+        })
+        .into();
+    messages.extend((0..8).map(|_| AgentMessage::user("ok")));
+    messages
+}
+
+/// A conversation over the model's context goes to this machine's endpoint
+/// whole: the endpoint trims it to the context it serves, as it trims any
+/// client's.
+#[tokio::test]
+async fn a_turn_through_the_endpoint_is_sent_whole_for_the_endpoint_to_trim() {
+    let (_dir, state) = state().await;
+    let id = model(&state, |entry| entry.context_length = Some(4_096)).await;
+    let mut device = phone(&state, id).await;
+    device.messages = conversation();
+
+    let body = sent(&state, id, device).await;
+
+    let oldest = body["messages"][0]["content"].as_str().map(str::len);
+    assert_eq!(oldest, Some(30_000));
 }

@@ -1,10 +1,7 @@
-//! An agent run's frames are the chat route's, and it saves nothing without
-//! a conversation.
-
-use std::convert::Infallible;
+//! An agent run's frames are each event's JSON, and it saves nothing
+//! without a conversation.
 
 use axum::response::IntoResponse as _;
-use axum::response::sse::Sse;
 use gglib_core::domain::agent::{
     AgentEvent, INCOMPLETE_KEY, THINKING_DURATION_KEY, THINKING_KEY, ToolCall,
 };
@@ -13,10 +10,10 @@ use gglib_core::domain::runs::{RunInfo, RunKind, RunStatus};
 use http_body_util::BodyExt as _;
 use serde_json::json;
 
+use super::compose::frame;
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, meta, paced, prepared, saved, settled, start, state,
 };
-use super::sse_event;
 use gglib_core::ports::RunsPort as _;
 
 async fn body(response: axum::response::Response) -> String {
@@ -34,10 +31,10 @@ fn data_lines(body: &str) -> Vec<String> {
         .collect()
 }
 
-/// The chat route's own bytes, as the page parses them today: a change to
-/// the framing both routes share must show here, not only as agreement.
-#[tokio::test]
-async fn the_chat_routes_frames_are_these_bytes() {
+/// A frame's own bytes, as the page and the CLI parse them: a change to the
+/// framing must show here.
+#[test]
+fn a_frame_is_these_bytes() {
     let events = [
         AgentEvent::TextDelta {
             content: "hi \"there\"\n".to_owned(),
@@ -53,27 +50,20 @@ async fn the_chat_routes_frames_are_these_bytes() {
             server: None,
         },
     ];
-    let frames = events
-        .iter()
-        .filter_map(sse_event)
-        .map(Ok::<_, Infallible>)
-        .collect::<Vec<_>>();
 
-    let chat = body(Sse::new(futures_util::stream::iter(frames)).into_response()).await;
+    let frames: Vec<String> = events.iter().map(frame).collect();
 
     assert_eq!(
-        chat,
-        concat!(
-            r#"data: {"type":"text_delta","content":"hi \"there\"\n"}"#,
-            "\n\n",
-            r#"data: {"type":"tool_call_start","tool_call":{"id":"c1","name":"read_file","arguments":{"path":"a.rs"}},"display_name":"Read File","args_summary":null}"#,
-            "\n\n",
-        )
+        frames,
+        [
+            r#"{"type":"text_delta","content":"hi \"there\"\n"}"#,
+            r#"{"type":"tool_call_start","tool_call":{"id":"c1","name":"read_file","arguments":{"path":"a.rs"}},"display_name":"Read File","args_summary":null}"#,
+        ]
     );
 }
 
 #[tokio::test]
-async fn a_runs_frames_are_the_chat_routes_bytes_and_it_ends_completed() {
+async fn a_runs_frames_are_its_events_and_it_ends_completed() {
     let (_dir, state) = state().await;
     let (p, _) = prepared(finished_reply(), End::Finish);
 
@@ -85,14 +75,11 @@ async fn a_runs_frames_are_the_chat_routes_bytes_and_it_ends_completed() {
     let events = state.runs.events(&LOCAL, "a1", 0).unwrap();
     let run = body(gglib_proxy::runs::sse::stream(events, None).into_response()).await;
 
-    let frames = finished_reply()
+    let frames: Vec<String> = finished_reply()
         .iter()
-        .filter_map(sse_event)
-        .map(Ok::<_, Infallible>)
-        .collect::<Vec<_>>();
-    let chat = body(Sse::new(futures_util::stream::iter(frames)).into_response()).await;
-    assert_eq!(data_lines(&run), data_lines(&chat));
-    assert_eq!(data_lines(&run).len(), finished_reply().len());
+        .map(|event| format!("data: {}", frame(event)))
+        .collect();
+    assert_eq!(data_lines(&run), frames);
     let end = run
         .split("event: run\ndata: ")
         .nth(1)

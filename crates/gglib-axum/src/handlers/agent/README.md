@@ -2,21 +2,20 @@
 
 <!-- module-docs:start -->
 
-POST /api/agent/chat — server-side agentic loop with SSE streaming.
+The server-side agentic loop: every agent run the daemon starts, this
+machine's turn at `PUT /api/runs/{id}?kind=agent` (`gglib chat`, `gglib q`
+and the page), a paired device's turn and a phone-kept chat run.
 
-`compose::prepare` resolves the upstream, validates the request, applies the
-configured limits and calls [`compose_agent_loop`](gglib_runtime::compose_agent_loop),
-so every caller of the loop does those alike. The limits are resolved by
-core's `TurnLimits::resolve`, which the CLI's `chat` and `q` call too: the
-iteration limit the request names, then the one its chat's settings saved
-(put in the request's place by `hub_turn::plan` for a turn on a hub chat and by
-for this machine's own turn, as the CLI's resume puts it in its flag's),
-then this machine's stored `max_tool_iterations`, then the default; and the
-stored `max_stagnation_steps`, which no request names. So a client that
-sends no iteration limit, as the chat page and a paired device do, runs with
-its chat's saved one, or the stored one. The handler spawns the loop as
-a background task and bridges the resulting `mpsc::Receiver<AgentEvent>` to an
-Axum [`Sse`] response, each event framed by `compose::frame`.
+A door reads its turn into a `loop_request::LoopRequest`, which no body is
+ever read as; `compose::prepare_over` applies the configured limits over the
+upstream the run settled and calls
+[`compose_agent_loop`](gglib_runtime::compose_agent_loop), so every door's
+loop is composed alike. The limits are resolved by core's
+`TurnLimits::resolve`, which the CLI reads too: the iteration limit the
+chat's settings saved (named on the request by `hub_turn::plan`), then this
+machine's stored `max_tool_iterations`, then the default; and the stored
+`max_stagnation_steps`, which no turn names. The run's work (`run::work`)
+logs each event as `compose::frame` writes it.
 
 A request sent with `draw: true` (the page's Draw button) is the only one
 whose model is offered `builtin:generate_image`: `compose::prepare_over`
@@ -38,7 +37,7 @@ and `gglib_mcp::DRAW_THEN_SAY_FAILED` when the tool answered with an error
 (say what went wrong). A later message of that chat, sent without `draw`,
 is offered no image tool, and its request carries a note at the front that
 the picture exists (`gglib_core::request_pipeline::DRAWN_NOTE`, added by
-the request pipeline and held by no row or event). When the model on the
+the endpoint's request pipeline and held by no row or event). When the model on the
 other end reads images, that request and every later one also shows it the
 most recent drawn picture, on the message that followed it
 (`gglib_core::request_pipeline::shown_picture`, applied by the completion
@@ -47,7 +46,7 @@ is not refused for it. The tools a filter names are not offered to
 such a run at any point. That holds for every run composed here with
 `draw`: this machine's turn, a device's turn, and a chat run with builtins. Without
 `draw` the tool is in no list and
-cannot be called, `tool_filter: null` included. Both doors first ask
+cannot be called, `tool_filter: null` included. Every door first asks
 `compose::refuse_unavailable_drawing`, before a slot is taken or a row
 written: a model on another machine, or a machine that cannot draw, is
 `400 drawing_unavailable` with the reason `GET /api/images/drawing` gives.
@@ -69,9 +68,9 @@ Inline `<think>` reclassification is handled upstream by
 handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
 
 An agent run stamps each turn's `turn_usage` event with the model it drove
-(`gglib_app_services::transcript::MadeBy`: locally the model on the port and
-its catalogue quantisation, on the paired machine the name and quantisation
-that machine has for the model) before logging it, so the
+(`gglib_app_services::transcript::MadeBy`: locally the catalogue's name and
+quantisation for the model's id, on the paired machine the name and
+quantisation that machine has for the model) before logging it, so the
 frame a page draws and the row the reply is saved as say the same. A turn
 on this machine's model also stamps the context its model was launched with
 (`remote_upstream::endpoint`): read once the model is loaded, and only when
@@ -124,83 +123,56 @@ neither raise nor lower the limit. The endpoint's loop guard alone counts
 such a loop's trips; when it ends the run it answers in the model's place
 with a finished message, which ends the run well with that sentence.
 
-The chat route's loop (`POST /api/agent/chat`, until it is retired) still
-drives llama-server's port: it waits on the daemon's generation gate before
-each send, so a reply waits for an image render rather than sharing the GPU
-with it (`retry_notice` reports that wait as a `waiting` event with the
-render's step), is limited the same way, and reports its guard's decisions
-to the same ledger. A run on the paired machine's model takes no turn here
-and is not limited from this side: that machine's own settings apply.
+A run on the paired machine's model is not limited from this side: that
+machine's own settings apply. It reports its own guard's decisions to this
+machine's ledger.
 
 # Which upstream
 
-`remote_upstream` decides, before anything else, whether the loop drives this
-machine's endpoint (a turn on a hub chat or a chat run with builtins, above),
-a llama-server this daemon started (the chat route: the request's `port`, validated against
-the servers it owns; the turn is shaped for the model that port serves, by
-its row in this catalog, whatever `model` the request names) or a model of
-the machine on the other end of the remote tunnel (`far`, that machine and
-the model's id there: the port the tunnel bound, the key from the pairing as
-the bearer, and no shaping, because the far proxy runs its own pipeline). A
-local run whose messages, history included, carry an image is refused `400
-model_cannot_read_images` when the model its server serves has no projector
-(`image_gate`), and any local run on a port an `sd-server` serves is refused
-`400 image_model_cannot_chat`, before its loop is composed; a far run is not
-judged here, since the far proxy refuses it by the same code. A
-`far` naming this machine is a `400`. Not connected, connected without a key,
-or connected to another machine than the ref's is a `409`
-(`RemoteOps::far_for`), the last because that machine's same id is another
-model.
+`remote_upstream` decides whether the loop drives this machine's endpoint
+(`through_endpoint`, above) or a model of the machine on the other end of
+the remote tunnel (`far`: that machine and the model's id there, the port
+the tunnel bound, the key from the pairing as the bearer, and no shaping,
+because the far proxy runs its own pipeline). A local run whose messages,
+history included, carry an image is refused `400 model_cannot_read_images`
+when its model has no projector (`image_gate`), and one on a model that
+draws `400 image_model_cannot_chat`, before its loop is composed; a far run
+is not judged here, since the far proxy refuses it by the same code. Not
+connected, connected without a key, or connected to another machine than
+the ref's is a `409` (`RemoteOps::far_for`), the last because that
+machine's same id is another model.
 
 On the far path the id is looked up there first (`FarProxy::lookup`), so a
 model that machine does not have is its `404` before any turn starts; the
 turns are sent with the id as the model, so no other model of its name
 answers, and the run is counted under, and its turns made by, the name and
 quantisation that machine has for it. Through this machine's endpoint the
-model is likewise its catalogue id. On llama-server's port an absent `model`
-is the ordinary case and means "whatever llama-server loaded".
+model is likewise its catalogue id.
 
 # Sampling
 
-A turn through this machine's endpoint is resolved there, by its pipeline,
-over what the turn names: the two reasoning controls (thinking off is
-`reasoning_budget_tokens: 0`, which the endpoint honours from any client).
-The chat route's turn is resolved by the same rules, in
-the one place they are: `gglib_core::request_pipeline::apply`, which the
-completion adapter calls as it shapes each request. `compose::prepare` hands
-it the pieces unfolded: the two reasoning controls, which are all the
-sampling a request body can name, and, on a turn on a saved chat, the five
+A turn through this machine's endpoint is resolved there, by its pipeline
+(`gglib_core::request_pipeline::apply`, the one place the ladder is
+folded), over what the turn names (`LoopRequest::sampling_layer`): its
+thinking budget (thinking off is `reasoning_budget_tokens: 0`, which the
+endpoint honours from any client) and, on a turn on a saved chat, the five
 sampling settings the chat saved (`gglib chat`'s flags, `ChatSampling`),
 sent as a client's, which the endpoint honours only while it trusts
-clients' sampling (`AgentChatRequest::sampling_layer`); the chat's saved
-profile goes on the model the turn asks for, `<id>:<profile>`, which the
-endpoint, or the paired machine's proxy, routes to that profile whatever it
-trusts; and from
-`remote_upstream::local` the served model's context, which carries its own
-stored values, and this machine's global defaults and agentic sampling
-switch. So a turn that
-names nothing and carries no tools is sent what `gglib model explain` reports
-for its model, and one with tools has a temperature nobody chose capped, as
-`gglib chat`'s is, unless the model is tagged `reasoning` or the settings
-store `agentic_sampling` off. The same context switches on the pipeline's
-other per-model stages: capability shaping, the truncation budget, the effort
-gate and the tool-call dialect parser. A far turn is handed nothing this
-machine stores, that switch included: its turn with tools is capped as it
-leaves here, and the far proxy resolves it by its own settings.
+clients' sampling. The chat's saved profile goes on the model the turn asks
+for, `<id>:<profile>`, which the endpoint, or the paired machine's proxy,
+routes to that profile whatever it trusts. A far turn is handed nothing this
+machine stores, its agentic switch included: its turn with tools is capped
+as it leaves here, and the far proxy resolves it by its own settings.
 
 # Cancellation
 
-When the HTTP client disconnects (browser tab closed, `curl` killed, etc.),
-Axum drops the SSE response and therefore the [`guard::AgentTaskGuard`] stream
-wrapper. Its [`Drop`] impl calls [`tokio::task::JoinHandle::abort`], which cancels the
-spawned `AgentLoop` task at its next `await` point — immediately stopping
-LLM token generation and any in-flight tool calls without leaking compute
-or resources. An agent run, this machine's turn at
-`PUT /api/runs/{id}?kind=agent` or a device's at the proxy's door, runs the
-same prepared loop detached from any response (`run::work`), so only cancel
-or shutdown stops it, and saves the transcript to its conversation,
-through `gglib_app_services::transcript`, the one writer of a turn's rows,
-which the CLI's chat saves through too.
+An agent run, this machine's turn at `PUT /api/runs/{id}?kind=agent` or a
+device's at the proxy's door, runs its prepared loop detached from any
+response (`run::work`), so a client that goes away stops nothing: only
+cancel or shutdown stops it, which drops the loop at its next `await`,
+stopping token generation and any tool call in flight. It saves the
+transcript to its conversation through `gglib_app_services::transcript`, the
+one writer of a turn's rows.
 Before it takes a slot, the images of the turn and of the history it
 rebuilds are checked by their sizes alone (`AttachmentService::check_request`):
 an id not stored is `400 attachment_not_found`, and images over 16 MiB
@@ -225,14 +197,11 @@ its run said, and starts the loop.
 Core's `gglib_core::domain::thinking::settle` is the one rule for it, read at
 every door a turn comes through: `hub_turn::plan` reads a device's turn,
 which is also how the page's turn on a paired machine's own chat arrives
-there, and this machine's own. The CLI reads its chat by the same rule,
-with `gglib chat --thinking` as what the turn says. A turn says `off`,
+there, and this machine's own, which `gglib chat --thinking` sends too. A turn says `off`,
 `default` or nothing. `off` runs it with a
 thinking budget of `0` and the conversation remembers; `default` runs it with
-the request's own `reasoning_budget_tokens` and the conversation forgets;
-nothing runs it as the conversation remembers, and a remembered `off` beats
-the request's own budget, which no turn has: only the chat route's request
-names one. A request's own budget and effort level are never remembered.
+the model's own and the conversation forgets; nothing runs it as the
+conversation remembers.
 What is remembered is `ConversationSettings.thinking`, written by
 `launch::begin_writes` beside the run's model, so a refused run, or a
 repeated id that starts nothing, writes nothing. The write is
@@ -261,9 +230,9 @@ is what is read. The decision is
 `compose::prepare_over` passes the folder to `compose_agent_loop` as the
 file tools' root, whose descriptions name it, and `compose::with_folder`
 adds the three qualified names to a tool filter that lists names; `[]`, a
-model that calls no tool, stays `[]`, and `null` admits them already. The
-chat route (`POST /api/agent/chat`) and every turn a paired device sends
-pass no folder, whatever the conversation remembers: a device's turn calls
+model that calls no tool, stays `[]`, and `null` admits them already. Every
+turn a paired device sends, and a phone-kept chat run, pass no folder,
+whatever the conversation remembers: a device's turn calls
 no tool of this machine's but the image tool its Draw asks for and the
 tools of the MCP servers opened to paired devices, which name no file tool, and no
 key of a device's turn names a path.
@@ -297,7 +266,7 @@ MCP server's tool of that name through to a device; else nothing. The
 chat's `no_tools` does not take the floor away, since the button is the
 person's choice for that message, and a hub that cannot draw refuses the
 turn `400 drawing_unavailable` before anything is written. A turn's
-`image_model`, when it says one, is the page's: copied onto the chat
+`image_model`, when it says one, is the page's: copied onto the loop's
 request and judged there. Beyond the floor are the tools of the MCP
 servers open to paired devices (`gglib mcp allow-remote <server>`, a flag
 on each), read only while the tunnel's gateway says a session is live,
@@ -341,8 +310,8 @@ settings'. The history the page used to send is pinned against
 device's in three things only:
 
 - **Model.** A chat that stored the paired machine's model runs there
-  (`hub_model::paired`): the chat request names it as `far`, the late step
-  loads nothing here and `remote_upstream::resolve` takes the tunnel. The
+  (`hub_model::paired`): the loop's request names it as `far`, the late step
+  loads nothing here and `remote_upstream::far` takes the tunnel. The
   run is listed by the name the chat has for it, and nothing of it is
   looked up in this catalogue, so the image checks are that machine's
   proxy's to make. Draw on it is `400 drawing_unavailable`.
@@ -381,9 +350,7 @@ the device's scope whose `frames` say `agent`.
 The run exists before its model does (`launch::launch_turn`). The `PUT`
 reads the turn, takes a slot, reserves the run and answers; finding or
 loading the model, opening the endpoint's door, composing the loop and
-writing the turn's rows (`launch::begin_writes`) are the run's own work. The test
-driver `launch::launch` (test builds only, until the old door is retired)
-prepares a loop first and runs it through the same writes and work. A cold load, or a load queued behind an
+writing the turn's rows (`launch::begin_writes`) are the run's own work. A cold load, or a load queued behind an
 image render, is then a `waiting` event (`model_load`, naming the model and,
 said again each second, how long the load has taken) in the run's log, not
 a `PUT` that hangs past the bound a device or the tunnel gives it. What is

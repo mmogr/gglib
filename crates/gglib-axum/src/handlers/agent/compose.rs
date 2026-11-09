@@ -1,6 +1,6 @@
-//! What `POST /api/agent/chat` does before its loop runs, and how it writes
-//! each event: one place, so every caller of the agent loop resolves,
-//! validates, limits and frames exactly as the chat route does.
+//! What a run does before its loop runs, and how it writes each event: one
+//! place, so every door a turn comes through validates, limits and frames
+//! alike.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -15,11 +15,10 @@ use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::{AgentGuardReporter, AgentLoopPort, RetryObserver};
 use gglib_core::services::{AttachmentService, drawing_availability};
 use gglib_mcp::{BUILTIN_PREFIX, DrawArm, DrawWith, DrawingTool, FILE_TOOLS};
-use gglib_runtime::{LoopGeneration, compose_agent_loop};
+use gglib_runtime::compose_agent_loop;
 
-use super::AgentChatRequest;
-use super::dto::AgentRequestConfig;
-use super::remote_upstream::{self, Upstream};
+use super::loop_request::{LoopRequest, NamedLimits};
+use super::remote_upstream::Upstream;
 use super::retry_notice::RetryNotice;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -62,8 +61,7 @@ pub(crate) const DRAW_TOOL: &str = gglib_core::request_pipeline::DRAW_TOOL_NAME;
 /// offered no image tool at all, so the choice would be dropped in silence.
 ///
 /// The one place every door's `draw` and `image_model` are judged: this
-/// machine's turn, a device's turn, a chat run with builtins and the chat
-/// route.
+/// machine's turn, a device's turn and a chat run with builtins.
 ///
 /// # Errors
 ///
@@ -73,7 +71,7 @@ pub(crate) const DRAW_TOOL: &str = gglib_core::request_pipeline::DRAW_TOOL_NAME;
 /// its reason.
 pub(crate) async fn refuse_unavailable_drawing(
     state: &AppState,
-    req: &AgentChatRequest,
+    req: &LoopRequest,
 ) -> Result<(), HttpError> {
     let refused = |code, message| HttpError::Coded {
         status: axum::http::StatusCode::BAD_REQUEST,
@@ -154,44 +152,23 @@ pub(crate) fn with_folder(
     filter
 }
 
-/// Resolve the upstream, validate the request, apply the configured limits
-/// and compose the loop, with no folder: the chat route's loop offers none
-/// of gglib's own file tools.
+/// Apply the configured limits and compose `req`'s loop over `upstream`,
+/// with `folder` as the root of gglib's own file tools: a canonical path,
+/// or `None` for no file tools.
 ///
-/// # Errors
-///
-/// Whatever [`remote_upstream::resolve`] refuses.
-pub(crate) async fn prepare(
-    state: &AppState,
-    req: AgentChatRequest,
-) -> Result<Prepared, HttpError> {
-    // Local llama-server or the remote tunnel: settled first, because it
-    // decides the port check, the model context, the stored sampling layers
-    // and the bearer together.
-    let upstream = remote_upstream::resolve(state, &req).await?;
-    Ok(prepare_over(state, req, upstream, None).await)
-}
-
-/// [`prepare`], once the upstream is settled, with `folder` as the root of
-/// gglib's own file tools: a canonical path, or `None` for no file tools.
-///
-/// A turn on one of this machine's chats or a device's comes here too, once
-/// its upstream is this machine's endpoint (`remote_upstream::endpoint`):
-/// its loop's turns go through the endpoint as any client's, so the
+/// A loop on this machine's model goes through its endpoint
+/// (`remote_upstream::endpoint`): its turns are any client's there, so the
 /// endpoint's loop guard counts them and this loop reports its own guard's
-/// decisions nowhere. Every other loop reports them to the same ledger.
-///
-/// Its own function because `prepare` cannot be driven in a test: no test
-/// has a running llama-server for `remote_upstream::resolve` to find.
+/// decisions nowhere. A loop on the paired machine's model reports them to
+/// this machine's ledger.
 pub(super) async fn prepare_over(
     state: &AppState,
-    req: AgentChatRequest,
+    req: LoopRequest,
     upstream: Upstream,
     folder: Option<PathBuf>,
 ) -> Prepared {
     // Read before `tool_filter` consumes the request piecemeal, and before the
-    // loop is composed: the two reasoning controls are the only sampling this
-    // endpoint accepts, and they occupy the ladder's top rung.
+    // loop is composed: the turn's own sampling, the ladder's top rung.
     let sampling = req.sampling_layer();
     let draw = req.draw;
     // The folder before Draw: a `[]` that Draw then names the image tool in
@@ -220,19 +197,15 @@ pub(super) async fn prepare_over(
 
     let local_model = upstream.local_model;
     let far_model = upstream.far_model.clone();
-    // Its guard decisions to the same process's ledger, which is the only
-    // reason the chat route's trips are counted at all (#1091). The name is
-    // `resolve`'s, not `req`'s: a request that named no model is counted
-    // under the model actually running on the port.
-    let guard = reports_its_guard(upstream.door.as_ref()).then(|| AgentGuardReporter {
+    // A far run's guard decisions go to this process's ledger (#1091),
+    // under the name that machine has for the model.
+    let guard = reports_its_guard(&upstream.door).then(|| AgentGuardReporter {
         sink: state.proxy.agent_guard_sink(),
         model: upstream.counted_as,
     });
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
-        // `upstream`, not `req`: the two paths mean opposite things by an
-        // absent model, and `resolve` is where that was already decided.
         upstream.model,
         upstream.model_context,
         state.mcp.clone(),
@@ -244,16 +217,10 @@ pub(super) async fn prepare_over(
         upstream.layers,
         upstream.door,
         state.core.attachments().store(),
-        // A reply on llama-server's port waits for an image render, and says
-        // so through the retry notice; one through a door takes no turn here:
-        // the endpoint takes it for each request it forwards.
-        LoopGeneration {
-            gate: Some(Arc::clone(&state.generation_gate)),
-            drawing,
-        },
+        drawing,
     );
 
-    let mut config = config_for(state, req.config).await;
+    let mut config = config_for(state, req.limits).await;
     // Pressing Draw is the person's explicit ask: the run's first reply
     // must be the call for the picture, offered that tool alone, and is
     // never left to the model to decide. The picture is asked for once:
@@ -276,31 +243,25 @@ pub(super) async fn prepare_over(
 }
 
 /// Whether a loop through `door` reports its own guard's decisions to this
-/// process's ledger: a loop on llama-server's port does, and so does one on
-/// a paired machine's model, which this machine counts as it composed it. A
-/// loop through this machine's endpoint does not: the endpoint's loop guard
-/// sees every request and counts what it decides, and a count here would
-/// count each trip twice.
-pub(super) fn reports_its_guard(door: Option<&gglib_runtime::Door>) -> bool {
-    door.is_none_or(gglib_runtime::Door::is_far)
+/// process's ledger: one on a paired machine's model does, which this
+/// machine counts as it composed it. A loop through this machine's endpoint
+/// does not: the endpoint's loop guard sees every request and counts what
+/// it decides, and a count here would count each trip twice.
+pub(super) fn reports_its_guard(door: &gglib_runtime::Door) -> bool {
+    door.is_far()
 }
 
-/// The loop config a request runs with: what it names, and for the limits
-/// it leaves out this machine's stored ones (`TurnLimits::resolve`). A
-/// turn on a saved chat reaches here with that chat's saved iteration limit
-/// already standing in for one it did not name (`hub_turn::plan`, for this
-/// machine's turn and a paired device's). So a client that
-/// names no iteration limit runs with its chat's, and failing that with
-/// `max_tool_iterations`, and none has to send either. A settings read that
-/// fails leaves the built-in defaults.
+/// The loop config a turn runs with: the limits its chat's settings name
+/// (`hub_turn::plan`, for this machine's turn and a paired device's), and
+/// for those they leave out this machine's stored ones
+/// (`TurnLimits::resolve`). So a turn on a chat that names no iteration
+/// limit runs with `max_tool_iterations`. A settings read that fails leaves
+/// the built-in defaults.
 ///
-/// Its own function because `prepare` cannot be driven in a test: it needs
-/// a running llama-server.
-pub(crate) async fn config_for(state: &AppState, named: Option<AgentRequestConfig>) -> AgentConfig {
+/// Its own function so a test can read the config a planned turn runs with.
+pub(crate) async fn config_for(state: &AppState, named: NamedLimits) -> AgentConfig {
     let settings = state.core.settings().get().await.ok();
-    named
-        .unwrap_or_default()
-        .into_agent_config(settings.as_ref())
+    named.into_agent_config(settings.as_ref())
 }
 
 /// One event as the `data:` text of its SSE frame.
@@ -325,9 +286,6 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
 }
 
 #[cfg(test)]
-#[path = "compose_context_tests.rs"]
-mod context_tests;
-#[cfg(test)]
 #[path = "compose_draw_tests.rs"]
 mod draw_tests;
 #[cfg(test)]
@@ -339,9 +297,3 @@ mod endpoint_tests;
 #[cfg(test)]
 #[path = "compose_folder_tests.rs"]
 mod folder_tests;
-#[cfg(test)]
-#[path = "compose_gate_tests.rs"]
-mod gate_tests;
-#[cfg(test)]
-#[path = "compose_sampling_tests.rs"]
-mod sampling_tests;

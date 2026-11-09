@@ -1,13 +1,7 @@
-//! `POST /api/agent/chat` with `far`: a model of the paired machine, named
-//! by that machine and its id there.
-//!
-//! The unit tests beside `remote_upstream` pin the lookup against a fake far
-//! proxy; this pins that the route reaches the far branch at all, and that
-//! its refusals are told apart by what is wrong.
-//!
-//! Neither case needs a tunnel: a ref to this machine is refused before the
-//! connection is read, and a ref to a paired machine gets far enough to be
-//! refused for the honest reason, which is that nothing is connected.
+//! A chat on a model of the paired machine, named by that machine and its
+//! id there: this machine's turn on it reaches the far branch, and with no
+//! tunnel up its run fails for the honest reason, that nothing is
+//! connected.
 //!
 //! And a conversation the page makes for a far model keeps that model, by
 //! its machine, from the moment it is made, as one made for a model of this
@@ -29,55 +23,66 @@ async fn body_json(response: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap_or_default()
 }
 
-fn chat(body: &str) -> Request<Body> {
-    request("POST", "/api/agent/chat".to_owned(), body)
-}
-
-/// A model of this machine is driven by its server's port; naming it as a
-/// far model is a malformed request, whatever the tunnel is doing.
+/// This machine's turn on a chat of the paired machine's model, with no
+/// tunnel up, is a run that fails `conflict` in the words that say nothing
+/// is connected, having written no row.
 #[tokio::test]
-async fn a_far_ref_to_this_machine_is_a_bad_request() {
-    let app = test_app(CorsConfig::AllowAll).await;
+async fn a_turn_on_a_far_chat_with_nothing_connected_fails_for_the_honest_reason() {
+    use gglib_core::contracts::http::daemon::run_path;
+    use gglib_core::domain::chat::{ConversationSettings, NewConversation};
+    use gglib_core::domain::runs::{RunInfo, RunStatus};
+    use gglib_core::domain::{Machine, ModelRef};
 
-    let response = app
-        .oneshot(chat(
-            r#"{"port":0,"messages":[],"far":{"machine":{"kind":"local"},"id":3}}"#,
-        ))
+    let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let settings = ConversationSettings {
+        model: Some(ModelRef {
+            machine: Machine::Paired {
+                fingerprint: "0a1b2c3d4e5f".to_owned(),
+            },
+            id: 3,
+        }),
+        ..ConversationSettings::default()
+    };
+    let id = state
+        .core
+        .chat_history()
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            settings: Some(settings),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
+    let turn = serde_json::json!({ "conversation_id": id, "content": "hi" }).to_string();
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let body = body_json(response).await;
-    let message = body.get("error").and_then(|v| v.as_str()).unwrap_or("");
-    assert!(message.contains("this machine"), "{body}");
-}
-
-/// The positive control. A paired ref must get *past* that check — the
-/// refusal it then meets is this machine having no tunnel, which is a
-/// different sentence and a different status. Without this, the test above
-/// would pass just as well against a route that refused everything.
-#[tokio::test]
-async fn a_far_ref_with_nothing_connected_is_refused_for_the_honest_reason() {
-    let app = test_app(CorsConfig::AllowAll).await;
-
-    let response = app
-        .oneshot(chat(
-            r#"{"port":0,"messages":[],"far":{"machine":{"kind":"paired","fingerprint":"0a1b2c3d4e5f"},"id":3}}"#,
-        ))
+    let put = format!("{}?kind=agent", run_path("f1"));
+    let made = app
+        .clone()
+        .oneshot(request("PUT", put, &turn))
         .await
         .unwrap();
+    assert_eq!(made.status(), StatusCode::CREATED);
+    let ended = async {
+        loop {
+            let read = request("GET", run_path("f1"), "");
+            let info = body_json(app.clone().oneshot(read).await.unwrap()).await;
+            let info: RunInfo = serde_json::from_value(info).unwrap();
+            if !matches!(info.status, RunStatus::Queued | RunStatus::InProgress) {
+                return info;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    };
+    let run = tokio::time::timeout(std::time::Duration::from_secs(10), ended)
+        .await
+        .expect("the run ends");
 
-    assert_eq!(
-        response.status(),
-        StatusCode::CONFLICT,
-        "nothing is connected here, and that is what should be said"
-    );
-    let body = body_json(response).await;
-    let message = body.get("error").and_then(|v| v.as_str()).unwrap_or("");
-    assert!(
-        message.contains("not connected"),
-        "expected the not-connected refusal, got: {body}"
-    );
+    assert_eq!(run.status, RunStatus::Failed);
+    let error = run.error.expect("a failed run says why");
+    assert_eq!(error.code, "conflict");
+    assert!(error.message.contains("not connected"), "{}", error.message);
+    let rows = state.core.chat_history().get_messages(id).await.unwrap();
+    assert!(rows.is_empty(), "no row was written");
 }
 
 fn request(method: &str, uri: String, body: &str) -> Request<Body> {

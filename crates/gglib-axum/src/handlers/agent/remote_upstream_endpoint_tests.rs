@@ -100,8 +100,8 @@ fn door() -> Door {
     }
 }
 
-fn turn() -> crate::handlers::agent::AgentChatRequest {
-    serde_json::from_str(r#"{"port":19555,"messages":[]}"#).unwrap()
+fn turn() -> crate::handlers::agent::loop_request::LoopRequest {
+    crate::handlers::agent::loop_request::LoopRequest::default()
 }
 
 fn as_u32(id: i64) -> u32 {
@@ -119,7 +119,7 @@ async fn a_turn_dials_the_endpoint_with_its_key_and_the_models_id() {
 
     assert_eq!(upstream.base_url, "http://127.0.0.1:9931");
     assert_eq!(upstream.model, Some(id.to_string()));
-    let dialled = upstream.door.expect("through a door");
+    let dialled = upstream.door;
     assert_eq!(dialled.key.as_deref(), Some("sk-this-machines-endpoint"));
     assert!(!dialled.is_far(), "this machine's own endpoint");
     assert_eq!(upstream.local_model, Some((PORT, id)));
@@ -127,6 +127,17 @@ async fn a_turn_dials_the_endpoint_with_its_key_and_the_models_id() {
     assert_eq!(upstream.made_by.model, "catalogue-name");
     assert_eq!(upstream.counted_as, "catalogue-name");
     assert_eq!(upstream.made_by.quantization.as_deref(), Some("Q4_K_M"));
+}
+
+/// A catalogue entry that names no quantisation gives none, not a guess.
+#[tokio::test]
+async fn a_model_without_a_quantisation_has_none() {
+    let (_dir, state) = state().await;
+    let id = model(&state, |_| {}).await;
+
+    let upstream = endpoint(&state, &turn(), served(id), door()).await.unwrap();
+
+    assert_eq!(upstream.made_by.quantization, None);
 }
 
 /// Once its model is loaded the turn reads the context it was launched with,

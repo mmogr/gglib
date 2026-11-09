@@ -10,7 +10,7 @@ use gglib_core::domain::runs::RunStatus;
 use gglib_core::ports::RunsPort as _;
 use serde_json::json;
 
-use super::launch::launch;
+use super::run_fixture::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, drain, finished_reply, logged, meta, prepared, reply, saved, saving,
     settled, start, state,
@@ -91,59 +91,14 @@ async fn shutdown_drops_the_loop_and_the_reply_is_saved_before_drained() {
     assert_eq!(meta(&rows[1], INCOMPLETE_KEY), json!(true));
 }
 
-/// A create dropped as soon as it started (the client gave up) still
-/// finishes starting its run in its own task, so the retry finds that run
-/// and the user's message is saved once.
-#[tokio::test]
-async fn a_create_dropped_part_way_and_retried_saves_the_users_message_once() {
-    use std::task::{Context, Waker};
-
-    let (_dir, state) = state().await;
-    let id = conversation(&state).await;
-    let (first, _) = prepared(finished_reply(), End::Finish);
-    let mut dropped = Box::pin(launch(
-        &state,
-        "a1",
-        LOCAL,
-        saving(id),
-        first,
-        super::compose::take_permit(&state).unwrap(),
-    ));
-    assert!(
-        dropped
-            .as_mut()
-            .poll(&mut Context::from_waker(Waker::noop()))
-            .is_pending()
-    );
-    drop(dropped);
-
-    let (again, _) = prepared(Vec::new(), End::Hang);
-    let spare = Arc::new(tokio::sync::Semaphore::new(1));
-    let retried = launch(
-        &state,
-        "a1",
-        LOCAL,
-        saving(id),
-        again,
-        spare.try_acquire_owned().unwrap(),
-    )
-    .await
-    .unwrap();
-
-    assert!(!retried.created, "the retry found the run");
-    let (_, end) = drain(state.runs.events(&LOCAL, "a1", 0).unwrap()).await;
-    assert_eq!(end.map(|e| e.status), Some(RunStatus::Completed));
-    let rows = saved(&state, id).await;
-    let users = rows.iter().filter(|r| r.role == MessageRole::User).count();
-    assert_eq!(users, 1);
-}
-
 #[tokio::test]
 async fn a_repeated_create_saves_the_users_message_once() {
     let (_dir, state) = state().await;
     let id = conversation(&state).await;
-    let (first, _) = prepared(Vec::new(), End::Hang);
+    let (first, _) = prepared(reply()[..1].to_vec(), End::Hang);
     start(&state, "a1", Some(id), first).await;
+    // Its rows are written before its first event is logged.
+    logged(&state, "a1", 1).await;
 
     let (again, dropped) = prepared(Vec::new(), End::Hang);
     let spare = Arc::new(tokio::sync::Semaphore::new(1));
@@ -155,7 +110,6 @@ async fn a_repeated_create_saves_the_users_message_once() {
         again,
         spare.try_acquire_owned().unwrap(),
     )
-    .await
     .unwrap();
 
     assert!(!created.created);

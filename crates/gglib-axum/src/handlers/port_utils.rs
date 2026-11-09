@@ -1,8 +1,7 @@
 //! Shared port-validation utilities for Axum handlers.
 //!
-//! Provides [`validate_port`] — an SSRF guard used by both the chat title
-//! handler and the agent chat handler before forwarding requests to a
-//! llama-server.
+//! Provides [`validate_port`] — an SSRF guard the chat title handler uses
+//! before forwarding a request to a llama-server.
 
 use gglib_app_services::types::ServerInfo;
 

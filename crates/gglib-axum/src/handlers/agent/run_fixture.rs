@@ -8,14 +8,17 @@ use std::time::Duration;
 use async_trait::async_trait;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolResult};
 use gglib_core::domain::chat::{Message, NewConversation};
-use gglib_core::domain::runs::RunInfo;
+use gglib_core::domain::runs::{RunInfo, RunKind};
 use gglib_core::domain::{Machine, ModelRef};
-use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, RunScope, RunsPort as _};
+use gglib_core::ports::{
+    AgentError, AgentLoopPort, AgentRunOutput, Created, RunScope, RunsPort as _,
+};
 use serde_json::{Value, json};
-use tokio::sync::mpsc;
+use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
 use super::compose::Prepared;
-use super::launch::launch;
+use super::launch::{Transcript, launch_turn, ready};
+use crate::error::HttpError;
 use crate::state::AppState;
 
 pub(super) const LOCAL: RunScope = RunScope::Local;
@@ -245,13 +248,29 @@ pub(super) async fn conversation(state: &AppState) -> i64 {
 }
 
 /// A transcript saved to `conversation`, its message after the rest.
-pub(super) fn saving(conversation: i64) -> super::launch::Transcript {
-    super::launch::Transcript {
+pub(super) fn saving(conversation: i64) -> Transcript {
+    Transcript {
         conversation_id: Some(conversation),
         answer_saved: false,
         remember: None,
         remember_folder: None,
     }
+}
+
+/// Start run `id` in `scope` on the scripted loop `p`, as a turn starts one
+/// once its loop is ready (`launch::launch_turn`): the run reserved on the
+/// model `p` was made by and answered at once, then its rows written and
+/// its loop run as the run's own work.
+pub(super) fn launch(
+    state: &AppState,
+    id: &str,
+    scope: RunScope,
+    transcript: Transcript,
+    p: Prepared,
+    permit: OwnedSemaphorePermit,
+) -> Result<Created, HttpError> {
+    let run = (RunKind::Agent, p.made_by.model.clone());
+    launch_turn(state, id, scope, run, transcript, ready(p), permit)
 }
 
 pub(super) async fn start(
@@ -264,7 +283,7 @@ pub(super) async fn start(
         state,
         id,
         LOCAL,
-        super::launch::Transcript {
+        Transcript {
             conversation_id: conversation,
             answer_saved: false,
             remember: None,
@@ -273,7 +292,6 @@ pub(super) async fn start(
         p,
         super::compose::take_permit(state).expect("a free slot"),
     )
-    .await
     .expect("started");
     assert!(created.created);
     created.info

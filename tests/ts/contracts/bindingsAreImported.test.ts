@@ -31,8 +31,6 @@ const GENERATED = join(REPO_ROOT, 'src/types/generated');
 
 /** Bindings nothing imports. To take one off: import it, or drop its `TS` derive in Rust. */
 const NOT_IMPORTED = [
-  'AgentChatRequest',
-  'AgentRequestConfig',
   'AssistantContent',
   'DisableFastDownloadsResponse',
   'ErrorBody',
