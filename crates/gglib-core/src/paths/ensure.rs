@@ -78,14 +78,15 @@ fn verify_writable(path: &Path) -> Result<(), PathError> {
 
     match result {
         Ok(mut file) => {
-            file.write_all(b"test")
-                .map_err(|e| PathError::NotWritable {
-                    path: path.to_path_buf(),
-                    reason: e.to_string(),
-                })?;
+            let written = file.write_all(b"test");
             drop(file);
+            // Removed whether the write landed or not: a status read probes
+            // this folder each time, and must not leave the file behind.
             let _ = fs::remove_file(&test_file);
-            Ok(())
+            written.map_err(|e| PathError::NotWritable {
+                path: path.to_path_buf(),
+                reason: e.to_string(),
+            })
         }
         Err(err) => Err(PathError::NotWritable {
             path: path.to_path_buf(),

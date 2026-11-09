@@ -132,7 +132,7 @@ crates/gglib-core/src/domain/recommendation.rs 410
 crates/gglib-core/src/domain/residency.rs 524
 crates/gglib-core/src/domain/runs/wire_tests.rs 307
 crates/gglib-core/src/domain/runtime_capabilities.rs 532
-crates/gglib-core/src/domain/state_words.rs 426
+crates/gglib-core/src/domain/state_words.rs 436
 crates/gglib-core/src/download/auto_pick.rs 404
 crates/gglib-core/src/download/auto_pick_tests.rs 730
 crates/gglib-core/src/download/completion.rs 432

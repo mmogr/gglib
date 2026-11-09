@@ -413,6 +413,16 @@ impl ModelsDirState {
             Self::NotWritable => "Not writable",
         }
     }
+
+    /// The word beside the folder's path where a person must know it:
+    /// none for a folder that is there and writable.
+    #[must_use]
+    pub const fn note(self) -> Option<&'static str> {
+        match self {
+            Self::Writable => None,
+            other => Some(other.word()),
+        }
+    }
 }
 
 impl fmt::Display for ModelsDirState {

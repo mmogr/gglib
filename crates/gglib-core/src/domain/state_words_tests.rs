@@ -85,6 +85,10 @@ fn the_accelerator_is_on_when_provisioned_and_the_folder_says_whether_it_can_be_
     assert_eq!(ModelsDirState::Writable.word(), "Writable");
     assert_eq!(ModelsDirState::Absent.word(), "Will be created");
     assert_eq!(ModelsDirState::NotWritable.to_string(), "Not writable");
+    // Beside the folder's path in `gglib up`: said unless all is well.
+    assert_eq!(ModelsDirState::Writable.note(), None);
+    assert_eq!(ModelsDirState::Absent.note(), Some("Will be created"));
+    assert_eq!(ModelsDirState::NotWritable.note(), Some("Not writable"));
     assert_eq!(
         serde_json::to_string(&ModelsDirState::NotWritable).unwrap(),
         "\"not_writable\""
