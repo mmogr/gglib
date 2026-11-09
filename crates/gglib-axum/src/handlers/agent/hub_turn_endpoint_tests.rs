@@ -27,7 +27,7 @@ use crate::state::AppState;
 const KEY: &str = "sk-this-machines-endpoint";
 
 /// A fake llama-server answering every request with one short reply.
-async fn llama() -> (Arc<Fake>, u16) {
+pub(super) async fn llama() -> (Arc<Fake>, u16) {
     let (fake, at) = far(200, REPLY).await;
     *fake.content_type.lock().unwrap() = "text/event-stream";
     let port = at
@@ -49,7 +49,7 @@ fn completions(fake: &Fake) -> usize {
 }
 
 /// Every frame run `id` logged in `scope`, once it has ended.
-async fn frames(state: &AppState, scope: &RunScope, id: &str) -> Vec<Value> {
+pub(super) async fn frames(state: &AppState, scope: &RunScope, id: &str) -> Vec<Value> {
     settled(state).await;
     let mut events = state.runs.events(scope, id, 0).unwrap();
     let mut frames = Vec::new();
@@ -68,7 +68,7 @@ async fn frames(state: &AppState, scope: &RunScope, id: &str) -> Vec<Value> {
     frames
 }
 
-fn status(state: &AppState, scope: &RunScope, id: &str) -> RunStatus {
+pub(super) fn status(state: &AppState, scope: &RunScope, id: &str) -> RunStatus {
     state
         .runs
         .existing(scope, id)

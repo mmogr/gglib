@@ -50,10 +50,7 @@ async fn an_id_is_sent_as_the_id() {
     let (turn, asked) = far_turn("3", found(3, "qwen3", None)).await;
 
     assert_eq!(asked, ["3"], "one lookup, of what was typed");
-    assert_eq!(
-        Target::Remote.wire_model_name(None, &turn.identifier),
-        Some("3".to_owned())
-    );
+    assert_eq!(turn.identifier, "3");
     assert_eq!(
         turn.model_ref,
         Some(ModelRef {
@@ -63,7 +60,7 @@ async fn an_id_is_sent_as_the_id() {
             id: 3,
         })
     );
-    assert_eq!(turn.shown(), "qwen3 (3) on desk");
+    assert_eq!(turn.machine.as_deref(), Some("desk"));
 }
 
 /// `gglib chat qwen3:coding --remote`: the name and its profile are resolved
@@ -74,13 +71,9 @@ async fn a_name_with_a_profile_is_sent_as_its_id_with_the_profile() {
     let (turn, asked) = far_turn("qwen3:coding", found(7, "qwen3", Some("coding"))).await;
 
     assert_eq!(asked, ["qwen3:coding"]);
-    assert_eq!(
-        Target::Remote.wire_model_name(None, &turn.identifier),
-        Some("7:coding".to_owned())
-    );
+    assert_eq!(turn.identifier, "7:coding");
     assert_eq!(turn.far_profile.as_deref(), Some("coding"));
     assert_eq!(turn.name, "qwen3");
-    assert_eq!(turn.shown(), "qwen3 (7:coding) on desk");
 }
 
 /// A model the far machine does not have is refused here, before a turn
@@ -103,42 +96,9 @@ async fn a_model_the_far_machine_lacks_is_refused_before_the_turn() {
 fn a_turn_here_names_its_catalogue_entry_by_id() {
     let unknown = TurnModel::here("external".to_owned(), None);
     assert_eq!(unknown.model_ref, None);
-    assert_eq!(unknown.shown(), "external");
+    assert_eq!(unknown.name, "external");
     assert_eq!(far_wire(3, None), "3");
     assert_eq!(far_wire(3, Some("coding")), "3:coding");
-}
-
-/// A saved turn's replies name its model as the machine that serves it has
-/// it: the catalogue's name and quantisation here, the far machine's there,
-/// and what was typed for a server this catalogue does not hold. Never a
-/// device, nor a context, which only the daemon knows.
-#[tokio::test]
-async fn a_turns_replies_are_named_for_its_model_and_its_quantisation() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = crate::bootstrap::test_context(dir.path()).await;
-    let path = dir.path().join("qwen3.gguf");
-    let mut entry =
-        gglib_core::domain::NewModel::new("qwen3".to_owned(), path, 8.0, chrono::Utc::now());
-    entry.variant_label = Some("Q4_K_M".to_owned());
-    let id = ctx.app.models().add(entry).await.expect("registered").id;
-    let here = Target::Local.resolve_turn(&ctx, id.to_string()).await;
-    let mut there = found(3, "far-qwen", None);
-    there.detail.quantization = Some("Q8_0".to_owned());
-    let (there, _) = far_turn("3", there).await;
-    let typed = TurnModel::here("external".to_owned(), None);
-
-    let named = |turn: &TurnModel| {
-        let made_by = turn.made_by();
-        assert_eq!((made_by.device, made_by.context_size), (None, None));
-        (made_by.model, made_by.quantization)
-    };
-    let quantised = |name: &str, q: &str| (name.to_owned(), Some(q.to_owned()));
-    assert_eq!(
-        named(&here.expect("resolved")),
-        quantised("qwen3", "Q4_K_M")
-    );
-    assert_eq!(named(&there), quantised("far-qwen", "Q8_0"));
-    assert_eq!(named(&typed), ("external".to_owned(), None));
 }
 
 // ── Remembering the model ────────────────────────────────────────────────

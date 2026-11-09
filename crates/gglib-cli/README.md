@@ -89,7 +89,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `model repair <id\|name>` | Re-download corrupt shards for a model |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--ctx-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
-| `chat <id\|name>` | Chat with a model interactively |
+| `chat <id\|name>` | Chat with a model interactively: the daemon runs each turn, through the endpoint, as it runs the chat page's, and the flags named are saved with the chat |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
 | `chat <id\|name>`, files | Reads files in the directory it was launched in, read-only, never home or `/`, and says which on one `Files:` stderr line; under `--tools`, name `read_file` to keep the file tools |
@@ -285,9 +285,10 @@ and if it says nothing the answer is "The model said nothing after the
 drawing tool ran." For that closing reply the model is told, in an
 instruction that is not saved to the chat and not sent with later messages,
 to say in a sentence or two what it asked the tool to draw, or what went
-wrong when the tool drew nothing. `/draw` says why when nothing can draw (no daemon, no
-image runtime or model, or a `--remote` session, whose model is on the other
-machine).
+wrong when the tool drew nothing. The daemon's run draws: the turn says
+`draw`, and the image model chosen as `image_model`. `/draw` says why when
+nothing can draw (no image runtime or model, or a `--remote` session, whose
+model is on the other machine).
 
 ```bash
 You: /draw
@@ -298,7 +299,8 @@ You: a red fox in the snow at dawn
 With more than one image model on the daemon, `/draw list` prints them,
 `/draw <model>` chooses one for the session by name or id and arms the next
 message, and `/draw default` goes back to the daemon's default. The choice
-lasts until the session ends and is not saved with the chat; a chosen model
+lasts until the session ends, said on each turn that draws, and is not saved
+with the chat; a chosen model
 that can no longer draw is refused with the reason, never swapped for the
 default.
 
@@ -321,14 +323,12 @@ the next message draws, with qwen-image-q8, this session's image model
 - **A file that cannot be attached** — missing, not a PNG or a JPEG by its
   first bytes, or over the cap — is an error naming the path, before any model
   is looked up or loaded. `gglib q` still requires a question.
-- **A model that cannot see** is refused by name before anything is loaded:
-  a model of this machine needs a projector linked
+- **A model that cannot see** is refused by the daemon, by name, when the
+  turn that carries the image is sent and before anything is loaded: a model
+  of this machine needs a projector linked
   (`gglib model update <model> --projector <path>`). The whole chat counts, so
-  resuming a chat that holds an image on a model without one is refused too.
-  With `--port`, the server on that port is asked through its `/props`
-  (`modalities.vision`); one that says `false` is refused the same way, and
-  one that does not answer, or does not say, is sent the image. With
-  `--remote`, the paired machine's proxy answers.
+  a turn on a chat that holds an image is refused on a model without one too.
+  With `--remote`, the paired machine's proxy answers.
 - **On resume**, `gglib chat --continue <N>` shows an image of the last turn as
   a marker, `[image 2560x1440 3f9a2c1e]`, after its text: its size and the
   start of its id. The images the last turn's tools made are on a line of their

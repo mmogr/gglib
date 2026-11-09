@@ -54,6 +54,7 @@ use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
+use super::chat_sampling::ChatSampling;
 use super::chat_turn::{ChatQuery, Drawing};
 use super::compose::{prepare_over, refuse_unavailable_drawing, take_permit};
 use super::device_tools::{self, Asked};
@@ -429,6 +430,7 @@ pub(super) async fn plan(
         reasoning_budget_tokens: thinking.budget,
         draw: turn.draw,
         image_model: turn.image_model,
+        saved: ChatSampling::of(&settings),
     };
     // A turn sent with Draw pressed that the hub cannot draw for, or with
     // the image model it chose, is refused
@@ -490,6 +492,9 @@ mod hub_turn_local_tests;
 #[cfg(test)]
 #[path = "hub_turn_plan_tests.rs"]
 mod hub_turn_plan_tests;
+#[cfg(test)]
+#[path = "hub_turn_sampling_tests.rs"]
+mod hub_turn_sampling_tests;
 #[cfg(test)]
 #[path = "hub_turn_tests.rs"]
 mod hub_turn_tests;

@@ -199,6 +199,7 @@ pub(super) async fn read(
         reasoning_budget_tokens: thinking_off(body).then_some(0),
         draw,
         image_model,
+        saved: super::chat_sampling::ChatSampling::default(),
     };
     refuse_unavailable_drawing(state, &chat).await?;
 

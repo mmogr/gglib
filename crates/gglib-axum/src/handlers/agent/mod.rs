@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod chat_sampling;
 mod chat_turn;
 mod compose;
 mod device_tools;

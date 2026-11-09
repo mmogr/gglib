@@ -1,30 +1,27 @@
-//! A resumed chat samples with the profile it was started with (#886), on
-//! the model it stored. Which machine it resumes on is
-//! `resume_machine_tests`'.
+//! What a chat saves of its command line, which the daemon reads on each of
+//! its turns: a new chat saves the flags it names, and a resume keeps what
+//! the chat saved with what it names in its place. Which machine it resumes
+//! on is `resume_machine_tests`'.
 //!
-//! Most tests go through the JSON a conversation row stores, because that is
-//! where the profile was lost: the sampling values beside it survived the
-//! round trip and the profile had no field to survive in. The last ones run
-//! `prepare` over a database, the code that saves the row and reads it back.
+//! Each test runs `prepare` over a database of its own and reads the row it
+//! saved.
 
 use gglib_core::Settings;
 use gglib_core::domain::chat::NewConversation;
-use gglib_core::domain::{InferenceConfig, ModelRef};
+use gglib_core::domain::{InferenceConfig, Machine, ModelRef};
 
 use super::super::prepare;
 use super::*;
 use crate::bootstrap::{CliContext, test_context};
+use crate::target::Target;
 
-/// A `ChatArgs` with every knob at rest.
+/// A `ChatArgs` with every knob at rest, on `qwen`.
 pub(crate) fn chat_args() -> ChatArgs {
     ChatArgs {
         identifier: "qwen".to_owned(),
-        context: crate::shared_args::ContextArgs::default(),
         system_prompt: None,
         sampling: crate::shared_args::SamplingArgs::default(),
-        retry_policy: gglib_core::retry::RetryPolicy::default(),
         no_tools: false,
-        port: None,
         target: Target::Local,
         max_iterations: None,
         tools: Vec::new(),
@@ -32,18 +29,10 @@ pub(crate) fn chat_args() -> ChatArgs {
         max_parallel: None,
         images: Vec::new(),
         verbose: false,
-        model: None,
         profile: None,
         continue_id: None,
         thinking: None,
-        observation_tools: Vec::new(),
-        max_observation_steps: None,
     }
-}
-
-/// A turn on `qwen`, which this catalogue does not hold.
-fn here() -> TurnModel {
-    TurnModel::here("qwen".to_owned(), None)
 }
 
 fn profile(name: &str) -> InferenceProfile {
@@ -55,156 +44,145 @@ fn profile(name: &str) -> InferenceProfile {
     }
 }
 
-fn profiles() -> Vec<InferenceProfile> {
-    vec![profile("coding"), profile("chat")]
-}
-
-/// What a resume reads back: the settings as the conversation row stores them.
-fn stored(settings: &ConversationSettings) -> ConversationSettings {
-    let json = serde_json::to_string(settings).unwrap();
-    serde_json::from_str(&json).unwrap()
-}
-
-#[test]
-fn a_chat_started_with_a_profile_resumes_with_it() {
-    let saved = stored(&session_settings(
-        &chat_args(),
-        Some(&profile("coding")),
-        &here(),
-    ));
-
-    let resumed = restore_profile(None, Target::Local, &profiles(), saved.profile.as_deref());
-
-    assert_eq!(resumed.map(|p| p.name), Some("coding".to_owned()));
-}
-
-#[test]
-fn a_profile_named_on_resume_beats_the_saved_one() {
-    let saved = stored(&session_settings(
-        &chat_args(),
-        Some(&profile("coding")),
-        &here(),
-    ));
-
-    let resumed = restore_profile(
-        Some(profile("chat")),
-        Target::Local,
-        &profiles(),
-        saved.profile.as_deref(),
-    );
-
-    assert_eq!(resumed.map(|p| p.name), Some("chat".to_owned()));
-}
-
-/// A row written before the field existed: its sampling still restores, and
-/// it resumes with no profile rather than failing to parse.
-#[test]
-fn an_old_row_without_the_field_resumes_unprofiled() {
-    let saved: ConversationSettings =
-        serde_json::from_str(r#"{"model_name":"qwen","top_k":40}"#).unwrap();
-
-    let merged = apply_saved_settings(&chat_args(), None, Some(&saved));
-    let resumed = restore_profile(None, Target::Local, &profiles(), saved.profile.as_deref());
-
-    assert_eq!(merged.sampling.top_k, Some(40));
-    assert!(resumed.is_none());
-}
-
-/// A deleted profile must not make the conversation unresumable, the same
-/// call `resume_profile` makes for a deleted suffix.
-#[test]
-fn a_saved_profile_since_deleted_resumes_unprofiled() {
-    let saved = stored(&session_settings(
-        &chat_args(),
-        Some(&profile("gone")),
-        &here(),
-    ));
-
-    let resumed = restore_profile(None, Target::Local, &profiles(), saved.profile.as_deref());
-
-    assert!(resumed.is_none());
-}
-
-/// A profile configured here does not describe the paired machine's sampling.
-#[test]
-fn a_remote_resume_restores_no_profile_from_this_machine() {
-    let resumed = restore_profile(None, Target::Remote, &profiles(), Some("coding"));
-
-    assert!(resumed.is_none());
-}
-
-#[test]
-fn a_chat_started_without_a_profile_saves_none() {
-    let saved = stored(&session_settings(&chat_args(), None, &here()));
-
-    assert_eq!(saved.profile, None);
-    assert!(!serde_json::to_string(&saved).unwrap().contains("profile"));
-}
-
 /// The CLI's context over `dir`'s database, with `coding` and `chat`
-/// configured.
-async fn context(dir: &tempfile::TempDir) -> CliContext {
+/// configured and `qwen` in the catalogue: the context, and qwen's id.
+async fn context(dir: &tempfile::TempDir) -> (CliContext, i64) {
     let ctx = test_context(dir.path()).await;
     ctx.settings_repo
         .modify(&|settings: &mut Settings| {
-            settings.inference_profiles = Some(profiles());
+            settings.inference_profiles = Some(vec![profile("coding"), profile("chat")]);
             Ok(())
         })
         .await
         .expect("profiles saved");
-    ctx
+    let path = dir.path().join("qwen.gguf");
+    let model = gglib_core::domain::NewModel::new("qwen".to_owned(), path, 8.0, chrono::Utc::now());
+    let qwen = ctx.app.models().add(model).await.expect("registered").id;
+    (ctx, qwen)
 }
 
-/// `gglib chat qwen [--profile …]`: the id of the conversation it saves.
-async fn start(ctx: &CliContext, profile: Option<&str>) -> i64 {
-    let args = ChatArgs {
-        profile: profile.map(str::to_owned),
-        ..chat_args()
-    };
-    let session = prepare(ctx, &args).await.expect("a new chat");
-    session.persistence.expect("the conversation is saved").id
+/// `args`, prepared: the id of the conversation it saves to.
+async fn prepared(ctx: &CliContext, args: &ChatArgs) -> i64 {
+    let (_, conversation) = prepare(ctx, args).await.expect("a session");
+    conversation.id
 }
 
-/// `gglib chat --continue <id> [--profile …]`: the profile it samples with.
-async fn resume(ctx: &CliContext, id: i64, profile: Option<&str>) -> Option<String> {
-    let args = ChatArgs {
+/// The settings chat `id` saved.
+async fn saved(ctx: &CliContext, id: i64) -> ConversationSettings {
+    let row = ctx.app.chat_history().get_conversation(id).await;
+    let row = row.expect("read").expect("there");
+    row.settings.expect("settings saved")
+}
+
+/// `gglib chat --continue <id>`, with nothing else named.
+fn resume(id: i64) -> ChatArgs {
+    ChatArgs {
         identifier: String::new(),
         continue_id: Some(id),
-        profile: profile.map(str::to_owned),
+        ..chat_args()
+    }
+}
+
+/// A new chat saves its model by id and every flag its command line named:
+/// sampling, tools, limits and the profile.
+#[tokio::test]
+async fn a_new_chat_saves_the_flags_it_names() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (ctx, qwen) = context(&dir).await;
+    let mut args = ChatArgs {
+        profile: Some("coding".to_owned()),
+        tools: vec!["read_file".to_owned()],
+        max_iterations: Some(7),
+        tool_timeout_ms: Some(9_000),
+        max_parallel: Some(2),
         ..chat_args()
     };
-    let session = prepare(ctx, &args).await.expect("the chat resumes");
-    session.params.profile.map(|p| p.name)
-}
+    args.sampling.temperature = Some(0.4);
+    args.sampling.top_k = Some(40);
 
-#[tokio::test]
-async fn a_chat_started_with_a_profile_continues_with_it() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir).await;
-    let id = start(&ctx, Some("coding")).await;
+    let settings = saved(&ctx, prepared(&ctx, &args).await).await;
 
-    assert_eq!(resume(&ctx, id, None).await.as_deref(), Some("coding"));
-}
-
-#[tokio::test]
-async fn a_profile_named_on_continue_beats_the_saved_one() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir).await;
-    let id = start(&ctx, Some("coding")).await;
-
+    let here = ModelRef {
+        machine: Machine::Local,
+        id: qwen,
+    };
+    assert_eq!(settings.model, Some(here));
+    assert_eq!(settings.model_name.as_deref(), Some("qwen"));
     assert_eq!(
-        resume(&ctx, id, Some("chat")).await.as_deref(),
-        Some("chat")
+        (settings.temperature, settings.top_k),
+        (Some(0.4), Some(40))
     );
+    assert_eq!(settings.profile.as_deref(), Some("coding"));
+    assert_eq!(settings.tools, ["read_file"]);
+    assert_eq!(
+        (
+            settings.max_iterations,
+            settings.tool_timeout_ms,
+            settings.max_parallel
+        ),
+        (Some(7), Some(9_000), Some(2))
+    );
+    assert_eq!(settings.no_tools, None);
 }
 
-/// The row an older gglib saved: no profile field, a sampling value beside
-/// it. A `None` profile is skipped when serialized, so this is that JSON.
+/// A resume keeps what the chat saved and saves what its command line names
+/// in its place: a sampling flag, `--no-tools` and a profile.
 #[tokio::test]
-async fn an_old_row_without_the_field_continues_unprofiled() {
+async fn a_resume_keeps_what_the_chat_saved_with_what_it_names_in_its_place() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir).await;
-    let saved: ConversationSettings =
+    let (ctx, _) = context(&dir).await;
+    let mut started = ChatArgs {
+        profile: Some("coding".to_owned()),
+        max_iterations: Some(7),
+        ..chat_args()
+    };
+    started.sampling.temperature = Some(0.4);
+    started.sampling.top_k = Some(40);
+    let id = prepared(&ctx, &started).await;
+
+    let mut again = ChatArgs {
+        profile: Some("chat".to_owned()),
+        no_tools: true,
+        ..resume(id)
+    };
+    again.sampling.temperature = Some(0.9);
+    prepared(&ctx, &again).await;
+
+    let settings = saved(&ctx, id).await;
+    assert_eq!(settings.temperature, Some(0.9), "the flag named");
+    assert_eq!(settings.top_k, Some(40), "kept");
+    assert_eq!(settings.max_iterations, Some(7), "kept");
+    assert_eq!(settings.profile.as_deref(), Some("chat"));
+    assert_eq!(settings.no_tools, Some(true));
+}
+
+/// A resume that names nothing leaves the chat's row as it was.
+#[tokio::test]
+async fn a_resume_that_names_nothing_writes_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (ctx, _) = context(&dir).await;
+    let mut started = chat_args();
+    started.sampling.temperature = Some(0.4);
+    let id = prepared(&ctx, &started).await;
+    let before = ctx.app.chat_history().get_conversation(id).await.unwrap();
+
+    prepared(&ctx, &resume(id)).await;
+
+    let after = ctx.app.chat_history().get_conversation(id).await.unwrap();
+    let stamp = |row: Option<gglib_core::domain::chat::Conversation>| {
+        row.map(|row| (row.settings, row.updated_at))
+    };
+    assert_eq!(stamp(after), stamp(before));
+}
+
+/// The row an older gglib saved names its model only by name, with a
+/// sampling value beside it: it resumes on that model, now saved by id,
+/// and keeps the value.
+#[tokio::test]
+async fn an_old_row_that_names_its_model_resumes_on_it_by_id() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (ctx, qwen) = context(&dir).await;
+    let older: ConversationSettings =
         serde_json::from_str(r#"{"model_name":"qwen","top_k":40}"#).unwrap();
     let id = ctx
         .app
@@ -213,58 +191,65 @@ async fn an_old_row_without_the_field_continues_unprofiled() {
             title: "older".to_owned(),
             model_id: None,
             system_prompt: None,
-            settings: Some(saved),
+            settings: Some(older),
         })
         .await
         .expect("the row is saved");
 
-    let args = ChatArgs {
-        identifier: String::new(),
-        continue_id: Some(id),
-        ..chat_args()
-    };
-    let session = prepare(&ctx, &args).await.expect("the chat resumes");
+    let (args, _) = prepare(&ctx, &resume(id)).await.expect("the chat resumes");
 
-    assert_eq!(session.args.sampling.top_k, Some(40), "the row was read");
-    assert!(session.params.profile.is_none());
+    assert_eq!(args.identifier, "qwen");
+    let settings = saved(&ctx, id).await;
+    assert_eq!(settings.top_k, Some(40));
+    assert_eq!(settings.model.map(|m| m.id), Some(qwen));
 }
 
-/// A chat on a model this catalogue holds stores it by id, and resumes on
-/// that id rather than the name it was shown by.
+/// A model this catalogue does not hold is refused before any row is
+/// saved: the daemon would answer the chat with another model.
 #[tokio::test]
-async fn a_chat_on_a_catalogued_model_resumes_on_its_id() {
+async fn a_model_this_catalogue_does_not_hold_is_refused_before_a_chat_is_made() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir).await;
-    let id = ctx
-        .app
-        .models()
-        .add(gglib_core::domain::NewModel::new(
-            "qwen".to_owned(),
-            dir.path().join("qwen.gguf"),
-            8.0,
-            chrono::Utc::now(),
-        ))
-        .await
-        .expect("registered")
-        .id;
-    let conversation = start(&ctx, None).await;
-
-    let saved = ctx.app.chat_history().get_conversation(conversation).await;
-    let saved = saved.unwrap().unwrap().settings.unwrap();
-    assert_eq!(
-        saved.model,
-        Some(ModelRef {
-            machine: gglib_core::domain::Machine::Local,
-            id
-        })
-    );
-    assert_eq!(saved.model_name.as_deref(), Some("qwen"));
+    let (ctx, _) = context(&dir).await;
     let args = ChatArgs {
-        identifier: String::new(),
-        continue_id: Some(conversation),
+        identifier: "nope".to_owned(),
         ..chat_args()
     };
-    let session = prepare(&ctx, &args).await.expect("the chat resumes");
-    assert_eq!(session.params.model_identifier, id.to_string());
-    assert_eq!(session.params.target, Target::Local);
+
+    let refused = prepare(&ctx, &args).await.err().expect("refused");
+
+    assert_eq!(
+        refused.to_string(),
+        "No model found matching: 'nope'\nUse 'gglib model list' to see available models."
+    );
+    let chats = ctx.app.chat_history().list_conversations().await.unwrap();
+    assert!(chats.is_empty(), "{chats:?}");
+}
+
+/// `--system-prompt` on a new chat is its prompt, and on a resume replaces
+/// the one it saved, which every later turn is sent with. Without it a
+/// resume keeps the chat's.
+#[tokio::test]
+async fn a_system_prompt_named_is_the_chats_from_then_on() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (ctx, _) = context(&dir).await;
+    let prompt = async |id| {
+        let row = ctx.app.chat_history().get_conversation(id).await.unwrap();
+        row.expect("there").system_prompt
+    };
+    let started = ChatArgs {
+        system_prompt: Some("Be brief.".to_owned()),
+        ..chat_args()
+    };
+    let id = prepared(&ctx, &started).await;
+    assert_eq!(prompt(id).await.as_deref(), Some("Be brief."));
+
+    prepared(&ctx, &resume(id)).await;
+    assert_eq!(prompt(id).await.as_deref(), Some("Be brief."));
+
+    let renamed = ChatArgs {
+        system_prompt: Some("Be long.".to_owned()),
+        ..resume(id)
+    };
+    prepared(&ctx, &renamed).await;
+    assert_eq!(prompt(id).await.as_deref(), Some("Be long."));
 }

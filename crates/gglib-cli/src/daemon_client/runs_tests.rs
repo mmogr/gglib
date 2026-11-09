@@ -94,3 +94,26 @@ fn an_event_with_data_and_no_number_is_refused() {
     let error = drain_items(&mut frames, b"data: {}\n\n").unwrap_err();
     assert_eq!(error.to_string(), "an event without its number");
 }
+
+/// A drawing run's stream, as `contracts/runs/preview_stream.txt` pins it:
+/// a tool's preview between its numbered frames carries no number, and is
+/// passed over, so the frames and the run's end read as ever.
+#[test]
+fn a_tools_preview_between_the_frames_is_passed_over() {
+    let wire = include_str!("../../../../contracts/runs/preview_stream.txt");
+    let mut frames = DataFrames::unbounded();
+
+    let items = drain_items(&mut frames, wire.as_bytes()).expect("the stream reads");
+
+    let numbers: Vec<u32> = items
+        .iter()
+        .filter_map(|item| match item {
+            RunItem::Frame { seq, .. } => Some(*seq),
+            RunItem::End(_) => None,
+        })
+        .collect();
+    assert_eq!(numbers, [1, 2]);
+    assert!(matches!(items.last(), Some(RunItem::End(info)) if info.id == "r1"));
+    let shown = format!("{items:?}");
+    assert!(!shown.contains("iVBORw0KGgo"), "{shown}");
+}

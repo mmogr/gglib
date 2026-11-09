@@ -186,13 +186,31 @@ async fn a_far_ref_to_this_machine_is_refused() {
     assert!(matches!(err, HttpError::BadRequest(_)), "got {err:?}");
 }
 
+/// A far chat's saved profile goes on the id the turn sends, which that
+/// machine routes to a profile of its own; the lookup asks for the id alone.
+#[tokio::test]
+async fn a_far_chats_profile_rides_on_the_id_it_sends() {
+    let (fake, far) = fake_far(200, LOOKUP).await;
+    let saved = ChatSampling {
+        profile: Some("coding".to_owned()),
+        ..ChatSampling::default()
+    };
+
+    let upstream = remote(&far, &far_ref(3), &saved).await.expect("looked up");
+
+    assert_eq!(upstream.model.as_deref(), Some("3:coding"));
+    assert_eq!(only(&fake).uri, "/v1/models/3/detail");
+}
+
 /// The far model is looked up by its id, sent by its id, and counted and
 /// made under the name and quantisation that machine has for it.
 #[tokio::test]
 async fn a_far_run_sends_the_id_and_is_made_by_the_far_name() {
     let (fake, far) = fake_far(200, LOOKUP).await;
 
-    let upstream = remote(&far, &far_ref(3)).await.expect("looked up");
+    let upstream = remote(&far, &far_ref(3), &ChatSampling::default())
+        .await
+        .expect("looked up");
 
     assert_eq!(
         upstream.model.as_deref(),
@@ -230,7 +248,9 @@ async fn a_far_turn_with_tools_is_sent_nothing_this_machine_stores() {
         agentic_sampling(&state, stored).await;
         global(&state, temperature(0.42)).await;
         let (fake, far) = fake_far(200, LOOKUP).await;
-        let upstream = remote(&far, &far_ref(3)).await.expect("looked up");
+        let upstream = remote(&far, &far_ref(3), &ChatSampling::default())
+            .await
+            .expect("looked up");
         *fake.body.lock().unwrap() = REPLY.to_owned();
         *fake.content_type.lock().unwrap() = "text/event-stream";
 
@@ -267,7 +287,7 @@ async fn a_far_id_that_machine_does_not_have_is_its_404() {
     let refusal = r#"{"error":{"message":"No model with that id or name is in the catalog: 9","code":"model_not_found"}}"#;
     let (_, far) = fake_far(404, refusal).await;
 
-    let Err(err) = remote(&far, &far_ref(9)).await else {
+    let Err(err) = remote(&far, &far_ref(9), &ChatSampling::default()).await else {
         panic!("a missing model was driven");
     };
 
@@ -283,7 +303,7 @@ async fn a_far_id_that_machine_does_not_have_is_its_404() {
 async fn a_far_key_refused_at_lookup_is_a_conflict() {
     let (_, far) = fake_far(401, r#"{"error":{"message":"Invalid API key"}}"#).await;
 
-    let Err(err) = remote(&far, &far_ref(3)).await else {
+    let Err(err) = remote(&far, &far_ref(3), &ChatSampling::default()).await else {
         panic!("a refused key was driven");
     };
 

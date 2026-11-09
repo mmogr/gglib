@@ -17,12 +17,14 @@ use gglib_app_services::FarProxy;
 use gglib_app_services::GuiError;
 use gglib_app_services::transcript::MadeBy;
 use gglib_app_services::types::ServerInfo;
-use gglib_core::domain::{Machine, ModelRef};
+use gglib_core::Settings;
+use gglib_core::domain::{InferenceProfile, Machine, ModelRef};
 use gglib_core::ports::ModelRuntimePort;
 use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use gglib_runtime::Door;
 
 use super::AgentChatRequest;
+use super::chat_sampling::ChatSampling;
 use super::hub_model::Loaded;
 use crate::handlers::remote::far_error;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
@@ -132,7 +134,7 @@ pub(super) async fn resolve(
         ));
     }
     let proxy = state.remote.far_for(&far.machine).await?;
-    remote(&proxy, far).await
+    remote(&proxy, far, &req.saved).await
 }
 
 /// A local request's upstream, once its port is known to serve `server`.
@@ -250,7 +252,9 @@ pub(super) async fn endpoint(
     super::image_gate::chats_named(state, &by_id).await?;
     super::image_gate::served(state, id, &req.messages).await?;
     let model_context = request_pipeline::resolve(state.catalog.as_ref(), Some(&by_id)).await;
-    let layers = endpoint_layers(state).await;
+    let settings = state.core.settings().get().await.unwrap_or_default();
+    let profile = req.saved.configured_profile(&settings);
+    let layers = endpoint_layers(state, &settings, profile).await;
     let row = state.core.models().get_by_id(id).await.ok().flatten();
     let name = row
         .as_ref()
@@ -264,7 +268,10 @@ pub(super) async fn endpoint(
         door: Some(door),
         model_context,
         layers,
-        model: Some(by_id),
+        // The chat's saved profile rides on the id, which the endpoint
+        // routes to that profile whether or not it trusts clients' sampling;
+        // one no longer configured is left off, and the turn runs without it.
+        model: Some(profile.map_or_else(|| by_id.clone(), |p| format!("{by_id}:{}", p.name))),
         counted_as: name.clone(),
         made_by: MadeBy {
             model: name,
@@ -277,19 +284,25 @@ pub(super) async fn endpoint(
     })
 }
 
-/// The stored layers the running endpoint folds a bare id's request with:
-/// the sampling it was started with (`gglib serve`'s flags), its default
-/// profile, this machine's global defaults and its agentic switch. Handed to
+/// The stored layers the running endpoint folds the turn's request with:
+/// the sampling it was started with (`gglib serve`'s flags), a profile, this
+/// machine's global defaults and its agentic switch. The profile is the
+/// chat's, `chat`, when the turn names one, as the endpoint routes
+/// `<id>:<profile>` to it, and otherwise the endpoint's default. Handed to
 /// the adapter for the one thing it folds through a door: whether the
 /// endpoint's ladder names a `max_tokens`, which a turn's limit would
 /// otherwise outrank. A settings read that fails leaves the global layer and
-/// the profile out, and the switch on.
-async fn endpoint_layers(state: &AppState) -> SamplingLayers {
-    let settings = state.core.settings().get().await.unwrap_or_default();
+/// the default profile out, and the switch on.
+async fn endpoint_layers(
+    state: &AppState,
+    settings: &Settings,
+    chat: Option<&InferenceProfile>,
+) -> SamplingLayers {
     let (cli_override, default_profile) = state.proxy.started_sampling().await.unwrap_or_default();
     // As the endpoint reads it: a default profile that is no longer
-    // configured is no layer.
-    let profile = default_profile.and_then(|name| {
+    // configured is no layer, and a profile the request names replaces it.
+    let profile = chat.map(|p| p.config.clone()).or_else(|| {
+        let name = default_profile?;
         let profiles = settings.inference_profiles.as_deref().unwrap_or_default();
         let found = profiles.iter().find(|p| p.name == name)?;
         Some(found.config.clone())
@@ -298,7 +311,7 @@ async fn endpoint_layers(state: &AppState) -> SamplingLayers {
         cli_override,
         profile,
         agentic_adjustments: settings.effective_agentic_sampling(),
-        global: settings.inference_defaults,
+        global: settings.inference_defaults.clone(),
         ..SamplingLayers::default()
     }
 }
@@ -320,14 +333,20 @@ pub(super) async fn through_endpoint(
 
 /// A far request's upstream: the far proxy's root through the tunnel, the
 /// far machine as the adapter carries it, and `model`'s id as the body's
-/// model. The id is looked up there first, so the run is counted under,
+/// model, with the profile the chat `saved` as its `{id}:{profile}` suffix,
+/// which that machine routes to a profile of its own. The id is looked up
+/// there first, so the run is counted under,
 /// and its turns made by, the name and quantisation that machine has for
 /// it, and a model it does not have is refused before any turn starts.
 ///
 /// # Errors
 ///
 /// The far machine's refusal of the lookup, with its status and message.
-pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream, HttpError> {
+pub(super) async fn remote(
+    far: &FarProxy,
+    model: &ModelRef,
+    saved: &ChatSampling,
+) -> Result<Upstream, HttpError> {
     let id = model.id.to_string();
     let detail = far.lookup(&id).await.map_err(far_error)?.detail;
     Ok(Upstream {
@@ -359,7 +378,7 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
             device: None,
             context_size: None,
         },
-        model: Some(id),
+        model: Some(saved.model(id)),
         local_model: None,
         far_model: Some(model.clone()),
     })

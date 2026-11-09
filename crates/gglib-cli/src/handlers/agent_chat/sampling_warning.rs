@@ -1,88 +1,88 @@
-//! Telling the user when a sampling flag did not survive the ladder.
+//! What a session says about the sampling flags its command line named.
 //!
-//! Separate from `config` because it is presentation: `config` composes an
-//! agent session, and a module that both wires ports and formats stderr is two
-//! things.
+//! A chat keeps five of them with its settings (`--temperature`, `--top-p`,
+//! `--top-k`, `--max-tokens`, `--repeat-penalty`), which the daemon reads
+//! on each of its turns and puts in the request as a client's sampling. The
+//! endpoint honours a client's sampling only while "Let clients set
+//! sampling" is on, `--max-tokens` always; with it off the session says so,
+//! once, before its first turn. Any other sampling flag is kept nowhere, and
+//! the session says that it did not take effect.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use gglib_core::Settings;
 
-use gglib_core::domain::{InferenceConfig, ParamSource};
-use gglib_core::request_pipeline::SamplingDecision;
-use gglib_runtime::SamplingObserver;
+use crate::shared_args::SamplingArgs;
+use crate::target::Target;
 
-/// Where a session's flags sit in the ladder the request pipeline folds: its
-/// `client` rung, beneath the `cli` rung of a server's own flags, which a
-/// chat leaves empty.
-const FLAGS_RUNG: usize = 1;
-
-/// Say so, once a session, when the ladder passed over a sampling flag the
-/// caller passed.
-///
-/// The session's first request says it, from the decision that request was
-/// sampled by: the ladder is folded where a request is shaped and nowhere
-/// before it, so that is the first moment anyone can know.
-///
-/// What it catches: any flag the fold passed over — see
-/// [`gglib_core::domain::discarded_from_rung`] — which for a chat's flags is
-/// a float JSON cannot carry (`--presence-penalty NaN`), never sent whatever
-/// rung wins. A level the model's template does not read is left out: that
-/// gate has its own note. Its first case, `--profile chat --presence-penalty
-/// 1.2`, no longer discards anything: the coupling rule passes over only
-/// rungs beneath the one that claims the temperature, so a flag above it
-/// stands (ADR 0022).
-///
-/// Never composed under `-Q`. `renderer` documents that quiet "suppresses all
-/// stderr output … ideal for scripting and piped output", and a warning that
-/// broke that contract would be a worse bug than the one it reports.
-pub(crate) fn discarded_flags(named: InferenceConfig) -> SamplingObserver {
-    telling(named, |warning| eprintln!("{warning}"))
-}
-
-/// [`discarded_flags`], with where the warning is said as an argument.
-fn telling(named: InferenceConfig, say: impl Fn(&str) + Send + Sync + 'static) -> SamplingObserver {
-    let said = AtomicBool::new(false);
-    Arc::new(move |decision| {
-        if said.swap(true, Ordering::Relaxed) {
-            return;
-        }
-        if let Some(warning) = warning(&named, decision) {
-            say(&warning);
-        }
-    })
-}
-
-/// The warning for the flags in `named` that `decision` passed over, or
-/// `None` when it passed over none.
-fn warning(named: &InferenceConfig, decision: &SamplingDecision) -> Option<String> {
-    let flags: Vec<String> = gglib_core::domain::discarded_from_rung(
-        named,
-        &decision.resolved,
-        &decision.sources,
-        FLAGS_RUNG,
-    )
-    .into_iter()
-    // A level the model's template does not read was dropped by that gate,
-    // which has its own note.
-    .filter(|flag| !dropped_by_template(decision, flag))
-    .map(|flag| format!("--{}", flag.replace('_', "-")))
-    .collect();
-    if flags.is_empty() {
-        return None;
+/// The lines a session prints on stderr about `sampling`, the flags its
+/// command line named, given this machine's `settings`. A session on the
+/// paired machine is not told what that machine's endpoint trusts.
+pub(crate) fn notices(sampling: &SamplingArgs, target: Target, settings: &Settings) -> Vec<String> {
+    let mut lines = Vec::new();
+    let trusted = settings.trust_client_sampling.unwrap_or(false);
+    let ignored = flags(&kept_but_untrusted(sampling));
+    if target == Target::Local && !trusted && !ignored.is_empty() {
+        lines.push(format!(
+            "  Note: this chat keeps {ignored}, but the endpoint uses its own sampling until \
+             \"Let clients set sampling\" is on: gglib config settings set \
+             --trust-client-sampling true"
+        ));
     }
-    Some(format!(
-        "  Warning: {} did not take effect.",
-        flags.join(", ")
-    ))
+    let unkept = flags(&not_kept(sampling));
+    if !unkept.is_empty() {
+        lines.push(format!(
+            "  Warning: {unkept} did not take effect: a chat keeps only --temperature, --top-p, \
+             --top-k, --max-tokens and --repeat-penalty."
+        ));
+    }
+    lines
 }
 
-/// Whether `field` was resolved and then deleted because the model's
-/// template never reads it (stage 5b of the pipeline).
-fn dropped_by_template(decision: &SamplingDecision, field: &str) -> bool {
-    decision
-        .sources
-        .iter()
-        .any(|(name, source)| name == field && source == ParamSource::SuppressedByTemplate)
+/// The named flags a chat keeps that the endpoint honours only from a
+/// client it trusts: every one it keeps but `--max-tokens`.
+fn kept_but_untrusted(s: &SamplingArgs) -> Vec<&'static str> {
+    [
+        ("--temperature", s.temperature.is_some()),
+        ("--top-p", s.top_p.is_some()),
+        ("--top-k", s.top_k.is_some()),
+        ("--repeat-penalty", s.repeat_penalty.is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(flag, named)| named.then_some(flag))
+    .collect()
+}
+
+/// The named flags no chat keeps.
+fn not_kept(s: &SamplingArgs) -> Vec<&'static str> {
+    [
+        ("--presence-penalty", s.presence_penalty.is_some()),
+        ("--min-p", s.min_p.is_some()),
+        ("--frequency-penalty", s.frequency_penalty.is_some()),
+        ("--dry-multiplier", s.dry_multiplier.is_some()),
+        ("--dry-base", s.dry_base.is_some()),
+        ("--dry-allowed-length", s.dry_allowed_length.is_some()),
+        ("--dry-penalty-last-n", s.dry_penalty_last_n.is_some()),
+        ("--dynatemp-range", s.dynatemp_range.is_some()),
+        ("--dynatemp-exponent", s.dynatemp_exponent.is_some()),
+        ("--top-n-sigma", s.top_n_sigma.is_some()),
+        ("--reasoning-effort", s.reasoning_effort.is_some()),
+        (
+            "--reasoning-budget-tokens",
+            s.reasoning_budget_tokens.is_some(),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(flag, named)| named.then_some(flag))
+    .collect()
+}
+
+/// `flags` as a person reads a list of them: `--a`, `--a and --b`, or
+/// `--a, --b and --c`.
+fn flags(flags: &[&str]) -> String {
+    match flags {
+        [] => String::new(),
+        [one] => (*one).to_owned(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 #[cfg(test)]

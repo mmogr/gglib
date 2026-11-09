@@ -218,34 +218,44 @@ pub(crate) struct AgentChatRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub image_model: Option<u32>,
+
+    /// What the chat a turn is on saved of how it samples. Set by the turn
+    /// handler from the conversation's settings; never read from a body.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub saved: super::chat_sampling::ChatSampling,
 }
 
 impl AgentChatRequest {
     /// The request's own sampling layer — the top rung of the hierarchy.
     ///
-    /// # Why only two fields, on a DTO that accepts no other sampling
+    /// # Why only two fields from the body
     ///
     /// This endpoint has never taken a `temperature`, a `top_p`, or anything
-    /// else the sampler reads, and this does not open that door: the returned
-    /// config names these two and leaves every other field `None`, so each one
-    /// resolves from the layers beneath it. For a local run those are the
-    /// values of the model its port serves, this machine's global defaults
-    /// and that model's recipe (`remote_upstream::local`); no profile, which
-    /// nothing in the request can name.
+    /// else the sampler reads from a request body, and this does not open
+    /// that door: of the body it reads only the two reasoning controls.
+    /// The sampler parameters are per-*model* tuning — they belong to the
+    /// model row and the operator's settings — while the reasoning controls
+    /// are per-*turn* shape, which no other layer can know.
     ///
-    /// The asymmetry is deliberate rather than an oversight to tidy up later.
-    /// The sampler parameters are per-*model* tuning — they belong to the model
-    /// row and the operator's settings, which is where an agent loop should read
-    /// them from, and a caller overriding them per request is asking to
-    /// un-tune the model. The reasoning controls are per-*turn* shape: how long
-    /// this particular question is worth thinking about is a property of the
-    /// question, not of the model, and there is no other layer that can know it.
+    /// The one other source is the chat's own saved sampling
+    /// ([`Self::saved`]), which a turn on a saved chat carries: the five
+    /// settings `gglib chat` keeps with a chat. They are sent as a client's
+    /// are, and the endpoint they go through honours them only while it
+    /// trusts clients' sampling. Every field neither names resolves from the
+    /// layers beneath: for a local run the values of the model its port
+    /// serves, this machine's global defaults and that model's recipe
+    /// (`remote_upstream::local`).
     ///
-    /// `None` when the request named neither, which keeps the adapter's
+    /// `None` when neither names anything, which keeps the adapter's
     /// "resolve entirely from the layers beneath" path — and its cheaper
     /// `with_sampling(None)` — for the overwhelmingly common case.
-    pub(crate) const fn sampling_layer(&self) -> Option<gglib_core::domain::InferenceConfig> {
-        if self.reasoning_effort.is_none() && self.reasoning_budget_tokens.is_none() {
+    pub(crate) fn sampling_layer(&self) -> Option<gglib_core::domain::InferenceConfig> {
+        let saved = self.saved.sampling.clone().unwrap_or_default();
+        if self.reasoning_effort.is_none()
+            && self.reasoning_budget_tokens.is_none()
+            && self.saved.sampling.is_none()
+        {
             return None;
         }
         // Written out in full rather than with `..Default::default()`, so a
@@ -256,11 +266,11 @@ impl AgentChatRequest {
         Some(gglib_core::domain::InferenceConfig {
             reasoning_effort: self.reasoning_effort,
             reasoning_budget_tokens: self.reasoning_budget_tokens,
-            temperature: None,
-            top_p: None,
-            top_k: None,
-            max_tokens: None,
-            repeat_penalty: None,
+            temperature: saved.temperature,
+            top_p: saved.top_p,
+            top_k: saved.top_k,
+            max_tokens: saved.max_tokens,
+            repeat_penalty: saved.repeat_penalty,
             presence_penalty: None,
             min_p: None,
             frequency_penalty: None,

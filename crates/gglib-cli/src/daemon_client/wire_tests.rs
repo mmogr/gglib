@@ -150,7 +150,6 @@ fn a_start_server_response_deserializes_into_the_narrowing() {
     let got: StartServerDto =
         serde_json::from_value(json).expect("the narrowing reads what the daemon sends");
 
-    assert_eq!(got.port, sent.port);
     assert_eq!(got.message, sent.message, "the daemon's sentence is kept");
 }
 

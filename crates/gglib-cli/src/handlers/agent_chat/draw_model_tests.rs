@@ -1,24 +1,17 @@
 //! `/draw <model>`, `/draw default` and `/draw list`: the session's choice
-//! of image model, made among the daemon's, held across messages, placed on
-//! the request the image tool hands the daemon, and never swapped for the
-//! default when it can no longer draw.
+//! of image model, made among the daemon's, held across messages, said on
+//! each turn that draws, and never swapped for the default when it can no
+//! longer draw.
 
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use gglib_core::ToolCall;
 use gglib_core::contracts::http::images::{DrawingAvailability, ImageModelRow};
-use gglib_core::domain::agent::NoProgress;
 use gglib_core::domain::{ComponentRole, ImageFamily};
-use gglib_core::ports::{
-    ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ToolExecutorPort,
-};
-use gglib_mcp::BuiltinToolExecutorAdapter;
-use serde_json::json;
+use gglib_core::ports::{ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest};
 use tokio::sync::mpsc;
 
 use super::DrawSwitch;
-use crate::bootstrap::test_context;
 
 const QWEN: u32 = 7;
 const SCHNELL: u32 = 3;
@@ -208,37 +201,17 @@ async fn a_name_that_does_not_choose_one_drawable_model_changes_nothing() {
 }
 
 /// The choice is the session's: it survives the message it was made for,
-/// a bare `/draw` says it, and each picture is asked of the daemon with its
-/// id as the request's model, which the chat model is never shown.
-/// `/draw default` forgets it, and the next picture names no model.
+/// a bare `/draw` says it, and each turn that draws says its id as the
+/// turn's `image_model`. `/draw default` forgets it, and the next turn that
+/// draws names no model. A turn that does not draw names none either.
 #[tokio::test]
-async fn the_choice_is_held_for_the_session_and_goes_on_each_request_to_draw() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = test_context(dir.path()).await;
-    let (library, switch) = session();
-    let tools = BuiltinToolExecutorAdapter::default().with_drawing(switch.tool(&ctx));
-    let call = ToolCall {
-        id: "c1".to_owned(),
-        name: "builtin:generate_image".to_owned(),
-        arguments: json!({ "prompt": "a fox", "model": "flux1-dev" }),
-    };
-    let draw = || async {
-        tools
-            .execute_with_progress(&call, &NoProgress)
-            .await
-            .unwrap();
-        switch.sent();
-    };
+async fn the_choice_is_held_for_the_session_and_said_on_each_turn_that_draws() {
+    let (_library, switch) = session();
 
     switch.say(Some("qwen")).await;
-    let offered = serde_json::to_string(&tools.list_tools().await).unwrap();
-    assert!(offered.contains("generate_image"), "{offered}");
-    assert!(
-        !offered.contains("qwen") && !offered.contains("\"model\""),
-        "{offered}"
-    );
-    draw().await;
-    assert!(!switch.is_armed());
+    assert_eq!(switch.turn(), (true, Some(QWEN)));
+    switch.sent();
+    assert_eq!(switch.turn(), (false, None), "a turn that does not draw");
     assert_eq!(switch.chosen(), Some(QWEN), "kept after its message");
 
     let said = switch.say(None).await;
@@ -246,22 +219,13 @@ async fn the_choice_is_held_for_the_session_and_goes_on_each_request_to_draw() {
         said,
         "the next message draws, with qwen-image-q8, this session's image model"
     );
-    draw().await;
+    assert_eq!(switch.turn(), (true, Some(QWEN)));
+    switch.sent();
 
     let said = switch.say(Some("default")).await;
     assert_eq!(said, "the next message draws, with flux1-schnell");
     assert_eq!(switch.chosen(), None);
-    assert!(switch.is_armed());
-    draw().await;
-
-    let models: Vec<Option<String>> = library
-        .asked
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|request| request.model.clone())
-        .collect();
-    assert_eq!(models, [Some("7".to_owned()), Some("7".to_owned()), None]);
+    assert_eq!(switch.turn(), (true, None));
 }
 
 /// A chosen model that has since gone is not swapped for the default: a

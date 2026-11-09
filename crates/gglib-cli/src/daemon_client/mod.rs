@@ -126,6 +126,7 @@ fn warn_on_build_mismatch(body: &serde_json::Value) {
 }
 
 /// A connected daemon: the shared HTTP client plus the credential to present.
+#[derive(Clone)]
 pub(crate) struct DaemonHandle {
     /// Client for talking to the daemon. No global timeout — long calls
     /// (model start) set their own.
@@ -280,7 +281,6 @@ fn spawn_daemon() -> Result<std::path::PathBuf> {
 pub(crate) mod auth;
 mod calls;
 mod explain;
-pub(crate) mod generation;
 pub(crate) mod images;
 pub(crate) mod library_changes;
 mod remote;

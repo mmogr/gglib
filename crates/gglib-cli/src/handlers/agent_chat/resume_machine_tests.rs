@@ -5,7 +5,8 @@
 use gglib_core::Settings;
 use gglib_core::domain::ModelRef;
 
-use super::super::super::{Session, prepare};
+use super::super::super::persistence::Conversation as Session;
+use super::super::super::prepare;
 use super::*;
 use crate::bootstrap::{CliContext, test_context};
 
@@ -52,17 +53,10 @@ fn paired_with_desk(fingerprint: &str) -> bool {
 /// there and the profile it was routed to: what goes on the wire.
 #[test]
 fn a_far_chat_resumes_on_its_machine_without_the_flag() {
-    let plain = stored_machine(
-        &saved(desk(), None),
-        Target::Local,
-        false,
-        false,
-        paired_with_desk,
-    );
+    let plain = stored_machine(&saved(desk(), None), Target::Local, false, paired_with_desk);
     let profiled = stored_machine(
         &saved(desk(), Some("coding")),
         Target::Remote,
-        false,
         false,
         paired_with_desk,
     );
@@ -78,41 +72,19 @@ fn a_far_chat_resumes_on_its_machine_without_the_flag() {
 /// refused rather than sent to a model 3 that is some other machine's.
 #[test]
 fn a_far_chat_is_refused_once_paired_with_another_machine() {
-    let refused = stored_machine(&saved(desk(), None), Target::Remote, false, false, |_| {
-        false
-    })
-    .expect_err("refused");
+    let refused = stored_machine(&saved(desk(), None), Target::Remote, false, |_| false)
+        .expect_err("refused");
 
     let text = refused.to_string();
     assert!(text.contains("no longer paired with"), "{text}");
     assert!(!text.contains(DESK), "no fingerprint: {text}");
 }
 
-/// A chat that ran on desk is not sent to a server here by `--port`, nor
-/// sent to desk in spite of it: the two name different machines.
-#[test]
-fn a_far_chat_refuses_port() {
-    let refused = stored_machine(
-        &saved(desk(), None),
-        Target::Local,
-        true,
-        false,
-        paired_with_desk,
-    )
-    .expect_err("refused");
-
-    let text = refused.to_string();
-    assert!(text.contains("drop --port"), "{text}");
-    assert!(!text.contains(DESK), "no fingerprint: {text}");
-}
-
-/// A chat that ran here is not sent to the paired machine by `--remote`.
 #[test]
 fn a_local_chat_refuses_remote() {
     let refused = stored_machine(
         &saved(Machine::Local, None),
         Target::Remote,
-        false,
         false,
         paired_with_desk,
     )
@@ -128,7 +100,6 @@ fn a_local_chat_resumes_here_by_its_id() {
     let resumed = stored_machine(
         &saved(Machine::Local, Some("coding")),
         Target::Local,
-        false,
         false,
         paired_with_desk,
     );
@@ -146,15 +117,15 @@ fn without_a_stored_model_the_flag_decides() {
     }));
     for flag in [Target::Local, Target::Remote] {
         assert_eq!(
-            stored_machine(&older, flag, false, false, paired_with_desk).unwrap(),
+            stored_machine(&older, flag, false, paired_with_desk).unwrap(),
             None
         );
         assert_eq!(
-            stored_machine(&row(None), flag, false, false, paired_with_desk).unwrap(),
+            stored_machine(&row(None), flag, false, paired_with_desk).unwrap(),
             None
         );
         assert_eq!(
-            stored_machine(&saved(desk(), None), flag, false, true, |_| false).unwrap(),
+            stored_machine(&saved(desk(), None), flag, true, |_| false).unwrap(),
             None,
             "a named model follows the flag, and is not refused"
         );
@@ -213,7 +184,11 @@ async fn library(dir: &tempfile::TempDir) -> (CliContext, i64, i64) {
 }
 
 /// `gglib chat [<identifier>] [--continue <id>]`, prepared.
-async fn chat<'a>(ctx: &'a CliContext, identifier: &str, id: Option<i64>) -> Result<Session<'a>> {
+async fn chat<'a>(
+    ctx: &'a CliContext,
+    identifier: &str,
+    id: Option<i64>,
+) -> Result<(ChatArgs, Session<'a>)> {
     let args = ChatArgs {
         identifier: identifier.to_owned(),
         continue_id: id,
@@ -230,7 +205,7 @@ async fn a_resume_on_another_model_stores_that_model() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (ctx, _, llama) = library(&dir).await;
     let started = chat(&ctx, "qwen", None).await.expect("a new chat");
-    let id = started.persistence.expect("saved").id;
+    let id = started.1.id;
 
     chat(&ctx, "llama", Some(id))
         .await
@@ -251,7 +226,7 @@ async fn a_resume_on_another_model_stores_that_model() {
         )
     );
     let resumed = chat(&ctx, "", Some(id)).await.expect("resumed");
-    assert_eq!(resumed.params.model_identifier, llama.to_string());
+    assert_eq!(resumed.0.identifier, llama.to_string());
 }
 
 /// A chat the page or a phone switched thinking off on stays switched off
@@ -266,7 +241,7 @@ async fn a_remembered_thinking_choice_and_folder_survive_a_resume_on_another_mod
     let dir = tempfile::tempdir().expect("tempdir");
     let (ctx, _, _) = library(&dir).await;
     let started = chat(&ctx, "qwen", None).await.expect("a new chat");
-    let id = started.persistence.expect("saved").id;
+    let id = started.1.id;
     let (history, off) = (ctx.app.chat_history(), Some(Thinking::Off));
     remember_thinking(history, id, off).await;
     remember_folder(history, id, Some("/x".to_owned())).await;
@@ -287,7 +262,7 @@ async fn a_chat_whose_model_is_gone_says_so_and_not_to_use_remote() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (ctx, qwen, _) = library(&dir).await;
     let started = chat(&ctx, "qwen", None).await.expect("a new chat");
-    let id = started.persistence.expect("saved").id;
+    let id = started.1.id;
     ctx.app.models().delete(qwen).await.expect("removed");
 
     let refused = chat(&ctx, "", Some(id)).await.err().expect("refused");

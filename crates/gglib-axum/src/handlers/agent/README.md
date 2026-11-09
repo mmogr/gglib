@@ -169,10 +169,16 @@ The chat route's turn is resolved by the same rules, in
 the one place they are: `gglib_core::request_pipeline::apply`, which the
 completion adapter calls as it shapes each request. `compose::prepare` hands
 it the pieces unfolded: the two reasoning controls, which are all the
-sampling a request can name (`AgentChatRequest::sampling_layer`), and from
+sampling a request body can name, and, on a turn on a saved chat, the five
+sampling settings the chat saved (`gglib chat`'s flags, `ChatSampling`),
+sent as a client's, which the endpoint honours only while it trusts
+clients' sampling (`AgentChatRequest::sampling_layer`); the chat's saved
+profile goes on the model the turn asks for, `<id>:<profile>`, which the
+endpoint, or the paired machine's proxy, routes to that profile whatever it
+trusts; and from
 `remote_upstream::local` the served model's context, which carries its own
 stored values, and this machine's global defaults and agentic sampling
-switch. No profile, since nothing in the request can name one. So a turn that
+switch. So a turn that
 names nothing and carries no tools is sent what `gglib model explain` reports
 for its model, and one with tools has a temperature nobody chose capped, as
 `gglib chat`'s is, unless the model is tagged `reasoning` or the settings

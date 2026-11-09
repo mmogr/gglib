@@ -13,10 +13,10 @@
 use anyhow::{Context as _, Result};
 
 use super::resolver;
+use super::start_body::start_body;
 use crate::bootstrap::CliContext;
 use crate::daemon_client::wire::{StartPinnedBody, StopServerBody};
 use crate::daemon_client::{self, Absent, DaemonHandle, StartProxyBody, StartServerBody};
-use crate::handlers::agent_chat::upstream::start_body;
 
 /// Execute `gglib model load <id> [--context N|max] [--pin]`.
 pub(crate) async fn load(

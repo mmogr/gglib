@@ -1,6 +1,6 @@
 //! [`AgentEvent`] and [`LlmStreamEvent`] — observable events in the agentic loop.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::tool_call_writing::ToolCallWriting;
 use super::tool_progress::{PreviewFrame, ToolStage};
@@ -22,7 +22,12 @@ use crate::normalize::NormalizationErrorKind;
 ///
 /// `#[serde(tag = "type", rename_all = "snake_case")]` produces e.g.
 /// `{"type":"tool_call_start","tool_call":{...}}`.
-#[derive(Debug, Clone, Serialize)]
+///
+/// Read back from a run's logged frames by a client of the daemon's door
+/// (`gglib chat`), which renders them as its own loop's. A
+/// [`ToolPreview`](AgentEvent::ToolPreview) is never logged, so it is never
+/// read back.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentEvent {
     /// An incremental text fragment from the model's response.
@@ -106,6 +111,7 @@ pub enum AgentEvent {
     /// matters, so a run keeps it beside its log, not in it, and a saved
     /// chat never holds one. Consumers show it and drop it when that call's
     /// [`ToolCallComplete`](AgentEvent::ToolCallComplete) arrives.
+    #[serde(skip_deserializing)]
     ToolPreview {
         /// The call this frame belongs to.
         tool_call_id: String,
@@ -198,7 +204,7 @@ pub enum AgentEvent {
 }
 
 /// What an [`AgentEvent::Waiting`] is waiting for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WaitingFor {
     /// An image render has the GPU, or is queued ahead.

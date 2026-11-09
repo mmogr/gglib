@@ -937,19 +937,16 @@ machine's. The proxy follows it, and so does a chat with one of this machine's
 models: `gglib chat` and `gglib q` on a model in the library, and a chat in
 the app, on the chat page or from a paired device.
 
-Four callers read no stored setting and keep the cap whatever it says:
+Three callers read no stored setting and keep the cap whatever it says:
 
 - a turn sent to a paired machine's model. It is capped as it leaves here, and
   that machine's proxy then resolves it by its own settings;
-- `gglib chat` or `gglib q` against a `--port` server whose model the library
-  does not hold;
 - `gglib benchmark agentic`, in each arm that runs the pipeline;
 - `gglib benchmark tune`.
 
-The environment variable switches the cap off for every caller, these four
-included, in the process that shapes the request: the command itself for
-`gglib chat` and `gglib q`, and the daemon for the proxy, a chat in the app
-and a benchmark.
+The environment variable switches the cap off for every caller, these three
+included, in the process that shapes the request: the daemon, for the proxy,
+a chat in the app or from `gglib chat` and `gglib q`, and a benchmark.
 
 Two surfaces cannot report it, both by construction: `gglib model explain` and
 the GUI's sampling provenance explain *stored configuration* with no request in
