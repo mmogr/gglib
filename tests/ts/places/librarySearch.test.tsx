@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
@@ -236,6 +236,95 @@ describe('the one search', () => {
     expect(at()).toBe('/get/owner/a');
     expect(screen.getByRole('option', { name: /owner\/a/ })).toHaveAttribute('aria-selected', 'true');
     expect(within(screen.getByRole('complementary', { name: 'Inspector' })).getByRole('heading', { name: 'owner/a' })).toBeInTheDocument();
+  });
+
+  it('the repos are one Tab stop, and ↓ opens the next in the inspector', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b']));
+    const { at } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    const a = await screen.findByRole('option', { name: /owner\/a/ });
+    const b = screen.getByRole('option', { name: /owner\/b/ });
+    expect([a.tabIndex, b.tabIndex]).toEqual([0, -1]);
+
+    a.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(b);
+    await waitFor(() => expect(at()).toBe('/get/owner/b'));
+    expect([a.tabIndex, b.tabIndex]).toEqual([-1, 0]);
+  });
+
+  it('a run of keys opens the repo it ends on, read once, as one history entry', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b', 'owner/c']));
+    const { at, router } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    await user.click(await screen.findByRole('option', { name: /owner\/a/ }));
+    expect(at()).toBe('/get/owner/a');
+    transport.getHfQuantizations.mockClear();
+
+    // Fake timers and synchronous keys: on a loaded machine the run's 150 ms
+    // could pass between two real keys, and the address move before it is read.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowDown' });
+      fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowDown' });
+      expect(document.activeElement).toBe(screen.getByRole('option', { name: /owner\/c/ }));
+      // The address waits for the run to end.
+      act(() => vi.advanceTimersByTime(140));
+      expect(at()).toBe('/get/owner/a');
+      await act(async () => vi.advanceTimersByTime(20));
+      expect(at()).toBe('/get/owner/c');
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() => expect(transport.getHfQuantizations).toHaveBeenCalled());
+    expect(transport.getHfQuantizations.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['owner/c']);
+
+    await act(() => router.navigate(-1));
+    expect(at()).toBe('/library');
+  });
+
+  it('a click during a run of keys wins: the waiting key pick is dropped', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b', 'owner/c']));
+    const { at } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    await user.click(await screen.findByRole('option', { name: /owner\/a/ }));
+    await user.keyboard('{ArrowDown}');
+    await user.click(screen.getByRole('option', { name: /owner\/c/ }));
+    expect(at()).toBe('/get/owner/c');
+    await act(() => new Promise((done) => setTimeout(done, 400)));
+    expect(at()).toBe('/get/owner/c');
+  });
+
+  it('a second run of keys takes its own history rule, not the first run\'s', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b', 'owner/c']));
+    const { at, router } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    const a = await screen.findByRole('option', { name: /owner\/a/ });
+    // Nothing picked: the first run pushes an entry.
+    a.focus();
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(at()).toBe('/get/owner/b'));
+    // Pressed on the picked row: the second run replaces it.
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(at()).toBe('/get/owner/c'));
+    await act(() => router.navigate(-1));
+    expect(at()).toBe('/library');
+  });
+
+  it('a run of keys left waiting when the results go never moves the address', async () => {
+    transport.browseHfModels.mockResolvedValue(page(['owner/a', 'owner/b', 'owner/c']));
+    const { at, unmount } = renderLibrary();
+    const user = userEvent.setup();
+    await user.type(field(), 'x{Enter}');
+    await user.click(await screen.findByRole('option', { name: /owner\/a/ }));
+    await user.keyboard('{ArrowDown}');
+    unmount();
+    await act(() => new Promise((done) => setTimeout(done, 400)));
+    expect(at()).toBe('/get/owner/a');
   });
 
   it("offers user/repo:QUANT's download as the first row, and queues it", async () => {
