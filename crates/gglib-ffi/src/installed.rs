@@ -25,8 +25,17 @@ pub struct InstalledModel {
     /// another model shares the name (#1648).
     pub listed_id: String,
     /// The label its type is shown by (`Q4_K_M`, `UD-Q4_K_XL`), when it has
-    /// one: its download's label, else the type its header states.
+    /// one: its download's label, unless that is only its file's name, else
+    /// the type its header states. For showing, never for matching a
+    /// repository's variant: [`Self::variant_label`] is that.
     pub quantization: Option<String>,
+    /// The label its download asked the Hub for, as the repository's
+    /// variant list calls it (`UD-Q4_K_XL`, or a one-file repository's
+    /// whole file name), when it came from one. An offer of [`Self::repo`]
+    /// is this model when its label is this. `None` too for a download
+    /// added before gglib kept labels: an app matching the Hub's offers
+    /// then falls back to [`Self::quantization`], the header's type.
+    pub variant_label: Option<String>,
     /// The Hugging Face repository it was downloaded from
     /// (`unsloth/Qwen3-8B-GGUF`), when it came from one.
     pub repo: Option<String>,
@@ -72,6 +81,7 @@ pub(crate) async fn installed(
                 name: model.name,
                 listed_id,
                 quantization,
+                variant_label: model.variant_label,
                 repo: model.hf_repo_id,
             }
         })

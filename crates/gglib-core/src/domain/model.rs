@@ -14,6 +14,7 @@ use super::image_family::{ComponentRole, ImageFamily};
 use super::inference::{DefaultsOrigin, InferenceConfig};
 use super::runtime_kind::RuntimeKind;
 use super::server_config::ServerConfig;
+use super::shard_name::gguf_stem;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // System tags
@@ -260,13 +261,28 @@ impl Model {
     /// variant label, else the name of the type its header states. An
     /// unknown type number has no name, so no label.
     ///
+    /// A variant label that is only the file's own name says nothing of its
+    /// type, and the header's type is shown instead: a repository with one
+    /// file labels it by its whole name (`z_image-Q8_0`), as it has no
+    /// other name to cut a shared prefix from.
+    ///
     /// For showing and naming only: a lookup on the Hub reads
     /// [`Self::variant_label`] alone (see [`NO_HUB_LABEL`]).
     #[must_use]
     pub fn quant_label(&self) -> Option<&str> {
         self.variant_label
             .as_deref()
+            .filter(|label| !self.is_named(label))
             .or_else(|| self.file_type.and_then(FileType::name))
+    }
+
+    /// Whether `label` is this model's file name, less the extension and a
+    /// shard's numbering, ignoring case.
+    fn is_named(&self, label: &str) -> bool {
+        self.file_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| gguf_stem(name).eq_ignore_ascii_case(label))
     }
 
     /// Whether this model reads images: it does exactly when it has a
@@ -441,6 +457,57 @@ mod tests {
         model.variant_label = None;
         model.file_type = Some(FileType(42));
         assert_eq!(model.quant_label(), None, "an unknown number has no name");
+    }
+
+    fn labelled(path: &str, label: &str) -> Model {
+        let mut model = flux(&[]);
+        model.file_path = PathBuf::from(path);
+        model.variant_label = Some(label.to_owned());
+        model.file_type = Some(FileType(7));
+        model
+    }
+
+    #[test]
+    fn a_label_that_is_only_the_files_name_shows_the_headers_type() {
+        let one_file = labelled("/m/z_image_nsfw_v2-Q8_0.gguf", "z_image_nsfw_v2-Q8_0");
+        assert_eq!(one_file.quant_label(), Some("Q8_0"));
+        let any_case = labelled("/m/Z_Image-Q8_0.GGUF", "z_image-q8_0");
+        assert_eq!(any_case.quant_label(), Some("Q8_0"));
+        let shard = labelled("/m/big-Q8_0-00001-of-00002.gguf", "big-Q8_0");
+        assert_eq!(
+            shard.quant_label(),
+            Some("Q8_0"),
+            "a shard goes by its split's name"
+        );
+    }
+
+    #[test]
+    fn a_label_other_than_the_files_name_is_kept() {
+        let cut = labelled("/m/Qwen3.8-27B-UD-Q8_K_XL.gguf", "UD-Q8_K_XL");
+        assert_eq!(cut.quant_label(), Some("UD-Q8_K_XL"));
+        let folder = labelled(
+            "/m/UD-IQ3_XXS/Next-UD-IQ3_XXS-00001-of-00004.gguf",
+            "UD-IQ3_XXS",
+        );
+        assert_eq!(folder.quant_label(), Some("UD-IQ3_XXS"));
+    }
+
+    #[test]
+    fn only_the_files_name_is_compared_never_its_folder() {
+        // A label taken from a folder that happens to share the file's name
+        // is that name, and says no more of the type than it does.
+        let same = labelled("/m/Q8_0-x/Q8_0-x.gguf", "Q8_0-x");
+        assert_eq!(same.quant_label(), Some("Q8_0"));
+        // A label naming the folder alone is no name of the file's.
+        let folder = labelled("/m/z_image-Q8_0/weights.gguf", "z_image-Q8_0");
+        assert_eq!(folder.quant_label(), Some("z_image-Q8_0"));
+    }
+
+    #[test]
+    fn a_files_own_name_with_no_header_type_shows_no_label() {
+        let mut model = labelled("/m/z_image-Q8_0.gguf", "z_image-Q8_0");
+        model.file_type = None;
+        assert_eq!(model.quant_label(), None);
     }
 
     #[test]
