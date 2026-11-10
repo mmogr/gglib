@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::Utc;
-use gglib_core::domain::{NewModel, NewModelFile};
+use gglib_core::domain::{FileType, NewModel, NewModelFile};
 use tempfile::TempDir;
 
 use super::*;
@@ -143,6 +143,31 @@ fn installed_models_of_one_name_say_their_own_quantization() {
     let mut ids: Vec<&str> = installed.iter().map(|m| m.listed_id.as_str()).collect();
     ids.sort_unstable();
     assert_eq!(ids, ["Test model@Q4_K_M", "Test model@Q8_0"]);
+}
+
+/// A one-file repository labels its variant by the whole file name: the
+/// model shows the header's type, and keeps the label an offer of its
+/// repository is matched by.
+#[test]
+fn a_one_file_download_shows_its_headers_type_and_keeps_its_hub_label() {
+    let root = TempDir::new().unwrap();
+    let library = library_over(TestHub::default(), &root);
+    let weights = file(&models_dir(&root).join("o_r/z_image-Q8_0.gguf"), MIB);
+    let mut model = test_model(&weights, None, &[]);
+    model.variant_label = Some("z_image-Q8_0".to_owned());
+    model.file_type = Some(FileType(7));
+    model.hf_repo_id = Some("o/r".to_owned());
+    insert(&library, &model);
+
+    let installed = wait(Arc::clone(&library).installed()).unwrap();
+
+    assert_eq!(
+        (
+            installed[0].quantization.as_deref(),
+            installed[0].variant_label.as_deref()
+        ),
+        (Some("Q8_0"), Some("z_image-Q8_0"))
+    );
 }
 
 /// With no reading handed over there is no budget to judge at; with one,
