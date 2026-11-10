@@ -176,6 +176,18 @@ fn a_file_with_no_tensor_data_has_no_payload() {
     assert_eq!(GgufParser::new().parse(&path).unwrap().payload, None);
 }
 
+/// A split's first file is often only metadata: it holds none of the
+/// model's tensor data, which is known, not unknown.
+#[test]
+fn a_file_that_declares_no_tensors_has_an_empty_payload() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("big-00001-of-00004.gguf");
+    crate::write_gguf(&path, &[("split.count", GgufValue::U16(4))], &[], 0);
+
+    let payload = GgufParser::new().parse(&path).unwrap().payload;
+    assert_eq!(payload, Some(gglib_core::domain::TensorPayload::default()));
+}
+
 /// The role the parser reports counts the file's tensors: Qwen 3.8's MTP
 /// block on its own is no model.
 #[test]

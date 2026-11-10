@@ -109,12 +109,19 @@ const DEFAULT_ALIGNMENT: u64 = 32;
 /// file, and the elements of `tensors`. `None` when nothing follows the
 /// table, as in a file written without its data, or when the shapes count
 /// more elements than a `u64` holds.
+///
+/// A file that declares no tensors holds no tensor data, and says so: the
+/// first file of a split is often only its metadata, and its others hold
+/// every tensor, so its share of the model is nothing rather than unknown.
 pub(crate) fn payload(
     raw: &RawMetadata,
     tensors: &[TensorInfo],
     file_len: u64,
     table_end: u64,
 ) -> Option<TensorPayload> {
+    if tensors.is_empty() {
+        return Some(TensorPayload::default());
+    }
     let alignment = raw
         .get("general.alignment")
         .and_then(GgufValue::as_u64)
