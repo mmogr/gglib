@@ -172,7 +172,7 @@ crates/gglib-core/src/services/chat_history.rs 365
 crates/gglib-core/src/services/drawing.rs 349
 crates/gglib-core/src/services/drawing_tests.rs 347
 crates/gglib-core/src/services/model_components_tests.rs 792
-crates/gglib-core/src/services/model_import.rs 750
+crates/gglib-core/src/services/model_import.rs 753
 crates/gglib-core/src/services/model_projector_tests.rs 308
 crates/gglib-core/src/services/model_registrar.rs 479
 crates/gglib-core/src/services/model_registrar_components_tests.rs 347

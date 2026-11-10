@@ -197,3 +197,101 @@ async fn a_retag_fills_the_facts_a_model_lacks() {
     assert_eq!(model.file_type, Some(FileType(15)));
     assert_eq!(model.bits_per_weight, Some(8.0));
 }
+
+#[test]
+fn a_single_file_counts_its_own_tensors() {
+    let gguf = first(payload(1_000, 7_000_000_000), None);
+    let facts = header_facts(Path::new("/m/a.gguf"), Some(&gguf), None, &NoopGgufParser);
+    assert_eq!(facts.param_count_b, Some(7.0));
+}
+
+#[test]
+fn every_shards_tensors_are_counted() {
+    let name = |index: u32| PathBuf::from(format!("/m/big-{index:05}-of-00003.gguf"));
+    let parser = Payloads(HashMap::from([
+        (name(2), payload(2_000, 114_840_000_000)),
+        (name(3), payload(2_000, 62_100_000_000)),
+    ]));
+    let gguf = first(TensorPayload::default(), Some(3));
+    let facts = header_facts(&name(1), Some(&gguf), None, &parser);
+    assert_eq!(facts.param_count_b, Some(176.94));
+}
+
+/// With no tensors counted, the count is what the labels or the name say.
+#[test]
+fn a_model_whose_tensors_cannot_all_be_counted_takes_the_labels_count() {
+    let mut gguf = first(payload(1_000, 1_000), Some(2));
+    gguf.param_count_b = Some(7.0);
+    let facts = header_facts(
+        Path::new("/m/renamed.gguf"),
+        Some(&gguf),
+        None,
+        &NoopGgufParser,
+    );
+    assert_eq!(
+        facts.param_count_b,
+        Some(7.0),
+        "half a model is not counted"
+    );
+
+    let mut unmeasured = first(payload(1_000, 1_000), None);
+    unmeasured.payload = None;
+    unmeasured.param_count_b = Some(13.0);
+    let facts = header_facts(
+        Path::new("/m/a.gguf"),
+        Some(&unmeasured),
+        None,
+        &NoopGgufParser,
+    );
+    assert_eq!(facts.param_count_b, Some(13.0));
+}
+
+/// One split, its first file only metadata and its size label an `NxMB`,
+/// is counted by its tensors through either door. A download names its
+/// shards, here by names llama.cpp's naming would never find, so its count
+/// can only come from that list. A local add finds its shards by llama.cpp's
+/// naming.
+#[test]
+fn a_split_counts_every_shards_tensors_by_either_door() {
+    use crate::services::{HfOrigin, ModelOrigin, build_new_model};
+
+    let named: Vec<PathBuf> = ["/hub/a.gguf", "/hub/b.gguf", "/hub/c.gguf"]
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
+    let local = |index: u32| PathBuf::from(format!("/m/big-{index:05}-of-00003.gguf"));
+    let parser = Payloads(HashMap::from([
+        (named[1].clone(), payload(2_000, 1_000_000_000)),
+        (named[2].clone(), payload(2_000, 1_000_000_000)),
+        (local(2), payload(2_000, 1_000_000_000)),
+        (local(3), payload(2_000, 1_000_000_000)),
+    ]));
+    let mut gguf = first(TensorPayload::default(), Some(3));
+    gguf.param_count_b = Some(28_672.0);
+
+    let download = ModelOrigin::HuggingFace(HfOrigin {
+        repo_id: "some/Big-GGUF",
+        commit_sha: "abc123",
+        hf_tags: &[],
+        variant_label: None,
+        file_paths: Some(&named),
+        published_sampling: None,
+    });
+    let add = ModelOrigin::LocalFile {
+        param_count_override: None,
+    };
+    for (first_file, origin) in [(named[0].clone(), download), (local(1), add)] {
+        let model = build_new_model(
+            &first_file,
+            Some(&gguf),
+            &parser,
+            &origin,
+            chrono::Utc::now(),
+        );
+        assert!(
+            (model.param_count_b - 2.0).abs() < f64::EPSILON,
+            "{first_file:?}: {}",
+            model.param_count_b
+        );
+    }
+}

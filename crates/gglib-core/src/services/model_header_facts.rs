@@ -1,5 +1,6 @@
-//! What a model's header states about its type: the type its first file
-//! names, and the bits per weight of its tensor data over every shard.
+//! What a model's header states about its type and size: the type its
+//! first file names, and the bits per weight and parameter count of its
+//! tensors over every shard.
 //!
 //! One rule for the four places that read them: an import, a download's
 //! registration or upgrade, the start-up pass that fills a model added
@@ -10,17 +11,24 @@ use std::path::{Path, PathBuf};
 use crate::domain::{FileType, GgufMetadata, Model, TensorPayload};
 use crate::ports::GgufParserPort;
 
-/// A model's type and bits per weight, as its files' headers give them.
+/// A model's type, bits per weight and parameter count, as its files'
+/// headers give them.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct HeaderFacts {
     /// The type the first file's header states.
     pub file_type: Option<FileType>,
     /// The bits per weight of every shard's tensor data together.
     pub bits_per_weight: Option<f64>,
+    /// The parameters, in billions: the elements of every shard's tensors,
+    /// else what the first file's labels or its name say
+    /// ([`GgufMetadata::param_count_b`]) when no tensor could be counted.
+    pub param_count_b: Option<f64>,
 }
 
 impl HeaderFacts {
-    /// Whether the header gave neither fact.
+    /// Whether the header gave neither its type nor its bits per weight, the
+    /// two the start-up pass and a retag fill. The count is not among them:
+    /// a stored count is its owner's, and is never filled over.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.file_type.is_none() && self.bits_per_weight.is_none()
@@ -36,7 +44,9 @@ impl HeaderFacts {
 /// naming, `<prefix>-00002-of-00003.gguf`, which is how llama.cpp finds them
 /// to load. The bits per weight are of every shard or none: a shard that
 /// cannot be named or read, or whose tensor data cannot be measured, leaves
-/// them unknown rather than measuring part of the model.
+/// them unknown rather than measuring part of the model. The tensors are
+/// counted by the same rule, and a model whose tensors cannot all be counted
+/// takes the count its first file's labels or name give.
 #[must_use]
 pub fn header_facts(
     file_path: &Path,
@@ -54,12 +64,7 @@ pub fn header_facts(
                     found = siblings;
                     Some(found.as_slice())
                 }
-                None => {
-                    return HeaderFacts {
-                        file_type: gguf.and_then(|g| g.file_type),
-                        bits_per_weight: None,
-                    };
-                }
+                None => return facts(gguf, None),
             },
             None => None,
         },
@@ -79,10 +84,31 @@ pub fn header_facts(
         }
         _ => gguf.and_then(|g| g.payload),
     };
+    facts(gguf, payload)
+}
+
+/// The facts of the parse `gguf` and the tensor data `payload` of every
+/// shard, when it was measured.
+fn facts(gguf: Option<&GgufMetadata>, payload: Option<TensorPayload>) -> HeaderFacts {
+    let counted = payload
+        .filter(|payload| payload.elements > 0)
+        .and_then(|payload| billions(payload.elements));
     HeaderFacts {
         file_type: gguf.and_then(|g| g.file_type),
         bits_per_weight: payload.and_then(TensorPayload::bits_per_weight),
+        param_count_b: counted.or_else(|| gguf.and_then(|g| g.param_count_b)),
     }
+}
+
+/// `elements` in billions: to the thousand, or past four trillion, to the
+/// million. A count no `u32` of millions holds is no model's.
+fn billions(elements: u64) -> Option<f64> {
+    if let Ok(thousands) = u32::try_from(elements / 1_000) {
+        return Some(f64::from(thousands) / 1_000_000.0);
+    }
+    u32::try_from(elements / 1_000_000)
+        .ok()
+        .map(|millions| f64::from(millions) / 1_000.0)
 }
 
 /// The facts the file at `path` states, when it is there and states either:
