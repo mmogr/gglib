@@ -15,7 +15,7 @@ use crate::utils::input;
 use gglib_app_services::ModelOps;
 use gglib_app_services::types::{AddModelRequest, UpdateModelRequest};
 use gglib_core::domain::{NameSource, resolve_model_name};
-use gglib_core::services::ImportMode;
+use gglib_core::services::{ImportMode, header_facts};
 use gglib_core::utils::validation;
 
 /// Execute the add command.
@@ -74,6 +74,11 @@ pub(crate) async fn execute(
         );
     }
 
+    // The count the import itself takes: every shard's tensors, found by
+    // llama.cpp's naming, as the import finds them.
+    let param_count_b =
+        header_facts(&path, Some(&gguf_metadata), None, ctx.gguf_parser.as_ref()).param_count_b;
+
     // Display extracted metadata to the user
     println!("\nExtracted metadata:");
     let resolved_name = resolve_model_name(Some(&gguf_metadata), &path, NameSource::LocalFile);
@@ -81,7 +86,7 @@ pub(crate) async fn execute(
     if let Some(ref arch) = gguf_metadata.architecture {
         println!("  Architecture: {arch}");
     }
-    if let Some(params) = gguf_metadata.param_count_b {
+    if let Some(params) = param_count_b {
         println!("  Parameters: {params:.1}B");
     }
     if let Some(file_type) = gguf_metadata.file_type {
@@ -106,11 +111,7 @@ pub(crate) async fn execute(
              metadata only and leaves the stored parameter count alone."
         );
         None
-    } else if gguf_metadata.image_family.is_some() {
-        // Nothing to ask of a model that draws: its file names no parameter
-        // count, and nothing reads one for it.
-        None
-    } else if let Some(params) = gguf_metadata.param_count_b {
+    } else if let Some(params) = param_count_b {
         let user_input =
             input::prompt_float_with_default("Parameter count (in billions)", Some(params))?;
         if user_input == 0.0 {
@@ -118,6 +119,10 @@ pub(crate) async fn execute(
         } else {
             Some(user_input)
         }
+    } else if gguf_metadata.image_family.is_some() {
+        // Nothing to ask of a model that draws and whose tensors could not
+        // be counted: nothing reads a count for it.
+        None
     } else {
         Some(input::prompt_float("Parameter count (in billions)")?)
     };

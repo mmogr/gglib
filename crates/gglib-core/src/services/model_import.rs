@@ -207,14 +207,22 @@ pub fn build_new_model(
 ) -> NewModel {
     let name = resolve_model_name(gguf, file_path, origin.name_source());
 
+    // The header's facts, over every shard: a download names its shards,
+    // and a local file's are found by llama.cpp's naming, so both add paths
+    // count the same tensors for the same file.
+    let shards = match origin {
+        ModelOrigin::HuggingFace(hf) => hf.file_paths,
+        ModelOrigin::LocalFile { .. } => None,
+    };
+    let facts = super::header_facts(file_path, gguf, shards, parser);
+
     let param_count_b = match origin {
         ModelOrigin::LocalFile {
             param_count_override,
-        } => param_count_override
-            .or_else(|| gguf.and_then(|g| g.param_count_b))
-            .unwrap_or(0.0),
-        ModelOrigin::HuggingFace(_) => gguf.and_then(|g| g.param_count_b).unwrap_or(0.0),
-    };
+        } => param_count_override.or(facts.param_count_b),
+        ModelOrigin::HuggingFace(_) => facts.param_count_b,
+    }
+    .unwrap_or(0.0);
 
     let gguf_caps = gguf.map(|g| parser.detect_capabilities(g));
     let gguf_tags = gguf_caps
@@ -229,11 +237,6 @@ pub fn build_new_model(
     model.expert_used_count = gguf.and_then(|g| g.expert_used_count);
     model.expert_shared_count = gguf.and_then(|g| g.expert_shared_count);
     model.image_family = gguf.and_then(|g| g.image_family);
-    let shards = match origin {
-        ModelOrigin::HuggingFace(hf) => hf.file_paths,
-        ModelOrigin::LocalFile { .. } => None,
-    };
-    let facts = super::header_facts(file_path, gguf, shards, parser);
     model.file_type = facts.file_type;
     model.bits_per_weight = facts.bits_per_weight;
     if let Some(g) = gguf {
