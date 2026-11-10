@@ -185,7 +185,7 @@ async fn a_catalogued_model(core: &gglib_core::services::AppCore) -> i64 {
         .add(gglib_core::domain::NewModel::new(
             "qwen3-8b".to_owned(),
             std::path::PathBuf::from("/models/absent.gguf"),
-            8.0,
+            Some(8.0),
             chrono::Utc::now(),
         ))
         .await
@@ -267,7 +267,7 @@ async fn the_pin_is_proved_and_described_when_no_model_is_named() {
         .add(gglib_core::domain::NewModel::new(
             "gemma-4b".to_owned(),
             std::path::PathBuf::from("/models/absent-too.gguf"),
-            4.0,
+            Some(4.0),
             chrono::Utc::now(),
         ))
         .await
@@ -305,7 +305,7 @@ async fn an_image_model_is_refused_before_any_request() {
     let mut new = gglib_core::domain::NewModel::new(
         "flux-schnell".to_owned(),
         std::path::PathBuf::from("/models/absent-flux.gguf"),
-        12.0,
+        Some(12.0),
         chrono::Utc::now(),
     );
     new.image_family = Some(gglib_core::domain::ImageFamily::Flux1);

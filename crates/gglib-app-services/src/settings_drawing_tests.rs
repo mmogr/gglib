@@ -24,7 +24,7 @@ async fn model(core: &AppCore, name: &str, draws: bool) -> i64 {
     let mut new = gglib_core::domain::NewModel::new(
         name.to_owned(),
         std::path::PathBuf::from(format!("/models/{name}.gguf")),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     if draws {

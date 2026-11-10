@@ -212,7 +212,7 @@ fn a_model_with_only_a_header_type_is_named_and_found_by_it() {
         let mut new = NewModel::new(
             "qwen3".to_owned(),
             std::path::PathBuf::from(format!("/m/{id}.gguf")),
-            8.0,
+            Some(8.0),
             chrono::Utc::now(),
         );
         new.file_type = Some(FileType(file_type));

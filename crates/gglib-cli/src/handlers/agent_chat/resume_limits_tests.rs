@@ -23,7 +23,8 @@ async fn storing(dir: &tempfile::TempDir) -> CliContext {
         .await
         .expect("limits saved");
     let path = dir.path().join("qwen.gguf");
-    let model = gglib_core::domain::NewModel::new("qwen".to_owned(), path, 8.0, chrono::Utc::now());
+    let model =
+        gglib_core::domain::NewModel::new("qwen".to_owned(), path, Some(8.0), chrono::Utc::now());
     ctx.app.models().add(model).await.expect("registered");
     ctx
 }

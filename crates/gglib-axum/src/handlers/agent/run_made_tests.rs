@@ -42,7 +42,7 @@ async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
     let mut entry = gglib_core::domain::NewModel::new(
         "catalogue-name".to_owned(),
         std::path::PathBuf::from("/models/served.gguf"),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     entry.variant_label = Some("Q4_K_M".to_owned());

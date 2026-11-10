@@ -173,7 +173,7 @@ async fn serve_of_an_image_model_refuses_a_context_flag_before_the_daemon_is_ask
     let mut new = NewModel::new(
         "flux".to_owned(),
         dir.path().join("flux.gguf"),
-        12.0,
+        Some(12.0),
         chrono::Utc::now(),
     );
     new.image_family = Some(ImageFamily::Flux1);
@@ -214,7 +214,7 @@ fn flux_with_a_vae() -> Model {
     let mut new = NewModel::new(
         "flux-schnell".to_owned(),
         "/m/flux.gguf".into(),
-        12.0,
+        Some(12.0),
         chrono::Utc::now(),
     );
     new.image_family = Some(ImageFamily::Flux1);

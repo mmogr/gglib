@@ -24,7 +24,7 @@ fn make_new_model(name: &str) -> NewModel {
     NewModel::new(
         name.to_string(),
         PathBuf::from(format!("/test/models/{name}.gguf")),
-        7.0,
+        Some(7.0),
         Utc::now(),
     )
 }

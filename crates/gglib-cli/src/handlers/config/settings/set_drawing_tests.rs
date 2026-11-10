@@ -22,7 +22,7 @@ async fn model(ctx: &CliContext, name: &str, draws: bool, dir: &std::path::Path)
     let mut new = NewModel::new(
         name.to_owned(),
         dir.join(format!("{name}.gguf")),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     if draws {

@@ -621,8 +621,8 @@ pub struct AgenticEvalReport {
     pub model_name: String,
     /// Quantization label (e.g. `Q4_K_M`), when known.
     pub quantization: Option<String>,
-    /// Parameter count in billions.
-    pub param_count_b: f64,
+    /// Parameter count in billions, when known.
+    pub param_count_b: Option<f64>,
     /// Context size every arm ran at, in tokens.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub ctx_size: u64,

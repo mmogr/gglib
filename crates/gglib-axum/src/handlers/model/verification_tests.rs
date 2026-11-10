@@ -75,7 +75,7 @@ impl Library {
     /// Add a model a user pointed gglib at: no repository, no file rows.
     async fn local_model(&self) -> i64 {
         let path = self.dir.path().join("local.gguf");
-        let model = NewModel::new("local".to_owned(), path, 7.0, chrono::Utc::now());
+        let model = NewModel::new("local".to_owned(), path, Some(7.0), chrono::Utc::now());
         self.state.core.models().add(model).await.unwrap().id
     }
 
@@ -84,7 +84,7 @@ impl Library {
     async fn downloaded_model(&self, bytes: &str) -> i64 {
         let path = self.dir.path().join(WEIGHTS);
         std::fs::write(&path, bytes).unwrap();
-        let mut model = NewModel::new("zeta".to_owned(), path, 7.0, chrono::Utc::now());
+        let mut model = NewModel::new("zeta".to_owned(), path, Some(7.0), chrono::Utc::now());
         model.hf_repo_id = Some(REPO.to_owned());
         model.variant_label = Some("Q8_0".to_owned());
         let id = self.state.core.models().add(model).await.unwrap().id;

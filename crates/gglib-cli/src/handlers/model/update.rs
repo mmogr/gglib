@@ -364,8 +364,8 @@ fn show_changes_preview(existing: &Model, updated: &Model) {
     show_field_change("Name", &existing.name, &updated.name);
     show_field_change(
         "Parameters",
-        &format!("{:.1}B", existing.param_count_b),
-        &format!("{:.1}B", updated.param_count_b),
+        &crate::presentation::format_params(existing.param_count_b),
+        &crate::presentation::format_params(updated.param_count_b),
     );
     show_field_change(
         "Architecture",

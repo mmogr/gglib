@@ -38,7 +38,7 @@ pub(in crate::handlers::agent) async fn model(state: &AppState, name: &str, sees
     let new = NewModel::new(
         name.to_owned(),
         PathBuf::from("models").join(format!("{name}.gguf")),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     let mut model = state.core.models().add(new).await.expect("added");

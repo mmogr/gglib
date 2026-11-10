@@ -71,7 +71,7 @@ pub(crate) async fn execute(
                     println!("  [{id}] {name} — draws as {}", family.label());
                 }
                 if pass.facts_read {
-                    println!("  [{id}] {name} — type and bits per weight read from its header");
+                    println!("  [{id}] {name} — the header facts it lacked read from its file");
                 }
             }
             Err(e) => {

@@ -19,7 +19,7 @@ impl ModelCatalogPort for OneModelCatalog {
 
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
         Ok((name == MODEL).then(|| ModelSummary {
-            param_count: String::new(),
+            param_count: Some(String::new()),
             ..ModelSummary::bare(1, MODEL)
         }))
     }

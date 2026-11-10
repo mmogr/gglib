@@ -87,7 +87,7 @@ fn model_with(projector: Option<&str>) -> Model {
     let mut new = gglib_core::NewModel::new(
         "qwen".to_owned(),
         PathBuf::from("/models/qwen.gguf"),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     new.projector_path = projector.map(PathBuf::from);

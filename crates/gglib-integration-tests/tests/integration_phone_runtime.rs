@@ -61,7 +61,7 @@ impl Phone {
             .expect("the weights are written");
 
         let repos = CoreFactory::build_repos(setup_test_pool().await.expect("a database"));
-        let mut small = NewModel::new("small".to_owned(), weights, 0.1, Utc::now());
+        let mut small = NewModel::new("small".to_owned(), weights, Some(0.1), Utc::now());
         small.architecture = Some("llama".to_owned());
         small.context_length = Some(32_768);
         small.metadata = HashMap::from(

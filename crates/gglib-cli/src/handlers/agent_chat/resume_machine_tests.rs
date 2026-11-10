@@ -175,7 +175,7 @@ async fn library(dir: &tempfile::TempDir) -> (CliContext, i64, i64) {
         let model = gglib_core::domain::NewModel::new(
             name.to_owned(),
             dir.path().join(format!("{name}.gguf")),
-            8.0,
+            Some(8.0),
             chrono::Utc::now(),
         );
         ids.push(ctx.app.models().add(model).await.expect("registered").id);

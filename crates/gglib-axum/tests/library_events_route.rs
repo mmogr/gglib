@@ -31,7 +31,7 @@ async fn catalogued(state: &gglib_axum::AxumContext, name: &str) -> i64 {
     let model = gglib_core::domain::NewModel::new(
         name.to_owned(),
         std::path::PathBuf::from(format!("/models/{name}.gguf")),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     state.core.models().add(model).await.unwrap().id
@@ -120,7 +120,7 @@ async fn an_add_from_the_app_reaches_the_stream_and_a_second_is_a_conflict() {
     assert_eq!(status, StatusCode::OK, "{answer}");
     let stored = state.core.models().find_by_path(&weights).await.unwrap();
     let stored = stored.expect("the file has a row");
-    assert!((stored.param_count_b - 7.0).abs() < f64::EPSILON);
+    assert_eq!(stored.param_count_b, Some(7.0));
     let added = AppEvent::model_added((&stored).into());
     assert_eq!(next_frame(&mut events).await, frame_of(&added));
 

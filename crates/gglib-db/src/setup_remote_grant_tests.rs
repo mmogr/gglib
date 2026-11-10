@@ -248,7 +248,8 @@ async fn a_fresh_database_is_stamped_and_flags_nothing() {
     .expect("a fresh database");
 
     assert_eq!(flagged(&pool).await, []);
-    assert_eq!(version(&pool).await, REMOTE_GRANT_SCHEMA_VERSION);
+    // At least this step's version: the steps above it stamp higher.
+    assert!(version(&pool).await >= REMOTE_GRANT_SCHEMA_VERSION);
 }
 
 /// The step as a boot runs it: an older file opened by this build has its

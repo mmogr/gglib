@@ -185,7 +185,7 @@ fn a_kept_link_to_another_file_is_not_named_linked() {
     let mut new = gglib_core::domain::NewModel::new(
         "zeta".to_string(),
         dir().join("zeta.Q8_0.gguf"),
-        1.0,
+        Some(1.0),
         chrono::Utc::now(),
     );
     new.components = vec![

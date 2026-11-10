@@ -39,7 +39,9 @@ export const FarDetails: FC<{ id: number; detail: ModelDetailDto }> = ({ id, det
         Details
       </summary>
       <dl className="mt-sm grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-md gap-y-sm">
-        <Item label="Size">{formatParamCount(d.paramCountB, d.expertUsedCount, d.expertCount)}</Item>
+        {d.paramCountB !== undefined && (
+          <Item label="Size">{formatParamCount(d.paramCountB, d.expertUsedCount, d.expertCount)}</Item>
+        )}
         {d.architecture && <Item label="Architecture">{d.architecture}</Item>}
         {(d.quantization || d.bitsPerWeight != null) && (
           <Item label="Quant">

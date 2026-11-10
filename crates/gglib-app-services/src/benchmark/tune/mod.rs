@@ -1380,7 +1380,7 @@ mod tests {
         let path = std::path::PathBuf::from("/tmp/model.gguf");
         Model::stored(
             1,
-            &gglib_core::NewModel::new(name.to_string(), path, 7.0, chrono::Utc::now()),
+            &gglib_core::NewModel::new(name.to_string(), path, Some(7.0), chrono::Utc::now()),
         )
     }
 }

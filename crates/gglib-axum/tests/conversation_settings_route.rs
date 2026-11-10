@@ -25,7 +25,7 @@ async fn daemon() -> (gglib_axum::AppState, Router, i64, i64) {
     let mut ids = Vec::new();
     for name in ["qwen3", "gemma"] {
         let path = std::path::PathBuf::from(format!("/models/{name}.gguf"));
-        let model = NewModel::new(name.to_owned(), path, 7.0, chrono::Utc::now());
+        let model = NewModel::new(name.to_owned(), path, Some(7.0), chrono::Utc::now());
         ids.push(state.core.models().add(model).await.unwrap().id);
     }
     (state, app, ids[0], ids[1])

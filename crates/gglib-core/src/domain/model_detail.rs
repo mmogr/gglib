@@ -65,8 +65,10 @@ pub struct ModelDetailDto {
     /// recipe's order. Empty for a model that chats.
     #[serde(default)]
     pub missing_components: Vec<ComponentRole>,
-    /// Parameter count in billions.
-    pub param_count_b: f64,
+    /// Parameter count in billions, when it is known.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub param_count_b: Option<f64>,
     /// Model architecture (e.g. `"llama"`, `"mistral"`).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]

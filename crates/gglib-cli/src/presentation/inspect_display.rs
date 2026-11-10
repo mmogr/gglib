@@ -28,7 +28,9 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     for line in image_model_lines(dto) {
         println!("{line}");
     }
-    println!("  Parameters     : {:.1}B", dto.param_count_b);
+    if let Some(params) = dto.param_count_b {
+        println!("  Parameters     : {params:.1}B");
+    }
     if let Some(arch) = &dto.architecture {
         println!("  Architecture   : {arch}");
     }

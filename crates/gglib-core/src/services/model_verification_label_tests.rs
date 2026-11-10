@@ -22,7 +22,7 @@ fn unlabelled(
     queued: Arc<AskedDownloads>,
 ) -> ModelVerificationService {
     std::fs::write(dir.join(WEIGHTS), "damaged").unwrap();
-    let mut new = NewModel::new("zeta".to_owned(), dir.join(WEIGHTS), 7.0, Utc::now());
+    let mut new = NewModel::new("zeta".to_owned(), dir.join(WEIGHTS), Some(7.0), Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
     new.file_type = Some(FileType(7));
     ModelVerificationService::new(
@@ -78,7 +78,12 @@ async fn an_unlabelled_model_is_checked_at_the_variant_holding_its_file() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub();
     std::fs::write(dir.path().join(WEIGHTS), "damaged").unwrap();
-    let mut new = NewModel::new("zeta".to_owned(), dir.path().join(WEIGHTS), 7.0, Utc::now());
+    let mut new = NewModel::new(
+        "zeta".to_owned(),
+        dir.path().join(WEIGHTS),
+        Some(7.0),
+        Utc::now(),
+    );
     new.hf_repo_id = Some(REPO.to_owned());
     new.hf_filename = Some(WEIGHTS.to_owned());
     let service = ModelVerificationService::new(

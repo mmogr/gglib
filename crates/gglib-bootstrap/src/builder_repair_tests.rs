@@ -51,7 +51,12 @@ async fn a_repair_leaves_a_running_download() {
     std::fs::create_dir(&folder).unwrap();
     let corrupt = folder.join(WEIGHTS);
     std::fs::write(&corrupt, "damaged").unwrap();
-    let mut model = NewModel::new("zeta".to_owned(), corrupt.clone(), 7.0, chrono::Utc::now());
+    let mut model = NewModel::new(
+        "zeta".to_owned(),
+        corrupt.clone(),
+        Some(7.0),
+        chrono::Utc::now(),
+    );
     model.hf_repo_id = Some("owner/zeta-GGUF".to_owned());
     // The label the repository's listing gives its one file.
     model.variant_label = Some("zeta.Q8_0".to_owned());

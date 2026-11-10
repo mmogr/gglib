@@ -1,5 +1,6 @@
 //! The `models` table: its definition, the columns added to it since, its
-//! indexes, and the one-time rebuild that stops it reusing ids.
+//! indexes, and the rebuild that brings an older shape to today's: one that
+//! reuses ids, or that cannot hold an unknown parameter count.
 //!
 //! A `#[path]` child of `setup.rs`, whose `create_schema` creates the table
 //! and its indexes first, before any table that references `models`, and runs
@@ -23,7 +24,7 @@ fn models_ddl(table: &str) -> String {
             name TEXT NOT NULL,
             file_path TEXT NOT NULL,
             projector_path TEXT,
-            param_count_b REAL NOT NULL,
+            param_count_b REAL,
             architecture TEXT,
             variant_label TEXT,
             file_type INTEGER,
@@ -127,20 +128,28 @@ pub(super) async fn create_model_indexes(conn: &mut SqliteConnection) -> Result<
     Ok(())
 }
 
-/// Whether `models` is declared `AUTOINCREMENT`.
-async fn never_reuses_ids(conn: &mut SqliteConnection) -> Result<bool> {
+/// Whether `models` has today's shape: declared `AUTOINCREMENT`, and with a
+/// `param_count_b` that may be NULL, a count nothing could read.
+async fn in_todays_shape(conn: &mut SqliteConnection) -> Result<bool> {
     let sql: String = sqlx::query_scalar(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'models'",
     )
     .fetch_one(&mut *conn)
     .await?;
-    Ok(sql.to_ascii_uppercase().contains("AUTOINCREMENT"))
+    let count_required: bool = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(\"notnull\"), 0) FROM pragma_table_info('models') \
+         WHERE name = 'param_count_b'",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(sql.to_ascii_uppercase().contains("AUTOINCREMENT") && !count_required)
 }
 
-/// Rebuilds a `models` table made without `AUTOINCREMENT`, keeping every row,
-/// every id and every row elsewhere that references one.
+/// Rebuilds a `models` table made without `AUTOINCREMENT`, or with a
+/// `param_count_b` that must be set, keeping every row, every id and every
+/// row elsewhere that references one.
 ///
-/// `SQLite` cannot add `AUTOINCREMENT` to a table in place, so this is its
+/// `SQLite` can change neither in place, so this is its
 /// documented table rebuild: the new table is made beside the old, filled, and
 /// renamed over it. It runs last in `create_schema`, because the sequence it
 /// seeds reads `chat_conversations`, `settings_kv` and the benchmark tables,
@@ -159,7 +168,7 @@ async fn never_reuses_ids(conn: &mut SqliteConnection) -> Result<bool> {
 /// transaction, so the second finds the work done and changes nothing.
 pub(super) async fn rebuild_models_if_needed(pool: &SqlitePool) -> Result<()> {
     let mut conn = pool.acquire().await?;
-    if never_reuses_ids(&mut conn).await? {
+    if in_todays_shape(&mut conn).await? {
         return Ok(());
     }
     match rebuild_models(&mut conn).await {
@@ -192,13 +201,15 @@ async fn rebuild_models(conn: &mut SqliteConnection) -> Result<()> {
 
 /// The rebuild's statements, inside the transaction `conn` holds.
 async fn rebuild_models_in_transaction(conn: &mut SqliteConnection) -> Result<()> {
-    if never_reuses_ids(conn).await? {
+    if in_todays_shape(conn).await? {
         return Ok(());
     }
     // A library can already hold rows that reference no model. Those must not
     // stop it booting; only a row the rebuild itself orphans may. Counted under
     // the lock, so no other process can change the count before the rebuild.
     let violations_before = foreign_key_violations(conn).await?;
+    // Read before the drop, which deletes the table's sequence row.
+    let sequenced = last_sequenced_id(conn).await?;
     sqlx::query(&models_ddl("models_new"))
         .execute(&mut *conn)
         .await?;
@@ -268,10 +279,34 @@ async fn rebuild_models_in_transaction(conn: &mut SqliteConnection) -> Result<()
         .execute(&mut *conn)
         .await?;
     sqlx::query("INSERT INTO sqlite_sequence (name, seq) VALUES ('models', ?)")
-        .bind(highest)
+        .bind(highest.max(sequenced))
         .execute(&mut *conn)
         .await?;
     Ok(())
+}
+
+/// The id `models`' own sequence last gave, `0` when it has none: a table
+/// made without `AUTOINCREMENT`, or a library with no `sqlite_sequence`,
+/// which `SQLite` makes only with the first `AUTOINCREMENT` table.
+///
+/// A rebuild of a table that already had a sequence must keep it: a
+/// removed model's id lives on nowhere else once the rows that referenced it
+/// went with it.
+async fn last_sequenced_id(conn: &mut SqliteConnection) -> Result<i64> {
+    let has_sequences: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    if has_sequences == 0 {
+        return Ok(0);
+    }
+    let seq = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(seq), 0) FROM sqlite_sequence WHERE name = 'models'",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(seq)
 }
 
 /// How many rows `PRAGMA foreign_key_check` reports.

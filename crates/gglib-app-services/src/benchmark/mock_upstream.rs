@@ -96,7 +96,7 @@ impl ModelCatalogPort for OneModelCatalog {
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
         Ok((name == "1" || name == self.0).then(|| ModelSummary {
             capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
-            param_count: String::new(),
+            param_count: None,
             ..ModelSummary::bare(1, self.0)
         }))
     }

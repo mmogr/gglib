@@ -41,7 +41,8 @@ async fn asked(no_tools: bool) -> (gglib_core::domain::chat::Conversation, Value
     let args = question(no_tools, &notes);
     let ctx = test_context(dir.path()).await;
     let path = dir.path().join("qwen.gguf");
-    let model = gglib_core::domain::NewModel::new("qwen".to_owned(), path, 8.0, chrono::Utc::now());
+    let model =
+        gglib_core::domain::NewModel::new("qwen".to_owned(), path, Some(8.0), chrono::Utc::now());
     ctx.app.models().add(model).await.expect("registered");
     let (port, taken) = stand_in(Answer::Runs {
         frames: vec![json!({"type": "final_answer", "content": "A cat."}).to_string()],

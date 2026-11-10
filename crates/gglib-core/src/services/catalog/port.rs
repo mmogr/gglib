@@ -47,7 +47,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         capabilities: m.capabilities,
         image_input: m.image_input(),
         image_output: m.generates_images(),
-        param_count: format_param_count(m.param_count_b),
+        param_count: m.param_count_b.map(format_param_count),
         quantization: m.quant_label().map(str::to_owned),
         architecture: m.architecture.clone(),
         created_at: m.added_at.timestamp(),

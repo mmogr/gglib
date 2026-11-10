@@ -158,7 +158,7 @@ fn model_with(components: &[(ComponentRole, &str)]) -> Model {
     let mut new = gglib_core::NewModel::new(
         "flux".to_owned(),
         PathBuf::from("/models/flux.gguf"),
-        12.0,
+        Some(12.0),
         chrono::Utc::now(),
     );
     new.image_family = Some(gglib_core::domain::ImageFamily::Flux1);

@@ -47,7 +47,7 @@ async fn library(linked: Option<&str>) -> Library {
     let dir = tempfile::tempdir().unwrap();
 
     let weights = file(dir.path(), WEIGHTS, b"weights");
-    let mut model = NewModel::new("zeta".to_string(), weights, 8.0, chrono::Utc::now());
+    let mut model = NewModel::new("zeta".to_string(), weights, Some(8.0), chrono::Utc::now());
     model.hf_repo_id = Some(REPO.to_string());
     model.hf_commit_sha = Some(RECORDED.to_string());
     model.variant_label = Some("Q8_0".to_string());

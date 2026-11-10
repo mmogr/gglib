@@ -54,7 +54,7 @@ async fn an_upgrade_reads_the_new_files_type_and_bits_and_keeps_the_label() {
     let mut held = NewModel::new(
         "model".to_owned(),
         PathBuf::from("/models/old.gguf"),
-        8.0,
+        Some(8.0),
         Utc::now(),
     );
     held.variant_label = Some("UD-Q4_K_XL".to_owned());

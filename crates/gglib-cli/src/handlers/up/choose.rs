@@ -260,7 +260,7 @@ mod tests {
     async fn registered(ctx: &CliContext, dir: &std::path::Path, name: &str) -> i64 {
         let path = dir.join(format!("{name}.gguf"));
         let entry =
-            gglib_core::domain::NewModel::new(name.to_owned(), path, 4.0, chrono::Utc::now());
+            gglib_core::domain::NewModel::new(name.to_owned(), path, Some(4.0), chrono::Utc::now());
         ctx.app.models().add(entry).await.expect("registered").id
     }
 

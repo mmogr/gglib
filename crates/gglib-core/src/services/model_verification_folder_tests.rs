@@ -44,7 +44,7 @@ fn service(
     rows: Vec<ModelFile>,
     queued: Arc<AskedDownloads>,
 ) -> ModelVerificationService {
-    let mut new = NewModel::new("zeta".to_owned(), dir.join(FIRST), 27.0, Utc::now());
+    let mut new = NewModel::new("zeta".to_owned(), dir.join(FIRST), Some(27.0), Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
     new.variant_label = Some("BF16".to_owned());
     let hub = FakeHub {

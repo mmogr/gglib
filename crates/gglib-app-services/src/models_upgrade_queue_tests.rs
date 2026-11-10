@@ -34,7 +34,7 @@ async fn library() -> Library {
     let mut model = NewModel::new(
         "zeta".to_string(),
         PathBuf::from("/models/old/zeta.Q8_0.gguf"),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     model.hf_repo_id = Some(REPO.to_string());

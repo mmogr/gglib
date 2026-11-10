@@ -33,7 +33,10 @@ pub struct GuiModel {
     pub id: i64,
     pub name: String,
     pub file_path: String,
-    pub param_count_b: f64,
+    /// The parameters, in billions; omitted when they are unknown.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub param_count_b: Option<f64>,
     pub architecture: Option<String>,
     /// The label the model's type is shown by: see `Model::quant_label`.
     pub quantization: Option<String>,
@@ -343,8 +346,8 @@ pub struct RetagResponse {
     pub spec_changed: bool,
     /// The image family read from the file for a model that had none.
     pub family_found: Option<gglib_core::domain::ImageFamily>,
-    /// Whether the type or the bits per weight the model lacked were read
-    /// from its file's header.
+    /// Whether the type, the bits per weight or the parameter count the model
+    /// lacked were read from its file's header.
     pub facts_read: bool,
 }
 

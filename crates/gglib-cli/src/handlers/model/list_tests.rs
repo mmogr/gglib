@@ -184,7 +184,7 @@ async fn three_models(dir: &std::path::Path) -> CliContext {
             .with_ymd_and_hms(2026, 10, day, 12, 0, 0)
             .unwrap();
         let path = format!("/models/{name}.gguf").into();
-        let mut model = gglib_core::NewModel::new(name.to_owned(), path, params, added);
+        let mut model = gglib_core::NewModel::new(name.to_owned(), path, Some(params), added);
         model.context_length = Some(context);
         ctx.app.models().add(model).await.unwrap();
     }
@@ -225,9 +225,9 @@ async fn the_library_is_listed_newest_first() {
 
 ID  Name                      Model ID Params   Arch         Quant    Size       Context    Images  Draws Added                File Path
 {rule}
-3   charlie                   charlie  27.0     --           --       --         131072     --      --    2026-10-03 12:00:00  /models/charlie.gguf
-2   bravo                     bravo    3.0      --           --       --         8192       --      --    2026-10-02 12:00:00  /models/bravo.gguf
-1   alpha                     alpha    7.5      --           --       --         32768      --      --    2026-10-01 12:00:00  /models/alpha.gguf
+3   charlie                   charlie  27.0B    --           --       --         131072     --      --    2026-10-03 12:00:00  /models/charlie.gguf
+2   bravo                     bravo    3.0B     --           --       --         8192       --      --    2026-10-02 12:00:00  /models/bravo.gguf
+1   alpha                     alpha    7.5B     --           --       --         32768      --      --    2026-10-01 12:00:00  /models/alpha.gguf
 "
         )
     );

@@ -21,7 +21,7 @@ async fn a_model(dir: &tempfile::TempDir) -> Model {
     let mut model = gglib_core::domain::NewModel::new(
         "qwen".to_owned(),
         dir.path().join("qwen.gguf"),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     model.context_length = Some(131_072);

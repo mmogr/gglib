@@ -495,9 +495,9 @@ async fn cmd_agentic(
 fn render_agentic_report(report: &AgenticEvalReport) {
     eprintln!();
     eprintln!(
-        "  {BOLD}{model} ({params}B{quant}) @ {ctx} ctx{RESET}",
+        "  {BOLD}{model} ({params}{quant}) @ {ctx} ctx{RESET}",
         model = report.model_name,
-        params = report.param_count_b,
+        params = crate::presentation::format_params(report.param_count_b),
         quant = report
             .quantization
             .as_deref()

@@ -19,7 +19,7 @@ fn create_test_model() -> Model {
         model_key: String::new(),
         file_path: PathBuf::from("/test/model.gguf"),
         projector_path: None,
-        param_count_b: 7.0,
+        param_count_b: Some(7.0),
         inference_defaults: None,
         defaults_origin: None,
         architecture: Some("llama".to_string()),
@@ -142,10 +142,6 @@ fn apply(existing: &Model, args: &UpdateArgs) -> Model {
 }
 
 #[test]
-#[expect(
-    clippy::float_cmp,
-    reason = "the parameter count is stored as typed, so 13.0 comes back exactly"
-)]
 fn test_create_updated_model() {
     let updated = apply(
         &create_test_model(),
@@ -161,7 +157,7 @@ fn test_create_updated_model() {
     );
 
     assert_eq!(updated.name, "Updated Name");
-    assert_eq!(updated.param_count_b, 13.0);
+    assert_eq!(updated.param_count_b, Some(13.0));
     assert_eq!(updated.architecture, Some("mistral".to_string()));
     assert_eq!(updated.variant_label, Some("Q4_0".to_string())); // Unchanged
     assert_eq!(updated.context_length, Some(8192));
