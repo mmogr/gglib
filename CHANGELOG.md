@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.32.1-rc.1](https://github.com/mmogr/gglib/compare/v0.32.0-rc.1...v0.32.1-rc.1) (2026-11-10)
+
+
+### Internal
+
+* **deps:** bump the cargo and npm dependencies to the newest versions their ranges allow ([#1869](https://github.com/mmogr/gglib/issues/1869)) ([7ec1f1b](https://github.com/mmogr/gglib/commit/7ec1f1b35a3e9fc4df95ce91a1cb94eadf09bf48))
+* **deps:** bump the cargo-compatible group across 1 directory with 13 updates ([#1867](https://github.com/mmogr/gglib/issues/1867)) ([2d2b11d](https://github.com/mmogr/gglib/commit/2d2b11db7a983edf9fdd0d269bc7dbbc602a05d7))
+* **deps:** move llama.cpp's pin from b11960 to b12110 ([#1844](https://github.com/mmogr/gglib/issues/1844)) ([1f75dfe](https://github.com/mmogr/gglib/commit/1f75dfe3b91b7f96adb84297e160524da719f88a))
+
 ## [0.32.0-rc.1](https://github.com/mmogr/gglib/compare/v0.31.0-rc.9...v0.32.0-rc.1) (2026-11-09)
 
 
