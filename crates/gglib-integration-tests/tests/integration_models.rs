@@ -19,7 +19,7 @@ fn test_new_model_serialization() {
     let mut original_model = NewModel::new(
         "Test Llama Model".to_string(),
         PathBuf::from("/models/test-llama.gguf"),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     original_model.architecture = Some("llama".to_string());
@@ -48,13 +48,13 @@ fn test_new_model_with_minimal_data() {
     let model = NewModel::new(
         String::new(),               // Empty name
         PathBuf::from("model.gguf"), // Minimal path
-        0.0,                         // Zero parameters
+        Some(0.0),                   // Zero parameters
         Utc::now(),
     );
 
     // Should handle minimal/empty values
     assert_eq!(model.name, "");
-    assert_eq!(model.param_count_b, 0.0);
+    assert_eq!(model.param_count_b, Some(0.0));
     assert_eq!(model.architecture, None);
     assert!(model.metadata.is_empty());
 
@@ -62,7 +62,7 @@ fn test_new_model_with_minimal_data() {
     let serialized = serde_json::to_string(&model).unwrap();
     let deserialized: NewModel = serde_json::from_str(&serialized).unwrap();
     assert_eq!(deserialized.name, "");
-    assert_eq!(deserialized.param_count_b, 0.0);
+    assert_eq!(deserialized.param_count_b, Some(0.0));
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn test_datetime_handling() {
     let model = NewModel::new(
         "DateTime Test".to_string(),
         PathBuf::from("/test/datetime.gguf"),
-        1.0,
+        Some(1.0),
         now,
     );
 
@@ -106,7 +106,7 @@ fn test_path_handling() {
         let model = NewModel::new(
             format!("Test for {path_str}"),
             PathBuf::from(path_str),
-            1.0,
+            Some(1.0),
             Utc::now(),
         );
 

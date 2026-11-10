@@ -22,7 +22,7 @@ use gglib_core::download::format_size;
 
 use crate::bootstrap::CliContext;
 use crate::model_list_args::ListArgs;
-use crate::presentation::truncate_string;
+use crate::presentation::{format_params, truncate_string};
 use crate::target::Target;
 
 #[path = "list_far.rs"]
@@ -228,11 +228,11 @@ fn render_table(models: &[GuiModel]) -> String {
                 .map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<model_id_width$} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",
+                "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<10} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model_id,
-                model.param_count_b,
+                format_params(model.param_count_b),
                 truncate_string(&speed, 9),
                 truncate_string(arch, 11),
                 truncate_string(quant, 7),
@@ -246,11 +246,11 @@ fn render_table(models: &[GuiModel]) -> String {
         } else {
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<model_id_width$} {:<8.1} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",
+                "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model_id,
-                model.param_count_b,
+                format_params(model.param_count_b),
                 truncate_string(arch, 11),
                 truncate_string(quant, 7),
                 size,

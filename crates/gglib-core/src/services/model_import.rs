@@ -221,8 +221,7 @@ pub fn build_new_model(
             param_count_override,
         } => param_count_override.or(facts.param_count_b),
         ModelOrigin::HuggingFace(_) => facts.param_count_b,
-    }
-    .unwrap_or(0.0);
+    };
 
     let gguf_caps = gguf.map(|g| parser.detect_capabilities(g));
     let gguf_tags = gguf_caps
@@ -472,7 +471,7 @@ mod tests {
             &origin,
             Utc::now(),
         );
-        assert_eq!(model.param_count_b, 13.0);
+        assert_eq!(model.param_count_b, Some(13.0));
     }
 
     #[test]
@@ -491,7 +490,7 @@ mod tests {
             &origin,
             Utc::now(),
         );
-        assert_eq!(model.param_count_b, 7.0);
+        assert_eq!(model.param_count_b, Some(7.0));
     }
 
     /// The quant a download asked for is the Hub's name for its files, which

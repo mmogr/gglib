@@ -33,7 +33,10 @@ pub struct GuiModel {
     pub id: i64,
     pub name: String,
     pub file_path: String,
-    pub param_count_b: f64,
+    /// The parameters, in billions; omitted when they are unknown.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub param_count_b: Option<f64>,
     pub architecture: Option<String>,
     /// The label the model's type is shown by: see `Model::quant_label`.
     pub quantization: Option<String>,

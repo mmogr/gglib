@@ -127,7 +127,7 @@ fn model(key: &str) -> NewModel {
     NewModel::new(
         key.to_string(),
         format!("/m/{key}.gguf").into(),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     )
 }

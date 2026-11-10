@@ -67,7 +67,12 @@ pub(crate) fn write_golden(dir: &Path, golden: Golden) -> PathBuf {
 /// A service over model 1, whose weights are `file` and whose family is
 /// `family`.
 fn service(file: &Path, family: Option<ImageFamily>) -> (ModelService, Arc<OneModelRepo>) {
-    let mut new = NewModel::new("model".to_owned(), file.to_path_buf(), 12.0, Utc::now());
+    let mut new = NewModel::new(
+        "model".to_owned(),
+        file.to_path_buf(),
+        Some(12.0),
+        Utc::now(),
+    );
     new.image_family = family;
     let repo = Arc::new(OneModelRepo(Mutex::new(Model::stored(1, &new))));
     (ModelService::new(repo.clone()), repo)
@@ -646,7 +651,7 @@ fn downloaded(dir: &Path, family: Option<ImageFamily>) -> NewModel {
     let mut new = NewModel::new(
         "flux1-schnell".to_owned(),
         dir.join("flux1-schnell-q8_0.gguf"),
-        12.0,
+        Some(12.0),
         Utc::now(),
     );
     new.image_family = family;

@@ -8,7 +8,7 @@ use gglib_core::ports::ModelSummary;
 
 fn summary(trained: Option<u64>) -> ModelSummary {
     ModelSummary {
-        param_count: "8B".into(),
+        param_count: Some("8B".into()),
         context_length: trained,
         ..ModelSummary::bare(1, "qwen3-8b")
     }

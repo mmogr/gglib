@@ -42,7 +42,7 @@ export interface LibraryGroups {
  */
 export function modelFacts(model: GgufModel): (string | null | false)[] {
   return [
-    formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount),
+    model.paramCountB !== undefined && formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount),
     model.quantization,
     model.sizeBytes > 0 && formatSize(model.sizeBytes),
     canSee(model) && 'sees images',
@@ -61,10 +61,10 @@ function billionsOf(word: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-/** Whether `params` billions is what a size word names: to the unit, or to the tenth when it has one. */
-function sizeMatches(params: number, word: string): boolean {
+/** Whether `params` billions is what a size word names: to the unit, or to the tenth when it has one. An unknown count names no size. */
+function sizeMatches(params: number | undefined, word: string): boolean {
   const named = billionsOf(word);
-  if (named === null) return false;
+  if (named === null || params === undefined) return false;
   return word.includes('.') ? Math.round(params * 10) === Math.round(named * 10) : Math.round(params) === named;
 }
 

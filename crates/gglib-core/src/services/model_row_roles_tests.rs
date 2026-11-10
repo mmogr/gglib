@@ -12,7 +12,7 @@ use crate::ports::{FirstBytesParser, ParsedPaths};
 /// Model 1, whose weights are `weights` in `dir`, linked to `projector` there
 /// when one is given.
 fn model(dir: &Path, weights: &str, projector: Option<&str>) -> Model {
-    let mut new = NewModel::new("zeta".to_owned(), dir.join(weights), 7.0, Utc::now());
+    let mut new = NewModel::new("zeta".to_owned(), dir.join(weights), Some(7.0), Utc::now());
     new.projector_path = projector.map(|name| dir.join(name));
     Model::stored(1, &new)
 }

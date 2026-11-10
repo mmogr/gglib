@@ -56,7 +56,8 @@ async fn context(dir: &tempfile::TempDir) -> (CliContext, i64) {
         .await
         .expect("profiles saved");
     let path = dir.path().join("qwen.gguf");
-    let model = gglib_core::domain::NewModel::new("qwen".to_owned(), path, 8.0, chrono::Utc::now());
+    let model =
+        gglib_core::domain::NewModel::new("qwen".to_owned(), path, Some(8.0), chrono::Utc::now());
     let qwen = ctx.app.models().add(model).await.expect("registered").id;
     (ctx, qwen)
 }

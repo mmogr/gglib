@@ -9,7 +9,12 @@ use crate::domain::NewModel;
 use crate::ports::{FirstBytesParser, ParsedPaths};
 
 fn model(id: i64, weights: &Path, projector: Option<&Path>) -> Model {
-    let mut new = NewModel::new(format!("m{id}"), weights.to_path_buf(), 7.0, Utc::now());
+    let mut new = NewModel::new(
+        format!("m{id}"),
+        weights.to_path_buf(),
+        Some(7.0),
+        Utc::now(),
+    );
     new.projector_path = projector.map(Path::to_path_buf);
     Model::stored(id, &new)
 }

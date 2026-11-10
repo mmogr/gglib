@@ -15,7 +15,7 @@ fn read_as(file_type: Option<u32>, bits: Option<f64>) -> NewModel {
     let mut new = NewModel::new(
         "a".to_owned(),
         PathBuf::from("/models/a.gguf"),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     new.file_type = file_type.map(FileType);

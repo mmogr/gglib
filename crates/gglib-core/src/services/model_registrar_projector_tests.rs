@@ -202,7 +202,7 @@ async fn a_model_already_linked_keeps_its_link_when_downloaded_again() {
     let mut held = NewModel::new(
         "zeta".to_owned(),
         canonical_model_path(&download.primary_path).unwrap(),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     held.projector_path = Some(chosen.clone());
@@ -230,7 +230,7 @@ async fn a_model_linked_to_the_downloaded_projector_reports_nothing() {
     let mut held = NewModel::new(
         "zeta".to_owned(),
         canonical_model_path(&download.primary_path).unwrap(),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     held.projector_path = Some(linked.clone());

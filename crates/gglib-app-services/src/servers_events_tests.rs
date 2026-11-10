@@ -141,7 +141,7 @@ impl Fixture {
         for name in ["another-model", MODEL] {
             let path = dir.path().join(format!("{name}.gguf"));
             std::fs::write(&path, b"placeholder").expect("the model file");
-            let model = NewModel::new(name.to_owned(), path, 7.0, chrono::Utc::now());
+            let model = NewModel::new(name.to_owned(), path, Some(7.0), chrono::Utc::now());
             model_id = repos.models.insert(&model).await.expect("a model").id;
         }
 

@@ -21,7 +21,7 @@ fn base_model() -> Model {
         model_key: String::new(),
         file_path: PathBuf::from("/models/qwen3.gguf"),
         projector_path: None,
-        param_count_b: 7.0,
+        param_count_b: Some(7.0),
         architecture: None,
         variant_label: None,
         file_type: None,

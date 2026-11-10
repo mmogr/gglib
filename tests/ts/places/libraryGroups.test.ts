@@ -11,6 +11,7 @@ import {
   matchesDownload,
   matchesFar,
   matchesModel,
+  modelFacts,
   sortModels,
 } from '../../../src/places/library/groups';
 import { guiModel } from '../fixtures/model';
@@ -68,6 +69,12 @@ describe('matchesModel', () => {
     expect(matchesModel(tiny, '0.6b')).toBe(true);
     expect(matchesModel(gemma, '12b')).toBe(true);
     expect(matchesModel(flux, '8b')).toBe(false);
+  });
+
+  it('gives a model whose count is unknown no size, to show or to match', () => {
+    const unknown = guiModel({ name: 'mystery', paramCountB: undefined });
+    expect(matchesModel(unknown, '7b')).toBe(false);
+    expect(modelFacts(unknown)[0]).toBe(false);
   });
 });
 

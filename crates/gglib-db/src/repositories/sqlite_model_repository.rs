@@ -459,7 +459,7 @@ mod tests {
         NewModel::new(
             name.to_string(),
             PathBuf::from(format!("/models/{name}.gguf")),
-            7.0,
+            Some(7.0),
             Utc::now(),
         )
     }
@@ -534,7 +534,7 @@ mod tests {
             .insert(&NewModel::new(
                 "Real".to_string(),
                 path.clone(),
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -589,7 +589,7 @@ mod tests {
             format!("local:{:x}", hasher.finish())
         };
 
-        let model = NewModel::new("Qwen3-8B-Q4_K_M".to_string(), path, 7.0, Utc::now());
+        let model = NewModel::new("Qwen3-8B-Q4_K_M".to_string(), path, Some(7.0), Utc::now());
         assert_eq!(
             compute_model_key(&model, &normalized_file_path_string(&model.file_path)),
             previous,
@@ -629,14 +629,19 @@ mod tests {
         assert_ne!(path, respelled, "the two spellings must differ literally");
 
         let first = repo
-            .insert(&NewModel::new("Solo".to_string(), path, 7.0, Utc::now()))
+            .insert(&NewModel::new(
+                "Solo".to_string(),
+                path,
+                Some(7.0),
+                Utc::now(),
+            ))
             .await
             .unwrap();
         let second = repo
             .insert(&NewModel::new(
                 "Solo".to_string(),
                 respelled,
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -670,7 +675,7 @@ mod tests {
             .insert(&NewModel::new(
                 "ALPHA".to_string(),
                 alpha_path.clone(),
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -679,7 +684,7 @@ mod tests {
             .insert(&NewModel::new(
                 "BETA".to_string(),
                 beta_path.clone(),
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -720,14 +725,15 @@ mod tests {
         std::fs::File::create(&first).unwrap();
         std::fs::File::create(&second).unwrap();
 
-        let mut downloaded = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        let mut downloaded =
+            NewModel::new("Sharded".to_string(), first.clone(), Some(7.0), Utc::now());
         downloaded.file_paths = Some(vec![first.clone(), second.clone()]);
         downloaded.download_date = Some(Utc::now());
         downloaded.last_update_check = Some(Utc::now());
         let original = repo.insert(&downloaded).await.unwrap();
 
         // A local re-import of the same file: no shard list, no dates.
-        let reimport = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        let reimport = NewModel::new("Sharded".to_string(), first.clone(), Some(7.0), Utc::now());
         let refreshed = repo.insert(&reimport).await.unwrap();
 
         assert_eq!(refreshed.id, original.id, "same row");
@@ -768,7 +774,7 @@ mod tests {
         // on macOS a tempdir sits behind `/private`, so raw and resolved
         // genuinely differ and the sibling arm would never match in
         // production.
-        let mut model = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        let mut model = NewModel::new("Sharded".to_string(), first.clone(), Some(7.0), Utc::now());
         model.file_paths = Some(vec![first.clone(), second.clone()]);
         let inserted = repo.insert(&model).await.unwrap();
 
@@ -797,7 +803,7 @@ mod tests {
             .insert(&NewModel::new(
                 "Updatable".to_string(),
                 path.clone(),
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await

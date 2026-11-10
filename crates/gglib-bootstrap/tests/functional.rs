@@ -16,7 +16,7 @@ async fn model_insert_and_list_round_trip() {
     let model = NewModel::new(
         "My Model".to_string(),
         dir.path().join("model.gguf"),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     core.repos.models.insert(&model).await.unwrap();

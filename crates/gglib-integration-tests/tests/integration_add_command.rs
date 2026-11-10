@@ -38,7 +38,7 @@ async fn test_add_command_database_integration() {
     let mut new_model = NewModel::new(
         "Integration Test Model".to_string(),
         file_path.clone(),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     new_model.architecture = Some("llama".to_string());
@@ -64,7 +64,7 @@ async fn test_add_command_database_integration() {
     assert_eq!(added_model.name, "Integration Test Model");
     let expected_path = fs::canonicalize(&file_path).unwrap_or_else(|_| file_path.clone());
     assert_eq!(added_model.file_path, expected_path);
-    assert_eq!(added_model.param_count_b, 7.0);
+    assert_eq!(added_model.param_count_b, Some(7.0));
     assert_eq!(added_model.architecture, Some("llama".to_string()));
     assert_eq!(added_model.variant_label.as_deref(), Some("UD-Q4_K_XL"));
     assert_eq!(
@@ -87,7 +87,7 @@ async fn test_add_command_duplicate_model_handling() {
     let mut new_model1 = NewModel::new(
         "Duplicate Test".to_string(),
         file_path.clone(),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     new_model1.architecture = Some("llama".to_string());
@@ -96,14 +96,14 @@ async fn test_add_command_duplicate_model_handling() {
 
     // Add first model
     let first_model = repo.insert(&new_model1).await.unwrap();
-    assert_eq!(first_model.param_count_b, 7.0);
+    assert_eq!(first_model.param_count_b, Some(7.0));
     assert_eq!(first_model.variant_label, Some("Q4_0".to_string()));
 
     // Add second model with same file path (should update via UPSERT for sharded download support)
     let mut new_model2 = NewModel::new(
         "Duplicate Test".to_string(),
         file_path.clone(),
-        13.0,
+        Some(13.0),
         Utc::now(),
     );
     new_model2.architecture = Some("mistral".to_string());
@@ -169,7 +169,7 @@ async fn test_add_command_with_complex_metadata() {
     let mut new_model = NewModel::new(
         "Complex Metadata Model".to_string(),
         file_path.clone(),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     new_model.architecture = Some("llama".to_string());
@@ -206,7 +206,7 @@ async fn test_add_command_with_minimal_data() {
     let new_model = NewModel::new(
         "Minimal Model".to_string(),
         file_path.clone(),
-        1.3,
+        Some(1.3),
         Utc::now(),
     );
 
@@ -219,7 +219,7 @@ async fn test_add_command_with_minimal_data() {
     let retrieved_model: Model = models.into_iter().next().unwrap();
 
     assert_eq!(retrieved_model.name, "Minimal Model");
-    assert_eq!(retrieved_model.param_count_b, 1.3);
+    assert_eq!(retrieved_model.param_count_b, Some(1.3));
     assert_eq!(retrieved_model.architecture, None);
     assert_eq!(retrieved_model.variant_label, None);
     assert_eq!(retrieved_model.context_length, None);

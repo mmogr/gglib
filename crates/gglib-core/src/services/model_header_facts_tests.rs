@@ -155,7 +155,7 @@ fn stored(file: &Path, file_type: Option<FileType>) -> Model {
     let mut new = crate::domain::NewModel::new(
         "zeta".to_owned(),
         file.to_path_buf(),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     new.file_type = file_type;
@@ -288,10 +288,6 @@ fn a_split_counts_every_shards_tensors_by_either_door() {
             &origin,
             chrono::Utc::now(),
         );
-        assert!(
-            (model.param_count_b - 2.0).abs() < f64::EPSILON,
-            "{first_file:?}: {}",
-            model.param_count_b
-        );
+        assert_eq!(model.param_count_b, Some(2.0), "{first_file:?}");
     }
 }

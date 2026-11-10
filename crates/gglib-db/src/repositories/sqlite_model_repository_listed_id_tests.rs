@@ -14,7 +14,7 @@ fn model(name: &str, file: &str, quantization: Option<&str>) -> NewModel {
     let mut new = NewModel::new(
         name.to_string(),
         PathBuf::from(format!("/models/{file}.gguf")),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     new.variant_label = quantization.map(str::to_owned);

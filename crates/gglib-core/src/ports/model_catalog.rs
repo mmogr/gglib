@@ -51,8 +51,9 @@ pub struct ModelSummary {
     /// Whether the model draws images: its weights name an image family (see
     /// [`Model::generates_images`]). Such a model is not served for chat.
     pub image_output: bool,
-    /// Parameter count as string (e.g., "7B", "13B", "70B").
-    pub param_count: String,
+    /// Parameter count as string (e.g., "7B", "13B", "70B"), when it is
+    /// known.
+    pub param_count: Option<String>,
     /// Quantization type (e.g., "`Q4_K_M`", "`Q8_0`").
     pub quantization: Option<String>,
     /// Model architecture (e.g., "llama", "mistral", "qwen2").
@@ -198,8 +199,9 @@ impl ModelSummary {
     #[must_use]
     pub fn description(&self) -> String {
         let arch = self.architecture.as_deref().unwrap_or("unknown");
+        let params = self.param_count.as_deref().unwrap_or("unknown");
         let quant = self.quantization.as_deref().unwrap_or("unknown");
-        format!("{} - {} parameters, {}", arch, self.param_count, quant)
+        format!("{arch} - {params} parameters, {quant}")
     }
 }
 

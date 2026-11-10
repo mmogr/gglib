@@ -36,6 +36,8 @@ mod recipes;
 mod remote_grant;
 #[path = "setup_settings.rs"]
 mod settings;
+#[path = "setup_unknown_params.rs"]
+mod unknown_params;
 
 /// `PRAGMA user_version` once the canonical-path backfills have run.
 ///
@@ -652,8 +654,13 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
     // the `user_version` ladder: an older build can still write `manual`.
     mcp_lifecycle::retire_manual_lifecycle(pool).await?;
 
-    // Last, after every table it reads exists, however old the library.
+    // After every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;
+
+    // The counts stored as `0.0` made unknown. After the rebuild, which lets
+    // the column hold a NULL, and after the remote grant step, whose version
+    // sits below this one.
+    unknown_params::forget_zero_param_counts(pool).await?;
 
     Ok(())
 }

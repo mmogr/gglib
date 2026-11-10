@@ -124,7 +124,7 @@ function ModelCard({ model }: { model: GgufModel }) {
   return (
     <div>
       <h3>{model.name}</h3>
-      <p>{model.param_count_b}B params</p>
+      {model.paramCountB !== undefined && <p>{model.paramCountB}B params</p>}
     </div>
   );
 }

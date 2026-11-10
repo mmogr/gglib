@@ -59,8 +59,11 @@ pub struct Model {
     /// name one file.
     #[serde(default)]
     pub projector_path: Option<PathBuf>,
-    /// Number of parameters in the model (in billions).
-    pub param_count_b: f64,
+    /// The parameters, in billions, when they are known: the tensors'
+    /// count (`HeaderFacts::param_count_b`), or one its owner set. `None`
+    /// when neither the tensors, the labels nor the name gave one.
+    #[serde(default)]
+    pub param_count_b: Option<f64>,
     /// Model architecture (e.g., "llama", "mistral", "falcon").
     pub architecture: Option<String>,
     /// The name the uploader gave this variant (`UD-Q4_K_XL`), when it came
@@ -170,8 +173,11 @@ pub struct NewModel {
     /// name one file.
     #[serde(default)]
     pub projector_path: Option<PathBuf>,
-    /// Number of parameters in the model (in billions).
-    pub param_count_b: f64,
+    /// The parameters, in billions, when they are known: the tensors'
+    /// count (`HeaderFacts::param_count_b`), or one its owner set. `None`
+    /// when neither the tensors, the labels nor the name gave one.
+    #[serde(default)]
+    pub param_count_b: Option<f64>,
     /// Model architecture (e.g., "llama", "mistral", "falcon").
     pub architecture: Option<String>,
     /// The name the uploader gave this variant (`UD-Q4_K_XL`), when it came
@@ -342,7 +348,7 @@ impl NewModel {
     pub fn new(
         name: String,
         file_path: PathBuf,
-        param_count_b: f64,
+        param_count_b: Option<f64>,
         added_at: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -388,12 +394,12 @@ mod tests {
         let model = NewModel::new(
             "Test Model".to_string(),
             PathBuf::from("/path/to/model.gguf"),
-            7.0,
+            Some(7.0),
             Utc::now(),
         );
 
         assert_eq!(model.name, "Test Model");
-        assert!((model.param_count_b - 7.0).abs() < f64::EPSILON);
+        assert_eq!(model.param_count_b, Some(7.0));
         assert!(model.architecture.is_none());
         assert!(model.tags.is_empty());
     }
@@ -402,7 +408,7 @@ mod tests {
         let mut new = NewModel::new(
             "flux".to_owned(),
             PathBuf::from("/models/flux1-schnell-q8_0.gguf"),
-            12.0,
+            Some(12.0),
             Utc::now(),
         );
         new.image_family = Some(ImageFamily::Flux1);
@@ -514,7 +520,12 @@ mod tests {
     fn a_chat_model_misses_no_component() {
         let model = Model::stored(
             1,
-            &NewModel::new("qwen".to_owned(), PathBuf::from("/m.gguf"), 7.0, Utc::now()),
+            &NewModel::new(
+                "qwen".to_owned(),
+                PathBuf::from("/m.gguf"),
+                Some(7.0),
+                Utc::now(),
+            ),
         );
         assert!(model.missing_components().is_empty());
     }

@@ -75,10 +75,7 @@ async fn a_file_added_from_a_terminal_posts_the_daemon_what_the_apps_add_emits()
         .expect("the file is added");
 
     let added = by_path().await;
-    assert!(
-        (added.param_count_b - 7.5).abs() < f64::EPSILON,
-        "{added:?}"
-    );
+    assert_eq!(added.param_count_b, Some(7.5), "{added:?}");
     let mut expected = told(&[AppEvent::model_added((&added).into())]);
     assert_eq!(*asked.lock().unwrap(), expected);
 

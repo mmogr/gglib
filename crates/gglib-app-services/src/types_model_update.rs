@@ -80,7 +80,7 @@ impl UpdateModelRequest {
             model.file_path = PathBuf::from(file_path);
         }
         if let Some(param_count_b) = self.param_count_b {
-            model.param_count_b = param_count_b;
+            model.param_count_b = Some(param_count_b);
         }
         if let Some(architecture) = &self.architecture {
             model.architecture = Some(architecture.clone());

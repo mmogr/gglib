@@ -177,7 +177,7 @@ async fn remembering_keeps_every_other_setting() {
     let model = gglib_core::domain::NewModel::new(
         "qwen3-8b".to_owned(),
         std::path::PathBuf::from("/models/qwen3-8b.gguf"),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     let model = state.core.models().add(model).await.unwrap().id;

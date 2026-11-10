@@ -1,5 +1,5 @@
--- generation 4
--- user_version 4
+-- generation 5
+-- user_version 5
 
 CREATE INDEX idx_agentic_results_model ON benchmark_agentic_results(model_id, created_at DESC);
 
@@ -221,7 +221,7 @@ CREATE TABLE models (
             name TEXT NOT NULL,
             file_path TEXT NOT NULL,
             projector_path TEXT,
-            param_count_b REAL NOT NULL,
+            param_count_b REAL,
             architecture TEXT,
             variant_label TEXT,
             file_type INTEGER,

@@ -18,9 +18,9 @@ model_name: string,
  */
 quantization: string | null, 
 /**
- * Parameter count in billions.
+ * Parameter count in billions, when known.
  */
-param_count_b: number, 
+param_count_b: number | null, 
 /**
  * Context size every arm ran at, in tokens.
  */

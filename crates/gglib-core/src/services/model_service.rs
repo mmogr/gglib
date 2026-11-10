@@ -867,7 +867,7 @@ mod tests {
             .insert(&NewModel::new(
                 "Solo".to_string(),
                 respelled,
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -914,7 +914,7 @@ mod tests {
             .insert(&NewModel::new(
                 "Sharded".to_string(),
                 first,
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -1014,7 +1014,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(model.param_count_b, 13.0);
+        assert_eq!(model.param_count_b, Some(13.0));
     }
 
     #[tokio::test]
@@ -1033,7 +1033,7 @@ mod tests {
         let new_model = NewModel::new(
             "test-model".to_string(),
             PathBuf::from("/path/to/model.gguf"),
-            7.0,
+            Some(7.0),
             Utc::now(),
         );
 
@@ -1064,7 +1064,7 @@ mod tests {
         let mut new_model = NewModel::new(
             "qwen-test".to_string(),
             PathBuf::from("/path/to/m.gguf"),
-            7.0,
+            Some(7.0),
             Utc::now(),
         );
         new_model.tags = vec!["chat".to_string(), "format:qwen-xml".to_string()];
@@ -1095,8 +1095,12 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model =
-            NewModel::new("u".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        let mut new_model = NewModel::new(
+            "u".to_string(),
+            PathBuf::from("/p.gguf"),
+            Some(7.0),
+            Utc::now(),
+        );
         new_model.tags = vec!["chat".to_string(), "format:hermes".to_string()];
         let created = service.add(new_model).await.unwrap();
 
@@ -1168,8 +1172,12 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model =
-            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            Some(7.0),
+            Utc::now(),
+        );
         new_model.tags = vec!["chat".to_string()];
         let created = service.add(new_model).await.unwrap();
 
@@ -1193,8 +1201,12 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model =
-            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            Some(7.0),
+            Utc::now(),
+        );
         new_model.tags = vec!["format:qwen-xml".to_string()];
         let created = service.add(new_model).await.unwrap();
 
@@ -1214,8 +1226,12 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model =
-            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            Some(7.0),
+            Utc::now(),
+        );
         new_model.tags = vec![
             "favorite".to_string(),      // user
             "format:hermes".to_string(), // stale auto
@@ -1244,8 +1260,12 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model =
-            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            Some(7.0),
+            Utc::now(),
+        );
         new_model.tags = vec!["mtp".to_string()]; // stale auto capability
         let created = service.add(new_model).await.unwrap();
 
@@ -1268,8 +1288,12 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo.clone());
 
-        let mut new_model =
-            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            Some(7.0),
+            Utc::now(),
+        );
         new_model.tags = vec!["format:qwen-xml".to_string()];
         let created = service.add(new_model).await.unwrap();
 
@@ -1302,8 +1326,12 @@ mod tests {
             tool_close: "«/TC»".to_string(),
             ..crate::domain::DialectSpec::qwen_xml()
         };
-        let mut new_model =
-            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            Some(7.0),
+            Utc::now(),
+        );
         new_model.dialect_spec = Some(derived.clone());
         let created = service.add(new_model).await.unwrap();
 
@@ -1326,8 +1354,12 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo.clone());
 
-        let mut new_model =
-            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            Some(7.0),
+            Utc::now(),
+        );
         new_model.dialect_spec = Some(crate::domain::DialectSpec::qwen_xml());
         let created = service.add(new_model).await.unwrap();
 

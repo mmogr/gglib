@@ -38,7 +38,7 @@ async fn catalogued(state: &gglib_axum::AxumContext, name: &str, context: u64) {
     let mut model = gglib_core::domain::NewModel::new(
         name.to_owned(),
         std::path::PathBuf::from(format!("/models/{name}.gguf")),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     model.context_length = Some(context);

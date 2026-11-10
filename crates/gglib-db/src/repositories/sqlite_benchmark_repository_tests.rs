@@ -35,7 +35,7 @@ fn report() -> AgenticEvalReport {
     AgenticEvalReport {
         model_name: "qwen2.5-0.5b-instruct".to_owned(),
         quantization: Some("Q8_0".to_owned()),
-        param_count_b: 0.5,
+        param_count_b: Some(0.5),
         ctx_size: 131_072,
         delta: ArmDelta {
             tool_accuracy: Some(0.0),

@@ -66,9 +66,9 @@ components: Array<ComponentLinkDto>,
  */
 missingComponents: Array<ComponentRole>, 
 /**
- * Parameter count in billions.
+ * Parameter count in billions, when it is known.
  */
-paramCountB: number, 
+paramCountB?: number, 
 /**
  * Model architecture (e.g. `"llama"`, `"mistral"`).
  */

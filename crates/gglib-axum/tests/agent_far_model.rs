@@ -145,7 +145,7 @@ async fn with_a_model() -> (axum::Router, i64) {
     let model = gglib_core::domain::NewModel::new(
         "qwen3".to_owned(),
         std::path::PathBuf::from("/models/qwen3.gguf"),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     let id = state.core.models().add(model).await.unwrap().id;

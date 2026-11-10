@@ -31,7 +31,7 @@ async fn qwen(state: &gglib_axum::AppState) -> ModelRef {
         let model = gglib_core::domain::NewModel::new(
             "qwen".to_owned(),
             std::path::PathBuf::from("/models/qwen.gguf"),
-            7.0,
+            Some(7.0),
             chrono::Utc::now(),
         );
         state.core.models().add(model).await.unwrap().id

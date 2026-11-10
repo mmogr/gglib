@@ -37,7 +37,7 @@ fn test_model(weights: &Path, projector: Option<&Path>, tags: &[&str]) -> NewMod
     let mut model = NewModel::new(
         "Test model".to_owned(),
         weights.to_path_buf(),
-        1.0,
+        Some(1.0),
         Utc::now(),
     );
     model.architecture = Some("llama".to_owned());

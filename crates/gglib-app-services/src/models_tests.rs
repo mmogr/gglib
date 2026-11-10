@@ -142,7 +142,7 @@ async fn forcing_a_downloaded_model_refreshes_it_rather_than_duplicating_it() {
     let mut downloaded = NewModel::new(
         "Qwen3-8B".to_string(),
         gguf_path.clone(),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     downloaded.hf_repo_id = Some("Qwen/Qwen3-8B-GGUF".to_string());
@@ -202,7 +202,7 @@ async fn forcing_from_a_sibling_shard_refuses_rather_than_repointing() {
     let mut sharded = NewModel::new(
         "Qwen3-30B".to_string(),
         first.clone(),
-        30.0,
+        Some(30.0),
         chrono::Utc::now(),
     );
     sharded.file_paths = Some(vec![first.clone(), second.clone()]);
@@ -350,9 +350,9 @@ async fn an_add_stores_the_parameter_count_it_is_handed() {
         .await
         .expect("add should succeed");
 
-    assert!((added.param_count_b - 7.5).abs() < f64::EPSILON);
+    assert_eq!(added.param_count_b, Some(7.5));
     let stored = ops.get(added.id).await.expect("the row reads");
-    assert!((stored.param_count_b - 7.5).abs() < f64::EPSILON);
+    assert_eq!(stored.param_count_b, Some(7.5));
 }
 
 /// The second: a re-import. One of a file that has a row rewrites that row,
@@ -936,7 +936,7 @@ async fn the_client_id_is_named_over_the_whole_catalogue_whatever_the_filter_sho
         let mut new = gglib_core::NewModel::new(
             name.to_owned(),
             std::path::PathBuf::from(format!("/models/{file}")),
-            7.0,
+            Some(7.0),
             chrono::Utc::now(),
         );
         new.variant_label = Some(quantization.to_owned());

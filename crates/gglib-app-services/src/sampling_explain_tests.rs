@@ -15,7 +15,7 @@ fn model() -> Model {
     let path = PathBuf::from("/models/test.gguf");
     Model::stored(
         1,
-        &NewModel::new("test-model".to_owned(), path, 7.0, Utc::now()),
+        &NewModel::new("test-model".to_owned(), path, Some(7.0), Utc::now()),
     )
 }
 

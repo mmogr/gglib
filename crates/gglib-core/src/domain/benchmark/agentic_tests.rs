@@ -93,7 +93,7 @@ pub(super) fn report_with(control: Option<ArmScores>, gglib_composite: f64) -> A
     AgenticEvalReport {
         model_name: "m".to_owned(),
         quantization: None,
-        param_count_b: 1.0,
+        param_count_b: Some(1.0),
         ctx_size: 4096,
         raw: uniform_arm(0.5),
         gglib: uniform_arm(gglib_composite),
