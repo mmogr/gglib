@@ -111,7 +111,7 @@ fn billions(elements: u64) -> Option<f64> {
         .map(|millions| f64::from(millions) / 1_000.0)
 }
 
-/// The facts the file at `path` states, when it is there and states either:
+/// The facts the file at `path` states, when it is there and states any:
 /// [`header_facts`] over its parse, its shards found by llama.cpp's naming.
 #[must_use]
 pub fn read_header_facts(path: &Path, parser: &dyn GgufParserPort) -> Option<HeaderFacts> {
@@ -120,18 +120,21 @@ pub fn read_header_facts(path: &Path, parser: &dyn GgufParserPort) -> Option<Hea
     }
     let gguf = parser.parse(path).ok()?;
     let facts = header_facts(path, Some(&gguf), None, parser);
-    (!facts.is_empty()).then_some(facts)
+    (!facts.is_empty() || facts.param_count_b.is_some()).then_some(facts)
 }
 
-/// Fill whichever of `model`'s type and bits per weight it lacks from its
-/// file's header, as [`read_header_facts`] reads them, and answer whether
-/// either was filled.
+/// Fill whichever of `model`'s type, bits per weight and parameter count it
+/// lacks from its file's header, as [`read_header_facts`] reads them, and
+/// answer whether any was filled.
 ///
 /// A fact already stored is never changed, and a file that is missing or
 /// unreadable leaves the model as it was: a model the start-up pass missed,
-/// its drive unmounted then, is filled by the first retag that finds it.
+/// its drive unmounted then, is filled by the first retag that finds it. A
+/// count is filled only where none is known: a stored one may be its
+/// owner's.
 pub(super) fn fill_missing_facts(model: &mut Model, parser: &dyn GgufParserPort) -> bool {
-    if model.file_type.is_some() && model.bits_per_weight.is_some() {
+    if model.file_type.is_some() && model.bits_per_weight.is_some() && model.param_count_b.is_some()
+    {
         return false;
     }
     let Some(facts) = read_header_facts(&model.file_path, parser) else {
@@ -145,7 +148,11 @@ pub(super) fn fill_missing_facts(model: &mut Model, parser: &dyn GgufParserPort)
     if bits_read {
         model.bits_per_weight = facts.bits_per_weight;
     }
-    type_read || bits_read
+    let count_read = model.param_count_b.is_none() && facts.param_count_b.is_some();
+    if count_read {
+        model.param_count_b = facts.param_count_b;
+    }
+    type_read || bits_read || count_read
 }
 
 /// How many files the header says its model is split into, when more than

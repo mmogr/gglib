@@ -56,8 +56,8 @@ pub struct RetagDiff {
     pub spec_changed: bool,
     /// The image family read from the file for a model that had none.
     pub family_found: Option<crate::domain::ImageFamily>,
-    /// Whether the type or the bits per weight the model lacked were read
-    /// from its file's header.
+    /// Whether the type, the bits per weight or the parameter count the model
+    /// lacked were read from its file's header.
     pub facts_read: bool,
 }
 

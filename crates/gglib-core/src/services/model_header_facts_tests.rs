@@ -177,6 +177,27 @@ fn a_stored_type_is_kept_when_only_the_bits_are_missing() {
     assert_eq!(model.bits_per_weight, Some(8.0));
 }
 
+/// A count is filled only where none is known: a stored one may be its
+/// owner's, and is kept though the tensors say another.
+#[test]
+fn a_missing_count_is_filled_and_a_stored_one_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("zeta.gguf");
+    std::fs::write(&file, b"weights").unwrap();
+
+    let mut unknown = stored(&file, Some(FileType(15)));
+    unknown.bits_per_weight = Some(8.0);
+    unknown.param_count_b = None;
+    assert!(fill_missing_facts(&mut unknown, &TypedQ4KM));
+    // A thousand weights, in billions.
+    assert_eq!(unknown.param_count_b, Some(0.000_001));
+
+    let mut owned = stored(&file, Some(FileType(15)));
+    owned.bits_per_weight = Some(8.0);
+    assert!(!fill_missing_facts(&mut owned, &TypedQ4KM));
+    assert_eq!(owned.param_count_b, Some(7.0));
+}
+
 /// A retag fills both facts of a model that has neither, and says so.
 #[tokio::test]
 async fn a_retag_fills_the_facts_a_model_lacks() {

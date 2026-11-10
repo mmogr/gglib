@@ -99,6 +99,50 @@ impl SqliteModelRepository {
     }
 }
 
+/// The statement `insert` registers a model by: an upsert on its key, so a
+/// registration can be retried. What a re-registration keeps of the row
+/// and what it replaces is said beside each column.
+const UPSERT_MODEL: &str = r"INSERT INTO models (
+        id, name, file_path, projector_path, param_count_b, architecture,
+        variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count,
+        metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec, image_family
+    ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(model_key) DO UPDATE SET
+        file_path = excluded.file_path,
+        -- Coalesced, not assigned. A re-registration that carries no
+        -- shard list is a local re-import, which never populates one;
+        -- assigning would erase the sibling paths a download recorded
+        -- and silently disable the sharded-duplicate lookup for that
+        -- model. A download always supplies the list, so it still
+        -- wins when there is one.
+        file_paths_json = COALESCE(excluded.file_paths_json, models.file_paths_json),
+        projector_path = COALESCE(excluded.projector_path, models.projector_path),
+        -- Coalesced as the projector is: a re-registration whose
+        -- table read no family never erases the one stored.
+        image_family = COALESCE(excluded.image_family, models.image_family),
+        variant_label = COALESCE(excluded.variant_label, models.variant_label),
+        -- The stored count first: it may be its owner's, and a
+        -- re-registration fills it only where it is unknown.
+        param_count_b = COALESCE(models.param_count_b, excluded.param_count_b),
+        file_type = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.file_type, excluded.file_type),
+        bits_per_weight = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.bits_per_weight, excluded.bits_per_weight),
+        context_length = COALESCE(excluded.context_length, models.context_length),
+        expert_count = COALESCE(excluded.expert_count, models.expert_count),
+        expert_used_count = COALESCE(excluded.expert_used_count, models.expert_used_count),
+        expert_shared_count = COALESCE(excluded.expert_shared_count, models.expert_shared_count),
+        -- Coalesced for the same reason: a local re-import sets
+        -- neither, and erasing them would make a downloaded model
+        -- read as never-downloaded and never-update-checked, which
+        -- the update-check workflow keys on.
+        download_date = COALESCE(excluded.download_date, models.download_date),
+        last_update_check = COALESCE(excluded.last_update_check, models.last_update_check),
+        tags = excluded.tags,
+        capabilities = excluded.capabilities,
+        dialect_spec = excluded.dialect_spec,
+        inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
+        defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
+    ";
+
 #[async_trait]
 impl ModelRepository for SqliteModelRepository {
     async fn list(&self) -> Result<Vec<Model>, RepositoryError> {
@@ -251,77 +295,54 @@ impl ModelRepository for SqliteModelRepository {
 
         // Use UPSERT to make registration idempotent. The row's own id is
         // bound when it has one, so an update takes no id from the sequence.
-        let _result = sqlx::query(
-            r"INSERT INTO models (
-                id, name, file_path, projector_path, param_count_b, architecture,
-                variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count,
-                metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec, image_family
-            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(model_key) DO UPDATE SET
-                file_path = excluded.file_path,
-                -- Coalesced, not assigned. A re-registration that carries no
-                -- shard list is a local re-import, which never populates one;
-                -- assigning would erase the sibling paths a download recorded
-                -- and silently disable the sharded-duplicate lookup for that
-                -- model. A download always supplies the list, so it still
-                -- wins when there is one.
-                file_paths_json = COALESCE(excluded.file_paths_json, models.file_paths_json),
-                projector_path = COALESCE(excluded.projector_path, models.projector_path),
-                -- Coalesced as the projector is: a re-registration whose
-                -- table read no family never erases the one stored.
-                image_family = COALESCE(excluded.image_family, models.image_family),
-                variant_label = COALESCE(excluded.variant_label, models.variant_label),
-                file_type = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.file_type, excluded.file_type),
-                bits_per_weight = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.bits_per_weight, excluded.bits_per_weight),
-                context_length = COALESCE(excluded.context_length, models.context_length),
-                expert_count = COALESCE(excluded.expert_count, models.expert_count),
-                expert_used_count = COALESCE(excluded.expert_used_count, models.expert_used_count),
-                expert_shared_count = COALESCE(excluded.expert_shared_count, models.expert_shared_count),
-                -- Coalesced for the same reason: a local re-import sets
-                -- neither, and erasing them would make a downloaded model
-                -- read as never-downloaded and never-update-checked, which
-                -- the update-check workflow keys on.
-                download_date = COALESCE(excluded.download_date, models.download_date),
-                last_update_check = COALESCE(excluded.last_update_check, models.last_update_check),
-                tags = excluded.tags,
-                capabilities = excluded.capabilities,
-                dialect_spec = excluded.dialect_spec,
-                inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
-                defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
-            ",
-        )
-        .bind(&model_key)
-        .bind(&model.name)
-        .bind(&file_path_string)
-        .bind(model.projector_path.as_deref().map(normalized_file_path_string))
-        .bind(model.param_count_b)
-        .bind(&model.architecture)
-        .bind(&model.variant_label)
-        .bind(model.file_type.map(|file_type| i64::from(file_type.0)))
-        .bind(model.bits_per_weight)
-        .bind(model.context_length.map(context_length_column))
-        .bind(model.expert_count.map(i64::from))
-        .bind(model.expert_used_count.map(i64::from))
-        .bind(model.expert_shared_count.map(i64::from))
-        .bind(&metadata_json)
-        .bind(model.added_at.to_string())
-        .bind(&model.hf_repo_id)
-        .bind(&model.hf_commit_sha)
-        .bind(&model.hf_filename)
-        .bind(model.download_date.as_ref().map(std::string::ToString::to_string))
-        .bind(model.last_update_check.as_ref().map(std::string::ToString::to_string))
-        .bind(&tags_json)
-        .bind(&model_key)
-        .bind(&file_paths_json)
-        .bind(i64::from(model.capabilities.bits()))
-        .bind(&inference_defaults_json)
-        .bind(&defaults_origin_str)
-        .bind(&server_defaults_json)
-        .bind(&dialect_spec_json)
-        .bind(model.image_family.map(ImageFamily::as_str))
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+        let _result = sqlx::query(UPSERT_MODEL)
+            .bind(&model_key)
+            .bind(&model.name)
+            .bind(&file_path_string)
+            .bind(
+                model
+                    .projector_path
+                    .as_deref()
+                    .map(normalized_file_path_string),
+            )
+            .bind(model.param_count_b)
+            .bind(&model.architecture)
+            .bind(&model.variant_label)
+            .bind(model.file_type.map(|file_type| i64::from(file_type.0)))
+            .bind(model.bits_per_weight)
+            .bind(model.context_length.map(context_length_column))
+            .bind(model.expert_count.map(i64::from))
+            .bind(model.expert_used_count.map(i64::from))
+            .bind(model.expert_shared_count.map(i64::from))
+            .bind(&metadata_json)
+            .bind(model.added_at.to_string())
+            .bind(&model.hf_repo_id)
+            .bind(&model.hf_commit_sha)
+            .bind(&model.hf_filename)
+            .bind(
+                model
+                    .download_date
+                    .as_ref()
+                    .map(std::string::ToString::to_string),
+            )
+            .bind(
+                model
+                    .last_update_check
+                    .as_ref()
+                    .map(std::string::ToString::to_string),
+            )
+            .bind(&tags_json)
+            .bind(&model_key)
+            .bind(&file_paths_json)
+            .bind(i64::from(model.capabilities.bits()))
+            .bind(&inference_defaults_json)
+            .bind(&defaults_origin_str)
+            .bind(&server_defaults_json)
+            .bind(&dialect_spec_json)
+            .bind(model.image_family.map(ImageFamily::as_str))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
         // Get the model by model_key (works for both insert and update)
         let row = sqlx::query(&format!(
@@ -1001,6 +1022,31 @@ mod tests {
 
         let refetched = repo.get_by_id(inserted.id).await.unwrap();
         assert_eq!(refetched.template_caps, Some(measured_caps()));
+    }
+
+    /// A re-import fills a count the row lacks, and never replaces one it
+    /// has: a stored count may be its owner's.
+    #[tokio::test]
+    async fn upsert_fills_an_unknown_count_and_keeps_a_stored_one() {
+        let repo = repo().await;
+        let mut unknown = make_model("Iota");
+        unknown.param_count_b = None;
+        let inserted = repo.insert(&unknown).await.unwrap();
+
+        let mut counted = make_model("Iota");
+        counted.param_count_b = Some(11.9);
+        repo.insert(&counted).await.unwrap();
+        assert_eq!(
+            repo.get_by_id(inserted.id).await.unwrap().param_count_b,
+            Some(11.9)
+        );
+
+        counted.param_count_b = Some(13.0);
+        repo.insert(&counted).await.unwrap();
+        assert_eq!(
+            repo.get_by_id(inserted.id).await.unwrap().param_count_b,
+            Some(11.9)
+        );
     }
 
     #[tokio::test]
