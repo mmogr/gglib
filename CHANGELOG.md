@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.33.0-rc.1](https://github.com/mmogr/gglib/compare/v0.32.1-rc.1...v0.33.0-rc.1) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **models:** an unknown parameter count is stored and shown as unknown, not as 0.0B ([#1875](https://github.com/mmogr/gglib/issues/1875))
+* **gguf:** a model's parameter count is its tensors', so a 177B MoE is no longer listed as 28672B ([#1873](https://github.com/mmogr/gglib/issues/1873))
+* **models:** a one-file repository's download shows the header's type as its quantization ([#1874](https://github.com/mmogr/gglib/issues/1874))
+
+### What it stopped getting wrong
+
+* **gguf:** a model's parameter count is its tensors', so a 177B MoE is no longer listed as 28672B ([#1873](https://github.com/mmogr/gglib/issues/1873)) ([70aff41](https://github.com/mmogr/gglib/commit/70aff4123fc5000bf05fd1e3b2570819ce8228a5)), closes [#1870](https://github.com/mmogr/gglib/issues/1870)
+* **models:** a one-file repository's download shows the header's type as its quantization ([#1874](https://github.com/mmogr/gglib/issues/1874)) ([4ffb065](https://github.com/mmogr/gglib/commit/4ffb0659e730a32cde883db2fe18961111fdab8e))
+* **models:** an unknown parameter count is stored and shown as unknown, not as 0.0B ([#1875](https://github.com/mmogr/gglib/issues/1875)) ([563b19f](https://github.com/mmogr/gglib/commit/563b19f9bfa16edbbc0e64bf2854b8858c12693f)), closes [#1872](https://github.com/mmogr/gglib/issues/1872)
+
 ## [0.32.1-rc.1](https://github.com/mmogr/gglib/compare/v0.32.0-rc.1...v0.32.1-rc.1) (2026-11-10)
 
 
