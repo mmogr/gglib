@@ -57,6 +57,7 @@ pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
 pub mod send_line;
 mod server_config;
+pub(crate) mod shard_name;
 pub mod slot_eviction;
 pub mod state_words;
 pub(crate) mod template_caps;

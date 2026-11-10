@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use super::types::HfQuantInfo;
 use super::variant_match::{delimits_a_name, holds_token};
+use crate::domain::shard_name::{gguf_stem, shard_parts};
 
 /// Why a draft or helper variant is not downloaded as a model.
 pub const HELPER_FILES_REFUSAL: &str = "gglib can't run draft or helper files on their own";
@@ -91,24 +92,11 @@ fn variant_key(path: &str) -> Option<(String, String)> {
     })
 }
 
-/// `stem` split as llama.cpp names a shard (`<name>-<index>-of-<total>`)
-/// into the name and the total; `None` for a stem that is no shard's.
-fn shard_parts(stem: &str) -> Option<(&str, &str)> {
-    let digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
-    let (rest, total) = stem.rsplit_once("-of-")?;
-    let (name, index) = rest.rsplit_once('-')?;
-    (digits(index) && digits(total)).then_some((name, total))
-}
-
 /// The file name a variant is named by: its first file's, less the
 /// extension and a shard's numbering.
 pub(super) fn variant_name(variant: &HfQuantInfo) -> &str {
     let first = variant.file_paths.first().map_or("", String::as_str);
-    let name = first.rsplit('/').next().unwrap_or(first);
-    let stem = name
-        .get(..name.len().saturating_sub(".gguf".len()))
-        .unwrap_or(name);
-    shard_parts(stem).map_or(stem, |(unsharded, _)| unsharded)
+    gguf_stem(first.rsplit('/').next().unwrap_or(first))
 }
 
 /// `labels`, the label of each of `keys` in their order, with every label
