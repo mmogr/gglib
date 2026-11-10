@@ -11,10 +11,10 @@ fn test_parse_param_label() {
     assert!((parse_param_label("13B").unwrap() - 13.0).abs() < f64::EPSILON);
     assert!((parse_param_label("70B").unwrap() - 70.0).abs() < f64::EPSILON);
 
-    // MoE models - should return TOTAL parameters (N × M)
-    assert!((parse_param_label("8x7B").unwrap() - 56.0).abs() < f64::EPSILON);
-    assert!((parse_param_label("64x2.6B").unwrap() - 166.4).abs() < 0.01);
-    assert!((parse_param_label("512x2.5B").unwrap() - 1280.0).abs() < 0.01);
+    // A mixture of experts' label states no total.
+    assert!(parse_param_label("8x7B").is_none());
+    assert!(parse_param_label("64x2.6B").is_none());
+    assert!(parse_param_label("512x56B").is_none());
 
     // Invalid
     assert!(parse_param_label("invalid").is_none());
@@ -25,6 +25,7 @@ fn test_parse_param_from_filename() {
     assert!((parse_param_from_filename("llama-7b-chat.gguf").unwrap() - 7.0).abs() < f64::EPSILON);
     assert!((parse_param_from_filename("model-13B-q4.gguf").unwrap() - 13.0).abs() < f64::EPSILON);
     assert!(parse_param_from_filename("no-params.gguf").is_none());
+    assert!(parse_param_from_filename("Mixtral-8x7B-v0.1.Q4_K_M.gguf").is_none());
 }
 
 #[test]
