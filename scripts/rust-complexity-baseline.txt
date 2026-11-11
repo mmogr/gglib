@@ -97,7 +97,7 @@ crates/gglib-cli/src/handlers/up/choose.rs 351
 crates/gglib-cli/src/handlers/up/mod.rs 388
 crates/gglib-cli/src/handlers/up/probe.rs 310
 crates/gglib-cli/src/handlers/up/warm.rs 351
-crates/gglib-cli/src/model_commands.rs 448
+crates/gglib-cli/src/model_commands.rs 450
 crates/gglib-cli/src/presentation/explain_display.rs 413
 crates/gglib-cli/src/presentation/explain_display_tests.rs 687
 crates/gglib-cli/src/presentation/inspect_display.rs 322
@@ -193,7 +193,7 @@ crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 371
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 353
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 379
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 453
-crates/gglib-db/src/repositories/sqlite_model_repository.rs 1146
+crates/gglib-db/src/repositories/sqlite_model_repository.rs 1180
 crates/gglib-db/src/repositories/sqlite_model_repository_components_tests.rs 372
 crates/gglib-db/src/repositories/sqlite_settings_repository_tests.rs 311
 crates/gglib-db/src/setup.rs 821
@@ -221,7 +221,8 @@ crates/gglib-ffi/src/library.rs 320
 crates/gglib-ffi/src/serve_tests.rs 400
 crates/gglib-gguf/src/capabilities/template_probe.rs 491
 crates/gglib-gguf/src/head_tests.rs 324
-crates/gglib-gguf/src/parser.rs 330
+crates/gglib-gguf/src/parser.rs 335
+crates/gglib-gguf/src/parser_tests.rs 311
 crates/gglib-gguf/src/reader.rs 317
 crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 606

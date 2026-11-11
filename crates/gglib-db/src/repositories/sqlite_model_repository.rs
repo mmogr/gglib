@@ -136,6 +136,11 @@ const UPSERT_MODEL: &str = r"INSERT INTO models (
         -- the update-check workflow keys on.
         download_date = COALESCE(excluded.download_date, models.download_date),
         last_update_check = COALESCE(excluded.last_update_check, models.last_update_check),
+        -- Merged, not assigned: each key the file's header has is read
+        -- afresh, so `--reimport` refreshes it, and a key only the owner
+        -- added (`model update --metadata`) stays. An empty map, from a
+        -- download whose header the reader refused, changes nothing.
+        metadata = json_patch(COALESCE(models.metadata, '{}'), excluded.metadata),
         tags = excluded.tags,
         capabilities = excluded.capabilities,
         dialect_spec = excluded.dialect_spec,
@@ -463,6 +468,7 @@ impl ModelRepository for SqliteModelRepository {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::path::PathBuf;
 
     use chrono::Utc;
@@ -773,6 +779,34 @@ mod tests {
                 .is_some(),
             "the shard list must survive a refresh, or the sibling lookup dies with it"
         );
+    }
+
+    /// A re-registration replaces the stored header with the one it read, so
+    /// `--reimport` refreshes a row a parser stored lossily; one that read no
+    /// header (a download whose header was refused) keeps the stored one.
+    #[tokio::test]
+    async fn a_refresh_rereads_the_header_and_keeps_the_owners_keys() {
+        let repo = repo().await;
+        let header = |text: &str| HashMap::from([("k".to_owned(), text.to_owned())]);
+        let with_note = |text: &str| {
+            let mut map = header(text);
+            map.insert("note".to_owned(), "mine".to_owned());
+            map
+        };
+
+        let mut model = make_model("Header");
+        model.metadata = with_note("[Array with 60 elements]");
+        let id = repo.insert(&model).await.unwrap().id;
+
+        model.metadata = header("[16, 4]");
+        assert_eq!(
+            repo.insert(&model).await.unwrap().metadata,
+            with_note("[16, 4]")
+        );
+
+        model.metadata = HashMap::new();
+        let kept = repo.insert(&model).await.unwrap();
+        assert_eq!((kept.id, kept.metadata), (id, with_note("[16, 4]")));
     }
 
     /// Adding shard 2 of a group already registered is the same duplicate as

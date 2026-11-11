@@ -36,7 +36,9 @@ pub enum ModelCommand {
         /// Replaces tags, capabilities and the dialect spec — including with
         /// nothing, so these can be cleared. Updates quantization, context
         /// length and the expert counts only where a value is newly detected;
-        /// a stored one is never emptied. `gglib model retag` rebuilds only
+        /// a stored one is never emptied. Re-reads each key of the file's
+        /// header, keeping keys added with `model update --metadata`.
+        /// `gglib model retag` rebuilds only
         /// tags and the dialect spec, so this is the wider of the two.
         ///
         /// The model keeps its id, and its name, parameter count and
