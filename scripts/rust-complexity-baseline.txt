@@ -221,7 +221,8 @@ crates/gglib-ffi/src/library.rs 320
 crates/gglib-ffi/src/serve_tests.rs 400
 crates/gglib-gguf/src/capabilities/template_probe.rs 491
 crates/gglib-gguf/src/head_tests.rs 324
-crates/gglib-gguf/src/parser.rs 330
+crates/gglib-gguf/src/parser.rs 335
+crates/gglib-gguf/src/parser_tests.rs 311
 crates/gglib-gguf/src/reader.rs 317
 crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 606

@@ -118,21 +118,10 @@ impl GgufParserPort for GgufParser {
 
 /// Extract structured metadata from raw GGUF key-value pairs.
 pub(crate) fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
-    let mut processed = HashMap::new();
-
-    // Convert metadata to string representation, skipping large arrays
-    for (key, value) in raw {
-        if key.starts_with("tokenizer.")
-            && matches!(value, GgufValue::Array(arr) if arr.len() > 100)
-        {
-            // Store just a summary for large tokenizer arrays
-            if let GgufValue::Array(arr) = value {
-                processed.insert(key.clone(), format!("Array with {} elements", arr.len()));
-            }
-        } else {
-            processed.insert(key.clone(), value.to_string());
-        }
-    }
+    let processed = raw
+        .iter()
+        .map(|(key, value)| (key.clone(), stored_text(key, value)))
+        .collect();
 
     // Extract fields
     let architecture = extract_architecture(raw);
@@ -156,6 +145,27 @@ pub(crate) fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetad
         metadata: processed,
         role: GgufFileRole::Weights,
         image_family: None,
+    }
+}
+
+/// The text a value is stored as. A tokenizer's large arrays are summarised.
+/// A number or bool array is kept whole, as `[16, 16, 4]` (JSON for ints and bools),
+/// so a per-layer list such as `{arch}.attention.head_count_kv` can be read
+/// back. Any other value is its `Display`, which summarises a long array.
+fn stored_text(key: &str, value: &GgufValue) -> String {
+    match value {
+        GgufValue::Array(items) if key.starts_with("tokenizer.") && items.len() > 100 => {
+            format!("Array with {} elements", items.len())
+        }
+        GgufValue::Array(items)
+            if items
+                .iter()
+                .all(|item| !matches!(item, GgufValue::String(_) | GgufValue::Array(_))) =>
+        {
+            let items: Vec<String> = items.iter().map(ToString::to_string).collect();
+            format!("[{}]", items.join(", "))
+        }
+        _ => value.to_string(),
     }
 }
 

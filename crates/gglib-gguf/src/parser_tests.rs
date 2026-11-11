@@ -288,3 +288,24 @@ fn a_tensor_table_that_cannot_be_read_never_fails_the_parse() {
     assert_eq!(parsed.image_family, None);
     assert_eq!(parsed.architecture.as_deref(), Some("flux"));
 }
+
+/// A per-layer number list is stored whole however long; a tokenizer's long
+/// arrays are summarised, as is a long list of strings.
+#[test]
+fn a_number_list_is_stored_whole_and_a_tokenizer_list_is_summarised() {
+    let numbers = GgufValue::Array((0..60).map(|i| GgufValue::U32(i % 2)).collect());
+    let words = GgufValue::Array((0..11).map(|i| GgufValue::String(i.to_string())).collect());
+    let vocab = GgufValue::Array((0..200).map(GgufValue::U32).collect());
+
+    let stored = stored_text("gemma4.attention.head_count_kv", &numbers);
+    let back: Vec<u32> = serde_json::from_str(&stored).expect("JSON array text");
+    assert_eq!(back.len(), 60);
+    assert_eq!(
+        stored_text("tokenizer.ggml.token_type", &vocab),
+        "Array with 200 elements"
+    );
+    assert_eq!(
+        stored_text("general.tags", &words),
+        "[Array with 11 elements]"
+    );
+}
