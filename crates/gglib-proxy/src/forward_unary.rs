@@ -46,14 +46,20 @@ use crate::unary_body::{Exchange, answer_with, exchange};
 /// a terminal 502; and a non-2xx upstream status is passed through with its
 /// body, since llama-server's own diagnostic is the useful one. A first answer
 /// that takes longer than `total` is a 504 (see [`exchange`]); a re-issue has
-/// its own bound.
+/// its own bound. The answer names `model_name`, as a streamed one does (see
+/// [`served_as`]).
 ///
 /// # Errors
 ///
 /// [`ForwardError::UpstreamDead`] when llama-server could not be reached.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one turn's request, its reading and its record, each read once in order"
+)]
 pub(crate) async fn forward_unary(
     req_builder: reqwest::RequestBuilder,
     body: Bytes,
+    model_name: &str,
     dialect: &TurnDialect,
     cache_metrics: &CacheMetricsStore,
     (metrics, snapshot_seq): (&ContextMetricsStore, u64),
@@ -90,8 +96,29 @@ pub(crate) async fn forward_unary(
             }
         };
     let answer = repair(again, &body, answer, dialect, metrics, snapshot_seq, turn).await;
+    let answer = served_as(answer, model_name);
     metrics.flag_generation(snapshot_seq, TurnGeneration::of_unary_body(&answer));
     Ok(answer_with(content_type, answer))
+}
+
+/// `answer` with its `model` naming `model_name`, the model gglib serves the
+/// turn as, which is the name every streamed frame carries (see
+/// [`crate::forward::drain_events`]).
+///
+/// llama-server names a reply after the `-m` it was started with, since gglib
+/// passes no `--alias`, so the body as it comes tells a client where a GGUF
+/// file sits on this machine rather than which model answered. Applied to the
+/// body the client is answered with, a second draw included. A body that is
+/// not JSON, or names no model, is answered as it came.
+fn served_as(answer: Bytes, model_name: &str) -> Bytes {
+    let Ok(mut parsed) = serde_json::from_slice::<serde_json::Value>(&answer) else {
+        return answer;
+    };
+    let Some(model) = parsed.get_mut("model") else {
+        return answer;
+    };
+    *model = model_name.into();
+    serde_json::to_vec(&parsed).map_or(answer, Bytes::from)
 }
 
 /// Judge `answer`, and draw again when its tool call does not validate.
