@@ -337,6 +337,7 @@ diagram and the catalog of crates, each with its own README,
 
 ## Documentation
 
+- [What a version promises](docs/compatibility.md)
 - [CLI command reference](docs/cli/)
 - [Client configuration and images](docs/clients.md)
 - [Sampling resolution](docs/sampling.md)
