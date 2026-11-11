@@ -23,6 +23,7 @@ Context
     device budget        96.00 GiB
     weights              3.99 GiB
     kv bytes/token       78336
+    kv cache             9.56 GiB
     trained window       262144
     before snapping      262144
 

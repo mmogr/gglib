@@ -77,6 +77,7 @@ export function chatPlan(overrides: Partial<LaunchPlan> = {}): LaunchPlan {
       budgetBytes: 48 * 1024 ** 3,
       weightsBytes: 2_500_000_000,
       kvBytesPerToken: 1_097_000,
+      kvBytes: 35_946_496_000,
       trainedCtx: 131072,
       unsnapped: 40005,
       sentence: 'Fits this machine with 32K context, of 128K trained.',

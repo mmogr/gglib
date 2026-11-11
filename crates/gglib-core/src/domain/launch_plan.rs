@@ -102,9 +102,14 @@ pub struct ContextFit {
     /// The weights, summed across shards, plus the projector when linked.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub weights_bytes: Option<u64>,
-    /// Bytes of KV cache each token of context costs at the launch's types.
+    /// Bytes of KV cache each token of context costs at the launch's types,
+    /// over the layers that keep every token.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub kv_bytes_per_token: Option<u64>,
+    /// The KV cache at the served context: every token's cost, and the
+    /// sliding-window layers' fixed block.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub kv_bytes: Option<u64>,
     /// The model's trained ceiling.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub trained_ctx: Option<u64>,

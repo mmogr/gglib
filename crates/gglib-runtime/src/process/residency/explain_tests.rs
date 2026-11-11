@@ -6,6 +6,7 @@
 
 use super::*;
 use gglib_core::cache_config::KvCacheType;
+use gglib_core::domain::KvElemsPerToken;
 
 /// A refusal is not a zero, and `FitInputs` says which refusal it was. Without
 /// this the only signal is a `None`, which sends a person reading source.
@@ -48,7 +49,7 @@ fn zero_weights_are_reported_as_unknown_not_as_free() {
 /// agreement rather than the value, which depends on the machine.
 #[test]
 fn the_explanation_agrees_with_the_budget_it_reports() {
-    let kv = KvElemsPerToken { k: 4096, v: 4096 };
+    let kv = KvShape::uniform(KvElemsPerToken { k: 4096, v: 4096 });
     let (fitted, inputs) = explain_fit(
         Some(131_072),
         Some(4_000_000_000),

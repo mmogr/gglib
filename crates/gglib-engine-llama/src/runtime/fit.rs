@@ -2,6 +2,7 @@
 
 use gglib_core::DEFAULT_CONTEXT_SIZE;
 use gglib_core::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V, KvCacheType};
+use gglib_core::domain::KvShape;
 use gglib_core::domain::phone_fit::{FitVerdict, MissingInput, fit_verdict};
 use gglib_core::ports::{ModelLaunchSpec, ModelRuntimeError};
 use gglib_core::services::total_model_bytes;
@@ -21,6 +22,11 @@ pub(crate) const CACHE_TYPES: (KvCacheType, KvCacheType) =
 /// a component the catalog counts beside the weights is not loaded, so it is
 /// not counted. A model therefore loads at the context the browser showed
 /// for the same budget.
+///
+/// Its KV cache is sized as this engine makes it: the context is made with
+/// llama.cpp's default parameters (`gglib_llama_context_new`), whose
+/// `swa_full` keeps every sliding-window layer at the full context, so the
+/// window's block is no saving here ([`KvShape::full_size_window`]).
 ///
 /// A model whose smallest rung does not fit is refused with
 /// [`ModelRuntimeError::ChatModelDoesNotFit`], and one trained for fewer
@@ -52,7 +58,7 @@ fn context_within(
     let (verdict, inputs) = fit_verdict(
         spec.context_length,
         Some(weights_bytes),
-        spec.kv_elems_per_token,
+        spec.kv_shape.map(KvShape::full_size_window),
         budget_bytes,
     );
     let rung = match verdict {

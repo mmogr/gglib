@@ -3,7 +3,7 @@
 //! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
-use crate::domain::{KvElemsPerToken, estimate_kv_elems_per_token};
+use crate::domain::{KvElemsPerToken, KvShape, estimate_kv_shape};
 
 /// Qwen3.6-shaped metadata: hybrid attention, every 4th layer full.
 fn qwen36_metadata() -> HashMap<String, String> {
@@ -171,7 +171,7 @@ fn a_non_numeric_interval_is_ignored_rather_than_fatal() {
     assert_eq!(kv_cache_layer_count(&md, Some("qwen35")), Some(64));
 }
 
-/// `block_count` has no fallback, and [`estimate_kv_elems_per_token`]
+/// `block_count` has no fallback, and [`estimate_kv_shape`]
 /// propagates its absence with `?`. Returning `None` keeps "we don't know"
 /// travelling instead of collapsing into a zero that reads as "KV is free".
 #[test]
@@ -209,10 +209,10 @@ fn the_estimate_counts_only_the_cache_holding_layers_of_a_hybrid_model() {
     // 16 cache-holding layers × 4 kv heads × 256 head dim.
     let expected = 16 * 4 * 256;
     assert_eq!(
-        estimate_kv_elems_per_token(&md, Some("qwen35")),
-        Some(KvElemsPerToken {
+        estimate_kv_shape(&md, Some("qwen35")),
+        Some(KvShape::uniform(KvElemsPerToken {
             k: expected,
             v: expected
-        })
+        }))
     );
 }

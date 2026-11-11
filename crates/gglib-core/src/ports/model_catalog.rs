@@ -14,7 +14,7 @@ use crate::domain::DefaultsOrigin;
 use crate::domain::DialectSpec;
 use crate::domain::ImageFamily;
 use crate::domain::InferenceConfig;
-use crate::domain::KvElemsPerToken;
+use crate::domain::KvShape;
 use crate::domain::Model;
 use crate::domain::ModelCapabilities;
 use crate::domain::ModelComponent;
@@ -146,15 +146,14 @@ pub struct ModelLaunchSpec {
     /// size could not be determined — callers must treat that as "unknown"
     /// rather than "free".
     pub file_size_bytes: u64,
-    /// Estimated K/V element counts consumed per token of context, derived
-    /// from the model's GGUF metadata (see
-    /// [`crate::domain::estimate_kv_elems_per_token`]). Type-agnostic —
-    /// callers convert to bytes via [`crate::domain::kv_bytes_per_token`]
-    /// once the launch's resolved K/V cache types are known.
+    /// The estimated KV cache, in elements, derived from the model's GGUF
+    /// metadata (see [`crate::domain::estimate_kv_shape`]). Type-agnostic —
+    /// callers convert to bytes via [`KvShape::bytes`] once the launch's
+    /// resolved K/V cache types are known.
     ///
     /// `None` when the metadata doesn't carry the layer/head counts needed;
     /// callers substitute a conservative allowance.
-    pub kv_elems_per_token: Option<KvElemsPerToken>,
+    pub kv_shape: Option<KvShape>,
     /// True when the model's KV memory retains only part of the token history
     /// — sliding-window, hybrid, or recurrent attention (see
     /// [`crate::domain::kv_memory_is_partial`]).
@@ -175,7 +174,7 @@ pub struct ModelLaunchSpec {
     /// bump, rather than reporting the first as the second.
     ///
     /// Derived from the metadata already on the catalog row, the same way
-    /// `kv_elems_per_token` and `kv_memory_is_partial` are.
+    /// `kv_shape` and `kv_memory_is_partial` are.
     pub model_sampling: ModelSamplingDefaults,
 }
 

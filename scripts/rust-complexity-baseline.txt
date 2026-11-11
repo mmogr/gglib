@@ -101,7 +101,7 @@ crates/gglib-cli/src/model_commands.rs 450
 crates/gglib-cli/src/presentation/explain_display.rs 413
 crates/gglib-cli/src/presentation/explain_display_tests.rs 687
 crates/gglib-cli/src/presentation/inspect_display.rs 322
-crates/gglib-cli/src/presentation/launch_display.rs 455
+crates/gglib-cli/src/presentation/launch_display.rs 456
 crates/gglib-cli/tests/llama_asks_first.rs 400
 crates/gglib-cli/tests/mcp_servers.rs 917
 crates/gglib-cli/tests/setup_scripts.rs 366
@@ -123,7 +123,7 @@ crates/gglib-core/src/domain/benchmark/tune/apply.rs 449
 crates/gglib-core/src/domain/cache_budget.rs 305
 crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/chat.rs 337
-crates/gglib-core/src/domain/fit_sentence_tests.rs 350
+crates/gglib-core/src/domain/fit_sentence_tests.rs 373
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 396
 crates/gglib-core/src/domain/hub_chats_tests.rs 481
@@ -131,8 +131,9 @@ crates/gglib-core/src/domain/image_family.rs 885
 crates/gglib-core/src/domain/image_family_tests.rs 1604
 crates/gglib-core/src/domain/inference.rs 1611
 crates/gglib-core/src/domain/inference_tests.rs 1283
-crates/gglib-core/src/domain/kv_estimate.rs 341
-crates/gglib-core/src/domain/launch_plan.rs 301
+crates/gglib-core/src/domain/kv_estimate.rs 404
+crates/gglib-core/src/domain/kv_estimate_tests.rs 442
+crates/gglib-core/src/domain/launch_plan.rs 306
 crates/gglib-core/src/domain/mcp/types.rs 601
 crates/gglib-core/src/domain/model.rs 532
 crates/gglib-core/src/domain/model_detail.rs 307
@@ -145,7 +146,7 @@ crates/gglib-core/src/domain/runs/wire_tests.rs 319
 crates/gglib-core/src/domain/runtime_capabilities.rs 532
 crates/gglib-core/src/domain/state_words.rs 436
 crates/gglib-core/src/download/auto_pick.rs 404
-crates/gglib-core/src/download/auto_pick_tests.rs 730
+crates/gglib-core/src/download/auto_pick_tests.rs 731
 crates/gglib-core/src/download/completion.rs 432
 crates/gglib-core/src/download/rate.rs 628
 crates/gglib-core/src/normalize/parsers/delimited.rs 985
@@ -289,7 +290,7 @@ crates/gglib-runtime/src/engine_contract_readings.rs 328
 crates/gglib-runtime/src/engine_contract_tier3.rs 438
 crates/gglib-runtime/src/engine_tests.rs 442
 crates/gglib-runtime/src/launch_narration.rs 857
-crates/gglib-runtime/src/llama/args/cache_ram.rs 328
+crates/gglib-runtime/src/llama/args/cache_ram.rs 339
 crates/gglib-runtime/src/llama/build/mod.rs 541
 crates/gglib-runtime/src/llama/detect/cuda.rs 303
 crates/gglib-runtime/src/llama/download/mod.rs 714

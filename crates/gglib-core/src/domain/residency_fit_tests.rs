@@ -16,10 +16,10 @@ use super::*;
 /// ~28 layers x 1024 hidden x 2 (K and V) is about 57k elements per token, and
 /// at `Q8_0` that is roughly a byte each.
 const EMBEDDER_WEIGHTS: u64 = 640 * 1024 * 1024;
-const EMBEDDER_KV: KvElemsPerToken = KvElemsPerToken {
+const EMBEDDER_KV: KvShape = KvShape::uniform(crate::domain::KvElemsPerToken {
     k: 28_672,
     v: 28_672,
-};
+});
 
 fn footprint(context: u64) -> Option<SlotFootprint> {
     SlotFootprint::new(

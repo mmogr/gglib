@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use super::{fit_note, fit_sentence, grouped, tokens};
-use crate::domain::{ContextFit, FitInputs};
+use crate::domain::{ContextFit, FitInputs, KvBytes, SlidingWindow};
 use crate::server_config::ContextSizeSource;
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -17,7 +17,7 @@ fn known() -> FitInputs {
     FitInputs {
         budget_bytes: Some(48 * GIB),
         weights_bytes: Some(2_500_000_000),
-        kv_bytes_per_token: Some(1_097_000),
+        kv: Some(KvBytes::uniform(1_097_000)),
         trained_ctx: Some(131_072),
         unsnapped: Some(40_005),
     }
@@ -72,7 +72,7 @@ fn a_served_context_above_the_fit_says_what_fits() {
 fn a_refusal_names_each_figure_it_was_missing() {
     let inputs = FitInputs {
         budget_bytes: None,
-        kv_bytes_per_token: None,
+        kv: None,
         trained_ctx: None,
         unsnapped: None,
         ..known()
@@ -97,7 +97,7 @@ fn a_refusal_names_each_figure_it_was_missing() {
     let three = FitInputs {
         budget_bytes: None,
         weights_bytes: None,
-        kv_bytes_per_token: None,
+        kv: None,
         unsnapped: None,
         ..known()
     };
@@ -148,7 +148,7 @@ fn a_context_that_needs_exactly_the_usable_share_fits() {
     let exact = FitInputs {
         budget_bytes: Some(10 * GIB),
         weights_bytes: Some(9_663_676_416 - 4_096_000),
-        kv_bytes_per_token: Some(1000),
+        kv: Some(KvBytes::uniform(1000)),
         unsnapped: Some(4096),
         ..known()
     };
@@ -270,6 +270,29 @@ fn the_constructor_and_the_functions_agree() {
     assert_eq!(fit_note(&f), f.note);
 }
 
+/// The served context's KV cache is its every-token cost and the
+/// sliding-window block, and the note counts both.
+#[test]
+fn the_kv_cache_served_counts_the_window_block() {
+    let windowed = FitInputs {
+        kv: Some(KvBytes {
+            per_token: 1000,
+            window: Some(SlidingWindow {
+                tokens: 1024,
+                per_cell: 1_000_000,
+            }),
+        }),
+        ..known()
+    };
+    let fit = fit(32_768, Some(32_768), &windowed);
+    assert_eq!(fit.kv_bytes_per_token, Some(1000));
+    assert_eq!(fit.kv_bytes, Some(32_768_000 + 1_536_000_000));
+    assert_eq!(
+        fit.note.as_deref(),
+        Some("fits (3.79 GiB of 43.20 GiB usable)")
+    );
+}
+
 /// The fits `contracts/models/fit_sentence.json` records, one of each
 /// shape: fits, fits below the rung, serves above it and past memory, a
 /// context that is not whole thousands, above the rung yet inside memory,
@@ -315,7 +338,7 @@ fn recorded() -> Vec<ContextFit> {
             ..refused
         }),
         refusal(FitInputs {
-            kv_bytes_per_token: None,
+            kv: None,
             ..refused
         }),
         refusal(FitInputs {
@@ -323,7 +346,7 @@ fn recorded() -> Vec<ContextFit> {
             ..refused
         }),
         refusal(FitInputs {
-            kv_bytes_per_token: None,
+            kv: None,
             trained_ctx: None,
             ..refused
         }),

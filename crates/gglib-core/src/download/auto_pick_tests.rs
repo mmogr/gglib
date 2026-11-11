@@ -12,7 +12,7 @@ use super::{
 use crate::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V};
 use crate::domain::FileType;
 use crate::domain::gguf::{GgufMetadata, HeadMetadata};
-use crate::domain::kv_estimate::{estimate_kv_elems_per_token, kv_bytes_per_token};
+use crate::domain::kv_estimate::estimate_kv_shape;
 use crate::domain::phone_fit::{FitVerdict, fit_verdict};
 use crate::domain::recommendation::{budget_covering, usable_share};
 use crate::domain::variant_fit::VariantFit;
@@ -508,7 +508,7 @@ fn a_chat_model_that_fits_only_the_lowest_rung_does_not_count() {
     // Room for the weights and a little cache: the verdict is Tight.
     let model = qwen3_4b();
     let tight = budget_covering(QWEN3_4B_Q4_K_M + 450 * 1024 * 1024);
-    let kv = estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref());
+    let kv = estimate_kv_shape(&model.metadata, model.architecture.as_deref());
     let verdict = fit_verdict(model.context_length, Some(QWEN3_4B_Q4_K_M), kv, Some(tight)).0;
     assert!(matches!(verdict, FitVerdict::Tight { .. }), "{verdict:?}");
     let fit = MemoryFit {
@@ -551,10 +551,9 @@ fn a_model_trained_for_no_more_than_the_lowest_rung_fits_its_whole_window() {
     for trained in [512, 2048, 4096] {
         let mut model = qwen3_4b();
         model.context_length = Some(trained);
-        let kv =
-            estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref()).unwrap();
-        let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
-        let window = QWEN3_4B_Q4_K_M + per_token * trained;
+        let kv = estimate_kv_shape(&model.metadata, model.architecture.as_deref()).unwrap();
+        let kv = kv.bytes(DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+        let window = QWEN3_4B_Q4_K_M + kv.at(trained);
 
         let at_edge = MemoryFit {
             budget_bytes: budget_covering(window),
@@ -593,10 +592,9 @@ fn a_model_trained_between_the_lowest_two_rungs_fits_its_whole_window() {
     for trained in [6144, 8191] {
         let mut model = qwen3_4b();
         model.context_length = Some(trained);
-        let kv =
-            estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref()).unwrap();
-        let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
-        let window = QWEN3_4B_Q4_K_M + per_token * trained;
+        let kv = estimate_kv_shape(&model.metadata, model.architecture.as_deref()).unwrap();
+        let kv = kv.bytes(DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+        let window = QWEN3_4B_Q4_K_M + kv.at(trained);
 
         let at_edge = MemoryFit {
             budget_bytes: budget_covering(window),
@@ -648,8 +646,11 @@ fn an_image_model_fits_by_its_weights_alone() {
 #[test]
 fn each_verdict_says_what_the_picker_found() {
     let model = qwen3_4b();
-    let kv = estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref());
-    let per_token = kv_bytes_per_token(kv.unwrap(), DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+    let kv = estimate_kv_shape(&model.metadata, model.architecture.as_deref());
+    let kv_bytes = kv
+        .unwrap()
+        .bytes(DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+    let per_token = kv_bytes.per_token;
 
     // Roomy: the ladder's own verdict, with the context it reached.
     let roomy = MemoryFit {

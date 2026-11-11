@@ -109,9 +109,7 @@ pub use template_caps::{
 };
 
 // Re-export KV estimation helpers at the domain level for convenience
-pub use kv_estimate::{
-    KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
-};
+pub use kv_estimate::{KvBytes, KvElemsPerToken, KvShape, SlidingWindow, estimate_kv_shape};
 
 // Re-export KV memory-shape detection at the domain level for convenience
 pub use kv_memory::{kv_cache_layer_count, kv_memory_is_partial};

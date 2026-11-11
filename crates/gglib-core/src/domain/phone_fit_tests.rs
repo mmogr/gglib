@@ -3,7 +3,7 @@
 use super::{FitVerdict, LOWEST_RUNG, MissingInput, fit_verdict};
 use crate::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V};
 use crate::domain::context_fit::fit_context;
-use crate::domain::kv_estimate::{KvElemsPerToken, kv_bytes_per_token};
+use crate::domain::kv_estimate::{KvElemsPerToken, KvShape};
 use crate::domain::recommendation::{budget_covering, usable_share};
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -12,13 +12,14 @@ const GIB: u64 = 1024 * 1024 * 1024;
 /// layers x 8 KV heads x 128 head dim from its own metadata.
 const WEIGHTS: u64 = 2_497_281_312;
 const TRAINED: u64 = 40_960;
-const KV: KvElemsPerToken = KvElemsPerToken {
+const KV: KvShape = KvShape::uniform(KvElemsPerToken {
     k: 36_864,
     v: 36_864,
-};
+});
 
-fn per_token() -> u64 {
-    kv_bytes_per_token(KV, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V)
+const fn per_token() -> u64 {
+    KV.bytes(DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V)
+        .per_token
 }
 
 /// Weights plus the lowest rung's KV cache: what the lowest rung occupies.
@@ -181,7 +182,7 @@ fn each_missing_input_is_named() {
 /// verdict must name it as missing rather than call the model too big.
 #[test]
 fn zero_weights_and_a_costless_kv_shape_are_missing() {
-    let zero_kv = KvElemsPerToken { k: 0, v: 0 };
+    let zero_kv = KvShape::uniform(KvElemsPerToken { k: 0, v: 0 });
     assert_eq!(
         fit_verdict(Some(TRAINED), Some(0), Some(KV), Some(8 * GIB)).0,
         FitVerdict::Unknown {
@@ -245,6 +246,9 @@ fn the_inputs_are_returned_as_the_why() {
     let (_, inputs) = fit_verdict(Some(TRAINED), Some(WEIGHTS), Some(KV), Some(8 * GIB));
     assert_eq!(inputs.trained_ctx, Some(TRAINED));
     assert_eq!(inputs.weights_bytes, Some(WEIGHTS));
-    assert_eq!(inputs.kv_bytes_per_token, Some(per_token()));
+    assert_eq!(
+        inputs.kv,
+        Some(KV.bytes(DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V))
+    );
     assert_eq!(inputs.budget_bytes, Some(8 * GIB));
 }

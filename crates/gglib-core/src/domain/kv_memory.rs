@@ -22,7 +22,7 @@
 //!
 //! Inputs come from the raw GGUF key/value map that `gglib-gguf` copies
 //! verbatim into [`crate::domain::Model::metadata`] (see
-//! [`crate::domain::estimate_kv_elems_per_token`] for the same pattern).
+//! [`crate::domain::estimate_kv_shape`] for the same pattern).
 //!
 //! Detection is deliberately *sensitive*: a false positive merely forgoes the
 //! disk-cache layer (the in-RAM cache still works), while a false negative
@@ -32,7 +32,7 @@
 //!
 //! [`kv_cache_layer_count`] answers the quantitative half of the same
 //! question — how many layers hold a per-token cache — and is what
-//! [`crate::domain::estimate_kv_elems_per_token`] sizes its budget from.
+//! [`crate::domain::estimate_kv_shape`] sizes its budget from.
 
 use std::collections::HashMap;
 use std::hash::BuildHasher;
@@ -149,7 +149,7 @@ pub fn kv_memory_is_partial<S: BuildHasher>(
 ///
 /// `None` when `block_count` is absent or non-numeric, so the "we don't know"
 /// signal keeps travelling rather than collapsing into a zero that would read
-/// as "KV is free" — [`crate::domain::estimate_kv_elems_per_token`] propagates
+/// as "KV is free" — [`crate::domain::estimate_kv_shape`] propagates
 /// it with `?`. An absent, non-numeric, or `1` interval leaves `block_count`
 /// untouched, so every full-attention model is bit-identical to before this
 /// function existed.

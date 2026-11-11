@@ -15,7 +15,7 @@
 
 use crate::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V};
 use crate::domain::context_fit::{FitInputs, fit_context_explained};
-use crate::domain::kv_estimate::{KvElemsPerToken, estimate_kv_bytes_for_context};
+use crate::domain::kv_estimate::KvShape;
 use crate::domain::recommendation::budget_covering;
 use crate::settings::DEFAULT_CONTEXT_SIZE;
 
@@ -47,7 +47,7 @@ pub enum FitVerdict {
     /// `have_bytes` is the budget the verdict was given. Both are budgets, so
     /// they compare directly, and when memory is the reason `need_bytes` is
     /// greater than `have_bytes`. [`FitInputs`] holds the weights and the KV
-    /// cost per token it was built from.
+    /// cache it was built from.
     ///
     /// A model trained for fewer tokens than the lowest rung is too big as
     /// well, however much memory there is: the fit never invents a context
@@ -94,7 +94,7 @@ pub enum MissingInput {
 pub fn fit_verdict(
     trained_ctx: Option<u64>,
     weights_bytes: Option<u64>,
-    kv: Option<KvElemsPerToken>,
+    kv: Option<KvShape>,
     budget_bytes: Option<u64>,
 ) -> (FitVerdict, FitInputs) {
     let (fitted, inputs) = fit_context_explained(
@@ -123,7 +123,7 @@ fn verdict(fitted: Option<u64>, inputs: &FitInputs) -> FitVerdict {
     }
     match (
         inputs.trained_ctx,
-        inputs.kv_bytes_per_token,
+        inputs.kv,
         inputs.weights_bytes,
         inputs.budget_bytes,
     ) {
@@ -139,10 +139,8 @@ fn verdict(fitted: Option<u64>, inputs: &FitInputs) -> FitVerdict {
         (_, _, _, None) => FitVerdict::Unknown {
             missing: MissingInput::Budget,
         },
-        (Some(_), Some(per_token), Some(weights), Some(budget)) => FitVerdict::TooBig {
-            need_bytes: budget_covering(
-                weights.saturating_add(estimate_kv_bytes_for_context(per_token, LOWEST_RUNG)),
-            ),
+        (Some(_), Some(kv), Some(weights), Some(budget)) => FitVerdict::TooBig {
+            need_bytes: budget_covering(weights.saturating_add(kv.at(LOWEST_RUNG))),
             have_bytes: budget,
         },
     }
