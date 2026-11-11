@@ -26,13 +26,15 @@ pub enum ImportMode {
     ///
     /// This is what `gglib model add --reimport` asks for, and what re-importing
     /// did unconditionally before [`ModelService::import_from_file`] began
-    /// guarding it. It refreshes tags, capabilities, quantization, context
-    /// length, the expert counts and the dialect spec — wider than `model
-    /// retag`, which rebuilds only tags and the dialect spec.
+    /// guarding it. It refreshes the stored header, tags, capabilities,
+    /// quantization, context length, the expert counts and the dialect spec —
+    /// wider than `model retag`, which rebuilds only tags and the dialect spec.
     ///
-    /// It is narrower than "overwrite the row", and the six columns do not all
+    /// It is narrower than "overwrite the row", and the columns do not all
     /// behave alike:
     ///
+    /// - `metadata` (the header) is **merged**: each key the file has is read
+    ///   afresh, and a key added with `model update --metadata` stays.
     /// - `tags`, `capabilities` and `dialect_spec` are **assigned**. A refresh
     ///   replaces them with whatever was just derived, including with nothing
     ///   — these can be cleared.
