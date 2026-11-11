@@ -4,8 +4,9 @@
 //!
 //! [`upstream_events`] is the first stage of the response pipeline in
 //! [`crate::forward`]: llama-server's SSE bytes in, [`LlmStreamEvent`]s out,
-//! ready for the normalizer. A read that waits longer than
-//! [`StreamBounds::idle`] ends the events with [`UpstreamStalled`].
+//! ready for the normalizer. A reply that goes longer than
+//! [`StreamBounds::idle`] without its next event (before the first token,
+//! without any bytes) ends the events with [`UpstreamStalled`].
 //! [`first_byte_timeout_frame`] is what the client gets instead of a reply
 //! when the upstream sent no response headers before the first-byte deadline,
 //! no other request was active, and the attempt was the last one or a recycle
@@ -25,24 +26,26 @@ use gglib_core::sse::{SseEncoder, SseStreamDecoder};
 
 use crate::forward::{FIRST_BYTE_DEADLINE_SECS, failed_turn_body};
 
-/// How long one read of a streamed reply may wait for the upstream's next
-/// bytes before the turn is ended as stalled.
+/// How long a streamed reply may wait for the upstream's next event before
+/// the turn is ended as stalled.
 ///
 /// It times reads, not the turn. The timer starts when the drain asks for the
-/// next chunk and stops when one arrives. While the drain waits on the client
-/// (`tx.send`) or on a repair re-issue, the reader is parked at its `yield` and
-/// no read is being timed, so a slow client is never mistaken for a silent
-/// upstream. The converse holds too: this bound does not notice a client that
-/// stops reading, which its twin on the client's side,
+/// next event and stops when a chunk decodes to one. Once the first token
+/// has come, a chunk that decodes to nothing, such as the `:` keep-alive
+/// comment llama-server sends while it works, leaves it running, so a reply
+/// that only pings is still judged stalled. While the drain waits on the client (`tx.send`) or on a repair
+/// re-issue, the reader is parked at its `yield` and no read is being timed,
+/// so a slow client is never mistaken for a silent upstream. The converse
+/// holds too: this bound does not notice a client that stops reading, which
+/// its twin on the client's side,
 /// [`CLIENT_SEND_TIMEOUT`](crate::client_send::CLIENT_SEND_TIMEOUT), does.
 ///
-/// Prefill sets the floor. The proxy asks llama-server for `return_progress`
-/// (see `inject_streaming_body_overrides` in [`crate::forward`]), so it sends
-/// a `prompt_progress` chunk after each batch of the prompt. gglib passes no
-/// `-b` or `-ub`, so a batch is llama-server's default 2048 tokens, and a host
-/// that prefills slower than about 6.8 tokens a second (2048 / 300) can go
-/// longer than this between two chunks. Such a stall comes before the first
-/// token, so it strikes once rather than recycling the model; see
+/// Before the first token, any bytes stop it. The proxy asks llama-server for
+/// `return_progress` (see `inject_streaming_body_overrides` in
+/// [`crate::forward`]), so it sends a `prompt_progress` chunk after each
+/// 2048-token batch of the prompt and only keep-alive comments between them;
+/// counting those keeps a slow prefill from being cut. A stall before the
+/// first token strikes once rather than recycling the model; see
 /// [`StreamVerdict::Stalled`](crate::upstream_health::StreamVerdict::Stalled).
 pub const STREAM_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 
@@ -58,7 +61,8 @@ pub struct StreamBounds {
     /// How long to wait for response headers, per cycle; see
     /// [`FIRST_BYTE_DEADLINE_SECS`].
     pub first_byte: Duration,
-    /// How long one read of the reply may wait; see [`STREAM_IDLE_TIMEOUT`].
+    /// How long the reply may wait for its next event; see
+    /// [`STREAM_IDLE_TIMEOUT`].
     pub idle: Duration,
     /// How long one send to a streaming client may wait for it to make room;
     /// see [`CLIENT_SEND_TIMEOUT`](crate::client_send::CLIENT_SEND_TIMEOUT).
@@ -100,8 +104,9 @@ impl StreamBounds {
     }
 }
 
-/// The upstream sent nothing for [`StreamBounds::idle`] while the proxy waited
-/// for the next chunk of its reply.
+/// The upstream sent no event for [`StreamBounds::idle`] while the proxy
+/// waited for the next one: keep-alive comments aside once tokens flow, no
+/// bytes at all before the first.
 ///
 /// [`upstream_events`] ends with this as its `Err`, so the drain tells a stall
 /// from a transport error by downcasting.
@@ -148,7 +153,7 @@ impl UpstreamStalled {
 }
 
 /// Decode an upstream SSE byte stream into typed events, waiting at most
-/// `idle` for each read.
+/// `idle` for each next event (before the first token, for any bytes).
 ///
 /// Reading stops at the end of the body or where the decoder says the stream
 /// ended (the `[DONE]` sentinel, an inline upstream error, or bytes it cannot
@@ -176,9 +181,14 @@ where
         let mut decoder = SseStreamDecoder::default();
         let mut byte_stream = std::pin::pin!(bytes);
         let mut after_first_token = false;
+        // When the wait for the next event ends. Restored once the events of
+        // a chunk have been taken. After the first token it is kept across a
+        // chunk that decodes to none, so keep-alive comments cannot hold a
+        // silent reply open; before it they are all prefill sends.
+        let mut deadline = tokio::time::Instant::now() + idle;
 
         loop {
-            let Ok(next) = tokio::time::timeout(idle, byte_stream.next()).await else {
+            let Ok(next) = tokio::time::timeout_at(deadline, byte_stream.next()).await else {
                 let stall = UpstreamStalled { after: idle, after_first_token };
                 warn!("{stall}");
                 yield Err(anyhow::Error::new(stall));
@@ -196,12 +206,16 @@ where
                 }
             };
             let (events, stop) = decoder.feed_bytes(&chunk);
+            let moved = !events.is_empty();
             for event in events {
                 after_first_token |= event.as_ref().is_ok_and(is_generated_token);
                 yield event;
             }
             if stop {
                 break;
+            }
+            if moved || !after_first_token {
+                deadline = tokio::time::Instant::now() + idle;
             }
         }
 

@@ -265,6 +265,7 @@ crates/gglib-proxy/src/server.rs 1031
 crates/gglib-proxy/src/slots.rs 1265
 crates/gglib-proxy/src/slots_poller.rs 830
 crates/gglib-proxy/src/sse_stream.rs 397
+crates/gglib-proxy/src/upstream_read_tests.rs 373
 crates/gglib-proxy/tests/fixtures/common.rs 1000
 crates/gglib-proxy/tests/fixtures/pinned.rs 302
 crates/gglib-proxy/tests/integration_admission.rs 322
