@@ -10,6 +10,12 @@ fn a_blank_or_absent_value_holds_nothing_and_any_other_is_held_as_it_is() {
     assert_eq!(held(Some(" key ")), Some(" key "));
 }
 
+#[test]
+fn a_held_key_is_trimmed_and_a_blank_one_is_still_nothing() {
+    assert_eq!(held_key(Some(" key \n")), Some("key"));
+    assert_eq!(held_key(Some("\t\n")), None);
+}
+
 /// The command is built from the name, so the two cannot disagree, and it
 /// names the key `settings show` prints.
 #[test]

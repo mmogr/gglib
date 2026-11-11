@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use gglib_core::secret::held;
+use gglib_core::secret::held_key;
 use gglib_core::services::{AppCore, SETTINGS_CACHE_TTL};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -35,7 +35,7 @@ pub(super) async fn rotation_poll(
                 continue;
             }
         };
-        let Some(next) = held(stored.as_deref()).map(str::to_owned) else {
+        let Some(next) = held_key(stored.as_deref()).map(str::to_owned) else {
             continue;
         };
         if next == current {

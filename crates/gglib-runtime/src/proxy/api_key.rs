@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
 use gglib_core::ports::SettingsRepository;
-use gglib_core::secret::held;
+use gglib_core::secret::held_key;
 use tracing::{info, warn};
 
 /// Settle the bearer token for a proxy about to bind `host`.
@@ -42,7 +42,7 @@ pub async fn resolve_api_key(
 
     if let Some(key) = stored
         .as_ref()
-        .and_then(|s| held(s.proxy_api_key.as_deref()))
+        .and_then(|s| held_key(s.proxy_api_key.as_deref()))
     {
         return (Some(key.to_owned()), ApiKeySource::Settings);
     }
@@ -234,7 +234,8 @@ mod tests {
     /// loopback proxy would ignore a key the operator deliberately set.
     #[tokio::test]
     async fn a_stored_key_is_honoured_on_a_loopback_bind() {
-        let store = Recording::with_key(Some("set-by-remote-enable"));
+        // Padded, and read trimmed, as the guard reads the setting.
+        let store = Recording::with_key(Some(" set-by-remote-enable\n"));
         let (key, source) = resolve_api_key(None, "127.0.0.1", &repo(&store)).await;
 
         assert_eq!(key.as_deref(), Some("set-by-remote-enable"));
