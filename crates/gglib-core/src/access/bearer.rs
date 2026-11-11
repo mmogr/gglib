@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use super::constant_time_eq;
-use crate::secret::held;
+use crate::secret::held_key;
 use crate::services::SettingsCache;
 
 /// The auth scheme this endpoint speaks, compared case-insensitively.
@@ -149,12 +149,15 @@ impl BearerPolicy {
 
     /// The token a request must present right now, or `None` while this
     /// endpoint is unauthenticated.
+    ///
+    /// A stored key is read through [`held_key`], as every client of this
+    /// endpoint reads it, so a key saved with spaces around it still admits.
     pub async fn current(&self) -> Option<Arc<str>> {
         if let Some(pinned) = &self.pinned {
             return Some(Arc::clone(pinned));
         }
         let stored = match &self.settings {
-            Some(cache) => held(cache.get().await.proxy_api_key.as_deref()).map(Arc::from),
+            Some(cache) => held_key(cache.get().await.proxy_api_key.as_deref()).map(Arc::from),
             None => None,
         };
         stored.or_else(|| self.floor.clone())

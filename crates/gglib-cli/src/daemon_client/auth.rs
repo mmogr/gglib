@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 
 use gglib_core::access::{daemon_token_path, read_daemon_token};
 use gglib_core::contracts::http::daemon::DAEMON_TOKEN_REQUIRED_TYPE;
-use gglib_core::secret::{SettingSecret, held};
+use gglib_core::secret::{SettingSecret, held, held_key};
 
 use crate::bootstrap::CliContext;
 
@@ -113,7 +113,7 @@ pub(crate) async fn proxy_key(ctx: &CliContext, flag: Option<String>) -> Option<
         return flag;
     }
     let settings = ctx.app.settings().get().await.ok()?;
-    held(settings.proxy_api_key.as_deref()).map(str::to_owned)
+    held_key(settings.proxy_api_key.as_deref()).map(str::to_owned)
 }
 
 /// What to tell someone whose daemon call came back 401.

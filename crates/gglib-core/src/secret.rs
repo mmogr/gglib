@@ -30,6 +30,16 @@ pub fn held(value: Option<&str>) -> Option<&str> {
     value.filter(|v| !v.trim().is_empty())
 }
 
+/// A held key or token, with the spaces around it dropped.
+///
+/// Every side of a bearer check reads a stored key through this, so the
+/// guard demands what a client presents and no header carries a stray
+/// newline. [`held`] keeps the value exact, for `reveal`.
+#[must_use]
+pub fn held_key(value: Option<&str>) -> Option<&str> {
+    held(value).map(str::trim)
+}
+
 /// A secret kept in settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]

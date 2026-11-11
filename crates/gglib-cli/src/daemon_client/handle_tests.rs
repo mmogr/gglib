@@ -101,6 +101,7 @@ async fn the_proxy_key_is_the_flag_and_then_the_stored_key_when_it_is_not_blank(
     let flag = || Some("the-flag".to_owned());
     for (stored, given, key) in [
         (Some("the-stored-key"), None, Some("the-stored-key")),
+        (Some(" the-stored-key \n"), None, Some("the-stored-key")),
         (Some("the-stored-key"), flag(), Some("the-flag")),
         (None, flag(), Some("the-flag")),
         (None, None, None),

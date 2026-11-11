@@ -33,7 +33,7 @@ pub fn from_env() -> Option<String> {
 /// one.
 #[must_use]
 pub fn normalised(value: &str) -> Option<String> {
-    crate::secret::held(Some(value)).map(|token| token.trim().to_owned())
+    crate::secret::held_key(Some(value)).map(str::to_owned)
 }
 
 #[cfg(test)]
