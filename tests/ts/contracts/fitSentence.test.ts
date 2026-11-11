@@ -31,6 +31,7 @@ const FIELDS: Record<keyof ContextFit, true> = {
   budgetBytes: true,
   weightsBytes: true,
   kvBytesPerToken: true,
+  kvBytes: true,
   trainedCtx: true,
   unsnapped: true,
   sentence: true,

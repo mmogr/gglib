@@ -14,8 +14,8 @@
 
 use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
 use gglib_core::domain::{
-    ContextFit, FitInputs, KvElemsPerToken, LaunchPlan, RuntimeKind, SecondarySlotDecision,
-    SlotFootprint, Unload, UnloadReason, decide_secondary_slot_for, fit_context_explained,
+    ContextFit, FitInputs, KvShape, LaunchPlan, RuntimeKind, SecondarySlotDecision, SlotFootprint,
+    Unload, UnloadReason, decide_secondary_slot_for, fit_context_explained,
 };
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec, ModelRuntimeError};
 use gglib_core::server_config::ServerConfigOptions;
@@ -36,7 +36,7 @@ use crate::process::admission::Resident;
 pub fn explain_fit(
     trained_ctx: Option<u64>,
     weights_bytes: Option<u64>,
-    kv: Option<KvElemsPerToken>,
+    kv: Option<KvShape>,
     k: KvCacheType,
     v: KvCacheType,
 ) -> (Option<u64>, FitInputs) {

@@ -731,7 +731,7 @@ fn prepare(
         let (fitted, inputs) = explain::explain_fit(
             spec.context_length,
             Some(spec.file_size_bytes),
-            spec.kv_elems_per_token,
+            spec.kv_shape,
             kv_types.k,
             kv_types.v,
         );
@@ -742,7 +742,7 @@ fn prepare(
             model = %spec.name,
             budget_bytes = ?inputs.budget_bytes,
             weights_bytes = ?inputs.weights_bytes,
-            kv_bytes_per_token = ?inputs.kv_bytes_per_token,
+            kv = ?inputs.kv,
             trained_ctx = ?inputs.trained_ctx,
             unsnapped = ?inputs.unsnapped,
             fitted = ?fitted,

@@ -154,9 +154,58 @@ fn a_shortlist_row_is_judged_on_the_shape_it_states() {
     let (core, _) = fit_verdict(
         Some(row.trained_ctx),
         Some(row.weights_bytes),
-        Some(row.kv_elems_per_token),
+        Some(gglib_core::domain::KvShape::uniform(row.kv_elems_per_token)),
         Some(8 * GIB),
     );
     assert_eq!(verdict, carried(core, false));
     assert_eq!(why.trained_ctx, Some(row.trained_ctx));
+}
+
+/// A header that says which layers slide is read as the phone's engine
+/// makes the cache: every sliding layer at the full context.
+#[test]
+fn a_sliding_window_is_read_at_the_full_context() {
+    let mut head = head(Some(40_960), true, true);
+    for (key, value) in [
+        ("llama.attention.sliding_window", "1024"),
+        ("llama.attention.sliding_window_pattern", "4"),
+    ] {
+        head.metadata
+            .metadata
+            .insert(key.to_owned(), value.to_owned());
+    }
+    let shape = estimate_kv_shape(&head.metadata.metadata, Some("llama")).unwrap();
+    assert!(shape.window.is_some());
+    assert_eq!(
+        ModelShape::of_head(&head).kv,
+        Some(shape.full_size_window())
+    );
+}
+
+/// An installed model is judged at the full-size window too, as the engine
+/// that would run it allocates.
+#[test]
+fn an_installed_sliding_window_is_read_at_the_full_context() {
+    let head = head(Some(40_960), true, true);
+    let mut new = gglib_core::domain::NewModel::new(
+        "m".to_owned(),
+        std::path::PathBuf::from("/models/m.gguf"),
+        Some(1.0),
+        chrono::Utc::now(),
+    );
+    new.architecture = Some("llama".to_owned());
+    new.context_length = Some(40_960);
+    new.metadata = head.metadata.metadata;
+    for (key, value) in [
+        ("llama.attention.sliding_window", "1024"),
+        ("llama.attention.sliding_window_pattern", "4"),
+    ] {
+        new.metadata.insert(key.to_owned(), value.to_owned());
+    }
+    let shape = estimate_kv_shape(&new.metadata, Some("llama")).unwrap();
+    assert!(shape.window.is_some());
+    assert_eq!(
+        ModelShape::of_model(&Model::stored(1, &new)).kv,
+        Some(shape.full_size_window())
+    );
 }

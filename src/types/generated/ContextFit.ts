@@ -31,9 +31,15 @@ budgetBytes: number | null,
  */
 weightsBytes: number | null, 
 /**
- * Bytes of KV cache each token of context costs at the launch's types.
+ * Bytes of KV cache each token of context costs at the launch's types,
+ * over the layers that keep every token.
  */
 kvBytesPerToken: number | null, 
+/**
+ * The KV cache at the served context: every token's cost, and the
+ * sliding-window layers' fixed block.
+ */
+kvBytes: number | null, 
 /**
  * The model's trained ceiling.
  */

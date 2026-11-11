@@ -121,7 +121,7 @@ fn a_phone_suggestion_is_a_fit() {
             fit_verdict(
                 Some(c.context),
                 Some(c.weights_bytes),
-                Some(c.kv_elems_per_token),
+                Some(KvShape::uniform(c.kv_elems_per_token)),
                 Some(budget),
             )
             .0
@@ -254,6 +254,8 @@ fn headroom_is_the_unused_remainder() {
 #[test]
 fn required_bytes_includes_the_kv_cache_at_the_stated_context() {
     let c = SHORTLIST[0];
-    let per_token = kv_bytes_per_token(c.kv_elems_per_token, KvCacheType::Q8_0, KvCacheType::Q8_0);
+    let per_token = KvShape::uniform(c.kv_elems_per_token)
+        .bytes(KvCacheType::Q8_0, KvCacheType::Q8_0)
+        .per_token;
     assert_eq!(c.required_bytes(), c.weights_bytes + per_token * c.context);
 }

@@ -27,9 +27,7 @@
 //! and the caller reports the hardware it found.
 
 use crate::cache_config::KvCacheType;
-use crate::domain::kv_estimate::{
-    KvElemsPerToken, estimate_kv_bytes_for_context, kv_bytes_per_token,
-};
+use crate::domain::kv_estimate::{KvElemsPerToken, KvShape};
 use crate::utils::system::SystemMemoryInfo;
 
 /// Fraction of the memory budget a candidate is allowed to occupy.
@@ -115,19 +113,15 @@ impl ModelCandidate {
     /// Total memory this candidate needs: weights plus KV cache at
     /// [`context`](Self::context), quantized to the gglib default.
     ///
-    /// Uses [`kv_bytes_per_token`] with [`KvCacheType::Q8_0`] on both sides
+    /// Uses [`KvShape::bytes`] with [`KvCacheType::Q8_0`] on both sides
     /// because that is what the runtime actually launches with (see
     /// `gglib_runtime::llama::args::kv_cache_type`). A recommendation computed
     /// against `f16` would over-reserve by roughly the KV cache again.
     #[must_use]
     pub const fn required_bytes(&self) -> u64 {
-        let per_token = kv_bytes_per_token(
-            self.kv_elems_per_token,
-            KvCacheType::Q8_0,
-            KvCacheType::Q8_0,
-        );
-        self.weights_bytes
-            .saturating_add(estimate_kv_bytes_for_context(per_token, self.context))
+        let kv =
+            KvShape::uniform(self.kv_elems_per_token).bytes(KvCacheType::Q8_0, KvCacheType::Q8_0);
+        self.weights_bytes.saturating_add(kv.at(self.context))
     }
 
     /// The smallest memory budget this candidate may be recommended for: the
@@ -265,7 +259,7 @@ static SHORTLIST: &[ModelCandidate] = &[
 /// a measurement. Weights are the exact size of each file on Hugging Face at
 /// the revision its row names; KV shapes and trained contexts are read from
 /// each file's own GGUF metadata, the shapes counted as
-/// [`estimate_kv_elems_per_token`](crate::domain::estimate_kv_elems_per_token)
+/// [`estimate_kv_shape`](crate::domain::estimate_kv_shape)
 /// counts them.
 pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
     ModelCandidate {

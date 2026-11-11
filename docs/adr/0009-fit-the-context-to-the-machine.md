@@ -102,9 +102,11 @@ preserves "a claim about the model, not a claim about last week's traffic" as
 legitimate.
 
 The arithmetic is that kind of claim. Trained context, KV shape and weight size
-are GGUF facts; device capacity is a hardware fact; the multiply is how
-llama.cpp actually allocates its unified KV cache at `--parallel 1`. Condemning
-it would also condemn `SlotFootprint`, `compute_auto_cache_ram_mb` and `up`'s own
+are GGUF facts; device capacity is a hardware fact; and the sum follows how
+llama-server allocates its KV cache at `--parallel 1`: a cell per token in the
+layers that keep every token, and, where the header says which layers slide, a
+fixed block of cells in the sliding-window layers. Condemning it would also
+condemn `SlotFootprint`, `compute_auto_cache_ram_mb` and `up`'s own
 recommendation.
 
 **The honest weakness is elsewhere and is recorded rather than argued away.**

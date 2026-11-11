@@ -30,7 +30,8 @@ impl ContextFit {
             fitted,
             budget_bytes: inputs.budget_bytes,
             weights_bytes: inputs.weights_bytes,
-            kv_bytes_per_token: inputs.kv_bytes_per_token,
+            kv_bytes_per_token: inputs.kv.map(|kv| kv.per_token),
+            kv_bytes: inputs.kv.map(|kv| kv.at(serves_at)),
             trained_ctx: inputs.trained_ctx,
             unsnapped: inputs.unsnapped,
             sentence: String::new(),
@@ -114,11 +115,8 @@ impl Memory {
 /// What the served context needs and what the runtime spends, when the
 /// budget, the weights and the KV cost are known.
 fn memory(fit: &ContextFit) -> Option<Memory> {
-    let per_token = fit.kv_bytes_per_token?;
     Some(Memory {
-        need: fit
-            .weights_bytes?
-            .saturating_add(per_token.saturating_mul(fit.serves_at)),
+        need: fit.weights_bytes?.saturating_add(fit.kv_bytes?),
         usable: usable_share(fit.budget_bytes?),
     })
 }
@@ -131,7 +129,7 @@ fn memory(fit: &ContextFit) -> Option<Memory> {
 /// or what it was trained for".
 fn missing(fit: &ContextFit) -> String {
     let unsaid: Vec<&str> = [
-        (fit.kv_bytes_per_token.is_none(), "what its context costs"),
+        (fit.kv_bytes.is_none(), "what its context costs"),
         (fit.trained_ctx.is_none(), "what it was trained for"),
     ]
     .into_iter()

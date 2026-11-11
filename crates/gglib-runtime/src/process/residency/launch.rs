@@ -471,14 +471,14 @@ pub(super) fn plan_llama(others: &[Resident], request: &LaunchRequest) -> Planne
     // The RAM figure is what is left after the *other* residents, not the whole
     // machine: with two models loaded, budgeting each against the full total
     // would have them both claim the same memory.
-    let kv_bytes_per_token = spec
-        .kv_elems_per_token
-        .map(|elems| gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v));
+    let kv = spec
+        .kv_shape
+        .map(|shape| shape.bytes(kv_types.k, kv_types.v));
     let cache_ram = crate::llama::args::resolve_cache_ram(
         *cache_ram_setting,
         vram::ram_available_for(crate::system::total_system_ram_bytes(), others),
         spec.file_size_bytes,
-        kv_bytes_per_token,
+        kv,
         *resolved_ctx,
     );
     opts.cache_ram_mb = cache_ram.cache_ram_mb;

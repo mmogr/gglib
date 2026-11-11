@@ -68,8 +68,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
 )]
 pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     let file_size_bytes = resident_bytes(&m);
-    let kv_elems_per_token =
-        crate::domain::estimate_kv_elems_per_token(&m.metadata, m.architecture.as_deref());
+    let kv_shape = crate::domain::estimate_kv_shape(&m.metadata, m.architecture.as_deref());
     let kv_memory_is_partial =
         crate::domain::kv_memory_is_partial(&m.metadata, m.architecture.as_deref());
     // Third fact derived from the same stored GGUF map. See
@@ -90,7 +89,7 @@ pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         context_length: m.context_length,
         server_defaults: m.server_defaults,
         file_size_bytes,
-        kv_elems_per_token,
+        kv_shape,
         kv_memory_is_partial,
         model_sampling,
     }

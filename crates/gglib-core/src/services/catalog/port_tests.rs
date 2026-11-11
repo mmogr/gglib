@@ -142,7 +142,7 @@ async fn model_reads_the_whole_row_by_id_or_name() {
 
 /// The launch spec derives what the model declares about sampling from the
 /// metadata already on the catalog row — the same trip
-/// `kv_elems_per_token` and `kv_memory_is_partial` make. Without it the
+/// `kv_shape` and `kv_memory_is_partial` make. Without it the
 /// proxy's baseline check has no way to tell a model's own recommendation
 /// from a pin bump.
 #[test]

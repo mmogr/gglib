@@ -15,7 +15,7 @@
 use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::{
     LaunchDecision, LaunchNarration, RuntimeCapabilities, RuntimeFlags, RuntimeKind, SlotFootprint,
-    estimate_kv_bytes_for_context, format_gib, format_mib_as_gib, kv_bytes_per_token,
+    format_gib, format_mib_as_gib,
 };
 use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use gglib_core::ports::{JinjaMode, ModelLaunchSpec};
@@ -166,18 +166,15 @@ fn kv_decision(inputs: &NarrationInputs<'_>, ctx: u64) -> LaunchDecision {
         KvCacheTypeSource::DisabledByEnv => "GGLIB_DISABLE_KV_QUANT",
     };
 
-    let Some(elems) = inputs.spec.kv_elems_per_token else {
+    let Some(shape) = inputs.spec.kv_shape else {
         return LaunchDecision::new("kv", types, source);
     };
 
-    let actual = estimate_kv_bytes_for_context(kv_bytes_per_token(elems, kv.k, kv.v), ctx);
+    let actual = shape.bytes(kv.k, kv.v).at(ctx);
     let value = if kv.k == KvCacheType::F16 && kv.v == KvCacheType::F16 {
         format!("{types} -> {}", format_gib(actual))
     } else {
-        let f16 = estimate_kv_bytes_for_context(
-            kv_bytes_per_token(elems, KvCacheType::F16, KvCacheType::F16),
-            ctx,
-        );
+        let f16 = shape.bytes(KvCacheType::F16, KvCacheType::F16).at(ctx);
         // Comma rather than parentheses: the renderer appends the provenance
         // in parens, and nesting a second pair inside it reads as a typo.
         format!(
@@ -434,7 +431,7 @@ mod sd_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::KvElemsPerToken;
+    use gglib_core::domain::{KvElemsPerToken, KvShape};
 
     use crate::llama::args::{MtpResolution, ReasoningFormatResolution, SlotRestoreSource};
 
@@ -453,7 +450,7 @@ mod tests {
             context_length: None,
             server_defaults: None,
             file_size_bytes: 18_476_297_420,
-            kv_elems_per_token: Some(KvElemsPerToken { k: 8192, v: 8192 }),
+            kv_shape: Some(KvShape::uniform(KvElemsPerToken { k: 8192, v: 8192 })),
             kv_memory_is_partial: false,
         }
     }
@@ -566,7 +563,7 @@ mod tests {
     #[test]
     fn kv_line_degrades_to_the_bare_types_without_an_estimate() {
         let mut s = spec(&[]);
-        s.kv_elems_per_token = None;
+        s.kv_shape = None;
         let (c, r) = (caps(), cache_ram(Some(6144), CacheRamSource::Auto));
         let n = narrate(&inputs(&s, &c, &r));
         assert_eq!(n.decision("kv").unwrap().value, "q8_0");

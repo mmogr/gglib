@@ -125,6 +125,7 @@ pub(crate) fn context_text(fit: &ContextFit) -> String {
         "  kv bytes/token",
         opt(fit.kv_bytes_per_token)
     );
+    let _ = writeln!(out, "  {:<22} {}", "  kv cache", gib(fit.kv_bytes));
     let _ = writeln!(out, "  {:<22} {}", "  trained window", opt(fit.trained_ctx));
     let _ = writeln!(out, "  {:<22} {}", "  before snapping", opt(fit.unsnapped));
     out
@@ -150,7 +151,7 @@ fn gib(v: Option<u64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::{ChoiceSource, FitInputs, LaunchArg, LaunchNarration};
+    use gglib_core::domain::{ChoiceSource, FitInputs, KvBytes, LaunchArg, LaunchNarration};
     use gglib_core::server_config::ContextSizeSource;
 
     fn arg(flag: &str, value: Option<&str>, source: ChoiceSource, reason: &str) -> LaunchArg {
@@ -273,7 +274,7 @@ mod tests {
         );
         assert_eq!(
             context_text(&fit),
-            "Context\n  Serves at 4K context; gglib could not fit one to this machine: the model does not say what its context costs or what it was trained for.\n  serves at              4096 (built-in default)\n  fitted to hardware     unknown\n    device budget        96.00 GiB\n    weights              3.99 GiB\n    kv bytes/token       unknown\n    trained window       unknown\n    before snapping      unknown\n"
+            "Context\n  Serves at 4K context; gglib could not fit one to this machine: the model does not say what its context costs or what it was trained for.\n  serves at              4096 (built-in default)\n  fitted to hardware     unknown\n    device budget        96.00 GiB\n    weights              3.99 GiB\n    kv bytes/token       unknown\n    kv cache             unknown\n    trained window       unknown\n    before snapping      unknown\n"
         );
     }
 
@@ -291,14 +292,14 @@ mod tests {
             &FitInputs {
                 budget_bytes: Some(48 << 30),
                 weights_bytes: Some(2_500_000_000),
-                kv_bytes_per_token: Some(1_097_000),
+                kv: Some(KvBytes::uniform(1_097_000)),
                 trained_ctx: Some(131_072),
                 unsnapped: Some(40_005),
             },
         );
         assert_eq!(
             context_text(&fit),
-            "Context\n  Fits this machine with 32K context, of 128K trained.\n  serves at              32768 (fitted to hardware)\n  fitted to hardware     32768\n    memory               fits (35.81 GiB of 43.20 GiB usable)\n    device budget        48.00 GiB\n    weights              2.33 GiB\n    kv bytes/token       1097000\n    trained window       131072\n    before snapping      40005\n"
+            "Context\n  Fits this machine with 32K context, of 128K trained.\n  serves at              32768 (fitted to hardware)\n  fitted to hardware     32768\n    memory               fits (35.81 GiB of 43.20 GiB usable)\n    device budget        48.00 GiB\n    weights              2.33 GiB\n    kv bytes/token       1097000\n    kv cache             33.48 GiB\n    trained window       131072\n    before snapping      40005\n"
         );
     }
 

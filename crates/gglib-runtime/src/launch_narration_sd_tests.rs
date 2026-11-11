@@ -39,7 +39,7 @@ fn flux() -> ModelLaunchSpec {
         context_length: None,
         server_defaults: None,
         file_size_bytes: 23 * GIB,
-        kv_elems_per_token: None,
+        kv_shape: None,
         kv_memory_is_partial: false,
     }
 }

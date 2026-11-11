@@ -35,7 +35,7 @@ pub(super) fn footprint_of(
 ) -> Option<SlotFootprint> {
     SlotFootprint::new(
         spec.file_size_bytes,
-        spec.kv_elems_per_token,
+        spec.kv_shape,
         kv_types.k,
         kv_types.v,
         context_size,
@@ -227,7 +227,7 @@ pub(super) const fn secondary_cache_ram() -> CacheRamSetting {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::CacheRamHealth;
+    use gglib_core::domain::{CacheRamHealth, KvElemsPerToken, KvShape};
     use tokio::time::Instant;
 
     const MIB: u64 = 1024 * 1024;
@@ -301,7 +301,7 @@ mod tests {
         // Weights-only footprints, so the number under test is the total.
         let at_ceiling = SlotFootprint::new(
             SECONDARY_SLOT_RESERVE_BYTES,
-            Some(gglib_core::domain::KvElemsPerToken { k: 0, v: 0 }),
+            Some(KvShape::uniform(KvElemsPerToken { k: 0, v: 0 })),
             gglib_core::cache_config::KvCacheType::F16,
             gglib_core::cache_config::KvCacheType::F16,
             0,
@@ -309,7 +309,7 @@ mod tests {
         .expect("known kv shape");
         let over = SlotFootprint::new(
             SECONDARY_SLOT_RESERVE_BYTES + 1,
-            Some(gglib_core::domain::KvElemsPerToken { k: 0, v: 0 }),
+            Some(KvShape::uniform(KvElemsPerToken { k: 0, v: 0 })),
             gglib_core::cache_config::KvCacheType::F16,
             gglib_core::cache_config::KvCacheType::F16,
             0,

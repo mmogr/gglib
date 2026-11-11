@@ -22,7 +22,7 @@
 //! step function that changes only when the machine genuinely changes.
 
 use crate::cache_config::KvCacheType;
-use crate::domain::kv_estimate::{KvElemsPerToken, kv_bytes_per_token};
+use crate::domain::kv_estimate::{KvBytes, KvShape};
 use crate::domain::recommendation::usable_share;
 
 use crate::settings::DEFAULT_CONTEXT_SIZE;
@@ -75,7 +75,7 @@ const _: () = assert!(RUNGS[0] == DEFAULT_CONTEXT_SIZE);
 pub fn fit_context(
     trained_ctx: Option<u64>,
     weights_bytes: Option<u64>,
-    kv: Option<KvElemsPerToken>,
+    kv: Option<KvShape>,
     k: KvCacheType,
     v: KvCacheType,
     budget_bytes: Option<u64>,
@@ -102,8 +102,9 @@ pub struct FitInputs {
     pub budget_bytes: Option<u64>,
     /// The model's weights, summed across shards, plus its projector.
     pub weights_bytes: Option<u64>,
-    /// Bytes of KV cache each token of context costs at the resolved types.
-    pub kv_bytes_per_token: Option<u64>,
+    /// The KV cache at the resolved types, which [`KvBytes::at`] sizes at
+    /// a context.
+    pub kv: Option<KvBytes>,
     /// The model's trained ceiling.
     pub trained_ctx: Option<u64>,
     /// The context that fit before snapping to a rung — the difference between
@@ -116,14 +117,13 @@ pub struct FitInputs {
 pub fn fit_context_explained(
     trained_ctx: Option<u64>,
     weights_bytes: Option<u64>,
-    kv: Option<KvElemsPerToken>,
+    kv: Option<KvShape>,
     k: KvCacheType,
     v: KvCacheType,
     budget_bytes: Option<u64>,
 ) -> (Option<u64>, FitInputs) {
-    let per_token = kv
-        .map(|elems| kv_bytes_per_token(elems, k, v))
-        .filter(|&b| b > 0);
+    // A cache that costs nothing is no reading of one.
+    let kv = kv.map(|shape| shape.bytes(k, v)).filter(|kv| kv.at(1) > 0);
     // `0` is this codebase's sentinel for "size could not be read"
     // (`total_model_bytes`), and it is the most dangerous value to take
     // literally: weights that cost nothing hand the entire budget to the KV
@@ -131,17 +131,19 @@ pub fn fit_context_explained(
     // same way.
     let weights = weights_bytes.filter(|&b| b > 0);
     // Never claim more than the model was trained for, *before* snapping, so
-    // the result is always both a rung and within the model's range.
+    // the result is always both a rung and within the model's range. The
+    // sliding-window block is fixed once the context passes the window, so
+    // the context is the inverse of the cache's size, not a division by it.
     let unsnapped = (|| {
         let usable = usable_share(budget_bytes?);
         let for_kv = usable.checked_sub(weights?)?;
-        Some((for_kv / per_token?).min(trained_ctx?))
+        Some(kv?.context_within(for_kv).min(trained_ctx?))
     })();
 
     let inputs = FitInputs {
         budget_bytes,
         weights_bytes: weights,
-        kv_bytes_per_token: per_token,
+        kv,
         trained_ctx,
         unsnapped,
     };
