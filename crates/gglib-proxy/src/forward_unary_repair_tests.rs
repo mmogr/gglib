@@ -167,6 +167,7 @@ pub(super) async fn run_turn(
     let response = forward_unary(
         Client::new().post(&url),
         body,
+        "m",
         &TurnDialect::parsed(dialect),
         &CacheMetricsStore::new(),
         (&metrics, seq),
@@ -311,4 +312,31 @@ async fn repair_off_leaves_a_unary_body_as_it_came() {
         "the body is answered as it came, bad call and all"
     );
     assert_eq!(metrics.tool_repairs_attempted(), 0);
+}
+
+/// The client is answered under the model's served name, the one its snapshot
+/// carries, not the GGUF path llama-server names its reply after: a first
+/// answer, and a second draw.
+#[tokio::test]
+async fn a_unary_answer_names_the_served_model_not_the_gguf_path() {
+    let at_path = |mut answer: serde_json::Value| {
+        answer["model"] = json!("/Users/x/.local/share/llama_models/org/repo/m-Q4_K_M.gguf");
+        answer
+    };
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
+    let once = vec![at_path(structured("call_good", FIXED_ARGUMENTS))];
+    let (_, answer, _) = run_turn(body.clone(), once, None, RepairTurn::OFF).await;
+    assert_eq!(answer["model"], "m");
+
+    let twice = vec![
+        at_path(structured("call_bad", BAD_ARGUMENTS)),
+        at_path(structured("call_fixed", FIXED_ARGUMENTS)),
+    ];
+    let (requests, answer, _) = run_turn(body, twice, None, RepairTurn::ON).await;
+    assert_eq!(requests.len(), 2, "one original, one repair");
+    assert_eq!(
+        answer["choices"][0]["message"]["tool_calls"][0]["id"],
+        "call_fixed"
+    );
+    assert_eq!(answer["model"], "m", "the second draw is named too");
 }

@@ -940,6 +940,7 @@ pub(crate) async fn forward_chat_completion(
     crate::forward_unary::forward_unary(
         req_builder,
         body,
+        model_name,
         &dialect,
         &cache_metrics,
         (metrics.as_ref(), snapshot_seq),

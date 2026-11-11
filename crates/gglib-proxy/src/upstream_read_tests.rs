@@ -247,6 +247,85 @@ async fn the_bound_does_not_run_while_nobody_asks_for_the_next_chunk() {
     );
 }
 
+/// llama-server's keep-alive comment, which it sends after each 30 s it has
+/// had nothing else to send (`--sse-ping-interval`).
+const PING: &[u8] = b":\n\n";
+
+/// An upstream that answers every read with `chunk`, `gap` after it is asked.
+fn every(
+    chunk: Bytes,
+    gap: Duration,
+) -> impl futures_util::Stream<Item = Result<Bytes, std::io::Error>> {
+    futures_util::stream::repeat(chunk).then(move |chunk| async move {
+        tokio::time::sleep(gap).await;
+        Ok(chunk)
+    })
+}
+
+/// Once tokens flow, a keep-alive comment is not the reply moving: an
+/// upstream that sends nothing else, however often, still ends in a stall.
+#[tokio::test]
+async fn keep_alive_comments_alone_still_end_in_a_stall() {
+    let started = Instant::now();
+    let first = futures_util::stream::once(async { Ok(content_frame("a")) });
+    let pings = first.chain(every(Bytes::from_static(PING), IDLE / 4));
+    let events = within_patience(upstream_events(pings, IDLE)).await;
+
+    assert!(started.elapsed() >= IDLE);
+    assert_eq!(events.len(), 2, "{events:?}");
+    assert_eq!(
+        stall_of(&events[1]),
+        Some(UpstreamStalled {
+            after: IDLE,
+            after_first_token: true,
+        })
+    );
+}
+
+/// Before the first token they are: between two prefill-progress chunks
+/// llama-server sends only these, so a slow prefill is never cut.
+#[tokio::test]
+async fn keep_alive_comments_carry_a_slow_prefill() {
+    let mut chunks = vec![Bytes::from_static(PING); 12];
+    chunks.push(content_frame("a"));
+    chunks.push(Bytes::from_static(b"data: [DONE]\n\n"));
+    let started = Instant::now();
+    let events = within_patience(upstream_events(then_silent(chunks, IDLE / 4), IDLE)).await;
+
+    assert!(started.elapsed() > IDLE * 2);
+    assert_eq!(all_ok(events).len(), 2, "the text and the Done");
+}
+
+/// Comments between frames that come inside the bound cut nothing: a chunk
+/// that decodes to an event, prefill progress or text, a comment in it or
+/// not, restores the whole bound.
+#[tokio::test]
+async fn keep_alive_comments_between_timely_frames_are_never_cut() {
+    let progress = Bytes::from_static(
+        b"data: {\"prompt_progress\":{\"cache\":0,\"processed\":1,\"total\":9,\"time_ms\":1}}\n\n",
+    );
+    let mut chunks = Vec::new();
+    for i in 0..6 {
+        let frame = if i < 3 {
+            progress.clone()
+        } else {
+            content_frame(&i.to_string())
+        };
+        chunks.push(Bytes::from_static(PING));
+        chunks.push(Bytes::from([PING, &frame].concat()));
+    }
+    chunks.push(Bytes::from_static(b"data: [DONE]\n\n"));
+    let started = Instant::now();
+    let events = within_patience(upstream_events(then_silent(chunks, IDLE / 4), IDLE)).await;
+
+    assert!(started.elapsed() > IDLE * 2);
+    assert_eq!(
+        all_ok(events).len(),
+        7,
+        "three progress frames, three texts and the Done"
+    );
+}
+
 /// Silence after prefill progress alone is a stall before the first token.
 #[tokio::test]
 async fn a_stall_before_any_generated_token_says_so() {

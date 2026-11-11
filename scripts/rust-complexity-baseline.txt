@@ -242,10 +242,10 @@ crates/gglib-proxy/src/canonicalization.rs 601
 crates/gglib-proxy/src/connections.rs 881
 crates/gglib-proxy/src/dashboard.rs 570
 crates/gglib-proxy/src/dashboard_tests.rs 568
-crates/gglib-proxy/src/forward.rs 1627
+crates/gglib-proxy/src/forward.rs 1628
 crates/gglib-proxy/src/forward_generation_tests.rs 546
 crates/gglib-proxy/src/forward_tests.rs 566
-crates/gglib-proxy/src/forward_unary_repair_tests.rs 316
+crates/gglib-proxy/src/forward_unary_repair_tests.rs 342
 crates/gglib-proxy/src/images.rs 303
 crates/gglib-proxy/src/images_tests.rs 568
 crates/gglib-proxy/src/loop_guard.rs 609
@@ -265,6 +265,7 @@ crates/gglib-proxy/src/server.rs 1031
 crates/gglib-proxy/src/slots.rs 1265
 crates/gglib-proxy/src/slots_poller.rs 830
 crates/gglib-proxy/src/sse_stream.rs 397
+crates/gglib-proxy/src/upstream_read_tests.rs 373
 crates/gglib-proxy/tests/fixtures/common.rs 1000
 crates/gglib-proxy/tests/fixtures/pinned.rs 302
 crates/gglib-proxy/tests/integration_admission.rs 322
