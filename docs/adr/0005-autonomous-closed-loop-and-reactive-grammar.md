@@ -85,6 +85,9 @@ while doing it. Both pre-existing apply paths (`--apply-best`, the GUI
 checkbox) did exactly that, ungated. The gate replaces them with a rule
 per measured failure:
 
+> **Amended 2026-11-12 — the flag is `--apply` alone.** `--apply-best`, kept
+> as its alias, is gone; `gglib benchmark tune --apply` goes through the gate.
+
 - Every tune run carries an **incumbent calibration pair** — the all-`None`
   overlay (exactly what the model does today) run twice. The twins run
   **seeded**: every candidate sees task *T* under the same derived seed
