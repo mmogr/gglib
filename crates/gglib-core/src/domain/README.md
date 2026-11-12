@@ -42,6 +42,9 @@ infrastructure concerns (database, filesystem, etc.).
 - `conversation_patch` - A change to some of a conversation's settings
   (`ConversationSettingsPatch`): its model, tools and tool limits, each
   field sent replacing its setting, a limit outside a run's bounds refused
+- `settings_edit` - A conversation's stored settings read and changed key by
+  key (`SettingsEdit`): a key this build cannot read is passed over, and a
+  write keeps it
 - `branching` - When a change to a saved chat branches it into a new chat
   (`plan`), and the options its family holds at each turn (`points`): a
   saved reply is never discarded or altered (ADR 0017)

@@ -31,7 +31,7 @@ crates/gglib-app-services/src/setup_engines_tests.rs 540
 crates/gglib-app-services/src/test_support.rs 449
 crates/gglib-app-services/src/types.rs 632
 crates/gglib-app-services/src/types_model_dto_tests.rs 315
-crates/gglib-axum/src/error.rs 331
+crates/gglib-axum/src/error.rs 332
 crates/gglib-axum/src/handlers/agent/compose.rs 375
 crates/gglib-axum/src/handlers/agent/compose_context_tests.rs 312
 crates/gglib-axum/src/handlers/agent/compose_draw_tests.rs 328
@@ -112,7 +112,7 @@ crates/gglib-core/src/domain/benchmark/agentic_tests.rs 864
 crates/gglib-core/src/domain/benchmark/tune/apply.rs 449
 crates/gglib-core/src/domain/cache_budget.rs 305
 crates/gglib-core/src/domain/capabilities.rs 1594
-crates/gglib-core/src/domain/chat.rs 337
+crates/gglib-core/src/domain/chat.rs 338
 crates/gglib-core/src/domain/fit_sentence_tests.rs 373
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 396
@@ -159,7 +159,7 @@ crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 740
 crates/gglib-core/src/services/app_core.rs 350
 crates/gglib-core/src/services/catalog/port_tests.rs 354
-crates/gglib-core/src/services/chat_history.rs 365
+crates/gglib-core/src/services/chat_history.rs 371
 crates/gglib-core/src/services/drawing.rs 349
 crates/gglib-core/src/services/drawing_tests.rs 347
 crates/gglib-core/src/services/model_components_tests.rs 797
@@ -180,7 +180,7 @@ crates/gglib-core/src/utils/system/packages.rs 586
 crates/gglib-db/src/loop_guard_trip_writer_tests.rs 291
 crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 655
 crates/gglib-db/src/repositories/sqlite_chat_history_images_tests.rs 419
-crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 371
+crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 338
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 353
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 368
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 403

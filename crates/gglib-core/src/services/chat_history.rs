@@ -75,10 +75,11 @@ impl ChatHistoryService {
     /// Update a conversation's title, system prompt and settings in one
     /// write, of only what changes: nothing at all when nothing does. The
     /// settings are made as [`ConversationSettingsPatch::apply`] makes them,
-    /// `model_name` being the name of the patch's model. A patch that names
-    /// a model decides the `model_id` by it, as
-    /// [`record_settings`](Self::record_settings) does; one that names none
-    /// keeps the `model_id`, as a row that stores only that keeps its model.
+    /// `model_name` being the name of the patch's model, and only the keys
+    /// the patch changes are written. A patch that names a model decides the
+    /// `model_id` by it, as [`record_settings`](Self::record_settings) does,
+    /// and when either changes both are written; one that names none keeps
+    /// the `model_id`, as a row that stores only that keeps its model.
     pub async fn update_conversation(
         &self,
         id: i64,
@@ -103,12 +104,13 @@ impl ChatHistoryService {
             let names_model = patch.model.is_some();
             patch.apply(&mut settings, model_name);
             let model_id = settings.model.as_ref().and_then(local_id);
-            if names_model && model_id != conversation.model_id {
+            let moved = model_id != conversation.model_id || settings.model != held.model;
+            update.settings = if names_model && moved {
                 update.model_id = Some(model_id);
-            }
-            if settings != held {
-                update.settings = Some(Some(settings));
-            }
+                settings.edit_with_model_from(&held)
+            } else {
+                settings.edit_from(&held)
+            };
         }
         self.repo.update_conversation(id, update).await
     }
@@ -116,7 +118,7 @@ impl ChatHistoryService {
     /// Name the model a run used on its conversation: `model`, by its
     /// machine (`None` for one of this machine's that is not in the
     /// registry), and the settings' `model_name`, keeping every other
-    /// setting.
+    /// setting, as [`record_settings`](Self::record_settings) keeps them.
     pub async fn record_model(
         &self,
         id: i64,
@@ -128,10 +130,11 @@ impl ChatHistoryService {
             .get_conversation(id)
             .await?
             .ok_or(ChatHistoryError::ConversationNotFound(id))?;
-        let mut settings = conversation.settings.unwrap_or_default();
+        let held = conversation.settings.unwrap_or_default();
+        let mut settings = held.clone();
         settings.model_name = Some(model_name.to_owned());
         settings.model = model;
-        self.record_settings(id, settings).await
+        self.record_settings(id, &held, settings).await
     }
 
     /// Set what a conversation remembers of thinking: `thinking`, or nothing
@@ -158,8 +161,9 @@ impl ChatHistoryService {
             .await
     }
 
-    /// Make `amend` to conversation `id`'s settings, keeping its
-    /// `model_id`; writes nothing when `amend` leaves them as they were.
+    /// Make `amend` to conversation `id`'s settings, writing only the keys
+    /// it changes and keeping its `model_id`; writes nothing when `amend`
+    /// leaves them as they were.
     async fn amend_settings(
         &self,
         id: i64,
@@ -173,22 +177,24 @@ impl ChatHistoryService {
         let held = conversation.settings.unwrap_or_default();
         let mut settings = held.clone();
         amend(&mut settings);
-        if settings == held {
-            return Ok(());
-        }
         let update = ConversationUpdate {
-            settings: Some(Some(settings)),
+            settings: settings.edit_from(&held),
             ..ConversationUpdate::default()
         };
         self.repo.update_conversation(id, update).await
     }
 
-    /// Replace a conversation's settings with `settings`, which name the
-    /// model its session uses. `model_id` names the same model when it is
-    /// this machine's, and nothing otherwise, so the two never disagree.
+    /// Make a conversation's settings `settings`, which name the model its
+    /// session uses, writing only the keys in which they differ from
+    /// `held`, the settings they were made from: every other stored key
+    /// stays, one this build cannot read among them. The model is written
+    /// whether or not it changed, with a `model_id` that names the same
+    /// model when it is this machine's, and nothing otherwise, so the two
+    /// never disagree.
     pub async fn record_settings(
         &self,
         id: i64,
+        held: &ConversationSettings,
         settings: ConversationSettings,
     ) -> Result<(), ChatHistoryError> {
         let model_id = settings.model.as_ref().and_then(local_id);
@@ -196,7 +202,7 @@ impl ChatHistoryService {
             .update_conversation(
                 id,
                 ConversationUpdate {
-                    settings: Some(Some(settings)),
+                    settings: settings.edit_with_model_from(held),
                     model_id: Some(model_id),
                     ..ConversationUpdate::default()
                 },

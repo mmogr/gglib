@@ -57,6 +57,7 @@ pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
 pub mod send_line;
 mod server_config;
+pub mod settings_edit;
 pub(crate) mod shard_name;
 pub mod slot_eviction;
 pub mod state_words;
@@ -170,6 +171,7 @@ pub use chat::{
     Conversation, ConversationUpdate, Message, MessageRole, NewConversation, NewMessage,
 };
 pub use conversation_patch::ConversationSettingsPatch;
+pub use settings_edit::SettingsEdit;
 pub use thinking::Thinking;
 
 // Re-export GGUF types at the domain level for convenience

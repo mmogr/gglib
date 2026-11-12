@@ -20,7 +20,7 @@ use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
 use crate::target::{Target, TurnModel, far_wire};
 
-/// The settings a resumed session saves in place of `saved`: what the
+/// The settings a resumed session saves in place of `held`: what the
 /// conversation saved, with what this command line names in its place
 /// ([`named_over`]), and, when its turn is on another model than the one
 /// stored, that model, its name and the session's profile. `None` when that
@@ -33,36 +33,32 @@ use crate::target::{Target, TurnModel, far_wire};
 /// the paired machine this chat never ran on.
 pub(crate) async fn resumed_settings(
     ctx: &CliContext,
-    saved: Option<ConversationSettings>,
+    held: &ConversationSettings,
     args: &ChatArgs,
     typed: bool,
     profile: Option<&InferenceProfile>,
     turn: &TurnModel,
 ) -> Result<Option<ConversationSettings>> {
-    let stored = saved.as_ref().and_then(|s| s.model.as_ref());
+    let stored = held.model.as_ref();
     if let Some(model) = stored.filter(|_| !typed)
         && turn.model_ref.is_none()
     {
         bail!(
             "this chat's model, {} ({}), is no longer in this library; name one to continue it \
              with: gglib chat <model> --continue {}",
-            saved
-                .as_ref()
-                .and_then(|s| s.model_name.as_deref())
-                .unwrap_or("--"),
+            held.model_name.as_deref().unwrap_or("--"),
             model.id,
             args.continue_id.unwrap_or_default()
         );
     }
     super::require_a_model(ctx, turn).await?;
-    let held = saved.unwrap_or_default();
     let mut kept = named_over(held.clone(), args, profile, turn);
     if held.model.as_ref() != turn.model_ref.as_ref() {
         kept.model.clone_from(&turn.model_ref);
         kept.model_name = Some(turn.name.clone());
         kept.profile = super::session_settings(args, profile, turn).profile;
     }
-    Ok((kept != held).then_some(kept))
+    Ok((kept != *held).then_some(kept))
 }
 
 /// [`stored_machine`] applied to a resume's `args`, against the pairing
