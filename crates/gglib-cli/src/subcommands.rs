@@ -143,7 +143,7 @@ pub enum DaemonCommand {
         ///
         /// The management API then requires a bearer token: the stored API
         /// key, minted and stored at startup if none exists, which
-        /// `gglib config settings reveal proxy-api-key` prints. It can
+        /// `gglib config reveal proxy-api-key` prints. It can
         /// still start and stop inference on this machine — only use on
         /// networks you trust.
         #[arg(long)]

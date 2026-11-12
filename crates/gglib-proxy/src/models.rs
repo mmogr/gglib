@@ -452,7 +452,7 @@ impl ErrorResponse {
     /// Create an error response for a detected agentic tool-call loop.
     ///
     /// Returned as HTTP 400 by the pre-dispatch loop guard under
-    /// `--loop-guard-mode refuse`, when the request's replayed history repeats
+    /// `loop-guard-mode refuse`, when the request's replayed history repeats
     /// the same tool-call batch **back to back and gets the same answer back
     /// each time** beyond the shared agent-path threshold (see `loop_guard`).
     /// A repeat whose answer changed is not counted, and the default mode,
@@ -464,7 +464,7 @@ impl ErrorResponse {
                 "Agentic loop detected: this conversation repeats the same tool-call batch \
                  with nothing in between (signature: {signature}). Aborting before another \
                  identical turn. Start a new conversation or change approach; to warn the model \
-                 instead of refusing, run `gglib config settings set --loop-guard-mode note`."
+                 instead of refusing, run `gglib config set loop-guard-mode note`."
             ),
             "loop_detected",
             "loop_detected",
@@ -474,7 +474,7 @@ impl ErrorResponse {
     /// Create an error response for detected response stagnation.
     ///
     /// Returned as HTTP 400 by the pre-dispatch loop guard under
-    /// `--loop-guard-mode refuse`, when the replayed history contains the same
+    /// `loop-guard-mode refuse`, when the replayed history contains the same
     /// assistant response `count` times against a limit of `max_steps`.
     pub fn stagnation_detected(count: usize, max_steps: usize) -> Self {
         Self::with_code(
@@ -482,7 +482,7 @@ impl ErrorResponse {
                 "Stagnation detected: the assistant has produced the same response {count} \
                  times (limit {max_steps}). Aborting before another identical turn. Start a \
                  new conversation or change approach; to warn the model instead of refusing, \
-                 run `gglib config settings set --loop-guard-mode note`."
+                 run `gglib config set loop-guard-mode note`."
             ),
             "stagnation_detected",
             "stagnation_detected",

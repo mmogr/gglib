@@ -1,8 +1,8 @@
-//! `gglib config settings reveal <key>`: a stored secret, alone on stdout.
+//! `gglib config reveal <key>`: a stored secret, alone on stdout.
 //!
 //! The one place the CLI prints a stored secret (ADR 0027); every other
 //! surface says only whether it is held. Stdout carries the value and nothing
-//! else, so `$(gglib config settings reveal proxy-api-key)` is exactly the
+//! else, so `$(gglib config reveal proxy-api-key)` is exactly the
 //! key. The warning that it is a secret goes to stderr, which never carries
 //! the value. With nothing stored the command fails and prints nothing on
 //! stdout.
@@ -14,8 +14,8 @@ use gglib_core::secret::{SecretRef, SettingSecret};
 
 use crate::bootstrap::CliContext;
 
-/// Execute `gglib config settings reveal <secret>`.
-pub(super) async fn handle_reveal(ctx: &CliContext, secret: SettingSecret) -> Result<()> {
+/// Execute `gglib config reveal <secret>`.
+pub(crate) async fn handle_reveal(ctx: &CliContext, secret: SettingSecret) -> Result<()> {
     let value = ctx
         .app
         .secrets()
@@ -65,7 +65,7 @@ const fn shown(secret: SettingSecret) -> &'static str {
 fn nothing_stored(secret: SettingSecret) -> String {
     match secret {
         SettingSecret::ProxyApiKey => format!(
-            "no proxy key is stored. `gglib config settings set --proxy-api-key <key>` stores \
+            "no proxy key is stored. `gglib config set proxy-api-key <key>` stores \
              one, and a proxy or daemon bound off loopback mints one. The key this device was \
              given when it paired is `{}`",
             SettingSecret::RemotePairingKey.name()

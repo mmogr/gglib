@@ -1,64 +1,31 @@
-//! `gglib config settings unset <key>` — return one setting to unset.
+//! `gglib config unset <key>`: return one setting to unset.
 //!
-//! Unset is a real state, not a synonym for zero or for a default. The one that
-//! forced this subcommand is `default-context-size`: leaving it unset is what
-//! lets each launch fit the context to the machine, and a stored number outranks
-//! that fit. `settings set` cannot express it — `handle_set` builds
-//! `args.default_context_size.map(Some)`, which produces `None` (leave alone) or
-//! `Some(Some(v))` (write a value) and never `Some(None)` (clear) — so the only
-//! way back was `settings reset`, which clears every other preference too.
-//!
-//! The valid keys are read from [`UpdateSettingsRequest`] rather than listed
-//! here. A hand-written list is a second place to forget a field, and this
-//! subcommand exists because a field was unreachable from one surface already.
+//! Unset is a real state, not a synonym for zero or for a default. The one
+//! that forced this command is `default-context-size`: leaving it unset is
+//! what lets each launch fit the context to the machine, and a stored number
+//! outranks that fit. `set` writes a value and never a clear, so without this
+//! the only way back was `reset`, which clears every other preference too.
 
 use anyhow::{Result, bail};
-use gglib_app_services::types::UpdateSettingsRequest;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-use super::settings_display::{camel_to_kebab, kebab_to_camel};
+use super::set::not_set_here;
+use super::{models_dir, queue_size, wire};
 use crate::bootstrap::CliContext;
+use crate::config_commands::{SettingKey, Takes};
 
-/// Every settable key, as the wire type spells them.
-///
-/// Serialising a default request emits one `null` per field, because
-/// `double_option` has no `skip_serializing_if` — so the type is its own
-/// manifest and cannot drift from what `update` will accept.
-fn known_keys() -> Map<String, Value> {
-    let probe = serde_json::to_value(UpdateSettingsRequest::default())
-        .expect("UpdateSettingsRequest always serialises");
-    match probe {
-        Value::Object(map) => map,
-        _ => Map::new(),
+/// Execute `gglib config unset <key>`.
+pub(crate) async fn handle_unset(ctx: &CliContext, key: SettingKey) -> Result<()> {
+    match key.takes {
+        Takes::Folder => return models_dir::unset(),
+        Takes::Elsewhere(_) => bail!(not_set_here(key)),
+        _ => {}
     }
-}
-
-pub(super) async fn handle_unset(ctx: &CliContext, key: &str) -> Result<()> {
-    let camel = kebab_to_camel(key);
-    let known = known_keys();
-    if !known.contains_key(&camel) {
-        let mut names: Vec<String> = known.keys().map(|k| camel_to_kebab(k)).collect();
-        names.sort();
-        bail!(
-            "Unknown setting '{key}'. Settable keys are:\n  {}",
-            names.join("\n  ")
-        );
-    }
-
-    // An explicit `null` is what `double_option` reads as "clear this"; an
-    // omitted key means "leave it alone". Building the request through serde
-    // rather than by field keeps this generic over all of them.
-    let body = Value::Object(std::iter::once((camel, Value::Null)).collect());
-    let request: UpdateSettingsRequest =
-        serde_json::from_value(body).expect("a known key with a null value always deserialises");
-
-    // The CLI reaches the core service, so the wire type converts on the way
-    // in. Same conversion the HTTP handler uses, so both surfaces clear a
-    // setting by the identical path.
+    let request = wire::request(&key, Value::Null)?;
     let clears_queue_size = request.max_download_queue_size.is_some();
     ctx.app.settings().update(request.into()).await?;
-    println!("✓ {key} is now unset.");
-    if clears_queue_size && let Some(warning) = super::queue_size::tell_daemon(ctx, None).await {
+    println!("✓ {} is now unset.", key.name);
+    if clears_queue_size && let Some(warning) = queue_size::tell_daemon(ctx, None).await {
         eprintln!("{warning}");
     }
     Ok(())

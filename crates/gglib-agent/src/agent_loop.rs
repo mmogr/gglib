@@ -653,7 +653,7 @@ async fn recover_from_parallel_overflow(
 
     let suggested_action = format!(
         "To permanently raise this limit, run: \
-         `gglib config settings set --max-parallel-tools <N>` \
+         `gglib config set max-parallel-tools <N>` \
          (current: {limit}, ceiling: {ceiling})",
         ceiling = gglib_core::MAX_PARALLEL_TOOLS_CEILING,
     );

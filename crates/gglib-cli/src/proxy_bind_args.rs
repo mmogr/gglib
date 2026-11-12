@@ -22,7 +22,7 @@ pub struct ProxyBindArgs {
     /// set, each launch is sized by the daemon — fitted to this machine
     /// where gglib can read the device, and the built-in floor where it
     /// cannot. Must be within the range
-    /// `gglib config settings set --default-context-size` accepts — `max`
+    /// `gglib config set default-context-size` accepts — `max`
     /// is not supported here since no specific model is in scope for a
     /// standalone proxy.
     #[arg(long)]

@@ -302,7 +302,7 @@ describe('Stop runaway loops', () => {
     await user.click(await screen.findByRole('button', { name: 'What gglib does to requests' }));
     expect(field('loop-guard-input')).toBeChecked();
     const said = screen.getByText(/^Refusing, as/);
-    expect(said).toHaveTextContent('Refusing, as gglib config settings set --loop-guard-mode refuse set it: a looping request is answered with a 400.');
+    expect(said).toHaveTextContent('Refusing, as gglib config set loop-guard-mode refuse set it: a looping request is answered with a 400.');
     await user.click(field('loop-guard-input'));
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(writes()).toEqual([{ loopGuardMode: 'off' }, { loopGuardMode: 'refuse' }]));

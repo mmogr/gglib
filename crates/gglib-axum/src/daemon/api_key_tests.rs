@@ -112,7 +112,7 @@ fn the_banner_never_prints_a_stored_key() {
 
         assert!(!text.contains("k3y-5f3a9c"), "{source:?}: {text}");
         assert!(
-            text.contains("`gglib config settings reveal proxy-api-key`"),
+            text.contains("`gglib config reveal proxy-api-key`"),
             "{source:?} must name the reveal: {text}"
         );
     }

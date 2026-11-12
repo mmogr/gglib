@@ -18,7 +18,7 @@
 //! per-session store, TTL, or eviction is needed.
 //!
 //! Detection is deliberately **pre-admission**, which is what lets
-//! `--loop-guard-mode refuse` return a clean HTTP 400 before any
+//! `loop-guard-mode refuse` return a clean HTTP 400 before any
 //! catalog/admission/model-swap cost. Under the default, `note`, the request
 //! is forwarded with a note and therefore pays those costs — the trade #1052
 //! makes, for a client that cannot recover from a refusal.  This catches

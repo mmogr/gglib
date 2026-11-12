@@ -62,7 +62,7 @@ pub(crate) use private::create_new_private_file;
 pub use private::{create_private_dir, create_private_file, make_private};
 
 // Directory operations
-pub use ensure::{DirectoryCreationStrategy, can_write_folder, ensure_directory};
+pub use ensure::{can_write_folder, ensure_directory};
 
 // Pure resolver for testing and CLI
 pub use resolver::ResolvedPaths;

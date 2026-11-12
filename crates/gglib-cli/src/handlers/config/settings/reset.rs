@@ -1,4 +1,4 @@
-//! `gglib config settings reset` — every preference back to its default.
+//! `gglib config reset`: every preference back to its default.
 //!
 //! What is kept is [`gglib_core::Settings::reset_preferences`]'s to decide,
 //! and the write is the settings service's, like `set` and `unset`: the
@@ -17,7 +17,7 @@ use crate::utils::input::prompt_confirmation;
 const KEPT: &str = "the machine this one joined, the devices it admits, \
                     whether and how it serves remote access, and the proxy's API key";
 
-pub(super) async fn handle_reset(ctx: &CliContext, yes: bool) -> Result<()> {
+pub(crate) async fn handle_reset(ctx: &CliContext, yes: bool) -> Result<()> {
     if !yes
         && !prompt_confirmation(&format!(
             "Reset every preference to its default? Kept: {KEPT}."

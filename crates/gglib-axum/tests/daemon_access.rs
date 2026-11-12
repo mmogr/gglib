@@ -152,7 +152,7 @@ async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
 /// ignores settings".
 ///
 /// A daemon that bound *with* a key must keep following the stored value, which
-/// is what makes rotation through `gglib config settings set` reach a running
+/// is what makes rotation through `gglib config set` reach a running
 /// listener without a restart. Tracking is right here and wrong above; the
 /// difference is whether a token was in force at bind.
 #[tokio::test]

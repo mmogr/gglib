@@ -113,7 +113,7 @@ pub const EVENTS_PATH: &str = "/api/events";
 /// The settings, as the app writes them.
 ///
 /// `PUT` stores the fields its body names and hands what the daemon holds
-/// live the values now stored. A `gglib config settings` command that
+/// live the values now stored. A `gglib config set`, `unset` or `reset` that
 /// stored the download queue size in its own process sends that one field,
 /// so the daemon's queue takes it.
 pub const SETTINGS_PATH: &str = "/api/config/settings";

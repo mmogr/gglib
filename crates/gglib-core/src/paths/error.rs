@@ -21,10 +21,6 @@ pub enum PathError {
     #[error("{0} exists but is not a directory")]
     NotADirectory(PathBuf),
 
-    /// A directory does not exist and creation was not allowed.
-    #[error("Directory {0} does not exist")]
-    DirectoryNotFound(PathBuf),
-
     /// Failed to create a directory.
     #[error("Failed to create directory {path}: {reason}")]
     CreateFailed { path: PathBuf, reason: String },

@@ -19,7 +19,7 @@ pub struct ServerConfig {
     ///
     /// `None` leaves it to the saved `llama_base_port` setting, then the
     /// compiled default — see `gglib_app_services`' `resolve_llama_base_port`.
-    /// The daemon names none, so `config settings set --llama-base-port`
+    /// The daemon names none, so `config set llama-base-port`
     /// reaches it when it next starts (#1161); tests name one to stay off the
     /// ports a running daemon uses.
     pub base_port: Option<u16>,

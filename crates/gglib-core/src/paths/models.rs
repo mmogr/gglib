@@ -12,7 +12,7 @@ use super::config::{
     MODELS_DIR_KEY, forget_models_dir, models_dir_line_stored, persist_models_dir,
     persisted_models_dir,
 };
-use super::ensure::{DirectoryCreationStrategy, ensure_directory};
+use super::ensure::ensure_directory;
 use super::error::PathError;
 use super::platform::normalize_user_path;
 
@@ -92,20 +92,17 @@ pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution,
     })
 }
 
-/// Make `path` the models directory: resolve it, create it as `strategy`
-/// allows, and store it for every later run.
+/// Make `path` the models directory: resolve it, create it when missing,
+/// and store it for every later run.
 ///
 /// The one way a surface changes the directory. Storing a path that was
 /// never resolved, or creating one that is never stored, is how two surfaces
 /// come to disagree about where models live. ([`store_default_models_dir`]
 /// stores the default without creating it; every surface still reads the
 /// one stored path.)
-pub fn set_models_dir(
-    path: &str,
-    strategy: DirectoryCreationStrategy,
-) -> Result<ModelsDirResolution, PathError> {
+pub fn set_models_dir(path: &str) -> Result<ModelsDirResolution, PathError> {
     let resolved = resolve_models_dir(Some(path))?;
-    ensure_directory(&resolved.path, strategy)?;
+    ensure_directory(&resolved.path)?;
     persist_models_dir(&resolved.path)?;
     Ok(resolved)
 }

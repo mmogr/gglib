@@ -1,4 +1,4 @@
-//! The secret `gglib config settings reveal` takes, by the name core gives it.
+//! The secret `gglib config reveal` takes, by the name core gives it.
 
 use clap::ValueEnum;
 use clap::builder::PossibleValue;

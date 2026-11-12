@@ -4,7 +4,7 @@
 //! through one door, so all of them fail the same way. Two of them used to
 //! exit 0 — `inspect` after printing to stderr, `remove` after printing to
 //! stdout — which made a missing model invisible to a script checking the
-//! exit code. `benchmark` and `config default` used to ask the library
+//! exit code. `benchmark` and the old `config default` used to ask the library
 //! themselves, and worded the miss as `model not found: x` and `Validation
 //! error: Model not found: x`.
 //!
@@ -41,7 +41,7 @@ const IDENTIFIER_COMMANDS: &[&[&str]] = &[
     &["benchmark", "perf", "--model", MISSING],
     &["benchmark", "tune", "--model", MISSING],
     &["benchmark", "agentic", "--model", MISSING],
-    &["config", "default", MISSING],
+    &["config", "set", "default-model-id", MISSING],
     &["question", "hi", "--model", MISSING],
     &["chat", MISSING],
 ];

@@ -321,7 +321,7 @@ fn the_only_one(specs: Vec<ModelLaunchSpec>) -> Result<ModelLaunchSpec, ImageErr
         )),
         (_, _) => unavailable(format!(
             "this machine has {} image models that can draw ({}); name the one to draw with, \
-             or set a default with `gglib config settings set --default-image-model <name>`",
+             or set a default with `gglib config set default-image-model-id <name>`",
             complete.len(),
             names(&complete)
         )),

@@ -62,42 +62,13 @@ fn a_stored_models_directory_is_what_a_later_resolve_returns() {
         "nothing is stored yet"
     );
 
-    let stored = set_models_dir(
-        chosen.to_string_lossy().as_ref(),
-        DirectoryCreationStrategy::AutoCreate,
-    )
-    .unwrap();
+    let stored = set_models_dir(chosen.to_string_lossy().as_ref()).unwrap();
 
     assert_eq!(stored.path, chosen);
     assert!(chosen.is_dir(), "the directory is created");
     let resolved = resolve_models_dir(None).unwrap();
     assert_eq!(resolved.path, chosen);
     assert_eq!(resolved.source, ModelsDirSource::EnvVar);
-}
-
-/// A directory that may not be created is refused before it is stored.
-#[test]
-fn a_models_directory_that_is_refused_is_not_stored() {
-    let _guard = ENV_LOCK.lock().unwrap();
-    let temp = tempfile::tempdir().unwrap();
-    let _data = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
-    let _models = EnvVarGuard::unset("GGLIB_MODELS_DIR");
-    let absent = temp.path().join("absent");
-
-    let refused = set_models_dir(
-        absent.to_string_lossy().as_ref(),
-        DirectoryCreationStrategy::Disallow,
-    );
-
-    assert!(
-        matches!(refused, Err(PathError::DirectoryNotFound(_))),
-        "{refused:?}"
-    );
-    assert!(!absent.exists());
-    assert_eq!(
-        resolve_models_dir(None).unwrap().source,
-        ModelsDirSource::Default
-    );
 }
 
 /// The environment a process was started with outranks the stored
@@ -110,11 +81,7 @@ fn the_environment_outranks_a_stored_models_directory() {
     let _models = EnvVarGuard::set("GGLIB_MODELS_DIR", "/tmp/from-env");
     let chosen = temp.path().join("stored");
 
-    set_models_dir(
-        chosen.to_string_lossy().as_ref(),
-        DirectoryCreationStrategy::AutoCreate,
-    )
-    .unwrap();
+    set_models_dir(chosen.to_string_lossy().as_ref()).unwrap();
 
     assert!(resolve_models_dir(None).unwrap().path.ends_with("from-env"));
 }
@@ -182,11 +149,7 @@ fn a_stored_models_directory_is_left_as_it_is() {
     let _data = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
     let _models = EnvVarGuard::unset("GGLIB_MODELS_DIR");
     let chosen = temp.path().join("chosen");
-    set_models_dir(
-        chosen.to_string_lossy().as_ref(),
-        DirectoryCreationStrategy::AutoCreate,
-    )
-    .unwrap();
+    set_models_dir(chosen.to_string_lossy().as_ref()).unwrap();
 
     store_default_models_dir().unwrap();
 

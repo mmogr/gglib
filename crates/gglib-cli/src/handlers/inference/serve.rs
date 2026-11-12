@@ -162,7 +162,7 @@ async fn serve_here(
             default_ctx: None,
             proxy_port: options.port,
             // The daemon owns llama-server port allocation; a per-run value
-            // has nothing to attach to. `config settings set --llama-base-port`.
+            // has nothing to attach to. `config set llama-base-port`.
             llama_base_port: None,
             cache_enabled: cache.cache,
             slot_dir: cache.slot_dir.clone(),

@@ -1,9 +1,9 @@
-//! `gglib config settings reveal`, `show` and `set` against a database on
+//! `gglib config reveal`, `show` and `set` against a database on
 //! disk: a stored secret is printed by `reveal` alone (ADR 0027).
 //!
 //! The unit tests over `write_value` hand it buffers; this runs the command a
 //! person types, so it also covers everything the binary prints before the
-//! handler runs. `$(gglib config settings reveal proxy-api-key)` is only the
+//! handler runs. `$(gglib config reveal proxy-api-key)` is only the
 //! key if nothing else reaches stdout.
 //!
 //! Every run sets `RUST_LOG=trace`, so a tracing event anywhere in the run
@@ -46,16 +46,18 @@ fn closed_port() -> u16 {
     listener.local_addr().expect("its address").port()
 }
 
-/// `gglib config settings <args>` with `root` as its data directory.
+/// `gglib config <args>` with `root` as its data directory, and a models
+/// directory inside it.
 fn settings(root: &Path, args: &[&str]) -> (Output, String, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
-        .args(["config", "settings"])
+        .arg("config")
         .args(args)
         .env("GGLIB_DATA_DIR", root)
+        .env("GGLIB_MODELS_DIR", root.join("models"))
         .env("GGLIB_DAEMON_PORT", closed_port().to_string())
         .env("RUST_LOG", "trace")
         .output()
-        .expect("running `gglib config settings`");
+        .expect("running `gglib config`");
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     (out, stdout, stderr)
@@ -97,7 +99,7 @@ fn reveal_with_no_pairing_exits_1_and_prints_neither_key() {
         "the refusal names the command that pairs: {stderr}"
     );
     assert!(
-        stderr.contains("`gglib config settings reveal proxy-api-key`"),
+        stderr.contains("`gglib config reveal proxy-api-key`"),
         "the refusal names the proxy's own key: {stderr}"
     );
     assert!(
@@ -132,7 +134,7 @@ fn show_prints_no_secret() {
         );
     }
     assert!(
-        stdout.contains("(set, not shown)  `gglib config settings reveal proxy-api-key`"),
+        stdout.contains("(set, not shown)  `gglib config reveal proxy-api-key`"),
         "{stdout}"
     );
 }
@@ -144,7 +146,7 @@ fn set_does_not_print_the_key_it_was_given() {
     let root = seeded(false);
     let new_key = "set-by-hand-2e7b";
 
-    let (out, stdout, stderr) = settings(root.path(), &["set", "--proxy-api-key", new_key]);
+    let (out, stdout, stderr) = settings(root.path(), &["set", "proxy-api-key", new_key]);
 
     assert!(out.status.success(), "stderr: {stderr}");
     assert!(

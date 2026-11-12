@@ -5,8 +5,8 @@
  * saves on change; those the endpoint reads when it turns on say so.
  *
  * The loop guard is on or off here: on writes `note`, off writes `off`.
- * `refuse` stays the terminal's (`gglib config settings set
- * --loop-guard-mode refuse`), and is shown as on with a line saying so.
+ * `refuse` stays the terminal's (`gglib config set
+ * loop-guard-mode refuse`), and is shown as on with a line saying so.
  *
  * @module places/settings/EndpointSection
  */
@@ -109,7 +109,7 @@ export const EndpointSection: FC = () => (
         aside={(mode: LoopGuardMode | null) =>
           mode === 'refuse' && (
             <p className="m-0 text-xs text-text-secondary">
-              Refusing, as <code>gglib config settings set --loop-guard-mode refuse</code> set it: a
+              Refusing, as <code>gglib config set loop-guard-mode refuse</code> set it: a
               looping request is answered with a 400.
             </p>
           )

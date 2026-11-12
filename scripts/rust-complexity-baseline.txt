@@ -61,7 +61,6 @@ crates/gglib-axum/tests/integration_routes.rs 1066
 crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320
 crates/gglib-cli/src/commands.rs 379
-crates/gglib-cli/src/config_commands/settings_args.rs 313
 crates/gglib-cli/src/daemon_client/calls.rs 384
 crates/gglib-cli/src/daemon_client/images.rs 321
 crates/gglib-cli/src/daemon_client/images_tests.rs 466

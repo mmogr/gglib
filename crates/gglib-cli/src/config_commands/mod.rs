@@ -3,10 +3,13 @@
 use clap::Subcommand;
 
 mod secret_arg;
-mod settings_args;
+mod setting_key;
 
 pub(crate) use secret_arg::SecretArg;
-pub(crate) use settings_args::SettingsSetArgs;
+#[cfg(test)]
+pub(crate) use setting_key::Bound;
+pub(crate) use setting_key::SettingKey;
+pub(crate) use setting_key::Takes;
 
 use crate::llama_commands::LlamaCommand;
 use crate::sd_commands::SdCommand;
@@ -14,23 +17,49 @@ use crate::sd_commands::SdCommand;
 /// Configuration and system management commands.
 #[derive(Subcommand)]
 pub enum ConfigCommand {
-    /// View or set the default model (shorthand for settings get/set-default-model)
-    Default {
-        /// Model ID or name to set as default (omit to show current)
-        identifier: Option<String>,
-        /// Clear the current default model
-        #[arg(long)]
-        clear: bool,
+    /// Show every setting and its value
+    Show,
+    /// Set one setting, by the key `show` prints
+    ///
+    /// The value is read by the key's type: a whole number, `true` or
+    /// `false`, text, a comma-separated list for `proxy-allowed-hosts`, or a
+    /// model's id or name for `default-model-id` and
+    /// `default-image-model-id`. A value the setting does not allow is
+    /// refused and nothing is stored.
+    Set {
+        /// The setting, as `show` prints it
+        key: SettingKey,
+        /// Its new value
+        #[arg(allow_hyphen_values = true)]
+        value: String,
     },
-    /// View or change the models directory preference
-    ModelsDir {
-        #[command(subcommand)]
-        command: ModelsDirCommand,
+    /// Clear one setting, returning it to unset
+    ///
+    /// Unset is not the same as zero or a default: for `default-context-size`
+    /// it is what lets each launch size the context to this machine, and
+    /// `set` can only ever write a value. For `models-dir` it removes the
+    /// stored folder, so the default applies.
+    Unset {
+        /// The setting, as `show` prints it
+        key: SettingKey,
     },
-    /// View or change application settings (context size, ports, queue size, etc.)
-    Settings {
-        #[command(subcommand)]
-        command: SettingsCommand,
+    /// Reset every preference to its default
+    ///
+    /// Keeps the machine this one joined, the devices it admits, whether and
+    /// how it serves remote access, and the proxy's API key.
+    Reset {
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+    /// Print a stored secret, alone on stdout
+    ///
+    /// The one place a stored secret is printed: `show` says only whether it
+    /// is held. Stdout carries the value and nothing else, so
+    /// `$(gglib config reveal proxy-api-key)` is exactly the key.
+    Reveal {
+        /// The secret, as `show` names it
+        key: SecretArg,
     },
     /// Manage named sampling profiles, selectable as `<model>:<profile>`
     Profile {
@@ -85,23 +114,6 @@ pub enum FastDownloadsCommand {
     Disable,
     /// Offer to enable it, interactively. Skips silently without a terminal
     Prompt,
-}
-
-/// Models directory command variants.
-#[derive(Subcommand)]
-pub enum ModelsDirCommand {
-    /// Show the currently configured models directory
-    Show,
-    /// Prompt the user for a directory (Enter to keep default)
-    Prompt,
-    /// Set the directory explicitly (non-interactive)
-    Set {
-        /// Path to the directory where GGUF models should be stored
-        path: String,
-        /// Fail if the directory does not exist (default creates it)
-        #[arg(long)]
-        no_create: bool,
-    },
 }
 
 /// Inference profile command variants.
@@ -198,7 +210,7 @@ pub enum ProfileCommand {
         no_list_in_models: bool,
     },
     /// Delete a profile
-    Rm {
+    Remove {
         /// Profile name
         name: String,
     },
@@ -211,42 +223,5 @@ pub enum ProfileCommand {
         /// Overwrite profiles that already exist with the same name
         #[arg(long)]
         force: bool,
-    },
-}
-
-/// Settings command variants.
-#[derive(Subcommand)]
-pub enum SettingsCommand {
-    /// Show all current application settings
-    Show,
-    /// Update application settings
-    Set(Box<SettingsSetArgs>),
-    /// Clear one setting, returning it to unset
-    ///
-    /// Unset is not the same as zero or a default: for `default-context-size`
-    /// it is what lets each launch size the context to this machine, and
-    /// `settings set` can only ever write a value. Before this existed, a
-    /// number written once could only be removed by resetting everything.
-    Unset {
-        /// The setting to clear, as shown by `settings show`
-        key: String,
-    },
-    /// Reset every preference to its default
-    ///
-    /// Keeps the machine this one joined, the devices it admits, whether and
-    /// how it serves remote access, and the proxy's API key.
-    Reset {
-        /// Answer yes to the confirmation, so nothing is asked
-        #[arg(short = 'y', long)]
-        yes: bool,
-    },
-    /// Print a stored secret, alone on stdout
-    ///
-    /// The one place a stored secret is printed: `settings show` says only
-    /// whether it is held. Stdout carries the value and nothing else, so
-    /// `$(gglib config settings reveal proxy-api-key)` is exactly the key.
-    Reveal {
-        /// The secret, as `settings show` names it
-        key: SecretArg,
     },
 }

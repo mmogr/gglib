@@ -605,7 +605,7 @@ describe('the endpoint place', () => {
       const webui = await screen.findByRole('group', { name: 'Open WebUI' });
       expect(transport.getProxyClients).toHaveBeenLastCalledWith(1);
       // Two spaces, as the CLI prints it: matched without collapsing them.
-      expect(within(webui).getByText('(set, not shown)  `gglib config settings reveal proxy-api-key` prints it', { normalizer: (t) => t })).toBeInTheDocument();
+      expect(within(webui).getByText('(set, not shown)  `gglib config reveal proxy-api-key` prints it', { normalizer: (t) => t })).toBeInTheDocument();
       expect(within(webui).queryByText('gglib')).not.toBeInTheDocument();
     });
   });

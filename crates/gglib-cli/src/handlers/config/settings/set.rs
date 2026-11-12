@@ -1,115 +1,41 @@
-//! `gglib config settings set` — write the fields a person named, and print them.
+//! `gglib config set <key> <value>`: write one setting, and print it.
 //!
-//! Each flag is named once here, where it becomes a field of the
-//! [`SettingsUpdate`]. The merge, the validation and the write are the
-//! settings service's, in one step, so a refused value stores nothing and
-//! there is no second merge here to keep in step with the real one. The keys
-//! to print are read back off the update.
+//! The value is read by what the key takes, in [`SettingKey`]'s table, and
+//! put on the wire type under the key's own name. The merge, the validation
+//! and the write are the settings service's, in one step, so a refused value
+//! stores nothing and its refusal is the validator's own sentence.
 
-use std::collections::BTreeSet;
+use anyhow::{Result, anyhow, bail};
+use serde_json::Value;
 
-use anyhow::Result;
+use gglib_core::Settings;
 
-use gglib_core::SettingsUpdate;
-
-use super::settings_display::{print_display_rows, settings_display_rows};
-use super::{queue_size, resolve_model_display};
+use super::settings_display::settings_display_rows;
+use super::{models_dir, queue_size, resolve_model_display, wire};
 use crate::bootstrap::CliContext;
-use crate::config_commands::SettingsSetArgs;
+use crate::config_commands::{SettingKey, Takes};
 use crate::handlers::model::resolver;
 
-/// The update the flags a person passed amount to, with `image_model` the
-/// id `--default-image-model` resolved to: the flag names a model by id or
-/// name, and only the library can say which id a name is.
-fn update_from(args: SettingsSetArgs, image_model: Option<i64>) -> SettingsUpdate {
-    SettingsUpdate {
-        default_context_size: args.default_context_size.map(Some),
-        proxy_port: args.proxy_port.map(Some),
-        llama_base_port: args.llama_base_port.map(Some),
-        max_download_queue_size: args.max_download_queue_size.map(Some),
-        max_tool_iterations: args.max_tool_iterations.map(Some),
-        max_stagnation_steps: args.max_stagnation_steps.map(Some),
-        max_parallel_tools: args.max_parallel_tools.map(Some),
-        tool_timeout_ms: args.tool_timeout_ms.map(Some),
-        default_model_id: None,
-        default_image_model_id: image_model.map(Some),
-        inference_defaults: None,
-        inference_profiles: None,
-        setup_completed: None,
-        title_generation_prompt: None,
-        proxy_host: args.proxy_host.map(Some),
-        proxy_allowed_hosts: args.proxy_allowed_hosts.map(Some),
-        proxy_cache_on_disk: args.proxy_cache_on_disk.map(Some),
-        proxy_cache_disk_gb: args.proxy_cache_disk_gb.map(Some),
-        proxy_api_key: args.proxy_api_key.map(Some),
-        trust_client_sampling: args.trust_client_sampling.map(Some),
-        loop_guard_mode: args.loop_guard_mode.map(|m| Some(m.into())),
-        tool_call_repair: args.tool_call_repair.map(Some),
-        mcp_drawing: args.mcp_drawing.map(Some),
-        agentic_sampling: args.agentic_sampling.map(Some),
-        proxy_autostart: args.proxy_autostart.map(Some),
-        close_to_tray: args.close_to_tray.map(Some),
-        start_at_login: args.start_at_login.map(Some),
-        // Written by `gglib remote join`, never by hand (ADR 0012).
-        remote_pairing: None,
-        // Written by `gglib remote enable`/`disable`, never by hand: setting
-        // this by hand would say a machine is reachable with nothing bound.
-        remote_enabled: None,
-        remote_serve: None,
-        // Written by inviting and forgetting devices, not by a settings flag.
-        remote_devices: None,
-    }
-}
-
-/// The kebab-case key of every field `update` writes.
-///
-/// A field the update leaves alone serialises as `null`. So would one it
-/// clears, which no flag here can ask for.
-fn changed_keys(update: &SettingsUpdate) -> Result<BTreeSet<String>> {
-    let fields = serde_json::to_value(update)?;
-    Ok(fields
-        .as_object()
-        .into_iter()
-        .flatten()
-        .filter(|(_, value)| !value.is_null())
-        .map(|(key, _)| key.replace('_', "-"))
-        .collect())
-}
-
-/// Apply the flags a person passed, then print only what changed.
-pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Result<()> {
-    // Resolved here; whether the model draws is the settings service's
-    // check, so this surface refuses in the same sentence as the others.
-    let image_model = match args.default_image_model_id.as_deref() {
-        Some(named) => Some(resolver::resolve_model_identifier(ctx, named).await?.id),
-        None => None,
+/// Execute `gglib config set <key> <value>`.
+pub(crate) async fn handle_set(ctx: &CliContext, key: SettingKey, typed: &str) -> Result<()> {
+    let value = match key.takes {
+        Takes::Folder => return models_dir::set(typed),
+        Takes::Whole(_) | Takes::Elsewhere(_) => bail!(not_set_here(key)),
+        // Resolved here, as every command naming a model resolves it;
+        // whether an image model draws is the settings service's check.
+        Takes::Model => Value::from(resolver::resolve_model_identifier(ctx, typed).await?.id),
+        takes => read(takes, typed).ok_or_else(|| refusal(key, typed))?,
     };
-    let update = update_from(args, image_model);
-    let changed = changed_keys(&update)?;
-    if changed.is_empty() {
-        println!("No settings provided. Use --help to see available options.");
-        return Ok(());
-    }
+    let request = wire::request(&key, value).map_err(|_| refusal(key, typed))?;
 
-    let sets_queue_size = update.max_download_queue_size.is_some();
-    let updated = ctx.app.settings().update(update).await?;
-    let (model_display, image_display) = resolve_model_display(ctx, &updated).await?;
-    let all_rows =
-        settings_display_rows(&updated, model_display.as_deref(), image_display.as_deref());
-
-    // Match exact key OR any dot-notation sub-row that starts with
-    // "{changed_key}." — needed for nested fields such as inference-defaults.
-    let changed_rows: Vec<_> = all_rows
-        .into_iter()
-        .filter(|(k, _)| {
-            changed
-                .iter()
-                .any(|c| k == c || k.starts_with(&format!("{c}.")))
-        })
-        .collect();
-
-    println!("✓ Settings updated successfully:");
-    print_display_rows(&changed_rows);
+    let sets_queue_size = request.max_download_queue_size.is_some();
+    let updated = ctx.app.settings().update(request.into()).await?;
+    let shown = shown(ctx, &updated, key.name).await?;
+    println!(
+        "✓ {} is now {}",
+        key.name,
+        shown.as_deref().unwrap_or(typed)
+    );
     if sets_queue_size
         && let Some(warning) = queue_size::tell_daemon(ctx, updated.max_download_queue_size).await
     {
@@ -118,9 +44,64 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
     Ok(())
 }
 
+/// `typed` as the JSON value `takes` reads it as, or `None` when it is not
+/// one. A model and a folder are read by their handlers, not here.
+fn read(takes: Takes, typed: &str) -> Option<Value> {
+    match takes {
+        Takes::Number(_) => typed.trim().parse::<u64>().ok().map(Value::from),
+        // What clap's own `bool` parser takes, and nothing else.
+        Takes::Switch => match typed {
+            "true" => Some(true.into()),
+            "false" => Some(false.into()),
+            _ => None,
+        },
+        Takes::Text => Some(typed.into()),
+        // As the app's comma field reads it.
+        Takes::Hosts => Some(
+            typed
+                .split(',')
+                .map(str::trim)
+                .filter(|host| !host.is_empty())
+                .map(Value::from)
+                .collect(),
+        ),
+        Takes::Choice(words) => words.contains(&typed).then(|| typed.into()),
+        Takes::Model | Takes::Folder | Takes::Whole(_) | Takes::Elsewhere(_) => None,
+    }
+}
+
+/// The refusal of a value the key does not take, saying what it does.
+fn refusal(key: SettingKey, typed: &str) -> anyhow::Error {
+    anyhow!(
+        "`{}` takes {}, got '{typed}'",
+        key.name,
+        key.takes.described()
+    )
+}
+
+/// The refusal of a key `set` does not write, saying what does.
+pub(super) fn not_set_here(key: SettingKey) -> String {
+    match key.takes {
+        Takes::Whole(where_) => format!("`{}` is not set from one value: it is {where_}", key.name),
+        Takes::Elsewhere(who) => format!("`{}` is not set by hand: {who}", key.name),
+        _ => format!("`{}` is set with `gglib config set`", key.name),
+    }
+}
+
+/// The value `config show` prints for `name` in `settings`: a secret as
+/// held rather than as typed, a model by its name.
+async fn shown(ctx: &CliContext, settings: &Settings, name: &str) -> Result<Option<String>> {
+    let (model, image) = resolve_model_display(ctx, settings).await?;
+    Ok(
+        settings_display_rows(settings, model.as_deref(), image.as_deref())
+            .into_iter()
+            .find_map(|(key, value)| (key == name).then_some(value)),
+    )
+}
+
 #[cfg(test)]
 #[path = "set_tests.rs"]
-mod tests;
+pub(super) mod tests;
 
 #[cfg(test)]
 #[path = "set_drawing_tests.rs"]
