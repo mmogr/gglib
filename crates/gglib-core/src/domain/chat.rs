@@ -13,6 +13,7 @@ use super::agent::messages::AssistantContent;
 use super::agent::tool_types::ToolCall;
 use super::attachment::{AttachmentId, AttachmentInfo};
 use super::machine::{Machine, ModelRef};
+use super::settings_edit::SettingsEdit;
 use super::thinking::Thinking;
 
 /// A chat conversation.
@@ -232,8 +233,8 @@ pub struct ConversationUpdate {
     pub title: Option<String>,
     /// Use `Some(Some(prompt))` to set, `Some(None)` to clear, `None` to leave unchanged.
     pub system_prompt: Option<Option<String>>,
-    /// Use `Some(Some(settings))` to set, `Some(None)` to clear, `None` to leave unchanged.
-    pub settings: Option<Option<ConversationSettings>>,
+    /// The settings' keys to set or remove; empty leaves them unchanged.
+    pub settings: SettingsEdit,
     /// Use `Some(Some(id))` to set, `Some(None)` to clear, `None` to leave unchanged.
     pub model_id: Option<Option<i64>>,
 }

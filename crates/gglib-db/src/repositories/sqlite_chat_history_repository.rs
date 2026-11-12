@@ -9,20 +9,22 @@ use gglib_core::{
     domain::attachment::{AttachmentId, AttachmentInfo},
     domain::branching::LineChat,
     domain::chat::{
-        Conversation, ConversationUpdate, Message, MessageRole, NewConversation, NewMessage,
+        Conversation, ConversationSettings, ConversationUpdate, Message, MessageRole,
+        NewConversation, NewMessage,
     },
     ports::attachment_store::AttachmentError,
     ports::chat_history::{ChatHistoryError, ChatHistoryRepository},
 };
 
-use super::{branch_rows, message_rows};
+use super::{branch_rows, conversation_rows, message_rows};
 
 /// The columns [`conversation`] reads.
 const CONVERSATION_COLUMNS: &str = "id, title, model_id, system_prompt, settings, \
      created_at, updated_at, branch_of, lineage_id";
 
-/// A conversation's row as the domain type. Settings that do not parse read
-/// as none.
+/// A conversation's row as the domain type. Its settings are read key by key
+/// ([`ConversationSettings::read`]): a key this build cannot read is passed
+/// over, and text that is not a JSON object reads as none.
 fn conversation(row: &SqliteRow) -> Conversation {
     let settings_str: Option<String> = row.get("settings");
     Conversation {
@@ -30,7 +32,7 @@ fn conversation(row: &SqliteRow) -> Conversation {
         title: row.get("title"),
         model_id: row.get("model_id"),
         system_prompt: row.get("system_prompt"),
-        settings: settings_str.and_then(|s| serde_json::from_str(&s).ok()),
+        settings: settings_str.and_then(|s| ConversationSettings::read(&s)),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         branch_of: row.get("branch_of"),
@@ -101,50 +103,7 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         id: i64,
         update: ConversationUpdate,
     ) -> Result<(), ChatHistoryError> {
-        if update.title.is_none()
-            && update.system_prompt.is_none()
-            && update.settings.is_none()
-            && update.model_id.is_none()
-        {
-            return Ok(());
-        }
-
-        let row = sqlx::query(
-            "SELECT title, model_id, system_prompt, settings FROM chat_conversations WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| ChatHistoryError::Database(e.to_string()))?
-        .ok_or(ChatHistoryError::ConversationNotFound(id))?;
-
-        let current_title: String = row.get("title");
-        let current_model: Option<i64> = row.get("model_id");
-        let current_prompt: Option<String> = row.get("system_prompt");
-        let current_settings: Option<String> = row.get("settings");
-
-        let next_title = update.title.unwrap_or(current_title);
-        let next_model = update.model_id.unwrap_or(current_model);
-        let next_prompt = update.system_prompt.unwrap_or(current_prompt);
-        let next_settings = match update.settings {
-            Some(Some(s)) => serde_json::to_string(&s).ok(),
-            Some(None) => None,
-            None => current_settings,
-        };
-
-        sqlx::query(
-            "UPDATE chat_conversations SET title = ?, model_id = ?, system_prompt = ?, settings = ?, updated_at = datetime('now') WHERE id = ?",
-        )
-        .bind(next_title)
-        .bind(next_model)
-        .bind(next_prompt)
-        .bind(next_settings)
-        .bind(id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
-        Ok(())
+        conversation_rows::update(&self.pool, id, update).await
     }
 
     async fn delete_conversation(&self, id: i64) -> Result<(), ChatHistoryError> {
@@ -369,3 +328,11 @@ mod sqlite_chat_history_images_tests;
 #[cfg(test)]
 #[path = "sqlite_chat_branches_tests.rs"]
 mod sqlite_chat_branches_tests;
+
+#[cfg(test)]
+#[path = "sqlite_chat_settings_tests.rs"]
+mod sqlite_chat_settings_tests;
+
+#[cfg(test)]
+#[path = "sqlite_chat_settings_text_tests.rs"]
+mod sqlite_chat_settings_text_tests;

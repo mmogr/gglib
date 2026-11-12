@@ -200,6 +200,7 @@ impl From<ChatHistoryError> for HttpError {
                 Self::BadRequest(format!("Invalid message role: {role}"))
             }
             ChatHistoryError::Database(msg) => Self::Internal(format!("Database error: {msg}")),
+            ChatHistoryError::UnreadableSettings(_) => Self::Conflict(err.to_string()),
             ChatHistoryError::Attachment(refusal) => refusal.into(),
         }
     }

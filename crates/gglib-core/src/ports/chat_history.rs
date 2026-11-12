@@ -26,6 +26,11 @@ pub enum ChatHistoryError {
     #[error("Database error: {0}")]
     Database(String),
 
+    /// The conversation's stored settings are not a JSON object, so a change
+    /// to them could not keep them. Nothing was written.
+    #[error("Conversation {0}'s stored settings are not a JSON object; they were left as they are")]
+    UnreadableSettings(i64),
+
     /// A message names an image the attachment store lacks
     /// ([`AttachmentError::NotFound`]). Nothing was saved.
     #[error(transparent)]
