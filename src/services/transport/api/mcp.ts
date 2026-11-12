@@ -29,11 +29,9 @@ export async function listMcpServers(): Promise<McpServerInfo[]> {
  */
 export async function addMcpServer(server: NewMcpServer): Promise<McpServerInfo> {
   // The nested config flattened into the request. The daemon requires `name`
-  // and `server_type` alone; the three optional strings are left out when empty.
-  const request: Pick<CreateMcpServerRequest, 'name' | 'server_type'> &
-    Partial<CreateMcpServerRequest> = {
+  // alone; the three optional strings are left out when empty.
+  const request: Pick<CreateMcpServerRequest, 'name'> & Partial<CreateMcpServerRequest> = {
     name: server.name,
-    server_type: server.server_type,
     command: server.config.command || undefined,
     args: server.config.args || [],
     working_dir: server.config.working_dir || undefined,

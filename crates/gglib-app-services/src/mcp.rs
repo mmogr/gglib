@@ -3,9 +3,7 @@
 use std::sync::Arc;
 
 use gglib_core::{McpRepositoryError, McpServiceError};
-use gglib_mcp::{
-    McpEnvEntry, McpServerConfig, McpServerStatus, McpServerType, McpService, McpTool, NewMcpServer,
-};
+use gglib_mcp::{McpEnvEntry, McpServerConfig, McpServerStatus, McpService, McpTool, NewMcpServer};
 
 use crate::error::GuiError;
 use crate::types::{
@@ -43,7 +41,6 @@ impl McpOps {
         McpServerDto {
             id: server.id,
             name: server.name.clone(),
-            server_type: server.server_type.to_string(),
             config: McpServerConfigDto {
                 command: server.config.command.clone(),
                 resolved_path_cache: server.config.resolved_path_cache.clone(),
@@ -86,11 +83,6 @@ impl McpOps {
 
     /// Add a new MCP server configuration.
     pub async fn add(&self, req: CreateMcpServerRequest) -> Result<McpServerInfo, GuiError> {
-        let server_type = req
-            .server_type
-            .parse::<McpServerType>()
-            .map_err(GuiError::ValidationFailed)?;
-
         let config = McpServerConfig {
             command: req.command,
             resolved_path_cache: None, // Will be populated by resolver
@@ -101,7 +93,6 @@ impl McpOps {
 
         let new_server = NewMcpServer {
             name: req.name,
-            server_type,
             config,
             // A blank value is the service's to refuse, for every add.
             env: req

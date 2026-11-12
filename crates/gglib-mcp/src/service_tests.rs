@@ -41,7 +41,6 @@ impl McpServerRepository for MockMcpRepository {
         let server = McpServer {
             id,
             name: new_server.name,
-            server_type: new_server.server_type,
             config: new_server.config,
             enabled: new_server.enabled,
             allow_remote: false,

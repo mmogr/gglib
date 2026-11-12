@@ -129,7 +129,6 @@ CREATE TABLE mcp_server_env (
 CREATE TABLE mcp_servers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
             enabled INTEGER NOT NULL DEFAULT 1,
             allow_remote INTEGER NOT NULL DEFAULT 0,
             lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
@@ -138,7 +137,6 @@ CREATE TABLE mcp_servers (
             args TEXT NOT NULL DEFAULT '[]',
             cwd TEXT,
             path_extra TEXT,
-            url TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             last_connected_at TEXT,
             is_valid INTEGER NOT NULL DEFAULT 0,

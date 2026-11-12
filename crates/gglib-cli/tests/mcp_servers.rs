@@ -454,7 +454,6 @@ fn in_the_daemon(
         McpServerDto {
             id,
             name: name.to_owned(),
-            server_type: "stdio".to_owned(),
             config: McpServerConfigDto {
                 command: Some("npx".to_owned()),
                 resolved_path_cache: None,

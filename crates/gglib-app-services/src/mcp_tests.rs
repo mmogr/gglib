@@ -23,7 +23,6 @@ async fn make_ops() -> McpOps {
 fn stdio_req(name: &str) -> CreateMcpServerRequest {
     CreateMcpServerRequest {
         name: name.to_string(),
-        server_type: "stdio".to_string(),
         command: Some("echo".to_string()),
         args: vec![],
         working_dir: None,
@@ -50,23 +49,6 @@ async fn add_server_appears_in_list() {
     let servers = ops.list().await.unwrap();
     assert_eq!(servers.len(), 1);
     assert_eq!(servers[0].server.name, "test-server");
-    assert_eq!(servers[0].server.server_type, "stdio");
-}
-
-#[tokio::test]
-async fn invalid_server_type_returns_validation_error() {
-    let ops = make_ops().await;
-    let mut req = stdio_req("bad");
-    for server_type in ["grpc", "sse"] {
-        req.server_type = server_type.to_string();
-        let result = ops.add(req.clone()).await;
-        let expected = format!("unknown server type '{server_type}'; expected stdio");
-        assert!(
-            matches!(&result, Err(GuiError::ValidationFailed(why)) if *why == expected),
-            "expected ValidationFailed, got {result:?}"
-        );
-    }
-    assert!(ops.list().await.unwrap().is_empty());
 }
 
 #[tokio::test]

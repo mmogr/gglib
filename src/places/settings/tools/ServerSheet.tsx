@@ -74,7 +74,6 @@ export function serverSent(fields: Fields): NewMcpServer {
   const args = fields.args.trim();
   return {
     name: fields.name.trim(),
-    server_type: 'stdio',
     enabled: fields.inChats,
     lifecycle: fields.atStart ? 'eager' : 'lazy',
     env: envSent(fields.env),

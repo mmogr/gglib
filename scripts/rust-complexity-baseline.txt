@@ -10,7 +10,7 @@ crates/gglib-app-services/src/benchmark/tune/mod.rs 1390
 crates/gglib-app-services/src/downloads.rs 345
 crates/gglib-app-services/src/hf_image_preview_tests.rs 319
 crates/gglib-app-services/src/hf_quantizations.rs 497
-crates/gglib-app-services/src/mcp.rs 311
+crates/gglib-app-services/src/mcp.rs 302
 crates/gglib-app-services/src/models.rs 468
 crates/gglib-app-services/src/models_tests.rs 972
 crates/gglib-app-services/src/models_upgrade.rs 330
@@ -29,7 +29,7 @@ crates/gglib-app-services/src/settings_tests.rs 415
 crates/gglib-app-services/src/setup.rs 363
 crates/gglib-app-services/src/setup_engines_tests.rs 540
 crates/gglib-app-services/src/test_support.rs 449
-crates/gglib-app-services/src/types.rs 634
+crates/gglib-app-services/src/types.rs 632
 crates/gglib-app-services/src/types_model_dto_tests.rs 317
 crates/gglib-app-services/src/types_settings.rs 310
 crates/gglib-axum/src/error.rs 331
@@ -79,7 +79,7 @@ crates/gglib-cli/src/handlers/config/settings/profiles.rs 417
 crates/gglib-cli/src/handlers/image_tests.rs 328
 crates/gglib-cli/src/handlers/inference/proxy_tests.rs 320
 crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 361
-crates/gglib-cli/src/handlers/mcp_cli.rs 400
+crates/gglib-cli/src/handlers/mcp_cli.rs 395
 crates/gglib-cli/src/handlers/model/download/interactive.rs 400
 crates/gglib-cli/src/handlers/model/list_tests.rs 360
 crates/gglib-cli/src/handlers/model/update.rs 683
@@ -128,7 +128,7 @@ crates/gglib-core/src/domain/inference_tests.rs 1283
 crates/gglib-core/src/domain/kv_estimate.rs 404
 crates/gglib-core/src/domain/kv_estimate_tests.rs 442
 crates/gglib-core/src/domain/launch_plan.rs 306
-crates/gglib-core/src/domain/mcp/types.rs 529
+crates/gglib-core/src/domain/mcp/types.rs 463
 crates/gglib-core/src/domain/model.rs 532
 crates/gglib-core/src/domain/model_detail.rs 307
 crates/gglib-core/src/domain/model_naming.rs 370
@@ -186,12 +186,12 @@ crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 655
 crates/gglib-db/src/repositories/sqlite_chat_history_images_tests.rs 419
 crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 371
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 353
-crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 386
-crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 451
+crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 368
+crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 403
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1180
 crates/gglib-db/src/repositories/sqlite_model_repository_components_tests.rs 372
 crates/gglib-db/src/repositories/sqlite_settings_repository_tests.rs 311
-crates/gglib-db/src/setup.rs 793
+crates/gglib-db/src/setup.rs 737
 crates/gglib-db/src/setup_backup_tests.rs 313
 crates/gglib-db/src/setup_models.rs 318
 crates/gglib-db/src/setup_models_tests.rs 325
@@ -232,7 +232,7 @@ crates/gglib-mcp/src/client_tests.rs 458
 crates/gglib-mcp/src/manager.rs 302
 crates/gglib-mcp/src/opened_tests.rs 490
 crates/gglib-mcp/src/service.rs 789
-crates/gglib-mcp/src/service_tests.rs 670
+crates/gglib-mcp/src/service_tests.rs 669
 crates/gglib-proxy/src/audit_records.rs 313
 crates/gglib-proxy/src/cache_lifecycle.rs 484
 crates/gglib-proxy/src/canonicalization.rs 601

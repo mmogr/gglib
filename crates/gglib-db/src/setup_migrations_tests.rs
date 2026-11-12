@@ -52,6 +52,7 @@ async fn plant_model(pool: &SqlitePool, name: &str, path: &str, key: &str, count
 /// Rows for steps 2, 4 and 6: a loop guard switched off, a remote tunnel
 /// whose list names a server, and an SSE server.
 async fn plant_rows(pool: &SqlitePool) {
+    super::super::mcp_servers::as_before_step_6(pool).await;
     sql(
         pool,
         r#"INSERT INTO settings_kv (key, value, updated_at) VALUES

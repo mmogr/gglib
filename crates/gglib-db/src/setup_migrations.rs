@@ -66,7 +66,7 @@ async fn step(version: i64, conn: &mut SqliteConnection) -> Result<()> {
         3 => super::recipes::drop_stored_reasoning_recipes(conn).await,
         4 => super::remote_grant::flag_listed_servers(conn).await,
         5 => super::unknown_params::forget_zero_param_counts(conn).await,
-        6 => super::sse_servers::delete_sse_servers(conn).await,
+        6 => super::mcp_servers::rebuild_without_type(conn).await,
         _ => bail!("no migration to user_version {version}"),
     }
 }

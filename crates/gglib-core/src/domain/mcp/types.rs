@@ -44,37 +44,6 @@ impl std::str::FromStr for McpLifecycle {
     }
 }
 
-/// Type of MCP server connection: the one kind gglib runs.
-///
-/// Stored in the `type` column and sent as `server_type`, so a type it does
-/// not know is refused by name rather than read as this one. No `Default`:
-/// every server says its type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum McpServerType {
-    /// Stdio-based server - gglib spawns and manages the process
-    Stdio,
-}
-
-impl std::fmt::Display for McpServerType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Stdio => write!(f, "stdio"),
-        }
-    }
-}
-
-impl std::str::FromStr for McpServerType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "stdio" => Ok(Self::Stdio),
-            other => Err(format!("unknown server type '{other}'; expected stdio")),
-        }
-    }
-}
-
 /// Runtime status of an MCP server.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -201,9 +170,6 @@ pub struct McpServer {
     /// User-friendly name for the server.
     pub name: String,
 
-    /// Connection type: stdio.
-    pub server_type: McpServerType,
-
     /// Execution configuration (command, args, etc.).
     pub config: McpServerConfig,
 
@@ -250,9 +216,6 @@ pub struct NewMcpServer {
     /// User-friendly name for the server.
     pub name: String,
 
-    /// Connection type: stdio.
-    pub server_type: McpServerType,
-
     /// Execution configuration (command, args, etc.).
     pub config: McpServerConfig,
 
@@ -277,7 +240,6 @@ impl NewMcpServer {
     ) -> Self {
         Self {
             name: name.into(),
-            server_type: McpServerType::Stdio,
             config: McpServerConfig::stdio(exe_path, args, None, path_extra),
             enabled: true,
             lifecycle: McpLifecycle::Lazy,
@@ -322,10 +284,6 @@ pub struct UpdateMcpServer {
     /// New user-friendly name for the server.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-
-    /// New connection type: stdio.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub server_type: Option<McpServerType>,
 
     /// New execution configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -443,34 +401,11 @@ mod tests {
         .with_lifecycle(McpLifecycle::Eager);
 
         assert_eq!(server.name, "Test Server");
-        assert_eq!(server.server_type, McpServerType::Stdio);
         assert_eq!(server.config.command, Some("npx".to_string()));
         assert_eq!(server.env.len(), 1);
         assert_eq!(server.env[0].key, "API_KEY");
         assert_eq!(server.env[0].value, "secret123");
         assert_eq!(server.lifecycle, McpLifecycle::Eager);
-    }
-
-    #[test]
-    fn a_server_type_is_spelled_one_way_printed_parsed_and_on_the_wire() {
-        let server_type = McpServerType::Stdio;
-        assert_eq!(server_type.to_string(), "stdio");
-        assert_eq!("stdio".parse::<McpServerType>(), Ok(server_type));
-        assert_eq!(serde_json::to_string(&server_type).unwrap(), "\"stdio\"");
-    }
-
-    /// `sse` was a type until gglib dropped it: it is refused like any
-    /// other, and never read as stdio.
-    #[test]
-    fn an_unknown_server_type_is_refused_by_name() {
-        for other in ["grpc", "sse"] {
-            assert_eq!(
-                other.parse::<McpServerType>(),
-                Err(format!("unknown server type '{other}'; expected stdio"))
-            );
-        }
-        // The stored and sent spelling is lowercase, and nothing else parses.
-        assert!("Stdio".parse::<McpServerType>().is_err());
     }
 
     #[test]
@@ -500,7 +435,6 @@ mod tests {
     fn test_serialization() {
         let server = NewMcpServer::new_stdio("Test", "node", vec!["server.js".to_string()], None);
         let json = serde_json::to_string(&server).unwrap();
-        assert!(json.contains("\"server_type\":\"stdio\""));
         assert!(json.contains("\"name\":\"Test\""));
     }
 

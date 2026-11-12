@@ -170,7 +170,7 @@ Path validation and environment utilities:
 use std::sync::Arc;
 use gglib_mcp::McpService;
 use gglib_core::ports::McpServerRepository;
-use gglib_core::domain::mcp::{NewMcpServer, McpLifecycle, McpServerType, McpServerConfig};
+use gglib_core::domain::mcp::{NewMcpServer, McpLifecycle, McpServerConfig};
 
 async fn example(repo: impl McpServerRepository + 'static) {
     // Create service with the repository it needs
@@ -179,7 +179,6 @@ async fn example(repo: impl McpServerRepository + 'static) {
     // Add a server configuration
     let server = service.add_server(NewMcpServer {
         name: "my-mcp-server".to_string(),
-        server_type: McpServerType::Stdio,
         config: McpServerConfig::stdio(
             "npx",
             vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()],

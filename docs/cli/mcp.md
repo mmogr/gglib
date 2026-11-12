@@ -11,9 +11,9 @@ $ gglib mcp add --name filesystem --command npx --args="-y,@modelcontextprotocol
 $ gglib mcp list
 Found 1 MCP server(s):
 
-ID   Name                      Type   Enabled   Remote  Lifecycle   Status     Tools 
------------------------------------------------------------------------------------
-4    filesystem                stdio  yes       no      lazy        Stopped    0     
+ID   Name                      Enabled   Remote  Lifecycle   Status     Tools 
+----------------------------------------------------------------------------
+4    filesystem                yes       no      lazy        Stopped    0     
 $ gglib mcp test filesystem
 Testing connection to 'filesystem'...
 ✓ Connection successful — 14 tool(s) discovered

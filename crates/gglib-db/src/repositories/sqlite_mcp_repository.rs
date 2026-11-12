@@ -11,30 +11,29 @@ use chrono::Utc;
 use sqlx::SqlitePool;
 
 use gglib_core::domain::mcp::{
-    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerType, NewMcpServer,
+    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, NewMcpServer,
 };
 use gglib_core::ports::{McpRepositoryError, McpServerRepository};
 
 use super::row_mappers::parse_datetime;
 
-/// Every `mcp_servers` column [`McpServerRow`] reads. Not `url`, which only
-/// an SSE server, which gglib no longer keeps, ever set.
-const MCP_SERVER_COLUMNS: &str = "id, name, type, enabled, allow_remote, lifecycle, command, resolved_path_cache, args, cwd, path_extra, created_at, last_connected_at, is_valid, last_error";
+/// Every `mcp_servers` column, as [`McpServerRow`] reads them.
+const MCP_SERVER_COLUMNS: &str = "id, name, enabled, allow_remote, lifecycle, command, resolved_path_cache, args, cwd, path_extra, created_at, last_connected_at, is_valid, last_error";
 
 /// Adds a server's row. It sets every column but the id, the two
 /// timestamps and `allow_remote`, in the order [`SqliteMcpRepository::write`]
 /// binds them. A new row is closed to paired devices by the column's
 /// default.
 const INSERT_SERVER: &str = "INSERT INTO mcp_servers \
-     (name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, is_valid, last_error) \
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+     (name, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, is_valid, last_error) \
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
 /// Replaces a server's row: the columns [`INSERT_SERVER`] sets, in its
 /// order, then the id of the row. Never `allow_remote`, which only
 /// [`McpServerRepository::set_allow_remote`] writes: a whole-row write made
 /// from a copy read before a deny would otherwise open the server again.
 const UPDATE_SERVER: &str = "UPDATE mcp_servers \
-     SET name = ?, type = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, is_valid = ?, last_error = ? \
+     SET name = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, is_valid = ?, last_error = ? \
      WHERE id = ?";
 
 /// `SQLite` implementation of the MCP server repository.
@@ -57,8 +56,6 @@ impl SqliteMcpRepository {
 struct McpServerRow {
     id: i64,
     name: String,
-    #[sqlx(rename = "type")]
-    server_type: String,
     enabled: bool,
     allow_remote: bool,
     lifecycle: String,
@@ -82,7 +79,6 @@ struct EnvRow {
 /// What a write sets, borrowed from the server being added or replaced.
 struct Written<'a> {
     name: &'a str,
-    server_type: McpServerType,
     config: &'a McpServerConfig,
     enabled: bool,
     lifecycle: McpLifecycle,
@@ -102,17 +98,7 @@ struct Written<'a> {
 /// the database makes such a row a disabled `lazy` one (#1699); one written
 /// while this process has the database open is read the same way, so it is
 /// never started.
-///
-/// A type other than `stdio` is refused, never read as stdio: the CHECK
-/// still admits `sse`, which opening the database deletes (step 6), and an
-/// older build could write one while this process has it open.
-fn row_to_server(
-    row: McpServerRow,
-    env: Vec<McpEnvEntry>,
-) -> Result<McpServer, McpRepositoryError> {
-    let server_type = row.server_type.parse::<McpServerType>().map_err(|reason| {
-        McpRepositoryError::Internal(format!("MCP server {} cannot be read: {reason}", row.id))
-    })?;
+fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
     let retired_manual = row.lifecycle == "manual";
     let config = McpServerConfig {
         command: row.command,
@@ -122,10 +108,9 @@ fn row_to_server(
         path_extra: row.path_extra,
     };
 
-    Ok(McpServer {
+    McpServer {
         id: row.id,
         name: row.name,
-        server_type,
         config,
         enabled: row.enabled && !retired_manual,
         allow_remote: row.allow_remote,
@@ -135,7 +120,7 @@ fn row_to_server(
         last_connected_at: parse_datetime(row.last_connected_at),
         is_valid: row.is_valid,
         last_error: row.last_error,
-    })
+    }
 }
 
 /// Decode a base64-encoded environment variable value.
@@ -170,7 +155,6 @@ impl McpServerRepository for SqliteMcpRepository {
                 None,
                 Written {
                     name: &server.name,
-                    server_type: server.server_type,
                     config: &server.config,
                     enabled: server.enabled,
                     lifecycle: server.lifecycle,
@@ -197,7 +181,7 @@ impl McpServerRepository for SqliteMcpRepository {
 
         let env = self.fetch_env(id).await?;
 
-        row_to_server(row, env)
+        Ok(row_to_server(row, env))
     }
 
     async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
@@ -212,7 +196,7 @@ impl McpServerRepository for SqliteMcpRepository {
 
         let env = self.fetch_env(row.id).await?;
 
-        row_to_server(row, env)
+        Ok(row_to_server(row, env))
     }
 
     async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
@@ -226,7 +210,7 @@ impl McpServerRepository for SqliteMcpRepository {
         let mut servers = Vec::with_capacity(rows.len());
         for row in rows {
             let env = self.fetch_env(row.id).await?;
-            servers.push(row_to_server(row, env)?);
+            servers.push(row_to_server(row, env));
         }
 
         Ok(servers)
@@ -237,7 +221,6 @@ impl McpServerRepository for SqliteMcpRepository {
             Some(server.id),
             Written {
                 name: &server.name,
-                server_type: server.server_type,
                 config: &server.config,
                 enabled: server.enabled,
                 lifecycle: server.lifecycle,
@@ -316,7 +299,6 @@ impl SqliteMcpRepository {
             INSERT_SERVER
         })
         .bind(server.name)
-        .bind(server.server_type.to_string())
         .bind(server.enabled)
         .bind(server.lifecycle.to_string())
         .bind(&server.config.command)

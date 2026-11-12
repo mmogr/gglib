@@ -69,23 +69,21 @@ async fn list(ctx: &CliContext) -> Result<()> {
 
     println!("Found {} MCP server(s):\n", servers.len());
     println!(
-        "{:<4} {:<25} {:<6} {:<9} {:<7} {:<11} {:<10} {:<6}",
-        "ID", "Name", "Type", "Enabled", "Remote", "Lifecycle", "Status", "Tools"
+        "{:<4} {:<25} {:<9} {:<7} {:<11} {:<10} {:<6}",
+        "ID", "Name", "Enabled", "Remote", "Lifecycle", "Status", "Tools"
     );
-    print_separator(83);
+    print_separator(76);
 
     let daemon = daemon_servers().await;
     let mut failures = Vec::new();
     for s in &servers {
-        let type_str = s.server_type.to_string();
         let yes_no = |on: bool| if on { "yes" } else { "no" };
         let lifecycle_str = s.lifecycle.to_string();
 
         println!(
-            "{:<4} {:<25} {:<6} {:<9} {:<7} {:<11} {}",
+            "{:<4} {:<25} {:<9} {:<7} {:<11} {}",
             s.id,
             truncate_string(&s.name, 24),
-            type_str,
             yes_no(s.enabled),
             yes_no(s.allow_remote),
             lifecycle_str,
@@ -200,10 +198,7 @@ async fn remove(ctx: &CliContext, identifier: &str, yes: bool) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
 
     if !yes {
-        println!(
-            "Server: {} (id: {}, type: {})",
-            server.name, server.id, server.server_type
-        );
+        println!("Server: {} (id: {})", server.name, server.id);
         if !input::prompt_confirmation("Remove this MCP server?")? {
             println!("Cancelled.");
             return Ok(());

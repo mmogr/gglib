@@ -1,5 +1,5 @@
-//! What the MCP routes answer for what cannot be added or opened: a bad
-//! request, in the service's words.
+//! What the MCP routes answer for what cannot be opened: a bad request, in
+//! the service's words.
 
 use std::sync::Arc;
 
@@ -49,31 +49,13 @@ async fn send(
     (status, serde_json::from_slice(&bytes).unwrap())
 }
 
-/// An `sse` server is a type there is not: a bad request on add, naming the
-/// one type there is, and nothing is stored.
-#[tokio::test]
-async fn an_sse_server_is_a_bad_request_on_add() {
-    let (_dir, state) = state().await;
-    let app = router(&state);
-
-    let new = json!({ "name": "remote", "server_type": "sse" });
-    assert_eq!(
-        send(&app, "POST", "/api/mcp/servers", &new).await,
-        (
-            StatusCode::BAD_REQUEST,
-            json!({ "error": "unknown server type 'sse'; expected stdio", "status": 400 })
-        )
-    );
-    assert!(state.mcp_ops.list().await.unwrap().is_empty());
-}
-
 /// The flag's route: the server as it now stands, 404 for an unknown id, and
 /// a bad request for opening `builtin`, in the service's words.
 #[tokio::test]
 async fn the_remote_route_sets_the_flag_and_refuses_what_it_cannot_open() {
     let (dir, state) = state().await;
     let app = router(&state);
-    let new = json!({ "name": "tavily", "server_type": "stdio", "command": "npx" });
+    let new = json!({ "name": "tavily", "command": "npx" });
     let (status, added) = send(&app, "POST", "/api/mcp/servers", &new).await;
     assert_eq!(status, StatusCode::OK, "{added}");
     let id = added["server"]["id"].as_i64().unwrap();

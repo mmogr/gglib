@@ -426,7 +426,6 @@ pub struct McpServerDto {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     pub name: String,
-    pub server_type: String,
     pub config: McpServerConfigDto,
     pub enabled: bool,
     /// Whether a paired device's runs are offered this server's tools. Read
@@ -549,7 +548,6 @@ impl From<McpServerStatus> for McpServerStatusDto {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct CreateMcpServerRequest {
     pub name: String,
-    pub server_type: String,
     pub command: Option<String>,
     #[serde(default)]
     pub args: Vec<String>,

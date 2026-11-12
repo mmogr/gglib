@@ -55,7 +55,6 @@ async fn a_stdio_server_reads_back_as_it_was_written() {
     ] {
         assert_eq!(read.id, added.id);
         assert_eq!(read.name, "files");
-        assert_eq!(read.server_type, McpServerType::Stdio);
         assert_eq!(read.config.command, Some("npx".to_string()));
         assert_eq!(
             read.config.args,
@@ -270,22 +269,21 @@ async fn a_connection_is_stamped_on_the_server_it_names() {
     ));
 }
 
-/// `stdio`, written as SQL writes it and not through the mapping under test,
-/// reads back, and is what a write stores.
+/// A row written as SQL writes it, not through the mapping under test,
+/// reads back its times.
 #[tokio::test]
-async fn a_stdio_type_string_reads_back_and_is_what_a_write_stores() {
+async fn a_row_written_by_sql_reads_back_its_times() {
     let repo = repository().await;
 
     sqlx::query(
-        "INSERT INTO mcp_servers (name, type, created_at, last_connected_at) \
-         VALUES ('raw-stdio', 'stdio', '2020-01-02 03:04:05', '2021-06-07 08:09:10')",
+        "INSERT INTO mcp_servers (name, created_at, last_connected_at) \
+         VALUES ('raw', '2020-01-02 03:04:05', '2021-06-07 08:09:10')",
     )
     .execute(&repo.pool)
     .await
     .unwrap();
 
-    let read = repo.get_by_name("raw-stdio").await.unwrap();
-    assert_eq!(read.server_type, McpServerType::Stdio);
+    let read = repo.get_by_name("raw").await.unwrap();
     assert_eq!(
         read.created_at,
         Utc.with_ymd_and_hms(2020, 1, 2, 3, 4, 5).unwrap()
@@ -294,50 +292,6 @@ async fn a_stdio_type_string_reads_back_and_is_what_a_write_stores() {
         read.last_connected_at,
         Some(Utc.with_ymd_and_hms(2021, 6, 7, 8, 9, 10).unwrap())
     );
-
-    let mut written = read.clone();
-    written.name = "written-stdio".to_owned();
-    repo.update(&written).await.unwrap();
-    let on_disk: String = sqlx::query_scalar("SELECT type FROM mcp_servers WHERE id = ?")
-        .bind(read.id)
-        .fetch_one(&repo.pool)
-        .await
-        .unwrap();
-    assert_eq!(on_disk, "stdio");
-
-    let other = sqlx::query("INSERT INTO mcp_servers (name, type) VALUES ('raw-grpc', 'grpc')")
-        .execute(&repo.pool)
-        .await;
-    assert!(other.is_err(), "the schema admits no third type string");
-}
-
-/// The CHECK still admits `sse`, which an older build can write while this
-/// one has the database open. Such a row is refused by name, never read as
-/// stdio, by a read of it and by the listing.
-#[tokio::test]
-async fn an_sse_row_is_refused_and_never_read_as_stdio() {
-    let repo = repository().await;
-    let id: i64 = sqlx::query_scalar(
-        "INSERT INTO mcp_servers (name, type, url) VALUES ('remote', 'sse', 'http://h/sse') \
-         RETURNING id",
-    )
-    .fetch_one(&repo.pool)
-    .await
-    .unwrap();
-
-    for refused in [
-        repo.get_by_id(id).await.map(|_| ()),
-        repo.get_by_name("remote").await.map(|_| ()),
-        repo.list().await.map(|_| ()),
-    ] {
-        let Err(McpRepositoryError::Internal(reason)) = refused else {
-            panic!("an sse row was read: {refused:?}");
-        };
-        assert!(
-            reason.contains("unknown server type 'sse'; expected stdio"),
-            "{reason}"
-        );
-    }
 }
 
 /// Names are kept unique by the service, not by an index: a database that
@@ -437,12 +391,10 @@ async fn a_whole_row_write_leaves_the_remote_flag_as_it_was() {
 #[tokio::test]
 async fn a_manual_row_written_while_open_reads_as_disabled() {
     let repo = repository().await;
-    sqlx::query(
-        "INSERT INTO mcp_servers (name, type, lifecycle, enabled) VALUES ('old', 'stdio', 'manual', 1)",
-    )
-    .execute(&repo.pool)
-    .await
-    .expect("a row an older build wrote");
+    sqlx::query("INSERT INTO mcp_servers (name, lifecycle, enabled) VALUES ('old', 'manual', 1)")
+        .execute(&repo.pool)
+        .await
+        .expect("a row an older build wrote");
 
     let read = repo.get_by_name("old").await.expect("the row");
 

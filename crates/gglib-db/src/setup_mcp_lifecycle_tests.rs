@@ -22,15 +22,13 @@ async fn stored_by_an_older_build(planted: &[(&str, &str, bool)]) -> SqlitePool 
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     create_schema(&pool).await.unwrap();
     for (name, lifecycle, enabled) in planted {
-        sqlx::query(
-            "INSERT INTO mcp_servers (name, type, lifecycle, enabled) VALUES (?, 'stdio', ?, ?)",
-        )
-        .bind(name)
-        .bind(lifecycle)
-        .bind(enabled)
-        .execute(&pool)
-        .await
-        .expect("a planted server");
+        sqlx::query("INSERT INTO mcp_servers (name, lifecycle, enabled) VALUES (?, ?, ?)")
+            .bind(name)
+            .bind(lifecycle)
+            .bind(enabled)
+            .execute(&pool)
+            .await
+            .expect("a planted server");
     }
     pool
 }

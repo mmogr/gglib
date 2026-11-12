@@ -297,7 +297,6 @@ describe('the add sheet', () => {
     await waitFor(() => expect(transport.addMcpServer).toHaveBeenCalledTimes(1));
     expect(transport.addMcpServer).toHaveBeenCalledWith({
       name: 'files',
-      server_type: 'stdio',
       enabled: false,
       lifecycle: 'eager',
       env: [{ key: 'TOKEN', value: 's3cret' }],
@@ -316,7 +315,6 @@ describe('the add sheet', () => {
     await waitFor(() => expect(transport.addMcpServer).toHaveBeenCalledTimes(1));
     expect(transport.addMcpServer).toHaveBeenCalledWith({
       name: 'echo',
-      server_type: 'stdio',
       enabled: true,
       lifecycle: 'lazy',
       env: [],
@@ -443,7 +441,6 @@ describe('Edit', () => {
     await waitFor(() => expect(transport.updateMcpServer).toHaveBeenCalledTimes(1));
     expect(transport.updateMcpServer).toHaveBeenCalledWith(3, {
       name: 'tavily',
-      server_type: 'stdio',
       enabled: false,
       lifecycle: 'eager',
       env: [{ key: 'TOKEN' }, { key: 'ROOT' }],
