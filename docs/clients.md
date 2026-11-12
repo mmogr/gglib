@@ -345,6 +345,12 @@ or in a failed run, is listed with its type, HTTP status and meaning in
 [error-codes.json](error-codes.json). Match on `code`. gglib's tests check
 the file against the source.
 
+Every refusal is `{"error": {"message", "type", "code"}}`, the gglib routes'
+and the guards' included: a path no route serves is `404 unknown_route`, a
+method a route does not take is `405 method_not_allowed`, and a body, query or
+path that does not read is `400 invalid_request`. The MCP gateway at `/mcp`
+answers in JSON-RPC instead.
+
 ## Sampling profiles
 
 Append `:coding` to a model name (e.g. `qwen3.6:coding`) to select a sampling
