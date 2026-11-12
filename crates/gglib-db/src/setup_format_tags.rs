@@ -5,7 +5,8 @@
 //! `format:qwen-xml` and five more), for the proxy's dialect parser to read.
 //! The parser is gone, so nothing reads the tags; each one goes from every
 //! model's `tags`, by its prefix (as written, so `Format:` is a user's), and
-//! the rest keep their order.
+//! the other string tags keep their order. (`json_group_array` rewrites a
+//! non-string element in such a row; gglib only writes strings.)
 //!
 //! `tags` is read leniently, so a row whose text is not a JSON array is left
 //! as it is rather than failing the open; the `CASE` makes sure `json_each`
