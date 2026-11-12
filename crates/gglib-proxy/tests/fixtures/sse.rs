@@ -1,9 +1,9 @@
 //! Static SSE byte fixtures used by the proxy round-trip integration tests.
 //!
 //! Each fixture represents a complete upstream response — the bytes that
-//! `llama-server` (or a model-specific dialect impostor) would send back to
-//! the proxy.  Tests feed these to a mock upstream HTTP server and then
-//! assert the bytes the *external client* receives from the proxy.
+//! `llama-server` would send back to the proxy.  Tests feed these to a mock
+//! upstream HTTP server and then assert the bytes the *external client*
+//! receives from the proxy.
 //!
 //! All fixtures terminate with `data: [DONE]\n\n` exactly as `llama-server`
 //! emits.

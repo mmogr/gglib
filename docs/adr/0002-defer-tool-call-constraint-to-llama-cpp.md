@@ -14,6 +14,16 @@
 > quiet and is watched, as ADR 0022 decided; nothing more is filed upstream;
 > no third dialect is measured for its own sake. See Follow-ups.
 
+> **Amended 2026-11-13.** `constrain.rs` (stage 6) and gglib's dialect parser
+> are deleted. A `"required"` or named `tool_choice` reaches llama-server as
+> the client sent it: llama-server writes the grammar for `"required"` and
+> parses the calls, and a named function is no longer enforced by gglib.
+> Markup llama-server leaves in content reaches the client as text, where the
+> residue scanner counts it. `GGLIB_DISABLE_GRAMMAR`,
+> `GGLIB_DISABLE_DIALECT_PARSER` and `GGLIB_MAX_GRAMMAR_TOOL_CALLS` are gone.
+> Validation and repair (decision 3) stay. The criterion quoted under Context
+> is kept as written, for the readings that cite it.
+
 ## Context
 
 [ADR 0001](0001-runtime-capability-tiers.md) classified `request_pipeline::constrain`

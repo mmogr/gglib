@@ -176,33 +176,12 @@ Positive evidence wins: if a template contains `[SYSTEM_PROMPT]` **and** a gener
    gglib model capabilities <id> --set requires-strict-turns
    ```
 
-### Adding a new architecture (response side)
+### The response side
 
-**Usually: nothing to add.** Response dialects are described by a
-`DialectSpec` (`crates/gglib-core/src/domain/dialect.rs`) — envelope
-markers plus body codecs — which detection derives automatically by
-executing the model's own chat template
-(`crates/gglib-gguf/src/capabilities/template_probe.rs`) and persists on
-the model row. Any family whose template renders tool calls as
-`MARKERS{json}MARKERS` works with zero code: the spec drives the
-`DelimitedToolCallParser` and the decode-time GBNF grammar alike.
-
-Code is only needed for a genuinely new **body codec** — a dialect whose
-tool-call body is not `{"name", "arguments"}` JSON and not the
-`<function=...>` inner XML:
-
-1. Add a variant to `BodyCodec` in `crates/gglib-core/src/domain/dialect.rs`.
-2. Implement its decoder in `crates/gglib-core/src/normalize/parsers/delimited.rs`
-   (`finalize_tool_call` dispatches on the spec's codec list).
-3. Teach the probe's payload validation to recognize the codec's rendering
-   (`template_probe::find_payload`), or — for a builtin-style dialect — add a
-   `format:*` constant to `crates/gglib-core/src/normalize/tags.rs` and map
-   it to a spec in `dialect_for_tags()`
-   (`crates/gglib-core/src/normalize/registry.rs`).
-
-The `normalize` pipeline (shared by the proxy and the completion adapter's
-sends to a llama-server, a benchmark arm's) picks up specs automatically via
-`get_parser()`.
+Nothing to add. gglib does not parse a model's tool calls or reasoning;
+llama-server does. Markup llama-server leaves in the text reaches the client
+as text, where the proxy's drift alarm
+(`crates/gglib-core/src/normalize/residue.rs`) counts it.
 
 ### Capability overrides
 
@@ -700,7 +679,7 @@ gglib installs one release of each engine: llama.cpp's `PINNED_LLAMA_RELEASE` (`
 - **Try a release before the constant moves.** `GGLIB_LLAMA_RELEASE=<tag> gglib config llama install --force` (or `GGLIB_SD_RELEASE` and `config sd`), then `status`; `--force` installs the tag whatever is there. Without the variable, a later release reads as newer than the pin and is kept; an earlier one reads as older, and `gglib serve`, `gglib up` and the app offer the pin in its place.
 - **Check what the bump meets.** CI checks it on a pull request into `main` or in a joined stack. The `CLI Check` legs on Linux and macOS install both pinned engines and run `gglib-runtime`'s ignored tests, which hold every launch flag and fixed value gglib passes to llama-server, llama-bench and sd-server to that binary's own `--help` (CI runs their `--version` directly), and every platform row of both download tables to the pinned release's assets. A failure there names the flag, the value or the row. A launch proves the flags parse, not what a real model does.
 - **Read the recordings' diff.** The same legs start the pinned llama-server on two tiny models and record what it answers into `contracts/upstream/`, report-only for now: a difference shows in the step summary of `Compare with contracts/upstream`. On a bump the workflow commits the new recordings beside the pin; when its body says the recorder did not run, or you move a pin by hand, commit them from `make record-upstream` or from the Linux leg's `upstream-recordings` artifact unpacked into `contracts/upstream/`. A pin moved without them fails `Test (Rust)`, which holds `version.txt` to the pin. Their diff is the reading: new `--help` flags (ADR 0012's survey), new keys in `shape.txt`, and new values in `observed.json`.
-- **Read what upstream did near gglib's own features.** `contracts/upstream/overlaps.json` names each gglib feature an engine could come to do itself (residency, context fitting, the tunnel, template caps, reasoning, the dialect parsers, MCP, downloads, sd's recipes), with its ADR, the gglib paths that hold it, and what of upstream to watch: files, README headings, the identifiers behind its flags and routes, its words, the recorder's readings. The body's "Upstream work near gglib's own features" section (`scripts/engine_pin_overlaps.sh`) lists, per row, what moved near it in the range: a new or changed flag by its identifiers, a source file added under the server folder, a README section that grew, a route that came or went under the row's route prefix, a commit touching the row's files whose subject uses its words, a reading that changed. Whatever matched no row is folded at the end; a path or heading a row names that upstream no longer has is said, and so, above the rows, is a route gglib asks that went. It is a reading, not a check: the question for each line is whether gglib's version can now go, and the answer is an issue or a note in the approval. A new compensation stage gets a row (`make enforce` runs `scripts/check_overlaps.sh`, which holds the rows to the tree and every `Tier A — Compensation` module to a row).
+- **Read what upstream did near gglib's own features.** `contracts/upstream/overlaps.json` names each gglib feature an engine could come to do itself (residency, context fitting, the tunnel, template caps, reasoning, tool calls, MCP, downloads, sd's recipes), with its ADR, the gglib paths that hold it, and what of upstream to watch: files, README headings, the identifiers behind its flags and routes, its words, the recorder's readings. The body's "Upstream work near gglib's own features" section (`scripts/engine_pin_overlaps.sh`) lists, per row, what moved near it in the range: a new or changed flag by its identifiers, a source file added under the server folder, a README section that grew, a route that came or went under the row's route prefix, a commit touching the row's files whose subject uses its words, a reading that changed. Whatever matched no row is folded at the end; a path or heading a row names that upstream no longer has is said, and so, above the rows, is a route gglib asks that went. It is a reading, not a check: the question for each line is whether gglib's version can now go, and the answer is an issue or a note in the approval. A new compensation stage gets a row (`make enforce` runs `scripts/check_overlaps.sh`, which holds the rows to the tree and every `Tier A — Compensation` module to a row).
 - **The in-process engine is recorded beside llama-server.** A phone runs llama.cpp in-process (`gglib-engine-llama`) where a desktop starts llama-server, and `contracts/upstream/llama-inproc/` is what that engine answered the recorder's questions with, on the same models, at the pin: `make record-upstream-inproc` on a Mac, after `make phone-llama` and with `GGLIB_ENGINE_MODELS_DIR` set. `Test (Rust)` holds it to `llama/` on every OS from the committed files: each `shape.txt` line one llama-server answered, the lines gglib reads present, its `version.txt` at the pin, each pinned template's render byte for byte, and tinygemma3's greedy reply the same: its visible pieces, its token count and its `finish_reason`. On a llama.cpp bump the workflow's macOS job takes the Linux job's recordings, builds `llama.xcframework` at the candidate, records the in-process engine beside them and hands both over, so the pull request carries both; when its body says the in-process engine was not recorded, record it with `make record-upstream-inproc`, or from the macOS leg's `upstream-recordings-aarch64-apple-darwin` artifact. A function the candidate renames or retypes fails `phone-llama`; a render or a reply the engine no longer gives alike fails `Test (Rust)`, which names the template or the reading.
 - **Approve each ADR reading that moved, from the pull request.** Every reading in `observed.json` that an ADR's criterion names carries the quote, and the `ADR criterion moved` check fails until `contracts/upstream/llama/approvals.json` agrees with it. When it fails on a pull request from this repository, the job posts one comment with each moved reading, its ADR's criterion and the `/approve` lines to choose from, brackets to fill, and removes the comment once the check passes. Comment on the pull request, one line per reading and the comment starting with the first: `/approve <reading> <note>`. The note says what was decided: `deleting <stage> (#<issue>)`, `keeping, because <reason>`, `probe changed in this PR` when a gglib change moved it, or `first reading, <tag>` for a reading that is new; `/approve <reading> remove` drops an approval whose reading the recording no longer names for an ADR. `approve-reading.yml` hears the owner's comment, writes the file with `scripts/approve_reading.sh`, commits it on the branch and pushes with the App's token, so CI runs again; the comment gets 👀 then 🚀, or one reply naming the bad line. `make adr-readings` runs the check and lists the readings no recording takes.
 - **Take a real picture before merging a stable-diffusion.cpp bump**, with ADR 0018's render-beside-a-chat pair. A llama.cpp bump needs no chat by hand, and neither the squash message nor the ADR logs carry readings: the recordings are the record. On a llama.cpp bump the workflow also puts Qwen3.5-0.8B through three probes (a tool call, split reasoning, an image in a tool message) into `contracts/upstream/llama/tier3/`, which no check reads.

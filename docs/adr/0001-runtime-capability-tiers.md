@@ -80,6 +80,10 @@ its own module docs; this list is the index, not the source of truth.
 one lands it is Tier A, and the tag is noted here so that classification is
 decided before the code exists rather than after.
 
+> **Amended 2026-11-13.** Tier A is empty: `delimited`, `oneshot`,
+> `constrain` and `format:think-tag` are deleted (ADR 0002 and ADR 0022, same
+> date). Tier C keeps `normalize::residue`; `grammar_enforced` is gone.
+
 ### Tier B — Policy
 
 llama.cpp will never do this, structurally. **Permanently gglib's.**

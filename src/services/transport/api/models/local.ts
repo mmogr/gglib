@@ -153,7 +153,7 @@ export async function listComponentChoices(id: ModelId): Promise<ComponentChoice
 
 /**
  * Re-run capability detection over a model's stored metadata
- * (`gglib model retag`). `full` rebuilds the system-tag namespace.
+ * (`gglib model retag`). `full` rebuilds the auto-generated tags.
  */
 export async function retagModel(modelId: number, full = false): Promise<RetagResponse> {
   const body: RetagBody = { full };

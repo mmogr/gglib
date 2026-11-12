@@ -83,8 +83,8 @@ use crate::{Door, LlmCompletionAdapter};
 ///   port, which is another machine's proxy (ADR 0012). It carries the key
 ///   the endpoint demands and, for another machine, the name of whose port
 ///   it is, so a refusal of that key can say which machine refused it. A
-///   send through it is proxied: the endpoint shapes it, parses the model's
-///   dialect and admits it on its queue.
+///   send through it is proxied: the endpoint shapes it and admits it on its
+///   queue.
 /// * `attachments` — where the images a message names by id are read from,
 ///   just before each request is sent, and where the images an MCP tool
 ///   returns are stored.

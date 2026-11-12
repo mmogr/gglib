@@ -4,8 +4,8 @@
 deltas back until the call is complete, judges it and re-issues; a
 `stream: false` turn has nothing to hold back, since its body is buffered
 anyway, so it is judged once read and re-issued the same way. Both re-issues
-are non-streaming, and both answers are read through the model's dialect
-before they are judged. `RepairContext` carries the decision on the streaming
+are non-streaming, and both answers are judged as llama-server sent them.
+`RepairContext` carries the decision on the streaming
 path (`sse_stream.rs`); the buffered path hands the same `RepairTurn` to
 `forward_unary`.
 **Decided by:** [ADR 0002](adr/0002-defer-tool-call-constraint-to-llama-cpp.md), findings 4–5.
@@ -38,7 +38,7 @@ already has".
 ```
                     ┌──────────────────────────────┐
    client request   │  request pipeline (existing) │
-   tool_choice=auto │  stages 1-6, unchanged       │
+   tool_choice=auto │  unchanged                   │
         │           └──────────────┬───────────────┘
         │                          ▼
         │                    llama-server
@@ -53,7 +53,7 @@ already has".
         │                    ┌─────┴─────┐
         │                    ▼           ▼
         │                 forward    re-issue same messages
-        │                            (required, or a second draw)
+        │                            (tool_choice=required)
         │                                 │
         │                                 ▼
         │                          llama-server (grammar installed)
@@ -76,11 +76,7 @@ already owns forwarding.
 | `validate_tool_calls` — `(tools, tool_calls) -> Verdict` | `gglib-core::request_pipeline::validate` | Pure function over `serde_json::Value`. No HTTP, no runtime. Testable exhaustively against schema fixtures. |
 | `decide` — forward the response, or re-issue it with which body | `gglib-proxy::repair` | The re-issue body is built from the request as forwarded upstream, so it sits beside the code that sends it. Makes no request itself. |
 | Repair executor — re-issue, swap, record | `gglib-proxy::forward` (streamed) and `gglib-proxy::forward_unary` (buffered), sharing `repair::read_second_draw` | Only the proxy can issue a second upstream request. |
-| Counters / dashboard fields | `gglib-proxy::metrics` | Same shape as `dialect_residue_total` and `grammar_enforced`. |
-
-Sitting the validator in `request_pipeline` beside `constrain` is deliberate:
-they are the two halves of the same concern (make the call well-formed), and
-one is being retired while the other takes over. Adjacency makes that legible.
+| Counters / dashboard fields | `gglib-proxy::metrics` | Same shape as `dialect_residue_total`. |
 
 ## Validation
 
@@ -131,14 +127,10 @@ All four must hold. Anything else forwards unchanged.
 2. The **original request's `tool_choice` was `auto`** (or absent). If the
    client already asked for `required` and the result is still invalid,
    re-issuing with `required` changes nothing — the grammar was already
-   installed and the violation is something it does not cover. The
-   exception is a turn gglib's own grammar constrained (below): that grammar
-   is weaker than upstream's, so its call is judged, and a violation is drawn
-   again under the same grammar.
+   installed and the violation is something it does not cover.
 3. The response is not already a repair attempt. **One attempt, never a loop.**
 4. Repair is enabled (`Settings.tool_call_repair`, default on, with a
-   `GGLIB_DISABLE_TOOL_REPAIR` env kill switch matching the convention of
-   `GGLIB_DISABLE_GRAMMAR`).
+   `GGLIB_DISABLE_TOOL_REPAIR` env kill switch).
 
    Settable as `gglib config set tool-call-repair false`, or from
    Settings › Endpoint › What gglib does to requests › Repair broken tool
@@ -155,9 +147,8 @@ saving.
 
 ## The repair request
 
-On an `auto` turn, identical to the original except `tool_choice: "required"`;
-on a turn gglib's own grammar constrained, the forwarded body again (below).
-Same messages, same sampling, same model, same session. Rationale for each
+Identical to the forwarded request except `tool_choice: "required"`, sent
+non-streaming. Same messages, same sampling, same model, same session. Rationale for each
 choice:
 
 - **Same messages.** The prefix is unchanged, so the prompt cache serves the
@@ -170,8 +161,8 @@ choice:
 
 **The re-issue is a fresh generation, not a correction.** Nothing carries the
 first call's function name or arguments into the second request: the model is
-asked the same question again under a stronger constraint (or, on a turn
-gglib's own grammar constrained, under the same one), and it may answer with a
+asked the same question again under a stronger constraint, and it may answer
+with a
 different tool, or the same tool with different arguments, not only the same
 call in a valid shape. What repair guarantees is that the call the client
 receives validates against the schema, not that it is the call the model first
@@ -179,33 +170,11 @@ meant. The client never saw the held-back call, so it has nothing to undo; but
 text the model streamed before the call, which the client did see, may no
 longer match the call that follows it.
 
-### One interaction that must not be missed
+### The re-issue skips the pipeline
 
-`request_pipeline::constrain` (stage 6) fires on `tool_choice: "required"` for
-dialect models, installs gglib's own grammar, and **rewrites `tool_choice` to
-`"none"`** — because llama-server rejects a custom grammar combined with
-`tools`. If the repair request goes through the pipeline unchanged, stage 6
-converts it into a request that asks for no tool call at all, and repair
-silently does nothing.
-
-The repair request therefore never goes back through the pipeline: it is the
+The repair request never goes back through the request pipeline: it is the
 forwarded body with `tool_choice` set to `"required"`, sent as it is, so
 upstream's grammar is the one that fires.
-
-### A turn gglib's own grammar constrained
-
-When stage 6 installed gglib's grammar, the forwarded body already carries it,
-with `tool_choice: "none"`, and llama-server refuses a custom grammar beside
-`required`. So the re-issue cannot switch to upstream's grammar. It is the same
-body sent again, non-streaming: a second draw under the same constraint, not a
-stronger one, and it may choose a different call. A draw that repeats the same
-call gains nothing, and `choose` then keeps the original.
-
-llama-server parses no tool calls under `tool_choice: "none"`, so the second
-draw comes back as the model's dialect markup in `content`. It is read the way
-a non-streaming response is, by the same dialect parser, before it is judged.
-Any re-issue's answer is read that way; for a model with no dialect, that
-changes nothing.
 
 ## When repair fails
 
@@ -247,9 +216,8 @@ on a repaired turn.
 **One accepted wart.** A turn that emits text *then* a bad tool call will show
 the client attempt 1's text followed by attempt 2's call. The text was the
 model's preamble and the call is now correct, which beats the alternative; and
-under `tool_choice: "required"` the re-issue emits no text of its own, and a
-second draw under gglib's grammar answers in markup that is read as the call,
-not as text. Measured turns on the `auto` path emitted empty content anyway.
+under `tool_choice: "required"` the re-issue emits no text of its own.
+Measured turns on the `auto` path emitted empty content anyway.
 
 This is acceptable because a tool call is not consumable incrementally: no
 agentic client can act on half a call, and every one of them reassembles the
@@ -264,12 +232,10 @@ the inert-Tier-A trap ADR 0002 flagged.
 
 A `stream: false` turn needs none of the above. The body is buffered before
 anything is answered, so there is nothing to hold back and nothing to
-interleave: `forward_unary` reads the body, runs it through the dialect parser
-once, judges the first choice's call and, on a violation, sends the same
-re-issue the streaming path would — `tool_choice: "required"` on an `auto`
-turn, a second draw under the same grammar on a turn stage 6 constrained.
-From the send onward the two paths share `repair::read_second_draw`, which
-reads the answer through the dialect before `choose` judges it. The client is
+interleave: `forward_unary` reads the body, judges the first choice's call
+and, on a violation, sends the same re-issue the streaming path would,
+`tool_choice: "required"`. From the send onward the two paths share
+`repair::read_second_draw`, which reads the answer `choose` judges. The client is
 answered with whichever body validates, the original when the draw does not,
 and the dashboard's repair counters and the per-model ledger record the
 attempt as they do for a streamed turn.
@@ -291,8 +257,8 @@ as much as Tier B behaviour:
 - A `warn!` on repair failure naming the model, the violation kinds, and the
   llama.cpp build.
 - On a `stream: false` turn the dialect-residue flag describes the first
-  answer, which is what was normalised, even when a repair then answers the
-  client with a second draw; the streamed path's flag describes the frames
+  answer, which is what was scanned, even when a repair then answers the
+  client with the re-issue's; the streamed path's flag describes the frames
   the client received. Telemetry only, and the overlap (residue, a violation
   and a successful draw on one turn) is narrow.
 
@@ -307,15 +273,10 @@ is how that gets measured in production rather than in a `--verbose` log.
   kind, plus the nested-type case the harness got wrong.
 - Repair trigger: unit tests over `(verdict, original tool_choice, is_retry)`
   asserting fires/does-not-fire.
-- Stage-6 bypass: `the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`
-  asserts that stage 6 would rewrite a repair body's `tool_choice` to `"none"`,
-  which is why the re-issue never goes back through the pipeline; the
-  second-draw tests pin the turn stage 6 did constrain.
 - Streaming: integration test that tool-call deltas are withheld until
   `finish_reason` and that text deltas are not.
 - Non-streaming, end to end (`forward_unary_repair_tests.rs`): a bad call is
-  re-issued and the client gets the valid one; a turn gglib's grammar
-  constrained is answered in markup and read as a call; a valid call is not
+  re-issued and the client gets the valid one; a valid call is not
   re-issued; a re-issue upstream rejects falls open to the first answer and
   counts as an attempt; repair off leaves the body as it came.
 - End-to-end: replay a recorded Llama 3.2 `auto` response with
@@ -367,25 +328,18 @@ This module is Tier B in [ADR 0001](adr/0001-runtime-capability-tiers.md)'s
 terms — policy, which that ADR asks no deletion criterion of, unlike Tier A.
 Judging a call against the schema the client sent, and re-issuing rather than
 handing the client something its executor will reject, is gglib's and stays.
-What can shrink is how often either half has anything to fire on, and the two
-halves retire separately:
-
-- The `auto` path exists because llama.cpp installs no grammar for
-  `tool_choice: "auto"` on some model/build pairs. No criterion deletes it
-  outright; it stops firing model by model as chat templates constrain more of
-  them.
-- The second draw under gglib's own grammar exists because stage 6 constrains
-  a dialect model more weakly than upstream's own grammar would. It goes when
-  stage 6 goes, on the deletion criterion `request_pipeline::constrain`
-  already carries.
+What can shrink is how often it has anything to fire on. It exists because
+llama.cpp installs no grammar for `tool_choice: "auto"` on some model/build
+pairs. No criterion deletes it outright; it stops firing model by model as
+chat templates constrain more of them.
 
 None of that is visible in a score, because a repaired call reaches the client
 as the repaired call. `repairs_attempted` in the report is what anyone will
 notice it by — but a zero is a reason to look rather than a reading, because
 several unlike facts produce one: a model that broke no schema, a model whose
-`auto` turns upstream already constrains, a client that asked for `required`
-on a turn gglib's own grammar did not constrain, a turn with no tools in it or
-none called. `Skipped` names them apart in the decision; the counter does not.
+`auto` turns upstream already constrains, a client that asked for `required`,
+a turn with no tools in it or none called. `Skipped` names them apart in the
+decision; the counter does not.
 Qwen3.8-27B's zero above is one of the first two — nothing it emitted failed
 validation — and the run does not say which.
 

@@ -3,8 +3,7 @@
 //! each request's body and answers from a script.
 //!
 //! The first request offers that tool alone and demands a call. The second
-//! carries no `tools`, no `tool_choice` and no grammar, for a model that
-//! writes its calls in a dialect as for any other, and a call its reply
+//! carries no `tools`, no `tool_choice` and no grammar, and a call its reply
 //! makes all the same is not run. Its last message is the composer's
 //! instruction for the reply, as a `user` message after the tool's result.
 //! A run that demands nothing sends what it always did.

@@ -59,7 +59,7 @@
     },
     "readings": ["caps.*.supports_preserve_reasoning"]
   },
-  "dialect-normalise": {
+  "tool-calls": {
     "engine": "llama",
     "adr": "0002",
     "paths": ["crates/gglib-core/src/normalize", "crates/gglib-proxy/src/repair.rs"],

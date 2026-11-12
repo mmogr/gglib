@@ -559,9 +559,8 @@ fn empty_scores(weights: &ScoreWeights) -> ArmScores {
 /// The arm is the *entire* difference between the two runs:
 ///
 /// - **Raw** bypasses the pipeline (`with_raw_passthrough`) and carries a
-///   passthrough model context, so no shaping, no per-model sampling, no
-///   dialect parsing and no grammar happen — llama-server's own defaults
-///   and wire format, verbatim.
+///   passthrough model context, so no shaping and no per-model sampling
+///   happen — llama-server's own defaults and wire format, verbatim.
 /// - **Gglib** carries the catalog-resolved [`ModelContext`], which switches
 ///   on exactly what the proxy would do for this model.
 ///
