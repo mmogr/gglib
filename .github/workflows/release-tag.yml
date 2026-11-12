@@ -10,11 +10,11 @@
 # tags a stable version itself, from the candidate's tag, so a promotion
 # never comes this way.
 #
-# main cuts the next minor's candidates and a line its own version's
-# patches, and scripts/release_lines.py holds each branch to its own before
-# anything is tagged: a line tags nothing outside its X.Y, and main tags
-# nothing inside a line that has a branch. A line runs this file as the line
-# holds it, since ci.yml calls it by path.
+# main cuts the next minor's or major's candidates and a line its own
+# version's patches, and scripts/release_lines.py holds each branch to its
+# own before anything is tagged: a line tags nothing outside its X.Y, and
+# main tags nothing inside a line that has a branch. A line runs this file
+# as the line holds it, since ci.yml calls it by path.
 #
 # Run by hand, it tags without waiting for CI: the same steps on the branch
 # it is run on, as it is now, and then the release PR workflow for that

@@ -206,6 +206,11 @@ pub enum AgentEvent {
     Error {
         /// Human-readable description of the failure.
         message: String,
+        /// The code the model's endpoint refused the request with, as it
+        /// wrote it, when that is what ended the loop. The run ends with
+        /// the same code when it is one of gglib's own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        code: Option<String>,
     },
 }
 

@@ -124,7 +124,7 @@ pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_t
             println!();
         }
 
-        AgentEvent::Error { message } => {
+        AgentEvent::Error { message, .. } => {
             eprintln!("\n  ✗  {message}");
         }
 
@@ -221,6 +221,7 @@ mod tests {
     fn error_does_not_panic() {
         smoke(&AgentEvent::Error {
             message: "something went wrong".into(),
+            code: None,
         });
     }
 

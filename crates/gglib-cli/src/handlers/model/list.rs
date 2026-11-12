@@ -4,10 +4,10 @@
 //! rows are [`ModelOps::list_with_query`]'s, the listing `GET /api/models`
 //! answers with, so a flag here and a filter on the library page narrow by
 //! one rule; a single table function renders them. A speed column (`⚡ t/s`)
-//! is shown only when at least one returned model has benchmark data. A
-//! `Size` column says what each model takes on disk (weights, projector and
-//! components), an `Images` column says which models are linked to a
-//! projector, and the `Draws` column names an image model's family, and the components it still needs
+//! is shown only when at least one returned model has a latest generation
+//! speed. A `Size` column says what each model takes on disk (weights,
+//! projector and components), an `Images` column says which models are
+//! linked to a projector, and the `Draws` column names an image model's family, and the components it still needs
 //! linked before it can draw. While this machine is paired, the list ends
 //! with one line on how the paired machine stands, which asks that machine
 //! nothing.
@@ -124,6 +124,11 @@ fn draws(model: &GuiModel) -> String {
     format!("{}, needs {}", family.label(), missing.join(", "))
 }
 
+/// The generation speed a row's speed cell prints: the latest measured.
+fn latest_speed(model: &GuiModel) -> Option<f64> {
+    model.benchmark_summary.as_ref()?.latest_tg_tps
+}
+
 /// The table, as text. The ID column is as wide as the widest id, so a
 /// four-digit id does not push its row out of line with the rest, and the
 /// `Draws` column is as wide as its widest entry, so the roles an image
@@ -133,7 +138,9 @@ fn draws(model: &GuiModel) -> String {
     reason = "one table in two layouts, with and without the speed column; the rows read whole"
 )]
 fn render_table(models: &[GuiModel]) -> String {
-    let show_speed = models.iter().any(|m| m.benchmark_summary.is_some());
+    // The column shows when a row has a speed to print, not merely a summary:
+    // a library benchmarked only by compare runs has summaries without one.
+    let show_speed = models.iter().any(|m| latest_speed(m).is_some());
     let id_width = models
         .iter()
         .map(|m| m.id.to_string().len())
@@ -221,11 +228,7 @@ fn render_table(models: &[GuiModel]) -> String {
         };
 
         if show_speed {
-            let speed = model
-                .benchmark_summary
-                .as_ref()
-                .and_then(|s| s.latest_tg_tps)
-                .map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
+            let speed = latest_speed(model).map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
             let _ = writeln!(
                 out,
                 "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<10} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",

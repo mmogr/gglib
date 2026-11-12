@@ -384,7 +384,7 @@
       "code": "agent_error",
       "type": null,
       "status": null,
-      "meaning": "The agent loop failed; the run's last event says why."
+      "meaning": "The agent loop failed; the run's last event says why. A run whose model's server refused its request ends with the refusal's code instead when it is one of these."
     },
     {
       "code": "transcript_not_saved",

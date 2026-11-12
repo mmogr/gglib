@@ -115,7 +115,7 @@ fn errors(events: &[AgentEvent]) -> Vec<&str> {
     events
         .iter()
         .filter_map(|event| match event {
-            AgentEvent::Error { message } => Some(message.as_str()),
+            AgentEvent::Error { message, .. } => Some(message.as_str()),
             _ => None,
         })
         .collect()

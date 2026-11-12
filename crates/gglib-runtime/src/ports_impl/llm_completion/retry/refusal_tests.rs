@@ -1,4 +1,5 @@
-//! What a turn's caller is told when the upstream refuses the key it sent.
+//! What a turn's caller is told when the upstream refuses the key it sent,
+//! or refuses the turn.
 //!
 //! One step past classification: not how a refusal is sorted, but which
 //! sentence comes out of [`send_with_retry`] once it has been — and that the
@@ -13,6 +14,7 @@
 
 use std::time::Duration;
 
+use gglib_core::ports::UpstreamRefusal;
 use gglib_core::retry::RetryPolicy;
 use reqwest::Client;
 
@@ -37,6 +39,11 @@ fn paired_machine() -> Door {
 
 /// Serve one refusal and return the message its caller ends up with.
 async fn refused(status: u16, reason: &str, body: &str, far: Option<&Door>) -> String {
+    refusal(status, reason, body, far).await.to_string()
+}
+
+/// Serve one refusal and return the error its caller ends up with.
+async fn refusal(status: u16, reason: &str, body: &str, far: Option<&Door>) -> anyhow::Error {
     let server = TestServer::start(vec![json(status, reason, body)]).await;
     send_with_retry(
         &Client::new(),
@@ -49,7 +56,6 @@ async fn refused(status: u16, reason: &str, body: &str, far: Option<&Door>) -> S
     )
     .await
     .expect_err("a refusal is never a response to stream")
-    .to_string()
 }
 
 /// The defect this file exists for.
@@ -138,15 +144,17 @@ async fn a_far_machines_other_failures_are_not_blamed_on_the_key() {
 
     assert_eq!(
         message,
-        "502 Bad Gateway backend_unreachable: the serving side could not reach its backend",
+        "desk answered 502 Bad Gateway backend_unreachable: the serving side could not reach its \
+         backend",
         "only a refused key is reported as a refused key"
     );
 }
 
 /// A paired machine's model that cannot read images is refused by that
 /// machine's proxy, not here, and its refusal reaches the caller whole: the
-/// code, and the sentence with the model it names and the command that
-/// links a projector.
+/// code, kept as the error's own beside the sentence, and the sentence with
+/// the model it names and the command that links a projector, after the
+/// machine's name, since the command is to be run there.
 #[tokio::test]
 async fn a_far_machines_refusal_of_an_image_arrives_whole() {
     use gglib_core::request_pipeline::CannotReadImages;
@@ -160,10 +168,92 @@ async fn a_far_machines_refusal_of_an_image_arrives_whole() {
     ))
     .unwrap();
 
-    let message = refused(400, "Bad Request", &body, Some(&paired_machine())).await;
+    let error = refusal(400, "Bad Request", &body, Some(&paired_machine())).await;
+
+    let refusal = error
+        .downcast_ref::<UpstreamRefusal>()
+        .expect("a refusal with a code is typed");
+    assert_eq!(
+        (refusal.status, refusal.code.as_str()),
+        (400, "model_cannot_read_images")
+    );
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "{NAME} answered 400 Bad Request invalid_request_error (model_cannot_read_images): \
+             {sentence}"
+        )
+    );
+}
+
+/// The same refusal from this machine's endpoint names no machine.
+#[tokio::test]
+async fn this_machines_refusal_of_an_image_names_no_machine() {
+    use gglib_core::request_pipeline::CannotReadImages;
+    use gglib_proxy::models::ErrorResponse;
+
+    let sentence = CannotReadImages.message("7");
+    let body = serde_json::to_string(&ErrorResponse::with_code(
+        sentence.clone(),
+        "invalid_request_error",
+        CannotReadImages.code(),
+    ))
+    .unwrap();
+    let local = Door {
+        root_url: String::new(),
+        key: None,
+        name: None,
+    };
+
+    let error = refusal(400, "Bad Request", &body, Some(&local)).await;
 
     assert_eq!(
-        message,
+        error
+            .downcast_ref::<UpstreamRefusal>()
+            .map(|r| r.code.as_str()),
+        Some("model_cannot_read_images")
+    );
+    assert_eq!(
+        error.to_string(),
         format!("400 Bad Request invalid_request_error (model_cannot_read_images): {sentence}")
     );
+}
+
+/// A paired machine still loading its model, retried until the policy gives
+/// up, keeps the far proxy's code and status and names the machine, so the
+/// run ends with `model_loading` rather than `agent_error`.
+#[tokio::test]
+async fn a_far_refusal_retried_until_the_policy_gives_up_keeps_its_code() {
+    let body = r#"{"error":{"message":"Model is loading","type":"service_unavailable","code":"model_loading"}}"#;
+    let server = TestServer::start(vec![json(503, "Service Unavailable", body)]).await;
+    let one_attempt = RetryPolicy {
+        max_attempts: 1,
+        ..RetryPolicy::default()
+    };
+
+    let error = send_with_retry(
+        &Client::new(),
+        &format!("{}/v1/chat/completions", server.base_url),
+        Some(&paired_machine()),
+        &serde_json::json!({"model": "test"}),
+        Duration::from_secs(5),
+        &one_attempt,
+        None,
+    )
+    .await
+    .expect_err("a model still loading after the last attempt is an error");
+
+    let refusal = error
+        .downcast_ref::<UpstreamRefusal>()
+        .expect("a refusal with a code is typed, retried or not");
+    assert_eq!(
+        (refusal.status, refusal.code.as_str()),
+        (503, "model_loading")
+    );
+    let message = error.to_string();
+    assert!(
+        message.starts_with(&format!("{NAME} answered 503 Service Unavailable")),
+        "{message}"
+    );
+    assert!(message.contains("(gave up after 1 attempts"), "{message}");
 }

@@ -49,6 +49,9 @@ mod run_preview_tests;
 #[path = "run_privacy_tests.rs"]
 mod run_privacy_tests;
 #[cfg(test)]
+#[path = "run_refusal_tests.rs"]
+mod run_refusal_tests;
+#[cfg(test)]
 #[path = "run_rows_tests.rs"]
 mod run_rows_tests;
 #[cfg(test)]

@@ -90,6 +90,8 @@ export interface AgentFinalAnswerEvent {
 export interface AgentErrorEvent {
   type: 'error';
   message: string;
+  /** The code the model's endpoint refused the request with, when that ended the loop. */
+  code?: string;
 }
 
 /**

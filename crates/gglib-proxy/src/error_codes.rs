@@ -8,19 +8,24 @@
 //! as writing a code, and what the scan cannot see, is in `error_codes_scan`.
 //!
 //! A code relayed from llama-server or from a far machine is not gglib's and
-//! is not here. To add a code, write it, add its row here, and run
+//! is not here; [`is_gglib_code`] asks which a code is, for an agent run
+//! that ends with the code its model's endpoint refused it with. To add a
+//! code, write it, add its row here, and run
 //! `GGLIB_WRITE_ERROR_CODES=1 cargo test -p gglib-proxy error_codes` to
 //! rewrite the file.
 
 use serde::Serialize;
 
+#[cfg(test)]
 /// The published file's shape. A change that would break a client that reads
 /// version 0 is a new version.
 const VERSION: u32 = 0;
 
+#[cfg(test)]
 /// The published file, from the repository root.
 const PUBLISHED: &str = "docs/error-codes.json";
 
+#[cfg(test)]
 const ABOUT: &str = "The error codes gglib writes itself, rather than relays from \
 llama-server, on its proxy and the daemon's runs. The proxy refuses with \
 {\"error\":{\"message\":...,\"type\":...,\"code\":...}}, whatever refused: a route, a guard, a \
@@ -172,10 +177,11 @@ const CODES: &[ErrorCode] = &[
     row("stagnation_detected", UNTYPED, None, "The agent gave the same reply too often, so the run was stopped."),
     row("too_many_tool_calls", UNTYPED, None, "The model asked for more tool calls at once than are allowed."),
     row("turn_too_long", UNTYPED, None, "The model's turn was cut off at its token limit while it wrote a tool call, or before it wrote any text, so the agent run stopped rather than use half of it; retry, or turn thinking off."),
-    row("agent_error", UNTYPED, None, "The agent loop failed; the run's last event says why."),
+    row("agent_error", UNTYPED, None, "The agent loop failed; the run's last event says why. A run whose model's server refused its request ends with the refusal's code instead when it is one of these."),
     row("transcript_not_saved", UNTYPED, None, "The reply could not be saved to its conversation."),
 ];
 
+#[cfg(test)]
 /// The published file's whole text.
 fn render() -> String {
     #[derive(Serialize)]
@@ -194,17 +200,30 @@ fn render() -> String {
     text
 }
 
+/// Whether `code` is one of gglib's own codes, a row of the table, rather
+/// than one relayed from llama-server or the tunnel, or one this build does
+/// not know.
+#[must_use]
+pub fn is_gglib_code(code: &str) -> bool {
+    CODES.iter().any(|row| row.code == code)
+}
+
+#[cfg(test)]
 #[path = "error_codes_tokens.rs"]
 mod error_codes_tokens;
 
+#[cfg(test)]
 #[path = "error_codes_items.rs"]
 mod error_codes_items;
 
+#[cfg(test)]
 #[path = "error_codes_scan.rs"]
 mod error_codes_scan;
 
+#[cfg(test)]
 #[path = "error_codes_tests.rs"]
 mod error_codes_tests;
 
+#[cfg(test)]
 #[path = "error_codes_scan_tests.rs"]
 mod error_codes_scan_tests;
