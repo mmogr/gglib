@@ -102,6 +102,17 @@ pub enum AgentError {
         completion_tokens: Option<u32>,
     },
 
+    /// The model's endpoint refused the request with a code of its own
+    /// ([`UpstreamRefusal`](crate::ports::UpstreamRefusal)). The loop emitted
+    /// `message` as its last `error` event, with `code` beside it.
+    #[error("{message}")]
+    Refused {
+        /// The endpoint's `error.code`, as it wrote it.
+        code: String,
+        /// The loop's sentence for it.
+        message: String,
+    },
+
     /// An unrecoverable internal error inside the loop implementation.
     #[error("internal agent error: {0}")]
     Internal(String),

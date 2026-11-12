@@ -203,7 +203,7 @@ pub(super) fn run_error(error: &AgentError) -> RunError {
             "turn_too_long",
             "The model's turn ran too long and was cut off, so the run was stopped.",
         ),
-        AgentError::Internal(_) => (
+        AgentError::Refused { .. } | AgentError::Internal(_) => (
             "agent_error",
             "The agent loop failed; the reply's last event says why.",
         ),

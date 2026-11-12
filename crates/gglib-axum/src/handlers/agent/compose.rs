@@ -277,6 +277,7 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
             tracing::error!(error = %e, "agent: failed to serialise AgentEvent; emitting fallback error");
             let typed_fallback = AgentEvent::Error {
                 message: "serialization failed".to_owned(),
+                code: None,
             };
             serde_json::to_string(&typed_fallback).unwrap_or_else(|_| {
                 r#"{"type":"error","message":"serialization failed"}"#.to_owned()
