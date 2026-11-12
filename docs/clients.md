@@ -4,7 +4,10 @@ The endpoint is `http://127.0.0.1:8080/v1`. No API key is required on
 loopback — enter any placeholder if your client insists. Use the Model ID
 `gglib model list` prints for the model (shown below as `qwen3.6`): its name,
 unless two models share one. In `/v1/models` it is an entry's `id`; the
-entry's `gglib_id` is gglib's own catalog id for it. `gglib proxy test <model>`
+entry's `gglib_id` is gglib's own catalog id for it. The list's `gglib` object
+says which gglib answered: `{"version": "…", "features": [...]}`, the features
+being those of gglib's own routes this process serves (`chats`, `runs`,
+`drawing`, `status`). `gglib proxy test <model>`
 prints these recipes with your endpoint's address and that model's id filled
 in, as `gglib up` does when it finishes. opencode does not read `/v1/models`,
 so its recipe lists each model you want to pick from by its id.
