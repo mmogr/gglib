@@ -11,7 +11,7 @@ use tower::ServiceExt;
 
 use common::harness::test_app;
 use common::origin::authed;
-use gglib_axum::{DaemonOptions, ServerConfig};
+use gglib_axum::ServerConfig;
 use gglib_core::CorsConfig;
 
 #[tokio::test]
@@ -111,9 +111,7 @@ async fn local_only_allows_ipv6_localhost() {
 }
 
 #[tokio::test]
-async fn the_daemons_defaults_bind_loopback_and_leave_the_database_path_to_resolve() {
-    assert_eq!(DaemonOptions::default().host, "127.0.0.1");
-
+async fn the_daemons_defaults_leave_the_database_path_to_resolve() {
     let config = ServerConfig::with_defaults().expect("defaults should build");
 
     // The production arm of `db_path`. Every other test in this crate passes

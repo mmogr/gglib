@@ -7,7 +7,6 @@ use anyhow::Result;
 use gglib_app_services::{RemoteJoinBody, RemoteJoinResponse, RemoteStatus};
 use gglib_core::domain::{ReachState, UNNAMED_PAIRED};
 
-use crate::bootstrap::CliContext;
 use crate::daemon_client;
 
 /// What `gglib remote join` was asked for.
@@ -24,8 +23,8 @@ pub(crate) struct JoinArgs {
 }
 
 /// Execute `gglib remote join`.
-pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+pub(crate) async fn join(args: JoinArgs) -> Result<()> {
+    let handle = daemon_client::ensure_daemon().await?;
 
     let first_pairing = args
         .pairing
@@ -111,8 +110,8 @@ fn joined_lines(joined: &RemoteJoinResponse) -> Vec<String> {
 }
 
 /// Execute `gglib remote disconnect`.
-pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
-    let Ok(handle) = daemon_client::running(ctx).await else {
+pub(crate) async fn disconnect() -> Result<()> {
+    let Ok(handle) = daemon_client::running().await else {
         eprintln!("  Daemon is not running \u{2014} nothing is connected.");
         return Ok(());
     };

@@ -25,7 +25,7 @@ use crate::presentation::style::make_spinner;
 /// the endpoint did not answer: the block is printed first when there is
 /// one, then the command exits non-zero, so a script can tell.
 pub(crate) async fn execute(ctx: &CliContext, model: Option<&str>) -> Result<()> {
-    let handle = daemon_client::running(ctx).await.map_err(|_| {
+    let handle = daemon_client::running().await.map_err(|_| {
         anyhow!("gglib isn't running, so nothing can be served: `gglib proxy` starts it")
     })?;
     let status = handle.proxy_status().await?;

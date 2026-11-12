@@ -1,9 +1,7 @@
 //! Settling the proxy's bearer token at bind time.
 //!
 //! Split from the supervisor for the file-size gate; the rule it encodes is
-//! the supervisor's and is documented on the function. The daemon settles the
-//! token of a management API bound off loopback with the same function, so
-//! one machine key is read, minted and stored one way.
+//! the supervisor's and is documented on the function.
 
 use std::sync::Arc;
 
@@ -25,7 +23,7 @@ use tracing::{info, warn};
 /// A minted token is persisted rather than kept for the process: a client
 /// configured once should keep working across restarts, and a token that
 /// changed every launch would train people to turn the feature off.
-pub async fn resolve_api_key(
+pub(super) async fn resolve_api_key(
     configured: Option<String>,
     host: &str,
     settings_repo: &Arc<dyn SettingsRepository>,
@@ -60,9 +58,8 @@ pub async fn resolve_api_key(
     //
     // A key that was not saved still guards this run. Refusing to start
     // would be worse, and an unsaved key beats an open endpoint on a
-    // network. It is `GeneratedUnsaved`: a daemon's banner prints such a key,
-    // its only copy, and a proxy prints none, so its clients need a key set
-    // by hand.
+    // network. It is `GeneratedUnsaved`, which nothing prints, so its
+    // clients need a key set by hand.
     if stored.is_none() {
         warn!("generated an API key but settings were unreadable, so it was not saved");
         return (Some(key), ApiKeySource::GeneratedUnsaved);

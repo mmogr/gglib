@@ -141,7 +141,7 @@ async fn with_no_daemon_of_this_library_nothing_is_sent_or_said() {
         (other, None),
         (refusing, Some(TOKEN)),
     ] {
-        let said = beside(port, token, tell_daemon(&ctx, Some(3))).await;
+        let said = beside(port, token, tell_daemon(Some(3))).await;
         assert_eq!(said, None, "{port} {token:?}");
     }
     assert!(asked_other.lock().unwrap().is_empty());
@@ -166,7 +166,7 @@ async fn a_daemon_that_is_not_told_is_a_warning_and_the_size_is_stored() {
 
     for (status, size) in [(Some("500 Internal Server Error"), 5), (None, 6)] {
         let (port, asked) = daemon(status);
-        let said = beside(port, Some(TOKEN), tell_daemon(&ctx, Some(size))).await;
+        let said = beside(port, Some(TOKEN), tell_daemon(Some(size))).await;
         let said = said.unwrap_or_else(|| panic!("{status:?}: no warning"));
         assert!(
             said.starts_with(

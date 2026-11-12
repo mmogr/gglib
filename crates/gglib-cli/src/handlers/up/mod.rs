@@ -88,7 +88,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // fitted value at launch. Sending `None` lets the launch fit it.
     let default_context = settings.default_context_size;
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let body = start_body(args.port, default_context);
     let started = proxy::start_on(&handle, &body, &settings).await?;
 

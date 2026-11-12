@@ -75,7 +75,7 @@ pub(crate) async fn dispatch(
     target: Target,
 ) -> Result<()> {
     let done = dispatch_with(ctx, &one_shot_model_ops(ctx), command, target).await;
-    ctx.library_changes.tell_daemon(ctx).await;
+    ctx.library_changes.tell_daemon().await;
     done
 }
 

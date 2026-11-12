@@ -1,9 +1,8 @@
 //! Tests for the key a command sends: the proxy's key as it is stored, and the
-//! handle that carries the daemon's credential to every call.
+//! handle that carries the daemon's token to every call.
 //!
-//! Which of the token, the operator's key and the stored key the daemon is
-//! presented is `auth_tests.rs`; here it is that the one resolution reaches
-//! the wire.
+//! How the token is read is `auth_tests.rs`; here it is that it reaches the
+//! wire, and that the stored key never does.
 
 use std::io::Write as _;
 use std::net::TcpListener;
@@ -12,8 +11,9 @@ use std::sync::{Arc, Mutex};
 use gglib_core::Settings;
 use gglib_test_http::blocking;
 
+use super::auth::STAND_IN_TOKEN;
 use super::*;
-use crate::bootstrap::test_context;
+use crate::bootstrap::{CliContext, test_context};
 
 /// The CLI's context over `dir`'s database, with `key` stored as the proxy's.
 async fn context(dir: &tempfile::TempDir, key: Option<&str>) -> CliContext {
@@ -118,72 +118,70 @@ async fn the_proxy_key_is_the_flag_and_then_the_stored_key_when_it_is_not_blank(
     }
 }
 
-/// With no token to read and no operator's key, the daemon is presented the
-/// stored key, and nothing when that is blank: the rule every command's
-/// handle is built by.
+/// The daemon is presented its token and never the stored key: with no token
+/// to read, nothing is sent.
 #[tokio::test]
-async fn with_no_token_and_no_operators_key_the_daemon_is_presented_the_stored_key() {
-    let nothing_else = auth::Local {
-        env: None,
-        token_path: None,
-    };
-    for (stored, presented) in [
-        (Some("the-stored-key"), Some("the-stored-key")),
-        (Some(" "), None),
-        (None, None),
-    ] {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let ctx = context(&dir, stored).await;
+async fn the_daemon_is_presented_its_token_and_never_the_stored_key() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let _ctx = context(&dir, Some("the-stored-key")).await;
+    let client = gglib_proxy::loopback::client;
 
-        let sent = nothing_else.credential(auth::proxy_key(&ctx, None)).await;
+    let none = STAND_IN_TOKEN.scope(None, async { DaemonHandle::new(client()) });
+    let some = STAND_IN_TOKEN.scope(Some(TOKEN.to_owned()), async {
+        DaemonHandle::new(client())
+    });
 
-        assert_eq!(sent.as_deref(), presented, "stored {stored:?}");
-    }
+    assert_eq!(none.await.api_key, None);
+    assert_eq!(some.await.api_key.as_deref(), Some(TOKEN));
+}
+
+/// The token a test's daemon has left.
+const TOKEN: &str = "the-daemons-token";
+
+/// `run`, with `port` for the daemon's and [`TOKEN`] left under the data root.
+async fn beside<T>(port: u16, run: impl Future<Output = T>) -> T {
+    STAND_IN_TOKEN
+        .scope(Some(TOKEN.to_owned()), STAND_IN_PORT.scope(port, run))
+        .await
 }
 
 /// A command that asks for the running daemon is handed one that carries the
-/// credential, and a call made through it sends that credential.
+/// token, and a call made through it sends that token.
 #[tokio::test]
-async fn a_running_daemon_is_handed_back_carrying_the_credential_every_call_sends() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir, Some("the-stored-key")).await;
-    let presented = auth::daemon_api_key(&ctx).await;
-    assert!(presented.is_some(), "a key is stored, so one is presented");
+async fn a_running_daemon_is_handed_back_carrying_the_token_every_call_sends() {
+    gglib_core::paths::isolate_data_root();
     let (port, asked) = stand_in(daemon_health());
 
-    let Ok(handle) = STAND_IN_PORT.scope(port, running(&ctx)).await else {
+    let Ok(handle) = beside(port, running()).await else {
         panic!("the stand-in answers as a daemon");
     };
-    assert_eq!(handle.api_key, presented);
-    STAND_IN_PORT
-        .scope(port, handle.setup_status())
+    assert_eq!(handle.api_key.as_deref(), Some(TOKEN));
+    beside(port, handle.setup_status())
         .await
         .expect("the stand-in answers");
 
     let last = asked.lock().unwrap().last().cloned();
-    let bearer = presented.map(|key| format!("Bearer {key}"));
     assert_eq!(
         last,
-        Some((format!("GET {} HTTP/1.1", paths::SETUP_STATUS_PATH), bearer))
+        Some((
+            format!("GET {} HTTP/1.1", paths::SETUP_STATUS_PATH),
+            Some(format!("Bearer {TOKEN}"))
+        ))
     );
 }
 
 /// A command that needs the daemon is handed the one already running, with
-/// the same credential, and launches nothing.
+/// its token, and launches nothing.
 #[tokio::test]
-async fn a_command_that_needs_the_daemon_is_handed_the_running_one_with_the_credential() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir, Some("the-stored-key")).await;
-    let presented = auth::daemon_api_key(&ctx).await;
-    assert!(presented.is_some(), "a key is stored, so one is presented");
+async fn a_command_that_needs_the_daemon_is_handed_the_running_one_with_its_token() {
+    gglib_core::paths::isolate_data_root();
     let (port, asked) = stand_in(daemon_health());
 
-    let handle = STAND_IN_PORT
-        .scope(port, ensure_daemon(&ctx))
+    let handle = beside(port, ensure_daemon())
         .await
         .expect("the stand-in answers as a daemon");
 
-    assert_eq!(handle.api_key, presented);
+    assert_eq!(handle.api_key.as_deref(), Some(TOKEN));
     assert_eq!(asked.lock().unwrap().len(), 1, "one probe, and no wait");
 }
 
@@ -192,12 +190,11 @@ async fn a_command_that_needs_the_daemon_is_handed_the_running_one_with_the_cred
 /// a test stops short of.
 #[tokio::test]
 async fn a_command_that_needs_the_daemon_launches_one_only_when_nothing_holds_the_port() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir, None).await;
+    gglib_core::paths::isolate_data_root();
     let (foreign, _) = stand_in(r#"{"service":"something-else"}"#.to_owned());
 
-    let held = STAND_IN_PORT.scope(foreign, ensure_daemon(&ctx)).await;
-    let free = STAND_IN_PORT.scope(nobody(), ensure_daemon(&ctx)).await;
+    let held = STAND_IN_PORT.scope(foreign, ensure_daemon()).await;
+    let free = STAND_IN_PORT.scope(nobody(), ensure_daemon()).await;
 
     let held = format!("{:#}", held.err().expect("another program holds the port"));
     assert!(held.contains("in use by another program"), "{held}");
@@ -206,30 +203,15 @@ async fn a_command_that_needs_the_daemon_launches_one_only_when_nothing_holds_th
     assert!(free.contains("could not launch the gglib daemon"), "{free}");
 }
 
-/// A handle built without asking the daemon anything carries the credential
-/// too: `remote disable` and the model list's summary probe for themselves.
-#[tokio::test]
-async fn a_handle_built_without_a_probe_carries_the_credential() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir, Some("the-stored-key")).await;
-    let presented = auth::daemon_api_key(&ctx).await;
-    assert!(presented.is_some(), "a key is stored, so one is presented");
-
-    let handle = DaemonHandle::new(&ctx, gglib_proxy::loopback::client()).await;
-
-    assert_eq!(handle.api_key, presented);
-}
-
 /// With nothing on the daemon's port, or something that is not a gglib
 /// daemon, there is no handle, and the caller is told which it was.
 #[tokio::test]
 async fn without_a_daemon_running_says_what_is_there_instead() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir, Some("the-stored-key")).await;
+    gglib_core::paths::isolate_data_root();
     let (foreign, _) = stand_in(r#"{"service":"something-else"}"#.to_owned());
 
-    let nothing = STAND_IN_PORT.scope(nobody(), running(&ctx)).await;
-    let another = STAND_IN_PORT.scope(foreign, running(&ctx)).await;
+    let nothing = STAND_IN_PORT.scope(nobody(), running()).await;
+    let another = STAND_IN_PORT.scope(foreign, running()).await;
 
     assert_eq!(nothing.err(), Some(Absent::NotRunning));
     assert_eq!(another.err(), Some(Absent::ForeignServer));

@@ -14,7 +14,6 @@ use tokio::sync::mpsc;
 use super::engine;
 use super::llama_events::{render_build_events, render_install_events};
 use super::llama_install::go_ahead;
-use crate::bootstrap::CliContext;
 use crate::sd_commands::SdCommand;
 use crate::utils::input;
 use gglib_core::domain::{EngineState, RuntimeKind};
@@ -34,10 +33,10 @@ const CLONING: Option<&str> = Some("Cloning stable-diffusion.cpp repository...")
 const NOW_USABLE: &str = "You can now serve an image model with 'gglib serve <model>'.";
 
 /// Dispatch an `sd` sub-command to its handler.
-pub(crate) async fn dispatch(ctx: &CliContext, command: SdCommand) -> Result<()> {
+pub(crate) async fn dispatch(command: SdCommand) -> Result<()> {
     match command {
         SdCommand::Install { force, build } => {
-            engine::install(ctx, RuntimeKind::StableDiffusion, force, build).await
+            engine::install(RuntimeKind::StableDiffusion, force, build).await
         }
         SdCommand::Status => {
             for line in status_lines(&sd_status()?) {
@@ -45,9 +44,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: SdCommand) -> Result<()>
             }
             Ok(())
         }
-        SdCommand::Uninstall { yes } => {
-            engine::uninstall(ctx, RuntimeKind::StableDiffusion, yes).await
-        }
+        SdCommand::Uninstall { yes } => engine::uninstall(RuntimeKind::StableDiffusion, yes).await,
     }
 }
 

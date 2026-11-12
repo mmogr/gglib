@@ -50,7 +50,7 @@ const fn shown(secret: SettingSecret) -> &'static str {
     match secret {
         SettingSecret::ProxyApiKey => {
             "  This machine's proxy key is on stdout. It is a secret: whoever holds it can use \
-             this machine's proxy, and its daemon when that is shared on the network."
+             this machine's proxy."
         }
         SettingSecret::RemotePairingKey => {
             "  This device's key for the machine it joined is on stdout. It is a secret: \
@@ -66,7 +66,7 @@ fn nothing_stored(secret: SettingSecret) -> String {
     match secret {
         SettingSecret::ProxyApiKey => format!(
             "no proxy key is stored. `gglib config settings set --proxy-api-key <key>` stores \
-             one, and a proxy or daemon bound off loopback mints one. The key this device was \
+             one, and a proxy bound off loopback mints one. The key this device was \
              given when it paired is `{}`",
             SettingSecret::RemotePairingKey.name()
         ),

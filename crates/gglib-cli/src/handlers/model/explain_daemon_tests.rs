@@ -82,7 +82,7 @@ async fn explained(
     profile: Option<&str>,
 ) -> Result<LaunchExplanationDto> {
     let ops = one_shot_model_ops(ctx);
-    beside(port, token, explanation(ctx, &ops, model.id, profile)).await
+    beside(port, token, explanation(&ops, model.id, profile)).await
 }
 
 /// With a model loaded that the launch would unload, the daemon's plan says
