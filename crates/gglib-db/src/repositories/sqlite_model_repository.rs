@@ -363,6 +363,9 @@ impl ModelRepository for SqliteModelRepository {
         self.with_components(stored).await
     }
 
+    /// A column read leniently keeps its stored text unless the edit changes
+    /// its value, so text this build cannot read survives an edit to another
+    /// field. Clearing such a value keeps it too; it already reads as none.
     async fn update(&self, model: &Model) -> Result<(), RepositoryError> {
         let metadata_json = serde_json::to_string(&model.metadata)
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
@@ -396,14 +399,17 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|caps| serde_json::to_string(caps).ok());
 
-        // The row and its components change together or not at all.
+        // The row and its components change together or not at all, and the
+        // row read here is the one written.
         let mut tx = self
             .pool
-            .begin()
+            .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
-        let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, variant_label = ?, file_type = ?, bits_per_weight = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ?, image_family = ? WHERE id = ?"
+        let held = held_row(&mut tx, model.id).await?;
+        let defaults_changed = model.inference_defaults != held.inference_defaults;
+        sqlx::query(
+            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, variant_label = ?, file_type = ?, bits_per_weight = ?, context_length = ?, metadata = IIF(?, ?, metadata), hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = IIF(?, ?, download_date), last_update_check = IIF(?, ?, last_update_check), tags = IIF(?, ?, tags), capabilities = ?, inference_defaults = IIF(?, ?, inference_defaults), defaults_origin = IIF(?, ?, defaults_origin), server_defaults = IIF(?, ?, server_defaults), dialect_spec = IIF(?, ?, dialect_spec), template_caps = IIF(?, ?, template_caps), image_family = IIF(?, ?, image_family) WHERE id = ?"
         )
             .bind(&model.name)
             // Normalised exactly as `insert` does. `find_by_path` is a plain
@@ -419,31 +425,36 @@ impl ModelRepository for SqliteModelRepository {
             .bind(model.file_type.map(|file_type| i64::from(file_type.0)))
             .bind(model.bits_per_weight)
             .bind(model.context_length.map(context_length_column))
+            .bind(model.metadata != held.metadata)
             .bind(&metadata_json)
             .bind(&model.hf_repo_id)
             .bind(&model.hf_commit_sha)
             .bind(&model.hf_filename)
+            .bind(model.download_date != held.download_date)
             .bind(model.download_date.as_ref().map(std::string::ToString::to_string))
+            .bind(model.last_update_check != held.last_update_check)
             .bind(model.last_update_check.as_ref().map(std::string::ToString::to_string))
+            .bind(model.tags != held.tags)
             .bind(&tags_json)
             .bind(i64::from(model.capabilities.bits()))
+            .bind(defaults_changed)
             .bind(&inference_defaults_json)
+            // The origin is written with its defaults, so new defaults never
+            // sit beside an origin stored for the old ones.
+            .bind(defaults_changed || model.defaults_origin != held.defaults_origin)
             .bind(&defaults_origin_str)
+            .bind(model.server_defaults != held.server_defaults)
             .bind(&server_defaults_json)
+            .bind(model.dialect_spec != held.dialect_spec)
             .bind(&dialect_spec_json)
+            .bind(model.template_caps != held.template_caps)
             .bind(&template_caps_json)
+            .bind(model.image_family != held.image_family)
             .bind(model.image_family.map(ImageFamily::as_str))
             .bind(model.id)
             .execute(&mut *tx)
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
-
-        if result.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound(format!(
-                "Model with ID {}",
-                model.id
-            )));
-        }
 
         model_component_rows::replace(&mut tx, model.id, &model.components).await?;
         tx.commit()
@@ -464,6 +475,22 @@ impl ModelRepository for SqliteModelRepository {
 
         Ok(())
     }
+}
+
+/// The stored row `update` rewrites, read on its transaction.
+async fn held_row(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: i64,
+) -> Result<Model, RepositoryError> {
+    let row = sqlx::query(&format!(
+        "SELECT {MODEL_SELECT_COLUMNS} FROM models WHERE id = ?"
+    ))
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|e| RepositoryError::Storage(e.to_string()))?
+    .ok_or_else(|| RepositoryError::NotFound(format!("Model with ID {id}")))?;
+    row_to_model(&row)
 }
 
 #[cfg(test)]
