@@ -27,13 +27,11 @@ use crate::presentation::style;
 pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result<()> {
     match command {
         RemoteCommand::Enable {
-            allow_mcp,
             relay,
             no_discovery,
             no_qr,
             invite,
         } => {
-            enable::refuse_allow_mcp(&allow_mcp)?;
             enable(
                 ctx,
                 EnableArgs {

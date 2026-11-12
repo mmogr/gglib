@@ -260,21 +260,13 @@ pub enum ModelCommand {
         /// Unsloth Dynamic quant like "UD-Q4_K_M")
         #[arg(short, long)]
         quantization: Option<String>,
-        /// List available quantizations for the model
+        /// List available quantizations for the model, and download nothing.
+        ///
+        /// A private repository needs `HF_TOKEN` set in this shell. A download
+        /// runs on the daemon, which reads `HF_TOKEN` where it started, once,
+        /// as it starts.
         #[arg(long)]
         list_quants: bool,
-        /// Not currently honoured: the daemon owns the download and registers
-        /// the model when it completes. Downloads still run; use
-        /// `gglib model remove <id>` afterwards to drop the row and keep the file.
-        #[arg(long)]
-        skip_db: bool,
-        /// `HuggingFace` token for private models (for `--list-quants` only).
-        ///
-        /// For downloads, set the `HF_TOKEN` environment variable instead, where
-        /// the gglib daemon starts: the daemon runs the download, and reads the
-        /// variable once, as it starts.
-        #[arg(long)]
-        token: Option<String>,
     },
 
     /// Check for updates to downloaded models

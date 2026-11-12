@@ -267,7 +267,7 @@ name the servers a session opened, in a list kept apart from them. The first
 start of this build flags each server that list named on its own row, once,
 when remote access was on, and only a name exactly one server has, when that
 server is stdio.
-`gglib remote enable --allow-mcp` is now refused, and says to run
+`gglib remote enable` no longer takes `--allow-mcp`; run
 `gglib mcp allow-remote <names>` instead. A machine enabled with the older
 `/mcp` switch still comes back with no MCP server open.
 

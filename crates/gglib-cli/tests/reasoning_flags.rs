@@ -23,12 +23,7 @@ use flag_surface::{long_flags_at, sampling_flags};
 fn sampling_of(argv: &[&str]) -> SamplingArgs {
     let cli = Cli::try_parse_from(argv).unwrap_or_else(|e| panic!("{argv:?} should parse: {e}"));
     match cli.command {
-        Some(
-            Commands::Serve { sampling, .. }
-            | Commands::Proxy { sampling, .. }
-            | Commands::Chat { sampling, .. }
-            | Commands::Question { sampling, .. },
-        ) => sampling,
+        Some(Commands::Serve { sampling, .. } | Commands::Proxy { sampling, .. }) => sampling,
         _ => panic!("unexpected command for {argv:?}"),
     }
 }
@@ -48,13 +43,8 @@ fn refusal(argv: &[&str]) -> String {
 /// in the same place. The flag set is derived in `cli_parity`; what is checked
 /// here is that the parsed value actually reaches the field.
 #[test]
-fn all_four_inference_commands_land_both_controls() {
-    let invocations: [&[&str]; 4] = [
-        &["gglib", "serve", "1"],
-        &["gglib", "proxy"],
-        &["gglib", "chat", "3"],
-        &["gglib", "q", "hello"],
-    ];
+fn serve_and_proxy_land_both_controls() {
+    let invocations: [&[&str]; 2] = [&["gglib", "serve", "1"], &["gglib", "proxy"]];
 
     for base in invocations {
         let mut argv = base.to_vec();
@@ -68,6 +58,27 @@ fn all_four_inference_commands_land_both_controls() {
             "for {base:?}"
         );
         assert_eq!(sampling.reasoning_budget_tokens, Some(2048), "for {base:?}");
+    }
+}
+
+/// A chat keeps neither control, so `chat` and `q` refuse both rather than
+/// take a value that would do nothing: `chat --thinking off` stops a chat's
+/// thinking.
+#[test]
+fn chat_and_q_refuse_both_controls() {
+    for base in [&["gglib", "chat", "3"][..], &["gglib", "q", "hello"]] {
+        for flag in [
+            ["--reasoning-effort", "xhigh"],
+            ["--reasoning-budget-tokens", "0"],
+        ] {
+            let mut argv = base.to_vec();
+            argv.extend(flag);
+            let message = refusal(&argv);
+            assert!(
+                message.contains(&format!("unexpected argument '{}'", flag[0])),
+                "{argv:?}: {message}"
+            );
+        }
     }
 }
 

@@ -16,7 +16,9 @@ use crate::model_commands::ModelCommand;
 use crate::profile_args::ProfileArgs;
 use crate::proxy_bind_args::ProxyBindArgs;
 use crate::remote_flag::RemoteFlag;
-use crate::shared_args::{AccessArgs, CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use crate::shared_args::{
+    AccessArgs, CacheArgs, ChatSamplingArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions,
+};
 pub(crate) use crate::subcommands::{
     AttachmentCommand, ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand,
 };
@@ -128,7 +130,7 @@ pub enum Commands {
         #[arg(long = "system-prompt", short = 's')]
         system_prompt: Option<String>,
         #[command(flatten)]
-        sampling: SamplingArgs,
+        sampling: ChatSamplingArgs,
         #[command(flatten)]
         profile: ProfileArgs,
         /// Disable tool access (plain LLM chat without filesystem or MCP tools)
@@ -188,7 +190,7 @@ pub enum Commands {
         #[arg(long, short = 'Q')]
         quiet: bool,
         #[command(flatten)]
-        sampling: SamplingArgs,
+        sampling: ChatSamplingArgs,
         #[command(flatten)]
         profile: ProfileArgs,
         /// Disable tool access (plain LLM question without filesystem or MCP tools)

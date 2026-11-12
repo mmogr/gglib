@@ -22,7 +22,7 @@ use crate::handlers::agent_chat::repl::{Session, run_repl};
 use crate::handlers::agent_chat::resume_settings::require_a_model;
 use crate::handlers::agent_chat::sampling_warning;
 use crate::handlers::agent_chat::turn::Shown;
-use crate::shared_args::SamplingArgs;
+use crate::shared_args::ChatSamplingArgs;
 use crate::target::Target;
 
 /// System prompt for the agentic question mode.
@@ -60,7 +60,7 @@ pub(crate) struct QuestionArgs {
     pub show_prompt: bool,
     pub verbose: bool,
     pub quiet: bool,
-    pub sampling: SamplingArgs,
+    pub sampling: ChatSamplingArgs,
     /// Named sampling profile, the flag form of a `{model}:{profile}` suffix.
     pub profile: Option<String>,
 }

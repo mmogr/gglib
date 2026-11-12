@@ -2,7 +2,7 @@
 
 use std::io::IsTerminal as _;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use gglib_app_services::{RemoteEnableBody, RemoteEnableResponse};
 
 use super::pairing_tui::{self, Outcome};
@@ -20,20 +20,6 @@ pub(crate) struct EnableArgs {
     pub no_qr: bool,
     /// Offer a pairing code as well, so a first run is one command.
     pub invite: bool,
-}
-
-/// What `enable --allow-mcp` is answered with. The flag named the MCP servers
-/// a session opened to paired devices; each server now says so itself.
-pub(super) const ALLOW_MCP_GONE: &str = "--allow-mcp is gone: run `gglib mcp allow-remote <names>`";
-
-/// Refuse `--allow-mcp`, before the daemon is asked anything: a script that
-/// still passes it learns where the grant went, and no tunnel comes up
-/// opening less than it asked for.
-pub(super) fn refuse_allow_mcp(allow_mcp: &[String]) -> Result<()> {
-    if allow_mcp.is_empty() {
-        return Ok(());
-    }
-    bail!(ALLOW_MCP_GONE)
 }
 
 /// Execute `gglib remote enable`.

@@ -173,9 +173,9 @@ carries them.
 
 ### Sampling
 
-A chat keeps five sampling flags, `--temperature`, `--top-p`, `--top-k`,
-`--max-tokens` and `--repeat-penalty`, and `--profile`. Any other sampling
-flag does not take effect, and the session says so on stderr.
+`chat` and `q` take five sampling flags, `--temperature`, `--top-p`,
+`--top-k`, `--max-tokens` and `--repeat-penalty`, and `--profile`, and the
+chat keeps them. The other sampling flags are `serve`'s and `proxy`'s.
 
 - Each turn sends the five as a client's sampling. The endpoint takes them
   only while **Let clients set sampling** is on (`gglib config set
@@ -185,8 +185,8 @@ flag does not take effect, and the session says so on stderr.
 - Each turn names the chat's profile on its model, `<id>:<profile>`, and the
   endpoint applies it whether or not it trusts clients' sampling. Under
   `--remote` the profile is the paired machine's.
-- `--reasoning-budget-tokens` is not kept: `--thinking off` stops a chat's
-  thinking.
+- There is no `--reasoning-budget-tokens` here: `--thinking off` stops a
+  chat's thinking.
 
 ### `/draw`
 

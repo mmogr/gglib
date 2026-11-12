@@ -10,25 +10,20 @@
 //! header or sizes a budget.
 
 use std::fmt::Write as _;
-use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use gglib_app_services::types::{HfQuantization, HfQuantizationsResponse};
 use gglib_core::download::GgufFileRole;
-use gglib_core::ports::huggingface::{HELPER_FILES_REFUSAL, HfClientPort};
+use gglib_core::ports::huggingface::HELPER_FILES_REFUSAL;
 
 use super::companions;
 use crate::bootstrap::CliContext;
 
-/// Print the listing of `model_id`, through a Hub client carrying `token`
-/// when one is given (a private repository), else this command's own.
-pub(super) async fn execute(ctx: &CliContext, model_id: &str, token: Option<&str>) -> Result<()> {
+/// Print the listing of `model_id`, through this command's Hub client, which
+/// carries the `HF_TOKEN` of this shell (a private repository needs one).
+pub(super) async fn execute(ctx: &CliContext, model_id: &str) -> Result<()> {
     println!("Finding available GGUF quantizations for {model_id}...");
-    let hf: Arc<dyn HfClientPort> = match token {
-        Some(token) => Arc::new(gglib_download::cli_exec::hub_client(Some(token.to_owned()))),
-        None => Arc::clone(&ctx.hf_client),
-    };
-    let listing = companions::listing_ops_with(ctx, hf, None)
+    let listing = companions::listing_ops(ctx, None)
         .get_model_quantizations(model_id)
         .await
         .with_context(|| format!("Failed to fetch quantizations for {model_id}"))?;

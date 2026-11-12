@@ -149,3 +149,24 @@ fn model_update_can_clear_one_stored_parameter() {
         "the all-or-nothing form stays: {update:?}"
     );
 }
+
+/// A chat keeps five sampling flags and sends them with each turn; `chat`
+/// and `q` take those five and no other, so a flag that would do nothing is
+/// refused where it is typed.
+#[test]
+fn chat_and_q_take_only_the_five_sampling_flags_a_chat_keeps() {
+    let kept = owned(&[
+        "max-tokens",
+        "repeat-penalty",
+        "temperature",
+        "top-k",
+        "top-p",
+    ]);
+    for command in ["chat", "question"] {
+        let taken: Vec<String> = long_flags(command)
+            .into_iter()
+            .filter(|flag| sampling_flags().contains(flag))
+            .collect();
+        assert_eq!(taken, kept, "`{command}`'s sampling flags");
+    }
+}

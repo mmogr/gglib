@@ -156,19 +156,14 @@ named there runs the session, on a new chat or one resumed with `--continue`,
 and the chat remembers it from the session's start, before its first message.
 It is written by the function the daemon's runs write it with, so the page's
 switch and a paired device read it as their own. `--thinking off` runs with a
-budget of `0`, whatever `--reasoning-budget-tokens` says, and `--thinking on`
-runs with the budget typed. With no `--thinking` the command line says
-nothing: a chat switched off runs with a budget of `0`, whatever
-`--reasoning-budget-tokens` says, and stays switched off. A resume whose
-typed budget is set aside that way says so once, in a line on stderr: the
-chat has Thinking switched off, the budget was not applied, and
-`--thinking on` switches it back. A chat the CLI starts remembers `off` only
-when `--thinking off` says it.
+budget of `0`, and `--thinking on` with the budget the hierarchy resolves.
+With no `--thinking` the command line says nothing, and a chat switched off
+stays switched off. A chat the CLI starts remembers `off` only when
+`--thinking off` says it. Neither `chat` nor `q` takes `--reasoning-effort`
+or `--reasoning-budget-tokens`.
 
 `gglib q` has no `--thinking`. It asks one question of a chat it saves only
-once the answer is in, and it saves none of its command line's sampling with
-that chat. Pass `--reasoning-budget-tokens 0` to stop the question's
-thinking, and switch the chat it saved with
+once the answer is in; switch the chat it saved with
 `gglib chat --continue <id> --thinking off`.
 
 On the chat page the choice is the **Thinking** switch in the composer,
@@ -451,8 +446,9 @@ published recipe is the exception: it is stored, and the first edit replaces
 it, so clearing that model's defaults gives back the `reasoning` recipe for a
 `reasoning`-tagged model and nothing for any other.
 
-All the same flags are available on `gglib serve`, `gglib chat`, and `gglib q` as
-per-invocation overrides that sit at the top of the hierarchy.
+All the same flags are available on `gglib serve` and `gglib proxy` as
+per-invocation overrides that sit at the top of the hierarchy. `gglib chat` and
+`gglib q` take five of them, which the chat keeps ([chat](cli/chat.md#sampling)).
 
 ## Where a model's defaults came from
 
@@ -746,16 +742,12 @@ profile that sets a temperature claims the whole trio, and a bare
 `--presence-penalty` beside it is discarded:
 
 ```bash
-gglib chat 7 --profile chat --presence-penalty 1.2
-# warning: --presence-penalty did not take effect …
+gglib serve 7 --profile chat --presence-penalty 1.2   # the penalty is discarded
 ```
 
-Pass `--temperature` as well to set them together. `gglib chat` and `gglib q`
-warn whenever a flag is passed over this way — including without a profile,
-since a model with stored `inference_defaults` naming a temperature does the
-same thing. The warning comes with the session's first message, which is when
-the hierarchy is resolved. It is suppressed under `gglib q -Q`, which promises
-silence on stderr.
+Pass `--temperature` as well to set them together. A model with stored
+`inference_defaults` naming a temperature does the same thing without a
+profile.
 
 `gglib serve` does not warn: its flags are resolved per request by the proxy,
 against a settings snapshot the CLI cannot see at launch, so any warning it

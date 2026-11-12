@@ -26,7 +26,7 @@ fn question(no_tools: bool, notes: &std::path::Path) -> QuestionArgs {
         show_prompt: false,
         verbose: false,
         quiet: true,
-        sampling: SamplingArgs::default(),
+        sampling: ChatSamplingArgs::default(),
         profile: None,
     }
 }

@@ -239,10 +239,10 @@ becomes a live monitor:
 - `search --images` and `browse --images` look for image models.
 - Private and gated repositories need `HF_TOKEN` in the environment. A
   command and the daemon each read it once, as they start: `search`,
-  `browse`, `check-updates` and `upgrade` ask the Hub with the command's own,
-  while a queued download, a repair's among them, runs on the daemon and uses
-  the daemon's, so the daemon must have been started with it.
-  `download --list-quants` takes `--token` instead.
+  `browse`, `check-updates`, `upgrade` and `download --list-quants` ask the
+  Hub with the command's own, while a queued download, a repair's among them,
+  runs on the daemon and uses the daemon's, so the daemon must have been
+  started with it.
 
 The transfer engine is described in the
 [download module](../../crates/gglib-cli/src/handlers/model/download/README.md).

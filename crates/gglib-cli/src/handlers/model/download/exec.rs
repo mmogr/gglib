@@ -21,11 +21,6 @@ pub(crate) struct DownloadArgs<'a> {
     pub model_id: &'a str,
     pub quantization: Option<&'a str>,
     pub list_quants: bool,
-    /// `HuggingFace` token for private models.
-    ///
-    /// Used only for `--list-quants`. A download runs on the daemon, with the
-    /// `HF_TOKEN` of the environment the daemon started in.
-    pub token: Option<&'a str>,
 }
 
 /// Execute the download command.
@@ -37,7 +32,7 @@ pub(crate) struct DownloadArgs<'a> {
 pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     // --list-quants: the daemon's listing, printed, and nothing queued.
     if args.list_quants {
-        return list_quants::execute(ctx, args.model_id, args.token).await;
+        return list_quants::execute(ctx, args.model_id).await;
     }
 
     let handle = daemon_client::ensure_daemon(ctx).await?;
