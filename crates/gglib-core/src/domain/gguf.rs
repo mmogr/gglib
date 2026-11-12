@@ -3,7 +3,7 @@
 //! This module contains the domain-facing types for GGUF file metadata
 //! and model capabilities. Parsing logic lives in `gglib-gguf`.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::fmt;
 
 // =============================================================================
@@ -14,7 +14,6 @@ bitflags::bitflags! {
     /// Known model capabilities detected from GGUF metadata.
     ///
     /// Uses bitflags for compile-time safety on stable capabilities.
-    /// Unknown/experimental capabilities go in `GgufCapabilities::extensions`.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
     pub struct CapabilityFlags: u32 {
         /// Model supports reasoning/thinking (e.g., DeepSeek R1, QwQ).
@@ -41,15 +40,10 @@ bitflags::bitflags! {
 }
 
 /// Model capabilities detected from GGUF metadata.
-///
-/// Combines stable known capabilities (bitflags) with forward-compatible
-/// extension strings for new/experimental capabilities.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GgufCapabilities {
     /// Known stable capabilities (compile-time checked).
     pub flags: CapabilityFlags,
-    /// Unknown/experimental capabilities (forward-compatible).
-    pub extensions: BTreeSet<String>,
 }
 
 impl GgufCapabilities {
@@ -58,7 +52,6 @@ impl GgufCapabilities {
     pub const fn empty() -> Self {
         Self {
             flags: CapabilityFlags::empty(),
-            extensions: BTreeSet::new(),
         }
     }
 
@@ -116,13 +109,6 @@ impl GgufCapabilities {
         if self.has_embedding() {
             // triggers --embeddings auto-enable
             tags.push(super::capability_tags::EMBEDDING.to_string());
-        }
-
-        // Add extension tags
-        for ext in &self.extensions {
-            if !tags.contains(ext) {
-                tags.push(ext.clone());
-            }
         }
 
         tags
@@ -335,7 +321,6 @@ mod tests {
     fn test_capabilities_flags() {
         let caps = GgufCapabilities {
             flags: CapabilityFlags::REASONING | CapabilityFlags::TOOL_CALLING,
-            extensions: BTreeSet::new(),
         };
         assert!(caps.has_reasoning());
         assert!(caps.has_tool_calling());
@@ -343,20 +328,6 @@ mod tests {
         let tags = caps.to_tags();
         assert!(tags.contains(&"reasoning".to_string()));
         assert!(tags.contains(&"agent".to_string()));
-    }
-
-    #[test]
-    fn test_capabilities_extensions() {
-        let mut extensions = BTreeSet::new();
-        extensions.insert("experimental-feature".to_string());
-
-        let caps = GgufCapabilities {
-            flags: CapabilityFlags::empty(),
-            extensions,
-        };
-
-        let tags = caps.to_tags();
-        assert!(tags.contains(&"experimental-feature".to_string()));
     }
 
     #[test]

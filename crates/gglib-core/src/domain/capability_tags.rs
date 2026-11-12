@@ -231,7 +231,6 @@ mod tests {
     fn all_covers_every_tag_the_producer_can_write() {
         let caps = crate::domain::GgufCapabilities {
             flags: crate::domain::CapabilityFlags::all(),
-            ..crate::domain::GgufCapabilities::empty()
         };
         let produced = caps.to_tags();
 
