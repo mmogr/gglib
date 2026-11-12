@@ -10,11 +10,11 @@ names a model by the id or name shown here.
 $ gglib model list
 Found 3 model(s):
 
-ID  Name                      Model ID               Params   ⚡ t/s      Arch         Quant    Size       Context    Images  Draws Added                File Path
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-3   Qwen3.8-27B               Qwen3.8-27B            27.0B    --         qwen35       Q8_0     27.05 GiB  262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
-2   Qwen3-4B-Instruct-2507    Qwen3-4B-Instruct-2507 4.0B     --         qwen3        Q8_0     3.99 GiB   262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
-1   Qwen3-30B-A3B             Qwen3-30B-A3B          30.0B    --         qwen3moe     Q4_K_M   17.28 GiB  40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf
+ID  Name                      Model ID               Params   Arch         Quant    Size       Context    Images  Draws Added                File Path
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+3   Qwen3.8-27B               Qwen3.8-27B            27.0B    qwen35       Q8_0     27.05 GiB  262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
+2   Qwen3-4B-Instruct-2507    Qwen3-4B-Instruct-2507 4.0B     qwen3        Q8_0     3.99 GiB   262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
+1   Qwen3-30B-A3B             Qwen3-30B-A3B          30.0B    qwen3moe     Q4_K_M   17.28 GiB  40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf
 ```
 <!-- /snippet -->
 

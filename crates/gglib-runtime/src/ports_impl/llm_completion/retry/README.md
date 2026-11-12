@@ -81,4 +81,10 @@ sentence carries no status and none of the upstream's own wording, so the
 rendered reason is written to the log at that point rather than left to the
 caller.
 
+Any other terminal failure, and one retried until the policy gave up, is the
+rendered reason, after the paired machine's name on its door (`studio answered 400 Bad Request …`), so advice such as
+`gglib model update <model> --projector` reads as advice for that machine. When
+the body wrote a `code`, the error is an `UpstreamRefusal` carrying it, and an
+agent run ends with that code when it is one of gglib's own.
+
 <!-- module-docs:end -->

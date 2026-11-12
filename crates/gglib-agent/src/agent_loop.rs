@@ -44,7 +44,7 @@ use async_trait::async_trait;
 use gglib_core::domain::agent::{FirstCall, LlmStreamEvent};
 use gglib_core::ports::{
     AgentError, AgentGuardReporter, AgentLoopPort, AgentRunOutput, EmptyToolExecutor,
-    FilteredToolExecutor, LlmCompletionPort, ToolExecutorPort,
+    FilteredToolExecutor, LlmCompletionPort, ToolExecutorPort, UpstreamRefusal,
 };
 use gglib_core::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult,
@@ -84,6 +84,28 @@ use gglib_core::domain::agent::{batch_results_hash, hash_result_text};
 async fn fail_loop<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T, AgentError> {
     emit_error_event(tx, &msg).await;
     Err(AgentError::Internal(msg))
+}
+
+/// End the loop on a reply that could not be started: with
+/// [`AgentError::Refused`], and the endpoint's code on the `error` event,
+/// when the endpoint refused it with an [`UpstreamRefusal`]; otherwise as
+/// [`fail_loop`].
+async fn fail_start<T>(
+    tx: &mpsc::Sender<AgentEvent>,
+    error: &anyhow::Error,
+) -> Result<T, AgentError> {
+    let message = format!("LLM stream error: {error:#}");
+    let Some(refusal) = error.downcast_ref::<UpstreamRefusal>() else {
+        return fail_loop(tx, message).await;
+    };
+    let code = refusal.code.clone();
+    let _ = tx
+        .send(AgentEvent::Error {
+            message: message.clone(),
+            code: Some(code.clone()),
+        })
+        .await;
+    Err(AgentError::Refused { code, message })
 }
 
 /// Surface a runaway tool-call stream, when the collector had to drop deltas.
@@ -179,7 +201,7 @@ impl AgentLoop {
     /// [`CollectedResponse`].
     ///
     /// Both the LLM call and stream-collection errors are translated into
-    /// [`AgentError::Internal`] after emitting an [`AgentEvent::Error`] on `tx`
+    /// [`AgentError::Internal`] (or [`AgentError::Refused`]) after emitting an [`AgentEvent::Error`] on `tx`
     /// so that SSE consumers always see the failure reason before the stream
     /// closes.
     async fn call_and_collect(
@@ -305,7 +327,7 @@ impl AgentLoop {
         // an idle timeout against a mid-stream reset — differ only there.
         let stream = match stream {
             Ok(s) => s,
-            Err(e) => return fail_loop(tx, format!("LLM stream error: {e:#}")).await,
+            Err(e) => return fail_start(tx, &e).await,
         };
         match collect_stream(measure_turn(stream, tx.clone(), messages.dropped()), tx).await {
             Ok(r) => usable(r, if_wordless, tx).await,

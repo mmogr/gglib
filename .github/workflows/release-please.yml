@@ -1,6 +1,7 @@
 # Keeps a branch's standing release pull request,
 # "chore(<branch>): release X.Y.Z-rc.N", up to date with the branch: main's,
-# which carries the next minor's candidates, and each maintenance line's,
+# which carries the next minor's candidates (from 1.0.0 on, the next
+# major's after a breaking change), and each maintenance line's,
 # release/X.Y.x, which carries that version's patches (CONTRIBUTING,
 # "Maintenance lines"). release-please reads the commit types since the last
 # release and works out the next candidate (release-please-config.json says
@@ -18,8 +19,12 @@
 # after a promotion, the shipped version's rc.N+1 (Promote tags the stable
 # version from the candidate's commit, so release-please still counts the
 # candidate as the last release); and the stable X.Y.0 that a feat over a
-# patch candidate makes it propose. So the release PR never waits on a
-# `Release-As:` line, and one written on purpose still decides the version.
+# patch candidate makes it propose. Once 1.0.0 has shipped, a breaking
+# change on main starts the next major unless main is in its candidates
+# already, so it never ships in a minor or a patch; and a version's first
+# candidate is always rc.1. So the release PR never waits on a `Release-As:`
+# line, and one written on purpose still decides the version, unless a
+# breaking change needs a major or it names a first candidate other than rc.1.
 #
 # release-please knows nothing of Cargo.lock or package-lock.json, and CI
 # builds with --locked, so after every update this workflow adds a commit that
@@ -207,8 +212,9 @@ jobs:
       #
       # --release-as, when the step above chose one, beats both release-please's
       # own reckoning and any `Release-As:` line in the commits. It is chosen
-      # only when the proposal is refused, which a `Release-As:` line naming a
-      # version the lines accept never is.
+      # when the proposal is refused, which a `Release-As:` line naming a
+      # version the lines accept never is, when a breaking change after 1.0.0
+      # needs the next major, and when a first candidate is not rc.1.
       - name: Open or update the release PR
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
@@ -218,7 +224,7 @@ jobs:
           force=()
           if [ -n "$RELEASE_AS" ]; then
             force=(--release-as "$RELEASE_AS")
-            echo "::notice::release-please would propose $PROPOSED, which the release lines refuse; the release PR proposes $RELEASE_AS"
+            echo "::notice::release-please would propose $PROPOSED, which the release lines put right; the release PR proposes $RELEASE_AS"
           fi
           tools/.github/release-please/node_modules/.bin/release-please release-pr \
             --token "$TOKEN" --repo-url "$GITHUB_REPOSITORY" --target-branch "$BRANCH" \
@@ -273,8 +279,8 @@ jobs:
       # The backstop. The version was chosen above to pass these same rules
       # (scripts/release_lines.py `guard-pr`, with fixtures): a candidate, of
       # a version that has not shipped, and of its own branch's line, main
-      # the next minor or a patch no line has taken, a line release/X.Y.x its
-      # next patch. So this refuses only what `choose` let through by a bug,
+      # the next minor or major or a patch no line has taken, a line
+      # release/X.Y.x its next patch. So this refuses only what `choose` let through by a bug,
       # or a branch or a tag that moved between the two runs. Each refusal
       # names the `Release-As: X.Y.Z-rc.1` line that puts it right, at the end
       # of the message of a commit that merges next.

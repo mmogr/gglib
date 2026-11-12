@@ -56,6 +56,8 @@ const TUNNEL_UNAVAILABLE: &str = "tunnel_unavailable";
 pub(super) enum Failure {
     /// The condition is transient; the same request may succeed if repeated.
     Retryable {
+        /// The response's HTTP status.
+        status: u16,
         /// The upstream's own `Retry-After`, when it supplied a usable one.
         retry_after: Option<Duration>,
         /// Human-readable cause, for logs and the user-facing retry notice.
@@ -65,6 +67,8 @@ pub(super) enum Failure {
     },
     /// Repeating the request would fail the same way.
     Terminal {
+        /// The response's HTTP status.
+        status: u16,
         /// Human-readable cause.
         reason: String,
         /// The body's own `code` — see [`Failure::code`].
@@ -77,6 +81,13 @@ impl Failure {
     pub(super) fn reason(&self) -> &str {
         match self {
             Self::Retryable { reason, .. } | Self::Terminal { reason, .. } => reason,
+        }
+    }
+
+    /// The response's HTTP status, whichever variant this is.
+    pub(super) const fn status(&self) -> u16 {
+        match self {
+            Self::Retryable { status, .. } | Self::Terminal { status, .. } => *status,
         }
     }
 
@@ -135,12 +146,17 @@ pub(super) async fn classify(response: Response, now: DateTime<Utc>) -> Result<R
 
     Err(if retryable {
         Failure::Retryable {
+            status: status.as_u16(),
             retry_after,
             reason,
             code,
         }
     } else {
-        Failure::Terminal { reason, code }
+        Failure::Terminal {
+            status: status.as_u16(),
+            reason,
+            code,
+        }
     })
 }
 

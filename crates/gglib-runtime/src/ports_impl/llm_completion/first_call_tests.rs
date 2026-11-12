@@ -284,7 +284,7 @@ async fn a_first_reply_with_no_call_fails_the_run_in_the_composers_words() {
         "the text was no answer"
     );
     let last_error = events.iter().rev().find_map(|event| match event {
-        AgentEvent::Error { message } => Some(message.as_str()),
+        AgentEvent::Error { message, .. } => Some(message.as_str()),
         _ => None,
     });
     assert_eq!(last_error, Some(NOT_ASKED));
