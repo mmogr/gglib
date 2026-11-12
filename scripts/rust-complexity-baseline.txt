@@ -27,7 +27,7 @@ crates/gglib-app-services/src/servers_events_tests.rs 335
 crates/gglib-app-services/src/service_graph.rs 321
 crates/gglib-app-services/src/settings_tests.rs 376
 crates/gglib-app-services/src/setup.rs 363
-crates/gglib-app-services/src/setup_engines_tests.rs 540
+crates/gglib-app-services/src/setup_engines_tests.rs 568
 crates/gglib-app-services/src/test_support.rs 449
 crates/gglib-app-services/src/types.rs 632
 crates/gglib-app-services/src/types_model_dto_tests.rs 315
@@ -52,7 +52,7 @@ crates/gglib-axum/src/handlers/proxy/wire_tests.rs 467
 crates/gglib-axum/src/routes.rs 428
 crates/gglib-axum/tests/agent_runs_route.rs 367
 crates/gglib-axum/tests/conversation_settings_route.rs 445
-crates/gglib-axum/tests/integration_routes.rs 1054
+crates/gglib-axum/tests/integration_routes.rs 1059
 crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320
 crates/gglib-cli/src/commands.rs 325

@@ -11,8 +11,9 @@
  * refuse it: a source build's install or update is the terminal's, named by
  * its command. While a model runs on the engine every action is disabled,
  * saying which model to stop (ST-11). ▸ Details holds the install record,
- * the binary and where it stands against its pin. All state is `useEngine`'s;
- * every fact is the daemon's engine status.
+ * the binary and where it stands against its pin, in the words
+ * `gglib config llama|sd status` prints (`standing`). All state is
+ * `useEngine`'s; every fact is the daemon's engine status.
  *
  * @module places/settings/EngineRow
  */
@@ -32,7 +33,6 @@ import type { EngineState } from '../../types/generated/EngineState';
 import { Menu, type MenuItem } from '../../components/ui/Menu';
 import { Disclosure } from './Disclosure';
 import { EngineDetails } from './EngineDetails';
-import { pinStanding } from './pinStanding';
 
 /** What each engine serves and what its removal takes, for the Remove… question. */
 const WORDS: Record<RuntimeKind, { serves: string; removes: string }> = {
@@ -72,7 +72,11 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
   const product = ENGINE_PRODUCT[kind];
   const heading = `engine-${kind}-heading`;
 
-  const standing = status ? pinStanding(status.pin, status.installCommand) : null;
+  // The update a button offers: to the pin, over an older install, when the
+  // daemon says the update is a download; otherwise the terminal's.
+  const older = status?.pin.standing === 'older';
+  const updateTo = older && status?.pin.updateDownloads ? status.pin.targetRelease : null;
+  const fromTerminal = older && !status?.pin.updateDownloads;
   const serving = status?.serving ?? null;
   const stopFirst = serving ? `Stop ${serving} first.` : undefined;
   const busy = installing || uninstalling || serving !== null;
@@ -81,7 +85,7 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
   const missing = !!status && !status.installed;
   const offersInstall = missing && !!status?.pin.updateDownloads;
   const builtBefore = missing && status?.download !== null && !status?.pin.updateDownloads;
-  const offersUpdate = !!status?.installed && !!standing?.update;
+  const offersUpdate = !!status?.installed && !!updateTo;
   // Over a download the install is a download again (`plan_install`); over a
   // source build it would build, which is the terminal's.
   const offersReinstall =
@@ -89,7 +93,7 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
 
   const update = async () => {
     const yes = await confirm({
-      title: `Update ${product} to ${standing?.update ?? 'the pinned release'}?`,
+      title: `Update ${product} to ${updateTo ?? 'the pinned release'}?`,
       description: 'Downloads the pinned release for this machine and replaces the one installed.',
       confirmLabel: 'Update',
     });
@@ -139,7 +143,7 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
           )}
           {offersUpdate && (
             <Button variant="secondary" size="sm" disabled={busy} title={stopFirst} onClick={() => void update()}>
-              Update to {standing?.update}…
+              Update to {updateTo}…
             </Button>
           )}
           {status?.installed && (
@@ -151,7 +155,7 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
       {serving && <Line>{stopFirst}</Line>}
       {engine.statusError && <Line tone="danger">{engine.statusError}</Line>}
       {status?.broken && <Line tone="danger">{status.broken}</Line>}
-      {standing?.fromTerminal && <Line>{standing.fromTerminal}</Line>}
+      {fromTerminal && <Line>The update is a source build, run from a terminal: {status?.installCommand}.</Line>}
       {(offersInstall || offersUpdate || offersReinstall) && status?.warning && (
         <StatusMark kind="attention" word={status.warning} className="text-xs" />
       )}
@@ -176,7 +180,7 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
 
       {status?.installed && (
         <Disclosure label="Details">
-          <EngineDetails status={status} standing={standing?.text ?? null} />
+          <EngineDetails status={status} />
         </Disclosure>
       )}
     </section>
