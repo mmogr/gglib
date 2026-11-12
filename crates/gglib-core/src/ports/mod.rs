@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod agent;
+pub(crate) mod agent_error;
 pub(crate) mod agent_guard_sink;
 pub mod attachment_store;
 pub(crate) mod benchmark;
