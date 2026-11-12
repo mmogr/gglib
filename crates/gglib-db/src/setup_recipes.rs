@@ -10,16 +10,7 @@
 
 use anyhow::Result;
 use gglib_core::domain::InferenceConfig;
-use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool};
-
-/// `PRAGMA user_version` once stored copies of the `reasoning` recipe are
-/// gone.
-///
-/// The third version this project has assigned, above
-/// [`LOOP_GUARD_MODE_SCHEMA_VERSION`](super::settings::LOOP_GUARD_MODE_SCHEMA_VERSION),
-/// which goes on meaning what it meant; anything later takes a higher number
-/// still.
-pub(super) const UNSTORED_RECIPE_SCHEMA_VERSION: i64 = 3;
+use sqlx::SqliteConnection;
 
 /// The recipe the import wrote before ADR 0022, value for value.
 ///
@@ -47,40 +38,15 @@ const STORED_RECIPE: InferenceConfig = InferenceConfig {
     reasoning_budget_tokens: None,
 };
 
-/// Migration: clear every stored copy of the `reasoning` recipe, once per
-/// database.
+/// Step 3: clear every stored copy of the `reasoning` recipe.
 ///
 /// Two kinds of row hold one: a row labelled `auto_detected`, and a row from
 /// before the label existed whose defaults equal the recipe exactly, which
 /// the read path used to label `auto_detected` by that comparison. Both lose
 /// their `inference_defaults` and `defaults_origin`. A row a person or a tune
-/// sweep wrote keeps its values whatever they are.
-///
-/// Gated on `user_version` and run in one `BEGIN IMMEDIATE` transaction, as
-/// the loop guard's fold is; run after that fold, so a library stamped below
-/// it gets both.
-pub(super) async fn drop_stored_reasoning_recipes(pool: &SqlitePool) -> Result<()> {
-    if user_version(pool).await? >= UNSTORED_RECIPE_SCHEMA_VERSION {
-        return Ok(());
-    }
-    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
-    if user_version(&mut *tx).await? >= UNSTORED_RECIPE_SCHEMA_VERSION {
-        return Ok(());
-    }
-    clear(&mut tx).await?;
-    // Not bindable as a parameter: SQLite requires a literal here.
-    sqlx::query(&format!(
-        "PRAGMA user_version = {UNSTORED_RECIPE_SCHEMA_VERSION}"
-    ))
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(())
-}
-
-/// Clear both kinds of stored copy. A row whose defaults cannot be read is
-/// left as found: it is not a copy anybody can recognise.
-async fn clear(conn: &mut SqliteConnection) -> Result<()> {
+/// sweep wrote keeps its values whatever they are, and so does a row whose
+/// defaults cannot be read: it is not a copy anybody can recognise.
+pub(super) async fn drop_stored_reasoning_recipes(conn: &mut SqliteConnection) -> Result<()> {
     let labelled = sqlx::query(
         "UPDATE models SET inference_defaults = NULL, defaults_origin = NULL \
          WHERE defaults_origin = 'auto_detected'",
@@ -114,12 +80,6 @@ async fn clear(conn: &mut SqliteConnection) -> Result<()> {
         );
     }
     Ok(())
-}
-
-async fn user_version(conn: impl SqliteExecutor<'_>) -> sqlx::Result<i64> {
-    sqlx::query_scalar("PRAGMA user_version")
-        .fetch_one(conn)
-        .await
 }
 
 #[cfg(test)]

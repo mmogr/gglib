@@ -5,9 +5,9 @@
 
 use gglib_core::SettingsRepository;
 
-use super::tests::{left_by_an_older_build, rows, stamp, text_row};
+use super::super::migrations::{LATEST, user_version};
+use super::tests::{BEFORE_THE_FOLD, left_by_an_older_build, rows, stamp, text_row};
 use super::*;
-use crate::setup::CANONICAL_PATH_SCHEMA_VERSION;
 use crate::{SqliteSettingsRepository, setup_database};
 
 /// Each with a switch that says `off`, or that a looser reading would take
@@ -39,7 +39,7 @@ async fn a_record_that_cannot_be_read_is_left_as_found_and_the_boot_goes_on() {
     let dir = tempfile::tempdir().expect("tempdir");
     for (case, (what, stored)) in UNREADABLE.iter().enumerate() {
         let path = dir.path().join(format!("{case}.db"));
-        left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, stored).await;
+        left_by_an_older_build(&path, BEFORE_THE_FOLD, stored).await;
         let mut found: Vec<_> = stored
             .iter()
             .map(|(key, value)| text_row(key, value, "then"))
@@ -51,8 +51,9 @@ async fn a_record_that_cannot_be_read_is_left_as_found_and_the_boot_goes_on() {
             .unwrap_or_else(|refused| panic!("{what}: the boot failed: {refused:#}"));
 
         assert_eq!(rows(&pool).await, found, "{what}");
-        assert!(
-            user_version(&pool).await.expect("a version") >= LOOP_GUARD_MODE_SCHEMA_VERSION,
+        assert_eq!(
+            user_version(&pool).await.expect("a version"),
+            LATEST,
             "{what}: stamped all the same, so no later boot tries again"
         );
         pool.close().await;
@@ -67,7 +68,7 @@ async fn all_but_the_switches_that_are_json_are_records_this_build_cannot_load()
     let dir = tempfile::tempdir().expect("tempdir");
     for (case, (what, stored)) in UNREADABLE.iter().enumerate() {
         let path = dir.path().join(format!("{case}.db"));
-        left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, stored).await;
+        left_by_an_older_build(&path, BEFORE_THE_FOLD, stored).await;
         let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
             .await
             .expect("the boot");
@@ -94,7 +95,7 @@ async fn a_switch_stored_as_a_blob_is_left_as_found_and_the_boot_goes_on() {
         .execute(&pool)
         .await
         .expect("a planted row");
-    stamp(&pool, CANONICAL_PATH_SCHEMA_VERSION).await;
+    stamp(&pool, BEFORE_THE_FOLD).await;
     pool.close().await;
 
     let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
@@ -108,24 +109,4 @@ async fn a_switch_stored_as_a_blob_is_left_as_found_and_the_boot_goes_on() {
         "then".to_owned(),
     );
     assert_eq!(rows(&pool).await, [blob]);
-}
-
-/// The version is asked again under the lock: a database another process
-/// stamped while this one waited is not folded, and a later stamp is not
-/// lowered to this one. Later than every step a boot runs, so the boot
-/// leaves it as planted too.
-#[tokio::test]
-async fn a_database_stamped_before_the_lock_was_held_is_neither_folded_nor_restamped() {
-    const LATER: i64 = crate::setup::remote_grant::REMOTE_GRANT_SCHEMA_VERSION + 1;
-    let dir = tempfile::tempdir().expect("tempdir");
-    let path = dir.path().join("gglib.db");
-    left_by_an_older_build(&path, LATER, &[(SWITCH, "false")]).await;
-    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
-        .await
-        .expect("the boot");
-
-    fold_and_stamp(&pool).await.expect("the pass");
-
-    assert_eq!(rows(&pool).await, [text_row(SWITCH, "false", "then")]);
-    assert_eq!(user_version(&pool).await.expect("a version"), LATER);
 }

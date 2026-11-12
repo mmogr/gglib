@@ -8,9 +8,12 @@ use std::path::{Path, PathBuf};
 use gglib_core::LoopGuardMode::{self, Note, Off, Refuse};
 use gglib_core::SettingsRepository;
 
+use super::super::migrations::{LATEST, run, user_version};
 use super::*;
-use crate::setup::CANONICAL_PATH_SCHEMA_VERSION;
 use crate::{SqliteSettingsRepository, setup_database};
+
+/// The version a build before the fold left: step 1 done.
+pub(super) const BEFORE_THE_FOLD: i64 = 1;
 
 /// A settings row, byte for byte: its key, its value's type and bytes, and
 /// when it was written.
@@ -133,7 +136,7 @@ async fn every_stored_pair_answers_once_folded_what_it_answered_before() {
             .filter_map(|(key, value)| value.map(|value| (key, value)))
             .collect();
         let path = dir.path().join(format!("{case}.db"));
-        left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &stored).await;
+        left_by_an_older_build(&path, BEFORE_THE_FOLD, &stored).await;
 
         let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
             .await
@@ -162,8 +165,7 @@ async fn a_database_never_stamped_is_folded_too() {
         .expect("the boot");
 
     assert_eq!(answer(&pool).await, Off);
-    // At least the fold's stamp: later passes stamp higher still.
-    assert!(user_version(&pool).await.expect("a version") >= LOOP_GUARD_MODE_SCHEMA_VERSION);
+    assert_eq!(user_version(&pool).await.expect("a version"), LATEST);
 }
 
 /// The stamp is what makes it once: a switch written into a stamped database,
@@ -176,8 +178,9 @@ async fn the_fold_runs_once_and_a_switch_written_after_it_is_not_folded() {
     let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await
         .expect("a fresh database");
-    assert!(
-        user_version(&pool).await.expect("a version") >= LOOP_GUARD_MODE_SCHEMA_VERSION,
+    assert_eq!(
+        user_version(&pool).await.expect("a version"),
+        LATEST,
         "a fresh database is stamped as it is made"
     );
     plant(&pool, SWITCH, "false").await;
@@ -197,7 +200,7 @@ async fn the_fold_runs_once_and_a_switch_written_after_it_is_not_folded() {
 async fn a_second_pass_over_a_folded_record_writes_nothing() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
-    left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &[(SWITCH, "false")]).await;
+    left_by_an_older_build(&path, BEFORE_THE_FOLD, &[(SWITCH, "false")]).await;
     let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await
         .expect("the boot");
@@ -207,17 +210,12 @@ async fn a_second_pass_over_a_folded_record_writes_nothing() {
         .expect("a marked row");
     let folded = [text_row(MODE, r#""off""#, "folded")];
     assert_eq!(rows(&pool).await, folded);
-    stamp(&pool, CANONICAL_PATH_SCHEMA_VERSION).await;
+    stamp(&pool, BEFORE_THE_FOLD).await;
 
-    fold_loop_guard_switch_into_mode(&pool)
-        .await
-        .expect("the second pass");
+    run(&pool, LATEST).await.expect("the second pass");
 
     assert_eq!(rows(&pool).await, folded);
-    assert_eq!(
-        user_version(&pool).await.expect("a version"),
-        LOOP_GUARD_MODE_SCHEMA_VERSION
-    );
+    assert_eq!(user_version(&pool).await.expect("a version"), LATEST);
 }
 
 /// Values no writer of this build would produce byte for byte, a key no field
@@ -235,7 +233,7 @@ async fn the_fold_writes_the_mode_and_the_switch_and_no_other_row() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
     let stored = [OTHERS, &[(SWITCH, "false")]].concat();
-    left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &stored).await;
+    left_by_an_older_build(&path, BEFORE_THE_FOLD, &stored).await;
 
     let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await
@@ -268,7 +266,7 @@ async fn a_stored_mode_keeps_its_row_byte_for_byte_when_the_switch_goes() {
     let path = dir.path().join("gglib.db");
     let mode = (MODE, r#" "refuse" "#);
     let stored = [OTHERS, &[mode, (SWITCH, "false")]].concat();
-    left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &stored).await;
+    left_by_an_older_build(&path, BEFORE_THE_FOLD, &stored).await;
 
     let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await
@@ -289,7 +287,7 @@ async fn the_auto_tune_row_is_reclaimed_as_a_database_opens() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
     let stored = [("auto_tune", "true"), ("proxy_port", "9191")];
-    left_by_an_older_build(&path, CANONICAL_PATH_SCHEMA_VERSION, &stored).await;
+    left_by_an_older_build(&path, BEFORE_THE_FOLD, &stored).await;
 
     let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await

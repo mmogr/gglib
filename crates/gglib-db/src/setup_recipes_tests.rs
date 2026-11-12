@@ -3,7 +3,9 @@
 //! that it runs once.
 
 use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
+use sqlx::SqlitePool;
 
+use super::super::migrations::{LATEST, run, user_version};
 use super::*;
 use crate::setup_database;
 
@@ -65,9 +67,7 @@ async fn stored_copies_are_cleared_and_everything_else_is_kept() {
     plant(&pool, "published", Some(&tuned), Some("published")).await;
     plant(&pool, "unreadable", Some("{not json"), None).await;
 
-    drop_stored_reasoning_recipes(&pool)
-        .await
-        .expect("the pass");
+    run(&pool, LATEST).await.expect("the pass");
 
     assert_eq!(stored(&pool, "labelled").await, (None, None));
     assert_eq!(stored(&pool, "unlabelled").await, (None, None));
@@ -89,11 +89,7 @@ async fn stored_copies_are_cleared_and_everything_else_is_kept() {
         (Some("{not json".to_owned()), None)
     );
 
-    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(version, UNSTORED_RECIPE_SCHEMA_VERSION);
+    assert_eq!(user_version(&pool).await.unwrap(), LATEST);
 }
 
 /// Once stamped, a copy an older build writes is left alone: the pass is a
@@ -102,9 +98,7 @@ async fn stored_copies_are_cleared_and_everything_else_is_kept() {
 async fn the_pass_runs_once() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let pool = left_by_an_older_build(&dir.path().join("gglib.db")).await;
-    drop_stored_reasoning_recipes(&pool)
-        .await
-        .expect("the pass");
+    run(&pool, LATEST).await.expect("the pass");
 
     plant(
         &pool,
@@ -113,9 +107,7 @@ async fn the_pass_runs_once() {
         Some("auto_detected"),
     )
     .await;
-    drop_stored_reasoning_recipes(&pool)
-        .await
-        .expect("a second open");
+    run(&pool, LATEST).await.expect("a second open");
 
     assert_eq!(
         stored(&pool, "late").await.1.as_deref(),

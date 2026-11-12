@@ -94,7 +94,7 @@ async fn a_rebuild_that_fails_changes_nothing_and_keeps_foreign_keys_on() {
         "{};
          INSERT INTO models (id, param_count_b, file_path, added_at, model_key)
              VALUES (4, 7.0, '/m/nameless.gguf', 'then', 'hf:nameless');
-         PRAGMA user_version = {CANONICAL_PATH_SCHEMA_VERSION};",
+         PRAGMA user_version = 1;",
         legacy_ddl("models").replace("name TEXT NOT NULL", "name TEXT"),
     ))
     .execute(&pool)

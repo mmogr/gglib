@@ -2,7 +2,9 @@
 //! database file of the test's own: which rows it flags, which it never
 //! does, and that it runs once.
 
-use super::*;
+use sqlx::SqlitePool;
+
+use super::super::migrations::{LATEST, run, user_version};
 use crate::setup_database;
 
 /// A database as the build before this step left it: this build's schema,
@@ -67,10 +69,10 @@ async fn the_listed_server_is_flagged_and_no_other() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, [stdio("tavily")]);
-    assert_eq!(version(&pool).await, REMOTE_GRANT_SCHEMA_VERSION);
+    assert_eq!(version(&pool).await, LATEST);
 }
 
 /// A machine whose tunnel was off reset its list at its next `enable`, so
@@ -90,10 +92,10 @@ async fn a_tunnel_that_was_off_opens_nothing() {
         )
         .await;
 
-        flag_listed_servers(&pool).await.expect("the step");
+        run(&pool, LATEST).await.expect("the step");
 
         assert_eq!(flagged(&pool).await, [], "remote_enabled {enabled:?}");
-        assert_eq!(version(&pool).await, REMOTE_GRANT_SCHEMA_VERSION);
+        assert_eq!(version(&pool).await, LATEST);
     }
 }
 
@@ -117,7 +119,7 @@ async fn a_shared_name_and_an_sse_server_are_not_flagged() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, [stdio("fs")]);
 }
@@ -134,7 +136,7 @@ async fn builtin_is_not_flagged() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, []);
 }
@@ -154,7 +156,7 @@ async fn a_name_is_trimmed_and_matched_whole() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, [stdio("tavily")]);
 }
@@ -182,14 +184,10 @@ async fn rows_that_cannot_be_read_open_nothing_and_are_stamped() {
         )
         .await;
 
-        flag_listed_servers(&pool).await.expect("the step");
+        run(&pool, LATEST).await.expect("the step");
 
         assert_eq!(flagged(&pool).await, [], "case {case}");
-        assert_eq!(
-            version(&pool).await,
-            REMOTE_GRANT_SCHEMA_VERSION,
-            "case {case}"
-        );
+        assert_eq!(version(&pool).await, LATEST, "case {case}");
     }
 }
 
@@ -209,7 +207,7 @@ async fn another_rows_bad_value_does_not_stop_the_copy() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, [stdio("tavily")]);
 }
@@ -225,13 +223,13 @@ async fn the_step_runs_once() {
         &[ON, ("remote_serve", r#"{"mcpServers":["tavily"]}"#)],
     )
     .await;
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
     sqlx::query("UPDATE mcp_servers SET allow_remote = 0")
         .execute(&pool)
         .await
         .expect("a deny");
 
-    flag_listed_servers(&pool).await.expect("a second open");
+    run(&pool, LATEST).await.expect("a second open");
 
     assert_eq!(flagged(&pool).await, []);
 }
@@ -248,8 +246,7 @@ async fn a_fresh_database_is_stamped_and_flags_nothing() {
     .expect("a fresh database");
 
     assert_eq!(flagged(&pool).await, []);
-    // At least this step's version: the steps above it stamp higher.
-    assert!(version(&pool).await >= REMOTE_GRANT_SCHEMA_VERSION);
+    assert_eq!(version(&pool).await, LATEST);
 }
 
 /// The step as a boot runs it: an older file opened by this build has its

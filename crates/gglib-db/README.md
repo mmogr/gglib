@@ -66,9 +66,11 @@ This crate is in the **Infrastructure Layer** — it implements the repository p
 - **`setup_model_files.rs`** — The `model_files` table, and `models.projector_path` with the one-time link of each model to the projector among its own files
 - **`setup_model_components.rs`** — The `model_components` table: the files an image model draws with beside its weights, one row per role, gone with their model, indexed by path
 - **`setup_branches.rs`** — The columns a branched chat is recorded by (ADR 0017), added after the chat tables
+- **`setup_migrations.rs`** — The one-time passes over rows, numbered on `PRAGMA user_version`, and the runner that takes each once, in order, with its stamp
 - **`setup_recipes.rs`** — The one-time clearing of stored copies of the `reasoning` recipe from `models` rows
 - **`setup_settings.rs`** — Settings rows whose setting is gone: the `auto_tune` row reclaimed, and the one-time fold of the loop guard's `proxy_loop_detection` row into `loop_guard_mode`
 - **`setup_remote_grant.rs`** — The one-time copy of the remote tunnel's old list of MCP servers onto each server's own `allow_remote` flag
+- **`setup_unknown_params.rs`** — The one-time change of parameter counts stored as `0.0` to unknown
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
 ## Features
@@ -107,10 +109,10 @@ async fn example() {
 
 ## Schema Migrations
 
-There is no migration runner. `create_schema()` is `CREATE TABLE IF NOT EXISTS`
-for the current shape, plus one `add_column_if_missing()` call per column that
-was added after the fact, and it is safe to run against a database of any
-older vintage. A database a newer build stamped with a higher schema
+`create_schema()` is `CREATE TABLE IF NOT EXISTS` for the current shape, plus
+one `add_column_if_missing()` call per column that was added after the fact,
+and it is safe to run against a database of any older vintage. The one-time
+passes over rows are one numbered list in `setup_migrations.rs` (below). A database a newer build stamped with a higher schema
 generation is refused (`setup_generation.rs`).
 
 **An `ALTER` that fails is a failure.** `add_column_if_missing()` reads `PRAGMA
@@ -159,7 +161,7 @@ there binds the row's own id, so an update takes no id from the sequence
 either.
 
 `SQLite` cannot add `AUTOINCREMENT` to a table in place, so a library whose
-`models` table was made without it is rebuilt once, at the end of
+`models` table was made without it is rebuilt once, near the end of
 `create_schema()`, after every table the rebuild reads exists:
 
 - Foreign keys are off for the rebuild, set on one connection outside its
@@ -202,13 +204,17 @@ switched off back on. It is folded instead, once per database, gated on
 - Once stamped, a `proxy_loop_detection` row is a row no field answers to. One
   written afterwards, by a build older than this, is not folded.
 
-The `PRAGMA user_version` ladder has four rungs, and each gates a pass over
-rows that runs once per database: `1` the canonical-path backfill (a blocking
-syscall per row, paid once per library), `2` the loop guard's fold above, `3`
-the stored copies of the `reasoning` recipe cleared, and `4` the remote
-tunnel's old `--allow-mcp` list copied onto `mcp_servers.allow_remote` (only
-from a machine whose tunnel was on, and only a name exactly one server has,
-when that server is stdio). The column set is deliberately not on it. The `template_caps` column post-dates
+The `PRAGMA user_version` ladder is the list in `setup_migrations.rs`: a file
+stamped `N` has had steps `1..=N`, each run once per database, in its own
+`BEGIN IMMEDIATE` transaction with its stamp. `1` is the canonical-path
+backfill (a blocking syscall per row, paid once per library), `2` the loop
+guard's fold above, `3` the stored copies of the `reasoning` recipe cleared,
+`4` the remote tunnel's old `--allow-mcp` list copied onto
+`mcp_servers.allow_remote` (only from a machine whose tunnel was on, and only a
+name exactly one server has, when that server is stdio), and `5` the parameter
+counts stored as `0.0` made unknown. Step 1 runs before the projector link,
+which reads the paths it rewrites; the rest run last, after the `models`
+rebuild. The column set is deliberately not on it. The `template_caps` column post-dates
 the first stamp, so a database stamped `1` or later may or may not carry it,
 and a version-gated `ALTER` that propagated errors would abort startup with
 `duplicate column name` on real installs. A column is added by asking the

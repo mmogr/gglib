@@ -208,8 +208,8 @@ async fn template_caps_migration_upgrades_a_pre_caps_database() {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
 
     // An old build's models table: the current schema minus
-    // `template_caps`, one row already in it. Stamped at the canonical
-    // schema version so the path backfills stay out of this test's way.
+    // `template_caps`, one row already in it. Stamped at step 1 so the
+    // path backfills stay out of this test's way.
     sqlx::query(
         "CREATE TABLE models (
                 id INTEGER PRIMARY KEY, name TEXT NOT NULL, file_path TEXT NOT NULL,
@@ -225,12 +225,10 @@ async fn template_caps_migration_upgrades_a_pre_caps_database() {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query(&format!(
-        "PRAGMA user_version = {CANONICAL_PATH_SCHEMA_VERSION}"
-    ))
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("PRAGMA user_version = 1")
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO models (name, file_path, param_count_b, added_at, model_key) \
              VALUES ('Old', '/m/old.gguf', 7.0, ?, 'k')",
