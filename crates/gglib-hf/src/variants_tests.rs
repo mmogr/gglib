@@ -2,17 +2,23 @@
 //!
 //! Each fixture is a repository's tree as
 //! `https://huggingface.co/api/models/<repo>/tree/main?recursive=true`
-//! answered it on 2026-11-02, kept to each entry's type, path and size.
+//! answered it on 2026-11-02 (`DavidAU`'s and mradermacher's gemma on
+//! 2026-11-12), kept to each entry's type, path and size.
 
-use gglib_core::ports::huggingface::{HfQuantInfo, match_label};
+use gglib_core::ports::huggingface::{HfQuantInfo, match_label, said_as_a_quantization};
 
 use super::{parse_tree_entries, variant_files, variants};
 use crate::models::{HfEntryType, HfFileEntry};
 
-/// The variants of the listing saved as `name`.
-fn listed(tree: &str) -> Vec<HfQuantInfo> {
+/// The files of the listing `tree`.
+fn listed_files(tree: &str) -> Vec<HfFileEntry> {
     let tree: serde_json::Value = serde_json::from_str(tree).unwrap();
-    variants(&parse_tree_entries(&tree).unwrap())
+    parse_tree_entries(&tree).unwrap()
+}
+
+/// The variants of the listing `tree`.
+fn listed(tree: &str) -> Vec<HfQuantInfo> {
+    variants(&listed_files(tree))
 }
 
 macro_rules! fixture {
@@ -23,6 +29,15 @@ macro_rules! fixture {
 
 fn labels(variants: &[HfQuantInfo]) -> Vec<&str> {
     variants.iter().map(|v| v.label.as_str()).collect()
+}
+
+/// The labels of `variants` a search says as quantisations.
+fn said(variants: &[HfQuantInfo]) -> Vec<&str> {
+    variants
+        .iter()
+        .filter(|v| said_as_a_quantization(v))
+        .map(|v| v.label.as_str())
+        .collect()
 }
 
 fn shards(variants: &[HfQuantInfo], label: &str) -> usize {
@@ -101,13 +116,13 @@ fn bartowski_labels_every_variant_by_its_quant() {
     assert_eq!(
         labels(&variants),
         [
-            "IQ2_M", "IQ2_S", "IQ2_XS", "IQ2_XXS", "IQ3_M", "IQ3_XS", "IQ3_XXS", "IQ4_NL",
+            "BF16", "IQ2_M", "IQ2_S", "IQ2_XS", "IQ2_XXS", "IQ3_M", "IQ3_XS", "IQ3_XXS", "IQ4_NL",
             "IQ4_XS", "Q2_K", "Q2_K_L", "Q3_K_L", "Q3_K_M", "Q3_K_S", "Q3_K_XL", "Q4_0", "Q4_1",
             "Q4_K_L", "Q4_K_M", "Q4_K_S", "Q5_K_L", "Q5_K_M", "Q5_K_S", "Q6_K", "Q6_K_L", "Q8_0",
-            "bf16",
-        ]
+        ],
+        "bartowski's `bf16` is spelt as every other repository's"
     );
-    assert_eq!(shards(&variants, "bf16"), 2);
+    assert_eq!(shards(&variants, "BF16"), 2);
 }
 
 #[test]
@@ -176,7 +191,71 @@ fn unsloth_mtp_models_are_labelled_with_their_ud_prefix() {
 fn a_lone_variant_is_labelled_by_its_whole_name() {
     let variants = listed(fixture!("google_gemma-3-1b-it-qat-q4_0-gguf"));
 
-    assert_eq!(labels(&variants), ["gemma-3-1b-it-q4_0"]);
+    assert_eq!(labels(&variants), ["gemma-3-1b-it-Q4_0"]);
+}
+
+/// `DavidAU` ships two lines, `INSTRUCT` and `Thinking`, each with a quant
+/// its uploader spelt `Q6_k`, and three projectors: the lines keep their
+/// words, the quant is spelt `Q6_K`, and no projector is said as a
+/// quantisation.
+#[test]
+fn davidau_spells_its_quants_one_way_and_says_no_projector() {
+    let variants = listed(fixture!(
+        "DavidAU_gemma-4-31B-it-Mystery-Fine-Tune-HERETIC-UNCENSORED-Thinking-Instruct-GGUF"
+    ));
+
+    assert_eq!(
+        labels(&variants),
+        [
+            "INSTRUCT-Q4_K_S",
+            "INSTRUCT-Q6_K",
+            "Thinking-Q4_K_S",
+            "Thinking-Q6_K",
+            "mmproj-BF16",
+            "mmproj-F16",
+            "mmproj-F32",
+        ]
+    );
+    assert_eq!(
+        said(&variants),
+        [
+            "INSTRUCT-Q4_K_S",
+            "INSTRUCT-Q6_K",
+            "Thinking-Q4_K_S",
+            "Thinking-Q6_K"
+        ]
+    );
+    let q6 = variant_files(
+        &listed_files(fixture!(
+            "DavidAU_gemma-4-31B-it-Mystery-Fine-Tune-HERETIC-UNCENSORED-Thinking-Instruct-GGUF"
+        )),
+        "thinking-q6_k",
+    )
+    .unwrap();
+    assert_eq!(
+        q6[0].path, "gemma-4-31B-Mystery-Fine-Tune-HERETIC-UNCENSORED-Thinking-Q6_k.gguf",
+        "a request in any case still names the uploader's file"
+    );
+}
+
+/// mradermacher's importance matrix beside its `i1` quants is a variant of
+/// its own, labelled by its whole name, and not said as a quantisation.
+#[test]
+fn mradermacher_says_no_importance_matrix() {
+    let variants = listed(fixture!(
+        "mradermacher_gemma-3-12b-it-vl-GLM-4.7-Flash-INSTRUCT-Thinking-Hybrid-Heretic-Uncensored-i1-GGUF"
+    ));
+
+    let matrix =
+        "gemma-3-12b-it-vl-GLM-4.7-Flash-INSTRUCT-Thinking-Hybrid-Heretic-Uncensored.imatrix";
+    assert!(labels(&variants).contains(&matrix));
+    let said = said(&variants);
+    assert_eq!(said.len(), variants.len() - 1);
+    assert!(!said.contains(&matrix), "{said:?}");
+    assert!(
+        said.contains(&"IQ4_XS") && said.contains(&"Q6_K"),
+        "{said:?}"
+    );
 }
 
 fn gguf(path: &str) -> HfFileEntry {

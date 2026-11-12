@@ -19,4 +19,10 @@ kind: ProvenanceKindDto,
  * The ladder rung, present only when `kind` is
  * [`Layer`](ProvenanceKindDto::Layer).
  */
-layer?: SamplingLayerDto, };
+layer?: SamplingLayerDto, 
+/**
+ * Where the value came from in a person's words (`source_label`), the
+ * ones `gglib model explain` prints: `profile 'coding'`,
+ * `per-model defaults (published by the model author)`.
+ */
+label: string, };

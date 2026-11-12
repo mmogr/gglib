@@ -103,7 +103,7 @@ infrastructure concerns (database, filesystem, etc.).
 - `reasoning_effort` - The `reasoning_effort` level a request asks for
   (`ReasoningEffort`)
 - `sampling_provenance` - Which rung supplied each resolved sampling value
-  (`FieldSources`, `ParamSource`)
+  (`FieldSources`, `ParamSource`), and its words (`source_label`)
 - `sampling_discards` - Which values a caller named and the ladder then passed
   over (`discarded_from_rung`)
 - `server_config` - Per-model server launch defaults (`ServerConfig`)
@@ -158,7 +158,8 @@ infrastructure concerns (database, filesystem, etc.).
 - `launch_plan` - The launch gglib would make for a model, said flag by flag
   (`LaunchPlan`, `LaunchArg`, `ChoiceSource`, `ContextFit`): what `gglib
   model explain` prints and `GET /api/models/{id}/explain` serves, and what
-  it would unload first, and why (`unloads`)
+  it would unload first, and why (`unloads`, with the sentence
+  `Unload::new` composes)
 - `launch_facts` - How a loaded model was launched and what it is doing
   (`LaunchFacts`): the context, the weights, the quant, the narration and
   the one flag line, carried on the admission snapshot's rows and the server

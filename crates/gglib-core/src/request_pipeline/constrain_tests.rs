@@ -1,7 +1,6 @@
 //! Tests for the grammar origination in `constrain.rs`.
 //!
-//! Split from `constrain.rs` so the module stays inside the complexity
-//! ratchet's budget — the repo's `*_tests.rs` sibling pattern.
+//! A sibling of `constrain.rs`, the repo's `*_tests.rs` layout.
 
 use super::*;
 use crate::normalize::tags::FORMAT_QWEN_XML;

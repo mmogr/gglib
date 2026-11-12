@@ -203,23 +203,6 @@ export type { ContextFit } from './generated/ContextFit';
 export type { ContextSizeSource } from './generated/ContextSizeSource';
 
 /**
- * Where a model's stored `inferenceDefaults` came from.
- *
- * - `user` — set by a person. Outranks global settings.
- * - `published` — the author's `generation_config.json`, read at import. Ranks
- *   below global settings.
- * - `measured` — a tune sweep's winner on this hardware, ranked with it.
- *
- * The `reasoning` recipe ranks there too and has no origin: it is never
- * stored (ADR 0022).
- *
- * Snake_case: this mirrors `gglib_core::domain::DefaultsOrigin` itself, which
- * is the one spelling every endpoint reporting the column now uses.
- */
-import type { DefaultsOrigin as DefaultsOriginName } from './generated/DefaultsOrigin';
-export type { DefaultsOriginName };
-
-/**
  * One field's published value and what gglib does with it — the `published`
  * entries of `GET /api/models/:id/explain`.
  *
@@ -530,6 +513,11 @@ export type { HfQuantization } from './generated/HfQuantization';
  * Response containing available quantizations for a model.
  */
 export type { HfQuantizationsResponse } from './generated/HfQuantizationsResponse';
+
+/**
+ * The quantization a download without one takes, as the download picks it.
+ */
+export type { HfPickResponse } from './generated/HfPickResponse';
 
 /**
  * An image model's family, read by the daemon from the head of its weights

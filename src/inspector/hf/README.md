@@ -4,7 +4,9 @@
 
 The inspector's Hugging Face subject: a repo, at `/get/:owner/:name`, so
 back, forward and reload keep it. From the top: `owner/name` ↗ and ×; the
-summary (the Hub's parameter count, and "calls tools" when the daemon read
+summary (the parameter count as a search gives it: the Hub's, unless the
+repo's file names contradict it and its largest weights hold theirs; and
+"calls tools" when the daemon read
 the chat template so, its confidence on hover); "Pick a size"; the
 projector the selected variant brings; an image model's companions; ▸ About
 this model (the Hub's description, counts and tags), closed.
@@ -14,12 +16,12 @@ one row per variant: its label, its size (its files on hover) and the
 daemon's fit verdict in its own words (`fit_word`), always shown. The size
 and the fit are the weights alone, judged as `gglib model download` picks a
 variant. gglib's pick carries ★: the variant `gglib model download <repo>`
-takes without `-q`, which the daemon marks (`picked`, from `pick_variant`
-over the heads the listing read; the CLI's `--list-quants` marks it too),
-marked only when those heads can tell it. Unmarked, the largest variant
-that fits is selected, quantized before full precision (F16, BF16, F32),
-as the download's picker prefers: a GUI-only rule until the listing can
-name the pick for every repository. The selected row is scrolled into view; only the selected row
+takes without `-q`: the listing's `picked` when the heads it read tell it,
+else the download's own pick (`GET /api/models/hf/pick`, asked beside the
+listing, which reads headers further and answers seconds later; the CLI's
+`--list-quants` marks the same). The list shows at once; ★ and the selection
+are added when the pick arrives. With none marked, as for a repo with no
+model, no row is selected until one is chosen. The selected row is scrolled into view; only the selected row
 carries `[■ Download]`, which queues that variant. Sizes are the library's
 (`formatSize`, two decimals). A draft or helper (`role: Sidecar`, its header's word) is dimmed,
 "not a model on its own", and cannot be selected; a projector is no row.

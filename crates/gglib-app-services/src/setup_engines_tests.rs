@@ -214,6 +214,10 @@ fn a_llama_install_is_read_from_its_record_its_validation_and_its_binary() {
     assert_eq!(json_state(&status), "not_working");
     assert_eq!(status.binary_path, "/data/.llama/bin/llama-server");
     assert_eq!(status.install_command, "gglib config llama install");
+    assert_eq!(
+        status.standing.as_deref(),
+        Some("Pinned release: b11429, which is the one installed.")
+    );
 }
 
 /// A downloaded sd install is not a build, and an unreadable record says why.
@@ -323,7 +327,31 @@ fn the_status_serializes_in_camel_case_with_its_kind() {
     assert_eq!(json["downloadUnavailable"], serde_json::Value::Null);
     assert_eq!(json["serving"], "flux");
     assert_eq!(json["installCommand"], SD_INSTALL_COMMAND);
+    assert_eq!(json["standing"], serde_json::Value::Null);
     assert!(json.get("updateCommand").is_none(), "{json}");
+}
+
+/// The pin's standing is served in the words `config llama|sd status`
+/// prints, and is null with nothing installed, where the status says so.
+#[test]
+fn the_pin_standing_is_the_status_commands_sentence() {
+    let older = SdStatus {
+        installed: true,
+        pin: PinState {
+            target_release: Some("master-500".to_owned()),
+            ..pin(PinStanding::Older, Some("master-400"))
+        },
+        ..nothing_installed()
+    };
+
+    let missing = sd_engine_status(nothing_installed(), Err("none".to_owned()));
+    let older = sd_engine_status(older, Err("none".to_owned()));
+
+    assert_eq!(missing.standing, None);
+    assert_eq!(
+        older.standing.as_deref(),
+        Some("Pinned release: master-500. The one installed, master-400, is older.")
+    );
 }
 
 #[tokio::test]

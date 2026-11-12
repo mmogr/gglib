@@ -1,8 +1,7 @@
 //! `gglib remote disable`.
 //!
 //! Its own file since it learned to switch remote access off with no daemon
-//! running, which would have put `mod.rs` past its budget. What it prints is
-//! pinned by `disable_tests.rs`.
+//! running. What it prints is pinned by `disable_tests.rs`.
 
 use std::time::Duration;
 

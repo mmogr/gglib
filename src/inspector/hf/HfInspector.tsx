@@ -26,11 +26,11 @@ import { queueDownload } from '../../services/downloadsEvents';
 import { useDownloads } from '../../services/downloadsRegistry';
 import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
-import type { HfImagePreview, HfModelSummary, HfQuantization, ToolSupportResponse } from '../../types';
+import type { HfImagePreview, HfModelSummary, HfPickResponse, HfQuantization, ToolSupportResponse } from '../../types';
 import { formatError } from '../../utils/errors';
 import { formatNumber, formatParamCount, getHuggingFaceModelUrl } from '../../utils/format';
 import { CompanionNote } from './CompanionNote';
-import { PickASize, firstPick } from './PickASize';
+import { PickASize } from './PickASize';
 import { ProjectorNote } from './ProjectorNote';
 
 /** What a pick hands the address it navigates to, so the repo is not read twice. */
@@ -78,12 +78,19 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
     },
     (err) => ({ error: formatError(err) }),
   );
+  // Asked beside the listing, which shows at once: the download's own pick,
+  // which reads further than the listing's heads. A failure marks nothing.
+  const pick = useRead<HfPickResponse | null>(() => getTransport().getHfPick(repo), () => null);
   // Optional: a failed reading says nothing about tools.
   const tools = useRead<ToolSupportResponse>(() => getTransport().getHfToolSupport(repo), () => null);
   const [picked, setPicked] = useState<string | null>(null);
 
-  const quants = listing && 'quants' in listing ? listing.quants : [];
-  const selected = quants.find((q) => q.label === picked) ?? firstPick(quants);
+  const listed = listing && 'quants' in listing ? listing.quants : [];
+  // gglib's pick: the listing's, else the download's once it arrives.
+  const pickLabel = listed.find((q) => q.picked)?.label ?? pick?.label ?? null;
+  const quants = listed.map((q) => (q.label === pickLabel ? { ...q, picked: true } : q));
+  // The row chosen, else gglib's pick.
+  const selected = quants.find((q) => q.label === picked) ?? quants.find((q) => q.picked);
   const model = summary && 'id' in summary ? summary : null;
 
   const download = async (quant: HfQuantization) => {

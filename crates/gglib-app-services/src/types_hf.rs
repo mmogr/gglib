@@ -30,7 +30,9 @@ pub struct HfModelSummary {
     pub likes: u64,
     /// Last modified timestamp
     pub last_modified: Option<String>,
-    /// Total parameter count in billions (the GGUF header's, when the Hub gives it)
+    /// Total parameter count in billions: the Hub's, unless the repository's
+    /// file names state a count more than twice it that its largest weights
+    /// could hold; a lookup by ID with neither takes those weights' header's.
     pub parameters_b: Option<f64>,
     /// Model description/README excerpt
     pub description: Option<String>,
@@ -135,8 +137,21 @@ pub struct HfQuantization {
     pub fit_word: Option<String>,
     /// Whether it is the variant `gglib model download <repo>` takes when
     /// none is asked for, as the picker chooses from the heads this listing
-    /// read (no further header is read for it). At most one is.
+    /// read (no further header is read for it). At most one is; where the
+    /// heads stop before a quantized file's type, none is, and
+    /// [`HfPickResponse`] names the pick.
     pub picked: bool,
+}
+
+/// The variant `gglib model download <repo>` takes when no quantization is
+/// asked for, as the download picks it, reading headers as far as it needs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct HfPickResponse {
+    pub model_id: String,
+    /// Its label, as the listing names it; `None` for a repository with no
+    /// model.
+    pub label: Option<String>,
 }
 
 /// A projector file of a `HuggingFace` repository.

@@ -94,7 +94,7 @@ pub use reasoning_effort::ReasoningEffort;
 
 // Re-export sampling provenance types at the domain level for convenience
 pub use sampling_discards::discarded_from_rung;
-pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
+pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer, source_label};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};

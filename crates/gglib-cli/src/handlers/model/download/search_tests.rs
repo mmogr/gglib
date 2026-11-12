@@ -100,6 +100,35 @@ async fn a_search_lists_every_hit_the_hub_gives() {
     );
 }
 
+/// A hit's quantisations leave out its projector and importance matrix,
+/// and spell each quant one way.
+#[tokio::test]
+async fn a_hits_quantizations_are_its_quants_alone() {
+    let printed = found_text(
+        &Hub::vision(),
+        "vision",
+        10,
+        HfSortField::Downloads,
+        HfModelKind::Chat,
+    )
+    .await
+    .expect("a listing");
+
+    assert_eq!(
+        printed,
+        text(&[
+            "",
+            "📋 Found 1 models:",
+            RULE,
+            " 1. owner/vision-GGUF (↓5 ❤1)",
+            "    Quantizations: Q4_K_M, Q6_K",
+            "",
+            TIPS[0],
+            TIPS[1],
+        ])
+    );
+}
+
 /// A hit's number is led by one space, however many digits it has.
 #[tokio::test]
 async fn a_tenth_hit_is_numbered_as_the_first_is() {

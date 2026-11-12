@@ -7,6 +7,9 @@
  * serializes, so a report names every key: an arm that did not run is `null`,
  * a list nothing filled is `[]`, a count nothing counted is `0`.
  *
+ * The verdicts and each task's counts are served (judged by the daemon on
+ * every read), so a fixture states them as the daemon would.
+ *
  * The baselines are a report in which nothing was measured. Where Rust gives
  * a field a serde default the baseline is that default, so a report stored
  * before the field existed reads back the same way (`ArmScores.seeds`, at 1,
@@ -102,6 +105,8 @@ export function agenticReport(overrides: Partial<AgenticEvalReport> = {}): Agent
     replicate_seed_sets: [],
     paired: null,
     proxy: null,
+    control_verdict: null,
+    effect_verdict: null,
     ...overrides,
   };
 }

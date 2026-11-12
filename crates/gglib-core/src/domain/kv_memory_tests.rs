@@ -1,6 +1,4 @@
 //! Tests for [`super::kv_memory_is_partial`] and [`super::kv_cache_layer_count`].
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 use crate::domain::{KvElemsPerToken, KvShape, estimate_kv_shape};

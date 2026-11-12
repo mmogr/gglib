@@ -7,9 +7,8 @@
 //! caps present in a body whose `params` is missing; this module holds the
 //! two halves apart.
 //!
-//! A separate module rather than more of `props.rs` for the same reason
-//! `props_parse_tests.rs` is: `props.rs` sits at its file budget, and the
-//! caps half is a distinct observation with its own ADR behind it.
+//! A separate module rather than more of `props.rs` because the caps half is
+//! a distinct observation with its own ADR behind it.
 //!
 //! # One read, one latch
 //!

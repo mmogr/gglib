@@ -1,23 +1,50 @@
 //! Tests for [`super`] — the `gglib model explain` table.
 
-use gglib_app_services::ParamProvenanceDto;
-use gglib_core::domain::InferenceConfig;
+use gglib_app_services::{ParamProvenanceDto, ProvenanceKindDto, SamplingLayerDto};
+use gglib_core::domain::{InferenceConfig, ParamSource, source_label};
 
 use super::*;
 use ProvenanceKindDto::{Coupled, Layer, Unset};
-use SamplingLayerDto::{Global, ModelAutoDetected, ModelUserSet, Profile};
+use SamplingLayerDto::{Global, ModelAutoDetected, ModelUserSet, Profile, Request};
 
 /// `resolved`, explained by [`auto_detected_sources`] for a model that
 /// publishes nothing.
 fn explained(resolved: InferenceConfig) -> SamplingExplanationDto {
-    SamplingExplanationDto {
+    labelled(SamplingExplanationDto {
         resolved,
         sources: auto_detected_sources(),
         profile: None,
         trust_client_sampling: false,
         published: Vec::new(),
         defaults_origin: None,
+    })
+}
+
+/// The source a row's `kind` and `layer` stand for.
+const fn source_of(kind: ProvenanceKindDto, layer: Option<SamplingLayerDto>) -> ParamSource {
+    match (kind, layer) {
+        (Coupled, _) => ParamSource::Coupled,
+        (Unset, _) => ParamSource::Unset,
+        (Layer, layer) => ParamSource::Layer(match layer {
+            Some(Request) => 0,
+            Some(Profile) => 1,
+            Some(ModelUserSet) => 2,
+            Some(Global) => 3,
+            Some(ModelAutoDetected) => 4,
+            None => 5,
+        }),
     }
+}
+
+/// `explanation` with each row labelled as the daemon labels it, for its
+/// source, the profile applied and the origin of the model's defaults.
+fn labelled(mut explanation: SamplingExplanationDto) -> SamplingExplanationDto {
+    let profile = explanation.profile.clone();
+    for row in &mut explanation.sources {
+        let source = source_of(row.kind, row.layer);
+        row.label = source_label(source, profile.as_deref(), explanation.defaults_origin);
+    }
+    explanation
 }
 
 /// Nothing resolved, under [`auto_detected_sources`].
@@ -35,7 +62,7 @@ fn sourced(
     let rows = &mut explanation.sources;
     let row = rows.iter_mut().find(|row| row.param == param).unwrap();
     (row.kind, row.layer) = (kind, layer);
-    explanation
+    labelled(explanation)
 }
 
 /// `explanation`, for a model whose GGUF publishes `key` for `param`, with
@@ -92,6 +119,7 @@ fn auto_detected_sources() -> Vec<ParamProvenanceDto> {
         param: param.to_owned(),
         kind,
         layer,
+        label: String::new(),
     };
     sources.into_iter().map(row).collect()
 }
@@ -148,32 +176,6 @@ fn every_parameter_gets_exactly_one_line() {
     }
 }
 
-/// The two ranks of per-model defaults must read differently — telling
-/// them apart is the whole point of the #685 distinction.
-#[test]
-fn user_set_and_auto_detected_defaults_are_worded_differently() {
-    let user = describe(Layer, Some(ModelUserSet), &plain());
-    let auto = describe(Layer, Some(ModelAutoDetected), &plain());
-
-    assert!(user.contains("user-set"), "{user}");
-    assert!(auto.contains("auto-detected"), "{auto}");
-    assert_ne!(user, auto);
-}
-
-/// A value the coupling rule passed over must not look like one nobody ever
-/// set.
-#[test]
-fn a_coupled_absence_says_why_nothing_is_sent() {
-    let unset = describe(Unset, None, &plain());
-    let coupled = describe(Coupled, None, &plain());
-
-    assert!(!unset.contains("coupled"), "{unset}");
-    assert!(
-        coupled.contains("coupled to temperature layer"),
-        "{coupled}"
-    );
-}
-
 /// `max_tokens` is unset on purpose; it must read as a decision
 /// rather than as a missing number.
 #[test]
@@ -190,17 +192,19 @@ fn an_absent_max_tokens_reads_as_deliberate() {
     assert!(line.contains("unset by design"), "{line}");
 }
 
-/// The profile rung is named after the profile the user actually asked
-/// for, not the generic word.
+/// A row's source is the label the daemon serves for it, printed as it
+/// comes: the words are `source_label`'s, pinned in gglib-core.
 #[test]
-fn the_profile_rung_carries_the_selected_name() {
-    let with_profile = SamplingExplanationDto {
-        profile: Some("coding".to_owned()),
-        ..plain()
-    };
-    assert_eq!(
-        describe(Layer, Some(Profile), &with_profile),
-        "profile 'coding'"
+fn a_row_prints_the_served_label() {
+    let mut served = plain();
+    served.sources[0].label = "the label as served".to_owned();
+
+    let lines = explanation_lines(&served);
+
+    assert!(
+        lines[0].ends_with("\u{2190} the label as served"),
+        "{}",
+        lines[0]
     );
 }
 
@@ -513,10 +517,10 @@ fn reasoning() -> SamplingExplanationDto {
         ..InferenceConfig::default()
     };
     let named = sourced(explained(resolved), "reasoningEffort", Layer, Some(Profile));
-    SamplingExplanationDto {
+    labelled(SamplingExplanationDto {
         profile: Some("high".to_owned()),
         ..sourced(named, "reasoningBudgetTokens", Layer, Some(Profile))
-    }
+    })
 }
 
 /// The row that could not be drawn before this table's name column grew.

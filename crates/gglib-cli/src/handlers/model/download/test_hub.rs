@@ -56,6 +56,7 @@ fn hit(id: &str, downloads: u64, likes: u64, description: Option<&str>) -> HfRep
         architecture: None,
         context_length: None,
         tags: vec![],
+        file_paths: Vec::new(),
     }
 }
 
@@ -86,6 +87,12 @@ impl Hub {
             hit("owner/plain-phi", 1_000, 2, Some("short")),
             hit("owner/empty-GGUF", 12, 3, Some("")),
         ])
+    }
+
+    /// One hit whose repository holds two quants, one spelt `Q6_k`, beside
+    /// a projector and an importance matrix.
+    pub(super) fn vision() -> Self {
+        Self::holding(vec![hit("owner/vision-GGUF", 5, 1, None)])
     }
 
     /// `count` hits, named by their number.
@@ -135,6 +142,27 @@ impl Hub {
     }
 }
 
+/// The files of `model_id` its search answer names: two quants for the
+/// first recorded hit, and none for the second or the third; a vision
+/// hit's quants beside its projector and importance matrix; one quant for
+/// any other.
+fn files(model_id: &str) -> Vec<String> {
+    let names: &[&str] = match model_id {
+        "owner/vision-GGUF" => &[
+            "vision-Q4_K_M.gguf",
+            "vision-Q6_k.gguf",
+            "mmproj-vision-F16.gguf",
+            "vision.imatrix.gguf",
+        ],
+        "MaziyarPanahi/Phi-4-mini-instruct-GGUF" => &["Q4_K_M.gguf", "Q8_0.gguf"],
+        "unsloth/Phi-4-mini-instruct-GGUF" | "bartowski/microsoft_Phi-4-mini-instruct-GGUF" => {
+            &["README.md"]
+        }
+        _ => &["Q6_K.gguf"],
+    };
+    names.iter().map(|name| (*name).to_owned()).collect()
+}
+
 #[async_trait]
 impl HfClientPort for Hub {
     async fn search(&self, options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
@@ -142,43 +170,36 @@ impl HfClientPort for Hub {
         if self.limited {
             return Err(HfPortError::RateLimited);
         }
+        // Each hit with the files its answer names, as the Hub's are.
+        let items = self
+            .hits
+            .iter()
+            .map(|hit| HfRepoInfo {
+                file_paths: files(&hit.model_id),
+                ..hit.clone()
+            })
+            .collect();
         Ok(HfSearchResult {
-            items: self.hits.clone(),
+            items,
             next_cursor: Some("next".to_string()),
         })
     }
 
-    async fn list_quantizations(&self, model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
-        let names: &[&str] = match model_id {
-            "MaziyarPanahi/Phi-4-mini-instruct-GGUF" => &["Q4_K_M", "Q8_0"],
-            "unsloth/Phi-4-mini-instruct-GGUF" => &[],
-            "bartowski/microsoft_Phi-4-mini-instruct-GGUF" => {
-                return Err(HfPortError::RateLimited);
-            }
-            _ => &["Q6_K"],
-        };
-        Ok(names
-            .iter()
-            .map(|name| HfQuantInfo {
-                label: (*name).to_string(),
-                role: None,
-                total_size: 1,
-                file_paths: vec![format!("model-{name}.gguf")],
-            })
-            .collect())
+    async fn list_quantizations(&self, _: &str) -> HfPortResult<Vec<HfQuantInfo>> {
+        unimplemented!("a search names each hit's files in its answer")
     }
 
     async fn list_gguf_files(&self, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        unimplemented!("a search and its quantizations are all this hub answers")
+        unimplemented!("a search is all this hub answers")
     }
     async fn get_quantization_files(&self, _: &str, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        unimplemented!("a search and its quantizations are all this hub answers")
+        unimplemented!("a search is all this hub answers")
     }
     async fn get_commit_sha(&self, _: &str) -> HfPortResult<String> {
-        unimplemented!("a search and its quantizations are all this hub answers")
+        unimplemented!("a search is all this hub answers")
     }
     async fn get_model_info(&self, _: &str) -> HfPortResult<HfRepoInfo> {
-        unimplemented!("a search and its quantizations are all this hub answers")
+        unimplemented!("a search is all this hub answers")
     }
     async fn read_head(
         &self,
@@ -186,9 +207,9 @@ impl HfClientPort for Hub {
         _path: &str,
         _max_bytes: u64,
     ) -> HfPortResult<Vec<u8>> {
-        unimplemented!("a search and its quantizations are all this hub answers")
+        unimplemented!("a search is all this hub answers")
     }
     async fn file_at(&self, _model_id: &str, _path: &str) -> HfPortResult<Option<HfFileInfo>> {
-        unimplemented!("a search and its quantizations are all this hub answers")
+        unimplemented!("a search is all this hub answers")
     }
 }

@@ -9,8 +9,8 @@
  * "fit unknown" for a failed read, keeps its highlight on a row as rows come
  * and go, offers the joined machine's models where they may load (and says
  * why not: away, not read, no Load), and closes on Esc with focus back on
- * its button, or on a click outside. The unload sentence is pinned to the CLI by
- * `contracts/unloadReason.test.ts`.
+ * its button, or on a click outside. The fit and unload sentences are the
+ * daemon's, shown as served.
  *
  * The transport is a fake; each explain read waits until the test answers it.
  */
@@ -257,21 +257,22 @@ describe('the Load palette', () => {
     expect(option('Gemma-3-4B-It')).toBeInTheDocument();
   });
 
-  it("says each row's fit from plan.fit, the CLI's unload sentence when the launch unloads first, and an image model's unload alone", async () => {
+  it("says each row's fit from plan.fit, its served unload sentence when the launch unloads first, and an image model's unload alone", async () => {
     const { user } = await renderPalette([QWEN, GEMMA, FLUX]);
     await user.click(button());
     await waitFor(() => expect(askedFor()).toEqual([1, 2, 4]));
 
     await answer(1, fitting());
-    await answer(2, fitting({ unloads: { model: 'Qwen3-30B-A3B', reason: 'would_not_fit_beside' } }));
-    await answer(4, fitting({ fit: null, unloads: { model: 'Flux-Dev', reason: 'one_image_model' } }));
+    await answer(2, fitting({ unloads: { model: 'Qwen3-30B-A3B', reason: 'would_not_fit_beside', sentence: UNLOAD_WORDS } }));
+    const fluxGoes = 'Unloads Flux-Dev first: one image model is loaded at a time.';
+    await answer(4, fitting({ fit: null, unloads: { model: 'Flux-Dev', reason: 'one_image_model', sentence: fluxGoes } }));
 
     expect(option('Qwen3-4B')).toHaveTextContent(FIT_WORDS);
     expect(option('Qwen3-4B')).not.toHaveTextContent('Unloads');
     // The unload first, clear of the ellipsis, and the whole line on hover.
     expect(option('Gemma-3-4B-It')).toHaveTextContent(`${UNLOAD_WORDS} ${FIT_WORDS}`);
     expect(within(option('Gemma-3-4B-It')).getByTitle(`${UNLOAD_WORDS} ${FIT_WORDS}`)).toBeInTheDocument();
-    expect(option('Flux-Schnell')).toHaveTextContent('Unloads Flux-Dev first: one image model is loaded at a time.');
+    expect(option('Flux-Schnell')).toHaveTextContent(fluxGoes);
     expect(option('Flux-Schnell')).not.toHaveTextContent('context');
   });
 
@@ -393,7 +394,7 @@ describe('the Load palette', () => {
       await act(async () => {});
       expect(askedFor()).toEqual([1, 2, 3]);
 
-      await answer(1, fitting({ unloads: { model: 'Qwen3-30B-A3B', reason: 'would_not_fit_beside' } }));
+      await answer(1, fitting({ unloads: { model: 'Qwen3-30B-A3B', reason: 'would_not_fit_beside', sentence: UNLOAD_WORDS } }));
       await waitFor(() => expect(askedFor()).toEqual([2, 3, 1]));
       expect(option('Model-A')).not.toHaveTextContent('Unloads');
     });
@@ -406,7 +407,7 @@ describe('the Load palette', () => {
 
       await user.click(button());
       await waitFor(() => expect(askedFor()).toEqual([1, 1]));
-      await answer(1, fitting({ unloads: { model: 'Qwen3-30B-A3B', reason: 'would_not_fit_beside' } }));
+      await answer(1, fitting({ unloads: { model: 'Qwen3-30B-A3B', reason: 'would_not_fit_beside', sentence: UNLOAD_WORDS } }));
       expect(option('Qwen3-4B')).not.toHaveTextContent('Unloads');
 
       await answer(1, fitting());

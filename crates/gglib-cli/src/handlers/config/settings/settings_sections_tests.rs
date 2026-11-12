@@ -1,9 +1,8 @@
 //! Tests for grouping display rows into sections.
 //!
-//! Its own sibling rather than more of `settings_display_tests.rs`, which is
-//! itself already at the size budget: `settings_to_sections` is a separate
-//! function with a separate contract, and splitting on that line is what
-//! keeps either file readable.
+//! Its own sibling rather than more of `settings_display_tests.rs`:
+//! `settings_to_sections` is a separate function with a separate contract,
+//! and splitting on that line is what keeps either file readable.
 
 use super::settings_to_sections;
 

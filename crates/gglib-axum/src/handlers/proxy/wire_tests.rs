@@ -1,7 +1,6 @@
 //! Tests for the proxy wire types.
 //!
-//! A `#[path]` sibling per the repo convention: `wire.rs` sat 12 lines under
-//! the 300-line budget with a new contract test due.
+//! A `#[path]` sibling per the repo convention.
 
 use super::*;
 use gglib_core::contracts::http::daemon::{

@@ -45,13 +45,13 @@ function fromGlobal(overrides: Partial<SamplingExplanation> = {}): SamplingExpla
       minP: 0.05,
     }),
     sources: [
-      { param: 'temperature', kind: 'layer', layer: 'global' },
-      { param: 'topP', kind: 'layer', layer: 'global' },
-      { param: 'topK', kind: 'layer', layer: 'global' },
-      { param: 'presencePenalty', kind: 'layer', layer: 'global' },
-      { param: 'repeatPenalty', kind: 'layer', layer: 'global' },
-      { param: 'minP', kind: 'layer', layer: 'global' },
-      { param: 'maxTokens', kind: 'layer', layer: 'global' },
+      { param: 'temperature', kind: 'layer', layer: 'global', label: 'global settings' },
+      { param: 'topP', kind: 'layer', layer: 'global', label: 'global settings' },
+      { param: 'topK', kind: 'layer', layer: 'global', label: 'global settings' },
+      { param: 'presencePenalty', kind: 'layer', layer: 'global', label: 'global settings' },
+      { param: 'repeatPenalty', kind: 'layer', layer: 'global', label: 'global settings' },
+      { param: 'minP', kind: 'layer', layer: 'global', label: 'global settings' },
+      { param: 'maxTokens', kind: 'layer', layer: 'global', label: 'global settings' },
     ],
     ...overrides,
   });
@@ -181,7 +181,7 @@ describe('SamplingForm', () => {
       renderForm(
         resolved(
           fromGlobal({
-            sources: [{ param: 'temperature', kind: 'layer', layer: 'modelUserSet' }],
+            sources: [{ param: 'temperature', kind: 'layer', layer: 'modelUserSet', label: 'per-model defaults (user-set)' }],
           }),
         ),
       );

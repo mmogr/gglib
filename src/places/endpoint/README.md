@@ -21,8 +21,8 @@ words are `components/status/words.ts`'s.
 
 Load a model… opens a palette of this machine's models not loaded, each
 with the fit sentence of its explanation (served on `plan.fit`, the
-inspector's) and, when the launch would unload a model first, the CLI's
-unload sentence (pinned by `contracts/unloadReason.test.ts`); the
+inspector's) and, when the launch would unload a model first, the unload
+sentence `gglib model explain` prints, served on `plan.unloads`; the
 joined machine's models follow as On <machine>, loadable there as the far
 inspector allows. There is no route that explains many models, so each
 row is read on its own (`GET /api/models/:id/explain`), the highlighted

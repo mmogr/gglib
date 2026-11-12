@@ -1,7 +1,6 @@
 //! Tests for the remote tunnel's settings (ADR 0012) and what a reset keeps.
 //!
-//! Split out via `#[path]`, like `settings_tests.rs`, and separately from it
-//! because that file is at its budget.
+//! Split out via `#[path]`, like `settings_tests.rs`.
 
 use super::*;
 

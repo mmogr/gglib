@@ -1,19 +1,13 @@
 //! The fixture the remote tunnel's tests are built on (ADR 0012).
 //!
-//! Beside `test_support.rs` rather than inside it. That file is 285 of the
-//! 300 lines `scripts/check_file_size.sh` allows, and a file that
-//! crosses the line *joins* the baseline — the one thing the ratchet exists
-//! to stop. Splitting is the house answer to a file at its budget, the same
-//! answer `gglib-core`'s `settings_remote_tests.rs` is.
-//!
-//! It also carries the machines the tests name, because `connect_tests.rs`
-//! and `lifecycle_tests.rs` name the same ones and a second copy of a
-//! ticket is a second thing to keep true. They are modelpipe's own normative
-//! vectors from `docs/ticket-format-v0.md`, which ship in its published
-//! tarball and are asserted identical by three implementations on every one
-//! of its CI runs.
-//! `ticket_vectors.py` has no `--update` flag, deliberately, so these
-//! strings cannot drift under us.
+//! Beside `test_support.rs` rather than inside it. It carries the machines
+//! the tests name, because `connect_tests.rs` and `lifecycle_tests.rs` name
+//! the same ones and a second copy of a ticket is a second thing to keep
+//! true. They are modelpipe's own normative vectors from
+//! `docs/ticket-format-v0.md`, which ship in its published tarball and are
+//! asserted identical by three implementations on every one of its CI runs.
+//! `ticket_vectors.py` has no `--update` flag, deliberately, so these strings
+//! cannot drift under us.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
