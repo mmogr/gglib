@@ -874,6 +874,10 @@ Named here so that their absence reads as a decision rather than an oversight.
   discovering a desktop on the same network without moving a ticket is
   plausible. It is a different trust model — presence on a network as
   evidence — and it needs its own argument.
+
+  > **Amended 2026-11-12.** gglib no longer carries `mdns-sd`: it went with
+  > `--share-lan` ([ADR 0027](0027-a-stored-secret-is-shown-only-when-asked-for.md#3-one-reveal)).
+  > Discovery on a LAN would add it back, and still needs its own argument.
 - **Per-peer pinning of the pairing request.** `grant_once` admits one request
   bearing the code from whichever peer arrives first. Binding it to a
   fingerprint the desktop has not yet seen is circular, and solving that needs

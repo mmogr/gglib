@@ -37,7 +37,7 @@ pub(crate) async fn handle_set(ctx: &CliContext, key: SettingKey, typed: &str) -
         shown.as_deref().unwrap_or(typed)
     );
     if sets_queue_size
-        && let Some(warning) = queue_size::tell_daemon(ctx, updated.max_download_queue_size).await
+        && let Some(warning) = queue_size::tell_daemon(updated.max_download_queue_size).await
     {
         eprintln!("{warning}");
     }

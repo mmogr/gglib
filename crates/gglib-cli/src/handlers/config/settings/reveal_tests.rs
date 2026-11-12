@@ -117,7 +117,6 @@ fn long_help(argv: &[&str]) -> String {
 fn the_help_that_names_the_reveal_spells_it_as_reveal_command_does() {
     let reveal = SettingSecret::ProxyApiKey.reveal_command();
     for argv in [
-        ["gglib", "daemon", "run", "--help"].as_slice(),
         ["gglib", "config", "reveal", "--help"].as_slice(),
         ["gglib", "proxy", "--help"].as_slice(),
         ["gglib", "serve", "--help"].as_slice(),

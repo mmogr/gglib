@@ -139,7 +139,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     let turn = target.resolve_turn(ctx, model_identifier).await?;
     require_a_model(ctx, &turn).await?;
     // The daemon answers the question: found, or started, once its model is.
-    let daemon = daemon_client::ensure_daemon(ctx).await?;
+    let daemon = daemon_client::ensure_daemon().await?;
     if !quiet {
         for line in sampling_warning::notices(&sampling, target, &settings) {
             eprintln!("{line}");

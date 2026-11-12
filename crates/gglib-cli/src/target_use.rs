@@ -40,7 +40,7 @@ impl Target {
     /// whatever [`far`](Self::far) says.
     pub(crate) async fn drawer(self, ctx: &CliContext) -> Result<ImageGenerator> {
         Ok(match self {
-            Self::Local => ImageGenerator::Daemon(ensure_daemon(ctx).await?),
+            Self::Local => ImageGenerator::Daemon(ensure_daemon().await?),
             Self::Remote => ImageGenerator::Far(self.far(ctx).await?.proxy),
         })
     }

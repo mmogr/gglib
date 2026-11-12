@@ -74,7 +74,7 @@ async fn list(ctx: &CliContext) -> Result<()> {
     );
     print_separator(83);
 
-    let daemon = daemon_servers(ctx).await;
+    let daemon = daemon_servers().await;
     let mut failures = Vec::new();
     for s in &servers {
         let type_str = s.server_type.to_string();
@@ -108,8 +108,8 @@ async fn list(ctx: &CliContext) -> Result<()> {
 
 /// The daemon's servers, when a daemon is running, or why there are none to
 /// read. Never a launch: a list is no reason to start one.
-async fn daemon_servers(ctx: &CliContext) -> Result<Vec<McpServerInfo>, String> {
-    match daemon_client::running(ctx).await {
+async fn daemon_servers() -> Result<Vec<McpServerInfo>, String> {
+    match daemon_client::running().await {
         Ok(daemon) => daemon
             .mcp_servers()
             .await
@@ -268,7 +268,7 @@ async fn tools(ctx: &CliContext, identifier: &str) -> Result<()> {
         return Ok(());
     }
 
-    let daemon = daemon_client::ensure_daemon(ctx).await?;
+    let daemon = daemon_client::ensure_daemon().await?;
     let Some(tools) = tools_in_the_daemon(&daemon, server.id).await? else {
         println!(
             "'{}' is starting in the daemon; ask again in a moment.",

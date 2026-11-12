@@ -35,7 +35,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<
         return list_quants::execute(ctx, args.model_id).await;
     }
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let listing = companions::listing_ops(ctx, None);
     if let Some(preview) = companions::preview(&listing, args.model_id).await {
         ctx.console.println(preview.trim_end());

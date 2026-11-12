@@ -7,7 +7,6 @@
 
 use anyhow::Result;
 
-use crate::bootstrap::CliContext;
 use crate::llama_commands::LlamaCommand;
 use gglib_core::domain::RuntimeKind;
 
@@ -15,16 +14,16 @@ use super::engine;
 use super::llama_detect;
 
 /// Dispatch a `llama` sub-command to its handler.
-pub(crate) async fn dispatch(ctx: &CliContext, command: LlamaCommand) -> Result<()> {
+pub(crate) async fn dispatch(command: LlamaCommand) -> Result<()> {
     match command {
         LlamaCommand::Install { force, build } => {
-            engine::install(ctx, RuntimeKind::Llama, force, build).await?;
+            engine::install(RuntimeKind::Llama, force, build).await?;
         }
         LlamaCommand::Status => {
             gglib_runtime::llama::handle_status().await?;
         }
         LlamaCommand::Uninstall { yes } => {
-            engine::uninstall(ctx, RuntimeKind::Llama, yes).await?;
+            engine::uninstall(RuntimeKind::Llama, yes).await?;
         }
         LlamaCommand::Detect { json } => {
             llama_detect::execute(json);

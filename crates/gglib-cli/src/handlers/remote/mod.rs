@@ -32,47 +32,41 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
             no_qr,
             invite,
         } => {
-            enable(
-                ctx,
-                EnableArgs {
-                    relay,
-                    no_discovery,
-                    no_qr,
-                    invite,
-                },
-            )
+            enable(EnableArgs {
+                relay,
+                no_discovery,
+                no_qr,
+                invite,
+            })
             .await
         }
         RemoteCommand::Disable => disable(ctx).await,
-        RemoteCommand::Status => status(ctx).await,
-        RemoteCommand::Invite { no_qr } => invite(ctx, no_qr).await,
-        RemoteCommand::List => list(ctx).await,
-        RemoteCommand::Forget { device } => forget(ctx, &device).await,
+        RemoteCommand::Status => status().await,
+        RemoteCommand::Invite { no_qr } => invite(no_qr).await,
+        RemoteCommand::List => list().await,
+        RemoteCommand::Forget { device } => forget(&device).await,
         RemoteCommand::Join {
             pairing,
             port,
             relay,
             no_discovery,
         } => {
-            join(
-                ctx,
-                JoinArgs {
-                    pairing,
-                    port,
-                    relay,
-                    no_discovery,
-                },
-            )
+            join(JoinArgs {
+                pairing,
+                port,
+                relay,
+                no_discovery,
+            })
             .await
         }
-        RemoteCommand::Disconnect => disconnect(ctx).await,
+        RemoteCommand::Disconnect => disconnect().await,
     }
 }
 
 /// Execute `gglib remote status`.
-pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
+pub(crate) async fn status() -> Result<()> {
     style::print_info_banner("Remote", "\u{1f517}");
-    let handle = match daemon_client::running(ctx).await {
+    let handle = match daemon_client::running().await {
         Ok(handle) => handle,
         Err(Absent::NotRunning) => {
             eprintln!("  Daemon:  not running \u{2014} nothing is being broadcast");

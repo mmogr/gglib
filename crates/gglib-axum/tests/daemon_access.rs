@@ -1,6 +1,6 @@
 //! Integration tests for the daemon management API's access control:
-//! the Host-header allowlist (DNS-rebinding guard) and the optional
-//! bearer token, as applied by `create_router`.
+//! the Host-header allowlist (DNS-rebinding guard) and the daemon token, as
+//! applied by `create_router`.
 
 mod common;
 
@@ -8,9 +8,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-use common::harness::{
-    test_app_with_access, test_state_and_app, test_state_and_app_with_access, with_test_token,
-};
+use common::harness::{test_app_with_access, test_state_and_app, test_token, with_test_token};
 use common::origin::bearer_token;
 use gglib_axum::DaemonAccess;
 use gglib_core::{CorsConfig, SettingsUpdate};
@@ -73,10 +71,10 @@ async fn missing_host_is_rejected() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-/// Loopback asks no API key, and every loopback name reaches `/health`; `/api`
-/// takes the daemon token and nothing less.
+/// Every loopback name reaches `/health`; `/api` takes the daemon token and
+/// nothing less.
 #[tokio::test]
-async fn loopback_asks_the_token_and_no_key() {
+async fn loopback_asks_the_token() {
     let app = build_app(DaemonAccess::loopback()).await;
 
     for host in ["127.0.0.1:9887", "localhost:9887", "[::1]:9887"] {
@@ -102,20 +100,13 @@ async fn loopback_asks_the_token_and_no_key() {
     assert_eq!(response.status(), StatusCode::OK, "the token → 200");
 }
 
-/// The regression this file exists to prevent from returning.
+/// The proxy's key neither closes nor opens the daemon.
 ///
 /// `gglib remote enable` mints and persists `proxy_api_key` so the *proxy* can
 /// enforce it at the tunnel edge. The management API reads no such thing: it
-/// bound on loopback with no key, and `DaemonAccess::new`'s contract is that
-/// no key means the token alone. Before the fix the router rebuilt the policy
-/// as `tracking(None, settings)`, which re-read `proxy_api_key` on every
-/// request — so enabling remote access 401'd the CLI and the desktop app out of
-/// their own daemon, including out of `gglib remote disable`. Nor does the
-/// proxy's key open the daemon.
-///
-/// The write happens before the first request on purpose: `SettingsCache` is
-/// lazily populated, so its very first `get()` already sees the key. No sleep,
-/// and no flake in either direction.
+/// takes the token alone. A router that once re-read `proxy_api_key` on every
+/// request 401'd the CLI and the desktop app out of their own daemon when
+/// remote access was enabled, including out of `gglib remote disable`.
 #[tokio::test]
 async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
     let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
@@ -138,8 +129,8 @@ async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
     assert_eq!(
         response.status(),
         StatusCode::OK,
-        "a proxy_api_key set after bind must not close a management API that \
-         bound without one — that is the `gglib remote enable` lockout"
+        "a stored proxy_api_key must not close the management API — that is \
+         the `gglib remote enable` lockout"
     );
     let response = app
         .oneshot(get_with("/api/servers", "Bearer minted-by-remote-enable"))
@@ -148,116 +139,43 @@ async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-/// The other half, so the fix above cannot be mistaken for "the daemon
-/// ignores settings".
-///
-/// A daemon that bound *with* a key must keep following the stored value, which
-/// is what makes rotation through `gglib config set` reach a running
-/// listener without a restart. Tracking is right here and wrong above; the
-/// difference is whether a token was in force at bind.
-#[tokio::test]
-async fn a_bound_key_still_follows_a_rotation() {
-    let (state, app) = test_state_and_app_with_access(
-        CorsConfig::AllowAll,
-        with_test_token(DaemonAccess::new(
-            Some("bound-key".into()),
-            "0.0.0.0",
-            Vec::new(),
-        )),
-    )
-    .await;
-
-    state
-        .core
-        .settings()
-        .update(SettingsUpdate {
-            proxy_api_key: Some(Some("rotated-key".into())),
-            ..SettingsUpdate::default()
-        })
-        .await
-        .expect("rotate the stored key");
-
-    let rotated = get_with("/api/servers", "Bearer rotated-key");
-    let response = app.clone().oneshot(rotated).await.unwrap();
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "a rotation must reach a listener that bound with a key"
-    );
-
-    let superseded = get_with("/api/servers", "Bearer bound-key");
-    let response = app.oneshot(superseded).await.unwrap();
-    assert_eq!(
-        response.status(),
-        StatusCode::UNAUTHORIZED,
-        "the superseded key must stop working"
-    );
-}
-
-/// With a token configured, /api/* requires it — and /health does not, so
-/// probes and health checks keep working.
-#[tokio::test]
-async fn configured_token_gates_api_but_not_health() {
-    let app = build_app(DaemonAccess::new(
-        Some("s3cret".into()),
-        "0.0.0.0",
-        Vec::new(),
-    ))
-    .await;
-
-    let response = app
-        .clone()
-        .oneshot(get("/api/servers", "127.0.0.1:9887"))
-        .await
-        .unwrap();
-    assert_eq!(
-        response.status(),
-        StatusCode::UNAUTHORIZED,
-        "no token → 401"
-    );
-
-    let wrong = get_with("/api/servers", "Bearer wrong");
-    let response = app.clone().oneshot(wrong).await.unwrap();
-    assert_eq!(
-        response.status(),
-        StatusCode::UNAUTHORIZED,
-        "wrong token → 401"
-    );
-
-    let right = get_with("/api/servers", "Bearer s3cret");
-    let response = app.clone().oneshot(right).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK, "right token → 200");
-
-    let response = app.oneshot(get("/health", "127.0.0.1:9887")).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK, "/health stays open");
-}
-
 /// The daemon's door and the proxy's must agree about what a valid credential
 /// looks like. RFC 9110 makes the scheme case-insensitive, so a client that
 /// spells it `bearer` is authenticating correctly.
 #[tokio::test]
 async fn the_daemon_matches_the_scheme_case_insensitively() {
-    let app = build_app(DaemonAccess::new(
-        Some("s3cret".into()),
-        "0.0.0.0",
-        Vec::new(),
-    ))
-    .await;
+    let app = build_app(DaemonAccess::loopback()).await;
+    let token = test_token();
+    let token = token.as_str();
 
-    for header in ["bearer s3cret", "BEARER s3cret", "Bearer  s3cret"] {
-        let request = get_with("/api/servers", header);
+    for header in [
+        format!("bearer {token}"),
+        format!("BEARER {token}"),
+        format!("Bearer  {token}"),
+    ] {
+        let request = get_with("/api/servers", &header);
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(
             response.status(),
             StatusCode::OK,
-            "{header:?} presents the configured token"
+            "{header:?} presents the token"
         );
     }
 
     // And the widening stops at the scheme: a different one, and a credential
     // in the wrong case, are still refused.
-    for header in ["Basic s3cret", "Bearer S3CRET", "Bearer ", "Bearer"] {
-        let request = get_with("/api/servers", header);
+    let shouted = token.to_uppercase();
+    assert_ne!(
+        shouted, token,
+        "the token has letters to change the case of"
+    );
+    for header in [
+        format!("Basic {token}"),
+        format!("Bearer {shouted}"),
+        "Bearer ".to_owned(),
+        "Bearer".to_owned(),
+    ] {
+        let request = get_with("/api/servers", &header);
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(
             response.status(),
@@ -267,25 +185,23 @@ async fn the_daemon_matches_the_scheme_case_insensitively() {
     }
 }
 
-/// A LAN-shared daemon must be reachable by raw IP and by its advertised
-/// mDNS name, while still refusing foreign hostnames.
+/// The daemon answers to a host it was named, and not to an IP literal it
+/// was not: it listens on loopback, so nothing reaches it by a LAN address.
 #[tokio::test]
-async fn share_lan_policy_accepts_ip_literals_and_named_hosts() {
-    let app = build_app(DaemonAccess::new(
-        None,
-        "0.0.0.0",
-        vec!["gglib.local".into()],
-    ))
-    .await;
+async fn a_named_host_is_accepted_and_an_unlisted_ip_literal_is_refused() {
+    let app = build_app(DaemonAccess::new(vec!["gglib.test".into()])).await;
 
-    for host in ["192.168.1.7:9887", "gglib.local:9887", "127.0.0.1:9887"] {
+    for host in ["gglib.test:9887", "127.0.0.1:9887"] {
         let response = app.clone().oneshot(get("/health", host)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK, "{host} must be allowed");
     }
 
-    let response = app
-        .oneshot(get("/health", "evil.example.com"))
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    for host in ["192.168.1.7:9887", "evil.example.com"] {
+        let response = app.clone().oneshot(get("/health", host)).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "{host} is refused"
+        );
+    }
 }

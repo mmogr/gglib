@@ -109,7 +109,7 @@ async fn a_request_shaped_like_the_clis_still_passes() {
 
 #[tokio::test]
 async fn the_daemons_own_page_passes_under_a_name_it_answers_to() {
-    let access = DaemonAccess::new(None, "127.0.0.1", vec!["gglib.test".into()]);
+    let access = DaemonAccess::new(vec!["gglib.test".into()]);
     let app = shipped(&shipped_cors(), access).await;
     let own = [("origin", "http://gglib.test:9887"), FORM];
     let answer = disconnect(&app, "gglib.test:9887", &own).await;
@@ -145,7 +145,7 @@ async fn a_rebound_page_is_refused_unless_its_name_is_one_the_daemon_answers_to(
         let answer = disconnect(&app, "evil.com:9887", &rebound).await;
         assert_eq!(answer.status, StatusCode::FORBIDDEN, "{}", answer.body);
     }
-    let named = DaemonAccess::new(None, "127.0.0.1", vec!["evil.com".into()]);
+    let named = DaemonAccess::new(vec!["evil.com".into()]);
     for app in routers(named) {
         let answer = disconnect(&app, "evil.com:9887", &rebound).await;
         assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);

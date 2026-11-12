@@ -43,7 +43,7 @@ pub(crate) async fn execute(
     target
         .run(
             async || list_here(ctx, ops, args).await,
-            async || list_far::execute(ctx, target).await,
+            async || list_far::execute(target).await,
         )
         .await
 }

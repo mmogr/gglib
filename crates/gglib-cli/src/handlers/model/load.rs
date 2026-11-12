@@ -30,8 +30,8 @@ pub(crate) async fn load(
     let body = start_body(&model, context)?;
     // The engine the model runs under has to be here before the daemon is
     // asked for it, as `serve` and `chat` make sure of.
-    crate::handlers::config::engine::ensure_installed(ctx, model.runtime(), false).await?;
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    crate::handlers::config::engine::ensure_installed(model.runtime(), false).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     for line in load_on(&handle, &body, pin).await? {
         eprintln!("{line}");
     }
@@ -78,7 +78,7 @@ pub(super) async fn load_on(
 /// Execute `gglib model unload <id>`.
 pub(crate) async fn unload(ctx: &CliContext, identifier: &str) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
-    let handle = match daemon_client::running(ctx).await {
+    let handle = match daemon_client::running().await {
         Ok(handle) => handle,
         Err(Absent::NotRunning) => {
             eprintln!("  Daemon is not running \u{2014} nothing is loaded.");

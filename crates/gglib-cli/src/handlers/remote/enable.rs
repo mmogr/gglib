@@ -6,7 +6,6 @@ use anyhow::Result;
 use gglib_app_services::{RemoteEnableBody, RemoteEnableResponse};
 
 use super::pairing_tui::{self, Outcome};
-use crate::bootstrap::CliContext;
 use crate::daemon_client;
 
 /// What `gglib remote enable` was asked for.
@@ -27,8 +26,8 @@ pub(crate) struct EnableArgs {
 /// Ensures the daemon is running, asks it to bring the tunnel up, and shows
 /// the pairing once — in the alternate screen when stdout is a terminal, as
 /// plain text otherwise.
-pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+pub(crate) async fn enable(args: EnableArgs) -> Result<()> {
+    let handle = daemon_client::ensure_daemon().await?;
 
     eprintln!("  Enabling remote access\u{2026} (finding a relay can take a few seconds)");
     let enabled = handle.remote_enable(&body_of(&args)).await?;

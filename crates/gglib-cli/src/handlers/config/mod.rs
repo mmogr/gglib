@@ -24,8 +24,8 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result
         ConfigCommand::Reset { yes } => settings::handle_reset(ctx, yes).await,
         ConfigCommand::Reveal { key } => settings::handle_reveal(ctx, key.0).await,
         ConfigCommand::Profile { command } => settings::handle_profile(ctx, command).await,
-        ConfigCommand::Llama { command } => llama::dispatch(ctx, command).await,
-        ConfigCommand::Sd { command } => sd::dispatch(ctx, command).await,
+        ConfigCommand::Llama { command } => llama::dispatch(command).await,
+        ConfigCommand::Sd { command } => sd::dispatch(command).await,
         ConfigCommand::CheckDeps => {
             let probe = gglib_runtime::DefaultSystemProbe::new();
             check_deps::execute(&probe)
