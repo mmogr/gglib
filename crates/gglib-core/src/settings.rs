@@ -300,9 +300,9 @@ pub struct Settings {
     /// `gglib config reveal remote-pairing.api-key` prints it, alone
     /// and only when asked, for a client that is not gglib.
     ///
-    /// A database written before the halves were bound holds
-    /// `remote_api_key` and `remote_last_ticket` as separate rows, and both
-    /// are ignored — no alias, deliberately. Neither is evidence about the
+    /// A database written before the halves were bound held
+    /// `remote_api_key` and `remote_last_ticket` as separate rows; an upgrade
+    /// deletes both — no alias, deliberately. Neither is evidence about the
     /// other, and reading the one as belonging to the other is exactly the
     /// defect this field closes; such a machine loads as never paired and
     /// pairs again, which a stale ticket already required of it.

@@ -4,7 +4,7 @@
  * ST-7), with the value it means; a number's default in the box and under
  * it, announced with the field (ST-2), and the range the backend accepts
  * (ST-3); the models folder's Reset writing the folder alone (ST-4); the
- * loop guard as on and off with the terminal's Refuse shown; the image model
+ * loop guard writing true and false; the image model
  * choice keeping a stored id that is no image model; the sampling summary
  * and Change…; a profile added from the place; the menu bar toggle in the
  * desktop app only.
