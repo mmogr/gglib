@@ -119,6 +119,80 @@ fn the_environment_outranks_a_stored_models_directory() {
     assert!(resolve_models_dir(None).unwrap().path.ends_with("from-env"));
 }
 
+/// A library that never chose a folder has the default stored, so a later
+/// build with another default still finds what was downloaded here.
+#[test]
+fn the_default_models_directory_is_stored_when_nothing_names_one() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let _data = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
+    let _models = EnvVarGuard::unset("GGLIB_MODELS_DIR");
+
+    store_default_models_dir().unwrap();
+
+    let resolved = resolve_models_dir(None).unwrap();
+    assert_eq!(resolved.path, default_models_dir().unwrap());
+    assert_eq!(
+        resolved.source,
+        ModelsDirSource::EnvVar,
+        "read back as stored"
+    );
+}
+
+/// A folder the environment names is that process's, not a choice to keep.
+#[test]
+fn a_models_directory_the_environment_names_is_not_stored() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let _data = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
+    let _models = EnvVarGuard::set("GGLIB_MODELS_DIR", "/tmp/from-env");
+
+    store_default_models_dir().unwrap();
+
+    assert!(!temp.path().join(".env").exists());
+}
+
+/// A line the loader refuses is left alone: it is the only record of the
+/// folder a user chose, written bare by a build before quoting.
+#[test]
+fn a_stored_line_the_loader_refuses_is_left_as_it_is() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let _data = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
+    let _models = EnvVarGuard::unset("GGLIB_MODELS_DIR");
+    let env = temp.path().join(".env");
+    let line = "GGLIB_MODELS_DIR=/Volumes/My Drive/models\n";
+    std::fs::write(&env, line).unwrap();
+    assert_eq!(
+        resolve_models_dir(None).unwrap().source,
+        ModelsDirSource::Default,
+        "the loader refuses the bare line"
+    );
+
+    store_default_models_dir().unwrap();
+
+    assert_eq!(std::fs::read_to_string(&env).unwrap(), line);
+}
+
+/// A stored folder stays the one stored.
+#[test]
+fn a_stored_models_directory_is_left_as_it_is() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let _data = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
+    let _models = EnvVarGuard::unset("GGLIB_MODELS_DIR");
+    let chosen = temp.path().join("chosen");
+    set_models_dir(
+        chosen.to_string_lossy().as_ref(),
+        DirectoryCreationStrategy::AutoCreate,
+    )
+    .unwrap();
+
+    store_default_models_dir().unwrap();
+
+    assert_eq!(resolve_models_dir(None).unwrap().path, chosen);
+}
+
 /// Two spellings of one file resolve to one answer. This is the property
 /// the model key, the stored column and the duplicate lookup all lean on;
 /// if it stops holding, a re-add silently merges two models into one row.

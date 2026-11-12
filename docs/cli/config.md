@@ -114,6 +114,8 @@ stores one.
   already running finishes where it started.
 - `GGLIB_MODELS_DIR` in the daemon's own environment outranks the stored
   directory.
+- The daemon's first start stores the default folder, so it then shows as
+  `environment`, and a later release with another default keeps using it.
 
 ## `llama` and `sd`
 

@@ -48,6 +48,7 @@ pub use models::DEFAULT_MODELS_DIR_RELATIVE;
 pub use models::{
     ModelsDirResolution, ModelsDirSource, canonical_model_path, canonical_model_path_string,
     default_models_dir, repository_dir, resolve_models_dir, set_models_dir,
+    store_default_models_dir,
 };
 
 // PID tracking
