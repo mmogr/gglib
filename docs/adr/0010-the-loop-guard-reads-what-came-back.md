@@ -195,6 +195,10 @@ before ADR 0006 had to widen it.
 > now ended ([ADR 0021](0021-the-loop-guard-ends-the-loop.md)), so a mistaken
 > trip that repeats costs the run.
 
+> **Amended 2026-11-12.** `loop_guard_mode` is gone. The guard is on or off
+> (`loop-guard`), on is what `note` did, and `refuse` was deleted, so a
+> verdict always reaches the model as a note first.
+
 ## Kill criteria
 
 - If `repeats_rescued` dwarfs `identical_result_repeats` in real use, the join is

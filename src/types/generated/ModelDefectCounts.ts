@@ -26,10 +26,9 @@ requests: number,
 /**
  * Requests the loop/stagnation guard acted on.
  *
- * That is *not* the same as rejected (#1052): the guard's default
- * forwards a tripped request with a note, and only
- * `loop-guard-mode refuse` rejects it before dispatch. Both count
- * here, so this number is a count of **interventions** — per process,
+ * That is *not* the same as rejected (#1052): the guard forwards a
+ * run's first trip with a note, and ends the run only if it trips again.
+ * Both count here, so this number is a count of **interventions** — per process,
  * reset when the daemon restarts. ADR 0011's kill criterion reads the
  * loop guard's log instead (`gglib proxy trips`), which outlives the
  * process and counts *decisions* rather than snapshots: a noted request
@@ -56,8 +55,8 @@ loop_guard_stagnations: number,
  *
  * One per turn the agent loop's guard ran on, trip or not. A run with
  * both `max_stagnation_steps` and `max_repeated_batch_steps` unset has no
- * guard, and records nothing here; that is the proxy's `off` case, which
- * records no scan either.
+ * guard, and records nothing here; that is the proxy's guard switched off,
+ * which records no scan either.
  *
  * Deliberately not folded into [`Self::requests`]. That counts a request
  * the proxy forwarded, and the agent loop forwards nothing — one turn
@@ -76,11 +75,10 @@ loop_guard_stagnations: number,
  *
  * And the numerators do not count the same way, so equal ratios do not
  * mean equally stuck conversations. An agent trip ends its run, so a run
- * contributes at most one; under `note` the proxy counts a stuck run
- * when it notes it and again when it ends it (ADR 0021), and one
- * conversation can get stuck more than once, so one conversation can
- * contribute many. ADR 0011 makes the same point about reading its log within one
- * mode. Read either ratio as trips per decision, which is what it is,
+ * contributes at most one; the proxy counts a stuck run when it notes
+ * it and again when it ends it (ADR 0021), and one conversation can get
+ * stuck more than once, so one conversation can contribute many. Read
+ * either ratio as trips per decision, which is what it is,
  * and not as a rate of conversations that got stuck.
  *
  * Per process, like every counter here, so it resets when the daemon

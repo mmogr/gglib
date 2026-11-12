@@ -18,7 +18,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gglib_core::LoopGuardMode;
 use gglib_core::ports::LoopGuardTripSink;
 use gglib_db::{LoopGuardTripWriter, setup_database};
 
@@ -55,7 +54,7 @@ async fn one_round() -> (i64, i64, i64) {
             std::thread::spawn(move || {
                 let at = now_secs();
                 while !stop.load(Ordering::Relaxed) {
-                    writer.record_scan("qwen", LoopGuardMode::Note, at);
+                    writer.record_scan("qwen", at);
                     recorded.fetch_add(1, Ordering::Relaxed);
                 }
             })

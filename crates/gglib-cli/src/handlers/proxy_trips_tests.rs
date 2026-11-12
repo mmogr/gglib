@@ -1,7 +1,6 @@
 //! Tests for [`super`]: the log read from a database with no daemon anywhere,
 //! and what the table and the empty case say.
 
-use gglib_core::LoopGuardMode;
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::domain::loop_guard_log::LoopGuardTripEvent;
 use gglib_core::ports::LoopGuardTripSink;
@@ -29,18 +28,12 @@ async fn the_log_is_read_from_the_database_with_no_daemon_involved() {
     let writer = LoopGuardTripWriter::spawn(pool.clone());
     let now = now_secs();
     for _ in 0..4 {
-        writer.record_scan("qwen3-coder", LoopGuardMode::Note, now);
+        writer.record_scan("qwen3-coder", now);
     }
     // Ten days back: outside the seven-day window read below.
-    writer.record_scan("qwen3-coder", LoopGuardMode::Note, now - 10 * 86_400);
+    writer.record_scan("qwen3-coder", now - 10 * 86_400);
     writer.record_trip(
-        LoopGuardTripEvent::new(
-            now,
-            "qwen3-coder",
-            LoopGuardTrip::Stagnation,
-            LoopGuardMode::Note,
-        )
-        .with_repeats(6, 5),
+        LoopGuardTripEvent::new(now, "qwen3-coder", LoopGuardTrip::Stagnation).with_repeats(6, 5),
     );
     writer.shutdown().await;
 
@@ -61,7 +54,7 @@ async fn the_log_is_read_from_the_database_with_no_daemon_involved() {
     );
     let row = text.lines().nth(2).expect("the window, a header and a row");
     let cells: Vec<&str> = row.split_whitespace().collect();
-    assert_eq!(cells[3..], ["note", "4", "1", "0", "1", "0"], "{row}");
+    assert_eq!(cells[3..], ["4", "1", "0", "1", "0"], "{row}");
 }
 
 #[test]

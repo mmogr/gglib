@@ -21,7 +21,8 @@ These can change in any release:
 - benchmarks and diagnostics, including `model explain` and the proxy dashboard;
 - the `GGLIB_DISABLE_*` switches;
 - the Rust crates' APIs;
-- the `llama_base_port` setting, which may go if llama-server's own router takes over residency.
+- the `llama_base_port` setting, which may go if llama-server's own router takes over residency;
+- the loop guard: its `loop-guard` setting, and what it catches and does.
 
 ## Platforms
 

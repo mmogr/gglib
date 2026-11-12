@@ -185,7 +185,7 @@ fn a_remote_machine() -> Settings {
         proxy_cache_on_disk: Some(true),
         proxy_cache_disk_gb: Some(4),
         trust_client_sampling: Some(true),
-        loop_guard_mode: Some(LoopGuardMode::Refuse),
+        loop_guard: Some(false),
         tool_call_repair: Some(false),
         mcp_drawing: Some(true),
         proxy_autostart: Some(true),

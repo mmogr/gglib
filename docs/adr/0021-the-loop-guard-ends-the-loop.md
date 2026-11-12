@@ -69,6 +69,15 @@ not in this repository.
    ending it would answer them without the model. No setting or mode is
    added; `refuse` and `off` are unchanged.
 
+> **Amended 2026-11-12 — `note` is the only behaviour.** The guard is now on
+> or off (`loop-guard true|false`), and on is decisions 1 and 3 above. `refuse`
+> and decision 2 are deleted, with the 400s `loop_detected` and
+> `stagnation_detected` on the proxy path (the agent run still reports those
+> codes). So the title's "under `note`" and decision 3's "`refuse` and `off`
+> are unchanged" no longer describe a choice: there is one way the guard acts.
+> The guard catches only the exact same call or reply repeated, and is outside
+> the [v1 promise](../compatibility.md).
+
 ## Consequences
 
 - Under `note` a looping run whose requests end with the tool result is

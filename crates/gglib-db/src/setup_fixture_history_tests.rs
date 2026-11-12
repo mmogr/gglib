@@ -5,7 +5,6 @@
 //! As for the models, each leniently read column is checked against the
 //! value it holds.
 
-use gglib_core::LoopGuardMode;
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::attachment::AttachmentId;
 use gglib_core::domain::benchmark::{BenchmarkRunStatus as Status, BenchmarkRunType as Kind};
@@ -208,7 +207,6 @@ async fn loop_guard_counts_read_back_whole() {
                 d.day.as_str(),
                 d.model_name.as_str(),
                 d.gglib_version.as_str(),
-                d.mode,
                 counts,
             )
         })
@@ -217,16 +215,9 @@ async fn loop_guard_counts_read_back_whole() {
         "2026-11-12",
         "Fixture Agent 0.6B",
         "0.33.0",
-        LoopGuardMode::Refuse,
         [40, 2, 1, 1, 1],
     );
-    let plain = (
-        "2026-11-11",
-        "Fixture Plain",
-        "0.33.0",
-        LoopGuardMode::Note,
-        [7, 0, 0, 0, 0],
-    );
+    let plain = ("2026-11-11", "Fixture Plain", "0.33.0", [7, 0, 0, 0, 0]);
     assert_eq!(read, [agent, plain]);
     pool.close().await;
 }

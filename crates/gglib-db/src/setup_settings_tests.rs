@@ -1,26 +1,34 @@
-//! The fold of the loop guard's switch into its mode, on database files of
-//! the test's own: what each stored pair answers afterwards, that it runs
-//! once, and what it writes. `setup_settings_unreadable_tests.rs` has the
-//! records it must leave alone.
+//! The fold of the loop guard's switch into its mode (step 2), on database
+//! files of the test's own: what each stored pair answers once a boot has run
+//! it and step 7 after it, that it runs once, and what it writes.
 
 use std::path::{Path, PathBuf};
 
-use gglib_core::LoopGuardMode::{self, Note, Off, Refuse};
 use gglib_core::SettingsRepository;
 
+use sqlx::SqlitePool;
+
 use super::super::migrations::{LATEST, run, user_version};
-use super::*;
 use crate::{SqliteSettingsRepository, setup_database};
 
+/// The key of the row that was the loop guard's switch.
+const SWITCH: &str = "proxy_loop_detection";
+
+/// The key of the row that held the loop guard's mode.
+const MODE: &str = "loop_guard_mode";
+
+/// The key of the row that holds the loop guard's switch today.
+const GUARD: &str = "loop_guard";
+
 /// The version a build before the fold left: step 1 done.
-pub(super) const BEFORE_THE_FOLD: i64 = 1;
+const BEFORE_THE_FOLD: i64 = 1;
 
 /// A settings row, byte for byte: its key, its value's type and bytes, and
 /// when it was written.
-pub(super) type StoredRow = (String, String, Vec<u8>, String);
+type StoredRow = (String, String, Vec<u8>, String);
 
 /// The row `key` has when it holds the text `value`, written at `at`.
-pub(super) fn text_row(key: &str, value: &str, at: &str) -> StoredRow {
+fn text_row(key: &str, value: &str, at: &str) -> StoredRow {
     (
         key.to_owned(),
         "text".to_owned(),
@@ -32,11 +40,7 @@ pub(super) fn text_row(key: &str, value: &str, at: &str) -> StoredRow {
 /// A database file as a build before the fold left it: this build's schema,
 /// `version` for its `user_version`, and `rows` in its settings table, each
 /// written at `then`.
-pub(super) async fn left_by_an_older_build(
-    path: &Path,
-    version: i64,
-    rows: &[(&str, &str)],
-) -> PathBuf {
+async fn left_by_an_older_build(path: &Path, version: i64, rows: &[(&str, &str)]) -> PathBuf {
     let pool = setup_database(path, &gglib_core::ports::NoopGgufParser)
         .await
         .expect("a fresh database");
@@ -57,7 +61,7 @@ async fn plant(pool: &SqlitePool, key: &str, value: &str) {
         .expect("a planted row");
 }
 
-pub(super) async fn stamp(pool: &SqlitePool, version: i64) {
+async fn stamp(pool: &SqlitePool, version: i64) {
     sqlx::query(&format!("PRAGMA user_version = {version}"))
         .execute(pool)
         .await
@@ -65,7 +69,7 @@ pub(super) async fn stamp(pool: &SqlitePool, version: i64) {
 }
 
 /// Every settings row, in key order.
-pub(super) async fn rows(pool: &SqlitePool) -> Vec<StoredRow> {
+async fn rows(pool: &SqlitePool) -> Vec<StoredRow> {
     sqlx::query_as(
         "SELECT key, typeof(value), CAST(value AS BLOB), updated_at \
          FROM settings_kv ORDER BY key",
@@ -83,13 +87,13 @@ async fn value_of(pool: &SqlitePool, key: &str) -> Option<String> {
         .expect("a row or none")
 }
 
-/// What the loop guard does, as this build loads the record.
-async fn answer(pool: &SqlitePool) -> LoopGuardMode {
+/// Whether the loop guard is on, as this build loads the record.
+async fn answer(pool: &SqlitePool) -> bool {
     SqliteSettingsRepository::new(pool.clone())
         .load()
         .await
         .expect("a record this build reads")
-        .effective_loop_guard_mode()
+        .effective_loop_guard()
 }
 
 /// What a row holds, or `None` for no row.
@@ -100,37 +104,36 @@ const NOTE: Held = Some(r#""note""#);
 const REFUSE: Held = Some(r#""refuse""#);
 const NULL: Held = Some("null");
 
-/// Each stored switch and mode, what the build before the fold answered for
-/// the pair, and the mode's row once folded.
+/// Each stored switch and mode, whether the guard is on once both steps ran,
+/// and the switch's row today.
 ///
-/// The answers are that build's rule written out, not computed: a stored mode
-/// answered, whatever the switch said; with none, `false` answered `off` and
-/// `true` or no switch answered `note`. A JSON `null` in either row read as no
-/// row. Only a `false` switch with no mode moves the mode's row; every other
-/// pair leaves it as stored.
-const PAIRS: &[(Held, Held, LoopGuardMode, Held)] = &[
-    (None, None, Note, None),
-    (None, OFF, Off, OFF),
-    (None, NOTE, Note, NOTE),
-    (None, REFUSE, Refuse, REFUSE),
-    (Some("true"), None, Note, None),
-    (Some("true"), OFF, Off, OFF),
-    (Some("true"), NOTE, Note, NOTE),
-    (Some("true"), REFUSE, Refuse, REFUSE),
-    (Some("false"), None, Off, OFF),
-    (Some("false"), OFF, Off, OFF),
-    (Some("false"), NOTE, Note, NOTE),
-    (Some("false"), REFUSE, Refuse, REFUSE),
-    (NULL, None, Note, None),
-    (NULL, OFF, Off, OFF),
-    (Some("true"), NULL, Note, NULL),
-    (Some("false"), NULL, Off, OFF),
+/// The build before the fold answered a stored mode whatever the switch
+/// said; with none, `false` answered `off` and `true` or no switch answered
+/// `note`. A JSON `null` in either row read as no row. Only `off` switches
+/// the guard off today; `note` and `refuse` are on, with no row.
+const PAIRS: &[(Held, Held, bool, Held)] = &[
+    (None, None, true, None),
+    (None, OFF, false, Some("false")),
+    (None, NOTE, true, None),
+    (None, REFUSE, true, None),
+    (Some("true"), None, true, None),
+    (Some("true"), OFF, false, Some("false")),
+    (Some("true"), NOTE, true, None),
+    (Some("true"), REFUSE, true, None),
+    (Some("false"), None, false, Some("false")),
+    (Some("false"), OFF, false, Some("false")),
+    (Some("false"), NOTE, true, None),
+    (Some("false"), REFUSE, true, None),
+    (NULL, None, true, None),
+    (NULL, OFF, false, Some("false")),
+    (Some("true"), NULL, true, None),
+    (Some("false"), NULL, false, Some("false")),
 ];
 
 #[tokio::test]
-async fn every_stored_pair_answers_once_folded_what_it_answered_before() {
+async fn every_stored_pair_answers_what_it_answered_before() {
     let dir = tempfile::tempdir().expect("tempdir");
-    for (case, (switch, mode, answered, mode_after)) in PAIRS.iter().enumerate() {
+    for (case, (switch, mode, on, guard_after)) in PAIRS.iter().enumerate() {
         let stored: Vec<(&str, &str)> = [(SWITCH, switch), (MODE, mode)]
             .into_iter()
             .filter_map(|(key, value)| value.map(|value| (key, value)))
@@ -143,18 +146,19 @@ async fn every_stored_pair_answers_once_folded_what_it_answered_before() {
             .expect("the boot");
 
         let pair = format!("switch {switch:?}, mode {mode:?}");
-        assert_eq!(answer(&pool).await, *answered, "{pair}");
+        assert_eq!(answer(&pool).await, *on, "{pair}");
         assert_eq!(value_of(&pool, SWITCH).await, None, "{pair}");
+        assert_eq!(value_of(&pool, MODE).await, None, "{pair}");
         assert_eq!(
-            value_of(&pool, MODE).await.as_deref(),
-            *mode_after,
+            value_of(&pool, GUARD).await.as_deref(),
+            *guard_after,
             "{pair}"
         );
         pool.close().await;
     }
 }
 
-/// A library from before the first stamp takes both steps in one boot.
+/// A library from before the first stamp takes every step in one boot.
 #[tokio::test]
 async fn a_database_never_stamped_is_folded_too() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -164,13 +168,12 @@ async fn a_database_never_stamped_is_folded_too() {
         .await
         .expect("the boot");
 
-    assert_eq!(answer(&pool).await, Off);
+    assert!(!answer(&pool).await);
     assert_eq!(user_version(&pool).await.expect("a version"), LATEST);
 }
 
-/// The stamp is what makes it once: a switch written into a stamped database,
-/// as an older build's `--proxy-loop-detection false` would write it, is a
-/// row no field answers to and is left where it is.
+/// The stamp is what makes it once: a switch written into a stamped database
+/// is a row no field answers to and is left where it is.
 #[tokio::test]
 async fn the_fold_runs_once_and_a_switch_written_after_it_is_not_folded() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -191,10 +194,10 @@ async fn the_fold_runs_once_and_a_switch_written_after_it_is_not_folded() {
         .expect("the second boot");
 
     assert_eq!(rows(&pool).await, [text_row(SWITCH, "false", "then")]);
-    assert_eq!(answer(&pool).await, Note);
+    assert!(answer(&pool).await);
 }
 
-/// A second pass over a folded record writes nothing: the mode's row keeps
+/// A second pass over a folded record writes nothing: the switch's row keeps
 /// the time the test gave it, so it was not written again with the same value.
 #[tokio::test]
 async fn a_second_pass_over_a_folded_record_writes_nothing() {
@@ -208,7 +211,7 @@ async fn a_second_pass_over_a_folded_record_writes_nothing() {
         .execute(&pool)
         .await
         .expect("a marked row");
-    let folded = [text_row(MODE, r#""off""#, "folded")];
+    let folded = [text_row(GUARD, "false", "folded")];
     assert_eq!(rows(&pool).await, folded);
     stamp(&pool, BEFORE_THE_FOLD).await;
 
@@ -229,7 +232,7 @@ const OTHERS: &[(&str, &str)] = &[
 ];
 
 #[tokio::test]
-async fn the_fold_writes_the_mode_and_the_switch_and_no_other_row() {
+async fn the_steps_write_the_switch_and_no_other_row() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
     let stored = [OTHERS, &[(SWITCH, "false")]].concat();
@@ -239,59 +242,31 @@ async fn the_fold_writes_the_mode_and_the_switch_and_no_other_row() {
         .await
         .expect("the boot");
 
-    let (mode, others): (Vec<_>, Vec<_>) = rows(&pool)
-        .await
-        .into_iter()
-        .partition(|(key, ..)| key == MODE);
-    let kept: Vec<_> = OTHERS
-        .iter()
-        .map(|(key, value)| text_row(key, value, "then"))
-        .collect();
-    assert_eq!(others, kept);
-    let [(_, kind, value, written)] = mode.as_slice() else {
-        panic!("one row for the mode, found {mode:?}");
-    };
-    assert_eq!(
-        (kind.as_str(), value.as_slice()),
-        ("text", &br#""off""#[..])
-    );
-    assert_ne!(written, "then", "the mode's row is new");
-}
-
-/// A stored mode already answers for the pair, so its row is not a write
-/// either: it keeps its bytes, padding included, and its time.
-#[tokio::test]
-async fn a_stored_mode_keeps_its_row_byte_for_byte_when_the_switch_goes() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let path = dir.path().join("gglib.db");
-    let mode = (MODE, r#" "refuse" "#);
-    let stored = [OTHERS, &[mode, (SWITCH, "false")]].concat();
-    left_by_an_older_build(&path, BEFORE_THE_FOLD, &stored).await;
-
-    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
-        .await
-        .expect("the boot");
-
-    let mut kept: Vec<_> = [OTHERS, &[mode]]
+    let mut kept: Vec<_> = [OTHERS, &[(GUARD, "false")]]
         .concat()
         .iter()
         .map(|(key, value)| text_row(key, value, "then"))
         .collect();
     kept.sort();
     assert_eq!(rows(&pool).await, kept);
-    assert_eq!(answer(&pool).await, Refuse);
 }
 
+/// A stored mode that is not `off` leaves the guard on, with no row.
 #[tokio::test]
-async fn the_auto_tune_row_is_reclaimed_as_a_database_opens() {
+async fn a_stored_refuse_turns_into_a_guard_that_is_on() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
-    let stored = [("auto_tune", "true"), ("proxy_port", "9191")];
+    let stored = [OTHERS, &[(MODE, r#""refuse""#), (SWITCH, "false")]].concat();
     left_by_an_older_build(&path, BEFORE_THE_FOLD, &stored).await;
 
     let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await
         .expect("the boot");
 
-    assert_eq!(rows(&pool).await, [text_row("proxy_port", "9191", "then")]);
+    let kept: Vec<_> = OTHERS
+        .iter()
+        .map(|(key, value)| text_row(key, value, "then"))
+        .collect();
+    assert_eq!(rows(&pool).await, kept);
+    assert!(answer(&pool).await);
 }

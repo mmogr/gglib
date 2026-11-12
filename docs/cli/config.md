@@ -17,7 +17,7 @@ Current application settings:
   default-model-id         2 (Qwen3-4B-Instruct-2507)
   inference-profiles       None
   llama-base-port          9300
-  loop-guard-mode          None
+  loop-guard               None
   max-download-queue-size  None
   max-parallel-tools       None
   max-stagnation-steps     None

@@ -182,7 +182,7 @@ const TUNE_RUN = {
   completed_at: null,
 };
 const LATEST_REASONING = { effort: null, budget: null };
-const TRIP_DAY = { day: '2026-11-06', model_name: 'Qwen3-4B', gglib_version: '0.31.0', mode: 'note', scanned: 9, trips: 1, loops: 1, stagnations: 0, sessions: 1 };
+const TRIP_DAY = { day: '2026-11-06', model_name: 'Qwen3-4B', gglib_version: '0.31.0', scanned: 9, trips: 1, loops: 1, stagnations: 0, sessions: 1 };
 
 const live = () => screen.getByRole('tabpanel', { name: 'Live' });
 /** Live's own sections, not a region a panel draws inside one. */
@@ -425,7 +425,7 @@ describe('the diagnostics place', () => {
 
       await act(async () => land([TRIP_DAY]));
       const rows = within(screen.getByRole('region', { name: 'Loop-guard trips' })).getAllByRole('row');
-      expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['2026-11-06', 'Qwen3-4B', '0.31.0', 'note', '9', '1', '1', '0', '1']);
+      expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['2026-11-06', 'Qwen3-4B', '0.31.0', '9', '1', '1', '0', '1']);
     });
 
     it('Tune activity is the tune runs alone, newest eight', async () => {

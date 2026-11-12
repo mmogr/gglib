@@ -30,8 +30,7 @@ read. Numbers take their defaults and ranges from
 the default in the box and as "Default: N" under it, announced with the
 field (ST-2). The drawing reading is `readings/drawingValues`.
 
-The loop guard is a checkbox: on writes `note`, off writes `off`; `refuse`
-is the terminal's and shows as on with a line saying so. The image model
+The loop guard is a checkbox, on unless stored off. The image model
 choice lists only models that draw, keeping a stored id that is not one.
 
 Tools' tool servers are `tools/` (its own README): a row each and one
@@ -46,7 +45,7 @@ and budget are Models › Sampling defaults'.
 |------|------|
 | `SettingsPlace.tsx` | The route: the section list (the open one raised, `aria-current`), the section's name over its content in the one scrolling area, a turning mark until the settings have loaded, a segment that names none sent to General; reads the settings again on opening |
 | `GeneralSection.tsx` | Start the endpoint when gglib launches; in the desktop app only, Start gglib at login and Keep running in the menu bar when the window closes |
-| `EndpointSection.tsx` | Port, the API key, Bind address (the endpoint's), Allowed hosts (`hostsText`/`hostsFrom`), the prompt cache on disk and its budget, Model servers start at; What gglib does to requests: Repair broken tool calls, Stop runaway loops (with its trips), Let clients set sampling |
+| `EndpointSection.tsx` | Port, the API key, Bind address (the endpoint's), Allowed hosts (`hostsText`/`hostsFrom`), the prompt cache on disk and its budget, Model servers start at; What gglib does to requests: Repair broken tool calls, Stop repeated calls, Let clients set sampling |
 | `ModelsSection.tsx` | The models folder, Download queue size, Context for models without their own, Model for gglib q, Image model for drawing (`imageChoices`), Sampling defaults, Profiles |
 | `ToolsSection.tsx` | The tool servers (`tools/`, over the one `useMcpServers`), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, Parallel tool calls, Tool timeout (ms)), Title prompt with Reset, the "Learn more about MCP" footnote |
 | `tools/` | The tool server rows and their add and edit sheet: its own README |
@@ -80,8 +79,7 @@ key stops being required when the endpoint next turns on."; "Saved." / "Undo"; "
 settings: <the daemon's words>"; "What gglib does to requests", "Agent
 limits", "Parallel tool calls", "Tool timeout (ms)", "How many tool calls an
 agent run makes at once.", "How long one tool call may take before it is
-stopped.", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
-request is answered with a 400."; the API key's "Set", "Replace", "Clear",
+stopped.", "Learn more about MCP"; the API key's "Set", "Replace", "Clear",
 "Cancel", "The new key", "none", the Show/Hide/Copy labels, "Copied" beside
 Copy (`components/CopyValue`) and the copy's failures, "Replace the API key?" with "Clients that send the
 old key are refused within a few seconds.", and "The key in use

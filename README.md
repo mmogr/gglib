@@ -16,8 +16,8 @@ over an encrypted link.
 Switching models on demand is the easy part. gglib reads each model and
 launches it the way you would have, with no preset to write, and keeps going
 from there: your sampling wins over the client's, a broken tool call is
-repaired and a looping agent is stopped before you see it, and the endpoint
-on your phone is the same one your editor uses.
+repaired, an agent that repeats the exact same call is stopped, and the
+endpoint on your phone is the same one your editor uses.
 
 It is still llama.cpp, and it shows its work. Every sampling value gglib
 resolves is shown with the layer that set it, and you can override any of

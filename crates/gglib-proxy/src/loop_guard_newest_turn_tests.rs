@@ -1,6 +1,5 @@
-//! What a verdict under `note` is about: the newest turn each detector judged,
-//! not the worst moment in the transcript (ADR 0021). `refuse` still acts on
-//! the first trip anywhere, and a control here pins that.
+//! What a verdict is about: the newest turn each detector judged, not the
+//! worst moment in the transcript (ADR 0021).
 //!
 //! A module of its own because `loop_guard_tests.rs` is frozen at its size by
 //! the complexity ratchet. Helpers are duplicated for the same reason.
@@ -8,16 +7,8 @@
 use super::*;
 use serde_json::{Value, json};
 
-fn cfg_in(mode: LoopGuardMode) -> LoopGuardConfig {
-    let settings = Settings {
-        loop_guard_mode: Some(mode),
-        ..Settings::with_defaults()
-    };
-    LoopGuardConfig::from_settings(&settings).expect("a mode that scans")
-}
-
 fn note() -> LoopGuardConfig {
-    cfg_in(LoopGuardMode::Note)
+    LoopGuardConfig::from_settings(&Settings::with_defaults()).expect("guard on by default")
 }
 
 fn body(messages: &[Value]) -> Vec<u8> {
@@ -169,20 +160,6 @@ fn the_later_of_two_standing_trips_is_the_one_reported() {
         scan_history(&body(&batches_then_prose), &note()).verdict,
         LoopGuardVerdict::StagnationDetected { .. }
     ));
-}
-
-/// The control: `refuse` acts on the first trip anywhere, as before.
-#[test]
-fn under_refuse_the_first_trip_still_stands_whatever_follows() {
-    let mut msgs = writes("a.rs", 3);
-    msgs.extend(writes("b.rs", 1));
-    msgs.extend(writes("c.rs", 1));
-    let outcome = scan_history(&body(&msgs), &cfg_in(LoopGuardMode::Refuse));
-    assert!(is_loop(&outcome), "{outcome:?}");
-    assert!(
-        !outcome.tripped_before(),
-        "refuse never reaches a second trip"
-    );
 }
 
 /// A person who speaks after a run's second trip is not answered by the

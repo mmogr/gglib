@@ -17,28 +17,26 @@
 //! construction — there is one detector implementation, not two — and no
 //! per-session store, TTL, or eviction is needed.
 //!
-//! Detection is deliberately **pre-admission**, which is what lets
-//! `loop-guard-mode refuse` return a clean HTTP 400 before any
-//! catalog/admission/model-swap cost. Under the default, `note`, the request
-//! is forwarded with a note and therefore pays those costs — the trade #1052
-//! makes, for a client that cannot recover from a refusal.  This catches
-//! a loop one turn after the agent path's per-iteration check would (the
-//! history at turn N shows responses 1..N-1). Under `refuse` that caps a
-//! runaway session at threshold+1 turns. Under the default the model is told
+//! Detection is deliberately **pre-admission**. The first trip is forwarded
+//! with a note and therefore pays the catalog/admission/model-swap costs —
+//! the trade #1052 makes, for a client that cannot recover from a refusal.
+//! This catches a loop one turn after the agent path's per-iteration check
+//! would (the history at turn N shows responses 1..N-1). The model is told
 //! once; if the same run trips again on a later request, the proxy answers
-//! that request itself with a finished assistant message and no tool call,
-//! which ends the run on a client that stops at such a message (ADR 0021).
-//! The cap is one of three bargains, which is why the mode is a setting
-//! rather than a constant.
+//! that request itself, before those costs, with a finished assistant
+//! message and no tool call, which ends the run on a client that stops at
+//! such a message (ADR 0021). `loop-guard false` switches the scan off.
 //!
-//! The two modes read a transcript differently. `refuse` acts on the first
-//! trip anywhere in it, as it always has. `note` acts only when the newest
-//! turn a detector judged belongs to a run that tripped, so a model that
-//! changed approach, or answered a person, is not noted again. Telling a
-//! second trip from a first needs no store either: a run that trips on this
-//! request and also tripped on the turn before it was already noted, by the
-//! request that carried that turn. A request where a person spoke after the
-//! trip is noted rather than ended, so the model gets to answer them.
+//! The guard acts only when the newest turn a detector judged belongs to a
+//! run that tripped, so a model that changed approach, or answered a person,
+//! is not noted again. Telling a second trip from a first needs no store
+//! either: a run that trips on this request and also tripped on the turn
+//! before it was already noted, by the request that carried that turn. A
+//! request where a person spoke after the trip is noted rather than ended, so
+//! the model gets to answer them.
+//!
+//! It catches only the exact same call or reply repeated. A loop whose calls
+//! vary — the same search with a different query each time — is not caught.
 //!
 //! Parse policy is **fail-open**: this guard is protection, not validation.
 //! An unparseable body yields [`LoopGuardVerdict::Pass`] (routing already
@@ -59,7 +57,7 @@ use std::collections::HashMap;
 use gglib_core::domain::agent::{AgentConfig, LoopDetector, StagnationDetector, batch_signature};
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::ports::AgentError;
-use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, LoopGuardMode, Settings, ToolCall};
+use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
 
 /// The permissive view of the incoming history.
 ///
@@ -88,23 +86,16 @@ pub(crate) struct LoopGuardConfig {
     max_stagnation_steps: usize,
     observation_tools: Vec<String>,
     max_observation_steps: Option<usize>,
-    /// What to do with a history that trips — carried here so the step can
-    /// branch without re-reading settings, and so it cannot be [`Off`]:
-    /// `from_settings` returns `None` for that.
-    ///
-    /// [`Off`]: LoopGuardMode::Off
-    mode: LoopGuardMode,
 }
 
 impl LoopGuardConfig {
     /// Resolve the guard configuration from a settings snapshot.
     ///
-    /// Returns `None` when nothing will be scanned — either because the mode
-    /// is [`LoopGuardMode::Off`] or because the shared agent defaults disable
+    /// Returns `None` when nothing will be scanned — either because the
+    /// guard is switched off or because the shared agent defaults disable
     /// loop detection entirely.
     pub(crate) fn from_settings(settings: &Settings) -> Option<Self> {
-        let mode = settings.effective_loop_guard_mode();
-        if !mode.scans() {
+        if !settings.effective_loop_guard() {
             return None;
         }
         let defaults = AgentConfig::default();
@@ -115,13 +106,7 @@ impl LoopGuardConfig {
                 .map_or(DEFAULT_MAX_STAGNATION_STEPS, |v| v as usize),
             observation_tools: defaults.observation_tools,
             max_observation_steps: defaults.max_observation_steps,
-            mode,
         })
-    }
-
-    /// What to do with a history that trips. Never [`LoopGuardMode::Off`].
-    pub(crate) const fn mode(&self) -> LoopGuardMode {
-        self.mode
     }
 }
 
@@ -228,7 +213,7 @@ pub(crate) struct ScanOutcome {
     /// answers a different question: not "did this conversation repeat itself"
     /// but "did the guard decline to act because the answer moved".
     ///
-    /// Only a turn that would otherwise have been refused counts. A repeat
+    /// Only a turn that would otherwise have tripped counts. A repeat
     /// still inside the allowance is never at risk, so nothing is withheld on
     /// it — counting those would make the rate say the rescue has customers it
     /// does not have. ADR 0010's kill criteria read it against
@@ -244,9 +229,8 @@ impl ScanOutcome {
     /// Whether the trip in `verdict` is not its run's first: the turn the
     /// same detector judged before it, in the same run, tripped too.
     ///
-    /// The request that carried that earlier turn tripped on it, so under
-    /// `note` the model has already been told once. Always false under
-    /// `refuse`, which acts on the first trip and never reaches a second, for
+    /// The request that carried that earlier turn tripped on it, so the model
+    /// has already been told once. Always false for
     /// [`LoopGuardVerdict::Pass`], and when a user turn follows the trip.
     pub(crate) const fn tripped_before(&self) -> bool {
         self.trips_in_a_row > 1
@@ -264,7 +248,7 @@ struct Trip {
     streak: usize,
 }
 
-/// Under `note`: each detector's newest trip, kept only while the newest turn
+/// Each detector's newest trip, kept only while the newest turn
 /// that detector judged belongs to it, and how many trips in a row its current
 /// run has made.
 #[derive(Debug, Default)]
@@ -392,10 +376,6 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
             trips_in_a_row: 0,
         };
     };
-    // `refuse` keeps the first trip anywhere in the transcript, as it always
-    // has; `note` scans on and judges the newest turn (ADR 0021).
-    let first_trip_ends_the_scan = cfg.mode == LoopGuardMode::Refuse;
-
     let mut stagnation = StagnationDetector::default();
     let mut loops = LoopDetector::default();
     // Batch signature -> the results hash from the last time that exact batch
@@ -423,16 +403,15 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
             // gets for free: `AgentLoop::run` is invoked once per user message
             // and builds a fresh `Guards`, so a user turn resets everything
             // there. One detector walking a whole replayed conversation has to
-            // be told, and without this the two paths refuse at different
+            // be told, and without this the two paths stop at different
             // turns while the docs above promise parity by construction.
             //
             // A user turn is also one way out of a transcript that already
-            // contains a trip, under `note`: the next assistant turn answers a
-            // person, so a trip from before it no longer describes the newest
-            // turn. A user turn with nothing after it changes no verdict — a
-            // client that adds a trailing user message to every request must
-            // not clear a trip by doing so. Under `refuse` the scan stops at
-            // the first trip and never reaches a later user turn.
+            // contains a trip: the next assistant turn answers a person, so a
+            // trip from before it no longer describes the newest turn. A user
+            // turn with nothing after it changes no verdict — a client that
+            // adds a trailing user message to every request must not clear a
+            // trip by doing so.
             _ => {
                 identical_result_repeat = false;
                 repeat_not_evaluated = false;
@@ -478,30 +457,6 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
         // one neither keeps nor clears it.
         let judged_prose = calls.is_empty() && !text.is_empty();
         match stagnation.record(&text, !calls.is_empty(), cfg.max_stagnation_steps) {
-            Err(e) if first_trip_ends_the_scan => {
-                return ScanOutcome {
-                    verdict: verdict(e),
-                    identical_result_repeat,
-                    repeat_not_evaluated,
-                    // Not carried over from the previous turn. The two bits
-                    // above are computed before the guards and so describe
-                    // *this* message; this one is only known after `check`,
-                    // and a guard that rejected this batch did not decline to
-                    // act on it. Shipping the last turn's value would count
-                    // one rescue again on every replay of a 400'd body, and
-                    // inflate precisely the ratio ADR 0010's first kill
-                    // criterion reads.
-                    //
-                    // `stagnation.record` ignores a turn that called a tool,
-                    // so this arm is reachable only on a prose turn — where
-                    // the branch above has already cleared all three. Kept
-                    // explicit rather than collapsed to that observation: the
-                    // invariant lives in another crate, and a `false` costs
-                    // nothing to state twice.
-                    repeat_rescued: false,
-                    trips_in_a_row: 1,
-                };
-            }
             Err(e) => standing.prose_judged(i, Some(verdict(e))),
             Ok(()) if judged_prose => standing.prose_judged(i, None),
             Ok(()) if !calls.is_empty() => standing.tool_turn(),
@@ -514,17 +469,6 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                 &cfg.observation_tools,
                 cfg.max_observation_steps,
             ) {
-                Err(e) if first_trip_ends_the_scan => {
-                    return ScanOutcome {
-                        verdict: verdict(e),
-                        identical_result_repeat,
-                        repeat_not_evaluated,
-                        // See the stagnation arm above: a batch the guard
-                        // refused was not one it let through.
-                        repeat_rescued: false,
-                        trips_in_a_row: 1,
-                    };
-                }
                 // No answers are recorded for a batch that tripped, so the
                 // run's count only grows: once a run trips, every later
                 // occurrence of it trips too, until a different batch or a
@@ -542,7 +486,7 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                     // Read from the verdict, not from the reset below. The
                     // reset that saved this turn happened on an earlier one,
                     // and `check` is where "would signature-only counting
-                    // have refused this?" is answerable.
+                    // have tripped on this?" is answerable.
                     repeat_rescued = record.rescued();
                     loops.record_results(record, results);
                     standing.loop_judged(i, None);
@@ -603,7 +547,7 @@ mod rescue_tests;
 #[path = "loop_guard_costly_tests.rs"]
 mod costly_tests;
 
-/// What a verdict under `note` is about: the newest turn, not the worst one.
+/// What a verdict is about: the newest turn, not the worst one.
 #[cfg(test)]
 #[path = "loop_guard_newest_turn_tests.rs"]
 mod newest_turn_tests;

@@ -293,7 +293,7 @@ fn repair_totals_survive_eviction() {
 #[test]
 fn what_was_done_to_a_request_is_said_in_words() {
     use crate::interventions::{
-        clamped_interventions, forwarded_interventions, unforwarded_interventions,
+        clamped_interventions, ended_interventions, forwarded_interventions,
     };
     let words = |done: Vec<gglib_core::domain::Intervention>| -> Vec<String> {
         done.into_iter().map(|i| i.word).collect()
@@ -308,12 +308,8 @@ fn what_was_done_to_a_request_is_said_in_words() {
         ]
     );
     assert_eq!(
-        words(unforwarded_interventions(LoopGuardTrip::Stagnation, true)),
+        words(ended_interventions(LoopGuardTrip::Stagnation)),
         ["Stopped stagnation"]
-    );
-    assert_eq!(
-        words(unforwarded_interventions(LoopGuardTrip::Loop, false)),
-        ["Refused: a loop"]
     );
     assert_eq!(
         words(clamped_interventions(None)),

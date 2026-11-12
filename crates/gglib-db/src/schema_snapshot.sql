@@ -1,5 +1,5 @@
--- generation 6
--- user_version 6
+-- generation 7
+-- user_version 7
 
 CREATE INDEX idx_agentic_results_model ON benchmark_agentic_results(model_id, created_at DESC);
 
@@ -99,9 +99,8 @@ CREATE TABLE loop_guard_scans (
             day           INTEGER NOT NULL,
             model_name    TEXT    NOT NULL,
             gglib_version TEXT    NOT NULL,
-            mode          TEXT    NOT NULL,
             scanned       INTEGER NOT NULL,
-            PRIMARY KEY (day, model_name, gglib_version, mode)
+            PRIMARY KEY (day, model_name, gglib_version)
         );
 
 CREATE TABLE loop_guard_trips (
@@ -109,7 +108,6 @@ CREATE TABLE loop_guard_trips (
             recorded_at    INTEGER NOT NULL,
             model_name     TEXT    NOT NULL,
             gglib_version  TEXT    NOT NULL,
-            mode           TEXT    NOT NULL,
             detector       TEXT    NOT NULL,
             signature_hash TEXT,
             session_hash   TEXT,

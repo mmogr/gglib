@@ -33,8 +33,6 @@ pub(crate) enum Takes {
     Text,
     /// A comma-separated list of hosts.
     Hosts,
-    /// One of these words.
-    Choice(&'static [&'static str]),
     /// A model in the library, by id or name; its id is stored.
     Model,
     /// A folder, created when missing.
@@ -111,9 +109,9 @@ pub(crate) const KEYS: &[SettingKey] = &[
         "First port llama-server instances are given, behind the endpoint",
     ),
     key(
-        "loop-guard-mode",
-        Takes::Choice(&["off", "note", "refuse"]),
-        "What the endpoint does with a conversation that repeats itself (note when unset)",
+        "loop-guard",
+        Takes::Switch,
+        "Note, then end, an agent that repeats the exact same call (on when unset)",
     ),
     key(
         "max-download-queue-size",
@@ -256,11 +254,6 @@ impl Takes {
             Self::Switch => "true or false".to_owned(),
             Self::Text => "text".to_owned(),
             Self::Hosts => "hosts, comma-separated, each with or without a port".to_owned(),
-            Self::Choice(words) => match words {
-                [] => String::new(),
-                [only] => (*only).to_owned(),
-                [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
-            },
             Self::Model => "a model's id or name".to_owned(),
             Self::Folder => "a path, created when missing".to_owned(),
             Self::Whole(where_) => format!("not one value; {where_}"),

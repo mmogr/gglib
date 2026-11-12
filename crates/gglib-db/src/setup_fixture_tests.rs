@@ -19,6 +19,8 @@ use super::{backup_beside, setup_database, setup_test_database};
 mod history;
 #[path = "setup_fixture_library_tests.rs"]
 mod library;
+#[path = "setup_fixture_loop_guard_tests.rs"]
+mod loop_guard;
 #[path = "setup_fixture_sse_tests.rs"]
 mod sse;
 

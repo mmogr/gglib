@@ -97,55 +97,42 @@ mod update_settings_request_tests {
 
     /// The clear must still be a clear after the hand-off to the domain
     /// update — the layer that decides what actually reaches storage.
-    /// The read hop for the loop-guard mode: what is stored is what the
-    /// settings modal is shown.
-    ///
-    /// Deleting this one line makes the GUI select open on the default
-    /// whatever is stored, and nothing else in the workspace notices.
+    /// The read hop for the loop guard's switch: what is stored is what the
+    /// settings page is shown.
     #[test]
-    fn the_stored_loop_guard_mode_reaches_the_settings_ui() {
-        use gglib_core::{LoopGuardMode, Settings};
+    fn the_stored_loop_guard_reaches_the_settings_ui() {
+        use gglib_core::Settings;
 
-        for mode in [
-            None,
-            Some(LoopGuardMode::Off),
-            Some(LoopGuardMode::Note),
-            Some(LoopGuardMode::Refuse),
-        ] {
+        for stored in [None, Some(false), Some(true)] {
             let settings = Settings {
-                loop_guard_mode: mode,
+                loop_guard: stored,
                 ..Settings::with_defaults()
             };
             let dto = super::super::AppSettings::from(settings);
-            assert_eq!(dto.loop_guard_mode, mode, "for {mode:?}");
+            assert_eq!(dto.loop_guard, stored, "for {stored:?}");
         }
     }
 
-    /// The write hop: what the GUI select sends is what the domain applies.
-    ///
-    /// This is the line the whole Tier 1 claim rests on — the select's only
-    /// effect reaches `gglib-core` through this conversion, and deleting it
-    /// makes the control do nothing with every suite green.
+    /// The write hop: what the page's toggle sends is what the domain
+    /// applies, and the three states the double option exists for stay
+    /// distinct.
     #[test]
-    fn a_written_loop_guard_mode_reaches_the_domain_update() {
-        use gglib_core::LoopGuardMode;
-
+    fn a_written_loop_guard_reaches_the_domain_update() {
         let request: UpdateSettingsRequest =
-            serde_json::from_str(r#"{"loopGuardMode":"refuse"}"#).expect("set");
+            serde_json::from_str(r#"{"loopGuard":false}"#).expect("set");
         let update = gglib_core::SettingsUpdate::from(request);
-        assert_eq!(update.loop_guard_mode, Some(Some(LoopGuardMode::Refuse)));
+        assert_eq!(update.loop_guard, Some(Some(false)));
 
-        // And the three states the double option exists for stay distinct.
         let omitted: UpdateSettingsRequest = serde_json::from_str("{}").expect("omitted");
         assert_eq!(
-            gglib_core::SettingsUpdate::from(omitted).loop_guard_mode,
+            gglib_core::SettingsUpdate::from(omitted).loop_guard,
             None,
             "an omitted field must not change the setting"
         );
         let cleared: UpdateSettingsRequest =
-            serde_json::from_str(r#"{"loopGuardMode":null}"#).expect("cleared");
+            serde_json::from_str(r#"{"loopGuard":null}"#).expect("cleared");
         assert_eq!(
-            gglib_core::SettingsUpdate::from(cleared).loop_guard_mode,
+            gglib_core::SettingsUpdate::from(cleared).loop_guard,
             Some(None),
             "an explicit null must clear the setting"
         );

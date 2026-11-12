@@ -49,7 +49,7 @@ async fn plant_model(pool: &SqlitePool, name: &str, path: &str, key: &str, count
     .expect("a planted model");
 }
 
-/// Rows for steps 2, 4 and 6: a loop guard switched off, a remote tunnel
+/// Rows for steps 2, 4, 6 and 7: a loop guard switched off, a remote tunnel
 /// whose list names a server, and an SSE server.
 async fn plant_rows(pool: &SqlitePool) {
     super::super::mcp_servers::as_before_step_6(pool).await;
@@ -116,8 +116,8 @@ async fn a_file_never_stamped_takes_every_step_in_one_run_and_a_second_run_write
             .fetch_all(&pool)
             .await
             .expect("the settings");
-    let off = ("loop_guard_mode".to_owned(), r#""off""#.to_owned());
-    assert_eq!(settings, [off], "step 2");
+    let off = ("loop_guard".to_owned(), "false".to_owned());
+    assert_eq!(settings, [off], "steps 2 and 7");
     let servers: Vec<(String, i64)> = sqlx::query_as("SELECT name, allow_remote FROM mcp_servers")
         .fetch_all(&pool)
         .await
