@@ -14,7 +14,7 @@ use axum::http::StatusCode;
 use axum::{Json, extract::State, response::IntoResponse};
 use tracing::{debug, error};
 
-use crate::models::{ErrorResponse, ModelsResponse};
+use crate::models::{ErrorResponse, Feature, GglibInfo, ModelsResponse};
 use crate::profiles::variant_entries;
 use crate::server::AppState;
 
@@ -63,7 +63,8 @@ fn advertised_context_window(raw_ctx: u64) -> u64 {
 /// The list also names this machine (`machine_name`), for a paired machine
 /// that shows these models beside its own, when the serve's
 /// [`HostFacts`](crate::HostFacts) can read the name; otherwise it leaves the
-/// field out.
+/// field out. And it says which gglib this is (`gglib`): the build's version,
+/// and the features this process serves.
 pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
@@ -130,6 +131,7 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
             // Read per request, so a rename shows on the next listing. Here and
             // never on `/health`, which answers before any credential does.
             response.machine_name = state.host.read_machine_name();
+            response.gglib = Some(served(&state));
 
             Json(response).into_response()
         }
@@ -144,6 +146,23 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
                 .into_response()
         }
     }
+}
+
+/// What this process says of itself: this build's version, and each of
+/// gglib's own features whose routes answer here rather than refuse. Each
+/// rests on the port the daemon hands its proxy, so a proxy without the
+/// daemon (the phone's engine, a benchmark's, a test's) lists only `status`,
+/// which every proxy answers.
+fn served(state: &AppState) -> GglibInfo {
+    let has = |feature| match feature {
+        // A hub's chats are read, written and added to: the last is a turn.
+        Feature::Chats => state.chats.is_some() && state.turns.is_some(),
+        Feature::Runs => state.runs.is_some(),
+        // Without a driver the drawing route answers `drawing_unavailable`.
+        Feature::Drawing => state.images.is_some(),
+        Feature::Status => true,
+    };
+    GglibInfo::this_build(Feature::ALL.into_iter().filter(|&f| has(f)))
 }
 
 #[cfg(test)]

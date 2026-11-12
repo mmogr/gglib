@@ -461,3 +461,26 @@ async fn a_chat_run_with_builtins_is_refused_as_a_turn_is() {
     assert_eq!(code(&answer), "drawing_unavailable");
     cancel.cancel();
 }
+
+/// A proxy holding runs and turns but no chats serves runs and not chats: a
+/// feature is listed only where its routes answer.
+#[tokio::test]
+async fn the_list_names_only_the_features_this_proxy_holds() {
+    let runs = Arc::new(FakeRuns::default());
+    let (base, cancel) = serve(Some(Arc::new(FakeTurns::default())), runs).await;
+    let (status, list) = json(
+        Client::new()
+            .get(format!("{base}/v1/models"))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    cancel.cancel();
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert_eq!(
+        list["gglib"]["features"],
+        json!(["runs", "status"]),
+        "{list}"
+    );
+}
