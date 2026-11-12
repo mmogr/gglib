@@ -625,7 +625,9 @@ A change to the database schema raises `SCHEMA_GENERATION` in
 `crates/gglib-db/src/setup_generation.rs` and rewrites the snapshot with
 `GGLIB_UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p gglib-db schema_snapshot`; the
 `schema_snapshot` test fails until both are done. An older gglib then
-refuses the upgraded library instead of writing to it.
+refuses the upgraded library instead of writing to it. The upgrade first
+copies the library to `gglib.db.gen<N>.bak` beside it (`gglib config paths`
+shows it), and the older gglib's refusal prints the commands that put it back.
 
 ### Working on the frontend
 
