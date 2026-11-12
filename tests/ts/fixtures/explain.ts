@@ -7,10 +7,6 @@
  * `?:` described a backend that predates those fields and no longer exists,
  * and the fixtures written against it were each describing a slightly
  * different impossible response.
- *
- * `effortSuppressed` stays genuinely optional: it carries
- * `skip_serializing_if`, so a model whose template reads `reasoning_effort`
- * really does omit the key.
  */
 import type { LaunchExplanation, SamplingExplanation } from '../../../src/types';
 import type { LaunchPlan } from '../../../src/types/generated/LaunchPlan';

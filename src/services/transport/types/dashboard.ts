@@ -110,16 +110,8 @@ export type { BaselineCoverage as SamplingBaselineCoverage } from '../../../type
 export type { BaselineReport as SamplingBaselineReport } from '../../../types/generated/BaselineReport';
 export type { BaselineState as SamplingBaselineState } from '../../../types/generated/BaselineState';
 
-/**
- * What one model's requests actually carried.
- *
- * Gained `effort_suppressed` — the record ADR 0007 says nothing else in the
- * system can reconstruct, because a `reasoning_effort` dropped by the template
- * gate leaves no other trace. The GUI had no way to render it.
- */
+/** What one model's requests actually carried. */
 export type { SamplingAuditSnapshot } from '../../../types/generated/SamplingAuditSnapshot';
-export type { EffortSuppressions } from '../../../types/generated/EffortSuppressions';
-export type { SuppressedEffortRecord } from '../../../types/generated/SuppressedEffortRecord';
 
 // ============================================================================
 // Reasoning readback

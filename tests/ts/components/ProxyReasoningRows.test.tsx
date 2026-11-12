@@ -91,21 +91,20 @@ describe('ProxyReasoningRows', () => {
     expect(screen.getByText('yes')).toBeInTheDocument();
   });
 
-  // The record exists precisely because nothing else in the system holds it:
-  // the level is deleted from the body before sending, and no readback can
-  // ever report that it was.
-  it('shows a suppressed level with its rung and marks it as never sent', () => {
+  // A template that does not read the level still has it sent, so the row
+  // shows it with its rung, beside the note that the template ignores it.
+  it('shows a level the template ignores with its rung, as sent', () => {
     render(
       <ProxyReasoningRows
         reasoning={reasoning({
           effort_support: { state: 'not_supported' },
-          latest: { effort: { level: 'high', source: 'profile', suppressed: true }, budget: null },
+          latest: { effort: { level: 'high', source: 'profile' }, budget: null },
         })}
       />,
     );
 
-    expect(screen.getByText(/was never sent/i)).toBeInTheDocument();
-    expect(screen.getByText(/high, from profile/)).toBeInTheDocument();
+    expect(screen.getByText('high (profile)')).toBeInTheDocument();
+    expect(screen.getByText(/the template ignores it/i)).toBeInTheDocument();
   });
 
   // The panel's own rule, applied to a blindness that is permanent rather than
@@ -116,7 +115,7 @@ describe('ProxyReasoningRows', () => {
       <ProxyReasoningRows
         reasoning={reasoning({
           effort_support: { state: 'supported' },
-          latest: { effort: { level: 'medium', source: 'global', suppressed: false }, budget: null },
+          latest: { effort: { level: 'medium', source: 'global' }, budget: null },
         })}
       />,
     );

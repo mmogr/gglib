@@ -164,20 +164,20 @@ mod tests {
 
     /// The whole path, not a hand-built context: a catalog row carrying a
     /// launch's `chat_template_caps` observation resolves into a
-    /// [`ModelContext`] whose caps the effort gate actually reads.
+    /// [`ModelContext`] whose caps stage 1 actually reads.
     ///
     /// This is the wiring the proxy depends on — `chat_completions` resolves
     /// its context through this function and hands it to `apply` — and it is
-    /// the half that a unit test on the gate cannot see. If `ModelSummary`
+    /// the half that a unit test on stage 1 cannot see. If `ModelSummary`
     /// ever stops carrying the caps, or `From<&ModelSummary>` stops copying
-    /// them, the gate silently degrades to "nobody knows" on every request
-    /// and every other test still passes.
+    /// them, stage 1 silently degrades to "nobody knows" on every request and
+    /// every other test still passes.
     #[tokio::test]
     async fn observed_caps_reach_the_pipeline_through_the_catalog() {
         let catalog = SpyCatalog {
             found: Some(ModelSummary {
                 template_caps: Some(crate::domain::TemplateCaps {
-                    supports_reasoning_effort: Some(false),
+                    supports_preserve_reasoning: Some(true),
                     ..Default::default()
                 }),
                 ..summary()
@@ -188,23 +188,24 @@ mod tests {
 
         let mut body = serde_json::json!({
             "model": "qwen3",
-            "messages": [{"role": "user", "content": "hi"}],
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "hello", "reasoning_content": "earlier trace"},
+                {"role": "user", "content": "again"},
+            ],
         });
-        let layers = super::super::SamplingLayers {
-            profile: Some(crate::domain::InferenceConfig {
-                reasoning_effort: Some(crate::domain::ReasoningEffort::High),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        let report =
-            super::super::apply(&mut body, &ctx, &layers, None).expect("the pipeline applies");
+        super::super::apply(
+            &mut body,
+            &ctx,
+            &super::super::SamplingLayers::default(),
+            None,
+        )
+        .expect("the pipeline applies");
 
-        assert!(
-            report.effort_suppressed.is_some(),
-            "the caps never reached the gate: {body}"
+        assert_eq!(
+            body["messages"][1]["reasoning_content"], "earlier trace",
+            "the caps never reached stage 1: {body}"
         );
-        assert!(body.get("reasoning_effort").is_none(), "{body}");
     }
 
     #[tokio::test]

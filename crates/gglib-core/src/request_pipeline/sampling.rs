@@ -489,10 +489,8 @@ pub fn resolve_sampling(
     // the log can never name a layer the resolution did not use.
     let (resolved, sources) = InferenceConfig::resolve_layers_with_sources(&layer_configs);
 
-    // Nothing is logged here. The whole decision is rendered once, by
-    // `super::sampling_log`, after stage 5b — which can still delete a resolved
-    // `reasoning_effort` and would leave this line stating that gglib sent one.
-    // See that module for why a second, correcting line is not enough.
+    // Nothing is logged here. `apply` renders the whole decision once, through
+    // `super::sampling_log`.
     let layer_names: [&'static str; LADDER_RUNGS] = ordered.map(|(name, _)| name);
     let decision = |applied| SamplingDecision {
         resolved: resolved.clone(),

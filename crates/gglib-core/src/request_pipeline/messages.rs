@@ -44,9 +44,9 @@ pub fn shape_messages(body: &mut Value, ctx: &ModelContext) -> bool {
 /// (`supports_preserve_reasoning: true`) renders earlier turns' reasoning back
 /// into the prompt by design, so the history goes as the client sent it and
 /// this returns `false` without touching it ([ADR 0020]). `false` or unknown
-/// strips as before. No `catalog_resolved` check is needed, unlike stage 5b: a
-/// passthrough context carries no caps, which answers [`Support::Unknown`], and
-/// unknown means today's behaviour.
+/// strips as before. No `catalog_resolved` check is needed: a passthrough
+/// context carries no caps, which answers [`Support::Unknown`], and unknown
+/// means today's behaviour.
 ///
 /// [ADR 0020]: https://github.com/mmogr/gglib/blob/main/docs/adr/0020-prior-reasoning-is-kept-where-the-template-keeps-it.md
 fn strip_prior_reasoning(body: &mut Value, ctx: &ModelContext) -> bool {
