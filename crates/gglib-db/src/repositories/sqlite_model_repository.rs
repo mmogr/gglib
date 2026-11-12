@@ -964,23 +964,6 @@ mod tests {
         assert_eq!(upserted.dialect_spec, None, "spec overwritten on upsert");
     }
 
-    /// Rows written before the column existed (or carrying garbage) read
-    /// as "no spec" — the tag fallback applies downstream.
-    #[tokio::test]
-    async fn unreadable_dialect_spec_reads_as_none() {
-        let repo = repo().await;
-        let inserted = repo.insert(&make_model("Legacy")).await.unwrap();
-        assert_eq!(inserted.dialect_spec, None);
-
-        sqlx::query("UPDATE models SET dialect_spec = 'not json' WHERE id = ?")
-            .bind(inserted.id)
-            .execute(&repo.pool)
-            .await
-            .unwrap();
-        let fetched = repo.get_by_id(inserted.id).await.unwrap();
-        assert_eq!(fetched.dialect_spec, None);
-    }
-
     #[tokio::test]
     async fn update_persists_the_dialect_spec() {
         use gglib_core::domain::DialectSpec;
@@ -1022,23 +1005,6 @@ mod tests {
         repo.update(&model).await.unwrap();
         let fetched = repo.get_by_id(model.id).await.unwrap();
         assert_eq!(fetched.template_caps, Some(measured_caps()));
-    }
-
-    /// Same tolerance as `dialect_spec`: garbage in the column degrades to
-    /// "never observed" rather than failing every read of the row.
-    #[tokio::test]
-    async fn unreadable_template_caps_reads_as_none() {
-        let repo = repo().await;
-        let inserted = repo.insert(&make_model("Iota")).await.unwrap();
-
-        sqlx::query("UPDATE models SET template_caps = 'not json' WHERE id = ?")
-            .bind(inserted.id)
-            .execute(&repo.pool)
-            .await
-            .unwrap();
-
-        let fetched = repo.get_by_id(inserted.id).await.unwrap();
-        assert_eq!(fetched.template_caps, None);
     }
 
     /// A re-import must not erase what a launch observed: `insert`'s upsert
@@ -1178,3 +1144,7 @@ mod component_files_tests;
 #[cfg(test)]
 #[path = "sqlite_model_repository_header_facts_tests.rs"]
 mod header_facts_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_unreadable_tests.rs"]
+mod unreadable_tests;
