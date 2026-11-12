@@ -68,7 +68,8 @@ impl Default for DaemonOptions {
 /// The sequence:
 ///
 /// 1. Take the machine-wide [`DaemonLock`] — refusing with the running
-///    daemon's pid/address if there is one.
+///    daemon's pid/address if there is one. Then store the models folder,
+///    when nothing names one yet, so a later default can't move it.
 /// 2. Sweep orphaned llama-server pidfiles left by a crashed daemon.
 /// 3. [`bootstrap`] the one `AxumContext` —
 ///    and with it the one `ProcessManager` on this machine.
@@ -94,6 +95,9 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     // 1. Singleton lock, before any side effect.
     let lock_dir = data_root().context("resolving data root for the daemon lock")?;
     let _lock = DaemonLock::acquire(&lock_dir, daemon_port()).map_err(|e| anyhow!("{e}"))?;
+    if let Err(e) = gglib_core::paths::store_default_models_dir() {
+        warn!("could not store the models folder: {e}");
+    }
 
     // 2. Orphan sweep. Only the daemon does this — it holds the lock, so any
     //    recorded llama-server pid is from a dead process, never a live
