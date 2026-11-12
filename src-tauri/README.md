@@ -1,14 +1,14 @@
-# GGLib Desktop GUI (Tauri)
+# gglib desktop app (Tauri)
 
 <!-- crate-header:start -->
 Layer: **adapter** · [workspace diagram](../crates/README.md#architecture-overview)
 <!-- crate-header:end -->
 
-This directory contains the Tauri-based desktop application for GGLib.
+This directory contains the Tauri-based desktop application for gglib. The app is called gglib; its program file is `gglib-gui`, built from the package `gglib-app`.
 
 ## Overview
 
-The GGLib Desktop GUI is a client of the daemon that owns the runtime — a place to watch the proxy and manage the model library, not the thing serving requests. It launches or connects to a daemon and can run it as a background service from the tray, so the endpoint keeps serving after the window closes. The CLI and Web UI are clients of the same daemon, sharing one backend and one database.
+The desktop app is a client of the daemon that owns the runtime — a place to watch the proxy and manage the model library, not the thing serving requests. It launches or connects to a daemon and can run it as a background service from the tray, so the endpoint keeps serving after the window closes. The CLI and Web UI are clients of the same daemon, sharing one backend and one database.
 
 For a complete overview of all interfaces and the shared architecture, see the main [README.md](../README.md#interfaces).
 
@@ -144,6 +144,8 @@ For more details on the architecture and how all interfaces work together, see:
   - `src/dock.rs`: macOS Dock icon visibility (activation policy)
   - `src/commands/`: Tauri command handlers (organized by domain)
   - `tauri.conf.json`: Tauri configuration
+  - `tauri.linux.conf.json`: on Linux, names the deb and rpm `gglib-gui` (the CLI's package is `gglib`), retires the old `gg-lib-gui` package, and keeps the menu entry named gglib through `linux/gglib.desktop`
+  - `tauri.windows.conf.json`: on Windows, names the app `gglib-gui`, so the per-user install goes to `%LOCALAPPDATA%\gglib-gui` and not into gglib's data folder `%LOCALAPPDATA%\gglib`
 
 ## Backend Module Architecture
 

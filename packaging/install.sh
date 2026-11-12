@@ -61,7 +61,7 @@ with_apt() {
   echo "deb [signed-by=/usr/share/keyrings/$KEY.gpg] $REPO_URL/apt stable main" \
     | as_root tee /etc/apt/sources.list.d/gglib.list >/dev/null
   as_root apt-get update
-  pkg=gg-lib-gui
+  pkg=gglib-gui
   if [ "$cli" = 1 ]; then pkg=gglib; fi
   as_root apt-get install ${yes:+-y} "$pkg" <"$tty"
 }
@@ -95,7 +95,7 @@ with_dnf() {
   if [ "$cli" = 1 ]; then
     say "there is no CLI-only rpm; installing the desktop app, which carries the CLI"
   fi
-  as_root dnf install ${yes:+-y} gg-lib-gui <"$tty"
+  as_root dnf install ${yes:+-y} gglib-gui <"$tty"
 }
 
 if command -v apt-get >/dev/null 2>&1; then
