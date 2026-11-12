@@ -223,6 +223,77 @@ where
     }
 }
 
+/// Read an upstream SSE byte stream into [`SseItem`]s, waiting at most `idle`
+/// for each next frame (before the first token, for any bytes).
+///
+/// Reading stops at the end of the body or where the decoder says the stream
+/// ended (`[DONE]`, a frame with an inline upstream error, or bytes it cannot
+/// decode), and nothing after that is read. Nothing is added at the end: a
+/// body that stops without a finish frame ends with its last item.
+///
+/// A transport error or a stall ends the items with one `Err`, after every
+/// item already read; a stall's is an [`UpstreamStalled`]. The timer runs only
+/// while a read is waiting (see [`STREAM_IDLE_TIMEOUT`]), and only a `data:`
+/// frame restarts it once the first token has come: a comment is passed on,
+/// but it is not the reply moving. The drain
+/// ([`drain_events`](crate::forward::drain_events)) reads these items as they
+/// come, so the `Err` is the last thing it sees.
+// Test builds only until the drain reads it, in the next commit.
+#[cfg(test)]
+pub(crate) fn upstream_frames<S, E>(
+    bytes: S,
+    idle: Duration,
+) -> impl Stream<Item = anyhow::Result<gglib_core::sse::SseItem>>
+where
+    S: Stream<Item = Result<Bytes, E>>,
+    E: std::fmt::Display,
+{
+    async_stream::stream! {
+        let mut decoder = SseStreamDecoder::default();
+        let mut byte_stream = std::pin::pin!(bytes);
+        let mut after_first_token = false;
+        // When the wait for the next frame ends. Restored once the items of
+        // a chunk have been taken. After the first token it is kept across a
+        // chunk with no frame in it, so keep-alive comments cannot hold a
+        // silent reply open; before it they are all prefill sends.
+        let mut deadline = tokio::time::Instant::now() + idle;
+
+        loop {
+            let Ok(next) = tokio::time::timeout_at(deadline, byte_stream.next()).await else {
+                let stall = UpstreamStalled { after: idle, after_first_token };
+                warn!("{stall}");
+                yield Err(anyhow::Error::new(stall));
+                return;
+            };
+            let Some(chunk_result) = next else {
+                break;
+            };
+            let chunk = match chunk_result {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("upstream SSE byte-stream error: {e}");
+                    yield Err(anyhow::anyhow!("upstream SSE byte-stream error: {e}"));
+                    return;
+                }
+            };
+            let (items, stop) = decoder.feed_frames(&chunk);
+            let moved = items.iter().any(|item| matches!(item, Ok(gglib_core::sse::SseItem::Data { .. })));
+            for item in items {
+                if let Ok(gglib_core::sse::SseItem::Data { events, .. }) = &item {
+                    after_first_token |= events.iter().any(is_generated_token);
+                }
+                yield item;
+            }
+            if stop {
+                break;
+            }
+            if moved || !after_first_token {
+                deadline = tokio::time::Instant::now() + idle;
+            }
+        }
+    }
+}
+
 /// Whether `event` is a generated token: content, reasoning or a tool call.
 /// Once one has arrived, prefill is over. It is the test behind
 /// [`UpstreamStalled::after_first_token`], and the drain applies it to the
@@ -278,3 +349,7 @@ pub(crate) fn first_byte_timeout_frame(model: &str, after: Duration) -> String {
 #[cfg(test)]
 #[path = "upstream_read_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "upstream_frames_tests.rs"]
+mod frames_tests;
