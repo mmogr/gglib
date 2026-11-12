@@ -4,7 +4,7 @@ crates/gglib-agent/tests/integration_cut_off.rs 406
 crates/gglib-agent/tests/integration_guards.rs 777
 crates/gglib-agent/tests/integration_happy_path.rs 421
 crates/gglib-agent/tests/unit_first_call.rs 527
-crates/gglib-app-services/src/benchmark/agentic.rs 753
+crates/gglib-app-services/src/benchmark/agentic.rs 756
 crates/gglib-app-services/src/benchmark/mapper.rs 534
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1388
 crates/gglib-app-services/src/downloads.rs 345
@@ -68,7 +68,7 @@ crates/gglib-cli/src/handlers/agent_chat/repl.rs 372
 crates/gglib-cli/src/handlers/agent_chat/sight_tests.rs 331
 crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 472
 crates/gglib-cli/src/handlers/agent_chat/turn_tests.rs 349
-crates/gglib-cli/src/handlers/benchmark.rs 1704
+crates/gglib-cli/src/handlers/benchmark.rs 1706
 crates/gglib-cli/src/handlers/config/engine.rs 504
 crates/gglib-cli/src/handlers/config/engine_tests.rs 350
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 417
@@ -107,8 +107,8 @@ crates/gglib-core/src/domain/agent/openai_history.rs 301
 crates/gglib-core/src/domain/agent/replay.rs 369
 crates/gglib-core/src/domain/agent/replay_made_tests.rs 351
 crates/gglib-core/src/domain/agent/replay_tests.rs 377
-crates/gglib-core/src/domain/benchmark/agentic.rs 1101
-crates/gglib-core/src/domain/benchmark/agentic_tests.rs 864
+crates/gglib-core/src/domain/benchmark/agentic.rs 1178
+crates/gglib-core/src/domain/benchmark/agentic_tests.rs 934
 crates/gglib-core/src/domain/benchmark/tune/apply.rs 449
 crates/gglib-core/src/domain/cache_budget.rs 305
 crates/gglib-core/src/domain/capabilities.rs 1594
@@ -178,7 +178,7 @@ crates/gglib-core/src/settings_tests.rs 545
 crates/gglib-core/src/sse/parser.rs 781
 crates/gglib-core/src/utils/system/packages.rs 586
 crates/gglib-db/src/loop_guard_trip_writer_tests.rs 291
-crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 655
+crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 659
 crates/gglib-db/src/repositories/sqlite_chat_history_images_tests.rs 419
 crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 338
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 353
