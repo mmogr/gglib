@@ -32,6 +32,10 @@ const ROUTES: &[(&str, Reached)] = &[
     ),
     ("/v1/models", By(&[&["gglib", "model", "list"]])),
     (
+        "/v1/models/{name}",
+        Exempt("OpenAI's read of one listed model, for clients; `model inspect` reads /detail"),
+    ),
+    (
         "/v1/gglib/models/{name}/load",
         By(&[&["gglib", "serve", "7"]]),
     ),

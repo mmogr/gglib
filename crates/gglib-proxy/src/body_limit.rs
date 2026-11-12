@@ -41,8 +41,9 @@ pub(crate) fn too_large(status: StatusCode) -> Option<Response> {
     })
 }
 
-/// The answer to a body that could not be read: the coded refusal when it
-/// was over the limit, and the extractor's own otherwise.
-pub(crate) fn rejected(rejection: BytesRejection) -> Response {
-    too_large(rejection.status()).unwrap_or_else(|| rejection.into_response())
+/// The answer to a body that could not be read: the refusal above when it
+/// was over the limit, and [`crate::refusal::unreadable`]'s otherwise.
+pub(crate) fn rejected(rejection: &BytesRejection) -> Response {
+    too_large(rejection.status())
+        .unwrap_or_else(|| crate::refusal::unreadable(rejection.status(), rejection.body_text()))
 }

@@ -2,11 +2,7 @@
 
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
+use axum::{body::Body, http::StatusCode, response::Response};
 use bytes::Bytes;
 use tracing::{debug, error, warn};
 
@@ -338,7 +334,7 @@ pub(crate) fn spawn_and_return(
         .header("cache-control", "no-cache")
         .header("x-accel-buffering", "no")
         .body(body)
-        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+        .unwrap_or_else(|e| crate::refusal::internal(format!("the answer could not be built: {e}")))
 }
 
 /// The body a streaming client is sent when the upstream answers with an

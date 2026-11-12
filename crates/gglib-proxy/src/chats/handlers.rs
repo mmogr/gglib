@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use axum::Json;
+use axum::extract::State;
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_core::domain::attachment::KeepPicture;
@@ -17,6 +17,7 @@ use gglib_core::ports::{HubChatsError, HubChatsPort};
 use serde_json::Value;
 
 use crate::models::ErrorResponse;
+use crate::refusal::Segment;
 use crate::server::AppState;
 
 pub(super) type Answer = Result<Response, Response>;
@@ -70,7 +71,7 @@ pub(crate) async fn list_chats(State(state): State<AppState>) -> Answer {
 
 /// `GET /v1/gglib/chats/{id}`: one chat and its rows. An id that is not a number
 /// names no chat.
-pub(crate) async fn open_chat(State(state): State<AppState>, Path(id): Path<String>) -> Answer {
+pub(crate) async fn open_chat(State(state): State<AppState>, Segment(id): Segment) -> Answer {
     let chats = chats(&state).ok_or_else(unavailable)?;
     let id = id
         .parse::<i64>()
@@ -86,7 +87,7 @@ pub(crate) async fn open_chat(State(state): State<AppState>, Path(id): Path<Stri
 /// does. A body that is no change is refused `invalid_request`.
 pub(crate) async fn change_chat(
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Segment(id): Segment,
     body: Result<Json<Value>, JsonRejection>,
 ) -> Answer {
     let chats = chats(&state).ok_or_else(unavailable)?;
@@ -124,7 +125,7 @@ fn not_a_change() -> Response {
 /// `invalid_request`.
 pub(crate) async fn keep_picture(
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Segment(id): Segment,
     body: Result<Json<Value>, JsonRejection>,
 ) -> Answer {
     let chats = chats(&state).ok_or_else(unavailable)?;

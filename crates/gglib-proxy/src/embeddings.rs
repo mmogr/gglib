@@ -33,6 +33,7 @@
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::State;
+use axum::extract::rejection::BytesRejection;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use tracing::{debug, error, info};
@@ -54,9 +55,15 @@ use gglib_core::domain::capability_tags;
 pub(crate) async fn embeddings(
     State(state): State<AppState>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<Bytes, BytesRejection>,
 ) -> Response {
     debug!("POST /v1/embeddings");
+    let body = match body {
+        Ok(body) => body,
+        Err(rejection) => {
+            return crate::refusal::unreadable(rejection.status(), rejection.body_text());
+        }
+    };
 
     // Only `model` is parsed. Both `input` shapes — a bare string and an array
     // of strings — plus `encoding_format` and anything llama-server grows

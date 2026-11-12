@@ -410,7 +410,7 @@ pub(crate) async fn chat_completions(
     debug!("POST /v1/chat/completions");
     let body = match body {
         Ok(body) => body,
-        Err(rejection) => return crate::body_limit::rejected(rejection),
+        Err(rejection) => return crate::body_limit::rejected(&rejection),
     };
 
     // Canonicalize the system prompt and tool order once, up front, and
@@ -432,10 +432,9 @@ pub(crate) async fn chat_completions(
             Ok(s) => Some(s),
             Err(e) => {
                 tracing::warn!("Invalid session ID in header: {}", e);
-                return Response::builder()
-                    .status(axum::http::StatusCode::BAD_REQUEST)
-                    .body(axum::body::Body::from(format!("Invalid session ID: {e}")))
-                    .unwrap();
+                return crate::refusal::invalid(format!(
+                    "{e}: a session id is up to 64 letters, digits, - or _"
+                ));
             }
         }
     } else {

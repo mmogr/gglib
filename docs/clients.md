@@ -4,7 +4,9 @@ The endpoint is `http://127.0.0.1:8080/v1`. No API key is required on
 loopback — enter any placeholder if your client insists. Use the Model ID
 `gglib model list` prints for the model (shown below as `qwen3.6`): its name,
 unless two models share one. In `/v1/models` it is an entry's `id`; the
-entry's `gglib_id` is gglib's own catalog id for it. The list's `gglib` object
+entry's `gglib_id` is gglib's own catalog id for it. `GET /v1/models/{id}`
+answers that one entry, with any `/` in the id sent as `%2F`; an id the list
+doesn't hold is `404 model_not_found`. The list's `gglib` object
 says which gglib answered: `{"version": "…", "features": [...]}`, the features
 being those of gglib's own routes, under `/v1/gglib/`, that this process
 serves (`chats`, `runs`, `drawing`, `status`). `gglib proxy test <model>`
@@ -345,6 +347,13 @@ the file against the source. An agent run whose model's server refused its
 request ends with the refusal's code when it is one of these (such as
 `model_cannot_read_images`), and `agent_error` otherwise; the run's last
 `error` event carries the refusal's code as `code`.
+
+Every refusal is `{"error": {"message", "type", "code"}}`, the gglib routes'
+and the guards' included: a path no route serves is `404 unknown_route`, a
+method a route does not take is `405 method_not_allowed`, and a body, query or
+path that does not read is `400 invalid_request`. Past its guards, the MCP
+gateway at `/mcp` answers in JSON-RPC, or with a bare status as MCP's
+transport does.
 
 ## Sampling profiles
 

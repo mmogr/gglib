@@ -13,7 +13,7 @@
 //! machine's disk and nothing the reader can use, and the port, which is not
 //! reachable from the other side of the tunnel.
 
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use axum::{Json, http::StatusCode};
 use gglib_core::domain::{ModelDetailDto, ModelLookup};
@@ -22,6 +22,7 @@ use tracing::{debug, error};
 
 use crate::models::ErrorResponse;
 use crate::profiles::configured_names;
+use crate::refusal::Segment;
 use crate::server::AppState;
 
 /// Answer what `name` resolves to, with the profile it named.
@@ -34,7 +35,7 @@ use crate::server::AppState;
 /// this endpoint answers for.
 pub(crate) async fn model_detail(
     State(state): State<AppState>,
-    Path(name): Path<String>,
+    Segment(name): Segment,
 ) -> Response {
     debug!(model = %name, "model detail requested");
     let settings = state.settings.get().await;

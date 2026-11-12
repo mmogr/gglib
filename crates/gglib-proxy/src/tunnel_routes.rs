@@ -18,6 +18,7 @@
 pub const TUNNEL_REACHABLE: &[&str] = &[
     "/health",
     "/v1/models",
+    "/v1/models/{name}",
     "/v1/gglib/models/{name}/load",
     "/v1/gglib/models/{name}/detail",
     "/v1/chat/completions",

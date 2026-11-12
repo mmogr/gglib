@@ -320,6 +320,12 @@ availability routes are told whether the model calls tools: a run's own
 `draw` is not refused for a model that calls none, and ends as decision 9
 says when its first reply is no call.
 
+> **Amended 2026-11-12 — a query that does not read.** The availability
+> routes answer 200 to any query that reads, and to no other. On the proxy's
+> `GET /v1/gglib/images/drawing`, a query that does not read, such as
+> `?far=maybe`, is refused 400 `invalid_request` in the error object every
+> other proxy refusal carries.
+
 A run whose model is on another machine does not draw: its loop would run
 its tools here while the image model is there. A chat kept on that machine
 draws with that machine's image model. A paired device reaches the image

@@ -18,7 +18,8 @@
 
 use std::time::SystemTime;
 
-use axum::extract::{Path, State};
+use axum::extract::State;
+use axum::extract::rejection::JsonRejection;
 use axum::response::{IntoResponse, Response};
 use axum::{Json, http::StatusCode};
 use gglib_core::domain::RuntimeKind;
@@ -27,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::dashboard::LaunchNarrationCache;
+use crate::refusal::Segment;
 use crate::server::{AppState, handle_runtime_error};
 use crate::slot_cache_state::SlotCacheState;
 
@@ -67,10 +69,15 @@ pub struct LoadResponse {
 )]
 pub(crate) async fn load_model(
     State(state): State<AppState>,
-    Path(name): Path<String>,
-    body: Option<Json<LoadRequest>>,
+    Segment(name): Segment,
+    body: Result<Option<Json<LoadRequest>>, JsonRejection>,
 ) -> Response {
-    let request = body.map(|Json(req)| req).unwrap_or_default();
+    let request = match body {
+        Ok(body) => body.map(|Json(req)| req).unwrap_or_default(),
+        Err(rejection) => {
+            return crate::refusal::unreadable(rejection.status(), rejection.body_text());
+        }
+    };
     info!(model = %name, num_ctx = ?request.num_ctx, "POST /v1/gglib/models/{{name}}/load");
     match state
         .runtime_port

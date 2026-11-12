@@ -780,11 +780,14 @@ readability.
 
 ## What the other machine can reach
 
-Everything the desktop's proxy serves — `/v1/models`, a model's detail at
+Everything the desktop's proxy serves — `/v1/models` and one entry of it at
+`/v1/models/{name}`, a model's detail at
 `/v1/gglib/models/{name}/detail`, `POST /v1/gglib/models/{name}/load`,
 `/v1/chat/completions`, `POST /v1/embeddings`, `POST /v1/images/generations`, `GET /v1/gglib/images/drawing`, `/v1/gglib/runs`, `/v1/gglib/chats`, `POST /v1/gglib/chats/{id}/changes`, `POST /v1/gglib/chats/{id}/pictures`, `/v1/gglib/attachments`, the dashboard, `POST /v1/gglib/proxy/cache/clear`, `POST /v1/gglib/proxy/shutdown` —
 with one exception. gglib's own routes are all under `/v1/gglib/`; the rest
-of `/v1` is OpenAI's. `/mcp`, the tool gateway, is refused to every request
+of `/v1` is OpenAI's. Every refusal gglib writes there is OpenAI's error
+object with a code from [error-codes.json](error-codes.json); a path the desktop does not
+serve is `404 unknown_route`. `/mcp`, the tool gateway, is refused to every request
 through the tunnel, whatever `enable` was given, because it starts any MCP
 server configured on the desktop and a leaked key with a shell server
 configured there is remote code execution. The refusal is a `403`

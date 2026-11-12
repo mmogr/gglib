@@ -31,7 +31,7 @@ $ gglib daemon status
 ## `proxy`
 
 Serves `/v1/chat/completions`, `/v1/embeddings`, `/v1/models`,
-`/v1/images/generations` and `/mcp` (MCP Streamable HTTP) from one port. When a request names a model that is
+`/v1/models/{name}`, `/v1/images/generations` and `/mcp` (MCP Streamable HTTP) from one port. When a request names a model that is
 not resident, the proxy queues it, launches the model, and applies flags
 derived from its capability tags: `mtp` → speculative decoding, `reasoning`
 → `--reasoning-format`, `agent` → `--jinja`. Every surface uses the same
