@@ -42,7 +42,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<
     }
     let body = daemon_client::QueueDownloadBody {
         model_id: args.model_id.to_string(),
-        quant: args.quantization.map(String::from),
+        quantization: args.quantization.map(String::from),
     };
     let queue = handle.queue_download(&body);
     remote::monitor(&handle, Arc::clone(&ctx.console), queue).await

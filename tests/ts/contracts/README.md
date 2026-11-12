@@ -6,7 +6,7 @@ They exist because this class of drift is silent. Nothing fails to compile when 
 
 | File | Pins |
 |------|------|
-| `startServerRequest.test.ts` | The flat `POST /api/servers/start` body against `StartServerRequest`'s field list, `StartServerBody`'s `alias`/`flatten`, and `InferenceConfig`'s accepted keys |
+| `startServerRequest.test.ts` | The flat `POST /api/servers/start` body against `StartServerRequest`'s field list, `StartServerBody`'s `id`/`flatten`, and `InferenceConfig`'s accepted keys |
 | `settingsBounds.test.ts` | `src/constants/settingsDefaults.ts` and `inferenceDefaults.ts` against `contracts/settings/bounds.json` (written by `gglib-core`'s settings-bounds tests from the constants `validate_settings` and `validate_inference_config` check against, and from what `Settings::with_defaults` returns): every range the page offers lies inside the one the backend accepts, and every stated default is the real one |
 | `revealCommands.test.ts` | `src/constants/secrets.ts`'s reveal commands against `SettingSecret` in `crates/gglib-core/src/secret.rs`: every secret, by its snake_case wire name, with the command `reveal_command` builds from its name |
 | `settingsParity.test.ts` | The effort ladder against `ReasoningEffort`, the profile editor's field list, and `MAX_STAGNATION_STEPS` against the agent default |

@@ -170,7 +170,7 @@ pub(crate) struct StartPinnedBody {
 pub(crate) struct QueueDownloadBody {
     pub model_id: String,
     /// `None` leaves the quantization choice to the daemon.
-    pub quant: Option<String>,
+    pub quantization: Option<String>,
 }
 
 /// `POST /api/models/{id}/repair` request body.
