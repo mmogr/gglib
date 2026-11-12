@@ -1,6 +1,6 @@
 {
   "version": 0,
-  "about": "The error codes gglib writes itself, rather than relays from llama-server, on its proxy and the daemon's runs. The proxy refuses with {\"error\":{\"message\":...,\"type\":...,\"code\":...}}, whatever refused: a route, a guard, or a body, query or path that does not read. The MCP gateway at /mcp speaks JSON-RPC instead. A stream already under way can end with that object as a data: frame. A run that failed carries {\"code\":...,\"message\":...} as its error, on /v1/gglib/runs and /api/runs. The daemon's /api/runs refuses with {\"error\":...,\"status\":...,\"type\":<code>}, and the proxy answers a paired device's turn on a hub chat with the daemon's refusal of it. The daemon's guards in front of /api refuse with upper-case types of their own, such as HOST_NOT_ALLOWED, which are not listed here. Match on code. type is the type the proxy writes beside the code: null where it writes more than one, or none. status is the HTTP status of every response that carries the code: null where those responses' writers do not all fix the same one, or where no response carries it, only a stream frame or a run's error. An availability answer is not such a response: GET /v1/gglib/images/drawing and the daemon's GET /api/images/drawing answer 200 to any query that reads, and the code in that body is the one a request to draw would be refused with.",
+  "about": "The error codes gglib writes itself, rather than relays from llama-server, on its proxy and the daemon's runs. The proxy refuses with {\"error\":{\"message\":...,\"type\":...,\"code\":...}}, whatever refused: a route, a guard, a body, query or path that does not read, a method a route does not take, or a path no route serves. The MCP gateway at /mcp speaks JSON-RPC instead. A stream already under way can end with that object as a data: frame. A run that failed carries {\"code\":...,\"message\":...} as its error, on /v1/gglib/runs and /api/runs. The daemon's /api/runs refuses with {\"error\":...,\"status\":...,\"type\":<code>}, and the proxy answers a paired device's turn on a hub chat with the daemon's refusal of it. The daemon's guards in front of /api refuse with upper-case types of their own, such as HOST_NOT_ALLOWED, which are not listed here. Match on code. type is the type the proxy writes beside the code: null where it writes more than one, or none. status is the HTTP status of every response that carries the code: null where those responses' writers do not all fix the same one, or where no response carries it, only a stream frame or a run's error. An availability answer is not such a response: GET /v1/gglib/images/drawing and the daemon's GET /api/images/drawing answer 200 to any query that reads, and the code in that body is the one a request to draw would be refused with.",
   "codes": [
     {
       "code": "model_loading",
@@ -193,6 +193,18 @@
       "type": "invalid_request_error",
       "status": 403,
       "meaning": "The MCP gateway is never reachable through the tunnel."
+    },
+    {
+      "code": "unknown_route",
+      "type": "invalid_request_error",
+      "status": 404,
+      "meaning": "No route serves the path. gglib's own routes are under /v1/gglib/."
+    },
+    {
+      "code": "method_not_allowed",
+      "type": "invalid_request_error",
+      "status": 405,
+      "meaning": "The route does not take the request's method; the Allow header lists the ones it does."
     },
     {
       "code": "no_daemon_to_stop",

@@ -23,8 +23,9 @@ const PUBLISHED: &str = "docs/error-codes.json";
 
 const ABOUT: &str = "The error codes gglib writes itself, rather than relays from \
 llama-server, on its proxy and the daemon's runs. The proxy refuses with \
-{\"error\":{\"message\":...,\"type\":...,\"code\":...}}, whatever refused: a route, a guard, or a \
-body, query or path that does not read. The MCP gateway at /mcp speaks JSON-RPC instead. A stream already under way can end \
+{\"error\":{\"message\":...,\"type\":...,\"code\":...}}, whatever refused: a route, a guard, a \
+body, query or path that does not read, a method a route does not take, or a path no route \
+serves. The MCP gateway at /mcp speaks JSON-RPC instead. A stream already under way can end \
 with that object as a data: frame. A run that failed carries {\"code\":...,\"message\":...} as its \
 error, on /v1/gglib/runs and /api/runs. The daemon's /api/runs refuses with \
 {\"error\":...,\"status\":...,\"type\":<code>}, and the proxy answers a paired device's turn on a \
@@ -129,6 +130,9 @@ const CODES: &[ErrorCode] = &[
     row("invalid_api_key", INVALID, Some(401), "The bearer token is missing or wrong."),
     row("device_not_paired", INVALID, Some(403), "A request came through the tunnel without a paired device's key."),
     row("mcp_not_allowed_over_tunnel", INVALID, Some(403), "The MCP gateway is never reachable through the tunnel."),
+    // What no route answers.
+    row("unknown_route", INVALID, Some(404), "No route serves the path. gglib's own routes are under /v1/gglib/."),
+    row("method_not_allowed", INVALID, Some(405), "The route does not take the request's method; the Allow header lists the ones it does."),
     // Stopping the daemon (`POST /v1/gglib/proxy/shutdown`).
     row("no_daemon_to_stop", INVALID, Some(409), "The proxy runs outside the gglib daemon, so there is nothing to stop from here."),
     // The runs and the hub's chats.

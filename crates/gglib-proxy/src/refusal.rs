@@ -3,16 +3,17 @@
 //! `error_codes` (published as `docs/error-codes.json`).
 //!
 //! Handlers write their refusals through [`ErrorResponse`]. What is here is
-//! the shared way to write one, and the answer no handler writes: a request
-//! an extractor could not read, which axum answers in plain text.
+//! the shared way to write one, and the answers no handler writes: a path no
+//! route serves, a method a route does not take, and a request an extractor
+//! could not read. Left to axum, each of those is plain text or an empty body.
 //!
 //! The MCP gateway at `/mcp` is not answered from here: it speaks JSON-RPC
 //! and MCP's own transport statuses.
 
 use axum::Json;
 use axum::extract::{FromRequestParts, Path};
-use axum::http::StatusCode;
 use axum::http::request::Parts;
+use axum::http::{Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 
 use crate::models::ErrorResponse;
@@ -82,4 +83,28 @@ impl<S: Send + Sync> FromRequestParts<S> for Segment {
             .map(|Path(segment)| Self(segment))
             .map_err(|rejection| unreadable(rejection.status(), rejection.body_text()))
     }
+}
+
+/// The router's fallback: 404 `unknown_route` for a path no route serves.
+pub(crate) async fn unknown_route(uri: Uri) -> Response {
+    error(
+        StatusCode::NOT_FOUND,
+        "invalid_request_error",
+        "unknown_route",
+        format!(
+            "No route here serves {}. gglib's own routes are under /v1/gglib/.",
+            uri.path()
+        ),
+    )
+}
+
+/// The answer to a method a route does not take: 405 `method_not_allowed`.
+/// axum still writes the `Allow` header beside it.
+pub(crate) async fn method_not_allowed(method: Method, uri: Uri) -> Response {
+    error(
+        StatusCode::METHOD_NOT_ALLOWED,
+        "invalid_request_error",
+        "method_not_allowed",
+        format!("{} does not take {method}.", uri.path()),
+    )
 }
