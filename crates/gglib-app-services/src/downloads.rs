@@ -11,12 +11,14 @@ use gglib_core::ports::{
     ToolSupportDetectorPort,
 };
 
+use gglib_download::download_pick;
+
 use crate::error::GuiError;
 use crate::hf_count::checked_parameters;
 use crate::hf_image_preview::image_look;
 use crate::hf_quantizations::{listed_pick, quantizations_response};
 use crate::types::{
-    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
+    HfModelSummary, HfPickResponse, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
     QueueDownloadResponse, ToolSupportResponse,
 };
 
@@ -200,7 +202,9 @@ impl DownloadOps {
     /// Each variant's role is read from a head of its first file, and the
     /// head of one model's weights for an image model's companions, so a
     /// listing costs a ranged read of `VARIANT_HEAD_BYTES` per variant and
-    /// one of at most `SNIFF_HEAD_BYTES`.
+    /// one of at most `SNIFF_HEAD_BYTES`. The variant a download without a
+    /// quantization takes is marked `picked` when those heads tell it; when
+    /// they cannot, [`Self::get_model_pick`] names it.
     pub async fn get_model_quantizations(
         &self,
         model_id: &str,
@@ -244,6 +248,30 @@ impl DownloadOps {
             variant.picked = true;
         }
         Ok(response)
+    }
+
+    /// The variant `gglib model download <model_id>` takes when no
+    /// quantization is asked for: the download's own pick
+    /// ([`download_pick`]), against the budget the download picks by, which
+    /// reads the headers it needs as far as the download would. `label` is
+    /// `None` for a repository with no model.
+    ///
+    /// Asked apart from [`Self::get_model_quantizations`], whose heads name
+    /// the pick only when they tell it: this read costs seconds and
+    /// megabytes on a large repository, and a listing shows at once.
+    pub async fn get_model_pick(&self, model_id: &str) -> Result<HfPickResponse, GuiError> {
+        let label = download_pick(
+            Arc::clone(&self.hf_client),
+            Arc::clone(&self.gguf_parser),
+            model_id,
+            download_budget().await,
+        )
+        .await
+        .map_err(|e| GuiError::Internal(format!("Failed to pick a variant: {e}")))?;
+        Ok(HfPickResponse {
+            model_id: model_id.to_owned(),
+            label,
+        })
     }
 
     /// Check if a `HuggingFace` model supports tool/function calling.

@@ -6,7 +6,8 @@ use axum::extract::{Path, State};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::types::{
-    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, ToolSupportResponse,
+    HfModelSummary, HfPickResponse, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
+    ToolSupportResponse,
 };
 
 /// Search `HuggingFace` for GGUF models.
@@ -25,6 +26,15 @@ pub(crate) async fn quantizations(
     Ok(Json(
         state.downloads.get_model_quantizations(&model_id).await?,
     ))
+}
+
+/// The variant a download of a model takes with none asked, as the
+/// download picks it.
+pub(crate) async fn pick(
+    State(state): State<AppState>,
+    Path(model_id): Path<String>,
+) -> Result<Json<HfPickResponse>, HttpError> {
+    Ok(Json(state.downloads.get_model_pick(&model_id).await?))
 }
 
 /// Check if a model supports tool/function calling.

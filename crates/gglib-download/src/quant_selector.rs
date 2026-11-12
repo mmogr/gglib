@@ -90,24 +90,11 @@ impl QuantizationSelector {
             return Ok(label);
         }
 
-        let contenders: Vec<Contender> = available
-            .iter()
-            .map(|variant| Contender {
-                size: variant.total_size,
-                role: variant.role,
-            })
-            .collect();
-        let reader = self.variants.reader(repo_id, &available);
-        let judge = budget_bytes.map(|budget_bytes| MemoryFit { budget_bytes });
-        let pick = pick_variant(
-            &contenders,
-            reader.as_ref(),
-            judge.as_ref().map(|judge| judge as &dyn FitJudge),
-        )
-        .await
-        .map_err(|NoWeights| {
-            DownloadError::other(format!("No model in '{repo_id}', {NoWeights}"))
-        })?;
+        let pick = pick_among(self.variants.as_ref(), repo_id, &available, budget_bytes)
+            .await
+            .map_err(|NoWeights| {
+                DownloadError::other(format!("No model in '{repo_id}', {NoWeights}"))
+            })?;
         let label = available[pick.index].label.clone();
         log_pick(repo_id, &label, pick, budget_bytes);
         Ok(label)
@@ -132,6 +119,36 @@ impl QuantizationSelector {
             .refusal()
             .map_or(Ok(()), |why| Err(DownloadError::other(why)))
     }
+}
+
+/// The variant of `repo_id` a download takes among `available` (listed,
+/// with the roles their heads say) when none is asked for: [`pick_variant`]
+/// over their sizes and roles against `budget_bytes`, reading what it needs
+/// of each through `source`.
+///
+/// The one pick a download and the listing's ★ both make
+/// ([`crate::download_pick`]).
+pub(crate) async fn pick_among(
+    source: &dyn VariantSource,
+    repo_id: &str,
+    available: &[HfQuantInfo],
+    budget_bytes: Option<u64>,
+) -> Result<Pick, NoWeights> {
+    let contenders: Vec<Contender> = available
+        .iter()
+        .map(|variant| Contender {
+            size: variant.total_size,
+            role: variant.role,
+        })
+        .collect();
+    let reader = source.reader(repo_id, available);
+    let judge = budget_bytes.map(|budget_bytes| MemoryFit { budget_bytes });
+    pick_variant(
+        &contenders,
+        reader.as_ref(),
+        judge.as_ref().map(|judge| judge as &dyn FitJudge),
+    )
+    .await
 }
 
 /// Say which variant was taken with none asked, and why.

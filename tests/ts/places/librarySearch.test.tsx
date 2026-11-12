@@ -26,6 +26,7 @@ const transport = vi.hoisted(() => ({
   getHfModelSummary: vi.fn(async (_id: string): Promise<HfModelSummary> => hfRepo('owner/x')),
   getHfToolSupport: vi.fn(async (_id: string) => ({ supports_tool_calls: false, confidence: 0, detected_format: null })),
   getHfQuantizations: vi.fn(async () => new Promise(() => {})),
+  getHfPick: vi.fn(async () => new Promise(() => {})),
   queueDownload: vi.fn(async (_p: { modelId: string; quantization?: string }) => ({ id: 'q-1' })),
   addModel: vi.fn(async (_p: { filePath: string }) => ({})),
 }));

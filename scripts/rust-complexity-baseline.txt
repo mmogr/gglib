@@ -7,9 +7,9 @@ crates/gglib-agent/tests/unit_first_call.rs 527
 crates/gglib-app-services/src/benchmark/agentic.rs 753
 crates/gglib-app-services/src/benchmark/mapper.rs 534
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1388
-crates/gglib-app-services/src/downloads.rs 368
+crates/gglib-app-services/src/downloads.rs 396
 crates/gglib-app-services/src/hf_image_preview_tests.rs 319
-crates/gglib-app-services/src/hf_quantizations.rs 497
+crates/gglib-app-services/src/hf_quantizations.rs 573
 crates/gglib-app-services/src/mcp.rs 302
 crates/gglib-app-services/src/models.rs 468
 crates/gglib-app-services/src/models_tests.rs 972
@@ -29,7 +29,7 @@ crates/gglib-app-services/src/settings_tests.rs 376
 crates/gglib-app-services/src/setup.rs 363
 crates/gglib-app-services/src/setup_engines_tests.rs 540
 crates/gglib-app-services/src/test_support.rs 449
-crates/gglib-app-services/src/types.rs 632
+crates/gglib-app-services/src/types.rs 633
 crates/gglib-app-services/src/types_model_dto_tests.rs 315
 crates/gglib-axum/src/error.rs 332
 crates/gglib-axum/src/handlers/agent/compose.rs 375
@@ -49,7 +49,7 @@ crates/gglib-axum/src/handlers/agent/run_fixture.rs 372
 crates/gglib-axum/src/handlers/agent/run_folder_tests.rs 306
 crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 357
 crates/gglib-axum/src/handlers/proxy/wire_tests.rs 467
-crates/gglib-axum/src/routes.rs 428
+crates/gglib-axum/src/routes.rs 429
 crates/gglib-axum/tests/agent_runs_route.rs 367
 crates/gglib-axum/tests/conversation_settings_route.rs 445
 crates/gglib-axum/tests/integration_routes.rs 1054

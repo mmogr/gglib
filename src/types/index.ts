@@ -532,6 +532,11 @@ export type { HfQuantization } from './generated/HfQuantization';
 export type { HfQuantizationsResponse } from './generated/HfQuantizationsResponse';
 
 /**
+ * The quantization a download without one takes, as the download picks it.
+ */
+export type { HfPickResponse } from './generated/HfPickResponse';
+
+/**
  * An image model's family, read by the daemon from the head of its weights
  * before anything is downloaded, and the companions a download fetches with
  * them: `HfQuantizationsResponse.image`.
