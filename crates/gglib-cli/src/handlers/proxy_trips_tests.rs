@@ -66,3 +66,34 @@ fn an_empty_window_says_so_and_names_the_window() {
         "a window wider than the log keeps is shown as the one it reads"
     );
 }
+
+/// An rc version and a model name longer than the old fixed widths keep every
+/// column under its header.
+#[test]
+fn wide_values_keep_the_columns_in_line() {
+    let day = |model_name: &str, gglib_version: &str| LoopGuardTripDay {
+        day: "2026-11-09".to_owned(),
+        model_name: model_name.to_owned(),
+        gglib_version: gglib_version.to_owned(),
+        scanned: 12,
+        trips: 1,
+        loops: 1,
+        stagnations: 0,
+        sessions: 1,
+    };
+    let text = printed(
+        &[
+            day("Qwen3.8-27B-Uncensored-Aggressive-MTP", "0.31.0-rc.8"),
+            day("gemma", "0.30.1"),
+        ],
+        7,
+    );
+    let lines: Vec<&str> = text.lines().skip(1).take(3).collect();
+    let version_at = lines[0].find("VERSION").unwrap();
+    // SCANNED is right-aligned: its count ends where the header ends.
+    let scanned_end = lines[0].find("SCANNED").unwrap() + "SCANNED".len();
+    for (row, version) in lines[1..].iter().zip(["0.31.0-rc.8", "0.30.1"]) {
+        assert_eq!(row.find(version), Some(version_at), "{text}");
+        assert_eq!(row.find(" 12 ").map(|i| i + 3), Some(scanned_end), "{text}");
+    }
+}

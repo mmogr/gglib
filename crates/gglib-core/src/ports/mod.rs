@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod agent;
+pub(crate) mod agent_error;
 pub(crate) mod agent_guard_sink;
 pub mod attachment_store;
 pub(crate) mod benchmark;
@@ -53,7 +54,7 @@ use thiserror::Error;
 pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
 pub use agent_guard_sink::{AgentGuardReporter, AgentGuardSink};
 // Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
-pub use llm_completion::LlmCompletionPort;
+pub use llm_completion::{LlmCompletionPort, UpstreamRefusal};
 pub use loop_guard_trips::LoopGuardTripSink;
 // Re-export tool-executor filter decorators
 pub use tool_executor_filter::{
