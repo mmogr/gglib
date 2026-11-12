@@ -813,8 +813,9 @@ where
     // Every guard and budget below is a real observation: a loop, a stagnated
     // answer, an over-wide parallel batch and an exhausted iteration budget are
     // all things the model *did*, and they score honestly as failures.
-    // `Internal` is the odd one out — it is the loop reporting that it could
-    // not talk to the upstream at all, or could not start — and a run that
+    // `Internal` and `Refused` are the odd ones out — the loop reporting that
+    // it could not talk to the upstream at all, that the upstream refused the
+    // request, or that it could not start — and a run that
     // never reached the model has no score to give, only a zero that looks
     // exactly like a bad one.
     let (loop_detected, stagnation_detected, error_detail, unmeasured) = match &run_result {
@@ -823,9 +824,10 @@ where
         Ok(Err(gglib_core::ports::AgentError::StagnationDetected { .. })) => {
             (false, true, None, None)
         }
-        Ok(Err(e @ gglib_core::ports::AgentError::Internal(_))) => {
-            (false, false, Some(e.to_string()), Some(e.to_string()))
-        }
+        Ok(Err(
+            e @ (gglib_core::ports::AgentError::Internal(_)
+            | gglib_core::ports::AgentError::Refused { .. }),
+        )) => (false, false, Some(e.to_string()), Some(e.to_string())),
         Ok(Err(e)) => (false, false, Some(e.to_string()), None),
         // A panicked task produced nothing either, and its zeros are just as
         // empty as an unreachable upstream's.

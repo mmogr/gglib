@@ -180,6 +180,11 @@ pub(super) async fn work(
 /// that carries its words: they are the composer's, fixed, and only a run
 /// sent with Draw is held to a first call, so its code is the one a picture
 /// that was not drawn has.
+///
+/// A request the model's endpoint refused ends with the endpoint's code when
+/// it is one of gglib's own (`model_cannot_read_images`, from this machine's
+/// endpoint or a paired machine's), and `agent_error` when it is not: a code
+/// relayed from llama-server or the tunnel is no promise of gglib's.
 pub(super) fn run_error(error: &AgentError) -> RunError {
     let (code, message) = match error {
         AgentError::MaxIterationsReached(_) => (
@@ -203,7 +208,11 @@ pub(super) fn run_error(error: &AgentError) -> RunError {
             "turn_too_long",
             "The model's turn ran too long and was cut off, so the run was stopped.",
         ),
-        AgentError::Internal(_) => (
+        AgentError::Refused { code, .. } if gglib_proxy::error_codes::is_gglib_code(code) => (
+            code.as_str(),
+            "The model's endpoint refused the request; the reply's last event says why.",
+        ),
+        AgentError::Refused { .. } | AgentError::Internal(_) => (
             "agent_error",
             "The agent loop failed; the reply's last event says why.",
         ),

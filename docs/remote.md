@@ -892,7 +892,10 @@ daemon has none. A model that cannot be loaded ends the run
 `failed` with `model_unavailable` rather than refusing the `PUT`, or with
 `model_not_found`, naming it, when the hub does not hold it; a client
 shows a run's error code as it would the `PUT`'s. Such a run has written
-nothing to the chat.
+nothing to the chat. A request the model's server refused ends the run with
+the refusal's code when it is gglib's own (`model_cannot_read_images`, say),
+else `agent_error`; on a paired machine's model the `error` event's
+sentence names that machine (`LLM stream error: <machine> answered …`).
 
 A turn sent with the device's Draw button pressed says `"draw": true`, and
 only then is the desktop's chat model offered its image tool, for that one

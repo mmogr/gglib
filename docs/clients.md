@@ -341,7 +341,10 @@ small `tokens`, and nothing comes while the markup streams.
 Every error code gglib's proxy writes, in a refusal, in a stream's error frame
 or in a failed run, is listed with its type, HTTP status and meaning in
 [error-codes.json](error-codes.json). Match on `code`. gglib's tests check
-the file against the source.
+the file against the source. An agent run whose model's server refused its
+request ends with the refusal's code when it is one of these (such as
+`model_cannot_read_images`), and `agent_error` otherwise; the run's last
+`error` event carries the refusal's code as `code`.
 
 ## Sampling profiles
 
