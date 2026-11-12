@@ -40,8 +40,8 @@ pub(crate) mod forward_unary;
 pub(crate) mod frame_edit;
 pub(crate) mod generation;
 pub(crate) mod host_facts;
-// llama-server's frames, as the drain tests feed them.
 pub(crate) mod image_refusal;
+// llama-server's frames, as the drain tests feed them.
 #[cfg(test)]
 pub(crate) mod llama_frame_fixtures;
 // Public: the daemon mounts the same handler at `/api/images/generations`.
