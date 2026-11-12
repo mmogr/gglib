@@ -34,7 +34,7 @@ pub(super) async fn before_upgrade(pool: &SqlitePool, db_path: &Path) -> Result<
         return Ok(());
     }
     let backup = backup_path(db_path, generation);
-    if !backup.exists() {
+    if !is_file(&backup) {
         write(pool, &backup).await.with_context(|| {
             format!(
                 "backing up {} to {} before upgrading it; nothing has been changed",
@@ -61,23 +61,31 @@ pub fn backup_beside(db_path: &Path) -> Option<(i64, PathBuf)> {
         .max_by_key(|(generation, _)| *generation)
 }
 
-/// What to add to the refusal of a newer file: the backup from before it was
-/// upgraded, if this build opens it, and how to put it back.
+/// What to add to the refusal of a newer file: a backup this build opens,
+/// when it was taken, and how to put it back.
 pub(super) fn how_to_restore(db_path: &Path) -> Option<String> {
     let (_, backup) = backup_beside(db_path).filter(|(g, _)| *g <= SCHEMA_GENERATION)?;
+    let taken = std::fs::metadata(&backup)
+        .and_then(|m| m.modified())
+        .map(|t| {
+            chrono::DateTime::<chrono::Local>::from(t)
+                .format(", taken %Y-%m-%d %H:%M")
+                .to_string()
+        })
+        .unwrap_or_default();
     let (db, bak) = (db_path.display(), backup.display());
     // A `-wal` left beside the restored file would be replayed onto it. Moved,
     // not copied, so the next upgrade takes a fresh copy instead of keeping
     // this one.
     let command = if cfg!(windows) {
-        format!("del \"{db}-wal\" \"{db}-shm\" & move /y \"{bak}\" \"{db}\"")
+        format!("del \"{db}-wal\" \"{db}-shm\" & move /y \"{bak}\" \"{db}\"  (Command Prompt)")
     } else {
         format!("rm -f '{db}-wal' '{db}-shm' && mv '{bak}' '{db}'")
     };
     Some(format!(
-        " A copy from before that upgrade, which this build opens, is {bak}. To go back \
-         to it, losing what the newer gglib changed: stop every gglib (`gglib daemon stop`), \
-         then\n  {command}"
+        " This build opens the backup {bak}{taken}. To go back to it, losing what changed \
+         since: quit the newer gglib's desktop app and stop its daemon with that build \
+         (`gglib daemon stop` refuses here too), then\n  {command}"
     ))
 }
 
@@ -88,8 +96,8 @@ fn backup_path(db_path: &Path, generation: i64) -> PathBuf {
     db_path.with_file_name(name)
 }
 
-/// Every backup beside `db_path`: a file named exactly as [`backup_path`]
-/// names one.
+/// Every backup beside `db_path`: a plain file named exactly as
+/// [`backup_path`] names one.
 fn backups(db_path: &Path) -> Vec<(i64, PathBuf)> {
     let Some(prefix) = db_path.file_name().and_then(|n| n.to_str()) else {
         return Vec::new();
@@ -105,6 +113,9 @@ fn backups(db_path: &Path) -> Vec<(i64, PathBuf)> {
     entries
         .filter_map(|entry| {
             let entry = entry.ok()?;
+            if !entry.file_type().ok()?.is_file() {
+                return None;
+            }
             let name = entry.file_name();
             let digits = name.to_str()?.strip_prefix(&prefix)?.strip_suffix(".bak")?;
             if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
@@ -149,12 +160,18 @@ async fn write_through(pool: &SqlitePool, tmp: &Path, backup: &Path) -> Result<(
 
 /// Link the finished copy in under the backup's name. A backup already there
 /// was published by another process opening the file at the same moment,
-/// before that process changed it, so it is kept.
+/// before that process changed it, so it is kept. Anything else in the way
+/// fails the backup.
 fn publish(tmp: &Path, backup: &Path) -> io::Result<()> {
     match std::fs::hard_link(tmp, backup) {
-        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists && is_file(backup) => Ok(()),
         linked => linked,
     }
+}
+
+/// Whether `path` is a plain file, not a directory or a link.
+fn is_file(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.is_file())
 }
 
 #[cfg(test)]

@@ -244,6 +244,10 @@ async fn the_refusal_of_a_newer_database_says_how_to_restore_its_backup() {
         .to_string();
 
     assert!(err.contains(&bak.display().to_string()), "{err}");
+    assert!(
+        err.contains(", taken "),
+        "says when the copy was taken: {err}"
+    );
     #[cfg(unix)]
     {
         let (db, bak) = (db.display(), bak.display());
@@ -267,6 +271,25 @@ async fn the_refusal_names_no_backup_this_build_cannot_open() {
 
     assert!(err.contains("newer gglib"), "{err}");
     assert!(!err.contains(".bak"), "{err}");
+}
+
+/// A directory where the backup goes is no backup: the open fails before
+/// anything changes, and no refusal offers it.
+#[tokio::test]
+async fn a_directory_at_the_backups_name_fails_the_open_and_is_never_offered() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db = db_in(&dir);
+    older_file(&db, SCHEMA_GENERATION - 1).await;
+    let in_the_way = backup_path(&db, SCHEMA_GENERATION - 1);
+    std::fs::create_dir(&in_the_way).expect("mkdir");
+
+    let err = open(&db).await.expect_err("no backup, no upgrade");
+
+    assert!(
+        format!("{err:#}").contains("nothing has been changed"),
+        "{err:#}"
+    );
+    assert!(backup_beside(&db).is_none());
 }
 
 #[test]
