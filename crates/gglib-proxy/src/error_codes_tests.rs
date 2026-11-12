@@ -21,7 +21,7 @@ use super::{CODES, Kind, PUBLISHED, render};
 /// `fn`, the code's spelling there, and where the code comes from. The last
 /// five hold a `code` of another kind, which the scan cannot tell apart.
 #[rustfmt::skip]
-const RELAYS: [(&str, &str, &str, &str); 37] = [
+const RELAYS: [(&str, &str, &str, &str); 38] = [
     ("gglib-proxy/src/models.rs", "with_code", "Some(code.into())", "`with_code`'s parameter"),
     ("gglib-proxy/src/image_refusal.rs", "refuse_images", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-proxy/src/models.rs", "image_model_cannot_chat", "refusal.code()", "`DrawsImages::code`"),
@@ -34,6 +34,7 @@ const RELAYS: [(&str, &str, &str, &str); 37] = [
     ("gglib-proxy/src/sse_stream.rs", "upstream_error_body", "code", "llama-server's, else `upstream_error`"),
     ("gglib-core/src/sse/encoder.rs", "upstream_error_frame", "code", "`upstream_error_frame`'s parameter"),
     ("gglib-core/src/sse/encoder.rs", "encode", "code", "an `UpstreamError` event's"),
+    ("gglib-proxy/src/frame_edit.rs", "name_error_code", "code", "an `UpstreamError` event's: llama-server's, else `upstream_error`"),
     ("gglib-core/src/sse/parser.rs", "parse_inline_error_frame", "code", "llama-server's, else `upstream_error`"),
     ("gglib-core/src/services/drawing.rs", "drawing_refusal", r#"matcherror{ImageError::Runtime(ModelRuntimeError::ModelNotFound(_))=>"model_not_found",ImageError::Runtime(ModelRuntimeError::ImageModelIncomplete{..})=>{"image_model_incomplete"}other=>other.code().unwrap_or(UNAVAILABLE),}"#, "a named model's refusal, else `ImageError::code`, else `drawing_unavailable`"),
     ("gglib-app-services/src/runs/chat.rs", "refusal", "code", "the proxy's refusal, else `upstream_error`"),

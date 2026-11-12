@@ -36,6 +36,10 @@ pub(crate) mod fallback_session;
 pub mod error_codes;
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
+// The edits a streamed frame takes on its way to the client. Test builds
+// only until the stream's drain applies them.
+#[cfg(test)]
+pub(crate) mod frame_edit;
 pub(crate) mod generation;
 pub(crate) mod host_facts;
 pub(crate) mod image_refusal;
