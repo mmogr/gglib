@@ -108,7 +108,7 @@ async fn passed_through(status: reqwest::StatusCode, response: reqwest::Response
         .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
         .header("content-type", "application/json")
         .body(Body::from(error_bytes))
-        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+        .unwrap_or_else(|e| crate::refusal::internal(format!("the answer could not be built: {e}")))
 }
 
 /// The 504 for a request that outlasted `total`.
@@ -202,7 +202,7 @@ pub(crate) fn answer_with(content_type: HeaderValue, body: Bytes) -> Response {
         .status(StatusCode::OK)
         .header("content-type", content_type)
         .body(Body::from(body))
-        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+        .unwrap_or_else(|e| crate::refusal::internal(format!("the answer could not be built: {e}")))
 }
 
 /// The 502 for an upstream body that could not be read.

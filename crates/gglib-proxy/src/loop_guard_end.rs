@@ -42,7 +42,9 @@ pub(crate) fn ended_response(model: &str, streaming: bool) -> Response {
                 model,
                 &ended_text(),
             )))
-            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+            .unwrap_or_else(|e| {
+                crate::refusal::internal(format!("the answer could not be built: {e}"))
+            });
     }
     let created = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

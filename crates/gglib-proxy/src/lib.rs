@@ -57,6 +57,7 @@ pub(crate) mod models_endpoint;
 pub(crate) mod observers;
 pub(crate) mod profiles;
 pub mod props;
+pub(crate) mod refusal;
 pub(crate) mod remote;
 pub mod repair;
 pub(crate) mod router;
