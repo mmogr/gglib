@@ -6,11 +6,11 @@
 #
 #   scripts/make_db_fixture_0_33.sh [out file]
 #
-# Run once, on Apple silicon, from the repository root. The checked-in file is
-# never regenerated: see crates/gglib-db/tests/fixtures/README.md.
+# Run on Apple silicon, from the repository root, into a path of your own:
+# the checked-in file is never regenerated (crates/gglib-db/tests/fixtures/README.md).
 set -euo pipefail
 
-out=${1:-crates/gglib-db/tests/fixtures/library-0.33.0.sqlite}
+out=${1:?usage: $0 <out.sqlite>}
 tarball=gglib-0.33.0-aarch64-apple-darwin.tar.gz
 
 # The library lives at a neutral path, so no user name lands in a stored path.
@@ -19,17 +19,17 @@ models=$data/models
 
 # The release, alone in a new empty directory; only its gglib binary is run.
 release=$(mktemp -d)
-trap 'rm -rf "$release"' EXIT
+trap 'rm -rf "$release" "$data"' EXIT
 gh release download v0.33.0 -R mmogr/gglib -D "$release" -p "$tarball" -p SHA256SUMS
 (cd "$release" && grep " $tarball\$" SHA256SUMS | shasum -a 256 -c -)
 mkdir "$release/unpacked"
 tar -xzf "$release/$tarball" -C "$release/unpacked"
 gglib=$release/unpacked/gglib
-"$gglib" --version
 
 rm -rf "$data"
 mkdir -p "$models"
 export GGLIB_DATA_DIR=$data GGLIB_MODELS_DIR=$models GGLIB_DAEMON_PORT=19899
+"$gglib" --version
 
 # Three GGUF v3 files, headers only but for two tiny tensors on the image
 # model, which is how its family is read.
@@ -131,7 +131,7 @@ INSERT INTO chat_conversations (id, title, model_id, system_prompt, created_at, 
 INSERT INTO chat_messages (id, conversation_id, role, content, metadata, created_at) VALUES
   (1, 1, 'system', 'Be brief.', NULL, '2026-11-12 01:30:00'),
   (2, 1, 'user', 'What is in this picture?', NULL, '2026-11-12 01:30:01'),
-  (3, 1, 'assistant', '', '{"tool_calls":[{"id":"call_1","name":"fixture-tools:echo","arguments":{"text":"hello"}}]}', '2026-11-12 01:30:02'),
+  (3, 1, 'assistant', '', '{"tool_calls":[{"id":"call_1","name":"fixture-tools:echo","arguments":{"text":"hello"},"display_name":"echo","server":"fixture-tools"}]}', '2026-11-12 01:30:02'),
   (4, 1, 'tool', 'hello', '{"tool_call_id":"call_1"}', '2026-11-12 01:30:03'),
   (5, 1, 'assistant', 'One grey pixel.', '{"modelName":"Fixture Agent 0.6B","modelQuantization":"Q4_K_M","promptTokens":64,"cachedTokens":32,"completionTokens":12,"turnDurationMs":700,"writingDurationMs":500,"tokensPerSecond":24.0,"finishReason":"stop"}', '2026-11-12 01:30:04');
 INSERT INTO message_attachments (message_id, attachment_id, position)
@@ -179,12 +179,15 @@ SQL
 # One file, compacted, with nothing of this machine in it. Out of WAL mode,
 # so opening it leaves no -wal or -shm file beside it; gglib turns WAL on again.
 sqlite3 -bail "$db" 'PRAGMA wal_checkpoint(TRUNCATE);'
-cp "$db" "$out"
-sqlite3 -bail "$out" 'PRAGMA journal_mode = DELETE;' 'VACUUM;' 'PRAGMA integrity_check;'
-rm -f "$out-shm" "$out-wal"
-if sqlite3 "$out" .dump | grep -iE 'Users|home|mattogrady'; then
+made=$release/library.sqlite
+cp "$db" "$made"
+sqlite3 -bail "$made" 'PRAGMA journal_mode = DELETE;' 'VACUUM;' >/dev/null
+[ "$(sqlite3 "$made" 'PRAGMA integrity_check;')" = ok ]
+rm -f "$made-shm" "$made-wal"
+# Checked before it reaches $out.
+if sqlite3 "$made" .dump | grep -iF -e "$HOME" -e "$USER" -e /Users/ -e /home/; then
   echo "a stored text names this machine's user" >&2
   exit 1
 fi
-rm -rf "$data"
+mv "$made" "$out"
 ls -l "$out"

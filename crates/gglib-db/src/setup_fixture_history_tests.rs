@@ -74,7 +74,10 @@ async fn chats_branches_and_pictures_read_back_whole() {
         (PIXEL, "image/png")
     );
     assert_eq!((image.width, image.height), (1, 1));
-    let call = json!({"tool_calls": [{"id": "call_1", "name": "fixture-tools:echo", "arguments": {"text": "hello"}}]});
+    let call = json!({"tool_calls": [{
+        "id": "call_1", "name": "fixture-tools:echo", "arguments": {"text": "hello"},
+        "display_name": "echo", "server": "fixture-tools"
+    }]});
     assert_eq!(messages[2].metadata, Some(call));
     let AgentMessage::Assistant { content } = messages[2].to_agent_message() else {
         panic!()

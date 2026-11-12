@@ -4,7 +4,8 @@
 generation 5, `user_version` 5. The tests in `src/setup_fixture_tests.rs`
 open a copy with this build and read every table back.
 
-- Made 2026-11-12 by `scripts/make_db_fixture_0_33.sh`, on commit `f4121a4c`.
+- Made 2026-11-12 by `scripts/make_db_fixture_0_33.sh` (#1890), from main
+  `ad3d5369` plus #1887.
 - From `gglib-0.33.0-aarch64-apple-darwin.tar.gz` of the GitHub release
   `v0.33.0`, SHA256
   `228d5bad2d28e61b1ad7b345a66b7de3b32bcc80f8e695cc28dd49c6cc081aa3`, checked
@@ -36,9 +37,10 @@ Written by 0.33.0's CLI:
 Put in by hand with `sqlite3`, because 0.33.0 writes them only with a model
 running or from a Hub download. The chat `settings`, the template caps, the
 tune rows, the tune run's `applied_json` and the agentic report are what
-serde makes of 0.33.0's types, which are unchanged between `v0.33.0` and the
-commit above. The message `metadata` is typed by hand with the keys 0.33.0
-writes (`tool_calls`, `tool_call_id`, and a reply's counts):
+serde makes of 0.33.0's types, which are unchanged between `v0.33.0` and
+the tree it was made from. The message `metadata` is typed by hand with the
+keys 0.33.0 writes (`tool_calls` with each call's `display_name` and
+`server`, `tool_call_id`, and a reply's counts):
 
 - `models.template_caps` on model 1, and `models.defaults_origin` set to
   `published` on model 2.
