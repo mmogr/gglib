@@ -57,6 +57,10 @@ and a client's `cache_prompt` passes through as any key gglib does not model
 does, `false` included. Stage 5 leaves the stage table; stage 5b keeps its
 name.
 
+> **Amended 2026-11-12.** Stage 5b has since gone too: template caps are read,
+> never used to edit the request ([ADR 0007](0007-ask-the-server-for-template-capabilities.md),
+> decision 3's amendment).
+
 ### 2. There is no sampling floor, and the `reasoning` recipe is never stored
 
 `InferenceConfig::with_hardcoded_defaults` and `reasoning_floor` are deleted,

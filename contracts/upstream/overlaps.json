@@ -38,7 +38,7 @@
   "template-caps": {
     "engine": "llama",
     "adr": "0007",
-    "paths": ["crates/gglib-proxy/src/template_caps_read.rs", "crates/gglib-core/src/domain/template_caps.rs", "crates/gglib-core/src/request_pipeline/effort_gate.rs"],
+    "paths": ["crates/gglib-proxy/src/template_caps_read.rs", "crates/gglib-core/src/domain/template_caps.rs"],
     "upstream": {
       "paths": ["common/jinja/caps.cpp", "common/jinja/caps.h"],
       "headings": ["### **GET** `/props`"],

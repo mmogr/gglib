@@ -53,18 +53,6 @@ pub enum ParamSource {
     /// ever named one" are different explanations, and only the first tells a
     /// reader where to look.
     Coupled,
-    /// A layer named a value, and a later stage **suppressed** it because the
-    /// model's observed template capabilities say the template never reads the
-    /// field. Nothing was sent.
-    ///
-    /// Only `reasoning_effort` can carry this today — it is the one modelled
-    /// field delivered by a chat template reading a variable rather than by
-    /// the sampler ([ADR 0007] decision 3). The suppressed level and the rung
-    /// that supplied it are in the pipeline's own record; see
-    /// `request_pipeline::effort_gate::SuppressedEffort`.
-    ///
-    /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
-    SuppressedByTemplate,
     /// Nothing named it, so no value is sent and llama.cpp's own default
     /// applies. There is no floor beneath the ladder (ADR 0022).
     Unset,
@@ -225,7 +213,6 @@ impl FieldSources {
                     ParamSource::Layer(i) => names.get(i).copied().unwrap_or("?"),
                     ParamSource::Coupled => "coupled",
                     ParamSource::Unset => "unset",
-                    ParamSource::SuppressedByTemplate => "suppressed-by-template",
                 };
                 format!("{field}={label}")
             })

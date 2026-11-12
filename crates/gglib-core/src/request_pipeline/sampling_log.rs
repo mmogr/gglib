@@ -1,34 +1,9 @@
 //! The one `debug!` line that describes a request's whole sampling decision.
 //!
-//! # Why it is not inside [`resolve_sampling`](super::sampling::resolve_sampling)
-//!
-//! `resolve_sampling` is stage 4; [`effort_gate`](super::effort_gate) is stage
-//! 5b, and it *deletes* a resolved `reasoning_effort` when the model's observed
-//! template does not read the variable. A line rendered inside stage 4 would
-//! print
-//!
-//! ```text
-//! reasoning_effort=Some(High) … from=… reasoning_effort=profile …
-//! ```
-//!
-//! for a value that stage 5b is about to throw away — and since neither
-//! reasoning control is echoed by any readback ([ADR 0007] finding 7a), that log
-//! line **is** the record. An operator grepping `sampling resolved` on a
-//! suppressing model would find gglib stating, in its only surviving account of
-//! the request, that it sent a level it did not send.
-//!
-//! A stage-5b line loud enough to correct it would not do: the misleading line
-//! would fire on *every* request and the correction only on a suppression, so
-//! the reader would have to know to go looking for a second line before they
-//! could trust the first. A record that is only true when read alongside
-//! another record is not a record. Rendering once, after every stage that can
-//! still change the answer, costs one function call and makes the common line
-//! honest by construction.
-//!
-//! Stage 5b keeps its own `debug!` for what this line structurally cannot say:
-//! after suppression `resolved.reasoning_effort` is `None` and its provenance
-//! reads `suppressed-by-template`, so **which** level was dropped and **which**
-//! rung asked for it exist nowhere else.
+//! [`apply`](super::apply) renders it once, after stage 4 has resolved the
+//! request. Neither reasoning control is echoed by any readback ([ADR 0007]
+//! finding 7a), so for those two this line is the only record of what was
+//! sent.
 //!
 //! [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
 
@@ -38,8 +13,8 @@ use super::sampling::SamplingDecision;
 
 /// Render one request's resolved sampling parameters and their provenance.
 ///
-/// Call after the last stage that can still change `decision` — today that is
-/// stage 5b. See the module docs for why the position is load-bearing.
+/// Call after the last stage that can still change `decision`, which is
+/// stage 4.
 ///
 /// Guarded on the level being enabled because both `layer_names` and
 /// [`FieldSources::describe`](crate::domain::FieldSources::describe) allocate,
@@ -68,8 +43,7 @@ pub(super) fn log_resolution(decision: &SamplingDecision) {
         // Logged like the rest, and load-bearing in a way the rest are not: no
         // readback will ever echo either of these, so this line and the
         // provenance record are the only evidence of what was resolved. See ADR
-        // 0007 finding 7a — and the module docs for why that makes the position
-        // of this call part of the contract.
+        // 0007 finding 7a.
         reasoning_effort = ?r.reasoning_effort,
         reasoning_budget_tokens = ?r.reasoning_budget_tokens,
         from = %decision.sources.describe(&decision.layer_names),

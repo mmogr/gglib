@@ -3,7 +3,6 @@ import type { DefaultsOrigin } from "./DefaultsOrigin";
 import type { InferenceConfig } from "./InferenceConfig";
 import type { ParamProvenanceDto } from "./ParamProvenanceDto";
 import type { PublishedDefaultDto } from "./PublishedDefaultDto";
-import type { SuppressedEffortDto } from "./SuppressedEffortDto";
 
 /**
  * A model's resolved sampling parameters and where each value came from.
@@ -67,28 +66,4 @@ published: Array<PublishedDefaultDto>,
  * reports this same column, and a wire form that differed from it in
  * casing alone meant one stored value reached a client under two names.
  */
-defaultsOrigin: DefaultsOrigin | null, 
-/**
- * The `reasoning_effort` this model's template would ignore, when the
- * stored configuration resolves one it does not read.
- *
- * # Why a table row is not enough
- *
- * The suppression *is* in [`Self::sources`] — that entry reads
- * [`SuppressedByTemplate`](ProvenanceKindDto::SuppressedByTemplate) — and
- * [`Self::resolved`] carries `null`, because that is what would be sent.
- * Between them a client can say *something was suppressed* and nothing
- * more: the level is gone from `resolved`, and the rung that asked for it
- * has been overwritten by the marker. Those two are the whole content of
- * the sentence a reader needs — "the `:high` profile asks for `high`; this
- * model's template does not read `reasoning_effort`" — so they are carried
- * here or they are carried nowhere.
- *
- * # It describes a request that has not happened
- *
- * This endpoint explains *stored configuration*. Nothing has been sent, so
- * this is a conditional: on any request against this model, that is what
- * would happen. A surface must word it that way. The unconditional twin
- * lives on the proxy's sampling audit, where a request really did run.
- */
-effortSuppressed?: SuppressedEffortDto, };
+defaultsOrigin: DefaultsOrigin | null, };

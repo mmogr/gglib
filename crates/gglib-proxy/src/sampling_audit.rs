@@ -153,10 +153,8 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 
-use gglib_core::domain::{
-    InferenceConfig, ModelSamplingDefaults, ParamSource, ReasoningEffort, SamplingOverride,
-};
-use gglib_core::request_pipeline::{SamplingDecision, SuppressedEffort};
+use gglib_core::domain::{InferenceConfig, ModelSamplingDefaults, ParamSource, SamplingOverride};
+use gglib_core::request_pipeline::SamplingDecision;
 use serde::{Deserialize, Serialize};
 
 use crate::audit_records::{
@@ -578,9 +576,8 @@ pub struct SamplingAuditStore {
     /// from the same `/props` body as the baseline and held with the same
     /// once-per-launch discipline.
     ///
-    /// Storage only: the gate reads the *catalog row's* copy via
-    /// `ModelContext`, not this one, and the dashboard for this live reading
-    /// lands with the readback work. The gate's *output* is on the snapshot.
+    /// Read only to report whether the template reads `reasoning_effort`; the
+    /// request pipeline reads the *catalog row's* copy via `ModelContext`.
     template_caps: Mutex<gglib_core::domain::TemplateCapsState>,
     /// The running model's id and what its GGUF publishes, set once per
     /// launch by the poller. `None` until the first poll names a model; the
@@ -588,11 +585,6 @@ pub struct SamplingAuditStore {
     model_sampling: Mutex<Option<(u32, Option<ModelSamplingDefaults>)>>,
     /// The published-vs-sent comparison, refreshed from each resolved intent.
     published: Mutex<PublishedOverrides>,
-    /// Requests whose resolved `reasoning_effort` stage 5b threw away.
-    effort_suppressed: AtomicU64,
-    /// The most recent one, with its rung already named. See
-    /// [`EffortSuppressions`].
-    latest_effort_suppressed: Mutex<Option<SuppressedEffortRecord>>,
     /// What the most recent request resolved for the two reasoning controls.
     ///
     /// The counterpart to [`Self::recent`] for the two fields that have no
@@ -618,45 +610,11 @@ impl SamplingAuditStore {
 
     /// Record what the request pipeline resolved, for the counters that do not
     /// need a wire observation to be meaningful.
-    ///
-    /// # Why `effort_suppressed` is a parameter and not an inference
-    ///
-    /// It could have been read off `decision.sources.reasoning_effort` — stage
-    /// 5b rewrites that entry to
-    /// [`SuppressedByTemplate`](ParamSource::SuppressedByTemplate) — and that
-    /// would have spared the caller a field. It would also have thrown away the
-    /// two things worth keeping: `decision.resolved.reasoning_effort` is `None`
-    /// by then, and the rung that asked for the level has been overwritten by
-    /// the suppression marker. [`SuppressedEffort`] exists precisely because
-    /// those are unrecoverable from the decision alone.
-    ///
-    /// Passing it explicitly also means a caller cannot drop
-    /// [`PipelineReport::effort_suppressed`] without the compiler saying so;
-    /// dropped, the level and the rung are computed, logged once at `debug!`,
-    /// and lost.
-    ///
-    /// [`PipelineReport::effort_suppressed`]: gglib_core::request_pipeline::PipelineReport::effort_suppressed
-    pub fn record_intent(
-        &self,
-        decision: &SamplingDecision,
-        effort_suppressed: Option<&SuppressedEffort>,
-    ) {
-        if let Some(suppressed) = effort_suppressed {
-            self.effort_suppressed.fetch_add(1, Ordering::Relaxed);
-            *self
-                .latest_effort_suppressed
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner) = Some(SuppressedEffortRecord {
-                level: suppressed.level,
-                source: describe_source(suppressed.source, &decision.layer_names),
-            });
-        }
-
+    pub fn record_intent(&self, decision: &SamplingDecision) {
         *self
             .latest_reasoning
             .lock()
-            .unwrap_or_else(PoisonError::into_inner) =
-            Some(resolved_reasoning(decision, effort_suppressed));
+            .unwrap_or_else(PoisonError::into_inner) = Some(resolved_reasoning(decision));
 
         let rejected = decision.client_fields_rejected.len() as u64;
         let discarded = decision.client_fields_discarded.len() as u64;
@@ -842,14 +800,6 @@ impl SamplingAuditStore {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .clone(),
-            effort_suppressed: EffortSuppressions {
-                requests: self.effort_suppressed.load(Ordering::Relaxed),
-                latest: self
-                    .latest_effort_suppressed
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .clone(),
-            },
             reasoning: ReasoningReadback {
                 effort_support: EffortSupportState::of(&self.template_caps()),
                 latest: self
@@ -866,33 +816,12 @@ impl SamplingAuditStore {
 
 /// What one request resolved for the two reasoning controls, with each rung
 /// already named.
-///
-/// Free-standing rather than a method, because it needs
-/// [`SamplingDecision::layer_names`] and the suppression together — and the
-/// suppression is the only place a suppressed level survives at all. Stage 5b
-/// rewrites `sources.reasoning_effort` to
-/// [`SuppressedByTemplate`](ParamSource::SuppressedByTemplate) and clears
-/// `resolved.reasoning_effort`, so a record built from the decision alone would
-/// report that gglib asked for nothing — which is precisely the erasure
-/// [`SuppressedEffort`] exists to prevent.
-fn resolved_reasoning(
-    decision: &SamplingDecision,
-    effort_suppressed: Option<&SuppressedEffort>,
-) -> ResolvedReasoning {
+fn resolved_reasoning(decision: &SamplingDecision) -> ResolvedReasoning {
     let names = &decision.layer_names;
-    let effort = match (effort_suppressed, decision.resolved.reasoning_effort) {
-        (Some(suppressed), _) => Some(EffortRung {
-            level: suppressed.level,
-            source: describe_source(suppressed.source, names),
-            suppressed: true,
-        }),
-        (None, Some(level)) => Some(EffortRung {
-            level,
-            source: describe_source(decision.sources.reasoning_effort, names),
-            suppressed: false,
-        }),
-        (None, None) => None,
-    };
+    let effort = decision.resolved.reasoning_effort.map(|level| EffortRung {
+        level,
+        source: describe_source(decision.sources.reasoning_effort, names),
+    });
     ResolvedReasoning {
         effort,
         budget: decision
@@ -903,60 +832,6 @@ fn resolved_reasoning(
                 source: describe_source(decision.sources.reasoning_budget_tokens, names),
             }),
     }
-}
-
-/// One resolved `reasoning_effort` stage 5b deleted, in a form a surface can
-/// render.
-///
-/// [`SuppressedEffort`] carries the rung as a [`ParamSource`], whose
-/// `Layer(i)` indexes a ladder no reader of a JSON snapshot has. Resolved to
-/// the rung's name here, at the one point where
-/// [`SamplingDecision::layer_names`] is still in hand.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct SuppressedEffortRecord {
-    /// The level the ladder resolved and llama-server never saw.
-    pub level: ReasoningEffort,
-    /// The rung that asked for it — `profile`, `model`, `global`, `cli`.
-    pub source: String,
-}
-
-/// What the effort gate has thrown away since this proxy started.
-///
-/// # Why the audit is where this lands
-///
-/// Every other consumer of a request's sampling can re-derive its subject from
-/// something. This one cannot: a suppressed `reasoning_effort` leaves **no
-/// trace anywhere else in the system**. It is deleted from the body before the
-/// request is sent, and neither reasoning control is echoed by `/slots.params`
-/// or `/props` (ADR 0007 finding 7a), so the readback that catches every other
-/// transmission fault is permanently blind to this one. That makes it Tier C's
-/// business by elimination — it is an observation about gglib's own behaviour
-/// that nothing else is positioned to make — and it is the reason the record is
-/// kept at all rather than left to a `debug!` line an operator has to have been
-/// running at the time to see.
-///
-/// # Zero is not "nothing was suppressed"
-///
-/// [`AuditState`]'s rule again. `requests: 0` is the honest reading on a model
-/// whose template reads the variable, on a model nobody has probed, and on a
-/// proxy that has served no request at all — three states with different
-/// meanings. A surface rendering this must say what it is beside, not present
-/// the count alone.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct EffortSuppressions {
-    /// Requests on which a resolved level was deleted before sending.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub requests: u64,
-    /// The most recent suppression, or `None` if there has been none.
-    ///
-    /// The most recent rather than a list, for the reason
-    /// [`PublishedOverrideField`] gives: with `trust_client_sampling` off every
-    /// request against one model and profile resolves identically, so a list
-    /// would be the same entry repeated. [`Self::requests`] is what says how
-    /// often.
-    pub latest: Option<SuppressedEffortRecord>,
 }
 
 /// Compare one resolved config against what the model published.
@@ -1034,11 +909,6 @@ pub struct SamplingAuditSnapshot {
     /// What gglib's own requests do with the running model's published
     /// sampler defaults.
     pub published: PublishedOverrides,
-    /// Resolved `reasoning_effort` levels stage 5b deleted before sending.
-    ///
-    /// The one thing on this snapshot that no wire observation could ever
-    /// corroborate — see [`EffortSuppressions`].
-    pub effort_suppressed: EffortSuppressions,
     /// The two reasoning controls: what the template says about them, what the
     /// last request resolved, and why none of it is an observation.
     ///
@@ -1152,13 +1022,6 @@ fn describe_source(source: ParamSource, names: &[&'static str]) -> String {
         ParamSource::Layer(i) => (*names.get(i).unwrap_or(&"?")).to_string(),
         ParamSource::Coupled => "unset (coupled)".to_string(),
         ParamSource::Unset => "unset".to_string(),
-        // Unreachable from both callers, for different reasons. `compare`
-        // renders the seven readback fields and never a reasoning control
-        // (finding 7a); [`SuppressedEffort`] captures the rung *before* stage
-        // 5b overwrites it, and only a rung names an effort. Labelled rather than
-        // `unreachable!` — a mislabelled rung in an audit record is a smaller
-        // fault than a panic on the request path.
-        ParamSource::SuppressedByTemplate => "suppressed (template)".to_string(),
     }
 }
 

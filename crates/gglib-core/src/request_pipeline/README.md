@@ -92,12 +92,8 @@ does either.
 - [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stage 4: the
   sampling hierarchy. Everything that
   touches top-level sampling keys.
-- [`effort_gate`] — stage 5b: deleting a resolved `reasoning_effort` the
-  model's observed template does not read, and writing down what was deleted so
-  a surface can say whose setting went nowhere.
 - [`sampling_log`] — no stage of its own; the single `sampling resolved` debug
-  line, rendered after 5b so it describes what was *sent* rather than what
-  stage 4 folded. Its module docs carry the argument for that placement.
+  line, rendered once stage 4 has resolved the request.
 - [`constrain`] — [`constrain_tool_calls()`], stage 6: gglib's own
   decode-time grammar for a dialect model's tool calls. It runs after
   stage 3 because the grammar adds a top-level key.
@@ -109,8 +105,8 @@ does either.
   proxy's tool-call repair reads it; the re-issue lives there.
 - [`explain`] — [`explain_stored()`]: a model's stored sampling
   configuration resolved with no request in hand, each value with the rung
-  that supplied it, and the stage-5b effort gate applied. `gglib model
-  explain` and the GUI's sampling panel both draw it.
+  that supplied it. `gglib model explain` and the GUI's sampling panel both
+  draw it.
 
 Outside tests, three paths call [`apply()`]: the proxy's forwarding path
 (`gglib-proxy`'s `forward.rs`), the runtime's completion adapter

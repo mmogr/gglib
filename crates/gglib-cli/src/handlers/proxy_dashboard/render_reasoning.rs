@@ -53,16 +53,7 @@ pub(super) fn render_reasoning_section(audit: Option<&SamplingAudit>, term_width
             let _ = writeln!(out, "  {:<24} none resolved", "Effort");
         }
         Some(rung) => {
-            let suppressed = if rung.suppressed {
-                " — suppressed, this template never reads it"
-            } else {
-                ""
-            };
-            let _ = writeln!(
-                out,
-                "  {:<24} {} ({}){}",
-                "Effort", rung.level, rung.source, suppressed
-            );
+            let _ = writeln!(out, "  {:<24} {} ({})", "Effort", rung.level, rung.source);
         }
     }
     match latest.budget.as_ref() {
@@ -126,7 +117,7 @@ fn effort_support_label(support: &EffortSupport) -> String {
     match support {
         EffortSupport::Supported => "yes".to_string(),
         EffortSupport::NotSupported => {
-            "no — a resolved effort is suppressed before sending".to_string()
+            "no — a resolved effort is sent, and this template ignores it".to_string()
         }
         EffortSupport::NotYetObserved { reason } => format!("not observed — {reason}"),
         EffortSupport::Unrecognised => {

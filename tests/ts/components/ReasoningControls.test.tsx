@@ -59,13 +59,13 @@ describe('the effort control across the three template states', () => {
     // explanation reads as a feature gglib does not have.
     renderForm({ reasoningEffort: 'no' });
 
-    expect(screen.getByText(/does not declare reasoning effort/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not read a reasoning level/i)).toBeInTheDocument();
   });
 
   it('never describes an unobserved template as one that refuses', () => {
     renderForm({ reasoningEffort: 'unknown' });
 
-    expect(screen.queryByText(/does not declare reasoning effort/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/does not read a reasoning level/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Reasoning Effort')).toHaveAccessibleDescription(
       /not yet observed/i,
     );
