@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.33.1-rc.1](https://github.com/mmogr/gglib/compare/v0.33.0-rc.1...v0.33.1-rc.1) (2026-11-12)
+
+
+### What it stopped getting wrong
+
+* **fit:** size the KV cache per layer, so Gemma 4 fits 128K, not 16K ([#1882](https://github.com/mmogr/gglib/issues/1882)) ([e329c54](https://github.com/mmogr/gglib/commit/e329c543c39ff8f4ddbb49ab88bc3551035d0ac7))
+* **gguf:** a stored header keeps per-layer lists, and a reimport refreshes it ([#1881](https://github.com/mmogr/gglib/issues/1881)) ([0d025a6](https://github.com/mmogr/gglib/commit/0d025a6fc3bf67abe19f0af9b0a4bf43fcd2a53e))
+* **proxy:** a reply names the served model, and keep-alives don't hold a stalled reply open ([#1880](https://github.com/mmogr/gglib/issues/1880)) ([f5373e5](https://github.com/mmogr/gglib/commit/f5373e5c8167704e0a528431ce73f1893f9c4ecb))
+* **proxy:** every reader of a stored key trims it, so a padded key admits ([#1879](https://github.com/mmogr/gglib/issues/1879)) ([9a0ac7e](https://github.com/mmogr/gglib/commit/9a0ac7e8e3a3e8ce8e6100f50e1a16eb02a3a3a0))
+
+
+### Documentation
+
+* say what a version promises ([#1878](https://github.com/mmogr/gglib/issues/1878)) ([0039a8d](https://github.com/mmogr/gglib/commit/0039a8d0476e64eed2b55ef62568e30dd8f0632f))
+
 ## [0.33.0-rc.1](https://github.com/mmogr/gglib/compare/v0.32.1-rc.1...v0.33.0-rc.1) (2026-11-10)
 
 
