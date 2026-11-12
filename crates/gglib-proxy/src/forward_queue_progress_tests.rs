@@ -43,6 +43,22 @@ async fn a_streaming_reply_reports_progress_on_its_lease() {
     assert_eq!(reports.times().len(), 1);
 }
 
+/// A keep-alive comment is passed on to the client but is not the reply
+/// moving: an upstream that sends only comments reports nothing.
+#[tokio::test]
+async fn comments_alone_report_no_progress() {
+    let reports = Arc::new(Reports::default());
+    let pings = vec![
+        Bytes::from_static(b": ping\n\n"),
+        Bytes::from_static(b":\n\n"),
+    ];
+    let turn = run_turn_holding(upstream(at_once(pings), Then::Silence), holding(&reports)).await;
+
+    assert!(turn.wire.starts_with(": ping\n\n:\n\n"), "{}", turn.wire);
+    assert!(turn.outcome.upstream_stalled.is_some());
+    assert!(reports.times().is_empty());
+}
+
 /// An upstream that never sends a byte reports nothing, so the queue's
 /// deadline still runs against a wedged request.
 #[tokio::test]

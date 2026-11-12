@@ -5,7 +5,7 @@
 use serde_json::{Value, json};
 
 use super::forward_stall_fixtures::{
-    Reader, Then, at_once, run_turn, run_turn_holding_back_tool_calls, upstream,
+    Reader, Then, at_once, run_turn, run_turn_holding_back_tool_calls, run_turn_repairing, upstream,
 };
 use super::*;
 use crate::llama_frame_fixtures::{
@@ -187,5 +187,79 @@ async fn a_finish_that_carries_a_call_goes_out_once_after_it() {
 
     assert_eq!(turn.frames(), vec![served(opens), served(closes)]);
     assert_eq!(turn.outcome.finish_reason.as_deref(), Some("tool_calls"));
+    assert_eq!(turn.dones(), 1);
+}
+
+/// An upstream that answers a repair's re-issue with one conformant
+/// `read_file` call, `call_fixed`. Returns its port.
+async fn spawn_reissue_answer() -> (u16, tokio::task::JoinHandle<()>) {
+    use axum::routing::post;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let port = listener.local_addr().unwrap().port();
+    let answer = json!({"choices": [{"index": 0, "finish_reason": "tool_calls", "message": {
+        "role": "assistant",
+        "tool_calls": [{"id": "call_fixed", "type": "function", "function": {
+            "name": "read_file", "arguments": "{\"path\":\"a\",\"max_lines\":3}"
+        }}]
+    }}]});
+    let app = axum::Router::new().route(
+        "/v1/chat/completions",
+        post(move || {
+            let body = answer.to_string();
+            async move {
+                axum::response::Response::builder()
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(body))
+                    .unwrap()
+            }
+        }),
+    );
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    (port, server)
+}
+
+/// A finish frame that carried the last fragment of a call a repair then
+/// replaced goes out after the repair's call, without the fragment.
+#[tokio::test]
+async fn a_finish_that_carried_a_replaced_call_goes_out_without_it() {
+    let (port, server) = spawn_reissue_answer().await;
+    let request = json!({
+        "model": "m", "stream": true, "tool_choice": "auto",
+        "messages": [{"role": "user", "content": "read it"}],
+        "tools": [{"type": "function", "function": {"name": "read_file", "parameters": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}, "max_lines": {"type": "integer"}},
+            "required": ["path"]
+        }}}]
+    });
+    let repair = RepairContext {
+        req_builder: crate::loopback::client()
+            .post(format!("http://127.0.0.1:{port}/v1/chat/completions")),
+        request_body: Bytes::from(request.to_string()),
+        enabled: true,
+    };
+    let opens = llama_frame(&call(0, Some("c1"), "{\"path\":\"a\",\"max_lines\":"));
+    let mut closes = llama_frame(&call(0, None, "\"three\"}"));
+    closes["choices"][0]["finish_reason"] = json!("tool_calls");
+    let chunks = vec![sse(&opens), sse(&closes), done_bytes()];
+    let turn = run_turn_repairing(upstream(at_once(chunks), Then::Close), repair).await;
+    server.abort();
+
+    assert!(turn.outcome.repair_succeeded, "{}", turn.wire);
+    let frames = turn.frames();
+    let [fixed, finish] = frames.as_slice() else {
+        panic!("the repair's call, then the finish: {}", turn.wire);
+    };
+    let call = &fixed["choices"][0]["delta"]["tool_calls"][0];
+    assert_eq!(call["id"], json!("call_fixed"));
+    let mut want = served(closes);
+    want["choices"][0]["delta"] = json!({});
+    assert_eq!(finish, &want, "the finish as sent, its fragment taken out");
+    assert!(!turn.wire.contains("three"), "{}", turn.wire);
     assert_eq!(turn.dones(), 1);
 }

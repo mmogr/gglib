@@ -183,6 +183,14 @@ pub(super) async fn run_turn_holding_back_tool_calls(
     run_turn_with(bytes, Reader::default(), Some(repair), None).await
 }
 
+/// [`run_turn`] with `repair` acting on the turn's tool calls.
+pub(super) async fn run_turn_repairing(
+    bytes: impl Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
+    repair: RepairContext,
+) -> Turn {
+    run_turn_with(bytes, Reader::default(), Some(repair), None).await
+}
+
 /// [`run_turn`] for a request holding `lease`, as an admitted one does.
 pub(super) async fn run_turn_holding(
     bytes: impl Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
