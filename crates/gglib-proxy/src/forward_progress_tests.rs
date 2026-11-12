@@ -1,12 +1,11 @@
 //! `prompt_progress` is the proxy's data, not the client's frame.
 //!
 //! The proxy forces `return_progress: true` upstream so the dashboard has a
-//! pre-fill bar. A `prompt_progress` chunk carries no `choices` key, which is
-//! a llama.cpp extension and not `OpenAI` streaming JSON, so re-emitting it to
-//! a client that never asked kills every schema-validating client (anything on
-//! the Vercel AI SDK — `OpenCode` among them) on the first frame, before a
-//! single token arrives. That client is sent an SSE comment for each frame
-//! instead, so a long prefill does not go silent on it (#1213).
+//! pre-fill bar. A client that never asked is not sent those frames (one
+//! without `choices`, as older llama-servers wrote it, stopped every
+//! schema-validating client on the Vercel AI SDK, `OpenCode` among them). It
+//! is sent an SSE comment for each frame instead, so a long prefill does not
+//! go silent on it (#1213).
 
 use super::*;
 use gglib_core::sse::SseStreamDecoder;
@@ -26,8 +25,9 @@ async fn spawn_progress_mock() -> (u16, tokio::task::JoinHandle<()>) {
         "/v1/chat/completions",
         post(|| async {
             let sse = concat!(
-                "data: {\"prompt_progress\":{\"cache\":0,\"processed\":0,\"total\":57,\"time_ms\":0}}\n\n",
-                "data: {\"prompt_progress\":{\"cache\":0,\"processed\":57,\"total\":57,\"time_ms\":813}}\n\n",
+                "data: {\"choices\":[{\"finish_reason\":null,\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null}}],\"prompt_progress\":{\"cache\":0,\"processed\":0,\"total\":57,\"time_ms\":0}}\n\n",
+                "data: {\"choices\":[{\"finish_reason\":null,\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null}}],\"prompt_progress\":{\"cache\":0,\"processed\":57,\"total\":57,\"time_ms\":813}}\n\n",
+                "data: {\"choices\":[{\"finish_reason\":null,\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null}}]}\n\n",
                 "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Moonlight\"},\"finish_reason\":null}]}\n\n",
                 "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
                 "data: [DONE]\n\n",

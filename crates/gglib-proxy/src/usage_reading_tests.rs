@@ -6,14 +6,15 @@ use std::sync::Arc;
 use gglib_core::LlmStreamEvent;
 use gglib_core::domain::agent::ContextReading;
 use gglib_core::request_pipeline::TruncationReport;
-use gglib_core::sse::{DONE_SENTINEL, SseEncoder};
+use gglib_core::sse::DONE_SENTINEL;
 use serde_json::{Value, json};
 
 use super::{Told, told};
 use crate::client_send::{CLIENT_SEND_TIMEOUT, ClientSender};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::forward::drain_events;
-use crate::upstream_read::prefill_comment;
+use crate::llama_frame_fixtures::{llama_bytes, llama_frame};
+use crate::upstream_read::{STREAM_IDLE_TIMEOUT, prefill_comment, upstream_frames};
 
 fn shortened(messages_truncated: usize) -> TruncationReport {
     TruncationReport {
@@ -86,9 +87,12 @@ async fn wire(told: Told) -> String {
     let registry = Arc::new(ActiveConnectionsRegistry::new());
     let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let events = [progress(), text(), done(), usage()].map(Ok);
+    let bytes = [progress(), text(), done(), usage()].map(|e| Ok(llama_bytes(&e)));
     drain_events(
-        futures_util::stream::iter(events),
+        upstream_frames::<_, std::io::Error>(
+            futures_util::stream::iter(bytes),
+            STREAM_IDLE_TIMEOUT,
+        ),
         "m".to_owned(),
         ClientSender::new(tx, CLIENT_SEND_TIMEOUT),
         &connection,
@@ -115,28 +119,37 @@ fn usage_frame(wire: &str) -> Value {
     frame
 }
 
-/// A client whose body did not set `return_progress` is sent what an
-/// encoder with no reading writes, byte for byte, from the first frame to
-/// `[DONE]`: a comment for the prefill, and the upstream's counts alone.
+/// A client whose body did not set `return_progress` is sent a comment for
+/// the prefill, then llama-server's frames with only `model` changed, the
+/// upstream's counts alone in `usage`, and the one `[DONE]`.
 #[tokio::test]
 async fn a_client_that_did_not_ask_gets_the_frame_unchanged() {
     let wire = wire(None).await;
 
-    let sent = usage_frame(&wire);
-    // The stream's own id and time, which are random per reply.
-    let plain = SseEncoder::new(
-        sent["id"].as_str().unwrap(),
-        "m",
-        sent["created"].as_u64().unwrap(),
-    );
-    let mut want = String::from_utf8(prefill_comment(57, 57).to_vec()).unwrap();
-    for event in [text(), done(), usage()] {
-        want.push_str(&plain.encode(&event).unwrap());
-    }
-    want.push_str(DONE_SENTINEL);
-    assert_eq!(wire, want);
+    let blocks: Vec<&str> = wire.split_inclusive("\n\n").collect();
+    let [comment, frames @ .., sentinel] = blocks.as_slice() else {
+        panic!("a comment, frames and [DONE]: {wire}");
+    };
+    assert_eq!(comment.as_bytes(), &prefill_comment(57, 57)[..]);
+    assert_eq!(*sentinel, DONE_SENTINEL);
+    let sent: Vec<Value> = frames
+        .iter()
+        .map(|block| {
+            let payload = block.strip_prefix("data: ").expect("a data block");
+            serde_json::from_str(payload.trim_end()).expect("JSON")
+        })
+        .collect();
+    let want: Vec<Value> = [text(), done(), usage()]
+        .iter()
+        .map(|event| {
+            let mut frame = llama_frame(event);
+            frame["model"] = json!("m");
+            frame
+        })
+        .collect();
+    assert_eq!(sent, want);
     assert_eq!(
-        sent["usage"],
+        usage_frame(&wire)["usage"],
         json!({
             "prompt_tokens": 812,
             "completion_tokens": 96,

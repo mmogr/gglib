@@ -14,7 +14,7 @@ use futures_util::stream::{self, BoxStream, Stream};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::upstream_read::upstream_events;
+use crate::upstream_read::upstream_frames;
 use gglib_core::ports::AdmissionLease;
 
 /// The idle bound these tests run the drain under. Long enough that a busy
@@ -43,11 +43,15 @@ pub(super) fn finish() -> Bytes {
     frame(&json!({}), Some("stop"))
 }
 
-/// A `prompt_progress` frame, which llama-server sends during prefill.
+/// A `prompt_progress` frame, which llama-server sends during prefill: the
+/// role delta, with the progress beside it.
 pub(super) fn progress() -> Bytes {
-    Bytes::from_static(
-        b"data: {\"prompt_progress\":{\"cache\":0,\"processed\":10,\"total\":57,\"time_ms\":5}}\n\n",
-    )
+    let frame = json!({
+        "choices": [{"finish_reason": null, "index": 0,
+            "delta": {"role": "assistant", "content": null}}],
+        "prompt_progress": {"cache": 0, "processed": 10, "total": 57, "time_ms": 5},
+    });
+    Bytes::from(format!("data: {frame}\n\n"))
 }
 
 /// The sentinel llama-server ends its body with.
@@ -219,9 +223,9 @@ async fn run_turn_with(
     });
 
     let started = Instant::now();
-    let events = upstream_events(bytes, IDLE);
+    let frames = upstream_frames(bytes, IDLE);
     let drain = drain_events(
-        events,
+        frames,
         "m".to_owned(),
         ClientSender::new(tx, SEND),
         &connection,

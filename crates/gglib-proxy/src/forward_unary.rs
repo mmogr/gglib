@@ -93,22 +93,17 @@ pub(crate) async fn forward_unary(
 }
 
 /// `answer` with its `model` naming `model_name`, the model gglib serves the
-/// turn as, which is the name every streamed frame carries (see
-/// [`crate::forward::drain_events`]).
-///
-/// llama-server names a reply after the `-m` it was started with, since gglib
-/// passes no `--alias`, so the body as it comes tells a client where a GGUF
-/// file sits on this machine rather than which model answered. Applied to the
-/// body the client is answered with, a second draw included. A body that is
-/// not JSON, or names no model, is answered as it came.
+/// turn as: the edit every streamed frame takes
+/// ([`crate::frame_edit::name_served_model`]). Applied to the body the client
+/// is answered with, a second draw included. A body that is not JSON, or
+/// names no model or the served one, is answered as it came.
 fn served_as(answer: Bytes, model_name: &str) -> Bytes {
     let Ok(mut parsed) = serde_json::from_slice::<serde_json::Value>(&answer) else {
         return answer;
     };
-    let Some(model) = parsed.get_mut("model") else {
+    if !crate::frame_edit::name_served_model(&mut parsed, model_name) {
         return answer;
-    };
-    *model = model_name.into();
+    }
     serde_json::to_vec(&parsed).map_or(answer, Bytes::from)
 }
 
