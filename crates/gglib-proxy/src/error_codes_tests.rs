@@ -21,7 +21,7 @@ use super::{CODES, Kind, PUBLISHED, render};
 /// `fn`, the code's spelling there, and where the code comes from. The last
 /// five hold a `code` of another kind, which the scan cannot tell apart.
 #[rustfmt::skip]
-const RELAYS: [(&str, &str, &str, &str); 36] = [
+const RELAYS: [(&str, &str, &str, &str); 37] = [
     ("gglib-proxy/src/models.rs", "with_code", "Some(code.into())", "`with_code`'s parameter"),
     ("gglib-proxy/src/image_refusal.rs", "refuse_images", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-proxy/src/models.rs", "image_model_cannot_chat", "refusal.code()", "`DrawsImages::code`"),
@@ -41,6 +41,7 @@ const RELAYS: [(&str, &str, &str, &str); 36] = [
     ("gglib-app-services/src/runs/chat.rs", "run_error", "code.to_owned()", "`run_error`'s parameter"),
     ("gglib-axum/src/handlers/agent/run.rs", "coded", "code", "`coded`'s parameter"),
     ("gglib-axum/src/handlers/agent/run.rs", "run_error", "code.to_owned()", "the `AgentError` arms above it"),
+    ("gglib-axum/src/handlers/agent/run.rs", "run_error", "code.as_str()", "the endpoint's refusal, when `is_gglib_code` holds"),
     ("gglib-agent/src/agent_loop.rs", "fail_start", "refusal.code.clone()", "the endpoint's `UpstreamRefusal`, on the `error` event as it wrote it"),
     ("gglib-axum/src/handlers/agent/transcript.rs", "coded", "code", "`coded`'s parameter"),
     ("gglib-axum/src/handlers/agent/hub_turn.rs", "refusal", "code.to_owned()", "a `Coded` refusal's"),
