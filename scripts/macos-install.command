@@ -3,12 +3,12 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="GGLib GUI.app"
+APP_NAME="gglib.app"
 APP_PATH="$SCRIPT_DIR/$APP_NAME"
 APPLICATIONS_DIR="/Applications"
 
-echo "🔧 GGLib GUI Installer"
-echo "======================"
+echo "🔧 gglib Installer"
+echo "=================="
 echo ""
 
 # Check if app exists
@@ -49,7 +49,7 @@ if [[ "$response" =~ ^[Yy]$ ]]; then
     mv "$APP_PATH" "$DEST_PATH"
     echo "✅ Installed successfully!"
     echo ""
-    echo "🚀 You can now launch GGLib GUI from your Applications folder or Spotlight."
+    echo "🚀 You can now launch gglib from your Applications folder or Spotlight."
 else
     echo ""
     echo "✅ Done! You can run the app from: $APP_PATH"

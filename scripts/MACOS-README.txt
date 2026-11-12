@@ -1,5 +1,5 @@
 ╔═══════════════════════════════════════════════════════════════╗
-║               GGLib GUI - macOS Installation                  ║
+║                   gglib - macOS Installation                  ║
 ╚═══════════════════════════════════════════════════════════════╝
 
 IMPORTANT: Before running the app, you must run the installer!
@@ -32,16 +32,16 @@ WHAT THE INSTALLER DOES
 • Removes the macOS quarantine flag from the app
 • Optionally moves the app to /Applications
 
-After installation, you can launch GGLib GUI from:
+After installation, you can launch gglib from:
 • /Applications (if you chose to install there)
 • This folder (if you kept it here)
-• Spotlight search (Cmd+Space, type "GGLib")
+• Spotlight search (Cmd+Space, type "gglib")
 
 ─────────────────────────────────────────────────────────────────
 MANUAL FIX (if installer doesn't work)
 ─────────────────────────────────────────────────────────────────
 
 Run this command in Terminal:
-xattr -cr "GGLib GUI.app"
+xattr -cr "gglib.app"
 
 ═══════════════════════════════════════════════════════════════
