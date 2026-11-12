@@ -55,7 +55,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 - **`routes.rs`** — Route definitions and handler mounting
 - **`routes_remote.rs`**, **`routes_runs.rs`**, **`routes_benchmark.rs`** — The routes nested under `/api/remote`, `/api/runs` and `/api/benchmark`
 - **`access.rs`** — `DaemonAccess`: the daemon's Host allowlist, its token, and the error shape a refusal is written in; the Host and origin guards that apply it are the proxy's
-- **`trust.rs`** — The bearer guard on `/api`: the daemon token, and on a `--share-lan` daemon its API key besides
+- **`trust.rs`** — The bearer guard on `/api`: the daemon token, and nothing else
 - **`state.rs`** — `AppState`, the state every handler and router shares
 - **`proxy_watch.rs`** — Turns the proxy supervisor's exit channel into a `ProxyCrashed` event on the event stream
 - **`sse.rs`** — Server-Sent Events utilities for streaming

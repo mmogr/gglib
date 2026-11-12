@@ -166,21 +166,18 @@ pub async fn dispatch(
         Commands::Gui { dev } => {
             handlers::gui::execute(dev)?;
         }
-        Commands::Web { share_lan, no_open } => {
-            handlers::web::execute(ctx, share_lan, no_open).await?;
+        Commands::Web { no_open } => {
+            handlers::web::execute(no_open).await?;
         }
         Commands::Daemon { command } => match command {
-            crate::commands::DaemonCommand::Run {
-                share_lan,
-                allowed_host,
-            } => {
-                handlers::daemon::run(share_lan, allowed_host).await?;
+            crate::commands::DaemonCommand::Run { allowed_host } => {
+                handlers::daemon::run(allowed_host).await?;
             }
             crate::commands::DaemonCommand::Status => {
-                handlers::daemon::status(ctx).await?;
+                handlers::daemon::status().await?;
             }
             crate::commands::DaemonCommand::Stop { yes, remote: _ } => {
-                handlers::daemon::stop(ctx, target, yes).await?;
+                handlers::daemon::stop(target, yes).await?;
             }
         },
         Commands::Proxy {
@@ -225,7 +222,7 @@ pub async fn dispatch(
                         .await?;
                     }
                     crate::commands::ProxyCommand::Stop => {
-                        handlers::inference::proxy::stop(ctx).await?;
+                        handlers::inference::proxy::stop().await?;
                     }
                     crate::commands::ProxyCommand::Test { model } => {
                         handlers::proxy_test::execute(ctx, model.as_deref()).await?;
@@ -252,7 +249,7 @@ pub async fn dispatch(
         // ── Remote tunnel (ADR 0012) ────────────────────────────────────────
         Commands::Remote { command } => handlers::remote::dispatch(ctx, command).await?,
         // ── Runs: replies the daemon owns ───────────────────────────────────
-        Commands::Run(args) => handlers::run::dispatch(ctx, args).await?,
+        Commands::Run(args) => handlers::run::dispatch(args).await?,
         // ── Drawing, through this machine's daemon or the paired one's ──────
         Commands::Image(args) => handlers::image::execute(ctx, target, args).await?,
         // ── Stored images ───────────────────────────────────────────────────

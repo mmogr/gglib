@@ -35,7 +35,7 @@ pub(super) async fn handle_reset(ctx: &CliContext, yes: bool) -> Result<()> {
     // The download queue size is a preference, so the reset put it back too.
     if let Ok(settings) = ctx.app.settings().get().await
         && let Some(warning) =
-            super::queue_size::tell_daemon(ctx, settings.max_download_queue_size).await
+            super::queue_size::tell_daemon(settings.max_download_queue_size).await
     {
         eprintln!("{warning}");
     }

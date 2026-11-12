@@ -142,7 +142,7 @@ pub(crate) async fn execute(
     let reach = reached(host.as_deref(), &settings);
     let body = start_body(host, port, default_context, sampling, &cache, &access);
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let started = start_on(&handle, &body, &settings).await?;
     attach_dashboard(ctx, reach, started.port, access.api_key).await
 }
@@ -200,8 +200,8 @@ pub(in crate::handlers) async fn attach_dashboard(
 }
 
 /// Execute `gglib proxy stop`.
-pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
-    let Ok(handle) = daemon_client::running(ctx).await else {
+pub(crate) async fn stop() -> Result<()> {
+    let Ok(handle) = daemon_client::running().await else {
         eprintln!("  Daemon is not running \u{2014} no proxy to stop.");
         return Ok(());
     };

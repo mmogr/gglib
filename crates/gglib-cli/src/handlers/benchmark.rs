@@ -135,12 +135,11 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
               none spawns it"
 )]
 async fn run_on_daemon(
-    ctx: &CliContext,
     path: &str,
     body: &impl serde::Serialize,
     mut on_event: impl FnMut(&BenchmarkEvent),
 ) -> Result<()> {
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let url = format!("{}{path}", daemon_client::base_url());
     let stream = daemon_client::sse::stream_json::<BenchmarkEvent, _>(
         &handle.client,
@@ -204,7 +203,6 @@ async fn cmd_compare(
     style::print_banner_close();
 
     run_on_daemon(
-        ctx,
         daemon_client::paths::BENCHMARK_COMPARE_PATH,
         &config,
         render_event,
@@ -238,7 +236,6 @@ async fn cmd_perf(
     style::print_banner_close();
 
     run_on_daemon(
-        ctx,
         daemon_client::paths::BENCHMARK_PERF_PATH,
         &config,
         render_event,
@@ -309,7 +306,6 @@ async fn cmd_tune(
 
     let mut completed_run: Option<i64> = None;
     run_on_daemon(
-        ctx,
         daemon_client::paths::BENCHMARK_TUNE_PATH,
         &config,
         |event| {
@@ -323,7 +319,7 @@ async fn cmd_tune(
 
     if apply {
         match completed_run {
-            Some(run_id) => apply_gated(ctx, run_id).await?,
+            Some(run_id) => apply_gated(run_id).await?,
             None => eprintln!(
                 "{}note:{} the run did not complete, so there is nothing to judge",
                 style::WARNING,
@@ -337,11 +333,11 @@ async fn cmd_tune(
 
 /// Ask the daemon to judge the run against the apply gate and render the
 /// verdict — a refusal is an outcome with evidence, not an error.
-async fn apply_gated(ctx: &CliContext, run_id: i64) -> Result<()> {
+async fn apply_gated(run_id: i64) -> Result<()> {
     use gglib_app_services::benchmark::tune::apply_run::ApplyOutcome;
     use gglib_core::domain::benchmark::tune::apply::ApplyVerdict;
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let outcome: ApplyOutcome = handle
         .tune_apply(run_id)
         .send()
@@ -453,7 +449,6 @@ async fn cmd_agentic(
 
     let mut report: Option<AgenticEvalReport> = None;
     run_on_daemon(
-        ctx,
         daemon_client::paths::BENCHMARK_AGENTIC_PATH,
         &config,
         |event| {
@@ -474,7 +469,7 @@ async fn cmd_agentic(
     if json || output.is_some() {
         let export = serde_json::json!({
             "gglib_version": gglib_build_info::SEMVER,
-            "hardware": fetch_hardware_snapshot(ctx).await,
+            "hardware": fetch_hardware_snapshot().await,
             "report": report,
         });
         let pretty = serde_json::to_string_pretty(&export)?;
@@ -1101,9 +1096,8 @@ fn fmt_delta(value: Option<f64>) -> String {
 /// Best-effort hardware snapshot for the JSON export, from the daemon's
 /// setup-status endpoint. `null` when unavailable — the report is still
 /// valid, just unpinned to a machine.
-async fn fetch_hardware_snapshot(ctx: &CliContext) -> serde_json::Value {
-    daemon_client::DaemonHandle::new(ctx, gglib_proxy::loopback::client())
-        .await
+async fn fetch_hardware_snapshot() -> serde_json::Value {
+    daemon_client::DaemonHandle::new(gglib_proxy::loopback::client())
         .setup_status()
         .await
         .unwrap_or(serde_json::Value::Null)

@@ -58,7 +58,7 @@ pub(super) async fn handle_unset(ctx: &CliContext, key: &str) -> Result<()> {
     let clears_queue_size = request.max_download_queue_size.is_some();
     ctx.app.settings().update(request.into()).await?;
     println!("✓ {key} is now unset.");
-    if clears_queue_size && let Some(warning) = super::queue_size::tell_daemon(ctx, None).await {
+    if clears_queue_size && let Some(warning) = super::queue_size::tell_daemon(None).await {
         eprintln!("{warning}");
     }
     Ok(())

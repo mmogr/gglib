@@ -42,7 +42,7 @@ use crate::target::TurnModel;
 pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // Before anything is stored: an image, a setting, a row.
     if let Some(id) = args.continue_id {
-        refuse_running_elsewhere(ctx, id).await?;
+        refuse_running_elsewhere(id).await?;
     }
     // A file that cannot be attached ends the command before a conversation
     // is made or a model asked for.
@@ -52,7 +52,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // The daemon runs the turns: found, or started, once the model is known
     // and before anything is written, so a chat is never made for a turn
     // nothing can answer.
-    let daemon = daemon_client::ensure_daemon(ctx).await?;
+    let daemon = daemon_client::ensure_daemon().await?;
     let kept = plan.resumed.as_ref().map(|resumed| resumed.folder.clone());
     let conversation = save(ctx, &args, plan).await?;
     let settings = ctx.app.settings().get().await?;
@@ -93,8 +93,8 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
 /// running no daemon run is replying, and none is started to ask; one that
 /// does not list its runs for this data root's token, as another data
 /// root's does not, has said nothing of this chat.
-async fn refuse_running_elsewhere(ctx: &CliContext, id: i64) -> Result<()> {
-    if let Ok(daemon) = daemon_client::running(ctx).await
+async fn refuse_running_elsewhere(id: i64) -> Result<()> {
+    if let Ok(daemon) = daemon_client::running().await
         && let Ok(listed) = daemon.run_list().await
         && let Some(run) = listed.runs.iter().find(|run| run.holds(id))
     {

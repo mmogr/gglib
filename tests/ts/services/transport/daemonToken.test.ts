@@ -114,15 +114,13 @@ describe('the daemon token from the link', () => {
     expect(authOf(fetchMock)).toBeUndefined();
   });
 
-  it("shows a loopback daemon's refusal in its own words, and asks for no API key", async () => {
+  it("shows the daemon's refusal in its own words", async () => {
     fetchMock.mockImplementation(async () => refusal());
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('some-key');
     const api = await client();
 
     await expect(api.get('/api/models')).rejects.toThrow(SENTENCE);
     await expect(api.post('/api/remote/invite')).rejects.toThrow(SENTENCE);
 
-    expect(prompt).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -143,7 +141,6 @@ describe('the daemon token from the link', () => {
 
     it('reads the token again and retries once with it', async () => {
       fetchMock.mockImplementationOnce(async () => refusal());
-      const prompt = vi.spyOn(window, 'prompt');
       const api = await client();
 
       await api.get('/api/models');
@@ -155,7 +152,6 @@ describe('the daemon token from the link', () => {
       expect(String(fetchMock.mock.calls[1][0])).toBe('http://127.0.0.1:9887/api/models');
       await api.apiFetch('/api/events');
       expect(authOf(fetchMock, 2)).toBe('Bearer new-token');
-      expect(prompt).not.toHaveBeenCalled();
     });
 
     it('retries only once, and never shows the link sentence', async () => {
@@ -253,17 +249,5 @@ describe('the daemon token from the link', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/servers/9001/logs/stream');
     expect(new Headers(init.headers).get('Authorization')).toBe('Bearer abc123');
-  });
-
-  it('still asks for the API key when a LAN-shared daemon wants one', async () => {
-    fetchMock.mockImplementation(async () =>
-      json({ error: 'Missing or invalid API key.', status: 401, type: 'INVALID_API_KEY' }, 401),
-    );
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue(null);
-    const api = await client();
-
-    await expect(api.get('/api/models')).rejects.toThrow();
-
-    expect(prompt).toHaveBeenCalledTimes(1);
   });
 });

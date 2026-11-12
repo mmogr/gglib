@@ -7,7 +7,6 @@
 //! That daemon is found as `LibraryChanges::tell_daemon` finds it: by the
 //! token it left under this data root.
 
-use crate::bootstrap::CliContext;
 use crate::daemon_client::{auth, running};
 
 /// Tell the daemon that serves this library that the stored download queue
@@ -18,11 +17,11 @@ use crate::daemon_client::{auth, running};
 /// nothing here fails the command. With no daemon, or one that serves
 /// another library (it refuses this data root's token), nobody is asked or
 /// warned.
-pub(super) async fn tell_daemon(ctx: &CliContext, stored: Option<u32>) -> Option<String> {
+pub(super) async fn tell_daemon(stored: Option<u32>) -> Option<String> {
     // With no token here no daemon serves this library, and whatever holds
     // the daemon's port is asked nothing.
     auth::daemon_token()?;
-    let daemon = running(ctx).await.ok()?;
+    let daemon = running().await.ok()?;
     match daemon.set_download_queue_size(stored).await {
         Ok(_) => None,
         Err(e) => Some(format!(

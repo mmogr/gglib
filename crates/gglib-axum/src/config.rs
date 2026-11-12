@@ -11,8 +11,8 @@ use anyhow::Result;
 use gglib_core::paths::{llama_server_path, sd_server_path};
 
 /// What [`bootstrap`](crate::bootstrap::bootstrap) builds the adapter's
-/// context from. Where the daemon binds and the CORS policy of its router are
-/// set by [`DaemonOptions`](crate::DaemonOptions).
+/// context from. The hosts the daemon answers to are set by
+/// [`DaemonOptions`](crate::DaemonOptions).
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     /// Base port for llama-server instances, when the caller names one.

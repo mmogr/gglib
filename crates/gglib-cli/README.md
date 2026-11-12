@@ -108,8 +108,8 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `benchmark tune` | Sweep sampling parameters for one model against an agentic tool-calling task suite |
 | `benchmark agentic` | Run the agentic task suite twice against one model, bypassing the gglib pipeline and through it, and report the difference |
 | `gui [--dev]` | Launch the Tauri desktop app |
-| `web [--share-lan] [--no-open]` | Make sure the daemon is running, print the web dashboard's link and open it in the browser (`--no-open` only prints); `--share-lan` instead runs `gglib daemon run --share-lan` in the foreground |
-| `daemon run [--share-lan] [--allowed-host HOST]` | Run the daemon, the one process that owns llama-server, in the foreground |
+| `web [--no-open]` | Make sure the daemon is running, print the web dashboard's link and open it in the browser (`--no-open` only prints) |
+| `daemon run [--allowed-host HOST]` | Run the daemon, the one process that owns llama-server, in the foreground, on this machine only |
 | `daemon status` | Show whether the daemon is running, and what it is doing |
 | `daemon stop [-y]` | Stop the daemon and every server it owns; with `--remote`, the paired machine's, which asks first unless `-y` |
 | `remote enable [--invite] [--relay URL] [--no-discovery] [--no-qr]` | Turn remote access on; it stays on across restarts until `disable`, and `--invite` also pairs a device |

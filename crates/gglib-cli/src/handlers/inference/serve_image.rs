@@ -95,7 +95,6 @@ pub(super) async fn serve_image(
         bail!(chat_flags_refusal(&model.name, &typed));
     }
     crate::handlers::config::engine::ensure_installed(
-        ctx,
         gglib_core::domain::RuntimeKind::StableDiffusion,
         false,
     )
@@ -139,7 +138,7 @@ pub(super) async fn serve_image(
         None,
     );
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let proxy_port = crate::handlers::inference::proxy::start_on(&handle, &body, &settings)
         .await?
         .port;

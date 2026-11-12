@@ -22,7 +22,7 @@
 //! starved by exactly the wedge it exists to notice.
 
 use std::io::{Read, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
 use tracing::{error, info, warn};
@@ -59,26 +59,12 @@ pub(super) fn spawn(bound: SocketAddr) {
         return;
     }
 
-    let target = probe_target(bound);
     let spawned = std::thread::Builder::new()
         .name("gglib-liveness".into())
-        .spawn(move || watch(target));
+        .spawn(move || watch(bound));
     if let Err(e) = spawned {
         // Degraded but not fatal: the daemon merely loses self-defence.
         warn!("could not start the liveness watchdog thread: {e}");
-    }
-}
-
-/// The address a probe should dial.
-///
-/// A daemon bound to the unspecified address (`0.0.0.0`) is reachable on
-/// loopback but not *at* `0.0.0.0`; any other bind — loopback or a LAN IP —
-/// is dialled exactly where it listens.
-fn probe_target(bound: SocketAddr) -> SocketAddr {
-    if bound.ip().is_unspecified() {
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), bound.port())
-    } else {
-        bound
     }
 }
 
@@ -150,7 +136,7 @@ fn probe(target: SocketAddr, timeout: Duration) -> bool {
     }
 
     // `Host` must name where we dialled or the daemon's Host guard rejects the
-    // probe — loopback is always allowed, and a LAN bind allows its own IP.
+    // probe; the daemon is on loopback, which it always answers to.
     let request = format!("GET /health HTTP/1.1\r\nHost: {target}\r\nConnection: close\r\n\r\n");
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
@@ -272,13 +258,5 @@ mod tests {
         assert!(!streak.record_failure());
         assert!(!streak.record_failure());
         assert!(streak.record_failure(), "third consecutive failure trips");
-    }
-
-    #[test]
-    fn an_unspecified_bind_is_probed_on_loopback() {
-        let target = probe_target("0.0.0.0:9887".parse().expect("addr"));
-        assert_eq!(target, "127.0.0.1:9887".parse().expect("addr"));
-        let lan = probe_target("192.168.1.5:9887".parse().expect("addr"));
-        assert_eq!(lan, "192.168.1.5:9887".parse().expect("addr"));
     }
 }
