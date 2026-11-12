@@ -8,8 +8,7 @@
 //! be wrong.
 //!
 //! Their own file rather than `integration_loop_guard_note.rs`: these are
-//! about the ledger, not about the note's shape, and that file is at the
-//! size a new one may be.
+//! about the ledger, not about the note's shape.
 
 use std::sync::Arc;
 

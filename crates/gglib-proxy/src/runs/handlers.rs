@@ -1,4 +1,4 @@
-//! `/v1/runs/*`: the same five calls as the daemon's `/api/runs/*`, in the
+//! `/v1/gglib/runs/*`: the same five calls as the daemon's `/api/runs/*`, in the
 //! caller's scope.
 //!
 //! Every error message here is fixed text or a [`RunsError`]'s, which is
@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_core::domain::runs::RunKind;
@@ -19,18 +19,10 @@ use serde_json::Value;
 
 use super::scope::Caller;
 use super::sse;
-use crate::models::ErrorResponse;
+use crate::refusal::{Segment, error, invalid};
 use crate::server::AppState;
 
 pub(super) type Answer = Result<Response, Response>;
-
-pub(super) fn error(status: StatusCode, error_type: &str, code: &str, message: String) -> Response {
-    (
-        status,
-        Json(ErrorResponse::with_code(message, error_type, code)),
-    )
-        .into_response()
-}
 
 /// A refusal from the runs, with its own status and code.
 fn refused(err: &RunsError) -> Response {
@@ -41,16 +33,6 @@ fn refused(err: &RunsError) -> Response {
         "invalid_request_error"
     };
     error(status, error_type, err.code(), err.to_string())
-}
-
-/// A request the route could not read.
-pub(super) fn invalid(message: &str) -> Response {
-    error(
-        StatusCode::BAD_REQUEST,
-        "invalid_request_error",
-        "invalid_request",
-        message.to_owned(),
-    )
 }
 
 /// The answer when this proxy was started without runs.
@@ -88,7 +70,7 @@ pub(crate) struct PutQuery {
     #[serde(default)]
     draw: bool,
     /// With `draw=true` beside `tools`: the image model the person chose for
-    /// the picture, by its id in `GET /v1/images/drawing`'s `models`.
+    /// the picture, by its id in `GET /v1/gglib/images/drawing`'s `models`.
     /// Absent, the default rule draws. Refused with `kind=agent`, whose turn
     /// says `image_model` in its body, and on a plain chat run.
     #[serde(default)]
@@ -128,7 +110,7 @@ fn server_id(token: &str) -> Option<i64> {
     canonical.then(|| token.parse().ok()).flatten()
 }
 
-/// `PUT /v1/runs/{id}`: start a chat run with the body as its request, or
+/// `PUT /v1/gglib/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the caller's run that already has the id. 201 new, 200
 /// existing. With `?kind=agent`, a device's turn on a hub chat, and with
 /// `?tools=3,7` a chat run through the agent loop with the tools of those
@@ -137,7 +119,7 @@ fn server_id(token: &str) -> Option<i64> {
 pub(crate) async fn put_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
-    Path(id): Path<String>,
+    Segment(id): Segment,
     query: Result<Query<PutQuery>, QueryRejection>,
     body: Result<Json<Value>, JsonRejection>,
 ) -> Answer {
@@ -192,16 +174,16 @@ pub(crate) async fn put_run(
     Ok((status, Json(created.info)).into_response())
 }
 
-/// `GET /v1/runs`: every run the caller may see, newest first.
+/// `GET /v1/gglib/runs`: every run the caller may see, newest first.
 pub(crate) async fn list_runs(State(state): State<AppState>, Caller(scope): Caller) -> Answer {
     Ok(Json(runs(&state).ok_or_else(unavailable)?.list(&scope)).into_response())
 }
 
-/// `GET /v1/runs/{id}`.
+/// `GET /v1/gglib/runs/{id}`.
 pub(crate) async fn get_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
-    Path(id): Path<String>,
+    Segment(id): Segment,
 ) -> Answer {
     let info = runs(&state)
         .ok_or_else(unavailable)?
@@ -210,11 +192,11 @@ pub(crate) async fn get_run(
     Ok(Json(info).into_response())
 }
 
-/// `POST /v1/runs/{id}/cancel`: idempotent.
+/// `POST /v1/gglib/runs/{id}/cancel`: idempotent.
 pub(crate) async fn cancel_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
-    Path(id): Path<String>,
+    Segment(id): Segment,
 ) -> Answer {
     let info = runs(&state)
         .ok_or_else(unavailable)?
@@ -230,12 +212,12 @@ pub(crate) struct EventsQuery {
     after: u32,
 }
 
-/// `GET /v1/runs/{id}/events?after=N`: see [`sse`]. Ends when the proxy
+/// `GET /v1/gglib/runs/{id}/events?after=N`: see [`sse`]. Ends when the proxy
 /// shuts down, so a graceful stop does not wait on a run still going.
 pub(crate) async fn run_events(
     State(state): State<AppState>,
     Caller(scope): Caller,
-    Path(id): Path<String>,
+    Segment(id): Segment,
     query: Result<Query<EventsQuery>, QueryRejection>,
 ) -> Answer {
     let runs = runs(&state).ok_or_else(unavailable)?;

@@ -2,8 +2,7 @@
 //!
 //! A `#[path]` sibling rather than an inline `mod tests`, following the split
 //! #860 made across the workspace: the tests outweighed the code they cover
-//! four to one, and every line of them counted against the module's size
-//! ratchet.
+//! four to one.
 
 use std::sync::Arc;
 

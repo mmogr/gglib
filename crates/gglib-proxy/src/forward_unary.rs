@@ -1,12 +1,11 @@
 //! The non-streaming half of `/v1/chat/completions`: one request up, one
 //! body back, read whole, normalised, judged and answered.
 //!
-//! Its own module because [`crate::forward`] sits at its complexity-ratchet
-//! ceiling, and the two paths share nothing past the request shaping: the
-//! streaming path drains frames through a channel, this one buffers a body.
-//! The shared reading of that body lives in [`crate::unary_body`], which the
-//! embeddings route uses too, and the shared reading of a repair's answer in
-//! [`crate::repair::read_second_draw`].
+//! Its own module because the two paths share nothing past the request
+//! shaping: the streaming path drains frames through a channel, this one
+//! buffers a body. The shared reading of that body lives in
+//! [`crate::unary_body`], which the embeddings route uses too, and the shared
+//! reading of a repair's answer in [`crate::repair::read_second_draw`].
 //!
 //! # Repair on this path
 //!

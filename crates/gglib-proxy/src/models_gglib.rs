@@ -47,15 +47,15 @@ pub const THIS_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// One of gglib's own features a process may serve.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Feature {
-    /// `chats`: the hub's chats and their images (`/v1/chats`,
-    /// `/v1/attachments`), and a turn added to one.
+    /// `chats`: the hub's chats and their images (`/v1/gglib/chats`,
+    /// `/v1/gglib/attachments`), and a turn added to one.
     Chats,
-    /// `runs`: a device's runs (`/v1/runs`).
+    /// `runs`: a device's runs (`/v1/gglib/runs`).
     Runs,
     /// `drawing`: whether this machine can draw, and its image models
-    /// (`/v1/images/drawing`), and a render.
+    /// (`/v1/gglib/images/drawing`), and a render.
     Drawing,
-    /// `status`: the proxy's status (`/v1/proxy/status` and its stream).
+    /// `status`: the proxy's status (`/v1/gglib/proxy/status` and its stream).
     Status,
 }
 

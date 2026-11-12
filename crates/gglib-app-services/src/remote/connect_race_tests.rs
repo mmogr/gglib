@@ -1,9 +1,8 @@
 //! Tests for two connect-side commands arriving at once.
 //!
-//! Its own file rather than more of `connect_tests.rs`, which is at the
-//! size budget, and because these are one subject: `join` reserves the
-//! connect side for the length of a dial, and every other command has to
-//! stay answerable while it does.
+//! Its own file rather than more of `connect_tests.rs`, because these are one
+//! subject: `join` reserves the connect side for the length of a dial, and
+//! every other command has to stay answerable while it does.
 //!
 //! Three of the four need no network. Two put the slot into the state a
 //! dial leaves it in and ask what the other commands do with it; the third

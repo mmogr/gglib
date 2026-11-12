@@ -3,8 +3,8 @@
 //! [`ContextMetricsStore`] is a fixed-capacity ring buffer that records one
 //! [`ContextSnapshot`] per handled `/v1/chat/completions` request. It feeds
 //! the `recent_requests` field of [`crate::dashboard::DashboardSnapshot`] —
-//! the unified data contract returned by `GET /v1/proxy/status` and pushed
-//! over `GET /v1/proxy/status/stream`, consumed by both the CLI (`gglib
+//! the unified data contract returned by `GET /v1/gglib/proxy/status` and pushed
+//! over `GET /v1/gglib/proxy/status/stream`, consumed by both the CLI (`gglib
 //! proxy dashboard`) and the web GUI's Proxy Dashboard modal.
 //!
 //! A snapshot is recorded before its request is forwarded, so what is learnt

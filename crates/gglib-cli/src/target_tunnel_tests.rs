@@ -31,9 +31,16 @@ const ROUTES: &[(&str, Reached)] = &[
         Exempt("a probe for a supervisor; it reports no state a command shows"),
     ),
     ("/v1/models", By(&[&["gglib", "model", "list"]])),
-    ("/v1/models/{name}/load", By(&[&["gglib", "serve", "7"]])),
     (
-        "/v1/models/{name}/detail",
+        "/v1/models/{name}",
+        Exempt("OpenAI's read of one listed model, for clients; `model inspect` reads /detail"),
+    ),
+    (
+        "/v1/gglib/models/{name}/load",
+        By(&[&["gglib", "serve", "7"]]),
+    ),
+    (
+        "/v1/gglib/models/{name}/detail",
         By(&[
             &["gglib", "model", "inspect", "7"],
             &["gglib", "chat", "7"],
@@ -50,41 +57,47 @@ const ROUTES: &[(&str, Reached)] = &[
         By(&[&["gglib", "image", "a cat"]]),
     ),
     (
-        "/v1/images/drawing",
+        "/v1/gglib/images/drawing",
         Exempt(
             "the page asks it for a far chat's Draw button; a run on a far model does not \
              draw (ADR 0018, decision 11)",
         ),
     ),
     (
-        "/v1/proxy/status",
+        "/v1/gglib/proxy/status",
         Exempt("`proxy dashboard` reads the stream form; the one-shot read is for scripts"),
     ),
     (
-        "/v1/proxy/status/stream",
+        "/v1/gglib/proxy/status/stream",
         By(&[&["gglib", "proxy", "dashboard"]]),
     ),
     (
-        "/v1/proxy/cache/clear",
+        "/v1/gglib/proxy/cache/clear",
         By(&[&["gglib", "proxy", "cache-clear"]]),
     ),
-    ("/v1/proxy/shutdown", By(&[&["gglib", "daemon", "stop"]])),
     (
-        "/v1/runs",
+        "/v1/gglib/proxy/shutdown",
+        By(&[&["gglib", "daemon", "stop"]]),
+    ),
+    (
+        "/v1/gglib/runs",
         Exempt("a paired device's own runs, which the page lists; `gglib run` is this machine's"),
     ),
-    ("/v1/runs/{id}", Exempt("as /v1/runs")),
-    ("/v1/runs/{id}/events", Exempt("as /v1/runs")),
-    ("/v1/runs/{id}/cancel", Exempt("as /v1/runs")),
+    ("/v1/gglib/runs/{id}", Exempt("as /v1/gglib/runs")),
+    ("/v1/gglib/runs/{id}/events", Exempt("as /v1/gglib/runs")),
+    ("/v1/gglib/runs/{id}/cancel", Exempt("as /v1/gglib/runs")),
     (
-        "/v1/chats",
+        "/v1/gglib/chats",
         Exempt("the page's far chats, through the daemon's /api/remote routes"),
     ),
-    ("/v1/chats/{id}", Exempt("as /v1/chats")),
-    ("/v1/chats/{id}/changes", Exempt("as /v1/chats")),
-    ("/v1/chats/{id}/pictures", Exempt("as /v1/chats")),
-    ("/v1/attachments", Exempt("as /v1/chats")),
-    ("/v1/attachments/{id}", Exempt("as /v1/chats")),
+    ("/v1/gglib/chats/{id}", Exempt("as /v1/gglib/chats")),
+    ("/v1/gglib/chats/{id}/changes", Exempt("as /v1/gglib/chats")),
+    (
+        "/v1/gglib/chats/{id}/pictures",
+        Exempt("as /v1/gglib/chats"),
+    ),
+    ("/v1/gglib/attachments", Exempt("as /v1/gglib/chats")),
+    ("/v1/gglib/attachments/{id}", Exempt("as /v1/gglib/chats")),
     (
         "/mcp",
         Exempt("the MCP gateway, guarded for the tunnel on its own (ADR 0024)"),

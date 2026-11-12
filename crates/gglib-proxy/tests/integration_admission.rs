@@ -290,7 +290,7 @@ async fn proxy_status_reports_the_admission_snapshot() {
     let (base, _runtime, proxy_cancel, upstream_cancel) = spawn_two_model_proxy().await;
 
     let status: Value = Client::new()
-        .get(format!("{base}/v1/proxy/status"))
+        .get(format!("{base}/v1/gglib/proxy/status"))
         .send()
         .await
         .unwrap()

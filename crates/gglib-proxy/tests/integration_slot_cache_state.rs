@@ -41,7 +41,7 @@ async fn a_session_restores_and_saves_after_a_clear(clear_names_it: bool) {
     assert_eq!(chat(&proxy.base, session, false).await.status(), 200);
     assert_eq!(*actions.lock().await, vec![1, 2], "generate→save");
 
-    let mut clear = Client::new().post(format!("{}/v1/proxy/cache/clear", proxy.base));
+    let mut clear = Client::new().post(format!("{}/v1/gglib/proxy/cache/clear", proxy.base));
     if clear_names_it {
         clear = clear.header("X-Gglib-Session-Id", session);
     }
@@ -93,7 +93,7 @@ async fn a_load_that_starts_the_server_makes_earlier_slot_files_stale() {
     next_second().await;
 
     let loaded = Client::new()
-        .post(format!("{}/v1/models/{MODEL}/load", proxy.base))
+        .post(format!("{}/v1/gglib/models/{MODEL}/load", proxy.base))
         .send()
         .await
         .expect("request");

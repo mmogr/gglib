@@ -1,6 +1,6 @@
 //! The dashboard publisher runs only when the serve asks for it.
 //!
-//! `GET /v1/proxy/status/stream` opens with the current snapshot, then gets one
+//! `GET /v1/gglib/proxy/status/stream` opens with the current snapshot, then gets one
 //! more each time the publisher ticks, once a second. Served with
 //! `dashboard: false` the stream opens the same way and nothing follows it;
 //! served with the publisher on, the next snapshot arrives within a tick. Real
@@ -28,7 +28,7 @@ async fn snapshots_seen(dashboard: bool) -> usize {
     })
     .await;
     let response = reqwest::Client::new()
-        .get(format!("{}/v1/proxy/status/stream", proxy.base))
+        .get(format!("{}/v1/gglib/proxy/status/stream", proxy.base))
         .send()
         .await
         .expect("the stream opens");

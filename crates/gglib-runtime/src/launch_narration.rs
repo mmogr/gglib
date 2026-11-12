@@ -9,7 +9,7 @@
 //! determine.
 //!
 //! Ordering is fixed here rather than at each display surface so the CLI
-//! banner, `GET /v1/proxy/status`, and the GUI dashboard cannot disagree
+//! banner, `GET /v1/gglib/proxy/status`, and the GUI dashboard cannot disagree
 //! about what a launch decided.
 
 use gglib_core::cache_config::KvCacheType;

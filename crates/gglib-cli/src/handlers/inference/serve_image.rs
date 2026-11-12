@@ -7,7 +7,7 @@
 //! a context flag, `--mlock`, `--jinja`, MTP, sampling or a profile is
 //! refused by name rather than dropped without a word. It starts the same
 //! pinned proxy as a chat model's `serve`, then asks it once, `POST
-//! /v1/models/{name}/load`, so the model is resident before the first
+//! /v1/gglib/models/{name}/load`, so the model is resident before the first
 //! request and a refusal (the runtime not installed, a missing component, no
 //! room beside a held model) is read here, in the proxy's own words. Drawing
 //! through the endpoint is a later change; this one loads.
@@ -202,7 +202,7 @@ pub(super) async fn load(
     key: Option<&str>,
 ) -> Result<LoadResponse> {
     let url = format!(
-        "http://127.0.0.1:{port}/v1/models/{}/load",
+        "http://127.0.0.1:{port}/v1/gglib/models/{}/load",
         path_segment(name)
     );
     let mut request = client
@@ -238,14 +238,14 @@ pub(super) fn loaded_line(loaded: &LoadResponse) -> String {
     format!("  \u{2705} {} is {how}", loaded.model)
 }
 
-/// The launch the proxy narrates on `/v1/proxy/status`, when it has one.
+/// The launch the proxy narrates on `/v1/gglib/proxy/status`, when it has one.
 async fn launch_narration(
     client: &reqwest::Client,
     port: u16,
     key: Option<&str>,
 ) -> Option<LaunchNarration> {
     let mut request = client
-        .get(format!("http://127.0.0.1:{port}/v1/proxy/status"))
+        .get(format!("http://127.0.0.1:{port}/v1/gglib/proxy/status"))
         .timeout(Duration::from_secs(5));
     if let Some(key) = key {
         request = request.bearer_auth(key);

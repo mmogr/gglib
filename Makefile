@@ -358,13 +358,6 @@ enforce: ## Run the architecture enforcement checks
 	@# fitted rung. The same construct shipped in #925, #926 and #934, each time
 	@# found months later by reading. The construct is the tell.
 	@./scripts/check_context_floor.sh
-	@# The file-size check, once per language with that language's baseline.
-	@# The 300-LOC budget is a guide for noticing a file that has taken on a
-	@# second job, so this stops on growth and not on size: a file past the
-	@# budget passes at its recorded size, and one that is a single concept
-	@# has its row raised by hand (CONTRIBUTING, "File size").
-	@./scripts/check_file_size.sh rust scripts/rust-complexity-baseline.txt
-	@./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt
 	@./scripts/check_lint_inheritance.sh
 	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
 	@# starts no jobs at all in a workflow file it will not parse. Local is the

@@ -1,4 +1,4 @@
-//! `POST /v1/models/{name}/load`: have a model resident before a turn needs it.
+//! `POST /v1/gglib/models/{name}/load`: have a model resident before a turn needs it.
 //!
 //! The route the *use* side of ADR 0013 adds to the proxy. A turn loads its
 //! model on the way in, so a client that only ever asks questions has no use
@@ -18,7 +18,8 @@
 
 use std::time::SystemTime;
 
-use axum::extract::{Path, State};
+use axum::extract::State;
+use axum::extract::rejection::JsonRejection;
 use axum::response::{IntoResponse, Response};
 use axum::{Json, http::StatusCode};
 use gglib_core::domain::RuntimeKind;
@@ -27,10 +28,11 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::dashboard::LaunchNarrationCache;
+use crate::refusal::Segment;
 use crate::server::{AppState, handle_runtime_error};
 use crate::slot_cache_state::SlotCacheState;
 
-/// What `POST /v1/models/{name}/load` accepts. Every field optional; an
+/// What `POST /v1/gglib/models/{name}/load` accepts. Every field optional; an
 /// empty body loads the model at the context it would be served with.
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct LoadRequest {
@@ -67,11 +69,16 @@ pub struct LoadResponse {
 )]
 pub(crate) async fn load_model(
     State(state): State<AppState>,
-    Path(name): Path<String>,
-    body: Option<Json<LoadRequest>>,
+    Segment(name): Segment,
+    body: Result<Option<Json<LoadRequest>>, JsonRejection>,
 ) -> Response {
-    let request = body.map(|Json(req)| req).unwrap_or_default();
-    info!(model = %name, num_ctx = ?request.num_ctx, "POST /v1/models/{{name}}/load");
+    let request = match body {
+        Ok(body) => body.map(|Json(req)| req).unwrap_or_default(),
+        Err(rejection) => {
+            return crate::refusal::unreadable(rejection.status(), rejection.body_text());
+        }
+    };
+    info!(model = %name, num_ctx = ?request.num_ctx, "POST /v1/gglib/models/{{name}}/load");
     match state
         .runtime_port
         .admit(
@@ -99,7 +106,7 @@ pub(crate) async fn load_model(
 /// What a load that admitted `target` records, and what it answers.
 ///
 /// The launch's narration goes to the dashboard, as a chat request's does,
-/// so `/v1/proxy/status` says what the load decided. A llama-server that
+/// so `/v1/gglib/proxy/status` says what the load decided. A llama-server that
 /// this load started is a restart to the slot cache, as a chat request's
 /// admission is: the next chat request finds the model running and would
 /// never report it. An `sd-server` is not: it has no KV slots, and its

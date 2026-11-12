@@ -187,7 +187,7 @@ pub fn remote_run_cancel_path(id: &str) -> String {
 }
 
 /// Whether the paired machine can draw, read through the tunnel for a far
-/// chat's Draw button: `GET` answers its `/v1/images/drawing`.
+/// chat's Draw button: `GET` answers its `/v1/gglib/images/drawing`.
 pub const REMOTE_IMAGES_DRAWING_PATH: &str = "/api/remote/images/drawing";
 
 /// The paired machine's models, read through the tunnel: `GET` lists every

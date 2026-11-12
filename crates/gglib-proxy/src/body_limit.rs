@@ -2,7 +2,7 @@
 //! refusal of one over it.
 //!
 //! An image rides in the body as base64, so `POST /v1/chat/completions` and
-//! `PUT /v1/runs/{id}` take [`MAX_BODY_BYTES`] in place of axum's 2 MiB
+//! `PUT /v1/gglib/runs/{id}` take [`MAX_BODY_BYTES`] in place of axum's 2 MiB
 //! default. A body over it is refused with a code, as every other refusal
 //! here is: left to the extractor it is a line of plain text on the first
 //! route, and on the second it reads as a body that is not JSON.
@@ -41,8 +41,9 @@ pub(crate) fn too_large(status: StatusCode) -> Option<Response> {
     })
 }
 
-/// The answer to a body that could not be read: the coded refusal when it
-/// was over the limit, and the extractor's own otherwise.
-pub(crate) fn rejected(rejection: BytesRejection) -> Response {
-    too_large(rejection.status()).unwrap_or_else(|| rejection.into_response())
+/// The answer to a body that could not be read: the refusal above when it
+/// was over the limit, and [`crate::refusal::unreadable`]'s otherwise.
+pub(crate) fn rejected(rejection: &BytesRejection) -> Response {
+    too_large(rejection.status())
+        .unwrap_or_else(|| crate::refusal::unreadable(rejection.status(), rejection.body_text()))
 }

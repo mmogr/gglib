@@ -12,7 +12,7 @@ use super::FarProxy;
 use crate::error::GuiError;
 
 impl FarProxy {
-    /// `GET /v1/runs`: the runs this device may see there.
+    /// `GET /v1/gglib/runs`: the runs this device may see there.
     ///
     /// # Errors
     ///
@@ -21,10 +21,10 @@ impl FarProxy {
     /// did not get through.
     pub async fn list_runs(&self) -> Result<reqwest::Response, GuiError> {
         self.offers(&[Feature::Runs]).await?;
-        self.send(self.bounded.get(self.url("/runs"))).await
+        self.send(self.bounded.get(self.url("/gglib/runs"))).await
     }
 
-    /// `POST /v1/runs/{run_id}/cancel`.
+    /// `POST /v1/gglib/runs/{run_id}/cancel`.
     ///
     /// # Errors
     ///
@@ -36,7 +36,7 @@ impl FarProxy {
         self.send(self.bounded.post(self.url(&path))).await
     }
 
-    /// `GET /v1/runs/{run_id}/events?after={after}`, answered as soon as its
+    /// `GET /v1/gglib/runs/{run_id}/events?after={after}`, answered as soon as its
     /// head arrives: the body is the stream, read as the run goes.
     ///
     /// # Errors
@@ -57,14 +57,14 @@ impl FarProxy {
     }
 }
 
-/// `/runs/{run_id}`, for an id the hub accepts: never a path a caller built.
+/// `/gglib/runs/{run_id}`, for an id the hub accepts: never a path a caller built.
 pub(super) fn run_path(run_id: &str) -> Result<String, GuiError> {
     if !is_run_id(run_id) {
         return Err(GuiError::ValidationFailed(
             "a run id is 1 to 64 of A-Z, a-z, 0-9, '_' and '-'".to_owned(),
         ));
     }
-    Ok(format!("/runs/{run_id}"))
+    Ok(format!("/gglib/runs/{run_id}"))
 }
 
 #[cfg(test)]

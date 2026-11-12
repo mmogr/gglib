@@ -1,6 +1,4 @@
 //! Tests for [`super::Settings`].
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 

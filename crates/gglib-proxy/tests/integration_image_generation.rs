@@ -1,7 +1,7 @@
 //! `POST /v1/images/generations` on the real proxy: inside the bearer guard
 //! like every route a credential reaches, answered by the image driver the
 //! daemon hands the proxy, and refused as unavailable on a proxy with none.
-//! `GET /v1/images/drawing` beside it: whether that driver can draw.
+//! `GET /v1/gglib/images/drawing` beside it: whether that driver can draw.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -120,12 +120,12 @@ async fn the_drawing_route_says_whether_the_daemons_driver_can_draw() {
     let client = reqwest::Client::new();
     let get = |query: &'static str| {
         client
-            .get(format!("{base}/v1/images/drawing{query}"))
+            .get(format!("{base}/v1/gglib/images/drawing{query}"))
             .bearer_auth("secret123")
             .send()
     };
     let refused = client
-        .get(format!("{base}/v1/images/drawing"))
+        .get(format!("{base}/v1/gglib/images/drawing"))
         .send()
         .await
         .unwrap();
@@ -159,7 +159,7 @@ async fn the_drawing_route_says_whether_the_daemons_driver_can_draw() {
 
     let (base, cancel) = serve(None).await;
     let none: Value = reqwest::Client::new()
-        .get(format!("{base}/v1/images/drawing"))
+        .get(format!("{base}/v1/gglib/images/drawing"))
         .bearer_auth("secret123")
         .send()
         .await

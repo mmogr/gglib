@@ -1,7 +1,7 @@
 //! What the proxy's drawing answer tells a paired device beside whether it
 //! can draw: the MCP servers whose tools a run from it is offered.
 //!
-//! A phone asks `GET /v1/images/drawing` on open, and it is the one answer
+//! A phone asks `GET /v1/gglib/images/drawing` on open, and it is the one answer
 //! a device already reads before it sends a run, so the servers ride on it
 //! (ADR 0024, decision 4). It is read on each ask, so a server opened or
 //! closed since shows on the phone's next open (ADR 0025). The daemon's own

@@ -15,7 +15,7 @@ use super::FarProxy;
 use crate::error::GuiError;
 
 impl FarProxy {
-    /// `POST /v1/attachments` with `bytes` as the body: an image stored
+    /// `POST /v1/gglib/attachments` with `bytes` as the body: an image stored
     /// there, for a turn on one of its chats to name. `content_type` is the
     /// caller's and is passed on as it came; the far machine reads the type
     /// from the bytes.
@@ -39,7 +39,7 @@ impl FarProxy {
         self.send(request).await
     }
 
-    /// `GET /v1/attachments/{id}`: the image's bytes, as they were sent.
+    /// `GET /v1/gglib/attachments/{id}`: the image's bytes, as they were sent.
     ///
     /// # Errors
     ///

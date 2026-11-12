@@ -1,4 +1,4 @@
-//! `POST /v1/models/{name}/load` over real HTTP: the model is resident when
+//! `POST /v1/gglib/models/{name}/load` over real HTTP: the model is resident when
 //! the call returns, and nothing is holding it.
 //!
 //! The route exists for a paired machine that wants a model loaded before a
@@ -44,7 +44,7 @@ async fn loading_a_model_makes_it_resident_and_holds_nothing() {
     let client = Client::new();
 
     let first = client
-        .post(format!("{base}/v1/models/{MODEL}/load"))
+        .post(format!("{base}/v1/gglib/models/{MODEL}/load"))
         .json(&json!({}))
         .send()
         .await
@@ -59,7 +59,7 @@ async fn loading_a_model_makes_it_resident_and_holds_nothing() {
 
     // Loading what is loaded is a no-op the runtime never sees as a swap.
     let again = client
-        .post(format!("{base}/v1/models/{MODEL}/load"))
+        .post(format!("{base}/v1/gglib/models/{MODEL}/load"))
         .send()
         .await
         .expect("request");
@@ -70,7 +70,7 @@ async fn loading_a_model_makes_it_resident_and_holds_nothing() {
     // A model that is not on the machine is refused as a chat request would
     // refuse it, and nothing was loaded for it.
     let missing = client
-        .post(format!("{base}/v1/models/no-such-model/load"))
+        .post(format!("{base}/v1/gglib/models/no-such-model/load"))
         .send()
         .await
         .expect("request");

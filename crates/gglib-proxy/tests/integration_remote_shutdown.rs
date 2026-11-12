@@ -1,4 +1,4 @@
-//! Verifies `POST /v1/proxy/shutdown` — the only way to stop this machine
+//! Verifies `POST /v1/gglib/proxy/shutdown` — the only way to stop this machine
 //! from the other side of a tunnel.
 //!
 //! The daemon already has `POST /api/daemon/shutdown`, and it is on a port a
@@ -58,7 +58,7 @@ async fn a_confirmed_request_with_the_token_cancels_the_daemon() {
     assert!(!daemon.is_cancelled(), "nothing has asked yet");
 
     let res = Client::new()
-        .post(format!("{base}/v1/proxy/shutdown"))
+        .post(format!("{base}/v1/gglib/proxy/shutdown"))
         .bearer_auth("secret123")
         .json(&serde_json::json!({ "confirm": "shutdown" }))
         .send()
@@ -82,7 +82,7 @@ async fn an_unauthenticated_request_cannot_stop_anything() {
     let (base, cancel) = spawn_proxy(with_key("secret123"), Some(daemon.clone())).await;
 
     for credential in [None, Some("Bearer wrong")] {
-        let mut request = Client::new().post(format!("{base}/v1/proxy/shutdown"));
+        let mut request = Client::new().post(format!("{base}/v1/gglib/proxy/shutdown"));
         if let Some(value) = credential {
             request = request.header(reqwest::header::AUTHORIZATION, value);
         }
@@ -115,7 +115,7 @@ async fn the_key_alone_is_not_enough_without_the_confirmation() {
     ];
     for body in bodies {
         let res = Client::new()
-            .post(format!("{base}/v1/proxy/shutdown"))
+            .post(format!("{base}/v1/gglib/proxy/shutdown"))
             .bearer_auth("secret123")
             .json(&body)
             .send()
@@ -128,7 +128,7 @@ async fn the_key_alone_is_not_enough_without_the_confirmation() {
 
     // A request with no body at all is the same answer, not a panic.
     let res = Client::new()
-        .post(format!("{base}/v1/proxy/shutdown"))
+        .post(format!("{base}/v1/gglib/proxy/shutdown"))
         .bearer_auth("secret123")
         .send()
         .await
@@ -146,7 +146,7 @@ async fn a_proxy_with_no_daemon_says_so() {
     let (base, cancel) = spawn_proxy(with_key("secret123"), None).await;
 
     let res = Client::new()
-        .post(format!("{base}/v1/proxy/shutdown"))
+        .post(format!("{base}/v1/gglib/proxy/shutdown"))
         .bearer_auth("secret123")
         .json(&serde_json::json!({ "confirm": "shutdown" }))
         .send()
@@ -179,7 +179,7 @@ async fn a_tunnelled_request_with_no_device_cannot_stop_anything() {
     let (base, cancel) = spawn_proxy(with_key("secret123"), Some(daemon.clone())).await;
 
     let res = Client::new()
-        .post(format!("{base}/v1/proxy/shutdown"))
+        .post(format!("{base}/v1/gglib/proxy/shutdown"))
         .bearer_auth("secret123")
         .header("via", "1.1 modelpipe")
         .header("x-modelpipe-peer", "3ca82708b995")
@@ -199,7 +199,7 @@ async fn a_tunnelled_request_with_no_device_cannot_stop_anything() {
     // Named by a device, the same request goes through — so the refusal above
     // is the missing header and not the marker.
     let named = Client::new()
-        .post(format!("{base}/v1/proxy/shutdown"))
+        .post(format!("{base}/v1/gglib/proxy/shutdown"))
         .bearer_auth("secret123")
         .header("via", "1.1 modelpipe")
         .header("x-modelpipe-peer", "3ca82708b995")

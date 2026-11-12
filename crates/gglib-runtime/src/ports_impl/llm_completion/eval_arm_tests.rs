@@ -1,7 +1,6 @@
 //! The two things an A/B evaluation asks of the adapter's request path: a
 //! control arm that skips the pipeline, and a `tool_choice` demanded of the
-//! opening turn alone. Split from `shaping_tests.rs`, unchanged, when that
-//! file was at its budget.
+//! opening turn alone. Split from `shaping_tests.rs`, unchanged.
 
 use super::*;
 

@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use super::types::HfQuantInfo;
 use super::variant_match::{delimits_a_name, holds_token};
 use crate::domain::shard_name::{gguf_stem, shard_parts};
+use crate::download::GgufFileRole;
 
 /// Why a draft or helper variant is not downloaded as a model.
 pub const HELPER_FILES_REFUSAL: &str = "gglib can't run draft or helper files on their own";
@@ -23,9 +24,48 @@ const RESERVED: [char; 3] = [':', '@', '/'];
 /// The token a projector's file name carries.
 pub(super) const PROJECTOR_TOKEN: &str = "mmproj";
 
+/// The token an importance matrix's file name carries.
+const IMATRIX_TOKEN: &str = "imatrix";
+
 /// The tokens a helper's file name carries: an importance matrix's, and an
 /// MTP head's.
-const HELPER_TOKENS: [&str; 2] = ["imatrix", "mtp"];
+const HELPER_TOKENS: [&str; 2] = [IMATRIX_TOKEN, "mtp"];
+
+/// Whether `variant` is said as a quantisation where a search lists them.
+///
+/// That is when its file name holds no projector's token (`mmproj`) and no
+/// importance matrix's (`imatrix`). It is read from the name for that line
+/// alone; a draft or MTP head is said, as a listing dims it. What a variant
+/// is, which a download and a listing go by, comes from its header
+/// ([`super::variant_role`]).
+#[must_use]
+pub fn said_as_a_quantization(variant: &HfQuantInfo) -> bool {
+    let name = variant_name(variant);
+    ![PROJECTOR_TOKEN, IMATRIX_TOKEN]
+        .iter()
+        .any(|token| holds_token(name, token, delimits_a_name))
+}
+
+/// The largest of `variants` that is a model's weights: one whose header
+/// says so, or, unread, one [`said_as_a_quantization`] (no projector's or
+/// importance matrix's file). `None` when none is.
+///
+/// A variant named for an MTP head is kept: a repository may name every
+/// model file so (`Qwopus3.8-27B-Flash-V2-MTP-Q4_K_M`), and a separate MTP
+/// draft is small and never the largest. What a repository's size is
+/// judged by before any header is read ([`super::plausible_total`]).
+#[must_use]
+pub fn largest_weights(variants: &[HfQuantInfo]) -> Option<&HfQuantInfo> {
+    let weights = |variant: &&HfQuantInfo| {
+        variant
+            .role
+            .map_or_else(|| said_as_a_quantization(variant), GgufFileRole::is_weights)
+    };
+    variants
+        .iter()
+        .filter(weights)
+        .max_by_key(|variant| variant.total_size)
+}
 
 /// `files`, each a path and a size, grouped into the repository's variants
 /// and labelled, by label. A file that is not a `.gguf` is no variant's.
@@ -41,7 +81,10 @@ const HELPER_TOKENS: [&str; 2] = ["imatrix", "mtp"];
 /// left: that is all a label takes from a name's tokens, and a variant's
 /// role comes from its header. A name that several folders hold is labelled
 /// by its folder, and a repository with one name to read a prefix from
-/// labels every variant by its whole name.
+/// labels every variant by its whole name. A token of a label that spells a
+/// quantisation is written in capitals (`Q6_k` is `Q6_K`), so a variant
+/// reads one way whoever uploaded it; a request still matches it in any
+/// case.
 pub fn variants_of<'a>(files: impl IntoIterator<Item = (&'a str, u64)>) -> Vec<HfQuantInfo> {
     // Keyed by the path less the shard's index and the extension: the
     // shard total stays, so sets of different totals are not one variant.
@@ -55,7 +98,9 @@ pub fn variants_of<'a>(files: impl IntoIterator<Item = (&'a str, u64)>) -> Vec<H
 
     let keys: Vec<&str> = groups.keys().map(String::as_str).collect();
     let stems: Vec<&str> = groups.values().map(|(stem, _)| stem.as_str()).collect();
-    let labels = unique_labels(&keys, labels_of(&stems));
+    let labels = unique_labels(&keys, labels_of(&stems))
+        .into_iter()
+        .map(|label| upper_quantizations(&label));
     let mut variants: Vec<HfQuantInfo> = groups
         .into_values()
         .zip(labels)
@@ -176,6 +221,49 @@ fn labels_of(stems: &[&str]) -> Vec<String> {
             label.replace(RESERVED, "-")
         })
         .collect()
+}
+
+/// `label` with each token, between `-` and `.`, that spells a
+/// quantisation written in capitals, so a variant reads one way whoever
+/// uploaded it: `Q6_k` is `Q6_K`, `iq4_xs` is `IQ4_XS` and `bf16` is `BF16`.
+/// Every other token is kept as written (`UD`, `FastMTP-32K`, `Thinking`).
+fn upper_quantizations(label: &str) -> String {
+    let mut written = String::with_capacity(label.len());
+    for (at, token) in label.split(['-', '.']).enumerate() {
+        if at > 0 {
+            // The separator before this token: one byte, `-` or `.`.
+            written.push(char::from(label.as_bytes()[written.len()]));
+        }
+        if spells_a_quantization(token) {
+            written.push_str(&token.to_ascii_uppercase());
+        } else {
+            written.push_str(token);
+        }
+    }
+    written
+}
+
+/// Whether `token` spells a quantisation, in any case: `Q`, `IQ` or `TQ`,
+/// digits, then parts of one to three letters or digits each after a `_`
+/// (`Q4_K_M`, `IQ2_XXS`, `TQ1_0`, `Q8_0`); or `F16`, `BF16`, `F32`.
+fn spells_a_quantization(token: &str) -> bool {
+    let upper = token.to_ascii_uppercase();
+    if matches!(upper.as_str(), "F16" | "BF16" | "F32") {
+        return true;
+    }
+    let Some(rest) = ["IQ", "TQ", "Q"]
+        .iter()
+        .find_map(|start| upper.strip_prefix(start))
+    else {
+        return false;
+    };
+    let mut parts = rest.split('_');
+    let bits = parts.next().unwrap_or_default();
+    !bits.is_empty()
+        && bits.bytes().all(|b| b.is_ascii_digit())
+        && parts.all(|part| {
+            (1..=3).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_alphanumeric())
+        })
 }
 
 /// The longest prefix every one of `names` starts with, when each goes on

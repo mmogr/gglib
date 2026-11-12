@@ -94,7 +94,7 @@ async fn an_identical_result_repeat_reaches_the_dashboard() {
         .expect("proxy request");
 
     let status: Value = Client::new()
-        .get(format!("{proxy_url}/v1/proxy/status"))
+        .get(format!("{proxy_url}/v1/gglib/proxy/status"))
         .send()
         .await
         .expect("status request")
@@ -146,7 +146,7 @@ async fn a_rescued_repeat_reaches_the_dashboard() {
         .expect("proxy request");
 
     let status: Value = Client::new()
-        .get(format!("{proxy_url}/v1/proxy/status"))
+        .get(format!("{proxy_url}/v1/gglib/proxy/status"))
         .send()
         .await
         .expect("status request")
@@ -185,7 +185,7 @@ async fn a_trailing_user_turn_does_not_re_report_the_repeat() {
         .expect("proxy request");
 
     let status: Value = Client::new()
-        .get(format!("{proxy_url}/v1/proxy/status"))
+        .get(format!("{proxy_url}/v1/gglib/proxy/status"))
         .send()
         .await
         .expect("status request")

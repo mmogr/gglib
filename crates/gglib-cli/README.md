@@ -171,7 +171,7 @@ Supported shells: `bash`, `zsh`, `fish`, `elvish`, `powershell`.
 
 ### Proxy Dashboard
 
-`gglib proxy dashboard` connects to an already-running proxy's `GET /v1/proxy/status/stream` SSE endpoint (see [`gglib-proxy`'s Proxy Dashboard docs](../gglib-proxy/README.md#proxy-dashboard) for the full `DashboardSnapshot` data contract) and redraws a live terminal view in place on every update — active connections (model, phase, prompt progress), per-slot context-usage gauges, prompt-cache health and measured reuse, and total request counts.
+`gglib proxy dashboard` connects to an already-running proxy's `GET /v1/gglib/proxy/status/stream` SSE endpoint (see [`gglib-proxy`'s Proxy Dashboard docs](../gglib-proxy/README.md#proxy-dashboard) for the full `DashboardSnapshot` data contract) and redraws a live terminal view in place on every update — active connections (model, phase, prompt progress), per-slot context-usage gauges, prompt-cache health and measured reuse, and total request counts.
 
 The prompt-cache section shows any warnings the proxy raised (a cramped RAM budget, or a disk layer disabled because the model's attention keeps only part of the token history) followed by measured reuse: prompt tokens served from cache versus processed, in total and for the most recent request. These are raw counts from the upstream's own `usage` reporting — there is no estimated "time saved", since reuse is measured exactly but what it saved depends on a prefill that never ran.
 

@@ -3,8 +3,7 @@
 Helper scripts for development, CI enforcement, documentation and releases.
 
 A check's header comment is its specification. This file says which script is
-which and what runs it. Of the checks, only the file-size check has a section
-here.
+which and what runs it.
 
 ## Architecture checks
 
@@ -20,39 +19,6 @@ no second list.
 | `check_readmes.sh` | README coverage: each directory below a crate's `src/`, below `src-tauri/src/` and below the TypeScript `src/` (`src/types/generated/` excepted) has a README with its `module-docs` markers | `check_boundaries.sh`, with `--strict` |
 | The checks in the `enforce` recipe | The repository rules that neither the compiler nor a linter checks | `make enforce`, in `ci.yml`'s `enforcement` job |
 | `check_adr_readings.sh` | Each reading an ADR's criterion names, in `contracts/upstream/llama/observed.json`, against its approval in `approvals.json`, and each quoted criterion against its ADR | `make adr-readings`, in `ci.yml`'s `adr-readings` job (`ADR criterion moved`) |
-
-### `check_file_size.sh`
-
-The file-size check, run once per language. Its 300-line budget is a guide,
-not a limit: it is there so that a file which has taken on a second job is
-noticed, and CONTRIBUTING's [File size](../CONTRIBUTING.md#file-size) says
-what follows.
-
-A file already over the budget is recorded in that language's baseline at its
-size and may shrink freely. The check stops when a file is longer than its
-row, and when a file with no row crosses the budget. It is a ratchet rather
-than a threshold because well over a hundred Rust files and more than a dozen
-TypeScript ones are over the budget, many of them one thing: a gate on size
-would fail on every commit and be switched off within a day, which is how a
-check becomes decorative.
-
-When it stops, the question is whether the file is still one thing. One that
-has taken on a second job is split at that seam. One that is a single concept
-stays whole, and its row is raised, or added, by hand, so the diff shows the
-number going up. A sibling file added to get under the number is the one
-answer that is wrong.
-
-`--update` rewrites every row to the tree's sizes. On a tree that passes, it
-can only lower a row or drop one, and the check says when a row is above its
-file. On a tree that fails it records every growth at once, which is why a
-deliberate growth is one row edited by hand.
-
-```bash
-# crates/ and src-tauri/
-./scripts/check_file_size.sh rust scripts/rust-complexity-baseline.txt [--update]
-# src/**/*.{ts,tsx,css}, except src/types/generated/
-./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt [--update]
-```
 
 ## The Swift framework (`apple/`)
 

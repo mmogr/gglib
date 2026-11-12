@@ -12,7 +12,7 @@ use super::far_runs::run_path;
 use crate::error::GuiError;
 
 impl FarProxy {
-    /// `GET /v1/chats`.
+    /// `GET /v1/gglib/chats`.
     ///
     /// # Errors
     ///
@@ -21,21 +21,21 @@ impl FarProxy {
     /// request did not get through.
     pub async fn list_chats(&self) -> Result<reqwest::Response, GuiError> {
         self.offers(&[Feature::Chats]).await?;
-        self.send(self.bounded.get(self.url("/chats"))).await
+        self.send(self.bounded.get(self.url("/gglib/chats"))).await
     }
 
-    /// `GET /v1/chats/{id}`.
+    /// `GET /v1/gglib/chats/{id}`.
     ///
     /// # Errors
     ///
     /// As [`FarProxy::list_chats`].
     pub async fn open_chat(&self, id: i64) -> Result<reqwest::Response, GuiError> {
         self.offers(&[Feature::Chats]).await?;
-        self.send(self.bounded.get(self.url(&format!("/chats/{id}"))))
+        self.send(self.bounded.get(self.url(&format!("/gglib/chats/{id}"))))
             .await
     }
 
-    /// `PUT /v1/runs/{run_id}?kind=agent` with `{conversation_id, content,
+    /// `PUT /v1/gglib/runs/{run_id}?kind=agent` with `{conversation_id, content,
     /// images, thinking}`: a turn on one of the far machine's chats, which it
     /// runs and saves.
     ///

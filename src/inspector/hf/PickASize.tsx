@@ -3,10 +3,10 @@
  * size (its files on hover) and the daemon's fit verdict in the daemon's
  * own words, always shown. One row is selected, and only it carries
  * `[■ Download]`. gglib's pick (`picked`: the variant `gglib model
- * download` takes without `-q`, the daemon's choice, marked only when the
- * listing's heads can tell it) carries ★ and is selected to begin with;
- * unmarked, the largest quantized variant that fits is. The selected row is
- * scrolled into view whenever it changes. The size and the fit are the weights alone, as the
+ * download` takes without `-q`, the daemon's choice: the listing's, else the
+ * download's own pick, which the inspector asks beside it) carries ★ and is
+ * selected once known; with none marked, no row is until one is chosen. The selected row is scrolled into view
+ * whenever it changes. The size and the fit are the weights alone, as the
  * download's own pick judges them; the projector fetched beside them counts
  * for neither, and is said under the table for the selected row. A draft or
  * helper (its header's role, `Sidecar`) is dimmed, "not a model on its
@@ -36,27 +36,6 @@ const FIT_MARK: Readonly<Record<VariantFit['kind'], MarkKind>> = {
 const HELPER_FILES_REFUSAL = "gglib can't run draft or helper files on their own";
 
 const isModel = (q: HfQuantization) => q.role !== 'Sidecar';
-
-/** A full-precision label, which a quantized variant that fits is preferred to. */
-const FULL_PRECISION = /^(?:F16|BF16|F32)$/i;
-
-/**
- * The variant selected to begin with: gglib's pick when the listing could
- * tell it; otherwise the largest that fits, quantized before full precision
- * (as the download's picker prefers), else the smallest model.
- */
-export function firstPick(quants: HfQuantization[]): HfQuantization | undefined {
-  const models = quants.filter(isModel);
-  const marked = models.find((q) => q.picked);
-  if (marked) return marked;
-  const largest = (list: HfQuantization[]) => list.reduce<HfQuantization | undefined>((a, q) => (!a || q.size_bytes > a.size_bytes ? q : a), undefined);
-  const fitting = models.filter((q) => q.fit?.kind === 'fits');
-  return (
-    largest(fitting.filter((q) => !FULL_PRECISION.test(q.label))) ??
-    largest(fitting) ??
-    models.reduce<HfQuantization | undefined>((a, q) => (!a || q.size_bytes < a.size_bytes ? q : a), undefined)
-  );
-}
 
 /** The files a variant is, for its size's hover. */
 function files(q: HfQuantization): string {

@@ -32,7 +32,7 @@
       "    Check it from another shell:",
       "      curl http://127.0.0.1:8080/v1/models",
       "",
-      "  Dashboard  http://127.0.0.1:8080/v1/proxy/status",
+      "  Dashboard  http://127.0.0.1:8080/v1/gglib/proxy/status",
       ""
     ],
     "recipes": {
@@ -167,7 +167,7 @@
       "    Check it from another shell:",
       "      curl -H \"Authorization: Bearer $(gglib config reveal proxy-api-key)\" http://127.0.0.1:8080/v1/models",
       "",
-      "  Dashboard  http://127.0.0.1:8080/v1/proxy/status",
+      "  Dashboard  http://127.0.0.1:8080/v1/gglib/proxy/status",
       ""
     ],
     "recipes": {

@@ -2,8 +2,7 @@
 //! daemon and the CLI hold them: two processes opening one old library at
 //! once, a rebuild that fails, and the model repository on a rebuilt table.
 //!
-//! Split from `setup_models_tests.rs`, whose fixtures these share, to keep
-//! each file under the 300 lines a new file may be.
+//! Split from `setup_models_tests.rs`, whose fixtures these share.
 
 use std::path::Path;
 use std::time::Duration;

@@ -190,6 +190,7 @@ fn a_reply_that_produced_nothing_still_says_it_stopped() {
     let got = rows(
         &[AgentEvent::Error {
             message: "LLM stream error".to_owned(),
+            code: None,
         }],
         false,
     );

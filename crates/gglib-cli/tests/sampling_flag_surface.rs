@@ -4,7 +4,7 @@
 //! Split from `cli_parity.rs`, which guards that `serve` and `proxy` agree
 //! about the rest of their flags. The two ask different questions — that one
 //! compares two commands to each other, this one compares a command to the
-//! struct it is built from — and together they were over the file budget.
+//! struct it is built from.
 //!
 //! # The expectation is derived, not transcribed
 //!

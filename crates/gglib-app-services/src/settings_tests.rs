@@ -1,9 +1,7 @@
 //! Tests for [`super::SettingsOps`].
 //!
 //! A `#[path]` sibling rather than an inline `mod tests`, following the split
-//! #860 made across the workspace: the tests outweigh the code they cover and
-//! every line of them counted against the module's size ratchet, which this
-//! module is at.
+//! #860 made across the workspace: the tests outweigh the code they cover.
 //!
 //! Declared as `mod tests`, not `mod settings_tests`, so every test keeps the
 //! path it already had — `settings::tests::…` — and the inventory before and

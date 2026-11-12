@@ -294,7 +294,7 @@ async fn a_load_asks_for_the_model_by_its_encoded_name_and_reads_the_answer() {
     assert!(loaded.started);
     assert_eq!(
         seen.lock().unwrap().as_slice(),
-        ["POST /v1/models/flux%2Fschnell/load HTTP/1.1"]
+        ["POST /v1/gglib/models/flux%2Fschnell/load HTTP/1.1"]
     );
     assert_eq!(loaded_line(&loaded), "  \u{2705} flux/schnell is loaded");
 }
