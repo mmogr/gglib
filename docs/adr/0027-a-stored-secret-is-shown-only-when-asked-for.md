@@ -65,12 +65,24 @@ still opens every other `/api` route, and through them can run an MCP
 server's command, with its env values, as the owner. `gglib remote key
 --show` is removed, and its stdout contract moves to `reveal`.
 
+> **Amended 2026-11-12 — the daemon takes no API key.** `--share-lan` is
+> removed from `gglib daemon run` and `gglib web`, and with it the daemon's
+> bind off loopback, its `gglib.local` mDNS name and the page's prompt for a
+> key. The daemon listens on `127.0.0.1` only, and `/api` takes its token and
+> nothing else, so the route answers the token alone, as above. The sentences
+> about a key the daemon admits describe code that is gone. The proxy's own
+> bind off loopback (`--host 0.0.0.0`, its key, `--allowed-host`) is
+> unchanged.
+
 ### 4. A key the daemon minted and could not store is printed once
 
 A daemon started `--share-lan` mints a key when none is stored. If it then
 fails to store it, its banner is the only copy, so the banner prints it. A
 key that was stored is never printed: the banner says where it came from and
 names the reveal command.
+
+> **Amended 2026-11-12.** No daemon mints a key now (decision 3's
+> amendment), so this paragraph and its banner are gone. The next one stands.
 
 A proxy bound off loopback prints no banner of its own. A key it mints and
 cannot store guards that run and is printed nowhere; the daemon presents it
@@ -101,6 +113,9 @@ to that proxy itself, and a client has to be given a key set with
   daemon's API key rather than its token. Its dashboard and Clear Cache get
   that key back, and so do Show and Copy on the proxy key; Show and Copy on
   an MCP server's env value are refused there.
+
+  > **Amended 2026-11-12.** No such page exists now (decision 3's
+  > amendment): every page holds the daemon's token.
 - The values are still plain text at rest. File permissions remain their
   only protection on disk.
 
