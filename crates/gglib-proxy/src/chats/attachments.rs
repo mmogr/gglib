@@ -12,7 +12,7 @@
 
 use axum::Json;
 use axum::extract::rejection::BytesRejection;
-use axum::extract::{DefaultBodyLimit, Path, State};
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
@@ -25,6 +25,7 @@ use gglib_core::request_pipeline::MAX_IMAGE_BYTES;
 
 use super::handlers::{Answer, chats, unavailable};
 use crate::models::ErrorResponse;
+use crate::refusal::Segment;
 use crate::server::AppState;
 
 /// The most an upload's body may be: one image.
@@ -62,7 +63,7 @@ pub(crate) async fn upload_attachment(
             let too_large = AttachmentError::TooLarge;
             refused(&too_large, too_large.http_status())
         } else {
-            rejection.into_response()
+            crate::refusal::unreadable(rejection.status(), rejection.body_text())
         }
     })?;
     let stored = chats
@@ -77,7 +78,7 @@ pub(crate) async fn upload_attachment(
 /// not an id names no image.
 pub(crate) async fn fetch_attachment(
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Segment(id): Segment,
 ) -> Answer {
     let chats = chats(&state).ok_or_else(unavailable)?;
     let id = AttachmentId::parse(&id).map_err(|_| {

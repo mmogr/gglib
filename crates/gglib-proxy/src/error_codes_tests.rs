@@ -27,7 +27,7 @@ const RELAYS: [(&str, &str, &str, &str); 35] = [
     ("gglib-proxy/src/models.rs", "image_model_cannot_chat", "refusal.code()", "`DrawsImages::code`"),
     ("gglib-proxy/src/chats/attachments.rs", "refused", "code", "`AttachmentError::code`"),
     ("gglib-proxy/src/images.rs", "refusal_body", "code", "`ImageError::code`"),
-    ("gglib-proxy/src/runs/handlers.rs", "error", "code", "`error`'s parameter"),
+    ("gglib-proxy/src/refusal.rs", "error", "code", "`error`'s parameter"),
     ("gglib-proxy/src/runs/handlers.rs", "refused", "err.code()", "`RunsError::code`"),
     ("gglib-proxy/src/chats/handlers.rs", "refused", "err.code()", "`HubChatsError::code`"),
     ("gglib-proxy/src/runs/turn.rs", "refused", "&refusal.code", "the daemon's `TurnRefused`"),

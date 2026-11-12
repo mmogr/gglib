@@ -7,13 +7,14 @@
 
 use axum::{
     Json,
-    extract::State,
+    extract::{State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use serde::Deserialize;
 use tracing::{info, warn};
 
+use crate::refusal::{error, internal, invalid, unreadable};
 use crate::server::AppState;
 
 /// Handle cache clear requests via `POST /v1/gglib/proxy/cache/clear`.
@@ -34,7 +35,7 @@ use crate::server::AppState;
 pub(crate) async fn handle_proxy_cache_clear(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> impl IntoResponse {
+) -> Response {
     // Extract optional session ID from header
     let session_id = headers
         .get("x-gglib-session-id")
@@ -45,23 +46,15 @@ pub(crate) async fn handle_proxy_cache_clear(
     if let Some(ref sid) = session_id
         && let Err(e) = crate::slots::sanitize_session_id(sid)
     {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": format!("invalid session id: {}", e)
-            })),
-        );
+        return invalid(format!(
+            "{e}: a session id is up to 64 letters, digits, - or _"
+        ));
     }
 
     // ── Disk slot layer ───────────────────────────────────────────────────
     let disk = if state.cache_enabled {
         let Some(slot_dir) = state.slot_dir.as_deref() else {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "slot_dir not configured"
-                })),
-            );
+            return internal("the disk cache is on, but no slot folder is configured");
         };
         // Not behind the slot gate: a clear answers at once, with no spinner
         // in the CLI or the GUI. A cycle that is generating as it runs holds
@@ -78,10 +71,7 @@ pub(crate) async fn handle_proxy_cache_clear(
             "all slots cleared"
         };
         if let Err(e) = cleared {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
-            );
+            return internal(format!("the slot files could not be cleared: {e}"));
         }
         disk
     } else {
@@ -132,6 +122,7 @@ pub(crate) async fn handle_proxy_cache_clear(
             "ram": ram,
         })),
     )
+        .into_response()
 }
 /// What `POST /v1/gglib/proxy/shutdown` requires in its body.
 #[derive(Debug, Deserialize)]
@@ -176,20 +167,19 @@ const CONFIRMATION: &str = "shutdown";
 /// already exists.
 pub(crate) async fn handle_proxy_shutdown(
     State(state): State<AppState>,
-    body: Option<Json<ShutdownRequest>>,
-) -> impl IntoResponse {
+    body: Result<Option<Json<ShutdownRequest>>, JsonRejection>,
+) -> Response {
+    let body = match body {
+        Ok(body) => body,
+        Err(rejection) => return unreadable(rejection.status(), rejection.body_text()),
+    };
     let confirmed = body
         .and_then(|Json(req)| req.confirm)
         .is_some_and(|word| word == CONFIRMATION);
     if !confirmed {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": format!(
-                    "shutting down is not reversible from here — send {{\"confirm\":\"{CONFIRMATION}\"}} to mean it"
-                ),
-            })),
-        );
+        return invalid(format!(
+            "shutting down is not reversible from here — send {{\"confirm\":\"{CONFIRMATION}\"}} to mean it"
+        ));
     }
 
     // Absent when this proxy is not running under the daemon — an embedded
@@ -197,11 +187,11 @@ pub(crate) async fn handle_proxy_shutdown(
     // nothing would carry out.
     let Some(token) = state.daemon_shutdown() else {
         warn!("remote shutdown requested, but this proxy is not running under the daemon");
-        return (
+        return error(
             StatusCode::CONFLICT,
-            Json(serde_json::json!({
-                "error": "this proxy is not running under the gglib daemon",
-            })),
+            "invalid_request_error",
+            "no_daemon_to_stop",
+            "this proxy is not running under the gglib daemon, so there is nothing to stop",
         );
     };
 
@@ -211,4 +201,5 @@ pub(crate) async fn handle_proxy_shutdown(
         StatusCode::ACCEPTED,
         Json(serde_json::json!({ "stopping": true })),
     )
+        .into_response()
 }
