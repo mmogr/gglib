@@ -77,7 +77,7 @@ crates/gglib-cli/src/handlers/inference/proxy_tests.rs 320
 crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 361
 crates/gglib-cli/src/handlers/mcp_cli.rs 395
 crates/gglib-cli/src/handlers/model/download/interactive.rs 400
-crates/gglib-cli/src/handlers/model/list_tests.rs 360
+crates/gglib-cli/src/handlers/model/list_tests.rs 391
 crates/gglib-cli/src/handlers/model/update.rs 683
 crates/gglib-cli/src/handlers/model/update_surface_tests.rs 368
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 395
