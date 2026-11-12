@@ -21,15 +21,6 @@ use crate::domain::agent::LlmStreamEvent;
 // Public types
 // =============================================================================
 
-/// Result of parsing a single SSE `data:` payload.
-#[derive(Debug)]
-pub enum SseParseResult {
-    /// The value `[DONE]` — stream terminator, no events.
-    Done,
-    /// One or more events decoded from the JSON frame.
-    Events(Vec<LlmStreamEvent>),
-}
-
 // =============================================================================
 // Parser
 // =============================================================================
@@ -37,7 +28,7 @@ pub enum SseParseResult {
 /// Parse a top-level `usage` object into a [`LlmStreamEvent::Usage`] event.
 ///
 /// Returns `None` when the frame carries no `usage` field. Deliberately
-/// returns just the event (not a full [`SseParseResult`]) — unlike
+/// returns just the event (not the frame's whole list) — unlike
 /// [`parse_inline_error_frame`], a `usage` field does **not** imply the rest
 /// of the frame should be skipped. See the call site in [`events_of`] for
 /// why.
@@ -105,33 +96,15 @@ fn parse_inline_error_frame(parsed: &serde_json::Value) -> Option<LlmStreamEvent
     })
 }
 
-/// Parse a single SSE `data:` payload into zero or more [`LlmStreamEvent`]s.
-///
-/// Returns:
-/// - `Ok(SseParseResult::Done)` when `data == "[DONE]"`
-/// - `Ok(SseParseResult::Events(…))` for a valid JSON frame (may be empty
-///   when the frame carries no content or tool-call deltas)
-/// - `Err(…)` when the frame is not valid JSON
-///
-/// # Errors
-///
-/// Returns an error if the `data` payload is not valid JSON.
-pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
-    if data == "[DONE]" {
-        return Ok(SseParseResult::Done);
-    }
-    Ok(SseParseResult::Events(events_of(&frame_json(data)?)))
-}
-
 /// One `data:` payload, other than `[DONE]`, parsed as JSON.
 pub(super) fn frame_json(data: &str) -> Result<serde_json::Value> {
     serde_json::from_str(data)
         .map_err(|e| anyhow!("SSE frame JSON parse error: {e} — data: {data}"))
 }
 
-/// The [`LlmStreamEvent`]s one parsed `data:` frame carries, in the order
-/// [`parse_sse_frame`] gives them. Empty for a frame that carries none, such
-/// as llama-server's opening role frame.
+/// The [`LlmStreamEvent`]s one parsed `data:` frame carries, in stream
+/// order. Empty for a frame that carries none, such as llama-server's
+/// opening role frame.
 #[must_use]
 pub fn events_of(parsed: &serde_json::Value) -> Vec<LlmStreamEvent> {
     // ── Prompt-progress frames (llama-server `return_progress: true`) ────
@@ -241,9 +214,8 @@ pub fn events_of(parsed: &serde_json::Value) -> Vec<LlmStreamEvent> {
     }
 
     // ── Usage totals bundled with this finish chunk (llama.cpp shape) ────
-    // Pushed *before* the finish_reason/Done event below, never after: the
-    // encoder appends the `[DONE]` sentinel immediately after `Done`, and
-    // nothing may follow `[DONE]` on the wire.
+    // Pushed *before* the finish_reason/Done event below, so a reader that
+    // stops at the finish has already seen the counts.
     if let Some(usage_event) = usage_event {
         events.push(usage_event);
     }
@@ -267,18 +239,6 @@ pub fn events_of(parsed: &serde_json::Value) -> Vec<LlmStreamEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The events of a frame are the same read from its text or its JSON.
-    #[test]
-    fn events_of_reads_a_parsed_frame_as_the_text_parser_does() {
-        let data = tool_frame(0, "c1", "f", "{}");
-        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
-        let Ok(SseParseResult::Events(from_text)) = parse_sse_frame(&data) else {
-            panic!("a frame of events");
-        };
-        assert_eq!(events_of(&parsed), from_text);
-        assert_eq!(from_text.len(), 1);
-    }
 
     /// llama-server's opening frame, a role and no text, carries no event.
     #[test]
@@ -355,19 +315,8 @@ mod tests {
     // ── Tests ──────────────────────────────────────────────────────────────
 
     #[test]
-    fn done_sentinel_returns_done_variant() {
-        assert!(matches!(
-            parse_sse_frame("[DONE]"),
-            Ok(SseParseResult::Done)
-        ));
-    }
-
-    #[test]
     fn text_delta_frame_produces_text_event() {
-        let events = match parse_sse_frame(&text_frame("hello")) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&text_frame("hello")).unwrap());
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -381,10 +330,7 @@ mod tests {
             "choices": [{ "delta": { "content": "" }, "finish_reason": null }]
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert!(
             events.is_empty(),
             "empty content should not produce TextDelta"
@@ -393,10 +339,7 @@ mod tests {
 
     #[test]
     fn finish_reason_produces_done_event() {
-        let events = match parse_sse_frame(&finish_frame("stop")) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&finish_frame("stop")).unwrap());
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -406,10 +349,8 @@ mod tests {
 
     #[test]
     fn tool_call_delta_frame_is_parsed() {
-        let events = match parse_sse_frame(&tool_frame(0, "tc1", "search", r#"{"q":"rust"}"#)) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events =
+            events_of(&frame_json(&tool_frame(0, "tc1", "search", r#"{"q":"rust"}"#)).unwrap());
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -424,11 +365,9 @@ mod tests {
 
     #[test]
     fn tool_call_delta_with_no_index_defaults_to_sequential_position() {
-        let events = match parse_sse_frame(&tool_frame_no_index("tc1", "search", r#"{"q":"rust"}"#))
-        {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(
+            &frame_json(&tool_frame_no_index("tc1", "search", r#"{"q":"rust"}"#)).unwrap(),
+        );
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -438,10 +377,7 @@ mod tests {
 
     #[test]
     fn two_tool_calls_with_no_index_get_distinct_sequential_slots() {
-        let events = match parse_sse_frame(&two_tool_frames_no_index()) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&two_tool_frames_no_index()).unwrap());
         assert_eq!(events.len(), 2, "both tool-call deltas must be emitted");
         assert!(matches!(
             &events[0],
@@ -456,7 +392,7 @@ mod tests {
     #[test]
     fn malformed_json_returns_error() {
         assert!(
-            parse_sse_frame("{ broken json }").is_err(),
+            frame_json("{ broken json }").is_err(),
             "malformed JSON should return Err"
         );
     }
@@ -467,10 +403,7 @@ mod tests {
             "choices": [{ "delta": { "content": "hi" }, "finish_reason": "stop" }]
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 2);
         assert!(matches!(&events[0], LlmStreamEvent::TextDelta { .. }));
         assert!(matches!(&events[1], LlmStreamEvent::Done { .. }));
@@ -482,10 +415,7 @@ mod tests {
             "choices": [{ "delta": { "reasoning_content": "I should check..." }, "finish_reason": null }]
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -499,10 +429,7 @@ mod tests {
             "choices": [{ "delta": { "reasoning_content": "" }, "finish_reason": null }]
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert!(
             events.is_empty(),
             "empty reasoning_content should not produce ReasoningDelta"
@@ -515,10 +442,7 @@ mod tests {
             "choices": [{ "delta": { "content": "ok", "reasoning_content": "think" }, "finish_reason": null }]
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 2);
         assert!(
             matches!(&events[0], LlmStreamEvent::ReasoningDelta { content } if content == "think"),
@@ -541,10 +465,7 @@ mod tests {
             }
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -568,10 +489,7 @@ mod tests {
             }
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert!(
             !events.is_empty(),
             "prompt_progress frame must not be skipped"
@@ -593,10 +511,7 @@ mod tests {
             }
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -627,10 +542,7 @@ mod tests {
             }
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert!(matches!(
             &events[0],
             LlmStreamEvent::Usage {
@@ -652,10 +564,7 @@ mod tests {
             }
         })
         .to_string();
-        let events = match parse_sse_frame(&with_zero) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&with_zero).unwrap());
         assert!(matches!(
             &events[0],
             LlmStreamEvent::Usage {
@@ -674,10 +583,7 @@ mod tests {
             "usage": { "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2 }
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert!(!events.is_empty(), "usage frame must not be skipped");
     }
 
@@ -696,13 +602,10 @@ mod tests {
             "usage": { "prompt_tokens": 4181, "completion_tokens": 12, "total_tokens": 4193 }
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 2, "expected both a Usage and a Done event");
-        // Usage must come *before* Done -- the encoder appends `[DONE]`
-        // immediately after Done, so nothing may be emitted after it.
+        // Usage comes *before* Done, so a reader that stops at the finish
+        // has already seen the counts.
         assert!(matches!(
             &events[0],
             LlmStreamEvent::Usage {
@@ -725,10 +628,7 @@ mod tests {
             "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 2);
         assert!(matches!(&events[0], LlmStreamEvent::Usage { .. }));
         assert!(matches!(
@@ -747,10 +647,7 @@ mod tests {
             }
         })
         .to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -764,10 +661,7 @@ mod tests {
     #[test]
     fn inline_error_frame_string_form_uses_defaults() {
         let frame = serde_json::json!({ "error": "boom" }).to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
@@ -781,10 +675,7 @@ mod tests {
         // No `choices` key at all -- would be silently dropped by the "no
         // choices" guard if the error check didn't run first.
         let frame = serde_json::json!({ "error": { "message": "oops" } }).to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert!(!events.is_empty(), "inline error frame must not be skipped");
     }
 
@@ -795,10 +686,7 @@ mod tests {
         // obj)` -- falls through to the normal "no choices" skip instead.
         let frame =
             serde_json::json!({ "error": { "message": "oops" }, "choices": [] }).to_string();
-        let events = match parse_sse_frame(&frame) {
-            Ok(SseParseResult::Events(e)) => e,
-            other => panic!("unexpected: {other:?}"),
-        };
+        let events = events_of(&frame_json(&frame).unwrap());
         assert!(
             events.is_empty(),
             "frame with a choices key should not be parsed as UpstreamError"
