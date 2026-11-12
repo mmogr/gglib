@@ -243,8 +243,12 @@ keys inside `usage`:
 
 ```json
 {"choices":[],"created":1729000000,"id":"chatcmpl-5b1e","model":"qwen3.6","object":"chat.completion.chunk",
+ "system_fingerprint":"b12110-cd959bae9","timings":{"predicted_n":96,"prompt_n":812},
  "usage":{"completion_tokens":96,"context_size":8192,"prompt_tokens":812,"total_tokens":908,"trimmed_messages":3}}
 ```
+
+The frame is llama-server's own, `timings` and all, with the two keys added
+and `model` naming the served model.
 
 - `context_size` is the context, in tokens, that the server which answered
   this request was launched with.
@@ -272,9 +276,9 @@ one from 90, and the sentences a client says. It is written by hand for every
 client to replay; gglib's chat page replays every case in its tests.
 
 `return_progress` is llama.cpp's own key, and it also asks for
-`prompt_progress` frames, which have no `choices`. On
-`POST /v1/chat/completions` a client that does not send it is sent neither:
-its stream is byte for byte what it was before the reading existed. A chat
+`prompt_progress` frames. On `POST /v1/chat/completions` a client that does
+not send it is sent neither: an SSE comment, `: prefill <done>/<total>`,
+stands in for each progress frame, and the usage frame is llama-server's. A chat
 run (`PUT /v1/gglib/runs/{id}`) sets the key for every client, so a run's usage
 frame always carries the reading. A reply that is not streamed carries no
 reading.

@@ -21,6 +21,14 @@
 > reaches the client as text, where the residue scanner counts it. The gate's
 > kill criterion has nothing left to reopen. Decisions 1 and 2 stand.
 
+> **Amended 2026-11-13 — the stream is forwarded.** With nothing left to
+> translate, the proxy no longer decodes llama-server's stream into events and
+> writes it again: it forwards each frame as it came. It edits only `model`
+> (the served name), a progress frame the client did not ask for (sent as a
+> `: prefill` comment), the usage frame of a client that asked for a reading,
+> and an error frame's `code`. Tool-call frames are still held while repair
+> can act.
+
 ## Context
 
 A day of agentic runs on 2026-10-14 compared requests sent through gglib with

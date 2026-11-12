@@ -18,8 +18,8 @@ data: {\"id\":\"u-1\",\"object\":\"chat.completion.chunk\",\"created\":172900000
 data: [DONE]\n\n";
 
 /// Reasoning model emitting `reasoning_content` (`DeepSeek` R1 / `QwQ` style)
-/// followed by answer text.  The pipeline must surface both as separate
-/// `reasoning_content` and `content` deltas in the re-emitted frames.
+/// followed by answer text.  The proxy must forward both as separate
+/// `reasoning_content` and `content` deltas.
 pub(crate) const REASONING_DEEPSEEK: &[u8] = b"\
 data: {\"id\":\"u-2\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"Let me think.\"},\"finish_reason\":null}]}\n\n\
 data: {\"id\":\"u-2\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"42\"},\"finish_reason\":null}]}\n\n\

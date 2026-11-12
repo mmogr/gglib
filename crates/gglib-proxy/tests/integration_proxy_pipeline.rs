@@ -136,7 +136,7 @@ async fn round_trip_with_status(
 // Tests
 // ═════════════════════════════════════════════════════════════════════════════
 
-/// Vanilla streaming text — the proxy must re-emit content deltas verbatim
+/// Vanilla streaming text — the proxy must forward content deltas verbatim
 /// and terminate with `data: [DONE]`.
 #[tokio::test]
 async fn basic_text_round_trip() {

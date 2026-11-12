@@ -202,13 +202,14 @@ either the original or the repaired call.
 
 **The re-issue itself is non-streaming.** A repair cannot be judged until the
 call is complete, so streaming it would buy no latency while requiring a second
-SSE pipeline — decoder, normalizer, encoder, `[DONE]` bookkeeping — to run
-inside the first. The buffered body is parsed once and synthesized back into
-`ToolCallDelta` events, so every frame the client sees still flows through the
-one `SseEncoder` that has been encoding the turn all along.
+SSE reader, with its own `[DONE]` bookkeeping, to run inside the first. The
+buffered body is parsed once, and gglib writes its calls as tool-call frames
+in the reply's own envelope, in place of the held ones. Every other frame is
+llama-server's, forwarded as it came.
 
-**Ordering.** Held frames are flushed *before* the `Done` frame, never after: a
-client that sees `finish_reason` first considers the turn over. The trailing
+**Ordering.** Held frames are flushed *before* the finish frame, never after: a
+client that sees `finish_reason` first considers the turn over. A stream that
+ends with no finish frame releases its held frames as they came, unjudged. The trailing
 `Usage` frame and the single `[DONE]` sentinel are untouched by the hold-back
 and keep their existing ordering, which is what stops a client parser choking
 on a repaired turn.

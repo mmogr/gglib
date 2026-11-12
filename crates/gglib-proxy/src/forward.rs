@@ -1,5 +1,5 @@
-//! Request forwarding to llama-server with a parse → re-encode pipeline for
-//! streaming responses.
+//! Request forwarding to llama-server, and its streamed reply forwarded frame
+//! for frame.
 //!
 //! ## Request pipeline
 //!
@@ -38,14 +38,22 @@
 //!  upstream bytes
 //!        │
 //!        ▼
-//!  SseStreamDecoder          (→ typed LlmStreamEvent)
+//!  upstream_frames           (→ comments, and each frame with its JSON and events)
 //!        │
 //!        ▼
-//!  SseEncoder                (→ pristine OpenAI `data:` frames)
+//!  drain_events              (→ the frames as they came, but for frame_edit's edits)
 //!        │
 //!        ▼
 //!  client
 //! ```
+//!
+//! The drain reads each frame's events to keep its books (the dashboard, the
+//! drift alarm, the turn's counts) and to hold tool calls for repair, but
+//! sends the frame itself: llama-server's `id`, `created`, `system_fingerprint`
+//! and every other key reach the client. gglib edits only `model` (the served
+//! name), an unasked progress frame (a `: prefill` comment), the usage frame
+//! of a client that asked for a reading, and an error frame's `code`; its own
+//! frames (notices, a repair's calls) carry the reply's `id`.
 //!
 //! gglib does not translate tool-call dialects: llama-server parses the calls
 //! it can, and markup it leaves in `content` reaches the client as text, where
@@ -352,12 +360,11 @@ const REPAIR_KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from
 /// Because `return_progress` is the proxy's own override and not the client's
 /// request, the returned flag records whether the *client* asked for progress
 /// frames. It decides whether `prompt_progress` frames are forwarded
-/// downstream or sent as SSE comments (see [`drain_events`]): the chunk
-/// carries no `choices` key, which is a llama.cpp extension and not valid
-/// `OpenAI` streaming JSON, so clients that validate chunks against the
-/// `OpenAI` schema (anything on the Vercel AI SDK — `OpenCode`, and others)
-/// abort the turn on the first one. Asking upstream for data the proxy needs
-/// must not make the proxy's own wire format non-conforming.
+/// downstream or sent as SSE comments (see [`drain_events`]): a client gets
+/// only the frames it asked for. An older llama-server's progress chunk had
+/// no `choices`, which stopped every client that validates chunks against the
+/// `OpenAI` schema (anything on the Vercel AI SDK, `OpenCode` among them) on
+/// the first one.
 ///
 /// Safety: if the body is not a JSON object the original bytes are forwarded
 /// unchanged.  No panic paths — every operation returns an `Option`/`Result`
@@ -584,7 +591,7 @@ pub(crate) struct ForwardRequest<'a> {
 ///   (streaming path only). `None` when the KV cache is disabled.
 ///
 /// Returns the response from llama-server, with the streaming SSE body
-/// re-encoded when `is_streaming` is true.
+/// forwarded frame for frame by [`drain_events`] when `is_streaming` is true.
 #[expect(
     clippy::too_many_lines,
     reason = "the chat forward path in order (budget, shaping, send, then the unary or \
