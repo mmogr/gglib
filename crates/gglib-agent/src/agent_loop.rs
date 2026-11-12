@@ -272,8 +272,8 @@ impl AgentLoop {
     /// first is refused by some chat templates, and this loop's own pruning
     /// keeps every `system` message at the front.
     ///
-    /// A tool call in this reply all the same (a dialect model's markup, or
-    /// an upstream that calls a tool it was not offered) is not run: `run`
+    /// A tool call in this reply all the same (an upstream that calls a tool
+    /// it was not offered) is not run: `run`
     /// ends with this reply's text and never looks at its calls. A reply
     /// with no text is answered with `first.if_wordless`, never with an
     /// empty answer, and so is one cut off at its token limit before it

@@ -169,7 +169,6 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
             ("truncated at ceiling", counts.truncated_generations),
             ("dialect residue", counts.dialect_residue),
             ("unvalidatable schemas", counts.unvalidatable_schemas),
-            ("normalization errors", counts.normalization_errors),
         ] {
             if value > 0 {
                 let _ = writeln!(out, "    {label:<24} {}", thousands(value));

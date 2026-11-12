@@ -13,7 +13,6 @@ use crate::forward::{drain_events, failed_turn_body};
 use crate::generation::TurnGeneration;
 use crate::repair::RepairContext;
 use crate::token_calibration::TokenCalibration;
-use crate::turn_dialect::TurnDialect;
 use crate::upstream_health::UpstreamHealth;
 use crate::upstream_read::{StreamBounds, first_byte_timeout_frame, upstream_events};
 use gglib_core::cache_metrics::CacheMetricsStore;
@@ -66,7 +65,6 @@ pub(crate) fn spawn_and_return(
     rx: tokio::sync::mpsc::Receiver<Result<Bytes, std::io::Error>>,
     connection: ConnectionGuard,
     model_name_owned: String,
-    dialect: TurnDialect,
     upstream_health: Arc<UpstreamHealth>,
     bounds: StreamBounds,
     calibration: Arc<TokenCalibration>,
@@ -210,7 +208,6 @@ pub(crate) fn spawn_and_return(
                 let outcome = drain_events(
                     upstream_events(resp.bytes_stream(), bounds.idle),
                     model_name_owned.clone(),
-                    dialect,
                     tx,
                     &connection,
                     repair,
@@ -260,9 +257,6 @@ pub(crate) fn spawn_and_return(
                     );
                     context_metrics.flag_empty_response(snapshot_seq, outcome.saw_reasoning);
                 }
-                if outcome.normalization_errored {
-                    context_metrics.flag_normalization_error(snapshot_seq);
-                }
                 if outcome.unvalidatable_schema {
                     context_metrics.flag_unvalidatable_schema(snapshot_seq);
                 }
@@ -271,9 +265,9 @@ pub(crate) fn spawn_and_return(
                 // left" lives in `health_verdict`, so this stays one line and
                 // the rule stays in one place.
                 upstream_health.record_stream_outcome(outcome.health_verdict());
-                // Drift alarm: dialect markup survived normalization into
-                // client-visible output. Log it and back-patch this
-                // request's dashboard snapshot.
+                // Drift alarm: tool-call markup reached client-visible
+                // output. Log it and back-patch this request's dashboard
+                // snapshot.
                 if let Some(marker) = &outcome.dialect_residue {
                     warn!(
                         model = %model_name_owned,

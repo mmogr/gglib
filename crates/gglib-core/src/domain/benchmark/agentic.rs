@@ -6,11 +6,10 @@
 //! BFCL-style tasks — twice against the same loaded model:
 //!
 //! - **raw**: the request pipeline bypassed entirely. No sampling
-//!   resolution (the server's own defaults apply), no capability shaping,
-//!   no dialect normalization, no grammar — what a client pointed straight
-//!   at llama-server experiences.
+//!   resolution (the server's own defaults apply), no capability shaping —
+//!   what a client pointed straight at llama-server experiences.
 //! - **gglib**: the full pipeline, exactly as the proxy runs it — per-model
-//!   sampling defaults, capability-aware shaping and dialect parsing.
+//!   sampling defaults and capability-aware shaping.
 //!
 //! The per-axis deltas in the [`AgenticEvalReport`] are the product: the
 //! measured difference in tool-call accuracy, loop avoidance, and task

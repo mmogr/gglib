@@ -310,15 +310,11 @@ pub fn infer_from_chat_template(
 /// # Scope: request preprocessing only
 ///
 /// This registry governs `ModelCapabilities` flags (strict-turn coalescing,
-/// system-role conversion, etc.).  It does **not** handle response-stream
-/// dialect normalization — that is a separate concern handled by the
-/// `GgufCapabilities.extensions` → `format:*` tag → `get_parser()` pipeline
-/// in `gglib-core::normalize::registry`.
+/// system-role conversion, etc.).  It does **not** handle tool-call markup
+/// in the reply: llama-server parses that itself.
 ///
 /// For example:
-/// - **Qwen** tool-call XML normalization already flows through
-///   `detect_tool_support()` → `extensions.insert("format:qwen-xml")` →
-///   `to_tags()` → `get_parser()` → `DelimitedToolCallParser`.  Qwen's chat template
+/// - **Qwen**: its chat template
 ///   always contains `<tool_call>` patterns, so `infer_from_chat_template`
 ///   (Layer 1) sets `SUPPORTS_TOOL_CALLS` reliably.  No architecture entry
 ///   is needed here for Qwen.

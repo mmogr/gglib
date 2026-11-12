@@ -25,7 +25,7 @@ async fn a_stall_after_the_finish_ends_quietly_but_still_strikes() {
     // The answer and its finish arrived; the usage frame and `[DONE]` never
     // did.
     let chunks = at_once(vec![text("Hi"), finish()]);
-    let turn = run_turn(upstream(chunks, Then::Silence), None, Reader::default()).await;
+    let turn = run_turn(upstream(chunks, Then::Silence), Reader::default()).await;
 
     assert_eq!(turn.text(), "Hi", "no notice after a complete answer");
     assert!(turn.error_codes().is_empty(), "{}", turn.wire);
@@ -46,7 +46,7 @@ async fn a_stall_outranks_a_client_that_left_during_it() {
         ..Reader::default()
     };
 
-    let turn = run_turn(upstream(chunks, Then::Silence), None, leaves).await;
+    let turn = run_turn(upstream(chunks, Then::Silence), leaves).await;
 
     assert!(turn.outcome.client_aborted, "the notice found nobody");
     assert!(turn.outcome.upstream_stalled.is_some());
@@ -65,13 +65,11 @@ async fn a_stall_outranks_a_client_that_left_during_it() {
 async fn a_stalled_turn_is_not_worth_saving_and_a_finished_one_is() {
     let stalled = run_turn(
         upstream(at_once(vec![text("Hel")]), Then::Silence),
-        None,
         Reader::default(),
     )
     .await;
     let finished = run_turn(
         upstream(at_once(vec![text("Hello"), finish()]), Then::Close),
-        None,
         Reader::default(),
     )
     .await;
@@ -86,7 +84,6 @@ async fn a_stall_before_the_first_token_strikes_without_a_recycle() {
     // what a slow prefill looks like, so it must not recycle on sight.
     let turn = run_turn(
         upstream(at_once(vec![progress()]), Then::Silence),
-        None,
         Reader::default(),
     )
     .await;
@@ -124,7 +121,7 @@ async fn a_stall_after_reasoning_alone_is_after_the_first_token() {
     // Reasoning is generated output: prefill was over, so this silence cannot
     // be a slow prefill, even though the client saw nothing it would render.
     let chunks = at_once(vec![frame(&json!({ "reasoning_content": "Let me" }), None)]);
-    let turn = run_turn(upstream(chunks, Then::Silence), None, Reader::default()).await;
+    let turn = run_turn(upstream(chunks, Then::Silence), Reader::default()).await;
 
     let stall = turn
         .outcome

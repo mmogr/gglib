@@ -1,13 +1,11 @@
 //! What a turn on a hub chat sends this machine's endpoint, which it reaches
 //! as any client does: the bearer key, the model's catalogue id, the
 //! conversation unshaped, the person's own choices, the first call's demand
-//! and the turn's limit. The endpoint folds the sampling ladder, trims and
-//! parses the dialect's markup; what comes back is read as the `OpenAI`
-//! reply it already is.
+//! and the turn's limit. The endpoint folds the sampling ladder and trims;
+//! what comes back is read as the `OpenAI` reply it already is.
 
 use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
-use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use serde_json::json;
 
 use crate::handlers::agent::run_fixture::{drawing_state, state};
@@ -98,35 +96,6 @@ async fn a_draw_demands_its_call_through_the_endpoint() {
         .collect();
     assert_eq!(names, ["builtin:generate_image"]);
     assert!(offers_nothing(&done.requests[1]), "{}", done.requests[1]);
-}
-
-/// A dialect model's markup is parsed by the endpoint, so a reply that still
-/// carries it is text: nothing here dispatches it as a call.
-#[tokio::test]
-async fn markup_through_the_endpoint_is_not_parsed_again() {
-    let markup = format!(
-        "<tool_call>\n{}\n</tool_call>",
-        json!({ "name": TOOL, "arguments": {} })
-    );
-    let reply = format!(
-        "data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
-        json!({ "choices": [{ "delta": { "content": markup } }] }),
-        json!({ "choices": [{ "delta": {}, "finish_reason": "stop" }] }),
-    );
-    let (_dir, state) = state().await;
-    let dialect = model(&state, |entry| {
-        entry.tags = vec![FORMAT_QWEN_XML.to_owned()];
-    })
-    .await;
-
-    let done = turn(&state, dialect, phone(&state, dialect).await, &reply).await;
-
-    let called = done
-        .events
-        .iter()
-        .any(|event| matches!(event, AgentEvent::ToolCallStart { .. }));
-    assert!(!called, "{:?}", done.events);
-    assert!(done.ended_well, "the markup was the answer");
 }
 
 /// The sentence the endpoint's loop guard ends a run with (ADR 0021): a

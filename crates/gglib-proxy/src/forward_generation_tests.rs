@@ -5,10 +5,7 @@
 //! timed tests pause tokio's clock, so a wait takes exactly its length and
 //! nothing else takes any.
 //!
-//! The time is taken as events arrive from the upstream, before the
-//! normalizer, and the Qwen tests are the ones that tell the two sides
-//! apart: that model's call arrives as text over seconds and leaves the
-//! normalizer as one event.
+//! The time is taken as events arrive from the upstream.
 
 use std::time::Duration;
 
@@ -17,7 +14,6 @@ use serde_json::json;
 
 use super::*;
 use crate::generation::TurnGeneration;
-use gglib_core::domain::DialectSpec;
 
 fn reasoning(content: &str) -> LlmStreamEvent {
     LlmStreamEvent::ReasoningDelta {
@@ -137,31 +133,18 @@ enum Client {
     Leaves { after: usize, wait: u64 },
 }
 
-/// [`drain_as`] for a model with no dialect: the normalizer passes every
-/// event through as it arrives.
+/// Drain `events` to a client that reads as `client` says, through a
+/// one-frame channel: a second frame is not sent until the first is taken.
 async fn drain(
     events: Vec<(u64, LlmStreamEvent)>,
     repair: Option<RepairContext>,
     client: Client,
 ) -> StreamOutcome {
-    drain_as(None, events, repair, client).await
+    drain_stream(upstream(events), repair, client).await
 }
 
-/// Drain `events`, normalized as `dialect` says, to a client that reads as
-/// `client` says, through a one-frame channel: a second frame is not sent
-/// until the first is taken.
-async fn drain_as(
-    dialect: Option<DialectSpec>,
-    events: Vec<(u64, LlmStreamEvent)>,
-    repair: Option<RepairContext>,
-    client: Client,
-) -> StreamOutcome {
-    drain_stream(dialect, upstream(events), repair, client).await
-}
-
-/// [`drain_as`] over any upstream, so one that breaks can be drained too.
+/// [`drain`] over any upstream, so one that breaks can be drained too.
 async fn drain_stream(
-    dialect: Option<DialectSpec>,
     events: impl Stream<Item = anyhow::Result<LlmStreamEvent>> + Send + 'static,
     repair: Option<RepairContext>,
     client: Client,
@@ -185,7 +168,6 @@ async fn drain_stream(
     let outcome = drain_events(
         events,
         "m".to_owned(),
-        TurnDialect::parsed(dialect),
         ClientSender::new(tx, Duration::from_secs(5)),
         &connection,
         repair,
@@ -210,66 +192,6 @@ async fn a_streamed_turn_is_counted_and_timed() {
          after a prefill frame, nor the 250 ms after"
     );
     assert_eq!(TurnGeneration::of_stream(&outcome), full_turn_generation());
-}
-
-/// A Qwen model writes its call as text, one fragment a second, the first
-/// after a second's wait. The normalizer holds the text back and makes one
-/// tool-call event of it.
-fn a_call_written_as_text() -> Vec<(u64, LlmStreamEvent)> {
-    [
-        "<tool_call>\n",
-        "<function=read_file>\n",
-        "<parameter=path>\n",
-        "src/lib.rs\n",
-        "</parameter>\n",
-        "</function>\n",
-        "</tool_call>",
-    ]
-    .into_iter()
-    .map(|markup| (1000, text(markup)))
-    .collect()
-}
-
-/// The time is the upstream's, not the normalizer's: seven fragments span
-/// six seconds, and the one event they leave the normalizer as spans none.
-#[tokio::test(start_paused = true)]
-async fn a_call_written_as_text_is_timed_over_its_markup() {
-    let mut events = a_call_written_as_text();
-    events.push((400, done("stop")));
-    events.push((0, usage(37)));
-    let qwen = Some(DialectSpec::qwen_xml());
-    let outcome = drain_as(qwen, events, None, Client::Stays).await;
-
-    assert_eq!(outcome.tool_calls, 1, "the markup was read as one call");
-    assert_eq!(
-        outcome.generation_ms,
-        Some(6000),
-        "first fragment to last: not 0, the span of the one event the \
-         normalizer made, and not the second before or the 400 ms after"
-    );
-}
-
-/// Markup that never closes leaves the normalizer as an error, whose raw
-/// text the client is sent. It was generated all the same, over three
-/// seconds.
-#[tokio::test(start_paused = true)]
-async fn markup_that_never_closes_is_timed_over_what_was_streamed() {
-    let events = vec![
-        (1000, text("<tool_call>\n")),
-        (2500, text("<function=read_file>\n")),
-        (500, text("<parameter=path>\n")),
-        (400, done("stop")),
-    ];
-    let qwen = Some(DialectSpec::qwen_xml());
-    let outcome = drain_as(qwen, events, None, Client::Stays).await;
-
-    assert!(outcome.normalization_errored, "the markup was not a call");
-    assert_eq!(outcome.tool_calls, 0);
-    assert_eq!(
-        outcome.generation_ms,
-        Some(3000),
-        "first fragment to last, though no delta left the normalizer"
-    );
 }
 
 /// With the hold-back engaged the calls reach the client at `Done`, and the
@@ -411,7 +333,7 @@ async fn a_held_call_released_when_the_upstream_stream_breaks_is_counted() {
         Err(anyhow::anyhow!("connection reset"))
     });
     let events = upstream(reasoning_then_a_held_call()).chain(breaks);
-    let outcome = drain_stream(None, events, Some(holding()), Client::Stays).await;
+    let outcome = drain_stream(events, Some(holding()), Client::Stays).await;
 
     assert!(outcome.upstream_errored);
     assert!(!outcome.client_aborted);

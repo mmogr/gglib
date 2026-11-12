@@ -30,9 +30,6 @@ use gglib_core::request_pipeline::{Verdict, validate_tool_calls};
 use serde_json::{Value, json};
 use tracing::{debug, warn};
 
-use crate::turn_dialect::TurnDialect;
-use crate::unary_body::normalize_non_streaming_body;
-
 /// Environment kill switch, matching the contract of `GGLIB_DISABLE_MTP`.
 pub const DISABLE_REPAIR_ENV: &str = "GGLIB_DISABLE_TOOL_REPAIR";
 
@@ -180,7 +177,7 @@ fn first_tool_calls(response: &Value) -> Option<&Value> {
 /// `stream` is forced **off**. A repair cannot be judged until the call is
 /// complete, so streaming the re-issue would buy no latency while requiring a
 /// second SSE pipeline to run inside the first — with its own decoder,
-/// normalizer, encoder and `[DONE]` bookkeeping. A buffered body is parsed
+/// encoder and `[DONE]` bookkeeping. A buffered body is parsed
 /// once and synthesized into events by [`synthesize_tool_call_events`], which
 /// keeps every frame the client sees flowing through the one `SseEncoder` that
 /// has been encoding this turn all along.
@@ -318,16 +315,13 @@ pub fn choose(request_body: &[u8], original: Bytes, repaired: Bytes) -> (Bytes, 
     }
 }
 
-/// Read the answer to a re-issue: the body of a 2xx, normalised through the
-/// model's dialect, or nothing when upstream refused or failed.
+/// Read the answer to a re-issue: the body of a 2xx, or nothing when upstream
+/// refused or failed.
 ///
 /// The half of a re-issue both paths do the same way. What they do
 /// differently is the send: the streaming path keeps the wire warm while it
 /// waits, the buffered path has no wire to keep warm.
-pub(crate) async fn read_second_draw(
-    sent: reqwest::Result<reqwest::Response>,
-    dialect: &TurnDialect,
-) -> Option<Bytes> {
+pub(crate) async fn read_second_draw(sent: reqwest::Result<reqwest::Response>) -> Option<Bytes> {
     let repaired = match sent {
         Ok(resp) if resp.status().is_success() => resp.bytes().await.ok()?,
         Ok(resp) => {
@@ -342,7 +336,6 @@ pub(crate) async fn read_second_draw(
             return None;
         }
     };
-    let (repaired, _) = normalize_non_streaming_body(repaired, dialect);
     Some(repaired)
 }
 

@@ -174,8 +174,8 @@ empty_responses: number,
  */
 reasoning_only: number, 
 /**
- * Turns where dialect markup survived normalization into client-visible
- * output — the drift alarm, per model rather than fleet-wide.
+ * Turns where tool-call markup reached client-visible output — the
+ * drift alarm, per model rather than fleet-wide.
  */
 dialect_residue: number, 
 /**
@@ -188,11 +188,6 @@ dialect_residue: number,
  * is measuring a much smaller slice of traffic than it appears to.
  */
 unvalidatable_schemas: number, 
-/**
- * Turns whose normalization discarded a malformed dialect tool call and
- * surfaced the raw body as visible text instead.
- */
-normalization_errors: number, 
 /**
  * Turns whose newest tool-call batch repeated the batch before it and
  * got an equal result back.

@@ -50,7 +50,7 @@
   "reasoning-history": {
     "engine": "llama",
     "adr": "0020",
-    "paths": ["crates/gglib-core/src/normalize/history.rs", "crates/gglib-core/src/request_pipeline/messages.rs", "crates/gglib-proxy/src/turn_dialect.rs"],
+    "paths": ["crates/gglib-core/src/normalize/history.rs", "crates/gglib-core/src/request_pipeline/messages.rs"],
     "upstream": {
       "paths": ["common/reasoning-budget.cpp", "common/reasoning-budget.h", "common/chat.cpp", "common/parsers/"],
       "headings": [],

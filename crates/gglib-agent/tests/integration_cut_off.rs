@@ -18,7 +18,6 @@ use gglib_agent::{AgentLoop, is_cut_off_warning};
 use gglib_core::domain::agent::{
     AgentEvent, AgentMessage, FirstCall, LlmStreamEvent, ToolDefinition,
 };
-use gglib_core::normalize::NormalizationErrorKind;
 use gglib_core::ports::{AgentError, AgentRunOutput};
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -232,26 +231,6 @@ async fn a_cut_off_call_past_the_kept_slots_ends_the_run_as_too_long() {
     assert_too_long(reply, Some(900)).await;
 }
 
-/// A dialect model's call comes as markup, which its parser holds back: a
-/// reply cut off inside it streams no call delta, only the parser's report
-/// of a tool-call tag left open. That is still a call being written.
-#[tokio::test]
-async fn a_cut_off_dialect_call_ends_the_run_as_too_long() {
-    let reply = cut_after(
-        vec![
-            text("Sure, drawing it now: "),
-            LlmStreamEvent::NormalizationError {
-                kind: NormalizationErrorKind::UnclosedToolCallTag {
-                    partial: r#"{"name": "generate_image", "arguments": {"prompt": "a T"#.into(),
-                },
-                raw: "<tool_call>".into(),
-            },
-        ],
-        900,
-    );
-    assert_too_long(reply, Some(900)).await;
-}
-
 /// A reply cut off while it only thought has no answer to give.
 #[tokio::test]
 async fn a_cut_off_reply_that_only_thought_ends_the_run_as_too_long() {
@@ -369,21 +348,6 @@ async fn words_with_text_cut_off_inside_a_call_are_answered_for() {
     assert_words_with_text_cut_in_a_call_are_answered_for(vec![
         text("Now drawing another:"),
         call_delta(0),
-    ])
-    .await;
-}
-
-/// The same for a dialect model, whose call is markup left open.
-#[tokio::test]
-async fn words_with_text_cut_off_inside_a_dialect_call_are_answered_for() {
-    assert_words_with_text_cut_in_a_call_are_answered_for(vec![
-        text("Sure, drawing it now: "),
-        LlmStreamEvent::NormalizationError {
-            kind: NormalizationErrorKind::UnclosedToolCallTag {
-                partial: r#"{"name": "generate_image", "arguments": {"prompt": "a T"#.into(),
-            },
-            raw: "<tool_call>".into(),
-        },
     ])
     .await;
 }

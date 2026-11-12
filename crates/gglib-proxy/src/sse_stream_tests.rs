@@ -36,7 +36,6 @@ async fn streamed_from(url: &str) -> String {
         rx,
         registry.register(1, "some-model", true, None),
         "some-model".to_owned(),
-        TurnDialect::parsed(None),
         Arc::new(UpstreamHealth::new()),
         StreamBounds::default(),
         Arc::new(TokenCalibration::new()),

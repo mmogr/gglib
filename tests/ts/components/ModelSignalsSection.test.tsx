@@ -35,7 +35,6 @@ const SIGNALS = [
   'empty_responses',
   'dialect_residue',
   'unvalidatable_schemas',
-  'normalization_errors',
   'identical_result_repeats',
   'repeats_not_evaluated',
   'repeats_rescued',
@@ -172,7 +171,6 @@ describe('ModelSignalsSection', () => {
             truncated_generations: 1,
             dialect_residue: 2,
             unvalidatable_schemas: 3,
-            normalization_errors: 4,
             repeats_not_evaluated: 9,
           },
         })}
@@ -185,7 +183,6 @@ describe('ModelSignalsSection', () => {
       'Truncated at ceiling: 1',
       'Dialect residue: 2',
       'Unvalidatable schemas: 3',
-      'Normalization errors: 4',
       'Observed',
       '  Repeated, not comparable: 9',
     ]);

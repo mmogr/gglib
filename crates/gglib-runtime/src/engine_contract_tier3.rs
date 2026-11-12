@@ -14,9 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use gglib_core::domain::DialectSpec;
 use gglib_core::domain::capability_tags::{AGENT, REASONING};
-use gglib_core::normalize::normalize_chat_completion_body;
 use gglib_core::request_pipeline::validate::{Verdict, validate_tool_calls};
 use serde_json::{Value, json};
 
@@ -68,8 +66,7 @@ fn message(body: &Value) -> &Value {
     &body["choices"][0]["message"]
 }
 
-/// llama-server returned the call as structured `tool_calls` itself, before
-/// gglib's normaliser: the fact a decision to delete that normaliser needs.
+/// llama-server returned the call as structured `tool_calls` itself.
 fn tool_call_native(body: &Value) -> Probe {
     match message(body)["tool_calls"].as_array() {
         Some(calls) if !calls.is_empty() => Ok(()),
@@ -77,18 +74,12 @@ fn tool_call_native(body: &Value) -> Probe {
     }
 }
 
-/// A `get_weather` call that gglib's parser reads and its validator accepts,
-/// whether llama-server parsed it or left markup for gglib to. No reason
-/// repeats what the model wrote.
+/// llama-server's own `tool_calls` hold a `get_weather` call that gglib's
+/// validator accepts. No reason repeats what the model wrote.
 fn tool_call_parsed(body: &Value, tools: &Value) -> Probe {
-    let mut body = body.clone();
-    let errors = normalize_chat_completion_body(&mut body, Some(&DialectSpec::qwen_xml()));
-    let calls = &message(&body)["tool_calls"];
+    let calls = &message(body)["tool_calls"];
     let Some(first) = calls.as_array().and_then(|c| c.first()) else {
-        let kept = errors.len();
-        return Err(format!(
-            "no tool call after normalizing ({kept} parser errors)"
-        ));
+        return Err("no tool call in llama-server's tool_calls".to_owned());
     };
     if first["function"]["name"] != json!("get_weather") {
         return Err("the call names another function".to_owned());
@@ -318,14 +309,14 @@ mod tests {
     }
 
     #[test]
-    fn tool_call_markup_left_in_content_is_parsed_by_gglib_but_not_native() {
+    fn tool_call_markup_left_in_content_is_neither_native_nor_parsed() {
         let body = answer(&json!({"content":
             "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"city\": \"Paris\"}}\n</tool_call>"}));
         assert_eq!(
             tool_call_native(&body),
             Err("no tool_calls in llama-server's answer".to_owned())
         );
-        assert_eq!(tool_call_parsed(&body, &weather_tool()), Ok(()));
+        assert!(tool_call_parsed(&body, &weather_tool()).is_err());
         let empty = answer(&json!({"content": "Sunny.", "tool_calls": []}));
         assert!(tool_call_native(&empty).is_err());
     }

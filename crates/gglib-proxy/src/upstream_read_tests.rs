@@ -136,8 +136,8 @@ async fn reading_stops_at_the_done_sentinel_and_the_next_chunk_is_never_read() {
 
 /// A body that just ends, with no `[DONE]` and no finish reason, still ends
 /// in one `Done`: the decoder's fallback. It carries no finish reason, since
-/// nothing upstream said the turn finished. The normalizer's contract is that
-/// every stream carries exactly one `Done`.
+/// nothing upstream said the turn finished, so every stream the drain reads
+/// carries a `Done`.
 #[tokio::test]
 async fn a_body_that_just_ends_gets_a_fallback_done_with_no_finish_reason() {
     let (events, reads) = read_all(vec![Ok(content_frame("hel"))]).await;

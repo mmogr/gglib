@@ -1,5 +1,5 @@
-//! Request forwarding to llama-server with parse → normalize → re-encode
-//! pipeline for streaming responses.
+//! Request forwarding to llama-server with a parse → re-encode pipeline for
+//! streaming responses.
 //!
 //! ## Request pipeline
 //!
@@ -22,9 +22,9 @@
 //! Capabilities are resolved with a **single** catalog lookup per request
 //! (via [`gglib_core::request_pipeline::resolve()`]) that yields both the
 //! `ModelCapabilities` bitfield (used for request preprocessing) and the
-//! `format:*` tags (used for response-stream parser selection).  No second
-//! lookup is made.  That resolution is shared with every non-proxy surface,
-//! so the proxy and the agent path cannot drift apart on what a model is.
+//! tags.  No second lookup is made.  That resolution is shared with every
+//! non-proxy surface, so the proxy and the agent path cannot drift apart on
+//! what a model is.
 //!
 //! That lookup happens in `chat_completions`, *before* the model is ensured
 //! running, and the resulting [`ModelContext`] arrives here on
@@ -41,22 +41,16 @@
 //!  SseStreamDecoder          (→ typed LlmStreamEvent)
 //!        │
 //!        ▼
-//!  NormalizingStream         (Qwen XML → ToolCallDelta, <think> tags dropped from text)
-//!        │
-//!        ▼
 //!  SseEncoder                (→ pristine OpenAI `data:` frames)
 //!        │
 //!        ▼
 //!  client
 //! ```
 //!
-//! `NormalizationError` events surfaced by the parsers are logged via
-//! `tracing::warn` and never forwarded to the wire.
-//!
-//! Non-streaming responses run through the same parser in one shot
-//! ([`gglib_core::normalize::normalize_chat_completion_body`]), so a
-//! `stream: false` client gets the same structured `tool_calls` a streaming
-//! client would.
+//! gglib does not translate tool-call dialects: llama-server parses the calls
+//! it can, and markup it leaves in `content` reaches the client as text, where
+//! the drift alarm counts it. No parser runs over a `stream: false` body
+//! either.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -72,7 +66,6 @@ use reqwest::Client;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
-use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
     self, ContextBudget, ModelContext, SamplingDecision, SamplingLayers, TruncationError,
     TruncationReport,
@@ -87,7 +80,6 @@ use crate::models::ErrorResponse;
 use crate::repair::RepairContext;
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
-use crate::turn_dialect::TurnDialect;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
 use crate::upstream_read::{StreamBounds, UpstreamStalled, is_generated_token, prefill_comment};
 use gglib_core::cache_metrics::CacheMetricsStore;
@@ -103,8 +95,8 @@ pub(crate) enum ForwardError {
     UpstreamDead,
 }
 
-/// Outcome of draining one upstream streaming response through the
-/// normalization pipeline, returned by [`drain_events`].
+/// Outcome of draining one upstream streaming response, returned by
+/// [`drain_events`].
 ///
 /// Used by the caller to distinguish a healthy response from a degenerate one
 /// (no output at all) for upstream-health bookkeeping.
@@ -116,7 +108,7 @@ pub(crate) enum ForwardError {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct StreamOutcome {
     /// `true` if at least one *client-renderable* frame (content, tool call,
-    /// recovered normalization text, or an error frame) was emitted.
+    /// or an error frame) was emitted.
     ///
     /// Reasoning deliberately does not count. A turn whose entire output landed
     /// in `reasoning_content` renders as an empty response in every client that
@@ -163,10 +155,10 @@ pub(crate) struct StreamOutcome {
     pub tool_calls: u32,
     /// See [`ContextSnapshot::generation_ms`]. Read off the meter's
     /// [`TokenClock`](crate::generation::TokenClock), which is stamped as
-    /// events arrive from the upstream, before normalization.
+    /// events arrive from the upstream.
     pub generation_ms: Option<u64>,
-    /// First dialect marker found in the client-visible text after
-    /// normalization, if any (see `gglib_core::normalize::residue`). The
+    /// First tool-call marker found in the client-visible text, if any (see
+    /// `gglib_core::normalize::residue`). The
     /// spawning task back-patches the request's metrics snapshot with it.
     pub dialect_residue: Option<String>,
     /// The turn died on an *upstream* failure: the model server emitted an
@@ -179,13 +171,6 @@ pub(crate) struct StreamOutcome {
     /// Implies [`Self::upstream_errored`]. Unless the turn's `Done` had already
     /// gone out, the client was sent `upstream_timeout`.
     pub upstream_stalled: Option<UpstreamStalled>,
-    /// Normalization discarded a malformed dialect tool call and surfaced the
-    /// raw body as visible text instead.
-    ///
-    /// A pure model defect, and one the existing repair never sees: repair
-    /// fires on schema violations of *parsed* calls, so a call too malformed
-    /// to parse falls outside it entirely.
-    pub normalization_errored: bool,
     /// The turn's tool call could not be validated, so repair never had an
     /// opinion to act on. See [`crate::repair::Skipped::Unvalidatable`].
     pub unvalidatable_schema: bool,
@@ -273,24 +258,12 @@ pub(crate) fn should_forward_header(name: &str) -> bool {
     !HOP_BY_HOP_HEADERS.contains(&lower.as_str())
 }
 
-/// Prefix prepended to malformed / unclosed tool-call markup when it is
-/// surfaced to the client as visible assistant text instead of being silently
-/// dropped.
-///
-/// Discarding the bytes would send a turn whose entire output was an
-/// unparseable `<tool_call>` as a zero-content stream, indistinguishable from
-/// "the model returned an empty response". Surfacing the raw body (visually
-/// flagged) means the human always sees *something* and can tell the model
-/// attempted a tool call the proxy could not parse.
-pub(crate) const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call output] ";
-
 /// Prefix prepended to reasoning text that is promoted into the content
 /// channel because the turn produced no visible output of its own.
 ///
-/// Same rescue as [`NORMALIZATION_NOTICE_PREFIX`], one channel over: a model
-/// that never closes its `<think>` block leaves a complete, often correct
-/// answer stranded in `reasoning_content`, which clients that collapse
-/// reasoning render as an empty response. Promoting it makes the turn usable;
+/// A model that never closes its `<think>` block leaves a complete, often
+/// correct answer stranded in `reasoning_content`, which clients that
+/// collapse reasoning render as an empty response. Promoting it makes the turn usable;
 /// the flag keeps the underlying degradation visible instead of silently
 /// papering over it.
 const REASONING_ONLY_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: reasoning-only response] ";
@@ -611,8 +584,7 @@ pub(crate) struct ForwardRequest<'a> {
 ///   (streaming path only). `None` when the KV cache is disabled.
 ///
 /// Returns the response from llama-server, with the streaming SSE body
-/// re-emitted through the universal normalization pipeline when
-/// `is_streaming` is true.
+/// re-encoded when `is_streaming` is true.
 #[expect(
     clippy::too_many_lines,
     reason = "the chat forward path in order (budget, shaping, send, then the unary or \
@@ -685,7 +657,6 @@ pub(crate) async fn forward_chat_completion(
         tokens: effective_ctx as usize,
     });
 
-    let dialect = TurnDialect::parsed(context.dialect.clone());
     let shaped = match shape_request_body(body, &context, &sampling, budget) {
         Ok(shaped) => shaped,
         Err(e) => {
@@ -814,7 +785,7 @@ pub(crate) async fn forward_chat_completion(
         // 3. Background task races the real send() against a 15-second timer,
         //    emitting SSE comment frames (":" ) while waiting for llama.cpp
         //    to assign a slot.  Once headers arrive the task streams the real
-        //    response through the normalization pipeline via the same channel.
+        //    response through the same channel.
 
         // Inject `stream_options.include_usage` and top-level
         // `return_progress` overrides — see `inject_streaming_body_overrides`
@@ -860,7 +831,6 @@ pub(crate) async fn forward_chat_completion(
             rx,
             connection,
             model_name_owned,
-            dialect,
             upstream_health,
             stream_bounds,
             calibration,
@@ -881,7 +851,6 @@ pub(crate) async fn forward_chat_completion(
         req_builder,
         body,
         model_name,
-        &dialect,
         &cache_metrics,
         (metrics.as_ref(), snapshot_seq),
         repair_enabled,
@@ -968,7 +937,6 @@ fn own_turn_encoder(model: &str) -> SseEncoder {
 pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
-    dialect: TurnDialect,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
@@ -981,7 +949,6 @@ pub(crate) async fn stream_response_to_channel(
     drain_events(
         events,
         model_name,
-        dialect,
         ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         connection,
         repair,
@@ -990,8 +957,7 @@ pub(crate) async fn stream_response_to_channel(
     .await
 }
 
-/// Feed the upstream's events through the normalization pipeline and send each
-/// encoded frame to `tx`.
+/// Encode the upstream's events and send each frame to `tx`.
 ///
 /// `events` comes from [`upstream_events`](crate::upstream_read::upstream_events),
 /// which reads the response under the idle bound. Used by the keepalive
@@ -1013,9 +979,8 @@ pub(crate) async fn stream_response_to_channel(
 /// the `[DONE]`: the answer was complete, and only its trailer was late.
 ///
 /// Until the upstream's first generated token (tested as for
-/// [`UpstreamStalled::after_first_token`], before the normalizer can hold
-/// tokens back), the drain also waits for `tx` to close, which it does when
-/// the client closes its connection. The turn then ends at once, as
+/// [`UpstreamStalled::after_first_token`]), the drain also waits for `tx` to
+/// close, which it does when the client closes its connection. The turn then ends at once, as
 /// [`StreamOutcome::left_before_first_token`] and not as a stall. After that
 /// token a departure is seen only when a frame sent to the client fails, so a
 /// silence still ends in a stall at the idle bound, and the stall asks for the
@@ -1031,7 +996,6 @@ pub(crate) async fn stream_response_to_channel(
 pub(crate) async fn drain_events(
     events: impl futures_util::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send + 'static,
     model_name: String,
-    dialect: TurnDialect,
     tx: ClientSender,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
@@ -1043,16 +1007,14 @@ pub(crate) async fn drain_events(
         .map_or(0, |d| d.as_secs());
     let encoder = SseEncoder::new(id, model_name, created).with_reading(told);
 
-    // Set once a generated token comes from the upstream, seen here because
-    // the normalizer can hold tokens back from the loop below. The meter's
-    // clock is stamped here for the same reason: a call written as text is
-    // generated over many tokens and leaves the normalizer as one event.
+    // Set once a generated token comes from the upstream, seen as each event
+    // arrives. The meter's clock is stamped here too.
     let generated = Arc::new(AtomicBool::new(false));
     let mut meter = Meter::default();
-    // Anything the upstream sends, prefill progress and markup the normalizer
-    // holds back included, is this reply still moving, which keeps the
-    // requests queued behind it from being given up as stalled. A silence
-    // sends nothing, so a wedged upstream still lets the queue's deadline run.
+    // Anything the upstream sends, prefill progress included, is this reply
+    // still moving, which keeps the requests queued behind it from being
+    // given up as stalled. A silence sends nothing, so a wedged upstream
+    // still lets the queue's deadline run.
     let events = events.inspect({
         let generated = Arc::clone(&generated);
         let clock = meter.clock();
@@ -1067,16 +1029,12 @@ pub(crate) async fn drain_events(
             }
         }
     });
-    let parser = get_parser(dialect.parser_spec());
-    let normalized = NormalizingStream::new(Box::pin(events), parser);
-    let mut normalized = Box::pin(normalized);
+    let mut events = Box::pin(events);
 
-    // Drift alarm: watch the post-normalization client-visible text for
-    // dialect markup that survived. Observation only — never alters what
-    // the client receives. Error-recovery text is deliberately excluded
-    // (its ⚠-prefixed notice already flags itself), as is reasoning.
-    // It scans for the model's spec even when the parser is bypassed.
-    let mut residue = gglib_core::normalize::ResidueScanner::new(dialect.scanned_spec());
+    // Drift alarm: watch the client-visible text for tool-call markup that
+    // llama-server left unparsed. Observation only — never alters what the
+    // client receives. Reasoning is not scanned.
+    let mut residue = gglib_core::normalize::ResidueScanner::new();
 
     let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
@@ -1109,7 +1067,7 @@ pub(crate) async fn drain_events(
                 outcome.client_aborted = true;
                 break;
             }
-            next = normalized.next() => match next {
+            next = events.next() => match next {
                 Some(event) => event,
                 None => break,
             },
@@ -1130,18 +1088,6 @@ pub(crate) async fn drain_events(
                     } else {
                         Some(prefill_comment(*processed, *total))
                     }
-                }
-                LlmStreamEvent::NormalizationError { kind, raw } => {
-                    // Surface the discarded body as visible assistant text
-                    // rather than dropping it silently (which manifested as an
-                    // empty response when the whole turn was one bad tool call).
-                    warn!(?kind, raw = %raw, "proxy: surfacing normalization issue as visible content");
-                    outcome.saw_visible_output = true;
-                    outcome.normalization_errored = true;
-                    let recovered = LlmStreamEvent::TextDelta {
-                        content: format!("{NORMALIZATION_NOTICE_PREFIX}{raw}"),
-                    };
-                    encoder.encode(&recovered).map(Bytes::from)
                 }
                 LlmStreamEvent::ReasoningDelta { content } => {
                     // Forwarded unchanged, but NOT counted as visible output —
@@ -1213,7 +1159,6 @@ pub(crate) async fn drain_events(
                     if !held_tool_frames.is_empty() {
                         let mut flush = resolve_held_tool_calls(
                             repair.as_ref(),
-                            &dialect,
                             &tool_calls,
                             std::mem::take(&mut held_tool_frames),
                             &encoder,
@@ -1361,7 +1306,7 @@ pub(crate) async fn drain_events(
 
 /// Resolves once the client has gone, if the upstream had sent no generated
 /// token by then; otherwise never. It checks on departure, not when the wait
-/// began, because a token the normalizer holds back arrives mid-wait.
+/// began, because the first token can arrive mid-wait.
 async fn left_before_first_token(tx: &ClientSender, generated: &AtomicBool) {
     tx.closed().await;
     if generated.load(Ordering::Relaxed) {
@@ -1432,7 +1377,6 @@ async fn emit_held_frames(tx: &ClientSender, held: &mut Vec<HeldFrame>, meter: &
 /// fail-open rule truncation and the loop guard follow.
 async fn resolve_held_tool_calls(
     repair: Option<&RepairContext>,
-    dialect: &TurnDialect,
     tool_calls: &crate::repair::ToolCallAccumulator,
     original_frames: Vec<HeldFrame>,
     encoder: &SseEncoder,
@@ -1481,7 +1425,7 @@ async fn resolve_held_tool_calls(
     let Some(sent) = send_reissue_keeping_the_wire_warm(builder.body(body), tx).await else {
         return original_frames;
     };
-    let Some(repaired) = crate::repair::read_second_draw(sent, dialect).await else {
+    let Some(repaired) = crate::repair::read_second_draw(sent).await else {
         return original_frames;
     };
 

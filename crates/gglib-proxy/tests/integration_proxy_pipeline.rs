@@ -1,18 +1,17 @@
-//! End-to-end round-trip tests for the proxy normalization pipeline.
+//! End-to-end round-trip tests for the proxy's streamed answer.
 //!
 //! Each test:
 //!
 //! 1. Spins up a **mock upstream** HTTP server that streams a fixture's bytes
 //!    in response to `POST /v1/chat/completions`.
 //! 2. Spins up the **real `gglib-proxy`** with mock ports — the runtime
-//!    points at the mock upstream and the catalog returns a `ModelSummary`
-//!    whose `tags` select the dialect parser under test.
+//!    points at the mock upstream and the catalog returns a `ModelSummary`.
 //! 3. Sends a streaming chat-completion request from a strict external
 //!    client (plain `reqwest`).
 //! 4. Collects the proxy's response bytes and parses every `data:` frame as
 //!    JSON.
-//! 5. Asserts the **post-normalization** wire format — the bytes external
-//!    clients (`OpenWebUI`, `OpenAI` SDKs) would actually see.
+//! 5. Asserts the wire format — the bytes external clients (`OpenWebUI`,
+//!    `OpenAI` SDKs) would actually see.
 //!
 //! No `gglib_core::sse::*` types are used in the assertions; the tests speak
 //! pure HTTP + JSON, exactly like an external consumer.
@@ -25,12 +24,10 @@ use tokio_util::sync::CancellationToken;
 mod fixtures;
 use fixtures::common::{
     assert_sse_canonical_envelope, parse_sse_frames, spawn_mock_upstream, spawn_proxy,
-    spawn_proxy_with_dialect,
 };
 use fixtures::sse::{
-    BASIC_TEXT, DERIVED_MARKER_TOOL_CALL, MALFORMED_JSON_RECOVERY, QWEN_FUNCTION_XML_TOOL_CALL,
-    QWEN_XML_TOOL_CALL, RAW_MARKUP_SPLIT_ACROSS_FRAMES, REASONING_DEEPSEEK, REASONING_ONLY,
-    STANDARD_OPENAI_TOOL_CALL, basic_text_split_chunks,
+    BASIC_TEXT, MALFORMED_JSON_RECOVERY, RAW_MARKUP_SPLIT_ACROSS_FRAMES, REASONING_DEEPSEEK,
+    REASONING_ONLY, STANDARD_OPENAI_TOOL_CALL, basic_text_split_chunks,
 };
 
 // ─── End-to-end driver ─────────────────────────────────────────────────────
@@ -225,271 +222,9 @@ async fn reasoning_only_response_is_promoted_to_content() {
     );
 }
 
-/// Qwen XML tool calls must be rewritten into strict `OpenAI` `tool_calls`
-/// deltas — the `<tool_call>…</tool_call>` markers must NOT appear in the
-/// rebuilt content stream.
-#[tokio::test]
-async fn qwen_xml_tool_call_is_normalized() {
-    let body = round_trip(
-        vec![QWEN_XML_TOOL_CALL],
-        "qwen3-coder",
-        vec!["format:qwen-xml".to_owned()],
-    )
-    .await;
-    let (frames, saw_done) = parse_sse_frames(&body);
-    assert!(saw_done);
-    assert_sse_canonical_envelope(&frames, "qwen3-coder");
-
-    // The literal Qwen markup MUST NOT appear in the wire output.
-    assert!(
-        !body.contains("<tool_call>") && !body.contains("</tool_call>"),
-        "Qwen XML markers leaked into wire output:\n{body}"
-    );
-
-    // Reconstruct the visible content — should only contain the leading prose.
-    let content: String = frames
-        .iter()
-        .filter_map(|f| f["choices"][0]["delta"]["content"].as_str())
-        .collect();
-    assert_eq!(content, "Looking it up. ");
-
-    // Find the tool_calls delta(s).
-    let tc_frames: Vec<&Value> = frames
-        .iter()
-        .filter(|f| f["choices"][0]["delta"]["tool_calls"].is_array())
-        .collect();
-    assert!(
-        !tc_frames.is_empty(),
-        "expected at least one tool_calls delta"
-    );
-
-    // First tool_call delta must carry id + type:"function" + function.name.
-    let first_tc = &tc_frames[0]["choices"][0]["delta"]["tool_calls"][0];
-    assert_eq!(first_tc["index"], json!(0));
-    assert!(
-        first_tc["id"].is_string(),
-        "first tool_call delta missing id"
-    );
-    assert_eq!(first_tc["type"], "function");
-    assert_eq!(first_tc["function"]["name"], "get_weather");
-
-    // The cumulative arguments JSON must reconstruct to the original args.
-    let mut args = String::new();
-    for f in &tc_frames {
-        if let Some(s) = f["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
-        {
-            args.push_str(s);
-        }
-    }
-    let parsed_args: Value =
-        serde_json::from_str(&args).expect("tool_call arguments should be JSON");
-    assert_eq!(parsed_args, json!({"city": "Paris"}));
-
-    // Final chunk must announce finish_reason="tool_calls".
-    let stop = frames
-        .iter()
-        .find(|f| f["choices"][0]["finish_reason"] == "tool_calls")
-        .expect("missing tool_calls finish chunk");
-    assert!(
-        stop["choices"][0]["delta"]
-            .as_object()
-            .is_some_and(serde_json::Map::is_empty)
-    );
-}
-
-/// The second `format:qwen-xml` body shape — Qwen3 + `--jinja`'s
-/// `<function=NAME><parameter=KEY>VALUE</parameter></function>` dialect,
-/// rather than [`qwen_xml_tool_call_is_normalized`]'s JSON body — must be
-/// rewritten into the same strict `OpenAI` `tool_calls` deltas, through the
-/// full proxy pipeline rather than just the parser's own unit tests.
-#[tokio::test]
-async fn qwen_function_xml_tool_call_is_normalized() {
-    let body = round_trip(
-        vec![QWEN_FUNCTION_XML_TOOL_CALL],
-        "qwen3.6",
-        vec!["format:qwen-xml".to_owned()],
-    )
-    .await;
-    let (frames, saw_done) = parse_sse_frames(&body);
-    assert!(saw_done);
-    assert_sse_canonical_envelope(&frames, "qwen3.6");
-
-    // The literal Qwen markup MUST NOT appear in the wire output.
-    assert!(
-        !body.contains("<tool_call>")
-            && !body.contains("</tool_call>")
-            && !body.contains("<function=")
-            && !body.contains("<parameter="),
-        "Qwen inner-XML markers leaked into wire output:\n{body}"
-    );
-
-    let content: String = frames
-        .iter()
-        .filter_map(|f| f["choices"][0]["delta"]["content"].as_str())
-        .collect();
-    assert_eq!(content, "Looking it up. ");
-
-    let tc_frames: Vec<&Value> = frames
-        .iter()
-        .filter(|f| f["choices"][0]["delta"]["tool_calls"].is_array())
-        .collect();
-    assert!(
-        !tc_frames.is_empty(),
-        "expected at least one tool_calls delta"
-    );
-
-    let first_tc = &tc_frames[0]["choices"][0]["delta"]["tool_calls"][0];
-    assert_eq!(first_tc["index"], json!(0));
-    assert!(
-        first_tc["id"].is_string(),
-        "first tool_call delta missing id"
-    );
-    assert_eq!(first_tc["type"], "function");
-    assert_eq!(first_tc["function"]["name"], "get_weather");
-
-    let mut args = String::new();
-    for f in &tc_frames {
-        if let Some(s) = f["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
-        {
-            args.push_str(s);
-        }
-    }
-    let parsed_args: Value =
-        serde_json::from_str(&args).expect("tool_call arguments should be JSON");
-    assert_eq!(parsed_args, json!({"city": "Paris"}));
-
-    let stop = frames
-        .iter()
-        .find(|f| f["choices"][0]["finish_reason"] == "tool_calls")
-        .expect("missing tool_calls finish chunk");
-    assert!(
-        stop["choices"][0]["delta"]
-            .as_object()
-            .is_some_and(serde_json::Map::is_empty)
-    );
-}
-
-/// A NON-Qwen model tagged `format:hermes` must normalize its `<tool_call>`
-/// markup exactly like a qwen-tagged model, rather than pass it to clients
-/// raw.
-#[tokio::test]
-async fn hermes_tagged_model_tool_call_is_normalized() {
-    let body = round_trip(
-        vec![QWEN_XML_TOOL_CALL],
-        "hermes-2-pro",
-        vec!["format:hermes".to_owned()],
-    )
-    .await;
-    let (frames, saw_done) = parse_sse_frames(&body);
-    assert!(saw_done);
-    assert_sse_canonical_envelope(&frames, "hermes-2-pro");
-
-    assert!(
-        !body.contains("<tool_call>") && !body.contains("</tool_call>"),
-        "hermes markup leaked into wire output:\n{body}"
-    );
-
-    let tc_frames: Vec<&Value> = frames
-        .iter()
-        .filter(|f| f["choices"][0]["delta"]["tool_calls"].is_array())
-        .collect();
-    assert!(!tc_frames.is_empty(), "expected a tool_calls delta");
-    let first_tc = &tc_frames[0]["choices"][0]["delta"]["tool_calls"][0];
-    assert_eq!(first_tc["type"], "function");
-    assert_eq!(first_tc["function"]["name"], "get_weather");
-    frames
-        .iter()
-        .find(|f| f["choices"][0]["finish_reason"] == "tool_calls")
-        .expect("missing tool_calls finish chunk");
-}
-
-/// A model whose catalog row carries a template-derived spec — custom
-/// multibyte markers, no `format:*` tag anywhere — must normalize through
-/// the full pipeline, including a close marker split across SSE frames.
-/// This is the zero-code-for-new-dialects property, end to end.
-#[tokio::test]
-async fn derived_spec_tool_call_is_normalized_across_frame_splits() {
-    let spec = gglib_core::domain::DialectSpec {
-        id: "derived".to_owned(),
-        tool_open: "«TC»".to_owned(),
-        tool_close: "«/TC»".to_owned(),
-        body_codecs: vec![gglib_core::domain::BodyCodec::Json],
-        emission: gglib_core::domain::EmissionProfile::default(),
-        id_prefix: "call_dialect_".to_owned(),
-    };
-
-    let upstream_cancel = CancellationToken::new();
-    let upstream_port =
-        spawn_mock_upstream(vec![DERIVED_MARKER_TOOL_CALL], upstream_cancel.clone()).await;
-    let (proxy_url, proxy_cancel) =
-        spawn_proxy_with_dialect(upstream_port, "any-new-model", spec).await;
-
-    let client = Client::new();
-    let resp = client
-        .post(format!("{proxy_url}/v1/chat/completions"))
-        .json(&json!({
-            "model": "any-new-model",
-            "stream": true,
-            "messages": [{"role": "user", "content": "hi"}],
-        }))
-        .send()
-        .await
-        .expect("proxy request");
-    assert_eq!(resp.status(), 200);
-
-    let mut body = Vec::new();
-    let mut stream = resp.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        body.extend_from_slice(&chunk.expect("body chunk"));
-    }
-    proxy_cancel.cancel();
-    upstream_cancel.cancel();
-    let body = String::from_utf8(body).expect("utf-8 body");
-
-    let (frames, saw_done) = parse_sse_frames(&body);
-    assert!(saw_done);
-    assert_sse_canonical_envelope(&frames, "any-new-model");
-
-    assert!(
-        !body.contains("«TC»") && !body.contains("«/TC»"),
-        "derived markers leaked into wire output:\n{body}"
-    );
-
-    let content: String = frames
-        .iter()
-        .filter_map(|f| f["choices"][0]["delta"]["content"].as_str())
-        .collect();
-    assert_eq!(content, "Sure.  done.");
-
-    let tc_frames: Vec<&Value> = frames
-        .iter()
-        .filter(|f| f["choices"][0]["delta"]["tool_calls"].is_array())
-        .collect();
-    assert!(!tc_frames.is_empty(), "expected a tool_calls delta");
-    let first_tc = &tc_frames[0]["choices"][0]["delta"]["tool_calls"][0];
-    assert_eq!(first_tc["type"], "function");
-    assert_eq!(first_tc["function"]["name"], "get_weather");
-    assert!(
-        first_tc["id"]
-            .as_str()
-            .is_some_and(|id| id.starts_with("call_dialect_")),
-        "derived specs mint call_dialect_ IDs, got {first_tc}"
-    );
-
-    let mut args = String::new();
-    for f in &tc_frames {
-        if let Some(a) = f["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
-        {
-            args.push_str(a);
-        }
-    }
-    let parsed_args: Value = serde_json::from_str(&args).expect("arguments should be JSON");
-    assert_eq!(parsed_args, json!({"city": "Paris"}));
-}
-
-/// The drift alarm end to end: an untagged, spec-less model leaks raw
-/// `<tool_call>` markup — split across SSE frames — to the client
-/// verbatim (unchanged behaviour), and the dashboard reports it: the
+/// The drift alarm end to end: raw `<tool_call>` markup llama-server left
+/// in `content` — split across SSE frames — reaches the client verbatim,
+/// and the dashboard reports it: the
 /// eviction-safe total increments and the recent-request entry is flagged.
 #[tokio::test]
 async fn dialect_residue_is_flagged_on_the_dashboard() {
@@ -525,39 +260,8 @@ async fn dialect_residue_is_flagged_on_the_dashboard() {
     );
 }
 
-/// A dialect model whose stream parses cleanly must NOT trip the alarm —
-/// the markup was consumed by the parser, nothing leaked.
-#[tokio::test]
-async fn clean_dialect_stream_does_not_trip_the_alarm() {
-    let (body, status) = round_trip_with_status(
-        vec![QWEN_XML_TOOL_CALL],
-        "qwen3-clean",
-        vec!["format:qwen-xml".to_owned()],
-        // Wait until our request shows up in the recent list; the flag, if
-        // it were ever coming, is set before the body finishes streaming.
-        |s| {
-            s["recent_requests"]
-                .as_array()
-                .is_some_and(|r| !r.is_empty())
-        },
-    )
-    .await;
-
-    assert!(!body.contains("<tool_call>"), "markup must be consumed");
-    assert_eq!(status["dialect_residue_total"].as_u64(), Some(0));
-    assert!(
-        status["recent_requests"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|r| r["dialect_residue"] == json!(false)),
-        "no entry may be flagged: {}",
-        status["recent_requests"]
-    );
-}
-
-/// A standard `OpenAI` tool-call stream (no dialect) must round-trip through
-/// the identity parser preserving id, type, name, and arguments.
+/// A standard `OpenAI` tool-call stream must round-trip through the proxy
+/// preserving id, type, name, and arguments.
 #[tokio::test]
 async fn standard_openai_tool_call_passthrough() {
     let body = round_trip(vec![STANDARD_OPENAI_TOOL_CALL], "strict-openai", vec![]).await;

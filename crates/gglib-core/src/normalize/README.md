@@ -2,66 +2,18 @@
 
 <!-- module-docs:start -->
 
-Universal local-LLM consistency layer.
-
-This module rewrites model-specific output dialects into the strict
-OpenAI-shaped [`crate::domain::agent::LlmStreamEvent`] sequence that the
-rest of the codebase expects.  Adapters wrap the LLM stream once at the
-port boundary; every downstream surface (Axum, CLI, Tauri, proxy)
-consumes the canonical form.
-
-Dialect selection is data-driven: a [`crate::domain::dialect::DialectSpec`]
-— detected from the model's own chat template at import time and persisted
-per model — configures the delimited parser, and the same spec generates
-the decode-time GBNF grammar, so parsing and enforcement cannot drift.
+What gglib reads in a model's text, around the request and the reply.
+gglib does not translate tool-call dialects: llama-server parses the calls
+it can, and anything it leaves in `content` reaches the client as it was
+written.
 
 ## Module map
 
-- [`tags`] — `format:*` constants, the legacy-row fallback vocabulary.
-- [`error`] — non-fatal [`error::NormalizationError`] surfaced from parsers.
-- [`parser`] — the [`parser::ToolCallParser`] trait + [`parser::ParserOutput`].
-- [`parsers`] — concrete parser implementations, one file per dialect family.
-- [`registry`] — the single dispatch site: spec → parser, plus the
-  tag → builtin-spec fallback map.
-- [`residue`] — chunk-safe scanner for dialect markup that survived
-  normalization into client-visible text (the proxy's drift alarm).
-- [`oneshot`] — [`normalize_chat_completion_body`], the same parser applied
-  to a non-streaming response body.
-- [`coerce`] — `coerce_json_object`, a deterministic local repair of a
-  tool-call body the parsers rejected (a code fence, trailing prose, a
-  trailing comma); it returns a body only when the result parses.
+- [`tags`] — `format:*` constants, the tags detection stores on a model.
+- [`residue`] — chunk-safe scanner for tool-call markup that reached
+  client-visible text (the proxy's drift alarm).
 - [`history`] — [`strip_thinking_debt`], which drops reasoning left in
   earlier assistant turns of a chat's history; stage 1 of the request
   pipeline calls it.
-- [`stream`] — [`NormalizingStream`], the one wrap point, and
-  `strip_think_tags`, which removes a stray `<think>` or `</think>` tag from
-  a reply's text: one function, called by the stream and by the
-  non-streaming path.
-
-## Adding a new dialect
-
-**Usually: no code.** A dialect whose template renders tool calls as
-`MARKERS{json}MARKERS` is derived automatically by the template probe in
-`gglib-gguf` and arrives here as a spec — [`registry::get_parser`] drives
-the delimited parser with it.
-
-For a new **builtin** (a dialect that needs a fallback tag because its
-templates are often stripped):
-
-1. Add a `pub const FORMAT_*` to [`tags`].
-2. Map the tag to a spec in [`registry::dialect_for_tags`].
-
-Only a genuinely new **body codec** (a non-JSON, non-inner-XML body
-encoding) needs parser code — a `BodyCodec` variant plus its decoder in
-[`parsers`]; see `CONTRIBUTING.md`'s architecture-registry section.
-
-The registry is the only place that knows the full set of parsers, by
-design — see the module docs there.
-
-Future work: `<think>` handling still lives outside the spec —
-[`stream`]'s `strip_think_tags` strips think tags unconditionally, streamed
-or not, and `history` keeps its own marker constants. Folding reasoning
-markers into `DialectSpec` is deliberate follow-up scope, since it changes
-behaviour for untagged models.
 
 <!-- module-docs:end -->

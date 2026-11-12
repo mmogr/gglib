@@ -9,7 +9,6 @@ use serde_json::json;
 
 use super::*;
 use crate::metrics::ContextSnapshot;
-use gglib_core::domain::DialectSpec;
 
 /// `max_lines` carrying a string, the way Llama 3.2 was measured wrong.
 const BAD_ARGUMENTS: &str = "{\"path\":\"a\",\"max_lines\":\"42\"}";
@@ -133,7 +132,6 @@ pub(super) fn snapshot() -> ContextSnapshot {
 pub(super) async fn run_turn(
     body: Bytes,
     answers: Vec<serde_json::Value>,
-    dialect: Option<DialectSpec>,
     repair_enabled: bool,
 ) -> (
     Vec<serde_json::Value>,
@@ -149,7 +147,6 @@ pub(super) async fn run_turn(
         Client::new().post(&url),
         body,
         "m",
-        &TurnDialect::parsed(dialect),
         &CacheMetricsStore::new(),
         (&metrics, seq),
         repair_enabled,
@@ -183,7 +180,7 @@ async fn a_bad_unary_tool_call_is_reissued_and_the_client_gets_the_valid_one() {
         structured("call_fixed", FIXED_ARGUMENTS),
     ];
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, answer, metrics) = run_turn(body, answers, None, true).await;
+    let (requests, answer, metrics) = run_turn(body, answers, true).await;
 
     assert_eq!(requests.len(), 2, "one original, one repair");
     assert_eq!(requests[1]["tool_choice"], "required");
@@ -212,7 +209,7 @@ async fn a_bad_unary_tool_call_is_reissued_and_the_client_gets_the_valid_one() {
 async fn a_valid_unary_tool_call_is_not_reissued() {
     let good = structured("call_good", FIXED_ARGUMENTS);
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, answer, metrics) = run_turn(body, vec![good.clone()], None, true).await;
+    let (requests, answer, metrics) = run_turn(body, vec![good.clone()], true).await;
 
     assert_eq!(requests.len(), 1, "nothing to repair, nothing re-issued");
     assert_eq!(answer["choices"], good["choices"]);
@@ -225,8 +222,7 @@ async fn a_valid_unary_tool_call_is_not_reissued() {
 async fn a_rejected_re_issue_falls_open_to_the_first_answer() {
     let bad = structured("call_bad", BAD_ARGUMENTS);
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, answer, metrics) =
-        run_turn(body, vec![bad.clone(), json!(null)], None, true).await;
+    let (requests, answer, metrics) = run_turn(body, vec![bad.clone(), json!(null)], true).await;
 
     assert_eq!(requests.len(), 2, "the re-issue was sent");
     assert_eq!(answer, bad, "and refused, so the first answer stands");
@@ -245,7 +241,7 @@ async fn repair_off_leaves_a_unary_body_as_it_came() {
     let bad = structured("call_bad", BAD_ARGUMENTS);
     let answers = vec![bad.clone(), structured("call_fixed", FIXED_ARGUMENTS)];
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, answer, metrics) = run_turn(body, answers, None, false).await;
+    let (requests, answer, metrics) = run_turn(body, answers, false).await;
 
     assert_eq!(requests.len(), 1, "nothing is asked twice with repair off");
     assert_eq!(
@@ -266,14 +262,14 @@ async fn a_unary_answer_names_the_served_model_not_the_gguf_path() {
     };
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let once = vec![at_path(structured("call_good", FIXED_ARGUMENTS))];
-    let (_, answer, _) = run_turn(body.clone(), once, None, false).await;
+    let (_, answer, _) = run_turn(body.clone(), once, false).await;
     assert_eq!(answer["model"], "m");
 
     let twice = vec![
         at_path(structured("call_bad", BAD_ARGUMENTS)),
         at_path(structured("call_fixed", FIXED_ARGUMENTS)),
     ];
-    let (requests, answer, _) = run_turn(body, twice, None, true).await;
+    let (requests, answer, _) = run_turn(body, twice, true).await;
     assert_eq!(requests.len(), 2, "one original, one repair");
     assert_eq!(
         answer["choices"][0]["message"]["tool_calls"][0]["id"],

@@ -145,6 +145,7 @@ selftest || { echo "check_overlaps.sh: the self-test failed, so a clean run woul
 check "$ROOT_DIR" "$TABLE" || exit 1
 
 rows=$(jq 'length' "$ROOT_DIR/$TABLE")
-stages=$(grep -rl --include='*.rs' 'Tier A — Compensation' "$ROOT_DIR/crates" | wc -l | tr -d ' ')
+# No Tier A stage left is a pass: grep finding nothing must not end the script.
+stages=$({ grep -rl --include='*.rs' 'Tier A — Compensation' "$ROOT_DIR/crates" || true; } | wc -l | tr -d ' ')
 echo "Self-test passed: each of 7 planted faults was reported."
 echo "All $rows rows of $TABLE name an engine, an ADR that exists or none, and paths that exist; all $stages Tier A compensation stages are under a row."

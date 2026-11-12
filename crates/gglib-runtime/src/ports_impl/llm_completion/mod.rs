@@ -67,9 +67,8 @@ pub struct LlmCompletionAdapter {
     /// name it — see [`Door`]. Never logged: the adapter derives no `Debug`,
     /// and the door's own `Debug` leaves the key out.
     ///
-    /// A send through a door is *proxied*: the endpoint shapes it and
-    /// parses the model's dialect, so this side does neither
-    /// ([`Self::shaped_body`], [`Self::send`]).
+    /// A send through a door is *proxied*: the endpoint shapes it, so this
+    /// side does not ([`Self::shaped_body`]).
     door: Option<Door>,
     /// Where the images a message names by id are read from (`images.rs`).
     /// `None` for a caller whose messages carry none.
@@ -100,9 +99,8 @@ pub struct LlmCompletionAdapter {
     stream_idle_timeout: std::time::Duration,
     /// The resolved per-model facts, from
     /// [`gglib_core::request_pipeline::resolve()`].  Drives request shaping
-    /// (capabilities, inference defaults) and response-parser selection
-    /// (`format:*` tags).  [`ModelContext::passthrough`] — the default —
-    /// makes every transform a no-op and selects the identity parser.
+    /// (capabilities, inference defaults).  [`ModelContext::passthrough`] —
+    /// the default — makes every transform a no-op.
     model_context: ModelContext,
     /// Optional destination for this request's token-usage figures.
     ///
@@ -350,20 +348,9 @@ impl LlmCompletionAdapter {
         )
         .await?;
 
-        // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
-        // Through a door the endpoint has already parsed the model's dialect
-        // into `OpenAI` tool calls.
-        let dialect = self
-            .model_context
-            .dialect
-            .as_ref()
-            .filter(|_| self.door.is_none());
-        let events = stream::normalized_event_stream(
-            response,
-            dialect,
-            self.usage_sink.clone(),
-            self.stream_idle_timeout,
-        );
+        // Decode, time, and (when a sink is set) tap prompt-cache usage.
+        let events =
+            stream::event_stream(response, self.usage_sink.clone(), self.stream_idle_timeout);
         Ok(Box::pin(events))
     }
 }

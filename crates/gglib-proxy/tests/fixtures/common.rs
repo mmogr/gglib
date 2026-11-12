@@ -840,27 +840,6 @@ pub(crate) async fn spawn_proxy_with_runtime(
     spawn_proxy_with_catalog(runtime, catalog).await
 }
 
-/// [`spawn_proxy`] whose catalog row carries a persisted dialect spec —
-/// the template-derived path, where no `format:*` tag is involved.
-pub(crate) async fn spawn_proxy_with_dialect(
-    upstream_port: u16,
-    model_name: &str,
-    dialect: gglib_core::domain::DialectSpec,
-) -> (String, CancellationToken) {
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
-        port: upstream_port,
-        model_name: model_name.into(),
-        slot_restore_supported: true,
-        pinned: false,
-    });
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
-        name: model_name.into(),
-        tags: Vec::new(),
-        dialect: Some(dialect),
-    });
-    spawn_proxy_with_catalog(runtime, catalog).await
-}
-
 /// [`spawn_proxy_with_runtime`] with the catalog supplied too — for tests that
 /// need more than one model to exist, which is the only way to exercise a swap.
 pub(crate) async fn spawn_proxy_with_catalog(

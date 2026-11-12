@@ -37,50 +37,16 @@ data: {\"id\":\"u-9\",\"object\":\"chat.completion.chunk\",\"created\":172900000
 data: {\"id\":\"u-9\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
 data: [DONE]\n\n";
 
-/// Qwen-family model emitting an XML-wrapped tool call inside the text
-/// channel.  With `format:qwen-xml` tags the pipeline must rewrite this into
-/// strict `OpenAI` `tool_calls` deltas — the external client should never see
-/// the `<tool_call>` markers.
-pub(crate) const QWEN_XML_TOOL_CALL: &[u8] = b"\
-data: {\"id\":\"u-3\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Looking it up. \"},\"finish_reason\":null}]}\n\n\
-data: {\"id\":\"u-3\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"<tool_call>{\\\"name\\\":\\\"get_weather\\\",\\\"arguments\\\":{\\\"city\\\":\\\"Paris\\\"}}</tool_call>\"},\"finish_reason\":null}]}\n\n\
-data: {\"id\":\"u-3\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n\
-data: [DONE]\n\n";
-
-/// Qwen3 + `--jinja` inner-XML tool call — the Hermes-style
-/// `<function=NAME><parameter=KEY>VALUE</parameter></function>` body inside
-/// the same `<tool_call>` wrapper, as opposed to [`QWEN_XML_TOOL_CALL`]'s
-/// JSON body.  Exercises `qwen_xml`'s second dialect through the full
-/// pipeline, not just the parser's own unit tests.
-pub(crate) const QWEN_FUNCTION_XML_TOOL_CALL: &[u8] = b"\
-data: {\"id\":\"u-10\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Looking it up. \"},\"finish_reason\":null}]}\n\n\
-data: {\"id\":\"u-10\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"<tool_call><function=get_weather><parameter=city>Paris</parameter></function></tool_call>\"},\"finish_reason\":null}]}\n\n\
-data: {\"id\":\"u-10\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n\
-data: [DONE]\n\n";
-
-/// A template-derived dialect: custom multibyte `«TC»`/`«/TC»` markers with
-/// a JSON body, and the CLOSE MARKER SPLIT ACROSS TWO SSE FRAMES — the
-/// end-to-end proof that a spec nobody hardcoded parses chunk-safely
-/// through the whole proxy pipeline.  Byte-string literals cannot hold
-/// non-ASCII, hence `str::as_bytes`.
-pub(crate) const DERIVED_MARKER_TOOL_CALL: &[u8] =
-    "data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Sure. \"},\"finish_reason\":null}]}\n\n\
-data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"«TC»{\\\"name\\\":\\\"get_weather\\\",\\\"arguments\\\":{\\\"city\\\":\\\"Paris\\\"}}«/T\"},\"finish_reason\":null}]}\n\n\
-data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"C» done.\"},\"finish_reason\":null}]}\n\n\
-data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n\
-data: [DONE]\n\n"
-        .as_bytes();
-
-/// Raw dialect markup on an UNTAGGED, spec-less model, with the marker
-/// split across two SSE frames.  The passthrough parser forwards it
-/// verbatim (unchanged behaviour) — the drift alarm must still flag it.
+/// Raw tool-call markup llama-server left in `content`, with the marker
+/// split across two SSE frames.  The proxy forwards it verbatim — the drift
+/// alarm must still flag it.
 pub(crate) const RAW_MARKUP_SPLIT_ACROSS_FRAMES: &[u8] = b"\
 data: {\"id\":\"u-12\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"leaking <tool\"},\"finish_reason\":null}]}\n\n\
 data: {\"id\":\"u-12\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"_call> markup\"},\"finish_reason\":null}]}\n\n\
 data: {\"id\":\"u-12\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
 data: [DONE]\n\n";
 
-/// Standard `OpenAI` tool call (already strict / no dialect rewriting).  The
+/// Standard `OpenAI` tool call, as llama-server streams one it parsed.  The
 /// proxy must round-trip this preserving `id`, `type:"function"`, `name`,
 /// `arguments`, and the `index`.
 pub(crate) const STANDARD_OPENAI_TOOL_CALL: &[u8] = b"\

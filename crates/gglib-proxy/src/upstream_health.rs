@@ -64,8 +64,7 @@ pub enum StreamVerdict {
     /// producing; the streak resets.
     Healthy,
     /// The turn produced nothing a client can render — no content, no tool
-    /// call, not even recovered normalization text. The degradation this
-    /// watchdog exists for.
+    /// call. The degradation this watchdog exists for.
     Empty,
     /// The turn died upstream mid-generation: the model server emitted an
     /// error event, or the byte stream itself broke. Strictly stronger

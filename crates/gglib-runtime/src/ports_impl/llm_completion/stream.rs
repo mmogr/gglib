@@ -1,8 +1,7 @@
-//! Response SSE bytes → normalized `LlmStreamEvent`s, with an optional
-//! token-usage tap.
+//! Response SSE bytes → `LlmStreamEvent`s, with an optional token-usage tap.
 //!
 //! Kept separate from the adapter's request-shaping so the streaming concern —
-//! SSE decode, parser normalization, and the telemetry tap — reads as one
+//! SSE decode, the writing-time clock and the telemetry tap — reads as one
 //! unit and the adapter file stays focused on building the outgoing request.
 
 use std::pin::Pin;
@@ -13,37 +12,27 @@ use anyhow::{Result, anyhow};
 use futures_core::Stream;
 use futures_util::StreamExt as _;
 
-use gglib_core::{
-    domain::agent::LlmStreamEvent,
-    domain::dialect::DialectSpec,
-    normalize::{NormalizingStream, get_parser},
-    ports::UsageSink,
-    sse::SseStreamDecoder,
-};
+use gglib_core::{domain::agent::LlmStreamEvent, ports::UsageSink, sse::SseStreamDecoder};
 
-use super::writing_time::{Clock, monotonic, time_writing};
+use super::writing_time::{monotonic, time_writing};
 
-/// Boxed stream of decoded, normalized completion events.
+/// Boxed stream of decoded completion events.
 pub(super) type EventStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>;
 
-/// Turn an SSE byte response into the typed, normalized event stream the agent
-/// loop consumes, optionally tapping the response's token usage into `sink`.
-///
-/// `dialect` selects the response parser — `None` selects the
-/// identity-passthrough parser, so models that already emit strict `OpenAI` tool
-/// calls are unaffected. `idle` bounds each read; see [`sse_events`].
-pub(super) fn normalized_event_stream(
+/// Turn an SSE byte response into the typed event stream the agent loop
+/// consumes, timed (see [`time_writing`]), optionally tapping the response's
+/// token usage into `sink`. `idle` bounds each read; see [`sse_events`].
+pub(super) fn event_stream(
     response: reqwest::Response,
-    dialect: Option<&DialectSpec>,
     sink: Option<Arc<dyn UsageSink>>,
     idle: Duration,
 ) -> EventStream {
     let raw = sse_events(response.bytes_stream(), idle);
-    let normalized = normalize_timed(raw, dialect, monotonic());
+    let timed = time_writing(raw, monotonic());
 
     match sink {
-        None => normalized,
-        Some(sink) => tap_usage(normalized, sink),
+        None => timed,
+        Some(sink) => tap_usage(timed, sink),
     }
 }
 
@@ -110,28 +99,14 @@ where
     })
 }
 
-/// Time `raw`'s writing, then normalize it: the time is taken before a
-/// dialect parser can hold markup back (see [`time_writing`]).
-pub(super) fn normalize_timed(
-    raw: EventStream,
-    dialect: Option<&DialectSpec>,
-    clock: Clock,
-) -> EventStream {
-    let timed = time_writing(raw, clock);
-    Box::pin(NormalizingStream::new(timed, get_parser(dialect)))
-}
-
-/// Telemetry-only tap on the fully-normalized stream: the single point that
-/// covers every agent-path consumer without any of them knowing about it.
+/// Telemetry-only tap on the decoded stream: the single point that covers
+/// every agent-path consumer without any of them knowing about it.
 ///
 /// Records the last `Usage` frame once the stream drains — mirroring the
 /// proxy's "last usage wins, record once" semantics — so a stream that carries
 /// no usage records nothing, and `cached_tokens`' absent-vs-zero distinction
-/// survives to the sink.
-///
-/// The tap sits after normalization but is independent of it: a raw-passthrough
-/// request selects the identity parser, which forwards `Usage` verbatim, so the
-/// control arm of an A/B evaluation is measured on the same footing as the
+/// survives to the sink. A raw-passthrough request is tapped the same way, so
+/// the control arm of an A/B evaluation is measured on the same footing as the
 /// shaped one.
 fn tap_usage(stream: EventStream, sink: Arc<dyn UsageSink>) -> EventStream {
     Box::pin(async_stream::stream! {

@@ -43,7 +43,7 @@ fn recorded(metrics: &ContextMetricsStore) -> TurnGeneration {
 async fn a_unary_turn_records_what_its_answer_carries() {
     let answers = vec![answer(2, "{\"path\":\"a\"}", "résumé", 37)];
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, _, metrics) = run_turn(body, answers, None, false).await;
+    let (requests, _, metrics) = run_turn(body, answers, false).await;
 
     assert_eq!(requests.len(), 1);
     assert_eq!(
@@ -67,7 +67,7 @@ async fn a_repaired_unary_turn_records_the_answer_the_client_gets() {
         answer(2, "{\"path\":\"a\"}", "the second", 9),
     ];
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, _, metrics) = run_turn(body, answers, None, true).await;
+    let (requests, _, metrics) = run_turn(body, answers, true).await;
 
     assert_eq!(requests.len(), 2, "one original, one repair");
     assert!(metrics.recent(1)[0].tool_repaired);
@@ -97,7 +97,6 @@ async fn a_unary_turn_the_upstream_refuses_records_nothing() {
         Client::new().post(format!("http://127.0.0.1:{port}/v1/chat/completions")),
         forwarded_body(&json!({})),
         "m",
-        &TurnDialect::parsed(None),
         &CacheMetricsStore::new(),
         (&metrics, seq),
         true,
@@ -117,4 +116,25 @@ async fn a_unary_turn_the_upstream_refuses_records_nothing() {
         "the refusal's body has readings to take"
     );
     assert_eq!(recorded(&metrics), TurnGeneration::default());
+}
+
+/// Tool-call markup llama-server left in a unary answer's `content` reaches
+/// the client as written, and the drift alarm counts it; plain text does not
+/// trip it.
+#[tokio::test]
+async fn markup_in_a_unary_answer_is_counted_by_the_drift_alarm() {
+    let said = |content: &str| {
+        json!({"choices": [{"index": 0, "finish_reason": "stop",
+            "message": {"role": "assistant", "content": content}}]})
+    };
+    let markup = "<tool_call>\n{\"name\": \"read_file\", \"arguments\": {}}\n</tool_call>";
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
+
+    let (_, answer, metrics) = run_turn(body.clone(), vec![said(markup)], false).await;
+    assert_eq!(answer["choices"][0]["message"]["content"], markup);
+    assert_eq!(metrics.dialect_residue_total(), 1);
+    assert!(metrics.recent(1)[0].dialect_residue);
+
+    let (_, _, metrics) = run_turn(body, vec![said("Sunny.")], false).await;
+    assert_eq!(metrics.dialect_residue_total(), 0);
 }

@@ -248,10 +248,9 @@ fn the_proxys_own_counts_are_read_through_the_mirror() {
         reasoning_only: 14,
         dialect_residue: 15,
         unvalidatable_schemas: 16,
-        normalization_errors: 17,
-        identical_result_repeats: 18,
-        repeats_not_evaluated: 19,
-        repeats_rescued: 20,
+        identical_result_repeats: 17,
+        repeats_not_evaluated: 18,
+        repeats_rescued: 19,
     };
     let json = serde_json::to_string(&sent).expect("the proxy's struct serialises");
     let got: ModelDefectCounts = serde_json::from_str(&json).expect("the mirror reads it");
@@ -273,7 +272,6 @@ fn the_proxys_own_counts_are_read_through_the_mirror() {
         got.reasoning_only,
         got.dialect_residue,
         got.unvalidatable_schemas,
-        got.normalization_errors,
         got.identical_result_repeats,
         got.repeats_not_evaluated,
         got.repeats_rescued,

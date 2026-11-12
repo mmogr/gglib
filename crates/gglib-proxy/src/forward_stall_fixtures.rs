@@ -15,7 +15,6 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::upstream_read::upstream_events;
-use gglib_core::domain::DialectSpec;
 use gglib_core::ports::AdmissionLease;
 
 /// The idle bound these tests run the drain under. Long enough that a busy
@@ -162,10 +161,9 @@ impl Turn {
 /// `tx.send`, as a slow socket does.
 pub(super) async fn run_turn(
     bytes: impl Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
-    dialect: Option<DialectSpec>,
     pace: Reader,
 ) -> Turn {
-    run_turn_with(bytes, dialect, pace, None, None).await
+    run_turn_with(bytes, pace, None, None).await
 }
 
 /// [`run_turn`] with the tool-call hold-back engaged. The repair context's
@@ -178,21 +176,19 @@ pub(super) async fn run_turn_holding_back_tool_calls(
         request_body: Bytes::new(),
         enabled: true,
     };
-    run_turn_with(bytes, None, Reader::default(), Some(repair), None).await
+    run_turn_with(bytes, Reader::default(), Some(repair), None).await
 }
 
 /// [`run_turn`] for a request holding `lease`, as an admitted one does.
 pub(super) async fn run_turn_holding(
     bytes: impl Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
-    dialect: Option<DialectSpec>,
     lease: AdmissionLease,
 ) -> Turn {
-    run_turn_with(bytes, dialect, Reader::default(), None, Some(lease)).await
+    run_turn_with(bytes, Reader::default(), None, Some(lease)).await
 }
 
 async fn run_turn_with(
     bytes: impl Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
-    dialect: Option<DialectSpec>,
     pace: Reader,
     repair: Option<RepairContext>,
     lease: Option<AdmissionLease>,
@@ -227,7 +223,6 @@ async fn run_turn_with(
     let drain = drain_events(
         events,
         "m".to_owned(),
-        TurnDialect::parsed(dialect),
         ClientSender::new(tx, SEND),
         &connection,
         repair,

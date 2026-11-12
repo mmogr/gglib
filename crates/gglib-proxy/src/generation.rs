@@ -90,8 +90,7 @@ impl TurnGeneration {
 /// the clock behind `generation_ms`.
 ///
 /// [`crate::forward::drain_events`] stamps it as each event arrives from the
-/// upstream, before normalization, which can hold tokens back and make one
-/// event of many. An event stamps when
+/// upstream. An event stamps when
 /// [`is_generated_token`](crate::upstream_read::is_generated_token) accepts
 /// it: a text, reasoning or tool-call delta. Prefill progress, `Usage`,
 /// `Done`, `WritingTime`, an upstream error frame and a failed read do not
@@ -127,8 +126,8 @@ impl TokenClock {
 }
 
 /// Meters one streamed turn as its drain runs: the time on its
-/// [`TokenClock`], stamped before normalization, and the reasoning and calls
-/// the drain tells it of, after.
+/// [`TokenClock`], stamped as events arrive, and the reasoning and calls the
+/// drain tells it of.
 #[derive(Debug, Default)]
 pub(crate) struct Meter {
     clock: TokenClock,
@@ -143,7 +142,7 @@ impl Meter {
         self.clock.clone()
     }
 
-    /// A reasoning delta was read out of normalization.
+    /// A reasoning delta was read.
     pub(crate) fn reasoning(&mut self, content: &str) {
         self.reasoning_chars += content.chars().count();
     }

@@ -88,8 +88,7 @@ pub struct ModelSummary {
     /// Persisted tool-call dialect spec, when detection identified one.
     ///
     /// `None` for rows imported before specs existed and for models whose
-    /// dialect could not be derived — consumers fall back to mapping
-    /// `format:*` tags via `normalize::registry::dialect_for_tags`.
+    /// dialect could not be derived.
     pub dialect: Option<DialectSpec>,
     /// llama-server's template-capability self-report, when a launch has
     /// recorded one (see [`Model::template_caps`](crate::domain::Model)).

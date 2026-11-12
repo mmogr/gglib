@@ -27,8 +27,8 @@ export type GeneratedOutput = {
  * llama-server was launched with `--reasoning-format deepseek` and so
  * splits thinking into its own `reasoning_content` SSE field. Without that
  * flag a reasoning model's thinking arrives inline as `<think>…</think>`,
- * the normalizer strips the tags, and every one of those characters is
- * counted as [`Self::answer_chars`] instead.
+ * and every one of those characters is counted as [`Self::answer_chars`]
+ * instead.
  *
  * So `reasoning_chars: 0` beside a large `answer_chars` is **ambiguous**:
  * it means either the model did not think, or it thought and nobody could

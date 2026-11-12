@@ -4,9 +4,8 @@
 //! sends one [`AgentEvent::TurnUsage`]: the upstream's token counts (each
 //! only when it reported it), the time from the stream's start to its end,
 //! the writing time the stream itself reports
-//! ([`LlmStreamEvent::WritingTime`], timed before normalization; this
-//! stream is after it, where held-back markup makes writing look instant),
-//! why the model stopped ([`LlmStreamEvent::Done`]), and how many earlier
+//! ([`LlmStreamEvent::WritingTime`], timed by the adapter as tokens
+//! arrive), why the model stopped ([`LlmStreamEvent::Done`]), and how many earlier
 //! messages the loop had dropped from the request this turn answered.
 //! A stream the collector stops reading early (an error, a cancelled run)
 //! ends no turn, and sends nothing.
