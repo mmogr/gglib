@@ -113,6 +113,17 @@ const ENGINES = {
 const KINDS = Object.keys(ENGINES) as RuntimeKind[];
 const CPU_WARNING = 'No GPU runtime gglib can use was found, so the CPU build will be slow.';
 
+/**
+ * The daemon's sentence for each standing (`standing_line`, the words
+ * `gglib config llama|sd status` prints).
+ */
+const STANDING = {
+  missing: () => null,
+  atPin: (kind: RuntimeKind) => `Pinned release: ${ENGINES[kind].pin}, which is the one installed.`,
+  older: (kind: RuntimeKind) =>
+    `Pinned release: ${ENGINES[kind].pin}. The one installed, ${ENGINES[kind].older}, is older.`,
+} as const;
+
 /** `kind`'s status, standing as named, with `overrides` and `pin` laid over it. */
 function status(
   kind: RuntimeKind,
@@ -141,6 +152,7 @@ function status(
       updateDownloads: standing !== 'atPin',
       ...pin,
     },
+    standing: STANDING[standing](kind),
     download: e.download,
     downloadUnavailable: null,
     warning: null,
@@ -305,7 +317,7 @@ describe.each(KINDS)('the %s row', (kind) => {
     expect(r.getByText('Downloaded').nextSibling).toHaveTextContent(/^2026-10-01$/);
     expect(r.getByText('Binary').nextSibling).toHaveTextContent(`/data/.${e.word}/bin/${e.server}`);
     expect(r.getByText('Binary reports').nextSibling).toHaveTextContent(`${e.server} reports ${e.pin}`);
-    expect(r.getByText(`Pinned to ${e.pin}, which is the one installed.`)).toBeInTheDocument();
+    expect(r.getByText(`Pinned release: ${e.pin}, which is the one installed.`)).toBeInTheDocument();
     expect(r.queryByText('Serving')).not.toBeInTheDocument();
   });
 

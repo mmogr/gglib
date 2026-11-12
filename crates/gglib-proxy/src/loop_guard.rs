@@ -526,8 +526,7 @@ fn verdict(e: AgentError) -> LoopGuardVerdict {
 #[path = "loop_guard_tests.rs"]
 mod tests;
 
-/// Stagnation cases. Its own module because `loop_guard_tests.rs` is frozen at
-/// its current size by the complexity ratchet.
+/// Stagnation cases.
 #[cfg(test)]
 #[path = "loop_guard_stagnation_tests.rs"]
 mod stagnation_tests;

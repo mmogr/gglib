@@ -107,7 +107,8 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/models/downloads/reorder-full` | Reorder the whole queue |
 | `POST` | `/api/models/hf/search` | Search `HuggingFace`; `kind` is `chat` (the default) or `image` |
 | `GET` | `/api/models/hf/model/{*model_id}` | One `HuggingFace` repo's summary, by its `owner/repo` id |
-| `GET` | `/api/models/hf/quantizations/{model_id}` | The quantizations a repo offers |
+| `GET` | `/api/models/hf/quantizations/{model_id}` | The quantizations a repo offers, `picked` on the one a download takes when their heads tell it |
+| `GET` | `/api/models/hf/pick/{model_id}` | The quantization a download without one takes, as the download picks it (`label`, `null` for a repo with no model); slower than the listing |
 | `GET` | `/api/models/hf/tool-support/{model_id}` | Whether a repo's model supports tool calling |
 | `GET` | `/api/config/settings` | Get application settings |
 | `PUT` | `/api/config/settings` | Update application settings |

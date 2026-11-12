@@ -1,6 +1,4 @@
 //! Tests for [`super::CatalogPortImpl`] and its `Model` projections.
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 use crate::domain::{ModelCapabilities, ModelSamplingDefaults, NewModel, TemplateCaps};

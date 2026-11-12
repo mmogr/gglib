@@ -8,10 +8,6 @@
 //! Deliberately **not** on `gglib proxy`. An unpinned proxy has no model in
 //! scope for a default to attach to, and its clients already select per
 //! request by asking for `{model}:{profile}`.
-//!
-//! It lives in its own file rather than beside the other groups because
-//! `shared_args.rs` sits 17 lines under the 300 LOC budget and this group with
-//! an honest doc comment is 18.
 
 use clap::Args;
 

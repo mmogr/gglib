@@ -2727,6 +2727,7 @@ name = "gglib-hf"
 version = "0.35.0-rc.1"
 dependencies = [
  "async-trait",
+ "futures-util",
  "gglib-core",
  "gglib-test-http",
  "reqwest",

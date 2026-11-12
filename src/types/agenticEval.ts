@@ -15,6 +15,9 @@ export type { AgenticEvalReport } from './generated/AgenticEvalReport';
 export type { AgenticTaskComparison } from './generated/AgenticTaskComparison';
 export type { ArmDelta } from './generated/ArmDelta';
 export type { ArmScores } from './generated/ArmScores';
+/** The report's served verdicts, judged by the daemon's rules on every read. */
+export type { ControlVerdict } from './generated/ControlVerdict';
+export type { EffectVerdict } from './generated/EffectVerdict';
 /** The proxy arm beside its raw-auto baseline; compared with each other, never with `raw` or `gglib`. */
 export type { ProxyArms } from './generated/ProxyArms';
 

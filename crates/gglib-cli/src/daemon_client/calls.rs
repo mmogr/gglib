@@ -2,9 +2,8 @@
 //!
 //! Split from `mod.rs`, which owns the *connection* — finding the daemon,
 //! launching it, checking its identity — when the remote tunnel's calls
-//! arrived and that file was at its budget. Every method here is one route
-//! constant from `gglib_core::contracts::http::daemon` and one body from
-//! `wire`.
+//! arrived. Every method here is one route constant from
+//! `gglib_core::contracts::http::daemon` and one body from `wire`.
 
 use std::time::Duration;
 

@@ -1,6 +1,4 @@
 //! Tests for the inference-config domain types.
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 

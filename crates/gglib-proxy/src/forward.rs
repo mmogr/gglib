@@ -1460,8 +1460,7 @@ async fn resolve_held_tool_calls(
 #[path = "forward_tests.rs"]
 mod forward_tests;
 
-/// Request shaping. Its own module because `forward_tests.rs` is frozen at its
-/// current size by the complexity ratchet.
+/// Request shaping.
 #[cfg(test)]
 #[path = "forward_shaping_tests.rs"]
 mod forward_shaping_tests;

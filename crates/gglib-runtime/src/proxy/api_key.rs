@@ -1,7 +1,7 @@
 //! Settling the proxy's bearer token at bind time.
 //!
-//! Split from the supervisor for the file-size gate; the rule it encodes is
-//! the supervisor's and is documented on the function.
+//! Split from the supervisor; the rule it encodes is the supervisor's and is
+//! documented on the function.
 
 use std::sync::Arc;
 

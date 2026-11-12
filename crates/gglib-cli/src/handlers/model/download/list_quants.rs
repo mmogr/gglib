@@ -6,8 +6,10 @@
 //! The listing is `DownloadOps::get_model_quantizations`, the call
 //! `GET /api/hf/quantizations/{repo}` answers with, so the terminal and
 //! the browser's table say the same of every variant, the fit included:
-//! judged as the download that follows picks one. Nothing here reads a
-//! header or sizes a budget.
+//! judged as the download that follows picks one. The ★ is the listing's
+//! pick, else the download's own (`DownloadOps::get_model_pick`, asked
+//! beside it), so it is always the variant the download takes. Nothing
+//! here reads a header or sizes a budget.
 
 use std::fmt::Write as _;
 
@@ -23,12 +25,34 @@ use crate::bootstrap::CliContext;
 /// carries the `HF_TOKEN` of this shell (a private repository needs one).
 pub(super) async fn execute(ctx: &CliContext, model_id: &str) -> Result<()> {
     println!("Finding available GGUF quantizations for {model_id}...");
-    let listing = companions::listing_ops(ctx, None)
-        .get_model_quantizations(model_id)
-        .await
-        .with_context(|| format!("Failed to fetch quantizations for {model_id}"))?;
+    let ops = companions::listing_ops(ctx, None);
+    // The listing marks the pick when its heads tell it; the download's own
+    // pick, asked beside it, names it when they cannot.
+    let (listing, pick) = tokio::join!(
+        ops.get_model_quantizations(model_id),
+        ops.get_model_pick(model_id)
+    );
+    let mut listing =
+        listing.with_context(|| format!("Failed to fetch quantizations for {model_id}"))?;
+    match pick {
+        Ok(pick) => mark_pick(&mut listing, pick.label.as_deref()),
+        Err(unpicked) => tracing::debug!(model_id, error = %unpicked, "no pick to mark"),
+    }
     print!("{}", quant_listing(&listing));
     Ok(())
+}
+
+/// Mark the variant labelled `label` as the pick when the listing's heads
+/// marked none.
+pub(super) fn mark_pick(listing: &mut HfQuantizationsResponse, label: Option<&str>) {
+    if listing.quantizations.iter().any(|q| q.picked) {
+        return;
+    }
+    if let Some(variant) =
+        (listing.quantizations.iter_mut()).find(|q| Some(q.label.as_str()) == label)
+    {
+        variant.picked = true;
+    }
 }
 
 /// A size as this listing prints it: MiB to one decimal, in integers.

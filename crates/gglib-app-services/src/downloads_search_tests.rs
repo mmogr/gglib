@@ -98,6 +98,7 @@ fn recorded_hit() -> HfRepoInfo {
         architecture: Some("phi3".to_string()),
         context_length: Some(131_072),
         tags: vec!["gguf".to_string(), "phi3".to_string()],
+        file_paths: Vec::new(),
     }
 }
 

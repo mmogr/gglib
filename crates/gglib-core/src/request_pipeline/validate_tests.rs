@@ -1,9 +1,8 @@
 //! Tests for [`super`]: the violations the validator reports.
 //!
-//! Moved out of `validate.rs` as they were, to keep that file within the Rust
-//! size ratchet. The verdicts that forward a call unchanged are in
-//! `validate_unjudged_tests.rs`, a child of this module that shares its
-//! fixtures.
+//! Moved out of `validate.rs` as they were. The verdicts that forward a call
+//! unchanged are in `validate_unjudged_tests.rs`, a child of this module that
+//! shares its fixtures.
 
 use super::*;
 use serde_json::json;

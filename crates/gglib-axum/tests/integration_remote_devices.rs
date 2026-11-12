@@ -2,9 +2,7 @@
 //!
 //! `daemon_route_contract.rs` proves these paths are *routed*; this proves
 //! they reach `RemoteOps` and that what comes back is the shape the surfaces
-//! were written against. A new file rather than more of
-//! `integration_routes.rs`, which is at the size the complexity ratchet
-//! recorded for it and may not grow.
+//! were written against.
 //!
 //! None of it needs a tunnel, which is the point. `list` and `forget` work
 //! with remote access off — a laptop is lost at a moment nobody chose, and a

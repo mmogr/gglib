@@ -1,6 +1,6 @@
 //! Tests for [`super`]: the benchmark repository against a real database.
 
-use gglib_core::domain::benchmark::agentic::{ArmDelta, ArmScores};
+use gglib_core::domain::benchmark::agentic::{ArmDelta, ArmScores, ControlVerdict, EffectVerdict};
 use gglib_core::domain::benchmark::tune::result::GeneratedOutput;
 
 use crate::setup::setup_test_database;
@@ -64,6 +64,8 @@ fn report() -> AgenticEvalReport {
         replicate_seed_sets: vec![replicate_seeds(&DEFAULT_SEEDS)],
         paired: None,
         proxy: None,
+        control_verdict: None,
+        effect_verdict: None,
     }
 }
 
@@ -146,6 +148,59 @@ async fn an_agentic_report_round_trips() {
         1,
         "each arm's own seed count, not the run's"
     );
+}
+
+/// A report stored before its verdicts were served reads back with them,
+/// and a verdict stored beside its numbers is never read: both are judged
+/// by today's rules from the numbers.
+#[tokio::test]
+async fn a_stored_report_is_judged_by_todays_rules() {
+    let repo = repo().await;
+    let run_id = repo
+        .create_run(BenchmarkRunType::Agentic, &[1], None, None, None)
+        .await
+        .expect("create_run");
+    let mut old = serde_json::to_value(report()).expect("serializes");
+    let fields = old.as_object_mut().expect("an object");
+    fields.remove("control_verdict");
+    fields.remove("effect_verdict");
+    let mut planted = old.clone();
+    planted["control_verdict"] = serde_json::json!({ "verdict": "wrong_direction", "gap": 0.5 });
+    for json in [old, planted] {
+        sqlx::query(
+            "INSERT INTO benchmark_agentic_results
+             (model_id, run_id, raw_composite, gglib_composite, report_json, created_at)
+             VALUES (1, ?, 0.802, 0.802, ?, '2026-01-01 00:00:00')",
+        )
+        .bind(run_id)
+        .bind(json.to_string())
+        .execute(&repo.pool)
+        .await
+        .expect("insert a stored report");
+    }
+
+    let history = repo
+        .get_model_agentic_history(1, 10)
+        .await
+        .expect("get_model_agentic_history");
+
+    assert_eq!(history.len(), 2);
+    for got in history {
+        // gglib 0.802 over a 0.60 control; a 0.0 delta over 0.022 of drift.
+        assert!(
+            matches!(got.control_verdict, Some(ControlVerdict::Moved { .. })),
+            "{:?}",
+            got.control_verdict
+        );
+        assert!(
+            matches!(
+                got.effect_verdict,
+                Some(EffectVerdict::WithinNoise { pairs: 1, .. })
+            ),
+            "{:?}",
+            got.effect_verdict
+        );
+    }
 }
 
 /// The run row must come back typed as agentic, not silently fall through

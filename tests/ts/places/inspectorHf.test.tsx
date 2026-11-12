@@ -19,7 +19,7 @@ import '@testing-library/jest-dom';
 
 import type { HfImagePreview, HfModelSummary, HfQuantization } from '../../../src/types';
 
-const hub = vi.hoisted(() => ({ quants: [] as unknown[], image: null as unknown, queue: null as unknown }));
+const hub = vi.hoisted(() => ({ quants: [] as unknown[], image: null as unknown, queue: null as unknown, pick: null as string | null }));
 const transport = vi.hoisted(() => ({
   listModels: vi.fn(async () => []),
   listServers: vi.fn(async () => []),
@@ -27,6 +27,7 @@ const transport = vi.hoisted(() => ({
   getDownloadQueue: vi.fn(async () => hub.queue),
   getHfModelSummary: vi.fn(),
   getHfQuantizations: vi.fn(async (id: string) => ({ model_id: id, quantizations: hub.quants, image: hub.image })),
+  getHfPick: vi.fn(async (id: string) => ({ model_id: id, label: hub.pick })),
   getHfToolSupport: vi.fn(async () => ({ supports_tool_calls: true, confidence: 0.9, detected_format: 'hermes' })),
   queueDownload: vi.fn(async () => ({ id: 'q-1' })),
 }));
@@ -89,6 +90,7 @@ const size = (label: string) => within(inspector()).getByRole('option', { name: 
 describe('the inspector, a Hugging Face repo', () => {
   beforeEach(() => {
     hub.queue = queueSnapshot();
+    hub.pick = null;
     for (const mock of Object.values(transport)) mock.mockClear();
     transport.getHfModelSummary.mockImplementation(async () => SUMMARY);
   });
@@ -105,20 +107,36 @@ describe('the inspector, a Hugging Face repo', () => {
     expect(within(inspector()).getByText(/^8\.0B/)).toBeInTheDocument();
   });
 
-  it('selects the largest quantized variant that fits when the listing marks no pick, with no ★', async () => {
-    // As real repositories list: the heads cannot tell gglib's pick, so none is marked.
+  it('selects no row and guesses no pick when the daemon marks none, until one is chosen', async () => {
+    // The daemon marks a pick for every repo with a model: the page never chooses one itself.
     renderHf([quant('Q4_K_M', 4000), quant('UD-Q8_K_XL', 4900), quant('Q8_0', 3900), quant('BF16', 7400), quant('F32', 16000, TOO_BIG)]);
     await within(inspector()).findByRole('listbox', { name: 'Sizes' });
 
-    expect(size('UD-Q8_K_XL')).toHaveAttribute('aria-selected', 'true');
-    expect(size('BF16')).toHaveAttribute('aria-selected', 'false');
+    for (const label of ['Q4_K_M', 'UD-Q8_K_XL', 'Q8_0', 'BF16', 'F32']) expect(size(label)).toHaveAttribute('aria-selected', 'false');
     expect(within(inspector()).queryByRole('img', { name: "gglib's pick" })).not.toBeInTheDocument();
+    expect(within(inspector()).queryByRole('button', { name: 'Download' })).not.toBeInTheDocument();
+
+    await userEvent.setup().click(size('Q8_0'));
+    expect(size('Q8_0')).toHaveAttribute('aria-selected', 'true');
+    expect(within(inspector()).getAllByRole('button', { name: 'Download' })).toHaveLength(1);
   });
 
-  it('selects full precision only when nothing quantized fits', async () => {
-    renderHf([quant('Q8_0', 9000, TOO_BIG), quant('F16', 7300), quant('BF16', 7400)]);
+  it("marks and selects the download's own pick when it arrives after a listing that marks none", async () => {
+    hub.pick = 'Q8_0';
+    renderHf([quant('Q4_K_M', 4000), quant('Q8_0', 3900), quant('BF16', 7400)]);
     await within(inspector()).findByRole('listbox', { name: 'Sizes' });
-    expect(size('BF16')).toHaveAttribute('aria-selected', 'true');
+
+    await waitFor(() => expect(size('Q8_0')).toHaveAttribute('aria-selected', 'true'));
+    expect(within(size('Q8_0')).getByRole('img', { name: "gglib's pick" })).toBeInTheDocument();
+    expect(within(inspector()).getAllByRole('img', { name: "gglib's pick" })).toHaveLength(1);
+    expect(transport.getHfPick).toHaveBeenCalledWith(REPO);
+  });
+
+  it("selects the daemon's pick even where a larger full-precision variant fits", async () => {
+    renderHf([quant('Q8_0', 9000, TOO_BIG), quant('F16', 7300, { picked: true }), quant('BF16', 7400)]);
+    await within(inspector()).findByRole('listbox', { name: 'Sizes' });
+    expect(size('F16')).toHaveAttribute('aria-selected', 'true');
+    expect(size('BF16')).toHaveAttribute('aria-selected', 'false');
   });
 
   it("selects gglib's pick, marked ★, scrolled into view, and only it carries Download, which queues it", async () => {
@@ -131,7 +149,7 @@ describe('the inspector, a Hugging Face repo', () => {
     expect(size('Q6_K')).toHaveAttribute('aria-selected', 'true');
     expect(within(inspector()).getAllByRole('img', { name: "gglib's pick" })).toHaveLength(1);
     expect(within(size('Q6_K')).getByRole('img', { name: "gglib's pick" })).toBeInTheDocument();
-    expect(scrolled.mock.contexts.at(-1)).toBe(size('Q6_K'));
+    await waitFor(() => expect(scrolled.mock.contexts.at(-1)).toBe(size('Q6_K')));
     expect(within(inspector()).getAllByRole('button', { name: 'Download' })).toHaveLength(1);
     expect(within(size('F32')).getByText('too big')).toBeInTheDocument();
     // The library's sizes: two decimals.

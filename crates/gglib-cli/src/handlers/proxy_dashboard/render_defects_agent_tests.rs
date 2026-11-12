@@ -1,8 +1,5 @@
 //! Tests for the agent path's rows in the per-model signals section (#1091).
 //!
-//! Their own file rather than more of `render_defects_tests.rs`, which the
-//! file-size budget has no room left in.
-//!
 //! What they are mostly about is the two ways this section could lie about a
 //! model reached only through GUI chat: filtering it out for having a clean
 //! proxy record, and printing its missing proxy denominator as a zero.

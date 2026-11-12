@@ -326,12 +326,12 @@ pub(crate) async fn run_agentic_eval(
         .zip(gglib_results.unwrap_or_default())
         .filter_map(|(raw, gglib)| {
             let first = raw.first().or_else(|| gglib.first())?;
-            Some(AgenticTaskComparison {
-                task_id: first.task_id.clone(),
-                category: first.category,
+            Some(AgenticTaskComparison::new(
+                first.task_id.clone(),
+                first.category,
                 raw,
                 gglib,
-            })
+            ))
         })
         .collect();
 
@@ -359,11 +359,14 @@ pub(crate) async fn run_agentic_eval(
         raw_replicates,
         paired: None,
         proxy,
+        control_verdict: None,
+        effect_verdict: None,
     };
     let report = AgenticEvalReport {
         paired: PairedEffect::from_tasks(&report.tasks),
         ..report
-    };
+    }
+    .with_verdicts();
 
     // Said out loud, because a control that failed to move invalidates every
     // other number in the report and a reader scanning the deltas will not

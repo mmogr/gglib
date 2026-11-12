@@ -8,4 +8,10 @@ export type Unload = {
 /**
  * The loaded model, by name.
  */
-model: string, reason: UnloadReason, };
+model: string, reason: UnloadReason, 
+/**
+ * Both in one sentence, composed here ([`Unload::new`]), printed by
+ * `gglib model explain` and shown by the Load palette:
+ * `Unloads Qwen3-30B-A3B first: it would not fit beside it.`
+ */
+sentence: string, };

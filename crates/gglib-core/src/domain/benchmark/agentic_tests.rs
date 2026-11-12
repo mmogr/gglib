@@ -68,12 +68,12 @@ fn task_result(id: &str, passed: bool) -> TuneTaskResult {
 }
 
 fn comparison(raw: &[bool], gglib: &[bool]) -> AgenticTaskComparison {
-    AgenticTaskComparison {
-        task_id: "t".to_owned(),
-        category: TaskCategory::SingleCall,
-        raw: raw.iter().map(|p| task_result("t", *p)).collect(),
-        gglib: gglib.iter().map(|p| task_result("t", *p)).collect(),
-    }
+    AgenticTaskComparison::new(
+        "t".to_owned(),
+        TaskCategory::SingleCall,
+        raw.iter().map(|p| task_result("t", *p)).collect(),
+        gglib.iter().map(|p| task_result("t", *p)).collect(),
+    )
 }
 
 /// An arm whose axes agree with its composite: every axis sits at `value`,
@@ -111,6 +111,8 @@ pub(super) fn report_with(control: Option<ArmScores>, gglib_composite: f64) -> A
         replicate_seed_sets: vec![],
         paired: None,
         proxy: None,
+        control_verdict: None,
+        effect_verdict: None,
     }
 }
 
@@ -190,6 +192,11 @@ fn a_legacy_report_reads_as_a_single_seed() {
 fn pass_counts_report_each_arms_seeds_separately() {
     let cmp = comparison(&[true, false, false], &[true, true, true]);
     assert_eq!(cmp.pass_counts(), (1, 3));
+    // And the served counts are the same ones.
+    assert_eq!(
+        (cmp.raw_passed, cmp.gglib_passed, cmp.unstable),
+        (1, 3, true)
+    );
 }
 
 /// A task that disagrees with itself across seeds is where suite variance
@@ -804,12 +811,12 @@ pub(super) fn paired_task(
     raw_scores: &[f64],
     gglib_scores: &[f64],
 ) -> AgenticTaskComparison {
-    AgenticTaskComparison {
-        task_id: id.to_owned(),
-        category: TaskCategory::SingleCall,
-        raw: raw_scores.iter().map(|s| scored_result(id, *s)).collect(),
-        gglib: gglib_scores.iter().map(|s| scored_result(id, *s)).collect(),
-    }
+    AgenticTaskComparison::new(
+        id.to_owned(),
+        TaskCategory::SingleCall,
+        raw_scores.iter().map(|s| scored_result(id, *s)).collect(),
+        gglib_scores.iter().map(|s| scored_result(id, *s)).collect(),
+    )
 }
 
 // ── Multi-pair A/A drift ────────────────────────────────────────────────
@@ -861,4 +868,67 @@ fn a_report_derives_its_paired_effect_from_tasks() {
     report.tasks = vec![paired_task("a", &[0.5], &[1.0])];
     let paired = report.paired_effect().expect("one pair");
     assert_eq!((paired.pairs, paired.wins), (1, 1));
+}
+
+// ── Served verdicts ─────────────────────────────────────────────────────
+
+/// A report with a control, an A/A arm and one task that flipped.
+fn judged_report() -> AgenticEvalReport {
+    AgenticEvalReport {
+        control: Some(uniform_arm(0.2)),
+        tasks: vec![comparison(&[true, false], &[true, true])],
+        ..report_with_replicate(0.30, 0.03)
+    }
+}
+
+/// The verdicts ride on the wire, as the rules say them, so no surface
+/// re-derives them; each task carries its pass counts and stability.
+#[test]
+fn the_verdicts_are_served_as_the_rules_say_them() {
+    let report = judged_report().with_verdicts();
+
+    assert_eq!(report.control_verdict, report.control_verdict());
+    assert_eq!(report.effect_verdict, report.effect_verdict());
+    let json = serde_json::to_value(&report).expect("serializes");
+    assert_eq!(json["control_verdict"]["verdict"], "moved");
+    assert_eq!(json["effect_verdict"]["verdict"], "exceeds_noise");
+    assert_eq!(json["effect_verdict"]["pairs"], 1);
+    assert_eq!(json["effect_verdict"]["bar"], EFFECT_NOISE_RATIO);
+    let task = &json["tasks"][0];
+    assert_eq!(
+        (
+            &task["raw_passed"],
+            &task["gglib_passed"],
+            &task["unstable"]
+        ),
+        (
+            &serde_json::json!(1),
+            &serde_json::json!(2),
+            &serde_json::json!(true)
+        )
+    );
+}
+
+/// What a report says of itself is never read back: a stored verdict or
+/// count, stale or planted, is dropped on read and judged again.
+#[test]
+fn a_stored_verdict_is_judged_again_not_read_back() {
+    let mut json = serde_json::to_value(judged_report().with_verdicts()).expect("serializes");
+    json["control_verdict"] = serde_json::json!({ "verdict": "wrong_direction", "gap": 9.0 });
+    json["effect_verdict"] = serde_json::Value::Null;
+    json["tasks"][0]["raw_passed"] = serde_json::json!(99);
+    json["tasks"][0]["unstable"] = serde_json::json!(false);
+
+    let read: AgenticEvalReport = serde_json::from_value(json).expect("deserializes");
+    assert_eq!(read.control_verdict, None);
+    assert_eq!(read.tasks[0].raw_passed, 0);
+
+    let judged = read.with_verdicts();
+    assert!(matches!(
+        judged.control_verdict,
+        Some(ControlVerdict::Moved { .. })
+    ));
+    assert!(judged.effect_verdict.is_some_and(|v| v.exceeds_noise()));
+    assert_eq!(judged.tasks[0].raw_passed, 1);
+    assert!(judged.tasks[0].unstable);
 }

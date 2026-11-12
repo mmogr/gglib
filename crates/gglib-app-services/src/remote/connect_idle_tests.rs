@@ -2,13 +2,11 @@
 //! is modelpipe's rather than this watcher's, how long it is, and when it
 //! re-arms.
 //!
-//! A sibling of `connect_watch_tests.rs`, which was 255 lines against a
-//! 300-line budget and would have gone over with these, and because they are
-//! a different question about the same loop: that file
-//! asks *what is announced*, this one asks *when* — and every case here turns
-//! on a clock that was already running before `follow` looked at it, which is
-//! precisely what [`ConnectHandle::idle_for`] gives and a clock kept here
-//! could not.
+//! A sibling of `connect_watch_tests.rs` because these are a different
+//! question about the same loop: that file asks *what is announced*, this one
+//! asks *when* — and every case here turns on a clock that was already
+//! running before `follow` looked at it, which is precisely what
+//! [`ConnectHandle::idle_for`] gives and a clock kept here could not.
 //!
 //! The harness — [`Clock`], [`follow_with`], [`said`] — comes from the
 //! sibling rather than being repeated, so both files agree by construction

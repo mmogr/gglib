@@ -2,6 +2,8 @@
 import type { AgenticTaskComparison } from "./AgenticTaskComparison";
 import type { ArmDelta } from "./ArmDelta";
 import type { ArmScores } from "./ArmScores";
+import type { ControlVerdict } from "./ControlVerdict";
+import type { EffectVerdict } from "./EffectVerdict";
 import type { PairedEffect } from "./PairedEffect";
 import type { ProxyArms } from "./ProxyArms";
 
@@ -49,7 +51,7 @@ seeds: Array<number>,
 /**
  * Scores under the positive control arm, when it ran.
  *
- * Read [`Self::control_verdict`] rather than these numbers directly: what
+ * Read [`Self::control_verdict()`] rather than these numbers directly: what
  * matters is not the control's score but whether it *differs*. Its
  * [`ArmScores::seeds`] is usually smaller than the real arms' — see
  * [`AgenticEvalConfig::control_seeds`] — so its composite is a coarser
@@ -59,7 +61,7 @@ control: ArmScores | null,
 /**
  * Scores under the A/A arm — the raw pipeline again, different seeds.
  *
- * Read [`Self::effect_verdict`] rather than this directly: the number that
+ * Read [`Self::effect_verdict()`] rather than this directly: the number that
  * matters is its *distance* from [`Self::raw`], not its own value.
  */
 raw_replicate: ArmScores | null, 
@@ -88,9 +90,8 @@ replicate_seed_sets: Array<Array<number>>,
 /**
  * The paired per-`(task, seed)` comparison, computed at assembly.
  *
- * Stored rather than derived-only, unlike the verdicts: those re-derive
- * from two floats in any language, while this one carries a rank test
- * nobody should maintain twice. [`Self::paired_effect`] re-derives it
+ * Stored, where the verdicts are recomputed on every read
+ * ([`Self::with_verdicts`]). [`Self::paired_effect`] re-derives it
  * from the drill-down for reports written before the field existed.
  */
 paired: PairedEffect | null, 
@@ -99,4 +100,16 @@ paired: PairedEffect | null,
  * [`AgenticEvalConfig::include_proxy`] ran them. `None` on every report
  * written before they existed.
  */
-proxy: ProxyArms | null, };
+proxy: ProxyArms | null, 
+/**
+ * What the positive control demonstrated ([`Self::control_verdict()`]),
+ * served so no surface re-derives it. Filled by [`Self::with_verdicts`]
+ * from today's rule and never read back from storage; `None` when the
+ * control did not run.
+ */
+control_verdict: ControlVerdict | null, 
+/**
+ * What the A/A arm says of the effect ([`Self::effect_verdict()`]),
+ * served and filled as `control_verdict` is.
+ */
+effect_verdict: EffectVerdict | null, };

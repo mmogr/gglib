@@ -65,6 +65,7 @@ async fn status_then_removal(
     );
     assert!(json.get("updateCommand").is_none(), "{json}");
     assert_eq!(json["serving"], serde_json::Value::Null);
+    assert_eq!(json["standing"], serde_json::Value::Null, "{json}");
     assert!(
         json["download"].is_string() ^ json["downloadUnavailable"].is_string(),
         "either a build to download or the reason there is none: {json}"
@@ -75,6 +76,13 @@ async fn status_then_removal(
     std::fs::write(&server, b"#!/bin/sh\n").unwrap();
     let (_, json) = call(Method::GET, &base).await;
     assert_eq!(json["installed"], true, "{json}");
+    // The pin's standing in `gglib config <engine> status`'s words: a binary
+    // with no record is placed against nothing.
+    assert_eq!(
+        json["standing"],
+        format!("Pinned release: {pin}. There is no record of what is installed."),
+        "{json}"
+    );
 
     let (status, json) = call(Method::POST, &format!("{base}/uninstall")).await;
     assert_eq!(status, StatusCode::OK, "{json}");
