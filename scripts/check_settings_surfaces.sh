@@ -406,7 +406,7 @@ pub struct UpdateSettingsRequest {
     pub documented: Option<Option<bool>>,
     #[serde(
         default,
-        alias = "toolCallFloor",
+        alias = "oldName",
         with = "serde_with::rust::double_option"
     )]
     pub multi_line: Option<Option<bool>>,

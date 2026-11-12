@@ -153,7 +153,7 @@ fn inference_default_lines(dto: &ModelDetailDto) -> Vec<String> {
             " (published by the model author — ranks below global settings)"
         }
         // Also below global — an automated apply is not a person — but the
-        // strongest evidence there is, and the agentic ceiling defers to it.
+        // strongest evidence there is.
         Some(DefaultsOrigin::Measured) => {
             " (measured by a tune sweep — ranks below global settings)"
         }

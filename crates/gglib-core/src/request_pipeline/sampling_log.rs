@@ -73,11 +73,6 @@ pub(super) fn log_resolution(decision: &SamplingDecision) {
         reasoning_effort = ?r.reasoning_effort,
         reasoning_budget_tokens = ?r.reasoning_budget_tokens,
         from = %decision.sources.describe(&decision.layer_names),
-        // Reported separately from `from`, which still names the rung the
-        // temperature *would* have come from. The ceiling does not replace that
-        // rung, it caps what it supplied.
-        agentic_turn = decision.agentic_turn,
-        agentic_ceiling = decision.agentic_ceiling_applied,
         "sampling resolved"
     );
 }

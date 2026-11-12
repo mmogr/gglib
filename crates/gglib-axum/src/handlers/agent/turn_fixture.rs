@@ -186,15 +186,6 @@ pub(super) async fn global(state: &AppState, config: InferenceConfig) {
     state.core.settings().update(update).await.unwrap();
 }
 
-/// Store the agentic sampling switch as `stored`: on, off, or not stored.
-pub(super) async fn agentic_sampling(state: &AppState, stored: Option<bool>) {
-    let update = SettingsUpdate {
-        agentic_sampling: Some(stored),
-        ..SettingsUpdate::default()
-    };
-    state.core.settings().update(update).await.unwrap();
-}
-
 pub(super) fn temperature(value: f32) -> InferenceConfig {
     InferenceConfig {
         temperature: Some(value),

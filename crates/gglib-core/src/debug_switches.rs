@@ -10,7 +10,7 @@
 //! the work**, and for gglib that process is the daemon. So
 //!
 //! ```text
-//! GGLIB_DISABLE_AGENTIC_SAMPLING=1 gglib benchmark agentic --model m
+//! GGLIB_DISABLE_GRAMMAR=1 gglib benchmark agentic --model m
 //! ```
 //!
 //! sets the variable on a CLI process which resolves no sampling at all. The
@@ -47,7 +47,6 @@ use std::fmt::Write as _;
 /// Kept sorted so the reported order is stable across processes — a mismatch
 /// warning that reorders itself is harder to read than one that does not.
 pub const ALL: &[&str] = &[
-    "GGLIB_DISABLE_AGENTIC_SAMPLING",
     "GGLIB_DISABLE_CACHE_AUTOSIZE",
     "GGLIB_DISABLE_CACHE_REUSE",
     "GGLIB_DISABLE_CONTEXT_FIT",

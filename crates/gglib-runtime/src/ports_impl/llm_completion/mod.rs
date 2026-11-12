@@ -83,15 +83,13 @@ pub struct LlmCompletionAdapter {
     /// over (ADR 0022).
     ///
     /// A value a stored layer supplied must never be handed in here: it would
-    /// reach the pipeline as a person's choice, which outranks every layer
-    /// and which the agentic temperature ceiling never lowers.
+    /// reach the pipeline as a person's choice, which outranks every layer.
     sampling: Option<InferenceConfig>,
     /// The stored layers beneath [`Self::sampling`]: the profile the caller
-    /// selected and the settings' global defaults, and with them whether a
-    /// turn with tools gets the agentic temperature ceiling. Handed to
+    /// selected and the settings' global defaults. Handed to
     /// [`request_pipeline::apply()`] unfolded, so the ladder is folded there
     /// and nowhere before it. A caller that hands over none (the default)
-    /// has neither layer, and the ceiling on.
+    /// has neither layer.
     layers: SamplingLayers,
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
@@ -247,8 +245,7 @@ impl LlmCompletionAdapter {
         // has already written the caller's own parameters into the body, which
         // is exactly where an external client's would be, so `apply` reads
         // them back as the top layer and resolves the caller's stored layers
-        // (`self.layers`) and the model's own beneath them. Whether a turn
-        // with tools is capped is those layers' to say.
+        // (`self.layers`) and the model's own beneath them.
         //
         // `trust_client_sampling: true` unconditionally: `Settings.trust_client_sampling`
         // gates an *external* client's request body against a boilerplate value it

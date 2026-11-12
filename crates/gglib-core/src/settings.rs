@@ -263,29 +263,6 @@ pub struct Settings {
     /// [`Self::effective_mcp_drawing`].
     pub mcp_drawing: Option<bool>,
 
-    // ── Agentic-turn sampling ───────────────────────────────────────
-    /// Whether a request carrying tools gets the agentic-turn temperature
-    /// ceiling — see
-    /// [`InferenceConfig::agentic_temperature_ceiling`](crate::domain::InferenceConfig::agentic_temperature_ceiling).
-    ///
-    /// `None`/`Some(true)` → active (the default): a turn that may emit
-    /// structured output has its temperature capped, but only over a value
-    /// nobody deliberately chose — a model's recipe nobody here reviewed —
-    /// and only on a model class that has a ceiling. Reasoning models have
-    /// none (see `agentic_temperature_ceiling`), so on them this setting
-    /// gates nothing. Anything set by a person stands. `Some(false)` disables
-    /// the cap.
-    ///
-    /// Same polarity as [`Self::loop_guard_mode`], and for the same
-    /// reason: this is a correction the endpoint should not silently lose.
-    /// A chat reads it through [`Self::effective_agentic_sampling`], which
-    /// supplies the default.
-    ///
-    /// The `tool_call_floor` alias is the name #741 gave this setting; it keeps
-    /// a config that uses that name loading.
-    #[serde(alias = "tool_call_floor")]
-    pub agentic_sampling: Option<bool>,
-
     // ── Always-on proxy (desktop app) ───────────────────────────────
     /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
     /// it launches, rather than waiting for the user to switch it on.
@@ -371,7 +348,6 @@ impl Settings {
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             max_parallel_tools: None,
             tool_timeout_ms: None,
-            agentic_sampling: None,
             default_model_id: None,
             default_image_model_id: None,
             inference_defaults: None,
@@ -451,16 +427,6 @@ impl Settings {
         }
     }
 
-    /// Whether a turn with tools gets the agentic temperature ceiling: the
-    /// stored [`Self::agentic_sampling`], and on when none is stored.
-    ///
-    /// The one place the switch is read, so the page, a paired device, the
-    /// terminal and the proxy cannot disagree about it.
-    #[must_use]
-    pub const fn effective_agentic_sampling(&self) -> bool {
-        !matches!(self.agentic_sampling, Some(false))
-    }
-
     /// Whether `/mcp` offers the drawing tool: the stored
     /// [`Self::mcp_drawing`], and off when none is stored.
     #[must_use]
@@ -538,9 +504,6 @@ impl Settings {
         }
         if let Some(ref v) = other.loop_guard_mode {
             self.loop_guard_mode = *v;
-        }
-        if let Some(ref v) = other.agentic_sampling {
-            self.agentic_sampling = *v;
         }
         if let Some(ref v) = other.proxy_autostart {
             self.proxy_autostart = *v;

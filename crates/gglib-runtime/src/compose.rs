@@ -77,8 +77,7 @@ use crate::{Door, LlmCompletionAdapter};
 ///   client's.
 /// * `layers` — the stored layers the endpoint folds beneath `sampling`,
 ///   read here for one thing: whether its ladder names a `max_tokens`, which
-///   a turn's limit would otherwise outrank. With them goes whether a turn
-///   with tools gets the agentic temperature ceiling.
+///   a turn's limit would otherwise outrank.
 /// * `door` — the gglib endpoint `base_url` is: this machine's own, which a
 ///   chat turn dials as any client does, or the remote tunnel's loopback
 ///   port, which is another machine's proxy (ADR 0012). It carries the key
