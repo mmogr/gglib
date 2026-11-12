@@ -9,8 +9,9 @@
 //! build that finds a higher one stops before touching the file.
 //!
 //! This is a number of its own, kept in its own table, rather than
-//! `PRAGMA user_version`: that ladder gates one-time row passes and
-//! deliberately says nothing of columns (see `add_column_if_missing`).
+//! `PRAGMA user_version`: that ladder numbers the one-time row passes in
+//! `setup_migrations.rs` and deliberately says nothing of columns (see
+//! `add_column_if_missing`).
 //!
 //! [`SCHEMA_GENERATION`] is kept honest by `schema_snapshot.sql`: the
 //! schema a fresh database ends up with, which a test compares against. A
@@ -25,7 +26,7 @@ use sqlx::SqlitePool;
 /// The generation of the schema [`super::create_schema_reading`] builds.
 ///
 /// Raise it by one whenever that schema changes in any way: a table, a
-/// column, an index, or a new step on the `user_version` ladder. Then
+/// column, an index, or a new step in `setup_migrations.rs`. Then
 /// rewrite the snapshot with
 /// `GGLIB_UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p gglib-db schema_snapshot`.
 pub(super) const SCHEMA_GENERATION: i64 = 5;

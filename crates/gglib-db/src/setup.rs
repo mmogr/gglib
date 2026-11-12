@@ -6,7 +6,7 @@
 
 use anyhow::{Context, Result};
 use sqlx::{
-    SqlitePool,
+    SqliteConnection, SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 use std::path::Path;
@@ -27,6 +27,8 @@ mod branches;
 mod generation;
 #[path = "setup_mcp_lifecycle.rs"]
 mod mcp_lifecycle;
+#[path = "setup_migrations.rs"]
+mod migrations;
 #[path = "setup_model_components.rs"]
 mod model_components;
 #[path = "setup_model_files.rs"]
@@ -41,13 +43,6 @@ mod remote_grant;
 mod settings;
 #[path = "setup_unknown_params.rs"]
 mod unknown_params;
-
-/// `PRAGMA user_version` once the canonical-path backfills have run.
-///
-/// Databases predating this carry `0`, `SQLite`'s default. The first version
-/// this project has assigned; anything later must take a higher number and
-/// leave this one meaning what it means now.
-const CANONICAL_PATH_SCHEMA_VERSION: i64 = 1;
 
 /// Whether a `SQLite` error is a unique-index violation.
 ///
@@ -71,11 +66,11 @@ fn is_unique_violation(error: &sqlx::Error) -> bool {
 /// ([#921]).
 ///
 /// **Columns are not on the `PRAGMA user_version` ladder.** Its versions gate
-/// passes over rows that run once per database (the path backfill at `1`, the
-/// loop guard's fold at `2`) and say nothing of columns: a field database
-/// stamped `1` or later may or may not carry `template_caps`, depending on
-/// which build last opened it, so a version-gated ALTER that propagates
-/// errors would abort startup with `duplicate column name`.
+/// passes over rows that run once per database (`setup_migrations.rs`) and say
+/// nothing of columns: a field database stamped `1` or later may or may not
+/// carry `template_caps`, depending on which build last opened it, so a
+/// version-gated ALTER that propagates errors would abort startup with
+/// `duplicate column name`.
 ///
 /// The identifiers are interpolated rather than bound: `SQLite` accepts no
 /// parameters in DDL. Every caller passes a literal.
@@ -255,31 +250,9 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
     models::create_models_table(pool).await?;
     models::create_model_indexes(&mut *pool.acquire().await?).await?;
 
-    // The path/key backfills below resolve every stored path, which is a
-    // blocking syscall per row and per shard entry — on Windows that opens a
-    // handle to each file, so an ungated pass would stall launch on a model
-    // living on a sleeping drive or a dead mount. Gated on `user_version` so
-    // the cost is paid once per library.
-    //
-    // The gate makes the repair one-shot, which is a real trade and not merely
-    // an optimisation: once stamped, a non-canonical row written afterwards
-    // is never repaired. That needs an older binary writing to an
-    // already-migrated database — mixed-version writers are out of scope, the
-    // usual bargain for a version-stamped migration. The passes themselves
-    // stay idempotent, so a crash before the stamp simply re-runs them.
-    let schema_version: i64 = sqlx::query_scalar("PRAGMA user_version")
-        .fetch_one(pool)
-        .await?;
-    if schema_version < CANONICAL_PATH_SCHEMA_VERSION {
-        backfill_local_model_keys(pool).await?;
-        backfill_shard_path_lists(pool).await?;
-        // Not bindable as a parameter: SQLite requires a literal here.
-        sqlx::query(&format!(
-            "PRAGMA user_version = {CANONICAL_PATH_SCHEMA_VERSION}"
-        ))
-        .execute(pool)
-        .await?;
-    }
+    // Step 1, the canonical paths, ahead of the rest: the projector link
+    // below finds a model's folder from the `file_path` it rewrites.
+    migrations::run(pool, 1).await?;
 
     model_files::create_model_files_table(pool).await?;
     model_files::add_projector_column(pool, gguf_parser).await?;
@@ -392,7 +365,7 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
 
     // Migration: whether paired devices may use a server, closed unless set.
     // The upgrade that opens the servers the old list named is
-    // `remote_grant`, a `user_version` step below.
+    // `remote_grant`, step 4 in `setup_migrations.rs`.
     add_column_if_missing(
         pool,
         "mcp_servers",
@@ -642,19 +615,6 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
     .execute(pool)
     .await?;
 
-    // A setting's row carried over into the setting that replaced it. After
-    // every table exists, so a schema refused above has had no row rewritten.
-    settings::fold_loop_guard_switch_into_mode(pool).await?;
-
-    // Stored copies of the `reasoning` recipe, which resolution now supplies
-    // from the tag. After the fold, whose version sits below this one.
-    recipes::drop_stored_reasoning_recipes(pool).await?;
-
-    // The MCP servers the remote tunnel's list opened, flagged on their own
-    // rows. After the recipes step, whose version sits below this one, and
-    // after the settings and MCP tables it reads exist.
-    remote_grant::flag_listed_servers(pool).await?;
-
     // Stored `manual` servers made disabled `lazy` ones. At every open, off
     // the `user_version` ladder: an older build can still write `manual`.
     mcp_lifecycle::retire_manual_lifecycle(pool).await?;
@@ -662,15 +622,12 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
     // After every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;
 
-    // The counts stored as `0.0` made unknown. After the rebuild, which lets
-    // the column hold a NULL, and after the remote grant step, whose version
-    // sits below this one.
-    unknown_params::forget_zero_param_counts(pool).await?;
-
-    Ok(())
+    // The other steps, after every table they read exists and after the
+    // rebuild, which lets step 5 store a NULL count.
+    migrations::run(pool, migrations::LATEST).await
 }
 
-/// Migration: put local models' paths and keys onto the canonical rule.
+/// Step 1: put local models' paths and keys onto the canonical rule.
 ///
 /// A `local:` key is a hash of the model's canonical path. A row written
 /// before [#850] may carry a key hashed over the path *as the caller spelled
@@ -694,8 +651,12 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
 /// migration has no business performing silently. Any other database error is
 /// propagated rather than counted as a skip.
 ///
+/// Once per library, because it resolves every stored path: a blocking
+/// syscall per row and shard, which on a dead mount stalls the launch. So a
+/// non-canonical row an older build writes after the stamp is never repaired.
+///
 /// [#850]: https://github.com/mmogr/gglib/pull/850
-async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
+async fn backfill_local_model_keys(conn: &mut SqliteConnection) -> Result<()> {
     use crate::repositories::sqlite_model_repository::local_model_key_for;
     use gglib_core::paths::canonical_model_path_string;
     use sqlx::Row;
@@ -703,7 +664,7 @@ async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
 
     let rows =
         sqlx::query("SELECT id, file_path, model_key FROM models WHERE model_key LIKE 'local:%'")
-            .fetch_all(pool)
+            .fetch_all(&mut *conn)
             .await?;
 
     let mut rekeyed = 0_usize;
@@ -723,7 +684,7 @@ async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
             .bind(&expected)
             .bind(&canonical)
             .bind(id)
-            .execute(pool)
+            .execute(&mut *conn)
             .await
         {
             Ok(_) => rekeyed += 1,
@@ -744,7 +705,7 @@ async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-/// Migration: canonicalise the stored shard path lists.
+/// Step 1 too: canonicalise the stored shard path lists.
 ///
 /// Companion to [`backfill_local_model_keys`], and needed for the same reason:
 /// an older row's `file_paths_json` may hold each shard exactly as the
@@ -759,14 +720,14 @@ async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
 /// Applies to every row with a shard list, not only `local:` ones — a
 /// downloaded sharded model keeps its `hf:` key but may hold the same raw
 /// paths. Idempotent: once resolved, re-resolving is the identity.
-async fn backfill_shard_path_lists(pool: &SqlitePool) -> Result<()> {
+async fn backfill_shard_path_lists(conn: &mut SqliteConnection) -> Result<()> {
     use gglib_core::paths::canonical_model_path_string;
     use sqlx::Row;
     use std::path::Path;
 
     let rows =
         sqlx::query("SELECT id, file_paths_json FROM models WHERE file_paths_json IS NOT NULL")
-            .fetch_all(pool)
+            .fetch_all(&mut *conn)
             .await?;
 
     let mut rewritten = 0_usize;
@@ -794,7 +755,7 @@ async fn backfill_shard_path_lists(pool: &SqlitePool) -> Result<()> {
         sqlx::query("UPDATE models SET file_paths_json = ? WHERE id = ?")
             .bind(&encoded)
             .bind(id)
-            .execute(pool)
+            .execute(&mut *conn)
             .await?;
         rewritten += 1;
     }

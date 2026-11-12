@@ -4,7 +4,7 @@
 //!
 //! A `#[path]` child of `setup.rs`, whose `create_schema` creates the table
 //! and its indexes first, before any table that references `models`, and runs
-//! the rebuild last, once every table the rebuild reads exists.
+//! the rebuild near the end, once every table the rebuild reads exists.
 
 use anyhow::{Context, Result};
 use sqlx::{SqliteConnection, SqlitePool};
@@ -151,8 +151,8 @@ async fn in_todays_shape(conn: &mut SqliteConnection) -> Result<bool> {
 ///
 /// `SQLite` can change neither in place, so this is its
 /// documented table rebuild: the new table is made beside the old, filled, and
-/// renamed over it. It runs last in `create_schema`, because the sequence it
-/// seeds reads `chat_conversations`, `settings_kv` and the benchmark tables,
+/// renamed over it. Only the later migration steps run after it in
+/// `create_schema`, because the sequence it seeds reads `chat_conversations`, `settings_kv` and the benchmark tables,
 /// which a library old enough to need it may lack until `create_schema` makes
 /// them.
 ///

@@ -253,7 +253,7 @@ async fn a_library_that_has_the_column_is_never_linked() {
 }
 
 /// A library old enough to need the `models` rebuild too gets both in one
-/// start, and the rebuild, which runs last, carries the link over.
+/// start, and the rebuild, which runs after the link, carries it over.
 #[tokio::test]
 async fn the_link_survives_the_models_rebuild_of_the_same_start() {
     let dir = tempfile::tempdir().unwrap();

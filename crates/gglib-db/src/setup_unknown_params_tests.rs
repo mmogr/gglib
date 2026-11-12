@@ -2,10 +2,11 @@
 //! that it runs once, and that a table which required a count is rebuilt
 //! so it can hold none.
 
+use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
 use super::super::create_schema;
-use super::*;
+use super::super::migrations::{LATEST, run, user_version};
 
 /// One connection, so every statement and pragma reads the one database.
 async fn library() -> SqlitePool {
@@ -57,14 +58,11 @@ async fn a_count_of_none_becomes_unknown_and_a_real_one_is_kept() {
     plant(&pool, "chat", 7.0).await;
     stamp_older(&pool).await;
 
-    forget_zero_param_counts(&pool).await.unwrap();
+    run(&pool, LATEST).await.unwrap();
 
     assert_eq!(count_of(&pool, "drawn").await, None);
     assert_eq!(count_of(&pool, "chat").await, Some(7.0));
-    assert_eq!(
-        user_version(&pool).await.unwrap(),
-        UNKNOWN_PARAMS_SCHEMA_VERSION
-    );
+    assert_eq!(user_version(&pool).await.unwrap(), LATEST);
 }
 
 /// Once stamped, a later `0.0` (an owner's, written by hand) is left alone.
@@ -73,7 +71,7 @@ async fn the_step_runs_once() {
     let pool = library().await;
     plant(&pool, "typed", 0.0).await;
 
-    forget_zero_param_counts(&pool).await.unwrap();
+    run(&pool, LATEST).await.unwrap();
 
     assert_eq!(count_of(&pool, "typed").await, Some(0.0));
 }
@@ -180,7 +178,7 @@ async fn a_saved_reports_count_of_none_becomes_unknown() {
     .unwrap();
     stamp_older(&pool).await;
 
-    forget_zero_param_counts(&pool).await.unwrap();
+    run(&pool, LATEST).await.unwrap();
 
     let counts: Vec<Option<f64>> = sqlx::query_scalar(
         "SELECT json_extract(report_json, '$.param_count_b') FROM benchmark_agentic_results \

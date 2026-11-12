@@ -60,7 +60,9 @@ async fn backfill_rekeys_a_row_stored_under_a_non_canonical_spelling() {
     .await
     .unwrap();
 
-    backfill_local_model_keys(&pool).await.unwrap();
+    backfill_local_model_keys(&mut pool.acquire().await.unwrap())
+        .await
+        .unwrap();
 
     let key: String = sqlx::query_scalar("SELECT model_key FROM models WHERE name = 'Legacy'")
         .fetch_one(&pool)
@@ -75,7 +77,9 @@ async fn backfill_rekeys_a_row_stored_under_a_non_canonical_spelling() {
     assert_ne!(key, legacy_key, "the key must actually have moved");
 
     // Idempotent: a second pass is a no-op.
-    backfill_local_model_keys(&pool).await.unwrap();
+    backfill_local_model_keys(&mut pool.acquire().await.unwrap())
+        .await
+        .unwrap();
     let again: String = sqlx::query_scalar("SELECT model_key FROM models WHERE name = 'Legacy'")
         .fetch_one(&pool)
         .await
@@ -128,7 +132,9 @@ async fn backfill_repairs_a_row_whose_stored_path_is_not_canonical() {
     .await
     .unwrap();
 
-    backfill_local_model_keys(&pool).await.unwrap();
+    backfill_local_model_keys(&mut pool.acquire().await.unwrap())
+        .await
+        .unwrap();
 
     let (stored_path, stored_key): (String, String) =
         sqlx::query_as("SELECT file_path, model_key FROM models WHERE name = 'Patched'")

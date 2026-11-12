@@ -303,7 +303,7 @@ async fn a_library_older_than_the_later_tables_is_rebuilt() {
         r#"{};
          INSERT INTO models (id, name, file_path, param_count_b, added_at, model_key, file_paths_json)
              VALUES (3, 'Old', '/m/o-1.gguf', 7.0, 'then', 'hf:old', '["/m/o-1.gguf","/m/o-2.gguf"]');
-         PRAGMA user_version = {CANONICAL_PATH_SCHEMA_VERSION};"#,
+         PRAGMA user_version = 1;"#,
         legacy_ddl("models"),
     ))
     .execute(&pool)
