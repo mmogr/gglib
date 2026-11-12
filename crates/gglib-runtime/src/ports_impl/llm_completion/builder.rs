@@ -60,12 +60,9 @@ impl LlmCompletionAdapter {
             door: None,
             attachments: None,
             sampling: None,
-            // No stored layer, and the ceiling on: a caller with no settings
-            // to follow (a benchmark arm, a tune sweep) hands over none.
-            layers: SamplingLayers {
-                agentic_adjustments: true,
-                ..SamplingLayers::default()
-            },
+            // No stored layer: a caller with no settings to follow (a
+            // benchmark arm, a tune sweep) hands over none.
+            layers: SamplingLayers::default(),
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             stream_idle_timeout: gglib_proxy::STREAM_IDLE_TIMEOUT,
             model_context: ModelContext::passthrough(),
@@ -138,13 +135,9 @@ impl LlmCompletionAdapter {
     /// The caller hands them over unfolded and the pipeline folds them with
     /// the model's own, once, when a request is shaped.
     ///
-    /// These replace the layers the adapter was built with, the agentic
-    /// switch among them, and [`SamplingLayers::default`] leaves that switch
-    /// off. So a caller says which it means: a chat on one of this machine's
-    /// models hands over `Settings::effective_agentic_sampling`, and a caller
-    /// with no settings to follow turns it on. The trust switch is not the
-    /// caller's to set: the adapter trusts its own typed parameters whatever
-    /// arrives here.
+    /// These replace the layers the adapter was built with. The trust switch
+    /// is not the caller's to set: the adapter trusts its own typed
+    /// parameters whatever arrives here.
     #[must_use]
     pub fn with_layers(mut self, layers: SamplingLayers) -> Self {
         self.layers = layers;

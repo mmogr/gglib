@@ -138,7 +138,7 @@ All four must hold. Anything else forwards unchanged.
 3. The response is not already a repair attempt. **One attempt, never a loop.**
 4. Repair is enabled (`Settings.tool_call_repair`, default on, with a
    `GGLIB_DISABLE_TOOL_REPAIR` env kill switch matching the convention of
-   `GGLIB_DISABLE_GRAMMAR` and `GGLIB_DISABLE_AGENTIC_SAMPLING`).
+   `GGLIB_DISABLE_GRAMMAR`).
 
    Settable as `gglib config set tool-call-repair false`, or from
    Settings › Endpoint › What gglib does to requests › Repair broken tool

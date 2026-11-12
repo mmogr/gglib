@@ -112,7 +112,6 @@ fn each_layer_beats_the_ones_below_it() {
             // profile" / "cli beats client" rows still exercise the
             // client layer at all. See `client_sampling_is_ignored_by_default`.
             trust_client_sampling: true,
-            agentic_adjustments: false,
         };
         resolve_sampling(&mut body, &model_ctx(model.map(temp)), &layers);
         assert_param(&body, "temperature", expected);
@@ -147,7 +146,6 @@ fn a_sparse_profile_leaves_other_model_defaults_intact() {
             profile: Some(temp(0.2)),
             global: None,
             trust_client_sampling: false,
-            agentic_adjustments: false,
         },
     );
 
@@ -207,48 +205,6 @@ fn a_non_object_body_reports_resolved_but_not_applied() {
 
     assert!(!decision.applied);
     assert!(decision.resolved.temperature.is_some(), "still resolved");
-}
-
-/// The interaction six existing tests could only assert by value.
-///
-/// When the ceiling bites, `sources.temperature` must still name the rung
-/// that supplied the value — the cap does not replace that rung, it caps
-/// what the rung supplied. Reporting anything else here would make the log
-/// say nobody chose a temperature on a model whose recipe did.
-///
-/// A non-reasoning model, because that is the only class that still has a
-/// ceiling — see `a_reasoning_models_recipe_stands_uncapped`.
-#[test]
-fn the_ceiling_caps_the_value_without_rewriting_its_provenance() {
-    let mut body = json!({
-        "messages": [],
-        "tools": [{ "type": "function", "function": { "name": "f" } }],
-    });
-    let ctx = ModelContext {
-        inference_defaults: Some(InferenceConfig {
-            temperature: Some(1.0),
-            ..Default::default()
-        }),
-        defaults_origin: Some(DefaultsOrigin::Published),
-        ..ModelContext::passthrough()
-    };
-    let decision = resolve_sampling(
-        &mut body,
-        &ctx,
-        &SamplingLayers {
-            agentic_adjustments: true,
-            ..Default::default()
-        },
-    );
-
-    assert!(decision.agentic_turn);
-    assert_eq!(decision.agentic_ceiling_applied, Some(0.3));
-    assert_eq!(decision.resolved.temperature, Some(0.3), "capped");
-    assert_eq!(
-        decision.sources.temperature,
-        ParamSource::Layer(LADDER_RUNGS - 1),
-        "provenance still names the recipe rung that supplied 1.0"
-    );
 }
 
 /// The trust gate's discard is the largest silent drop gglib performs, and
@@ -451,7 +407,6 @@ fn a_profile_temperature_does_not_carry_model_penalties() {
             profile: Some(temp(0.2)),
             global: None,
             trust_client_sampling: false,
-            agentic_adjustments: false,
         },
     );
 
@@ -764,41 +719,6 @@ fn a_measured_recipe_ranks_below_global_settings() {
     assert_param(&body, "temperature", 0.5);
 }
 
-/// The regression guard this variant exists for. The sweep resolved its
-/// candidates against the model's real context (#748) so the winner
-/// transfers to production — a ceiling capping the stored winner would
-/// un-measure it on exactly the turns it was measured for. The published
-/// contrast in the same test pins that the exemption is the origin, not a
-/// loosening of the ceiling.
-#[test]
-fn the_agentic_ceiling_never_caps_a_measured_temperature() {
-    let mut body = tools_body();
-    resolve_sampling(
-        &mut body,
-        &measured_ctx(temp(0.9), false),
-        &agentic_layers(),
-    );
-    assert_param(&body, "temperature", 0.9); // measured: stands
-
-    let mut body = tools_body();
-    resolve_sampling(&mut body, &recipe_ctx(temp(0.9), false), &agentic_layers());
-    assert_param(&body, "temperature", 0.3); // the same value as a guess: capped
-}
-
-/// A measured recipe that names no temperature sends none, and the ceiling
-/// adds none either: llama.cpp's own default applies (ADR 0022).
-#[test]
-fn the_ceiling_adds_no_temperature_where_no_rung_names_one() {
-    let mut body = tools_body();
-    let recipe = InferenceConfig {
-        top_k: Some(20),
-        ..Default::default()
-    };
-    let decision = resolve_sampling(&mut body, &measured_ctx(recipe, false), &agentic_layers());
-    assert_deferred(&body, "temperature");
-    assert_eq!(decision.agentic_ceiling_applied, None);
-}
-
 /// The below-global rung names its occupant, so the debug line and the
 /// audit's provenance strings stop crediting gglib's guess for a
 /// measurement — or for a model author's published recipe, which the
@@ -907,21 +827,14 @@ fn resolution_overwrites_a_partial_client_value_from_lower_layers() {
     assert_param(&body, "top_p", 0.42);
 }
 
-// ── The agentic-turn temperature ceiling ──────────────────────────────
+// ── Tool turns ────────────────────────────────────────────────────────
 
 fn tools_body() -> Value {
     json!({"tools": [{"function": {"name": "read_file"}}]})
 }
 
-fn agentic_layers() -> SamplingLayers {
-    SamplingLayers {
-        agentic_adjustments: true,
-        ..Default::default()
-    }
-}
-
 /// A model whose stored recipe nobody here reviewed: one the import fetched
-/// from its author. It ranks below global settings and the ceiling may cap it.
+/// from its author. It ranks below global settings.
 fn recipe_ctx(defaults: InferenceConfig, reasoning: bool) -> ModelContext {
     ModelContext {
         tags: if reasoning {
@@ -944,66 +857,32 @@ fn reasoning_ctx() -> ModelContext {
     }
 }
 
-/// The measured decision this file used to assert the opposite of: a
-/// `reasoning` model's recipe temperature stands on agentic turns.
-///
-/// The `0.6` cap this replaces was compared against the uncapped recipe
-/// on 2026-08-10 (tune runs #12–#32, 20 paired runs): uncapped won the
-/// composite (Wilcoxon one-sided p = 0.0099), tool-call formatting never
-/// degraded (100% vs 98.6%), and the cap *raised* loop-guard triggers —
-/// the exact failure it risked manufacturing. See
-/// `agentic_temperature_ceiling` and ADR 0004's postscript.
+/// A turn that carries tools decodes at the temperature the ladder
+/// resolved, as any other turn does: there is no cap for tool turns. A
+/// published recipe nobody here reviewed is the value a cap once lowered,
+/// so it is the case that shows there is none.
 #[test]
-fn a_reasoning_models_recipe_stands_uncapped_on_agentic_turns() {
-    let mut body = tools_body();
-    let ctx = reasoning_ctx();
-    let decision = resolve_sampling(&mut body, &ctx, &agentic_layers());
-
-    assert!(decision.agentic_turn, "still an agentic turn");
-    assert_eq!(decision.agentic_ceiling_applied, None, "no cap fired");
-    assert_param(&body, "temperature", 1.0);
-    // The recipe travels whole: the penalty tuned for 1.0 stays with it.
-    assert_param(&body, "presence_penalty", 1.5);
-}
-
-/// Only the non-reasoning class still has a ceiling; its `0.3` predates
-/// the experiment above, is unmeasured, and stands until it earns the
-/// same treatment.
-#[test]
-fn only_non_reasoning_models_are_capped() {
-    for (reasoning, expected) in [(true, 1.0), (false, 0.3)] {
+fn a_tool_turn_keeps_the_temperature_it_resolved() {
+    for reasoning in [false, true] {
         let mut body = tools_body();
-        let ctx = recipe_ctx(
-            InferenceConfig {
-                temperature: Some(1.0),
-                ..Default::default()
-            },
-            reasoning,
-        );
-        resolve_sampling(&mut body, &ctx, &agentic_layers());
+        let recipe = InferenceConfig {
+            temperature: Some(1.0),
+            top_p: Some(0.95),
+            ..Default::default()
+        };
+        let ctx = recipe_ctx(recipe, reasoning);
+        let decision = resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
 
-        assert_param(&body, "temperature", expected);
+        assert_param(&body, "temperature", 1.0);
+        assert_param(&body, "top_p", 0.95);
+        assert_eq!(
+            decision.sources.temperature,
+            ParamSource::Layer(LADDER_RUNGS - 1)
+        );
     }
 }
 
-/// Deliberate configuration outranks the ceiling. This is the whole
-/// reason the gate is provenance rather than rank.
-#[test]
-fn a_deliberate_temperature_is_never_capped() {
-    let mut body = tools_body();
-    // `User` origin, so the recipe occupies the per-model rung rather than
-    // the auto-detected one.
-    let ctx = ModelContext {
-        inference_defaults: Some(temp(0.9)),
-        defaults_origin: Some(DefaultsOrigin::User),
-        ..ModelContext::passthrough()
-    };
-    resolve_sampling(&mut body, &ctx, &agentic_layers());
-
-    assert_param(&body, "temperature", 0.9);
-}
-
-/// The regression guard for #743: the adjustment must not disable DRY.
+/// The regression guard for #743: a tool turn must not disable DRY.
 #[test]
 fn dry_survives_an_agentic_turn() {
     let mut body = tools_body();
@@ -1012,7 +891,6 @@ fn dry_survives_an_agentic_turn() {
         &mut body,
         &ctx,
         &SamplingLayers {
-            agentic_adjustments: true,
             global: Some(InferenceConfig {
                 temperature: Some(0.8),
                 dry_multiplier: Some(0.8),
@@ -1023,7 +901,6 @@ fn dry_survives_an_agentic_turn() {
     );
 
     assert_param(&body, "dry_multiplier", 0.8);
-    // Global is a deliberate setting, so its temperature stands uncapped.
     assert_param(&body, "temperature", 0.8);
 }
 
@@ -1089,64 +966,6 @@ fn dry_survives_without_a_temperature_in_the_same_layer() {
     assert_param(&body, "dry_multiplier", 0.8);
     // The trio still comes from the claiming layer, untouched by this.
     assert_param(&body, "presence_penalty", 1.5);
-    assert_param(&body, "temperature", 1.0);
-}
-
-/// The ceiling only ever lowers. A model already below it is untouched.
-#[test]
-fn the_ceiling_never_raises_a_temperature() {
-    let mut body = tools_body();
-    let ctx = recipe_ctx(temp(0.1), false);
-    resolve_sampling(&mut body, &ctx, &agentic_layers());
-
-    assert_param(&body, "temperature", 0.1);
-}
-
-/// `top_p` is left alone when the cap fires. The rule this replaced forced
-/// it to 1.0, which contradicted published model guidance.
-#[test]
-fn the_ceiling_does_not_touch_top_p() {
-    let mut body = tools_body();
-    let ctx = recipe_ctx(
-        InferenceConfig {
-            temperature: Some(1.0),
-            top_p: Some(0.95),
-            ..Default::default()
-        },
-        false,
-    );
-    resolve_sampling(&mut body, &ctx, &agentic_layers());
-
-    assert_param(&body, "temperature", 0.3);
-    assert_param(&body, "top_p", 0.95);
-}
-
-#[test]
-fn a_request_without_tools_is_never_capped() {
-    let mut body = json!({});
-    let ctx = recipe_ctx(temp(1.0), false);
-    resolve_sampling(&mut body, &ctx, &agentic_layers());
-
-    assert_param(&body, "temperature", 1.0);
-}
-
-/// `strip_unsupported_tools` leaves a dangling `tool_choice` when there
-/// were no tools to strip, so this shape reaches stage 4 in practice.
-#[test]
-fn a_dangling_tool_choice_without_tools_is_not_an_agentic_turn() {
-    let mut body = json!({"tool_choice": "required"});
-    let ctx = recipe_ctx(temp(1.0), false);
-    resolve_sampling(&mut body, &ctx, &agentic_layers());
-
-    assert_param(&body, "temperature", 1.0);
-}
-
-#[test]
-fn the_ceiling_does_nothing_when_the_caller_has_not_enabled_it() {
-    let mut body = tools_body();
-    let ctx = recipe_ctx(temp(1.0), false);
-    resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
-
     assert_param(&body, "temperature", 1.0);
 }
 
@@ -1707,7 +1526,6 @@ fn each_rung_can_supply_a_reasoning_control() {
             // this table is about the ladder, not the gate — that split has
             // its own tests directly above.
             trust_client_sampling: true,
-            agentic_adjustments: false,
         };
 
         let decision = resolve_sampling(&mut body, &ctx, &layers);

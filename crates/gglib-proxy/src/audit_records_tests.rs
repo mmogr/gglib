@@ -7,8 +7,8 @@ use gglib_core::domain::TemplateCaps;
 
 /// **The rule ADR 0007 decision 3 turns on.** A caps object that did not carry
 /// the field must answer "nobody knows", never "the template does not read it"
-/// — the second is what the suppression gate acts on, and acting on an absence
-/// would delete a level nobody established was ignored.
+/// — the second tells a surface the level is ignored, and reading that off an
+/// absence would hide a control nobody established was inert.
 #[test]
 fn an_absent_caps_field_is_not_yet_observed_never_not_supported() {
     let state = EffortSupportState::of(&TemplateCapsState::Read {

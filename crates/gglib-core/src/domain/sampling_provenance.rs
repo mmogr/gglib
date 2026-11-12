@@ -53,54 +53,9 @@ pub enum ParamSource {
     /// ever named one" are different explanations, and only the first tells a
     /// reader where to look.
     Coupled,
-    /// A layer named a value, and a later stage **suppressed** it because the
-    /// model's observed template capabilities say the template never reads the
-    /// field. Nothing was sent.
-    ///
-    /// Only `reasoning_effort` can carry this today — it is the one modelled
-    /// field delivered by a chat template reading a variable rather than by
-    /// the sampler ([ADR 0007] decision 3). The suppressed level and the rung
-    /// that supplied it are in the pipeline's own record; see
-    /// `request_pipeline::effort_gate::SuppressedEffort`.
-    ///
-    /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
-    SuppressedByTemplate,
     /// Nothing named it, so no value is sent and llama.cpp's own default
     /// applies. There is no floor beneath the ladder (ADR 0022).
     Unset,
-}
-
-impl ParamSource {
-    /// Whether a person actually chose this value.
-    ///
-    /// `auto_detected_rung` is the index of the model's recipe rung in the
-    /// ladder being asked about — a recipe nobody here reviewed is not a
-    /// choice, which is why it already ranks below global settings.
-    ///
-    /// # Why this is a method and not a `matches!` at the call site
-    ///
-    /// A `matches!` at the call site listing the variants that count as
-    /// *unchosen* fails open in the worst direction: a new `ParamSource`
-    /// variant is not in the list, so it reads as "deliberately chosen", and
-    /// the agentic temperature ceiling silently stops firing for it. No
-    /// compile error, no test failure, and the symptom is a ceiling that
-    /// quietly does nothing.
-    ///
-    /// Here the `match` is exhaustive and the arms are the *positive* case,
-    /// so a new variant breaks the build at the one place that defines what
-    /// "deliberate" means, and whoever adds it has to decide.
-    #[must_use]
-    pub const fn is_deliberate_choice(self, auto_detected_rung: usize) -> bool {
-        match self {
-            // A rung someone configured — unless it is the auto-detected
-            // recipe, which nobody reviewed.
-            Self::Layer(i) => i != auto_detected_rung,
-            // Nothing named it, the coupling rule passed over whatever did, or
-            // a template gate threw away what a rung chose. None of the three
-            // leaves a chosen value standing on *this* parameter.
-            Self::Coupled | Self::Unset | Self::SuppressedByTemplate => false,
-        }
-    }
 }
 
 /// The five rungs of the ladder
@@ -258,7 +213,6 @@ impl FieldSources {
                     ParamSource::Layer(i) => names.get(i).copied().unwrap_or("?"),
                     ParamSource::Coupled => "coupled",
                     ParamSource::Unset => "unset",
-                    ParamSource::SuppressedByTemplate => "suppressed-by-template",
                 };
                 format!("{field}={label}")
             })

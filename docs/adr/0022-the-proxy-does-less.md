@@ -57,6 +57,10 @@ and a client's `cache_prompt` passes through as any key gglib does not model
 does, `false` included. Stage 5 leaves the stage table; stage 5b keeps its
 name.
 
+> **Amended 2026-11-12.** Stage 5b has since gone too: template caps are read,
+> never used to edit the request ([ADR 0007](0007-ask-the-server-for-template-capabilities.md),
+> decision 3's amendment).
+
 ### 2. There is no sampling floor, and the `reasoning` recipe is never stored
 
 `InferenceConfig::with_hardcoded_defaults` and `reasoning_floor` are deleted,
@@ -199,5 +203,10 @@ release cycle with the parser bypassed, not the presence of a PEG parser.
 - Whether the agentic temperature ceiling should exist at all. Its `0.3` is
   unmeasured, as `agentic_temperature_ceiling` says; this ADR only removes the
   floor it mostly capped.
+
+  > **Amended 2026-11-12 — decided: the ceiling is deleted.** Tool turns keep
+  > the temperature the ladder resolves, the `agentic-sampling` setting and
+  > `GGLIB_DISABLE_AGENTIC_SAMPLING` are gone, and so is
+  > `agentic_temperature_ceiling` (v1 decision 4).
 - Any change to the normaliser, the residue scanner or stage 6 beyond leaving
   them as they are.

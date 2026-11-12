@@ -198,8 +198,7 @@ async fn the_proxy_arm_leaves_the_request_pipeline_to_the_proxy() {
 }
 
 /// The gglib and control arms shape their requests on the client, where a
-/// value a caller names can be taken back out of a request and a temperature
-/// nobody chose is capped on a turn with tools. Each still sends every value
+/// value a caller names can be taken back out of a request. Each still sends every value
 /// it names, on a model whose stored defaults set a temperature of their own:
 /// an arm that lost its seed could not be compared run for run, and the
 /// control is the four values it names.
@@ -207,7 +206,7 @@ async fn the_proxy_arm_leaves_the_request_pipeline_to_the_proxy() {
 async fn the_gglib_and_control_arms_send_every_value_they_name() {
     // The pipeline strips the tools from a request to a catalogued model that
     // cannot call them. This one can, so each request read below is a turn
-    // with tools, the only kind the cap applies to.
+    // with tools.
     let context = ModelContext {
         capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
         ..storing_a_temperature(0.123)
@@ -234,12 +233,11 @@ async fn the_gglib_and_control_arms_send_every_value_they_name() {
     }
 }
 
-/// The gglib arm is handed no settings, so no agentic sampling switch
-/// reaches it: its turn with tools, on an ordinary model whose recipe nobody
-/// here reviewed, is capped at 0.3 whatever the machine it runs on has
-/// stored.
+/// The gglib arm's turn with tools, on an ordinary model whose recipe nobody
+/// here reviewed, is sent the recipe's temperature: tool turns are not
+/// capped.
 #[tokio::test]
-async fn the_gglib_arm_caps_a_temperature_nobody_chose_on_its_turn_with_tools() {
+async fn the_gglib_arm_sends_the_recipes_temperature_on_its_turn_with_tools() {
     let context = ModelContext {
         capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
         inference_defaults: Some(InferenceConfig {
@@ -256,7 +254,7 @@ async fn the_gglib_arm_caps_a_temperature_nobody_chose_on_its_turn_with_tools() 
     let gglib = first_body_since(&upstream, 0);
     let tools = gglib["tools"].as_array();
     assert!(tools.is_some_and(|tools| !tools.is_empty()), "{gglib}");
-    assert_eq!(gglib["temperature"], json!(0.3_f32), "{gglib}");
+    assert_eq!(gglib["temperature"], json!(0.9_f32), "{gglib}");
 }
 
 /// Off unless asked for; when asked for, both run on the primary seeds,

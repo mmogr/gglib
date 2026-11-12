@@ -30,8 +30,6 @@ fn decision(resolved: InferenceConfig, sources: FieldSources) -> SamplingDecisio
         resolved,
         sources,
         layer_names: ["cli", "client", "profile", "model", "global", "auto"],
-        agentic_turn: false,
-        agentic_ceiling_applied: None,
         client_fields_rejected: Vec::new(),
         client_fields_discarded: Vec::new(),
         applied: true,
@@ -376,8 +374,8 @@ fn client_field_counters_accumulate_across_requests() {
         expected: "an integer",
     }];
 
-    store.record_intent(&d, None);
-    store.record_intent(&d, None);
+    store.record_intent(&d);
+    store.record_intent(&d);
 
     let snap = store.snapshot();
     assert_eq!(snap.client_fields_discarded, 4);
@@ -464,16 +462,13 @@ fn publishing(pairs: &[(&str, &str)]) -> ModelSamplingDefaults {
 fn an_intent_before_any_model_is_known_compares_nothing() {
     let store = SamplingAuditStore::new();
 
-    store.record_intent(
-        &decision(
-            InferenceConfig {
-                temperature: Some(1.0),
-                ..InferenceConfig::default()
-            },
-            all_from(ParamSource::Layer(3)),
-        ),
-        None,
-    );
+    store.record_intent(&decision(
+        InferenceConfig {
+            temperature: Some(1.0),
+            ..InferenceConfig::default()
+        },
+        all_from(ParamSource::Layer(3)),
+    ));
 
     let published = store.snapshot().published;
     assert_eq!(published.intents, 0, "nothing was compared");
@@ -486,16 +481,13 @@ fn a_resolved_value_displacing_a_published_one_is_reported_as_an_override() {
     let store = SamplingAuditStore::new();
     store.set_model_sampling(1, Some(publishing(&[("general.sampling.temp", "0.33")])));
 
-    store.record_intent(
-        &decision(
-            InferenceConfig {
-                temperature: Some(1.0),
-                ..InferenceConfig::default()
-            },
-            all_from(ParamSource::Layer(3)),
-        ),
-        None,
-    );
+    store.record_intent(&decision(
+        InferenceConfig {
+            temperature: Some(1.0),
+            ..InferenceConfig::default()
+        },
+        all_from(ParamSource::Layer(3)),
+    ));
 
     let published = store.snapshot().published;
     assert_eq!(published.intents, 1);
@@ -518,10 +510,10 @@ fn a_value_gglib_never_names_defers_to_the_model() {
     let store = SamplingAuditStore::new();
     store.set_model_sampling(1, Some(publishing(&[("general.sampling.top_p", "0.71")])));
 
-    store.record_intent(
-        &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
-        None,
-    );
+    store.record_intent(&decision(
+        InferenceConfig::default(),
+        all_from(ParamSource::Unset),
+    ));
 
     let published = store.snapshot().published;
     assert_eq!(
@@ -536,16 +528,13 @@ fn a_value_gglib_never_names_defers_to_the_model() {
 fn a_model_swap_resets_the_comparison() {
     let store = SamplingAuditStore::new();
     store.set_model_sampling(1, Some(publishing(&[("general.sampling.temp", "0.33")])));
-    store.record_intent(
-        &decision(
-            InferenceConfig {
-                temperature: Some(1.0),
-                ..InferenceConfig::default()
-            },
-            all_from(ParamSource::Layer(3)),
-        ),
-        None,
-    );
+    store.record_intent(&decision(
+        InferenceConfig {
+            temperature: Some(1.0),
+            ..InferenceConfig::default()
+        },
+        all_from(ParamSource::Layer(3)),
+    ));
     assert_eq!(store.snapshot().published.intents, 1, "guards the premise");
 
     store.set_model_sampling(2, None);
@@ -562,10 +551,10 @@ fn a_model_swap_resets_the_comparison() {
 fn a_swap_between_two_silent_models_still_resets() {
     let store = SamplingAuditStore::new();
     store.set_model_sampling(1, Some(publishing(&[])));
-    store.record_intent(
-        &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
-        None,
-    );
+    store.record_intent(&decision(
+        InferenceConfig::default(),
+        all_from(ParamSource::Unset),
+    ));
     assert_eq!(store.snapshot().published.intents, 1, "guards the premise");
 
     store.set_model_sampling(2, Some(publishing(&[])));
@@ -580,10 +569,10 @@ fn re_setting_the_same_model_is_idempotent() {
     let store = SamplingAuditStore::new();
     let model = publishing(&[("general.sampling.temp", "0.33")]);
     store.set_model_sampling(1, Some(model));
-    store.record_intent(
-        &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
-        None,
-    );
+    store.record_intent(&decision(
+        InferenceConfig::default(),
+        all_from(ParamSource::Unset),
+    ));
 
     store.set_model_sampling(1, Some(model));
 
@@ -686,127 +675,7 @@ fn the_snapshot_carries_the_caps_answer_as_three_states_not_two() {
     assert_eq!(tag(&store), "not_yet_observed");
 }
 
-// ── Suppressed reasoning effort (ADR 0007 stage 5b) ────────────────────────
-
 use gglib_core::domain::ReasoningEffort;
-use gglib_core::request_pipeline::SuppressedEffort;
-
-/// **The record that exists nowhere else.** A suppressed level is deleted from
-/// the body before sending, and neither reasoning control is echoed by
-/// `/slots.params` or `/props` (finding 7a) — so if this store does not hold
-/// it, no surface in the system can ever say that a `:high` profile went
-/// nowhere.
-#[test]
-fn a_suppressed_level_is_recorded_with_the_rung_that_asked_for_it() {
-    let store = SamplingAuditStore::new();
-    let d = decision(InferenceConfig::default(), all_from(ParamSource::Unset));
-
-    store.record_intent(
-        &d,
-        Some(&SuppressedEffort {
-            level: ReasoningEffort::High,
-            // `layer_names` in `decision` is [cli, client, profile, …].
-            source: ParamSource::Layer(2),
-        }),
-    );
-
-    let report = store.snapshot().effort_suppressed;
-    assert_eq!(report.requests, 1);
-    let latest = report.latest.expect("the suppression is held");
-    assert_eq!(latest.level, ReasoningEffort::High);
-    assert_eq!(
-        latest.source, "profile",
-        "the rung is resolved to its name, not left as a ladder index"
-    );
-}
-
-/// The rung is the half the decision cannot carry: stage 5b overwrites
-/// `sources.reasoning_effort` with the suppression marker, so a store that read
-/// the rung off the decision would report `suppressed (template)` — true, and
-/// useless for finding out whose setting is inert.
-#[test]
-fn the_rung_survives_the_decisions_own_provenance_being_overwritten() {
-    let store = SamplingAuditStore::new();
-    let mut d = decision(InferenceConfig::default(), all_from(ParamSource::Unset));
-    d.sources.reasoning_effort = ParamSource::SuppressedByTemplate;
-
-    store.record_intent(
-        &d,
-        Some(&SuppressedEffort {
-            level: ReasoningEffort::Max,
-            source: ParamSource::Layer(4),
-        }),
-    );
-
-    let latest = store.snapshot().effort_suppressed.latest.expect("held");
-    assert_eq!(latest.source, "global");
-    assert_ne!(latest.source, "suppressed (template)");
-}
-
-/// The ordinary request — the overwhelming majority — must leave the counter
-/// alone and the latest entry empty.
-#[test]
-fn a_request_with_nothing_suppressed_records_nothing() {
-    let store = SamplingAuditStore::new();
-    store.record_intent(
-        &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
-        None,
-    );
-
-    let report = store.snapshot().effort_suppressed;
-    assert_eq!(report.requests, 0);
-    assert_eq!(report.latest, None);
-}
-
-/// Suppression is a property of the model's template, so on a suppressing model
-/// it fires on every request that resolves a level. The count has to accumulate
-/// while the entry stays the latest one rather than the first.
-#[test]
-fn repeated_suppressions_accumulate_and_the_latest_wins() {
-    let store = SamplingAuditStore::new();
-    let d = decision(InferenceConfig::default(), all_from(ParamSource::Unset));
-
-    for level in [ReasoningEffort::Low, ReasoningEffort::Minimal] {
-        store.record_intent(
-            &d,
-            Some(&SuppressedEffort {
-                level,
-                source: ParamSource::Layer(3),
-            }),
-        );
-    }
-
-    let report = store.snapshot().effort_suppressed;
-    assert_eq!(report.requests, 2);
-    assert_eq!(report.latest.unwrap().level, ReasoningEffort::Minimal);
-}
-
-/// The wire contract the dashboard is written against.
-#[test]
-fn the_snapshot_carries_the_suppression_for_a_surface_to_render() {
-    let store = SamplingAuditStore::new();
-    store.record_intent(
-        &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
-        Some(&SuppressedEffort {
-            level: ReasoningEffort::XHigh,
-            source: ParamSource::Layer(2),
-        }),
-    );
-
-    let json = serde_json::to_value(store.snapshot()).expect("snapshot serializes");
-    let report = &json["effort_suppressed"];
-    assert_eq!(report["requests"], serde_json::json!(1), "{json}");
-    assert_eq!(
-        report["latest"]["level"],
-        serde_json::json!("xhigh"),
-        "{json}"
-    );
-    assert_eq!(
-        report["latest"]["source"],
-        serde_json::json!("profile"),
-        "{json}"
-    );
-}
 
 // ── The blindness, made permanent (ADR 0007 finding 7a) ────────────────────
 
@@ -901,7 +770,7 @@ fn the_latest_resolved_reasoning_is_recorded_with_both_rungs() {
     d.sources.reasoning_effort = ParamSource::Layer(2);
     d.sources.reasoning_budget_tokens = ParamSource::Layer(4);
 
-    store.record_intent(&d, None);
+    store.record_intent(&d);
 
     let latest = store
         .snapshot()
@@ -911,40 +780,9 @@ fn the_latest_resolved_reasoning_is_recorded_with_both_rungs() {
     let effort = latest.effort.expect("the level is held");
     assert_eq!(effort.level, ReasoningEffort::High);
     assert_eq!(effort.source, "profile");
-    assert!(!effort.suppressed);
     let budget = latest.budget.expect("the budget is held");
     assert_eq!(budget.tokens, 4096);
     assert_eq!(budget.source, "global");
-}
-
-/// A suppressed level must still appear — marked. Rendering the level without
-/// the marker would report a control that went nowhere as though it had worked,
-/// and nothing on the wire can contradict that claim.
-#[test]
-fn a_suppressed_level_is_recorded_with_its_marker_not_omitted() {
-    let store = SamplingAuditStore::new();
-    let mut d = decision(InferenceConfig::default(), all_from(ParamSource::Unset));
-    // Stage 5b's own aftermath: the level is gone and the rung overwritten.
-    d.sources.reasoning_effort = ParamSource::SuppressedByTemplate;
-
-    store.record_intent(
-        &d,
-        Some(&SuppressedEffort {
-            level: ReasoningEffort::Max,
-            source: ParamSource::Layer(2),
-        }),
-    );
-
-    let effort = store
-        .snapshot()
-        .reasoning
-        .latest
-        .expect("recorded")
-        .effort
-        .expect("a suppressed level is still the level that was resolved");
-    assert_eq!(effort.level, ReasoningEffort::Max);
-    assert_eq!(effort.source, "profile");
-    assert!(effort.suppressed, "the marker is what makes it honest");
 }
 
 /// A request that named neither control is a *record with nothing in it*, not
@@ -956,10 +794,10 @@ fn a_request_naming_neither_control_is_a_record_not_a_silence() {
     let store = SamplingAuditStore::new();
     assert_eq!(store.snapshot().reasoning.latest, None);
 
-    store.record_intent(
-        &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
-        None,
-    );
+    store.record_intent(&decision(
+        InferenceConfig::default(),
+        all_from(ParamSource::Unset),
+    ));
 
     let latest = store.snapshot().reasoning.latest.expect("a record exists");
     assert_eq!(latest.effort, None);
@@ -992,8 +830,8 @@ fn discarded_client_fields_reach_the_snapshot_by_name() {
         expected: "an integer",
     }];
 
-    store.record_intent(&d, None);
-    store.record_intent(&d, None);
+    store.record_intent(&d);
+    store.record_intent(&d);
 
     let snap = store.snapshot();
     // The total is unchanged — the names are additional, not a replacement.

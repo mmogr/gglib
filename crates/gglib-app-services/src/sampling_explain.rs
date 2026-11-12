@@ -15,7 +15,7 @@
 use gglib_core::domain::inference_profile::not_found_message;
 use gglib_core::domain::{
     DefaultsOrigin, InferenceConfig, InferenceProfile, Model, ModelSamplingContext,
-    ModelSamplingDefaults, ParamSource, ReasoningEffort, SamplingLayer, SamplingOverride,
+    ModelSamplingDefaults, ParamSource, SamplingLayer, SamplingOverride,
 };
 use gglib_core::settings::Settings;
 use serde::{Deserialize, Serialize};
@@ -76,47 +76,6 @@ pub struct SamplingExplanationDto {
     /// casing alone meant one stored value reached a client under two names.
     #[serde(default)]
     pub defaults_origin: Option<DefaultsOrigin>,
-    /// The `reasoning_effort` this model's template would ignore, when the
-    /// stored configuration resolves one it does not read.
-    ///
-    /// # Why a table row is not enough
-    ///
-    /// The suppression *is* in [`Self::sources`] — that entry reads
-    /// [`SuppressedByTemplate`](ProvenanceKindDto::SuppressedByTemplate) — and
-    /// [`Self::resolved`] carries `null`, because that is what would be sent.
-    /// Between them a client can say *something was suppressed* and nothing
-    /// more: the level is gone from `resolved`, and the rung that asked for it
-    /// has been overwritten by the marker. Those two are the whole content of
-    /// the sentence a reader needs — "the `:high` profile asks for `high`; this
-    /// model's template does not read `reasoning_effort`" — so they are carried
-    /// here or they are carried nowhere.
-    ///
-    /// # It describes a request that has not happened
-    ///
-    /// This endpoint explains *stored configuration*. Nothing has been sent, so
-    /// this is a conditional: on any request against this model, that is what
-    /// would happen. A surface must word it that way. The unconditional twin
-    /// lives on the proxy's sampling audit, where a request really did run.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effort_suppressed: Option<SuppressedEffortDto>,
-}
-
-/// A resolved `reasoning_effort` this model's template would not read.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "camelCase")]
-pub struct SuppressedEffortDto {
-    /// The level the ladder resolved.
-    pub level: ReasoningEffort,
-    /// The rung that supplied it, before the suppression overwrote the entry
-    /// in [`SamplingExplanationDto::sources`].
-    ///
-    /// `None` only for a ladder index this module cannot name, which the five
-    /// rungs it resolves cannot produce.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub layer: Option<SamplingLayerDto>,
 }
 
 /// What gglib does with one field's published recommendation.
@@ -207,13 +166,6 @@ pub enum ProvenanceKindDto {
     /// Nothing named it, so it is not sent and llama.cpp's own default
     /// applies.
     Unset,
-    /// A rung named the value and a request-shaping stage suppressed it,
-    /// because the model's observed template does not read the field
-    /// (ADR 0007). Unreachable from this module, which explains stored
-    /// configuration with no request in hand — but the DTO mirrors
-    /// [`ParamSource`] and a mirror missing an arm is how a surface starts
-    /// rendering a suppressed value as if it had been sent.
-    SuppressedByTemplate,
 }
 
 /// The wire form of [`SamplingLayer`].
@@ -285,9 +237,7 @@ fn wire_key(field: &'static str) -> &'static str {
 
 /// The named rung a source came from, when it came from a rung at all.
 ///
-/// The one place this module turns a ladder index into a name, so
-/// [`provenance`] and the suppression record cannot disagree about which rung
-/// `Layer(1)` is. Exhaustive rather than catch-all: a new [`ParamSource`] arm
+/// The one place this module turns a ladder index into a name. Exhaustive rather than catch-all: a new [`ParamSource`] arm
 /// must be decided here rather than silently reported as nameless.
 ///
 /// `from_index` returns `None` only for a ladder longer than the five rungs
@@ -299,11 +249,8 @@ const fn layer_of(source: ParamSource) -> Option<SamplingLayerDto> {
             Some(layer) => Some(SamplingLayerDto::from_layer(layer)),
             None => None,
         },
-        // A passed-over or unset field names no rung at all, and a
-        // suppression has deliberately overwritten the rung it replaced — see
-        // `SamplingExplanationDto::effort_suppressed` for where that rung goes
-        // instead.
-        ParamSource::Coupled | ParamSource::Unset | ParamSource::SuppressedByTemplate => None,
+        // A passed-over or unset field names no rung at all.
+        ParamSource::Coupled | ParamSource::Unset => None,
     }
 }
 
@@ -313,7 +260,6 @@ fn provenance(field: &'static str, source: ParamSource) -> ParamProvenanceDto {
         ParamSource::Layer(_) => ProvenanceKindDto::Layer,
         ParamSource::Coupled => ProvenanceKindDto::Coupled,
         ParamSource::Unset => ProvenanceKindDto::Unset,
-        ParamSource::SuppressedByTemplate => ProvenanceKindDto::SuppressedByTemplate,
     };
 
     ParamProvenanceDto {
@@ -349,21 +295,15 @@ pub(crate) fn explain(
     // The two facts about the model that change how resolution behaves.
     let model_ctx = ModelSamplingContext::for_model(model);
 
-    // The ladder plus stage 5b's effort gate, both from the shared kernel a
-    // request is resolved by. Not a copy of either rule: an explanation that
-    // re-derived them could only drift into a confident account of a
-    // resolution that does not happen.
-    let (resolved, sources, effort_suppressed) = gglib_core::request_pipeline::explain_stored(
+    // The ladder, from the shared kernel a request is resolved by. Not a copy
+    // of the rule: an explanation that re-derived it could only drift into a
+    // confident account of a resolution that does not happen.
+    let (resolved, sources) = gglib_core::request_pipeline::explain_stored(
         profile,
         model.inference_defaults.as_ref(),
         settings.inference_defaults.as_ref(),
         model_ctx,
-        &model.template_caps,
     );
-    let effort_suppressed = effort_suppressed.map(|suppressed| SuppressedEffortDto {
-        level: suppressed.level,
-        layer: layer_of(suppressed.source),
-    });
 
     // What gglib actually puts on the wire, read from the patch the request
     // pipeline merges into the body rather than from the struct fields. A
@@ -387,7 +327,6 @@ pub(crate) fn explain(
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
         published,
         defaults_origin: model.defaults_origin,
-        effort_suppressed,
     }
 }
 

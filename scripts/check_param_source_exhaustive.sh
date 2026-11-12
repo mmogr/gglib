@@ -6,11 +6,12 @@
 # adding a variant a silent behaviour change at every one of those sites
 # instead of a compile error:
 #
-#   - `request_pipeline::sampling` gated the agentic temperature ceiling on a
-#     `matches!` listing the *unchosen* variants. A new variant falls through
-#     as "chosen", so the ceiling silently stops firing. That is the same
-#     shape as #741's floor and #744's ceiling, both of which shipped inert
-#     and were found in production rather than by a test.
+#   - `request_pipeline::sampling` once gated an agentic temperature ceiling
+#     on a `matches!` listing the *unchosen* variants. A new variant fell
+#     through as "chosen", so the ceiling would silently stop firing. That is
+#     the same shape as #741's floor and #744's ceiling, both of which shipped
+#     inert and were found in production rather than by a test. The ceiling
+#     has since been deleted.
 #   - `is_floor` had the same problem in the other direction — a new variant
 #     silently read as "not the floor". It has since been deleted for having
 #     no callers, which is the other way that question stops being asked.
@@ -231,8 +232,8 @@ A match over `ParamSource` uses a catch-all arm.
 
 Adding a variant would then change behaviour at that site silently instead of
 failing the build. Spell out every variant, or — better — express the question
-as a method on `ParamSource` itself, next to `is_deliberate_choice`, so there
-is one exhaustive answer rather than several.
+as a method on `ParamSource` itself, in sampling_provenance.rs, so there is
+one exhaustive answer rather than several.
 MSG
   exit 1
 fi

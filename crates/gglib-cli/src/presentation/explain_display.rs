@@ -135,10 +135,6 @@ pub(crate) fn explanation_lines(explanation: &SamplingExplanationDto) -> Vec<Str
         ("dry_allowed_length", fmt_i32(resolved.dry_allowed_length)),
         ("dry_penalty_last_n", fmt_i32(resolved.dry_penalty_last_n)),
         ("max_tokens", fmt_u32(resolved.max_tokens)),
-        // The value column shows what would be *sent*, so a suppressed effort
-        // reads as a dash here and the note below carries the level. That is
-        // `Deferred`'s idiom, not a new one: a dash with an explanation
-        // underneath already means "the number that applies is not gglib's".
         ("reasoning_effort", fmt_effort(resolved.reasoning_effort)),
         (
             "reasoning_budget_tokens",
@@ -167,62 +163,14 @@ pub(crate) fn explanation_lines(explanation: &SamplingExplanationDto) -> Vec<Str
             "{field:<NAME_WIDTH$}{value:<VALUE_WIDTH$} {ARROW} {}",
             describe(source.kind, source.layer, explanation)
         );
-        // Two kinds of note can hang under a row and they never collide:
-        // the published comparison only ever fires on a field with a GGUF
-        // key, and no reasoning control has one.
         let mut published = explanation.published.iter();
         let published = published.find(|entry| entry.param == source.param);
-        let note = suppression_note(field, explanation)
-            .or_else(|| published.map(published_note))
+        let note = published
+            .map(published_note)
             .map(|n| format!("{:NOTE_INDENT$}{n}", ""));
         std::iter::once(row).chain(note)
     })
     .collect()
-}
-
-/// Name the level a suppression threw away and the rung that asked for it.
-///
-/// `None` for every field but `reasoning_effort`, and for that one unless this
-/// model's template positively does not read it.
-///
-/// # Why the level is down here and not in the value column
-///
-/// The row above reads `reasoning_effort   —   ← suppressed by this model's
-/// template`, and a reader could stop there and know the control is inert. What
-/// they could not know is **whose setting** is inert — and that is the
-/// actionable half. A `:high` profile that does nothing on this model is a fact
-/// about the profile, and the person who has to change something is the one who
-/// wrote it.
-///
-/// The level and the rung are both unrecoverable by the time the table is
-/// drawn: the gate clears `resolved.reasoning_effort` and overwrites the rung in
-/// `sources`. They arrive on [`SamplingExplanationDto::effort_suppressed`] or
-/// not at all.
-///
-/// # The tense, and why the note is as terse as it is
-///
-/// This command explains *stored* configuration and has sent nothing, so
-/// nothing here may claim a request happened. The conditional is carried by the
-/// row above — "suppressed by this model's template" is a standing property of
-/// the model, true of every request and of none in particular — which lets this
-/// note be a label rather than a sentence.
-///
-/// That terseness is also forced. The longest rung label is 48 characters
-/// (`per-model defaults (auto-detected: reasoning tag)`), and after the
-/// [`NOTE_INDENT`] and the print indent there are 77 left of [`SEP_WIDTH`] —
-/// so a fuller phrasing overruns the rule it sits under on exactly the model
-/// that needs the note most. `the_reasoning_rows_and_their_note_fit_the_table_width`
-/// holds the corner.
-fn suppression_note(field: &str, explanation: &SamplingExplanationDto) -> Option<String> {
-    if field != "reasoning_effort" {
-        return None;
-    }
-    let suppressed = explanation.effort_suppressed?;
-    Some(format!(
-        "{MARK_OVERRIDE} '{}' from {}; not sent",
-        suppressed.level,
-        describe(ProvenanceKindDto::Layer, suppressed.layer, explanation)
-    ))
 }
 
 /// Describe what the model published for one field.
@@ -324,18 +272,6 @@ fn describe(
         },
         ProvenanceKindDto::Coupled => "unset (coupled to temperature layer)".to_owned(),
         ProvenanceKindDto::Unset => "unset by design".to_owned(),
-        // Reachable, and the reason this table exists for the reasoning
-        // controls at all. `explain` resolves stored configuration with no
-        // request in hand — but the *template* is a property of the model, not
-        // of the request, so the question "would this level survive?" can be
-        // answered from the catalog row alone. `explain` applies the same
-        // predicate the pipeline's stage 5b applies, via the same function.
-        //
-        // Never folded into "unset by design": the two differ in whether a rung
-        // named something, which is the whole content of the suppression, and
-        // "unset" would report that nobody configured a control somebody
-        // configured.
-        ProvenanceKindDto::SuppressedByTemplate => "suppressed by this model's template".to_owned(),
     }
 }
 

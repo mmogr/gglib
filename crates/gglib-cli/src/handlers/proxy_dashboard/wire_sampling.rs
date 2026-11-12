@@ -81,11 +81,6 @@ pub(super) struct EffortRung {
     pub(super) level: String,
     #[serde(default)]
     pub(super) source: String,
-    /// Whether the effort gate deleted it before sending. Rendering the level
-    /// without this marker would report a control that went nowhere as though
-    /// it had worked.
-    #[serde(default)]
-    pub(super) suppressed: bool,
 }
 
 /// Mirror of `gglib_proxy::audit_records::BudgetRung`.
