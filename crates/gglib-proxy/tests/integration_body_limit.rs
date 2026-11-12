@@ -2,7 +2,7 @@
 //!
 //! Both take 32 MiB in place of axum's 2 MiB default, and both refuse more
 //! with a code: left to axum, `POST /v1/chat/completions` answers a line of
-//! plain text, and `PUT /v1/runs/{id}` that the body is not a JSON object.
+//! plain text, and `PUT /v1/gglib/runs/{id}` that the body is not a JSON object.
 
 mod fixtures;
 
@@ -93,7 +93,7 @@ async fn a_run_of_3_mib_is_taken_and_one_over_the_limit_is_refused_with_a_code()
     let (base, cancel) = serve(Some(Arc::clone(&runs))).await;
     let put = |id: &str, body: String| {
         Client::new()
-            .put(format!("{base}/v1/runs/{id}"))
+            .put(format!("{base}/v1/gglib/runs/{id}"))
             .header("content-type", "application/json")
             .body(body)
             .send()
@@ -118,7 +118,7 @@ async fn a_run_whose_body_is_not_json_keeps_its_own_refusal() {
     let (base, cancel) = serve(Some(Arc::clone(&runs))).await;
     let put = |content_type: &str, body: &'static str| {
         Client::new()
-            .put(format!("{base}/v1/runs/r1"))
+            .put(format!("{base}/v1/gglib/runs/r1"))
             .header("content-type", content_type)
             .body(body)
             .send()

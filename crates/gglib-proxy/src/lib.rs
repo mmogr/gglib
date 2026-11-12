@@ -91,7 +91,7 @@ pub(crate) mod upstream_read;
 mod upstream_shape_tests;
 pub(crate) mod usage_reading;
 
-// What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
+// What `POST /v1/gglib/models/{name}/load` answers, for a paired machine that reads it.
 pub use host_facts::{FreeDiskReader, HostFacts, MachineNameReader};
 pub use load_endpoint::LoadResponse;
 pub use observers::ProxyObservers;

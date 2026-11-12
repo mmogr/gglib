@@ -1,4 +1,4 @@
-//! `POST /v1/models/{name}/load`: have a model resident before a turn needs it.
+//! `POST /v1/gglib/models/{name}/load`: have a model resident before a turn needs it.
 //!
 //! The route the *use* side of ADR 0013 adds to the proxy. A turn loads its
 //! model on the way in, so a client that only ever asks questions has no use
@@ -30,7 +30,7 @@ use crate::dashboard::LaunchNarrationCache;
 use crate::server::{AppState, handle_runtime_error};
 use crate::slot_cache_state::SlotCacheState;
 
-/// What `POST /v1/models/{name}/load` accepts. Every field optional; an
+/// What `POST /v1/gglib/models/{name}/load` accepts. Every field optional; an
 /// empty body loads the model at the context it would be served with.
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct LoadRequest {
@@ -71,7 +71,7 @@ pub(crate) async fn load_model(
     body: Option<Json<LoadRequest>>,
 ) -> Response {
     let request = body.map(|Json(req)| req).unwrap_or_default();
-    info!(model = %name, num_ctx = ?request.num_ctx, "POST /v1/models/{{name}}/load");
+    info!(model = %name, num_ctx = ?request.num_ctx, "POST /v1/gglib/models/{{name}}/load");
     match state
         .runtime_port
         .admit(
@@ -99,7 +99,7 @@ pub(crate) async fn load_model(
 /// What a load that admitted `target` records, and what it answers.
 ///
 /// The launch's narration goes to the dashboard, as a chat request's does,
-/// so `/v1/proxy/status` says what the load decided. A llama-server that
+/// so `/v1/gglib/proxy/status` says what the load decided. A llama-server that
 /// this load started is a restart to the slot cache, as a chat request's
 /// admission is: the next chat request finds the model running and would
 /// never report it. An `sd-server` is not: it has no KV slots, and its

@@ -8,8 +8,8 @@
 //! arrived.
 //!
 //! **Restrictive, with one exception.** A local client can write these
-//! headers too. On every route but `/v1/runs` what it gains is a refusal on
-//! `/mcp` and a tick on a counter. On `/v1/runs` the device name is the
+//! headers too. On every route but `/v1/gglib/runs` what it gains is a refusal on
+//! `/mcp` and a tick on a counter. On `/v1/gglib/runs` the device name is the
 //! caller's scope, so a client that reaches the proxy directly and forges
 //! them is taken for that device and can read its runs, which this machine's own
 //! scope is refused; `runs::scope` says why nothing here can tell. The

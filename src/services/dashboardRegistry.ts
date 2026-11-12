@@ -1,7 +1,7 @@
 /**
  * The proxy's live dashboard, one stream per endpoint.
  *
- * `/v1/proxy/status/stream` is the proxy's own, on its own port with its own
+ * `/v1/gglib/proxy/status/stream` is the proxy's own, on its own port with its own
  * credential (`services/clients/proxyDashboard`). Each surface that showed it
  * used to open its own stream: the dashboard modal one, the tray another, and
  * the redesign's sidebar words, flag lines and recent-requests list would

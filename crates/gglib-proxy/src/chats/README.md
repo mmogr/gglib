@@ -2,17 +2,17 @@
 
 <!-- module-docs:start -->
 
-`/v1/chats`: a paired device's view of the hub's chats. `GET /v1/chats`
+`/v1/gglib/chats`: a paired device's view of the hub's chats. `GET /v1/gglib/chats`
 lists them newest first, each with the run whose reply to it is not yet
 saved, and each branch with the chat it was made from (`branch_of`);
-`GET /v1/chats/{id}` opens one with every row and the metadata the hub
+`GET /v1/gglib/chats/{id}` opens one with every row and the metadata the hub
 saved, with the chat's settings, which say `"thinking": "off"` when a turn
 switched its thinking off, and with what the hub says of its branches (ADR
 0016): the points where its family parts (`points`) and whether it ends in a
 question nothing answers (`answerable`). Served through the `HubChatsPort`
 the proxy was started with, and answered `503 chats_unavailable` without one.
 
-`POST /v1/chats/{id}/changes` edits, regenerates or branches a chat, with
+`POST /v1/gglib/chats/{id}/changes` edits, regenerates or branches a chat, with
 the body the hub's page sends its own daemon, and the hub's branching rules
 decide: a change that would rewrite a saved reply copies the chat into a new
 branch. The answer is the chat to show, whether it is new, and whether it is
@@ -21,7 +21,7 @@ now to be answered, which the device does with a turn that says
 (`unchanged`, `not_a_reply`, `nothing_to_answer`, `message_not_found`,
 `invalid_request`), a body that is no change `400 invalid_request`.
 
-`POST /v1/chats/{id}/pictures` keeps a picture beside the one it was made
+`POST /v1/gglib/chats/{id}/pictures` keeps a picture beside the one it was made
 from (ADR 0018, decision 21). The body is `{"from": <id>, "image": <id>}`,
 two stored images: `image` joins the latest tool row of the chat that
 carries `from`, after the images that row has, in place and on no branch.
@@ -32,10 +32,10 @@ the chat carries, or an `image` that is not stored, is `400
 attachment_not_found`. A body that is not those two ids, one with any other
 key included, is `400 invalid_request`. Nothing is written by a refusal.
 
-`/v1/attachments` is the images those chats' turns carry. A device sends
-one as the raw body of `POST /v1/attachments`, at most 8 MiB, and is
+`/v1/gglib/attachments` is the images those chats' turns carry. A device sends
+one as the raw body of `POST /v1/gglib/attachments`, at most 8 MiB, and is
 answered its id, type, size and estimated tokens; a turn then names it by
-that id. `GET /v1/attachments/{id}` answers the bytes as they were sent, with
+that id. `GET /v1/gglib/attachments/{id}` answers the bytes as they were sent, with
 `no-store`: a device keeps none of this machine's chats. An id that is not stored is `404
 attachment_not_found`. Both go through the same port, behind the same guard.
 An image a tool made is read there too, by the id its tool row lists.

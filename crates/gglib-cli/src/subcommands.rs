@@ -51,7 +51,7 @@ pub enum AttachmentCommand {
 pub enum ProxyCommand {
     /// Show a live terminal dashboard for an already-running proxy
     ///
-    /// Connects to `GET /v1/proxy/status/stream` on the target proxy and
+    /// Connects to `GET /v1/gglib/proxy/status/stream` on the target proxy and
     /// redraws active connections, llama.cpp `/slots` context usage, and
     /// the running request count in place until Ctrl+C is pressed.
     Dashboard {

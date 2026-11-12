@@ -75,7 +75,7 @@ $ gglib up
     Check it from another shell:
       curl http://127.0.0.1:8080/v1/models
 
-  Dashboard  http://127.0.0.1:8080/v1/proxy/status
+  Dashboard  http://127.0.0.1:8080/v1/gglib/proxy/status
 
   Ready. The endpoint keeps running in the background.
 

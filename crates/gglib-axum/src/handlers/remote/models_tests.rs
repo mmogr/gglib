@@ -102,7 +102,7 @@ async fn a_model_is_read_by_its_identifier_as_one_segment() {
     assert_eq!(body["detail"]["id"], 3);
     assert_eq!(body["detail"]["isServing"], true);
     let seen = only(&fake);
-    assert_eq!(seen.uri, "/v1/models/org%2Fqwen3%3Acoding/detail");
+    assert_eq!(seen.uri, "/v1/gglib/models/org%2Fqwen3%3Acoding/detail");
     assert!(carries_key(&seen), "{seen:?}");
 }
 
@@ -150,7 +150,7 @@ async fn a_load_posts_with_the_key_and_its_context() {
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("POST", "/v1/models/org%2Fqwen3/load")
+        ("POST", "/v1/gglib/models/org%2Fqwen3/load")
     );
     assert!(carries_key(&seen), "{seen:?}");
     assert_eq!(json(&seen.body), serde_json::json!({ "num_ctx": 8192 }));

@@ -2,7 +2,7 @@
 //! refusal of one over it.
 //!
 //! An image rides in the body as base64, so `POST /v1/chat/completions` and
-//! `PUT /v1/runs/{id}` take [`MAX_BODY_BYTES`] in place of axum's 2 MiB
+//! `PUT /v1/gglib/runs/{id}` take [`MAX_BODY_BYTES`] in place of axum's 2 MiB
 //! default. A body over it is refused with a code, as every other refusal
 //! here is: left to the extractor it is a line of plain text on the first
 //! route, and on the second it reads as a body that is not JSON.

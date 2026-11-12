@@ -244,7 +244,7 @@ key of a device's turn names a path.
 # A paired device's turn
 
 `hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
-starts: `PUT /v1/runs/{id}?kind=agent` on the proxy's door carries only a
+starts: `PUT /v1/gglib/runs/{id}?kind=agent` on the proxy's door carries only a
 chat's id and the device's message, with any image named by the id its
 upload answered, and the chat's Thinking choice on the turn that changes it;
 a turn may be its images alone. An image the turn or the
@@ -337,7 +337,7 @@ device's in three things only:
   with `400 invalid_request`.
 
 `chat_turn` is the starter's other door, the proxy's
-`PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired
+`PUT /v1/gglib/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired
 phone keeps itself, sent whole as an `OpenAI` request and run through the
 loop so that it can use the servers it names and draw, its query read as a
 `ChatQuery`. `tools=none` is such a chat with no server: offered no MCP

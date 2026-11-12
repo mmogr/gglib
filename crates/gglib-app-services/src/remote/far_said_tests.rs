@@ -136,7 +136,7 @@ async fn a_hub_without_a_feature_refuses_only_its_calls() {
     assert_eq!(chats, refused);
     assert_eq!(added, refused);
     assert!(runs.status().is_success());
-    assert_eq!(hub.asked(), ["/v1/models", "/v1/models", "/v1/runs"]);
+    assert_eq!(hub.asked(), ["/v1/models", "/v1/models", "/v1/gglib/runs"]);
 }
 
 /// A kept answer that serves the call lets it go unasked.
@@ -148,7 +148,7 @@ async fn a_kept_answer_that_serves_the_call_is_not_read_again() {
     far.list_chats().await.unwrap();
     far.list_runs().await.unwrap();
 
-    assert_eq!(hub.asked(), ["/v1/chats", "/v1/runs"]);
+    assert_eq!(hub.asked(), ["/v1/gglib/chats", "/v1/gglib/runs"]);
 }
 
 /// A hub updated while this machine stayed connected is served at once: an
@@ -165,6 +165,11 @@ async fn a_hub_updated_while_connected_is_served_at_once() {
 
     assert_eq!(
         hub.asked(),
-        ["/v1/models", "/v1/models", "/v1/chats", "/v1/chats/7"]
+        [
+            "/v1/models",
+            "/v1/models",
+            "/v1/gglib/chats",
+            "/v1/gglib/chats/7"
+        ]
     );
 }

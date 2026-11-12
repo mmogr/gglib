@@ -13,10 +13,12 @@
 //!           bearer_guard   the protected group only
 //!             device_gate  the protected group: tunnelled ⇒ names a device
 //!               mcp_tunnel_guard   /mcp only: tunnelled ⇒ refused, always
-//!               named_device_only  /v1/chats and /v1/attachments: a named
-//!                                  device, never local
+//!               named_device_only  /v1/gglib/chats and /v1/gglib/attachments:
+//!                                  a named device, never local
 //!                 handler
 //! ```
+//!
+//! gglib's own routes are under `/v1/gglib/`; the rest of `/v1` is `OpenAI`'s.
 //!
 //! `/health` sits outside the bearer group on purpose: it is polled before
 //! anyone has credentials. It is still behind the Host guard. Pairing has no
@@ -51,18 +53,27 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
     // machine reads them at `/api`, and a key-holder on a LAN bind must not
     // read every chat.
     let chats = Router::new()
-        .route("/v1/chats", get(crate::chats::list_chats))
-        .route("/v1/chats/{id}", get(crate::chats::open_chat))
+        .route("/v1/gglib/chats", get(crate::chats::list_chats))
+        .route("/v1/gglib/chats/{id}", get(crate::chats::open_chat))
         // A change to one, made as the hub's own page makes it (ADR 0017).
-        .route("/v1/chats/{id}/changes", post(crate::chats::change_chat))
+        .route(
+            "/v1/gglib/chats/{id}/changes",
+            post(crate::chats::change_chat),
+        )
         // A picture drawn again, kept beside the one a tool drew (ADR 0018).
-        .route("/v1/chats/{id}/pictures", post(crate::chats::keep_picture))
+        .route(
+            "/v1/gglib/chats/{id}/pictures",
+            post(crate::chats::keep_picture),
+        )
         // The images their turns carry: sent once, read back by id.
         .route(
-            "/v1/attachments",
+            "/v1/gglib/attachments",
             post(crate::chats::upload_attachment).layer(crate::chats::body_limit()),
         )
-        .route("/v1/attachments/{id}", get(crate::chats::fetch_attachment))
+        .route(
+            "/v1/gglib/attachments/{id}",
+            get(crate::chats::fetch_attachment),
+        )
         .route_layer(axum::middleware::from_fn(crate::chats::named_device_only));
 
     // Everything a client can reach with credentials. Grouped separately from
@@ -72,11 +83,11 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
     let mut protected = Router::new()
         .route("/v1/models", get(crate::models_endpoint::list_models))
         .route(
-            "/v1/models/{name}/load",
+            "/v1/gglib/models/{name}/load",
             post(crate::load_endpoint::load_model),
         )
         .route(
-            "/v1/models/{name}/detail",
+            "/v1/gglib/models/{name}/detail",
             get(crate::model_detail_endpoint::model_detail),
         )
         .route(
@@ -89,28 +100,34 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             "/v1/images/generations",
             post(crate::images::generations_route).layer(crate::body_limit::layer()),
         )
-        .route("/v1/images/drawing", get(crate::images::drawing_route))
-        .route("/v1/proxy/status", get(handle_proxy_status))
-        .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route(
-            "/v1/proxy/cache/clear",
+            "/v1/gglib/images/drawing",
+            get(crate::images::drawing_route),
+        )
+        .route("/v1/gglib/proxy/status", get(handle_proxy_status))
+        .route(
+            "/v1/gglib/proxy/status/stream",
+            get(handle_proxy_status_stream),
+        )
+        .route(
+            "/v1/gglib/proxy/cache/clear",
             post(crate::admin::handle_proxy_cache_clear),
         )
         .route(
-            "/v1/proxy/shutdown",
+            "/v1/gglib/proxy/shutdown",
             post(crate::admin::handle_proxy_shutdown),
         )
         // A paired device's own runs: the scope is read from the marker, so
         // a device reaches only what it started (ADR 0013's amendment).
-        .route("/v1/runs", get(crate::runs::list_runs))
+        .route("/v1/gglib/runs", get(crate::runs::list_runs))
         .route(
-            "/v1/runs/{id}",
+            "/v1/gglib/runs/{id}",
             put(crate::runs::put_run)
                 .layer(crate::body_limit::layer())
                 .get(crate::runs::get_run),
         )
-        .route("/v1/runs/{id}/events", get(crate::runs::run_events))
-        .route("/v1/runs/{id}/cancel", post(crate::runs::cancel_run))
+        .route("/v1/gglib/runs/{id}/events", get(crate::runs::run_events))
+        .route("/v1/gglib/runs/{id}/cancel", post(crate::runs::cancel_run))
         .merge(chats)
         .merge(mcp);
 

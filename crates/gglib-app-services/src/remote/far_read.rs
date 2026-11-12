@@ -84,7 +84,7 @@ impl FarProxy {
         accepted(self.send(request).await?).await
     }
 
-    /// `GET /v1/models/{identifier}/detail`: one model, resolved there as a
+    /// `GET /v1/gglib/models/{identifier}/detail`: one model, resolved there as a
     /// turn sent with `identifier` would be. The identifier travels as one
     /// path segment, so a name holding `/` or `:` arrives whole.
     ///
@@ -95,11 +95,11 @@ impl FarProxy {
     /// `Unavailable` as for [`FarProxy::models`].
     pub async fn lookup(&self, identifier: &str) -> Result<ModelLookup, FarError> {
         self.offers(&[]).await?;
-        let path = format!("/models/{}/detail", path_segment(identifier));
+        let path = format!("/gglib/models/{}/detail", path_segment(identifier));
         decode(&accepted(self.send(self.bounded.get(self.url(&path))).await?).await?)
     }
 
-    /// `POST /v1/models/{identifier}/load` with `{num_ctx}`: have the model
+    /// `POST /v1/gglib/models/{identifier}/load` with `{num_ctx}`: have the model
     /// resident now, so the first turn does not wait.
     ///
     /// # Errors
@@ -112,7 +112,7 @@ impl FarProxy {
         num_ctx: Option<u64>,
     ) -> Result<LoadResponse, FarError> {
         self.offers(&[]).await?;
-        let path = format!("/models/{}/load", path_segment(identifier));
+        let path = format!("/gglib/models/{}/load", path_segment(identifier));
         let request = self
             .bounded
             .post(self.url(&path))
@@ -121,7 +121,7 @@ impl FarProxy {
         decode(&accepted(self.send(request).await?).await?)
     }
 
-    /// Stop the far daemon: `POST /v1/proxy/shutdown` with the confirmation
+    /// Stop the far daemon: `POST /v1/gglib/proxy/shutdown` with the confirmation
     /// word the route requires (ADR 0012, decision 7). A one-way door, so it
     /// is not retried.
     ///
@@ -134,7 +134,7 @@ impl FarProxy {
         self.offers(&[]).await?;
         let request = self
             .bounded
-            .post(self.url("/proxy/shutdown"))
+            .post(self.url("/gglib/proxy/shutdown"))
             .json(&serde_json::json!({ "confirm": "shutdown" }));
         match self.send(request).await?.status() {
             s if s.is_success() => {

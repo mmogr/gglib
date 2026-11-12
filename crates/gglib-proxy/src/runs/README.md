@@ -2,12 +2,12 @@
 
 <!-- module-docs:start -->
 
-`/v1/runs/*`: a paired device's door to the daemon's runs, replies the
+`/v1/gglib/runs/*`: a paired device's door to the daemon's runs, replies the
 daemon owns until they end. The same five calls, bodies and event framing as
 the daemon's `/api/runs/*`, served through the `RunsPort` the proxy was
 started with, and answered `503 runs_unavailable` without one.
 
-`PUT /v1/runs/{id}?kind=agent` with `{conversation_id, content, images?,
+`PUT /v1/gglib/runs/{id}?kind=agent` with `{conversation_id, content, images?,
 thinking?, answer_saved?, draw?, image_model?}` is a
 paired device's turn on one of the hub's chats: handed to the daemon's
 `AgentRunStarter`, which runs the reply as an agent run in the device's
@@ -16,12 +16,12 @@ scope and saves it to the chat. Only a named device may; anything else is
 `"default"`, said on the turn that changes it; any other word, like any other
 key, is `400 invalid_request`. `answer_saved: true`, with empty `content` and
 no image, answers the question the chat already ends in, as a change at
-`/v1/chats/{id}/changes` leaves it (ADR 0017); on a chat that ends in none it
+`/v1/gglib/chats/{id}/changes` leaves it (ADR 0017); on a chat that ends in none it
 is `409 nothing_to_answer`. `draw` is the device's Draw button, sent only
 when pressed, and `image_model` the id of the image model the person chose
 for that picture, sent only when one was.
 
-`PUT /v1/runs/{id}?kind=chat&tools=3,7` is a chat run for a chat the
+`PUT /v1/gglib/runs/{id}?kind=chat&tools=3,7` is a chat run for a chat the
 device keeps itself, run through the agent loop with gglib's builtins: the
 body is the device's unchanged `OpenAI` chat request, handed to the same
 starter (`start_chat`) with the servers it may use, and `&draw=true` offers

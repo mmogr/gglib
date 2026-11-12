@@ -23,7 +23,7 @@ async fn a_listing_reaches_the_far_chats_with_the_key_and_comes_back_as_it_was()
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("GET", "/v1/chats")
+        ("GET", "/v1/gglib/chats")
     );
     assert!(carries_key(&seen), "{seen:?}");
 }
@@ -38,7 +38,7 @@ async fn opening_a_chat_reaches_it_by_id() {
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("GET", "/v1/chats/12")
+        ("GET", "/v1/gglib/chats/12")
     );
     assert!(carries_key(&seen), "{seen:?}");
 }
@@ -61,7 +61,7 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("PUT", "/v1/runs/chat-1?kind=agent")
+        ("PUT", "/v1/gglib/runs/chat-1?kind=agent")
     );
     assert!(carries_key(&seen), "{seen:?}");
     assert_eq!(
@@ -180,7 +180,10 @@ async fn the_runs_and_a_cancel_reach_the_far_runs() {
         .collect();
     assert_eq!(
         asked,
-        [("GET", "/v1/runs"), ("POST", "/v1/runs/chat-1/cancel")]
+        [
+            ("GET", "/v1/gglib/runs"),
+            ("POST", "/v1/gglib/runs/chat-1/cancel")
+        ]
     );
     let key = format!("Bearer {KEY}");
     assert!(
@@ -201,7 +204,7 @@ async fn the_far_drawing_availability_comes_back_as_it_was() {
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("GET", "/v1/images/drawing")
+        ("GET", "/v1/gglib/images/drawing")
     );
     assert!(carries_key(&seen), "{seen:?}");
 }
@@ -251,7 +254,7 @@ async fn the_far_drawing_question_carries_the_chosen_image_model() {
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("GET", "/v1/images/drawing?image_model=12")
+        ("GET", "/v1/gglib/images/drawing?image_model=12")
     );
     assert!(carries_key(&seen), "{seen:?}");
 }
@@ -275,7 +278,7 @@ async fn a_runs_events_stream_through_in_order_as_they_come() {
         "text/event-stream"
     );
     let seen = only(&fake);
-    assert_eq!(seen.uri, "/v1/runs/chat-1/events?after=3");
+    assert_eq!(seen.uri, "/v1/gglib/runs/chat-1/events?after=3");
     assert!(carries_key(&seen), "{seen:?}");
 
     let mut body = response.into_body();

@@ -1,4 +1,4 @@
-//! `PUT /v1/runs/{id}?kind=agent` on the real proxy: a paired device adds a
+//! `PUT /v1/gglib/runs/{id}?kind=agent` on the real proxy: a paired device adds a
 //! turn to one of the hub's chats, and nothing else may.
 //!
 //! The starter is a stand-in (`fixtures::turns`) that records what it is
@@ -26,7 +26,7 @@ use fixtures::turns::{FakeTurns, serve, serve_holding};
 
 fn put(base: &str, body: &serde_json::Value) -> RequestBuilder {
     Client::new()
-        .put(format!("{base}/v1/runs/d1?kind=agent"))
+        .put(format!("{base}/v1/gglib/runs/d1?kind=agent"))
         .json(body)
 }
 
@@ -187,7 +187,7 @@ async fn a_proxy_without_a_starter_answers_503() {
 async fn an_unknown_kind_is_400() {
     let (base, cancel) = serve(None, Arc::default()).await;
     let request = Client::new()
-        .put(format!("{base}/v1/runs/d1?kind=zzq"))
+        .put(format!("{base}/v1/gglib/runs/d1?kind=zzq"))
         .json(&body());
     let (status, answer) = json(from_device(request).send().await.unwrap()).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
@@ -198,7 +198,7 @@ async fn an_unknown_kind_is_400() {
 
 fn put_chat(base: &str, query: &str, body: &serde_json::Value) -> RequestBuilder {
     Client::new()
-        .put(format!("{base}/v1/runs/p1{query}"))
+        .put(format!("{base}/v1/gglib/runs/p1{query}"))
         .json(body)
 }
 

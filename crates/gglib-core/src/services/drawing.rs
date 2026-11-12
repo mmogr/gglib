@@ -20,7 +20,7 @@
 //!
 //! [`drawing_availability`] is the rule behind the Draw button's
 //! availability, at every door that asks (`GET /api/images/drawing`, the
-//! proxy's `GET /v1/images/drawing`, and a run's `draw: true`).
+//! proxy's `GET /v1/gglib/images/drawing`, and a run's `draw: true`).
 //!
 //! The reasons, in the order they are asked:
 //!

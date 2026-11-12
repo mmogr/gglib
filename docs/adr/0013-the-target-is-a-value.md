@@ -164,6 +164,18 @@ and tools stay out of reach. The route joins the list of what the tunnel
 reaches, which the proxy's test pins, behind the same guard as the other
 chat routes: only a request tunnelled from a named device reaches it.
 
+> **Amended 2026-11-12 — gglib's own routes live under `/v1/gglib/`.** The
+> routes named in this decision and its amendments (runs, chats,
+> attachments, a model's load and detail, the drawing check, and the
+> proxy's status, cache-clear and shutdown) are now at `/v1/gglib/<x>`,
+> with the same suffix, so `/v1` stays OpenAI's namespace: `/v1/models`,
+> `/v1/chat/completions`, `/v1/embeddings` and `/v1/images/generations` do
+> not move. Nothing serves the old paths. A device on an older gglib cannot
+> reach them on a machine that moved them and must update; a newer one asking an
+> older machine is told to update it by that machine's version answer
+> (ADR 0014's amendment of the same date). What the tunnel reaches is
+> otherwise unchanged.
+
 ### 4. A turn remembers the model it asked that machine for
 
 `RemotePairing` gains `default_model`: the model this machine last asked

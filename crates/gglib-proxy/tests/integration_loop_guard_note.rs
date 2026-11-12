@@ -52,7 +52,7 @@ async fn forward_under(guard: bool, history: Vec<Value>) -> (u16, Option<Value>,
     let _ = resp.bytes().await;
 
     let status_json: Value = Client::new()
-        .get(format!("{proxy_url}/v1/proxy/status"))
+        .get(format!("{proxy_url}/v1/gglib/proxy/status"))
         .send()
         .await
         .expect("status request")

@@ -199,7 +199,7 @@ impl ModelRuntimePort for DeadThenLive {
 /// Read the dashboard off a running proxy.
 pub(crate) async fn dashboard_of(proxy_url: &str) -> Value {
     Client::new()
-        .get(format!("{proxy_url}/v1/proxy/status"))
+        .get(format!("{proxy_url}/v1/gglib/proxy/status"))
         .send()
         .await
         .expect("status request")

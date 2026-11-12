@@ -30,14 +30,14 @@ const ABOUT: &str = "The error codes gglib writes itself, rather than relays fro
 llama-server, on its proxy and the daemon's runs. The proxy refuses with \
 {\"error\":{\"message\":...,\"type\":...,\"code\":...}}, and a stream already under way can end \
 with that object as a data: frame. A run that failed carries {\"code\":...,\"message\":...} as its \
-error, on /v1/runs and /api/runs. The daemon's /api/runs refuses with \
+error, on /v1/gglib/runs and /api/runs. The daemon's /api/runs refuses with \
 {\"error\":...,\"status\":...,\"type\":<code>}, and the proxy answers a paired device's turn on a \
 hub chat with the daemon's refusal of it. The daemon's guards in front of /api refuse with \
 upper-case types of their own, such as HOST_NOT_ALLOWED, which are not listed here. Match on \
 code. type is the type the proxy writes beside the code: null where it writes more than one, \
 or none. status is the HTTP status of every response that carries the code: null where those \
 responses' writers do not all fix the same one, or where no response carries it, only a stream \
-frame or a run's error. An availability answer is not such a response: GET /v1/images/drawing \
+frame or a run's error. An availability answer is not such a response: GET /v1/gglib/images/drawing \
 and the daemon's GET /api/images/drawing always answer 200, and the code in that body is the \
 one a request to draw would be refused with.";
 

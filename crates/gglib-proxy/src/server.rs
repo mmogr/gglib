@@ -79,7 +79,7 @@ pub(crate) struct AppState {
     pub(crate) host: HostFacts,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
     /// `/slots` cache, and request metrics, plus the SSE broadcaster that
-    /// pushes snapshots to `GET /v1/proxy/status/stream`.
+    /// pushes snapshots to `GET /v1/gglib/proxy/status/stream`.
     pub(crate) dashboard: Arc<DashboardState>,
     /// Application settings, snapshotted so the per-request read does not hit
     /// the database every time. See `settings_cache` module docs.
@@ -101,9 +101,9 @@ pub(crate) struct AppState {
     /// Asked whether a session is live, before a device is told the MCP
     /// servers open to it, and told when a tunnelled request arrives. `None` where no tunnel can be.
     remote: Option<Arc<dyn RemoteGatewayPort>>,
-    /// The daemon's runs, served at `/v1/runs`; `None` answers those 503.
+    /// The daemon's runs, served at `/v1/gglib/runs`; `None` answers those 503.
     pub(crate) runs: Option<Arc<dyn RunsPort>>,
-    /// The hub's chats, served at `/v1/chats`; `None` answers those 503.
+    /// The hub's chats, served at `/v1/gglib/chats`; `None` answers those 503.
     pub(crate) chats: Option<Arc<dyn HubChatsPort>>,
     /// Starts a device's turn on a hub chat; `None` answers it 503.
     pub(crate) turns: Option<Arc<dyn AgentRunStarter>>,
@@ -289,7 +289,7 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         sampling_audit,
     ));
     // Second background task: periodically recomputes and broadcasts the
-    // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
+    // unified DashboardSnapshot for GET /v1/gglib/proxy/status/stream subscribers
     // (see `dashboard` module docs), when the caller asked for it. Same
     // join-on-shutdown treatment as the slots poller above.
     let dashboard_publisher = publish_dashboard

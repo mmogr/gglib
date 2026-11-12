@@ -9,7 +9,7 @@
  * # The contract this reads, and why it is a mirror rather than a shared type
  *
  * The frontend connects directly to an already-running proxy's own HTTP port
- * (`http://{host}:{port}/v1/proxy/status/stream`), the same way the CLI's
+ * (`http://{host}:{port}/v1/gglib/proxy/status/stream`), the same way the CLI's
  * `gglib proxy dashboard` command does — a real HTTP client of the JSON
  * contract, not a shared in-process type. Unknown or extra fields are ignored
  * by TypeScript's structural typing, so a reader tolerates additive

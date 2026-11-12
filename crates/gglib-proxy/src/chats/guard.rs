@@ -11,7 +11,7 @@ use crate::remote::Tunnelled;
 
 /// Refuse any request that is not tunnelled from a named device.
 ///
-/// Applied with `route_layer` on `/v1/chats` alone, inside the bearer guard
+/// Applied with `route_layer` on `/v1/gglib/chats` alone, inside the bearer guard
 /// and the device gate, so an unauthenticated request is still a 401. A
 /// local request is refused as well: this machine reads its chats at `/api`,
 /// and a client holding the proxy's key on a LAN bind must not read every

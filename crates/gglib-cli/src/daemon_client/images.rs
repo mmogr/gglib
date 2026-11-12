@@ -144,7 +144,7 @@ impl ImageGenerationPort for ImageGenerator {
     }
 
     /// The drawing daemon's own answer (`GET /api/images/drawing` here,
-    /// `/v1/images/drawing` there), as it gave it: its image model when it
+    /// `/v1/gglib/images/drawing` there), as it gave it: its image model when it
     /// can draw, its code and reason when it cannot, and its image models;
     /// `chosen` goes as `?image_model=<id>`. A daemon that cannot be
     /// reached, or is too old to have the route, cannot draw; nor can a

@@ -17,7 +17,7 @@ import type { Support } from "./Support";
  * - CLI: `gglib model inspect` (human-readable or `--json`)
  * - Axum: `GET /api/models/:id/detail`
  * - GUI frontend: model detail panel
- * - Proxy: `GET /v1/models/{name}/detail`, inside a [`ModelLookup`], with
+ * - Proxy: `GET /v1/gglib/models/{name}/detail`, inside a [`ModelLookup`], with
  *   [`Self::file_path`] and [`Self::port`] left out
  *
  * # Not a superset of `GuiModel`

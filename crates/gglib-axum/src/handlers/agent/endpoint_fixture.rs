@@ -268,7 +268,7 @@ impl Daemon {
     /// The endpoint's dashboard, read with `key`.
     pub(super) async fn dashboard(&self, key: Option<&str>) -> Value {
         let mut request =
-            gglib_proxy::loopback::client().get(format!("{}/v1/proxy/status", self.root));
+            gglib_proxy::loopback::client().get(format!("{}/v1/gglib/proxy/status", self.root));
         if let Some(key) = key {
             request = request.bearer_auth(key);
         }

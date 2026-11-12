@@ -1,4 +1,4 @@
-//! A stand-in for the hub's chats, for the proxy's `/v1/chats` tests.
+//! A stand-in for the hub's chats, for the proxy's `/v1/gglib/chats` tests.
 //!
 //! Counts every call, so a test can say whether a request reached the chats
 //! at all, and answers from a fixed pair of chats. Its images go through

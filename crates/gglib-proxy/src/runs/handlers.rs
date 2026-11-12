@@ -1,4 +1,4 @@
-//! `/v1/runs/*`: the same five calls as the daemon's `/api/runs/*`, in the
+//! `/v1/gglib/runs/*`: the same five calls as the daemon's `/api/runs/*`, in the
 //! caller's scope.
 //!
 //! Every error message here is fixed text or a [`RunsError`]'s, which is
@@ -88,7 +88,7 @@ pub(crate) struct PutQuery {
     #[serde(default)]
     draw: bool,
     /// With `draw=true` beside `tools`: the image model the person chose for
-    /// the picture, by its id in `GET /v1/images/drawing`'s `models`.
+    /// the picture, by its id in `GET /v1/gglib/images/drawing`'s `models`.
     /// Absent, the default rule draws. Refused with `kind=agent`, whose turn
     /// says `image_model` in its body, and on a plain chat run.
     #[serde(default)]
@@ -128,7 +128,7 @@ fn server_id(token: &str) -> Option<i64> {
     canonical.then(|| token.parse().ok()).flatten()
 }
 
-/// `PUT /v1/runs/{id}`: start a chat run with the body as its request, or
+/// `PUT /v1/gglib/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the caller's run that already has the id. 201 new, 200
 /// existing. With `?kind=agent`, a device's turn on a hub chat, and with
 /// `?tools=3,7` a chat run through the agent loop with the tools of those
@@ -192,12 +192,12 @@ pub(crate) async fn put_run(
     Ok((status, Json(created.info)).into_response())
 }
 
-/// `GET /v1/runs`: every run the caller may see, newest first.
+/// `GET /v1/gglib/runs`: every run the caller may see, newest first.
 pub(crate) async fn list_runs(State(state): State<AppState>, Caller(scope): Caller) -> Answer {
     Ok(Json(runs(&state).ok_or_else(unavailable)?.list(&scope)).into_response())
 }
 
-/// `GET /v1/runs/{id}`.
+/// `GET /v1/gglib/runs/{id}`.
 pub(crate) async fn get_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
@@ -210,7 +210,7 @@ pub(crate) async fn get_run(
     Ok(Json(info).into_response())
 }
 
-/// `POST /v1/runs/{id}/cancel`: idempotent.
+/// `POST /v1/gglib/runs/{id}/cancel`: idempotent.
 pub(crate) async fn cancel_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
@@ -230,7 +230,7 @@ pub(crate) struct EventsQuery {
     after: u32,
 }
 
-/// `GET /v1/runs/{id}/events?after=N`: see [`sse`]. Ends when the proxy
+/// `GET /v1/gglib/runs/{id}/events?after=N`: see [`sse`]. Ends when the proxy
 /// shuts down, so a graceful stop does not wait on a run still going.
 pub(crate) async fn run_events(
     State(state): State<AppState>,

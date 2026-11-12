@@ -112,7 +112,7 @@ pub(crate) fn render_client_config(recipes: &ClientRecipesDto, color: bool) -> V
     out.push("    Check it from another shell:".to_owned());
     out.push(curl);
     out.push(String::new());
-    out.push(format!("  Dashboard  {base}/proxy/status"));
+    out.push(format!("  Dashboard  {base}/gglib/proxy/status"));
     out.push(String::new());
     out
 }
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn the_dashboard_url_is_included() {
         let lines = render_client_config(&answer("m", 1, Some(KeyState::NoneNeeded)), false);
-        assert!(lines.iter().any(|l| l.contains("/v1/proxy/status")));
+        assert!(lines.iter().any(|l| l.contains("/v1/gglib/proxy/status")));
     }
 
     /// Piped or captured output must be clean — this block is the one most

@@ -8,7 +8,7 @@
 
 /// Every path the proxy serves, and therefore every path the tunnel carries.
 ///
-/// `/mcp`, `/v1/chats` and `/v1/attachments` are here with guards
+/// `/mcp`, `/v1/gglib/chats` and `/v1/gglib/attachments` are here with guards
 /// of their own. An image a device stores is part of a turn it adds to a
 /// chat, which is use: it changes no model and no setting. So is a change
 /// to a chat (ADR 0017): it writes the chats a turn writes, adding a branch
@@ -18,25 +18,25 @@
 pub const TUNNEL_REACHABLE: &[&str] = &[
     "/health",
     "/v1/models",
-    "/v1/models/{name}/load",
-    "/v1/models/{name}/detail",
+    "/v1/gglib/models/{name}/load",
+    "/v1/gglib/models/{name}/detail",
     "/v1/chat/completions",
     "/v1/embeddings",
     "/v1/images/generations",
-    "/v1/images/drawing",
-    "/v1/proxy/status",
-    "/v1/proxy/status/stream",
-    "/v1/proxy/cache/clear",
-    "/v1/proxy/shutdown",
-    "/v1/runs",
-    "/v1/runs/{id}",
-    "/v1/runs/{id}/events",
-    "/v1/runs/{id}/cancel",
-    "/v1/chats",
-    "/v1/chats/{id}",
-    "/v1/chats/{id}/changes",
-    "/v1/chats/{id}/pictures",
-    "/v1/attachments",
-    "/v1/attachments/{id}",
+    "/v1/gglib/images/drawing",
+    "/v1/gglib/proxy/status",
+    "/v1/gglib/proxy/status/stream",
+    "/v1/gglib/proxy/cache/clear",
+    "/v1/gglib/proxy/shutdown",
+    "/v1/gglib/runs",
+    "/v1/gglib/runs/{id}",
+    "/v1/gglib/runs/{id}/events",
+    "/v1/gglib/runs/{id}/cancel",
+    "/v1/gglib/chats",
+    "/v1/gglib/chats/{id}",
+    "/v1/gglib/chats/{id}/changes",
+    "/v1/gglib/chats/{id}/pictures",
+    "/v1/gglib/attachments",
+    "/v1/gglib/attachments/{id}",
     "/mcp",
 ];

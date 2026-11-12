@@ -5,7 +5,7 @@ From 1.0.0, gglib follows a simple rule. A release that breaks anything in the f
 ## Covered
 
 - **The OpenAI routes:** `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and `/v1/images/generations`, as a client reads them.
-- **gglib's own `/v1` routes that paired devices use**, ggchat among them.
+- **gglib's own routes under `/v1/gglib/`**, which paired devices use, ggchat among them.
 - **Error codes** gglib writes itself, as listed in [`error-codes.json`](error-codes.json).
 - **CLI command and flag names**, as in the [CLI reference](cli/).
 - **Settings keys.**

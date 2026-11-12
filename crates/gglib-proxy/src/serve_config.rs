@@ -63,8 +63,8 @@ pub struct ServeConfig {
     /// budget is sized from. This crate has no probe of its own.
     pub host: HostFacts,
     /// Whether the dashboard publisher runs, pushing a fresh snapshot to
-    /// `/v1/proxy/status/stream` subscribers once a second. With it off,
-    /// `/v1/proxy/status` still answers and the stream still opens with the
+    /// `/v1/gglib/proxy/status/stream` subscribers once a second. With it off,
+    /// `/v1/gglib/proxy/status` still answers and the stream still opens with the
     /// current snapshot, but nothing follows it.
     pub dashboard: bool,
     /// What this run reports to that outlives it — the per-model defect

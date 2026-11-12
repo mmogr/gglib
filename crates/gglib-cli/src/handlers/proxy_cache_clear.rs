@@ -1,19 +1,19 @@
 //! `gglib proxy cache-clear` — clear KV cache via the proxy HTTP endpoint.
 //!
-//! Connects to `POST /v1/proxy/cache/clear` on a running `gglib proxy` (or
+//! Connects to `POST /v1/gglib/proxy/cache/clear` on a running `gglib proxy` (or
 //! `gglib web`) instance and clears slot files for all sessions or a specific
 //! session ID.
 
 use anyhow::{Context, Result};
 
-/// Clear KV cache via the proxy's `/v1/proxy/cache/clear` endpoint.
+/// Clear KV cache via the proxy's `/v1/gglib/proxy/cache/clear` endpoint.
 pub(crate) async fn execute(
     host: &str,
     port: u16,
     session_id: Option<&str>,
     api_key: Option<&str>,
 ) -> Result<()> {
-    let url = format!("http://{host}:{port}/v1/proxy/cache/clear");
+    let url = format!("http://{host}:{port}/v1/gglib/proxy/cache/clear");
 
     let mut builder = gglib_proxy::loopback::client_for(host).post(&url);
 
