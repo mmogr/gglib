@@ -1,9 +1,9 @@
 //! What a turn on a hub chat sends this machine's endpoint, which it reaches
 //! as any client does: the bearer key, the model's catalogue id, the
 //! conversation unshaped, the person's own choices, the first call's demand
-//! and the turn's limit. The endpoint folds the sampling ladder, trims,
-//! writes the dialect's grammar and parses the dialect's markup; what comes
-//! back is read as the `OpenAI` reply it already is.
+//! and the turn's limit. The endpoint folds the sampling ladder, trims and
+//! parses the dialect's markup; what comes back is read as the `OpenAI`
+//! reply it already is.
 
 use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::domain::{DefaultsOrigin, InferenceConfig};

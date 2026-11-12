@@ -10,8 +10,7 @@
 //!   no dialect normalization, no grammar — what a client pointed straight
 //!   at llama-server experiences.
 //! - **gglib**: the full pipeline, exactly as the proxy runs it — per-model
-//!   sampling defaults, capability-aware shaping, dialect parsing, and
-//!   decode-time grammar enforcement where a task demands a tool call.
+//!   sampling defaults, capability-aware shaping and dialect parsing.
 //!
 //! The per-axis deltas in the [`AgenticEvalReport`] are the product: the
 //! measured difference in tool-call accuracy, loop avoidance, and task

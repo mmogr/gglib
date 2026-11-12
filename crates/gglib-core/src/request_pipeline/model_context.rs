@@ -16,8 +16,7 @@ use crate::ports::ModelSummary;
 ///
 /// * [`capabilities`](Self::capabilities) — request-side transforms
 ///   (strict-turn coalescing and friends).
-/// * [`dialect`](Self::dialect) — response-stream parser selection and
-///   decode-time grammar origination.
+/// * [`dialect`](Self::dialect) — response-stream parser selection.
 /// * [`tags`](Self::tags) — the sampling floor (via the `reasoning` tag) and
 ///   launch narration.
 /// * [`inference_defaults`](Self::inference_defaults) — the per-model layer of
@@ -36,8 +35,7 @@ pub struct ModelContext {
     pub capabilities: ModelCapabilities,
     /// The model's tags — the sampling floor (`reasoning`) and narration.
     pub tags: Vec<String>,
-    /// Resolved tool-call dialect — drives response-stream parser selection
-    /// and decode-time grammar origination.
+    /// Resolved tool-call dialect — drives response-stream parser selection.
     ///
     /// Populated from the model's persisted spec when one exists, else from
     /// the `format:*` tag fallback (see [`From<&ModelSummary>`]); `None`

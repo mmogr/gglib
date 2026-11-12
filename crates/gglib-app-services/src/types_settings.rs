@@ -59,8 +59,8 @@ pub struct AppSettings {
     pub trust_client_sampling: Option<bool>,
     /// Whether the proxy's loop guard scans requests. Absent means on.
     pub loop_guard: Option<bool>,
-    /// Whether a tool call failing schema validation is re-issued, with
-    /// `tool_choice: "required"` or under gglib's grammar. Absent means on.
+    /// Whether a tool call failing schema validation is re-issued with
+    /// `tool_choice: "required"`. Absent means on.
     pub tool_call_repair: Option<bool>,
     /// Whether `/mcp` offers MCP clients the drawing tool. Absent means off.
     pub mcp_drawing: Option<bool>,

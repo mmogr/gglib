@@ -89,10 +89,10 @@ pub struct GeneratedOutput {
     pub llm_calls: usize,
     /// The largest single batch of tool calls any one turn executed.
     ///
-    /// The fingerprint of a constrained-decoding runaway. gglib's generated
-    /// grammar admits `root ::= sp call (sp call)* sp` — unbounded repetition —
-    /// so a model that never emits an end-of-generation token can keep producing
-    /// syntactically valid calls until it hits a token cap or the context limit.
+    /// The fingerprint of a constrained-decoding runaway. A tool-call grammar
+    /// that admits unbounded repetition lets a model that never emits an
+    /// end-of-generation token keep producing syntactically valid calls until
+    /// it hits a token cap or the context limit.
     /// Scoring cannot reveal this: extra unrequested calls cost nothing, so a
     /// batch of hundreds containing the right call still scores `1.0` and the
     /// task still reads as passed.

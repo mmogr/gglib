@@ -176,7 +176,7 @@ pub(super) async fn run_turn_holding_back_tool_calls(
     let repair = RepairContext {
         req_builder: crate::loopback::client().post("http://127.0.0.1:9/"),
         request_body: Bytes::new(),
-        turn: RepairTurn::ON,
+        enabled: true,
     };
     run_turn_with(bytes, None, Reader::default(), Some(repair), None).await
 }

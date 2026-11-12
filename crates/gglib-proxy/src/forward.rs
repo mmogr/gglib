@@ -84,7 +84,7 @@ use crate::connections::ConnectionGuard;
 use crate::generation::Meter;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
-use crate::repair::{RepairContext, RepairTurn};
+use crate::repair::RepairContext;
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
 use crate::turn_dialect::TurnDialect;
@@ -441,8 +441,6 @@ struct ShapedRequest {
     truncation: TruncationReport,
     /// Whether any message carries an image; `false` for a body never read.
     carries_images: bool,
-    /// Whether the pipeline originated a decode-time tool-call grammar.
-    grammar_enforced: bool,
     /// What the sampling stage resolved, when it ran at all.
     ///
     /// `None` on a body that was never JSON: the pipeline did not execute, so
@@ -480,16 +478,11 @@ fn shape_request_body(
             body,
             truncation: TruncationReport::default(),
             carries_images: false,
-            grammar_enforced: false,
             sampling: None,
         });
     };
 
-    // The constrain stage never engages over a client-sent grammar, so
-    // before-absent + after-present is exactly "the pipeline originated one".
-    let grammar_before = value.get("grammar").is_some();
     let report = request_pipeline::apply(&mut value, ctx, layers, budget)?;
-    let grammar_enforced = !grammar_before && value.get("grammar").is_some();
     let carries_images = request_pipeline::has_images(&value);
 
     match serde_json::to_vec(&value) {
@@ -497,7 +490,6 @@ fn shape_request_body(
             body: Bytes::from(v),
             truncation: report.truncation,
             carries_images,
-            grammar_enforced,
             sampling: Some(report.sampling),
         }),
         Err(e) => {
@@ -512,7 +504,6 @@ fn shape_request_body(
                 body,
                 truncation: TruncationReport::default(),
                 carries_images,
-                grammar_enforced: false,
                 sampling: Some(sampling),
             })
         }
@@ -582,7 +573,7 @@ pub(crate) struct ForwardRequest<'a> {
     /// non-streaming response paths.
     pub cache_metrics: Arc<CacheMetricsStore>,
     /// Whether a tool call failing schema validation is re-issued, with
-    /// `tool_choice: "required"` or under gglib's own grammar.
+    /// `tool_choice: "required"`.
     ///
     /// From `Settings.tool_call_repair`, which is absent-means-on. Resolved
     /// where the settings snapshot already lives rather than read again here,
@@ -694,10 +685,8 @@ pub(crate) async fn forward_chat_completion(
         tokens: effective_ctx as usize,
     });
 
-    // Read once, so the request's shaping and its answer's reading agree.
-    let dialect = TurnDialect::for_turn(context.dialect.clone());
-    let shaping = dialect.shaping_context(&context);
-    let shaped = match shape_request_body(body, &shaping, &sampling, budget) {
+    let dialect = TurnDialect::parsed(context.dialect.clone());
+    let shaped = match shape_request_body(body, &context, &sampling, budget) {
         Ok(shaped) => shaped,
         Err(e) => {
             // Hard abort: the conversation cannot be trimmed to fit. Record a
@@ -712,7 +701,6 @@ pub(crate) async fn forward_chat_completion(
                 payload_chars_after: 0,
                 messages_truncated: 0,
                 was_clamped: true,
-                grammar_enforced: false,
                 dialect_residue: false,
                 tool_repaired: false,
                 completion_tokens: None,
@@ -739,7 +727,6 @@ pub(crate) async fn forward_chat_completion(
         body,
         truncation: report,
         carries_images,
-        grammar_enforced,
         sampling: decision,
     } = shaped;
 
@@ -763,16 +750,9 @@ pub(crate) async fn forward_chat_completion(
             "history truncated: reduced payload before upstream forwarding"
         );
     }
-    if grammar_enforced {
-        info!(
-            model = model_name,
-            "tool-call grammar enforced for this request (decode-time constraint)"
-        );
-    }
     let snapshot_seq = metrics.record(ContextSnapshot {
         interventions: crate::interventions::forwarded_interventions(
             report.messages_truncated,
-            grammar_enforced,
             loop_guard_trip,
         ),
         model_name: model_name.to_owned(),
@@ -780,7 +760,6 @@ pub(crate) async fn forward_chat_completion(
         payload_chars_after: report.payload_chars_after,
         messages_truncated: report.messages_truncated,
         was_clamped: false,
-        grammar_enforced,
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,
@@ -893,10 +872,7 @@ pub(crate) async fn forward_chat_completion(
             permit,
             config,
             session_id,
-            RepairTurn {
-                enabled: repair_enabled,
-                gglib_grammar: grammar_enforced,
-            },
+            repair_enabled,
         ));
     }
 
@@ -908,10 +884,7 @@ pub(crate) async fn forward_chat_completion(
         &dialect,
         &cache_metrics,
         (metrics.as_ref(), snapshot_seq),
-        RepairTurn {
-            enabled: repair_enabled,
-            gglib_grammar: grammar_enforced,
-        },
+        repair_enabled,
         stream_bounds.unary,
     )
     .await
@@ -1479,7 +1452,7 @@ async fn resolve_held_tool_calls(
         return original_frames;
     };
 
-    let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.turn);
+    let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.enabled);
     // A call the validator could not judge at all leaves repair with no
     // opinion to act on. Recorded before the early return, because a client
     // whose tools all use `anyOf` gets zero repair coverage and, without
@@ -1553,11 +1526,6 @@ mod forward_shaping_tests;
 #[cfg(test)]
 #[path = "forward_progress_tests.rs"]
 mod forward_progress_tests;
-
-/// A streamed turn gglib's own grammar constrained, repaired by a second draw.
-#[cfg(test)]
-#[path = "forward_repair_grammar_tests.rs"]
-mod forward_repair_grammar_tests;
 
 /// The byte streams the stall tests feed the drain, and the turn they read.
 #[cfg(test)]

@@ -30,11 +30,6 @@ messages_truncated: number,
  */
 was_clamped: boolean, 
 /**
- * `true` when the request pipeline originated a decode-time tool-call
- * grammar for this request (see `request_pipeline::constrain`).
- */
-grammar_enforced: boolean, 
-/**
  * `true` when dialect residue — tool-call markup that survived
  * normalization — reached this request's client-visible output (see
  * `gglib_core::normalize::residue`). Back-patched after the response
@@ -43,7 +38,7 @@ grammar_enforced: boolean,
 dialect_residue: boolean, 
 /**
  * `true` when this turn's tool call failed schema validation and a
- * re-issue, under `required` or gglib's own grammar, produced a conformant one.
+ * re-issue under `required` produced a conformant one.
  * Back-patched after the response streams via
  * [`ContextMetricsStore::flag_tool_repair`].
  */

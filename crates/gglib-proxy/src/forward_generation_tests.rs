@@ -123,7 +123,7 @@ fn holding() -> RepairContext {
     RepairContext {
         req_builder: crate::loopback::client().post("http://127.0.0.1:9/"),
         request_body: Bytes::new(),
-        turn: RepairTurn::OFF,
+        enabled: false,
     }
 }
 
@@ -514,7 +514,7 @@ async fn drain_reissued(status: u16, answer: serde_json::Value) -> StreamOutcome
         req_builder: crate::loopback::client()
             .post(format!("http://127.0.0.1:{port}/v1/chat/completions")),
         request_body: read_file_request(),
-        turn: RepairTurn::ON,
+        enabled: true,
     };
     let outcome = drain(bad_call_turn(), Some(repair), Client::Stays).await;
     server.abort();

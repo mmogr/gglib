@@ -38,8 +38,8 @@ A send through a door is proxied: the endpoint runs the request pipeline
 over it as it does over any client's request, so the adapter does not. It
 folds no sampling ladder (the person's own choice, written into the body,
 reaches the endpoint as a client's: thinking off is
-`reasoning_budget_tokens: 0`), merges no turns, trims nothing and writes no
-grammar; the first call's `tool_choice` goes as it was written. The reply
+`reasoning_budget_tokens: 0`), merges no turns and trims nothing; the first
+call's `tool_choice` goes as it was written. The reply
 comes back with the dialect's markup already parsed into `OpenAI` tool
 calls, so no dialect parser runs over it. The images a message names are
 still read here, since the endpoint takes them inline.

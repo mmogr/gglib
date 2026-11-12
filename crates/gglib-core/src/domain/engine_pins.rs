@@ -22,7 +22,7 @@
 /// Resolving `releases/latest` would change the inference engine underneath
 /// gglib whenever upstream cut a release — silently, and differently for two
 /// users who installed a day apart. Every compensation gglib applies (dialect
-/// normalization, grammar origination, capability detection) is a bet about
+/// normalization, capability detection) is a bet about
 /// what that engine does, and an unpinned engine makes those bets
 /// unfalsifiable: when behaviour changes, there is no way to tell a gglib
 /// regression from an upstream one.

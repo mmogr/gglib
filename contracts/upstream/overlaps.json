@@ -62,7 +62,7 @@
   "dialect-normalise": {
     "engine": "llama",
     "adr": "0002",
-    "paths": ["crates/gglib-core/src/normalize", "crates/gglib-core/src/request_pipeline/constrain.rs", "crates/gglib-proxy/src/repair.rs"],
+    "paths": ["crates/gglib-core/src/normalize", "crates/gglib-proxy/src/repair.rs"],
     "upstream": {
       "paths": ["common/chat.cpp", "common/chat.h", "common/chat-peg-parser.cpp", "common/chat-peg-parser.h", "common/chat-auto-parser.h", "common/chat-auto-parser-generator.cpp", "common/chat-auto-parser-helpers.cpp", "common/chat-auto-parser-helpers.h", "common/chat-diff-analyzer.cpp", "common/parsers/", "common/peg-parser.cpp", "common/peg-parser.h", "common/json-schema-to-grammar.cpp", "common/json-schema-to-grammar.h"],
       "headings": ["### POST `/v1/chat/completions`"],

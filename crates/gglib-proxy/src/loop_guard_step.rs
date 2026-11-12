@@ -188,7 +188,6 @@ fn record_ended(
         payload_chars_after: body_len,
         messages_truncated: 0,
         was_clamped: false,
-        grammar_enforced: false,
         loop_guard_trip: Some(trip),
         loop_guard_ended: true,
         recorded_at_secs: now,

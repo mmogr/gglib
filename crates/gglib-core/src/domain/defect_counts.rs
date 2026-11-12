@@ -158,8 +158,8 @@ pub struct ModelDefectCounts {
     /// [`Self::agent_guard_loops`] that does fire.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub agent_guard_stagnations: u64,
-    /// Turns whose tool call failed schema validation and was re-issued,
-    /// with `tool_choice: "required"` or as a second draw under gglib's grammar.
+    /// Turns whose tool call failed schema validation and was re-issued
+    /// with `tool_choice: "required"`.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repairs_attempted: u64,
     /// Of those, the re-issues that produced a conformant call.

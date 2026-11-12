@@ -11,7 +11,7 @@ use crate::client_send::ClientSender;
 use crate::connections::ConnectionGuard;
 use crate::forward::{drain_events, failed_turn_body};
 use crate::generation::TurnGeneration;
-use crate::repair::{RepairContext, RepairTurn};
+use crate::repair::RepairContext;
 use crate::token_calibration::TokenCalibration;
 use crate::turn_dialect::TurnDialect;
 use crate::upstream_health::UpstreamHealth;
@@ -78,7 +78,7 @@ pub(crate) fn spawn_and_return(
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<StreamConfig>,
     session_id: Option<String>,
-    repair_turn: RepairTurn,
+    repair_enabled: bool,
 ) -> Response {
     // `connection` is moved into this task so it lives exactly as long
     // as the streaming task does — dropped (unregistering from the
@@ -205,7 +205,7 @@ pub(crate) fn spawn_and_return(
                 let repair = cloned.map(|builder| RepairContext {
                     req_builder: builder,
                     request_body: body.clone(),
-                    turn: repair_turn,
+                    enabled: repair_enabled,
                 });
                 let outcome = drain_events(
                     upstream_events(resp.bytes_stream(), bounds.idle),

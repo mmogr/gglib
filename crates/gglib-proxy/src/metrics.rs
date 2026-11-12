@@ -68,16 +68,13 @@ pub struct ContextSnapshot {
     /// `true` when the hard-abort budget check triggered and an HTTP 400 was
     /// returned to the client instead of forwarding the request.
     pub was_clamped: bool,
-    /// `true` when the request pipeline originated a decode-time tool-call
-    /// grammar for this request (see `request_pipeline::constrain`).
-    pub grammar_enforced: bool,
     /// `true` when dialect residue — tool-call markup that survived
     /// normalization — reached this request's client-visible output (see
     /// `gglib_core::normalize::residue`). Back-patched after the response
     /// streams via [`ContextMetricsStore::flag_dialect_residue`].
     pub dialect_residue: bool,
     /// `true` when this turn's tool call failed schema validation and a
-    /// re-issue, under `required` or gglib's own grammar, produced a conformant one.
+    /// re-issue under `required` produced a conformant one.
     /// Back-patched after the response streams via
     /// [`ContextMetricsStore::flag_tool_repair`].
     pub tool_repaired: bool,
@@ -198,7 +195,7 @@ pub struct ContextMetricsStore {
     /// buffer — eviction must not lose the count.
     dialect_residue_total: AtomicU64,
     /// Count of turns whose tool call failed schema validation and was
-    /// re-issued, with `tool_choice: "required"` or under gglib's own grammar.
+    /// re-issued with `tool_choice: "required"`.
     ///
     /// Counted whether or not the re-issue worked. An attempt is evidence
     /// that this model's `auto` path is unconstrained — the per-model

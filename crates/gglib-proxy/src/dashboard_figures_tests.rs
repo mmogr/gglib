@@ -23,7 +23,6 @@ fn request(model: &str) -> ContextSnapshot {
         payload_chars_after: 2_000,
         messages_truncated: 0,
         was_clamped: false,
-        grammar_enforced: false,
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,

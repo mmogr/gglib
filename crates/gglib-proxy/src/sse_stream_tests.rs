@@ -48,7 +48,7 @@ async fn streamed_from(url: &str) -> String {
         None,
         None,
         None,
-        RepairTurn::OFF,
+        false,
     );
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await

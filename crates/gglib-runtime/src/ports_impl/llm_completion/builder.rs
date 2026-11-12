@@ -211,8 +211,8 @@ impl LlmCompletionAdapter {
 
     /// Write a `tool_choice` value into this run's **first** request body.
     ///
-    /// Set before the pipeline runs, so the shaping stages (including the
-    /// dialect grammar stage) read it exactly as they would a client's.
+    /// Set before the pipeline runs, so the shaping stages read it exactly as
+    /// they would a client's.
     /// Subsequent turns fall back to `build_chat_body`'s `"auto"`, letting the
     /// model finish — see [`Self::first_turn_tool_choice`] for why repeating
     /// the demand measures the harness rather than the model.

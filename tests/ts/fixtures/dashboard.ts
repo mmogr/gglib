@@ -221,7 +221,6 @@ const REQUEST: ContextSnapshot = {
   payload_chars_after: 0,
   messages_truncated: 0,
   was_clamped: false,
-  grammar_enforced: false,
   dialect_residue: false,
   tool_repaired: false,
   completion_tokens: null,

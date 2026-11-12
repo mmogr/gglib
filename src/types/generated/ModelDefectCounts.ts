@@ -124,8 +124,8 @@ agent_guard_loops: number,
  */
 agent_guard_stagnations: number, 
 /**
- * Turns whose tool call failed schema validation and was re-issued,
- * with `tool_choice: "required"` or as a second draw under gglib's grammar.
+ * Turns whose tool call failed schema validation and was re-issued
+ * with `tool_choice: "required"`.
  */
 repairs_attempted: number, 
 /**

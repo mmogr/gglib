@@ -15,24 +15,10 @@
 //! So repair is not "originate a grammar" — ADR 0002 leaves that to upstream
 //! — but "ask upstream to use the one it already has". On an `auto` turn the
 //! repair request is the original with `tool_choice` forced to `"required"`,
-//! which is enough. On a turn gglib's own grammar constrained, upstream's
-//! cannot be asked for beside it, so the turn is drawn again under the same
-//! grammar instead ([`second_draw_body`]).
+//! which is enough.
 //!
-//! # Why the repair body bypasses the request pipeline
-//!
-//! [`repair_body`] and [`second_draw_body`] mutate the already-resolved body
-//! and send it. It must never go back to `request_pipeline::apply`.
-//!
-//! The pipeline's grammar stage fires on `tool_choice: "required"` for
-//! dialect models and rewrites `tool_choice` to `"none"`, because
-//! llama-server rejects a custom grammar combined with `tools`. Run on a
-//! repair it would convert the re-issue into a request for no tool call at
-//! all: a full generation spent, nothing changed, no error anywhere.
-//!
-//! The hazard is structural — the repair path does not call `apply` — and is
-//! pinned by this module's `the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`
-//! test rather than by a flag.
+//! [`repair_body`] mutates the already-resolved body and sends it; it does
+//! not go back through `request_pipeline::apply`, which already shaped it.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
@@ -47,35 +33,12 @@ use tracing::{debug, warn};
 use crate::turn_dialect::TurnDialect;
 use crate::unary_body::normalize_non_streaming_body;
 
-/// Environment kill switch, matching the contract of `GGLIB_DISABLE_GRAMMAR`.
+/// Environment kill switch, matching the contract of `GGLIB_DISABLE_MTP`.
 pub const DISABLE_REPAIR_ENV: &str = "GGLIB_DISABLE_TOOL_REPAIR";
 
 /// Whether [`DISABLE_REPAIR_ENV`] is set to a truthy value.
 fn repair_disabled_via_env() -> bool {
     gglib_core::debug_switches::enabled(DISABLE_REPAIR_ENV)
-}
-
-/// Whether repair runs on a turn, and what constrained it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RepairTurn {
-    /// Whether repair is enabled at all: `Settings.tool_call_repair`.
-    pub enabled: bool,
-    /// Whether gglib's own grammar constrained this turn: the request
-    /// pipeline's stage 6 installed it and rewrote `tool_choice` to `"none"`.
-    pub gglib_grammar: bool,
-}
-
-impl RepairTurn {
-    /// Repair on, on a turn gglib's grammar did not constrain.
-    pub const ON: Self = Self {
-        enabled: true,
-        gglib_grammar: false,
-    };
-    /// Repair off.
-    pub const OFF: Self = Self {
-        enabled: false,
-        gglib_grammar: false,
-    };
 }
 
 /// Everything a streaming turn needs to re-issue itself as a tool-call repair.
@@ -88,8 +51,8 @@ pub(crate) struct RepairContext {
     pub req_builder: reqwest::RequestBuilder,
     /// The request body as forwarded upstream, which the repair derives from.
     pub request_body: Bytes,
-    /// Whether repair runs, and what constrained the turn.
-    pub turn: RepairTurn,
+    /// Whether repair runs: `Settings.tool_call_repair`.
+    pub enabled: bool,
 }
 
 /// Why a response was not repaired, for the record.
@@ -123,8 +86,7 @@ pub enum Decision {
     /// Re-issue with this body, then forward whichever result is better.
     Reissue {
         /// The body to re-issue: the original with `tool_choice` forced to
-        /// `"required"`, or, on a turn gglib's grammar constrained, the
-        /// forwarded body again.
+        /// `"required"`.
         body: Bytes,
         /// Rendered violations, for logging and the record.
         violations: Vec<String>,
@@ -137,16 +99,15 @@ pub enum Decision {
 /// re-issue is derived from, and it already carries the shaping the original
 /// request received.
 ///
-/// `turn` says whether repair runs, and whether gglib's own grammar constrained
-/// the turn. On such a turn the call is judged all the same, and a violation is
-/// drawn again under that grammar.
+/// `enabled` is `Settings.tool_call_repair`; [`DISABLE_REPAIR_ENV`] turns it
+/// off too.
 ///
 /// Never errors: anything it cannot make sense of yields
 /// [`Decision::Forward`], because a repair that misfires costs a generation
 /// and replaces a working call with a re-rolled one.
 #[must_use]
-pub fn decide(request_body: &[u8], response_body: &[u8], turn: RepairTurn) -> Decision {
-    if !turn.enabled || repair_disabled_via_env() {
+pub fn decide(request_body: &[u8], response_body: &[u8], enabled: bool) -> Decision {
+    if !enabled || repair_disabled_via_env() {
         return Decision::Forward(Skipped::Disabled);
     }
 
@@ -160,9 +121,8 @@ pub fn decide(request_body: &[u8], response_body: &[u8], turn: RepairTurn) -> De
     // Already-constrained requests are checked before validation: when the
     // client asked for `required`, upstream's grammar was already installed,
     // so a violation is something that grammar does not cover and re-issuing
-    // reproduces it at full cost. gglib's own grammar is the exception: it is
-    // weaker than upstream's, and what it let through is judged all the same.
-    if !turn.gglib_grammar && !is_auto_tool_choice(&request) {
+    // reproduces it at full cost.
+    if !is_auto_tool_choice(&request) {
         return Decision::Forward(Skipped::AlreadyConstrained);
     }
 
@@ -177,12 +137,7 @@ pub fn decide(request_body: &[u8], response_body: &[u8], turn: RepairTurn) -> De
         }
         Verdict::Invalid(violations) => {
             let rendered: Vec<String> = violations.iter().map(ToString::to_string).collect();
-            let body = if turn.gglib_grammar {
-                second_draw_body(&request)
-            } else {
-                repair_body(&request)
-            };
-            body.map_or_else(
+            repair_body(&request).map_or_else(
                 || Decision::Forward(Skipped::Unreadable),
                 |body| Decision::Reissue {
                     body,
@@ -239,22 +194,6 @@ fn repair_body(request: &Value) -> Option<Bytes> {
     obj.insert("stream".to_owned(), Value::Bool(false));
     obj.remove("stream_options");
     serde_json::to_vec(&repaired).ok().map(Bytes::from)
-}
-
-/// The forwarded body again, non-streaming, for a turn gglib's own grammar
-/// constrained.
-///
-/// The grammar and `tool_choice: "none"` stay: llama-server refuses a custom
-/// grammar beside any other tool choice, so upstream's own grammar cannot be
-/// asked for here. This is a second draw under the same constraint, not a
-/// stronger one, and it may choose a different call. `choose` keeps it only if
-/// it validates.
-fn second_draw_body(request: &Value) -> Option<Bytes> {
-    let mut again = request.clone();
-    let obj = again.as_object_mut()?;
-    obj.insert("stream".to_owned(), Value::Bool(false));
-    obj.remove("stream_options");
-    serde_json::to_vec(&again).ok().map(Bytes::from)
 }
 
 /// Assembles streamed [`LlmStreamEvent::ToolCallDelta`] fragments into the
@@ -385,10 +324,6 @@ pub fn choose(request_body: &[u8], original: Bytes, repaired: Bytes) -> (Bytes, 
 /// The half of a re-issue both paths do the same way. What they do
 /// differently is the send: the streaming path keeps the wire warm while it
 /// waits, the buffered path has no wire to keep warm.
-///
-/// Under `tool_choice: "none"` llama-server parses no tool calls, so a second
-/// draw's answer can be dialect markup: it is read as a non-streaming response
-/// is, before anything judges it.
 pub(crate) async fn read_second_draw(
     sent: reqwest::Result<reqwest::Response>,
     dialect: &TurnDialect,
@@ -414,8 +349,3 @@ pub(crate) async fn read_second_draw(
 #[cfg(test)]
 #[path = "repair_tests.rs"]
 mod repair_tests;
-
-/// A turn gglib's own grammar constrained.
-#[cfg(test)]
-#[path = "repair_grammar_tests.rs"]
-mod repair_grammar_tests;

@@ -135,7 +135,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`loopback.rs`** — The one builder of an HTTP client for a server on this machine: `no_proxy()` applied, so a request to `127.0.0.1` never goes through `HTTP_PROXY` or the system proxy (#1085); used by this crate's upstream client and by every other crate that talks to the daemon or llama-server
 - **`metrics.rs`** — `ContextMetricsStore` ring buffer feeding `DashboardSnapshot.recent_requests`
 - **`generation.rs`** — What one turn generated (completion tokens, reasoning characters, tool calls queued for the client, finish reason, time between the first and last generated token the upstream streamed): metered as a streamed turn drains, read from the body of one that is not, and written onto the turn's `recent_requests` entry once it is over
-- **`repair.rs`** — Tool-call repair: validates emitted `tool_calls` against the advertised schema and, when they do not conform, re-issues the turn: with `tool_choice: "required"`, so llama.cpp's own schema-derived grammar does the correcting, or, on a turn gglib's own grammar constrained, as a second draw under that same grammar. gglib originates no grammar of its own here — see [Tool-call repair](../../docs/tool-call-repair.md) and [ADR 0002](../../docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
+- **`repair.rs`** — Tool-call repair: validates emitted `tool_calls` against the advertised schema and, when they do not conform, re-issues the turn: with `tool_choice: "required"`, so llama.cpp's own schema-derived grammar does the correcting. gglib originates no grammar of its own here — see [Tool-call repair](../../docs/tool-call-repair.md) and [ADR 0002](../../docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
 - **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
 - **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`; also provides slot I/O primitives (`save_slot`, `restore_slot`, `clear_slot_files`, `sanitize_session_id`)
 - **`slot_eviction.rs`** — Disk-aware byte-budget LRU eviction of the slot files, over core's pure selection, and the reaping of orphaned `.tmp` files
@@ -1082,7 +1082,7 @@ Diagnostics › Live (`src/places/diagnostics/live/`).
 | `total_requests` | `u64` | All requests since proxy start, including evicted ones |
 | `cache` | `object \| null` | Prompt-cache configuration for the running model; `null` until the first request resolves one |
 | `dialect_residue_total` | `u64` | Requests whose client-visible output carried dialect markup that survived normalization; eviction-safe |
-| `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued, with `tool_choice: "required"` or as a second draw under gglib's own grammar on a turn it constrained, counted whether or not the re-issue worked |
+| `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued with `tool_choice: "required"`, counted whether or not the re-issue worked |
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
 | `upstream_health` | `object` | Degradation watchdog counters since proxy start: the current strike streak (`consecutive_strikes`), and totals of empty responses, upstream errors, stream stalls, first-byte timeouts, client aborts, proactive recycles and recycles not carried out |
 | `per_model_defects` | `object` | Per-model defect counts, keyed by the name of the model a request resolved to — see below |
@@ -1262,14 +1262,13 @@ neither prompt field is present does it fall back to `n_past` →
 | `messages_truncated` | `usize` | Number of messages whose content was replaced |
 | `was_clamped` | `bool` | `true` when HTTP 400 was returned to the client |
 | `recorded_at_secs` | `u64` | Unix timestamp of the observation |
-| `grammar_enforced` | `bool` | The pipeline originated a decode-time GBNF grammar for this request (`request_pipeline::constrain`) |
 | `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched once the turn's outcome is known |
 | `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
 | `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard act on this request — forward it with a note, or end the run — or `null` when it did not |
 | `loop_guard_ended` | `bool` | The loop guard ended this request's run: the same run tripped again after its note, so the proxy answered with a finished assistant message instead of forwarding ([ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md)) |
 | `completion_tokens` | `u32` \| `null` | `usage.completion_tokens` as the upstream reported it; `null` when the turn carried no usage |
 | `reasoning_chars` | `usize` | Characters of reasoning the turn generated, `0` when none |
-| `interventions` | `[{ what: { kind, … }, word }]` | What gglib did to the request, in the order it was done, each with the word every surface shows: `repaired_tool_call`, `trimmed { messages }`, `constrained`, `noted_loop { detector }`, `stopped_loop { detector }`, `refused { reason: { kind: longer_than_context } }`. A repaired tool call is added when the repair lands |
+| `interventions` | `[{ what: { kind, … }, word }]` | What gglib did to the request, in the order it was done, each with the word every surface shows: `repaired_tool_call`, `trimmed { messages }`, `noted_loop { detector }`, `stopped_loop { detector }`, `refused { reason: { kind: longer_than_context } }`. A repaired tool call is added when the repair lands |
 | `tool_calls` | `u32` | Tool calls queued for the client, each counted once however many fragments it streamed in |
 | `finish_reason` | `string` \| `null` | The `finish_reason` the turn ended with; `null` when it ended without one |
 | `generation_ms` | `u64` \| `null` | Milliseconds between the first and the last generated token (a reasoning, text or tool-call delta) the upstream streamed, timed before normalization, whatever the normalizer later made of them; `null` when it streamed none, and on every non-streaming turn |

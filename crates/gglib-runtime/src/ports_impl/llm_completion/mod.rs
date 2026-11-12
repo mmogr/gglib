@@ -133,8 +133,8 @@ pub struct LlmCompletionAdapter {
     /// Skip the request-shaping pipeline entirely and send the bare body.
     ///
     /// The control arm of an A/B evaluation: no sampling resolution (the
-    /// upstream's own defaults apply), no capability shaping, no truncation,
-    /// no grammar. Off everywhere else — this exists so "bare llama-server"
+    /// upstream's own defaults apply), no capability shaping, no truncation.
+    /// Off everywhere else — this exists so "bare llama-server"
     /// is measurable against "through the gglib pipeline" on identical
     /// requests, not as a general escape hatch.
     raw_passthrough: bool,
@@ -187,9 +187,8 @@ impl LlmCompletionAdapter {
     /// (`tool_choice: "required"`) where it would leave the choice to the
     /// model: what the loop asks of a run's first reply when its caller
     /// demanded a tool ([`LlmCompletionPort::chat_stream_requiring_call`]).
-    /// It is written before the pipeline runs, which reads it as it reads a
-    /// client's: a dialect model gets a grammar for the call, and any other
-    /// the server's own.
+    /// It is written before the pipeline runs, which passes it on as it does a
+    /// client's: the server holds the reply to a call with its own grammar.
     ///
     /// # Errors
     ///
@@ -228,7 +227,7 @@ impl LlmCompletionAdapter {
 
         // Through a door the endpoint shapes the request, as it shapes any
         // client's: it folds the sampling ladder over what the body names,
-        // trims to the context it serves, and writes the dialect's grammar.
+        // and trims to the context it serves.
         // This side sends what a client sends, and the turn's limit.
         // Only this machine's endpoint is given a limit: a paired machine's
         // proxy resolves its own settings, and a limit from here would outrank

@@ -33,7 +33,7 @@ use crate::forward::{ForwardError, REPAIR_REISSUE_TIMEOUT};
 use crate::generation::TurnGeneration;
 use crate::metrics::ContextMetricsStore;
 use crate::models::ErrorResponse;
-use crate::repair::{Decision, RepairTurn, Skipped, choose, decide, read_second_draw};
+use crate::repair::{Decision, Skipped, choose, decide, read_second_draw};
 use crate::turn_dialect::TurnDialect;
 use crate::unary_body::{Exchange, answer_with, exchange};
 
@@ -63,7 +63,7 @@ pub(crate) async fn forward_unary(
     dialect: &TurnDialect,
     cache_metrics: &CacheMetricsStore,
     (metrics, snapshot_seq): (&ContextMetricsStore, u64),
-    turn: RepairTurn,
+    repair_enabled: bool,
     total: Duration,
 ) -> Result<Response, ForwardError> {
     // A re-issue needs the same endpoint, headers and body the original goes
@@ -95,7 +95,16 @@ pub(crate) async fn forward_unary(
                     .into_response());
             }
         };
-    let answer = repair(again, &body, answer, dialect, metrics, snapshot_seq, turn).await;
+    let answer = repair(
+        again,
+        &body,
+        answer,
+        dialect,
+        metrics,
+        snapshot_seq,
+        repair_enabled,
+    )
+    .await;
     let answer = served_as(answer, model_name);
     metrics.flag_generation(snapshot_seq, TurnGeneration::of_unary_body(&answer));
     Ok(answer_with(content_type, answer))
@@ -135,9 +144,9 @@ async fn repair(
     dialect: &TurnDialect,
     metrics: &ContextMetricsStore,
     snapshot_seq: u64,
-    turn: RepairTurn,
+    repair_enabled: bool,
 ) -> Bytes {
-    let decision = decide(request, &answer, turn);
+    let decision = decide(request, &answer, repair_enabled);
     // Recorded before the early return, for the reason the streaming path
     // gives: a client whose tools cannot be judged gets zero repair coverage,
     // and without this, zero evidence of it.

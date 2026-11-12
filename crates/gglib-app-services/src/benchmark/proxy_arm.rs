@@ -176,8 +176,7 @@ fn only_model(snapshot: HashMap<String, ModelDefectCounts>) -> ModelDefectCounts
 ///
 /// Every arm but the proxy pair. Under `"auto"` the proxy judges every call
 /// whose schema it can judge.
-/// Under `"required"` it judges only a turn gglib's own grammar constrained,
-/// which it installs for a dialect model, and forwards the rest unjudged.
+/// Under `"required"` it forwards every turn unjudged.
 pub(super) const fn opens_with_required(arm: EvalArm) -> bool {
     !matches!(arm, EvalArm::RawAuto | EvalArm::Proxy)
 }

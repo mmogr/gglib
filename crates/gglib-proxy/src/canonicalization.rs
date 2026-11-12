@@ -27,7 +27,7 @@ use tracing::{debug, warn};
 
 /// Environment kill switch. Truthy values (case-insensitive `1`, `true`,
 /// `yes`, `on`) leave the system prompt exactly as the client sent it — the
-/// same contract as `GGLIB_DISABLE_GRAMMAR` and `GGLIB_DISABLE_TOOL_REPAIR`.
+/// same contract as `GGLIB_DISABLE_MTP` and `GGLIB_DISABLE_TOOL_REPAIR`.
 ///
 /// An environment variable rather than a setting because this runs as the very
 /// first statement of the request handler, before the settings snapshot is
