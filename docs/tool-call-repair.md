@@ -6,7 +6,7 @@ deltas back until the call is complete, judges it and re-issues; a
 anyway, so it is judged once read and re-issued the same way. Both re-issues
 are non-streaming, and both answers are judged as llama-server sent them.
 `RepairContext` carries the decision on the streaming
-path (`sse_stream.rs`); the buffered path hands the same `RepairTurn` to
+path (`sse_stream.rs`); the buffered path hands the same on/off setting to
 `forward_unary`.
 **Decided by:** [ADR 0002](adr/0002-defer-tool-call-constraint-to-llama-cpp.md), findings 4–5.
 
