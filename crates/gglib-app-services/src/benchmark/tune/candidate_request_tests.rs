@@ -136,7 +136,6 @@ fn shaped_by_the_pipeline(candidate: &InferenceConfig, model: &Model) -> Inferen
     body["tools"] = json!([{"type": "function", "function": {"name": TOOL}}]);
     let layers = SamplingLayers {
         trust_client_sampling: true,
-        agentic_adjustments: true,
         ..SamplingLayers::default()
     };
     request_pipeline::apply(&mut body, &model_context_for(model), &layers, None)

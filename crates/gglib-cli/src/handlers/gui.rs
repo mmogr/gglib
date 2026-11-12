@@ -17,7 +17,7 @@ use anyhow::Result;
 const APPIMAGE_DIR: &str = "target/release/bundle/appimage";
 
 /// Where a Linux build leaves the bare binary, under the checkout.
-const LINUX_BINARY: &str = "target/release/gglib-app";
+const LINUX_BINARY: &str = "target/release/gglib-gui";
 
 /// A system the desktop app is built for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,13 +59,13 @@ pub(crate) fn execute(dev: bool) -> Result<()> {
 }
 
 /// The app beside the running binary of a prebuilt install, when it is there:
-/// the `.app` bundle (macOS), an `AppImage` or `gglib-app` (Linux), or
-/// `gglib-app.exe` (Windows).
+/// the `.app` bundle (macOS), an `AppImage` or `gglib-gui` (Linux), or
+/// `gglib-gui.exe` (Windows).
 fn sibling_artifact(os: Os, exe_dir: &Path) -> Option<PathBuf> {
     match os {
-        Os::Mac => Some(exe_dir.join("GGLib GUI.app")).filter(|bundle| bundle.exists()),
+        Os::Mac => Some(exe_dir.join("gglib.app")).filter(|bundle| bundle.exists()),
         Os::Linux => find_sibling_gui_artifact(exe_dir),
-        Os::Windows => Some(exe_dir.join("gglib-app.exe")).filter(|exe| exe.exists()),
+        Os::Windows => Some(exe_dir.join("gglib-gui.exe")).filter(|exe| exe.exists()),
     }
 }
 
@@ -76,7 +76,7 @@ fn find_sibling_gui_artifact(exe_dir: &Path) -> Option<PathBuf> {
         let path = entry.path();
         if path.is_file()
             && let Some(name) = path.file_name().and_then(|s| s.to_str())
-            && (name.ends_with(".AppImage") || name == "gglib-app")
+            && (name.ends_with(".AppImage") || name == "gglib-gui")
         {
             return Some(path);
         }
@@ -91,9 +91,9 @@ fn find_sibling_gui_artifact(exe_dir: &Path) -> Option<PathBuf> {
 /// in place. It mirrors the Linux fallback.
 fn repo_artifact(os: Os, repo_root: &Path) -> PathBuf {
     match os {
-        Os::Mac => repo_root.join("target/release/bundle/macos/GGLib GUI.app"),
+        Os::Mac => repo_root.join("target/release/bundle/macos/gglib.app"),
         Os::Linux => find_repo_gui_artifact(repo_root),
-        Os::Windows => repo_root.join("target/release/gglib-app.exe"),
+        Os::Windows => repo_root.join("target/release/gglib-gui.exe"),
     }
 }
 
@@ -139,7 +139,7 @@ fn launch_command(os: Os, artifact: &Path) -> Command {
 /// Open the app at `artifact`. `open` is waited for, since its status says
 /// whether the bundle launched; an artifact run directly is left running.
 fn launch(os: Os, artifact: &Path) -> Result<()> {
-    println!("Launching GGLib GUI...");
+    println!("Launching gglib...");
     let mut command = launch_command(os, artifact);
     match os {
         Os::Mac => match command.status() {

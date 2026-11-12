@@ -490,22 +490,9 @@ The proxy adds no `cache_prompt` key either. llama-server defaults it to `true`,
 and a client's own `cache_prompt` passes through as any key gglib does not model
 does (ADR 0022).
 
-A request carrying a non-empty `tools` array has its temperature **capped to
-`0.3`** — but only when the value that won came from a model's recipe nobody
-here reviewed. Anything a person set stands, and a request whose temperature
-nothing names is sent none.
-
-A `reasoning`-tagged model is **not capped at all**. It used to be, at `0.6`;
-[ADR 0004](../../docs/adr/0004-observe-the-sampling-boundary.md)'s addendum named the evidence that would change that, the experiment
-ran, and the cap lost on every count — the uncapped recipe temperature beat it
-on paired composite (p = 0.0099), tool-call formatting passed 100% uncapped
-against 98.6% under the cap, and cooling the model *increased* the
-loop/stagnation triggers the cap was supposed to avoid. A reasoning model
-decodes its `<think>` block and its tool call under one sampler configuration,
-so a cap imposed for structured output lands on the thinking too. DRY is not
-touched. Disable with `gglib config set agentic-sampling false` or
-`GGLIB_DISABLE_AGENTIC_SAMPLING=1`; see
-[Sampling resolution](../../docs/sampling.md#the-agentic-turn-temperature-ceiling).
+A request carrying a non-empty `tools` array is sampled like any other: its
+temperature is the one the ladder resolved, and none is sent when nothing
+names one.
 
 Resolution runs through `InferenceConfig::resolve_with_profile`, the single
 source of truth for the merge order.  The resolved values are aggressively

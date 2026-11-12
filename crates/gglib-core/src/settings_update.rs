@@ -51,8 +51,6 @@ pub struct SettingsUpdate {
     pub tool_call_repair: Option<Option<bool>>,
     /// See [`Settings::mcp_drawing`](super::Settings::mcp_drawing).
     pub mcp_drawing: Option<Option<bool>>,
-    /// See [`Settings::agentic_sampling`](super::Settings::agentic_sampling).
-    pub agentic_sampling: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,

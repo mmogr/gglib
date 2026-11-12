@@ -86,57 +86,6 @@ async fn test_save_and_load_proxy_cache_on_disk() {
     assert_eq!(repo.load().await.unwrap().proxy_cache_on_disk, Some(false));
 }
 
-/// A database written before these fields existed has no rows for them.
-/// `Settings` is `#[serde(default)]` with `Option` fields, so the absent
-/// rows deserialize to `None` rather than failing the whole load — which
-/// is why no migration is needed for the new columns.
-#[tokio::test]
-async fn test_load_tolerates_rows_written_before_new_fields_existed() {
-    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-    let repo = SqliteSettingsRepository::new(pool.clone());
-    repo.ensure_table().await.unwrap();
-
-    // Simulate a pre-existing DB: only an old key is present.
-    sqlx::query(
-        "INSERT INTO settings_kv (key, value, updated_at) VALUES ('proxy_port', '9090', '')",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    let loaded = repo.load().await.expect("older row sets still load");
-    assert_eq!(loaded.proxy_port, Some(9090));
-    assert_eq!(loaded.proxy_host, None);
-    assert_eq!(loaded.proxy_cache_on_disk, None);
-}
-
-/// Serve rows older builds wrote, with their `/mcp` switch on or their list
-/// of MCP servers, still read: neither key is a field now, since a server is
-/// opened to paired devices by a flag on its own row, so the whole settings
-/// load does not fail on either.
-#[tokio::test]
-async fn a_serve_row_an_older_build_wrote_still_reads() {
-    for older in [
-        r#"{"allowMcp":true,"relay":null,"discovery":true}"#,
-        r#"{"mcpServers":["tavily"],"relay":null,"discovery":true}"#,
-    ] {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        let repo = SqliteSettingsRepository::new(pool.clone());
-        repo.ensure_table().await.unwrap();
-        sqlx::query(
-            "INSERT INTO settings_kv (key, value, updated_at) VALUES ('remote_serve', ?, '')",
-        )
-        .bind(older)
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        let serve = repo.load().await.expect("an older serve row still loads");
-        let serve = serve.remote_serve.expect("and is read as a serve row");
-        assert!(serve.discovery && serve.relay.is_none(), "{older}");
-    }
-}
-
 #[tokio::test]
 async fn test_none_fields_are_deleted_from_db() {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

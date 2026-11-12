@@ -3,7 +3,6 @@ Current application settings:
 
   General
   ────────────────────────────────────────
-  agentic-sampling         None
   close-to-tray            None
   default-context-size     None (sized per launch)
   default-image-model-id   None

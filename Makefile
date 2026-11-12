@@ -722,7 +722,7 @@ build-tauri: ## Build Tauri desktop app
 	else \
 		npm run tauri:bundle; \
 	fi
-	@echo "✓ Tauri app built to target/release/gglib-app"
+	@echo "✓ Tauri app built to target/release/gglib-gui"
 
 ##@ Workflows
 

@@ -161,8 +161,7 @@ sent as a client's, which the endpoint honours only while it trusts
 clients' sampling. The chat's saved profile goes on the model the turn asks
 for, `<id>:<profile>`, which the endpoint, or the paired machine's proxy,
 routes to that profile whatever it trusts. A far turn is handed nothing this
-machine stores, its agentic switch included: its turn with tools is capped
-as it leaves here, and the far proxy resolves it by its own settings.
+machine stores; the far proxy resolves it by its own settings.
 
 # Cancellation
 

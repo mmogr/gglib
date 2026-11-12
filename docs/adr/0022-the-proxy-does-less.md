@@ -199,5 +199,10 @@ release cycle with the parser bypassed, not the presence of a PEG parser.
 - Whether the agentic temperature ceiling should exist at all. Its `0.3` is
   unmeasured, as `agentic_temperature_ceiling` says; this ADR only removes the
   floor it mostly capped.
+
+  > **Amended 2026-11-12 — decided: the ceiling is deleted.** Tool turns keep
+  > the temperature the ladder resolves, the `agentic-sampling` setting and
+  > `GGLIB_DISABLE_AGENTIC_SAMPLING` are gone, and so is
+  > `agentic_temperature_ceiling` (v1 decision 4).
 - Any change to the normaliser, the residue scanner or stage 6 beyond leaving
   them as they are.

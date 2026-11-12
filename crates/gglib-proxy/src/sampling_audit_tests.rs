@@ -30,8 +30,6 @@ fn decision(resolved: InferenceConfig, sources: FieldSources) -> SamplingDecisio
         resolved,
         sources,
         layer_names: ["cli", "client", "profile", "model", "global", "auto"],
-        agentic_turn: false,
-        agentic_ceiling_applied: None,
         client_fields_rejected: Vec::new(),
         client_fields_discarded: Vec::new(),
         applied: true,

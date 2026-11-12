@@ -38,9 +38,6 @@ does either.
 - [`mod@resolve`] — [`resolve()`], the single catalog round-trip that produces one,
   and [`resolve_summary()`], the same lookup for a caller that refuses a model
   the catalog does not hold rather than degrade it.
-- [`request_shape`] — [`carries_tools()`], the one thing the stages need to know
-  about the *request* rather than the model: whether it is asking for a tool
-  call. Read by two stages for different purposes, so it lives in neither.
 - [`content`] — [`text_len()`] and [`for_each_text_mut()`], the two shapes a
   message's `content` takes (a string, or an array of parts), read and
   rewritten in one place for every stage that handles message text; and
@@ -93,7 +90,7 @@ does either.
   request's serialized length, with each image counted at its estimated
   tokens in place of the length of its URL.
 - [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stage 4: the
-  sampling hierarchy and the agentic temperature ceiling. Everything that
+  sampling hierarchy. Everything that
   touches top-level sampling keys.
 - [`effort_gate`] — stage 5b: deleting a resolved `reasoning_effort` the
   model's observed template does not read, and writing down what was deleted so

@@ -1,7 +1,7 @@
 /**
  * Settings › Endpoint: its port and key, its address and who may reach it,
  * its prompt cache on disk, where the model servers behind it start, and under "What gglib
- * does to requests" the four things the endpoint does to a request. Each
+ * does to requests" the three things the endpoint does to a request. Each
  * saves on change; those the endpoint reads when it turns on say so.
  *
  * The loop guard is on or off here: on writes `note`, off writes `off`.
@@ -31,7 +31,7 @@ export function hostsFrom(typed: string): string[] | null {
   return hosts.length > 0 ? hosts : null;
 }
 
-/** Absent means on, for the three corrections the endpoint should not lose silently. */
+/** Absent means on, for a correction the endpoint should not lose silently. */
 const onUnlessOff = (stored: boolean | null) => stored !== false;
 
 export const EndpointSection: FC = () => (
@@ -117,11 +117,6 @@ export const EndpointSection: FC = () => (
       >
         A conversation that repeats the same tool calls and gets the same answers back, or repeats one
         reply, is forwarded with a note saying what repeated, and its run ends if it repeats again.
-      </ToggleSetting>
-
-      <ToggleSetting k="agenticSampling" id="agentic-sampling-input" label="Cap sampling on agent runs" on={onUnlessOff}>
-        A turn that may call a tool has its temperature capped to 0.3, over a value nobody chose and
-        never on a reasoning model. Anything a person set stands.
       </ToggleSetting>
 
       <ToggleSetting k="trustClientSampling" id="trust-client-sampling-input" label="Let clients set sampling">

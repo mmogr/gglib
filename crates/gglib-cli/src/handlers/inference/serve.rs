@@ -175,9 +175,9 @@ async fn serve_here(
     );
     // Only what was passed, not the full resolution. The resolution printed
     // here is the five-rung stored ladder; what a request actually gets is the
-    // proxy's six-rung one, which additionally has the client's own rung and
-    // the agentic ceiling above it. Printing the former as if it were the
-    // latter states values no request is guaranteed to see.
+    // proxy's six-rung one, which additionally has the client's own rung
+    // above it. Printing the former as if it were the latter states values no
+    // request is guaranteed to see.
     let stated_sampling = sampling.into_override();
     let mtp_args = plan.mtp.clone();
     let effective_ctx = plan.effective_ctx;

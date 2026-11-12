@@ -188,7 +188,6 @@ fn a_remote_machine() -> Settings {
         loop_guard_mode: Some(LoopGuardMode::Refuse),
         tool_call_repair: Some(false),
         mcp_drawing: Some(true),
-        agentic_sampling: Some(true),
         proxy_autostart: Some(true),
         close_to_tray: Some(true),
         start_at_login: Some(true),

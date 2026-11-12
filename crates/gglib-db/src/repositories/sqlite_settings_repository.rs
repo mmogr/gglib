@@ -253,5 +253,9 @@ mod sqlite_settings_repository_tests;
 mod sqlite_settings_table_tests;
 
 #[cfg(test)]
+#[path = "sqlite_settings_older_rows_tests.rs"]
+mod sqlite_settings_older_rows_tests;
+
+#[cfg(test)]
 #[path = "sqlite_settings_reset_tests.rs"]
 mod sqlite_settings_reset_tests;
