@@ -1,8 +1,7 @@
 //! Tests for the failed-launch guard in [`super`].
 //!
-//! Split out of `launch.rs` to keep it under the repo's file-size ratchet;
-//! see `scripts/check_file_size.sh`. Unix-only for the harmless binary
-//! they spawn, not for the behaviour.
+//! Split out of `launch.rs`. Unix-only for the harmless binary they spawn,
+//! not for the behaviour.
 
 use super::{LIVENESS_TICK, SpawnedChild};
 use crate::process::core::GuiProcessCore;

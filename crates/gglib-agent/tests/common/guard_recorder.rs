@@ -1,7 +1,6 @@
 //! A recording [`AgentGuardSink`] and the scaffolding around it (#1091).
 //!
 //! Beside the other mocks rather than in the one suite that uses it, because
-//! the suite it is for has no room left in the file-size budget, and because
 //! the next path to report its guard decisions will want the same recorder.
 
 use std::sync::{Arc, Mutex};

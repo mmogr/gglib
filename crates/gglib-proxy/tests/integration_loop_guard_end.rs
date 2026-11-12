@@ -8,7 +8,7 @@
 //! last case pins that.
 //!
 //! Its own file because `integration_loop_guard_note.rs` is about the note's
-//! shape and `integration_loop_guard.rs` is frozen at its size.
+//! shape.
 
 use std::sync::Arc;
 
