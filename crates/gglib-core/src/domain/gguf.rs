@@ -50,11 +50,6 @@ pub struct GgufCapabilities {
     pub flags: CapabilityFlags,
     /// Unknown/experimental capabilities (forward-compatible).
     pub extensions: BTreeSet<String>,
-    /// Tool-call dialect identified at detection time, if any.
-    ///
-    /// `None` means no structured dialect is known — consumers fall back to
-    /// mapping `format:*` tags to a builtin spec.
-    pub dialect: Option<crate::domain::dialect::DialectSpec>,
 }
 
 impl GgufCapabilities {
@@ -64,7 +59,6 @@ impl GgufCapabilities {
         Self {
             flags: CapabilityFlags::empty(),
             extensions: BTreeSet::new(),
-            dialect: None,
         }
     }
 
@@ -342,7 +336,6 @@ mod tests {
         let caps = GgufCapabilities {
             flags: CapabilityFlags::REASONING | CapabilityFlags::TOOL_CALLING,
             extensions: BTreeSet::new(),
-            dialect: None,
         };
         assert!(caps.has_reasoning());
         assert!(caps.has_tool_calling());
@@ -360,7 +353,6 @@ mod tests {
         let caps = GgufCapabilities {
             flags: CapabilityFlags::empty(),
             extensions,
-            dialect: None,
         };
 
         let tags = caps.to_tags();

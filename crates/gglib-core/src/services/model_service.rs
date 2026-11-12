@@ -27,15 +27,15 @@ pub enum ImportMode {
     /// This is what `gglib model add --reimport` asks for, and what re-importing
     /// did unconditionally before [`ModelService::import_from_file`] began
     /// guarding it. It refreshes the stored header, tags, capabilities,
-    /// quantization, context length, the expert counts and the dialect spec —
-    /// wider than `model retag`, which rebuilds only tags and the dialect spec.
+    /// quantization, context length and the expert counts — wider than
+    /// `model retag`, which rebuilds only tags.
     ///
     /// It is narrower than "overwrite the row", and the columns do not all
     /// behave alike:
     ///
     /// - `metadata` (the header) is **merged**: each key the file has is read
     ///   afresh, and a key added with `model update --metadata` stays.
-    /// - `tags`, `capabilities` and `dialect_spec` are **assigned**. A refresh
+    /// - `tags` and `capabilities` are **assigned**. A refresh
     ///   replaces them with whatever was just derived, including with nothing
     ///   — these can be cleared.
     /// - `quantization`, `context_length` and the expert counts are
@@ -46,16 +46,13 @@ pub enum ImportMode {
     Refresh,
 }
 
-/// The diff produced by [`ModelService::retag_model`] when at least one tag
-/// or the dialect spec changed.
+/// The diff produced by [`ModelService::retag_model`] when something changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetagDiff {
     /// Tags that were newly added.
     pub added: Vec<String>,
     /// Tags that were removed (only non-empty on a `full = true` rebuild).
     pub removed: Vec<String>,
-    /// Whether the persisted dialect spec was rewritten.
-    pub spec_changed: bool,
     /// The image family read from the file for a model that had none.
     pub family_found: Option<crate::domain::ImageFamily>,
     /// Whether the type, the bits per weight or the parameter count the model
@@ -64,12 +61,11 @@ pub struct RetagDiff {
 }
 
 impl RetagDiff {
-    /// Returns `true` if any tag was added or removed, the spec changed, a
-    /// family was found, or a header fact was read.
+    /// Returns `true` if any tag was added or removed, a family was found, or
+    /// a header fact was read.
     pub const fn is_changed(&self) -> bool {
         !self.added.is_empty()
             || !self.removed.is_empty()
-            || self.spec_changed
             || self.family_found.is_some()
             || self.facts_read
     }
@@ -213,7 +209,7 @@ impl ModelService {
         //    capabilities rewritten underneath it.
         //
         //    `ImportMode::Refresh` is the caller stating that the overwrite is
-        //    what they came for — re-deriving a model's spec from the file
+        //    what they came for — re-deriving a model's tags and facts from the file
         //    with newer detection logic. It is opt-in because it is
         //    destructive, and unreachable by accident.
         let existing = self
@@ -380,21 +376,8 @@ impl ModelService {
 
     /// Remove a tag from a model.
     ///
-    /// If the tag doesn't exist on the model, this is a no-op. System tags
-    /// (see [`crate::domain::is_system_tag`]) are protected and cannot be
-    /// removed through this API.
+    /// If the tag doesn't exist on the model, this is a no-op.
     pub async fn remove_tag(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
-        if crate::domain::is_system_tag(tag) {
-            return Err(CoreError::Validation(format!(
-                "tag '{tag}' is a system tag and cannot be removed via the standard API",
-            )));
-        }
-        self.remove_tag_force(model_id, tag).await
-    }
-
-    /// Remove a tag from a model, a system tag included: what
-    /// [`Self::remove_tag`] does once its system-tag check has passed.
-    async fn remove_tag_force(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
         let mut model = self
             .repo
             .get_by_id(model_id)
@@ -458,12 +441,11 @@ impl ModelService {
     /// Re-derive auto-tags for a single model from its persisted GGUF metadata.
     ///
     /// `full = false` (default) is **additive**: any newly-detected tag that
-    /// isn't already present is appended; nothing is ever removed. This is
-    /// the safe path for backfilling `format:*` tags on models that lack them.
+    /// isn't already present is appended; nothing is ever removed.
     ///
     /// `full = true` performs a full rebuild: every auto-generated tag (the
-    /// predefined capability tag namespace plus every existing `format:*`
-    /// tag) is dropped and the freshly-detected set is added in its place.
+    /// predefined capability tag namespace) is dropped and the
+    /// freshly-detected set is added in its place.
     /// User-curated tags outside that namespace are preserved.
     ///
     /// A model with no image family has one read from its file's tensor
@@ -496,21 +478,6 @@ impl ModelService {
         let caps = gguf_parser.detect_capabilities(&gguf_metadata);
         let new_tags = caps.to_tags();
 
-        // Spec semantics mirror the tag semantics: additive mode only fills
-        // a missing spec, `--full` re-derives unconditionally — including
-        // clearing a spec that detection does not derive.
-        let new_spec = caps.dialect;
-        let spec_changed = if full {
-            let changed = model.dialect_spec != new_spec;
-            model.dialect_spec = new_spec;
-            changed
-        } else if model.dialect_spec.is_none() && new_spec.is_some() {
-            model.dialect_spec = new_spec;
-            true
-        } else {
-            false
-        };
-
         let family_found = super::model_components::sniff_missing_family(&mut model, gguf_parser);
         let facts_read = super::model_header_facts::fill_missing_facts(&mut model, gguf_parser);
 
@@ -521,10 +488,9 @@ impl ModelService {
             // The list lives with the constants that produce it: a tag missing
             // from it survives a refresh forever, silently keeping a
             // capability the model does not have.
-            model.tags.retain(|t| {
-                !crate::domain::capability_tags::ALL.contains(&t.as_str())
-                    && !crate::domain::is_system_tag(t)
-            });
+            model
+                .tags
+                .retain(|t| !crate::domain::capability_tags::ALL.contains(&t.as_str()));
         }
 
         for t in &new_tags {
@@ -535,7 +501,7 @@ impl ModelService {
         model.tags.sort();
 
         let after: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
-        if after == before && !spec_changed && family_found.is_none() && !facts_read {
+        if after == before && family_found.is_none() && !facts_read {
             return Ok(None);
         }
 
@@ -543,7 +509,6 @@ impl ModelService {
         Ok(Some(RetagDiff {
             added: after.difference(&before).cloned().collect(),
             removed: before.difference(&after).cloned().collect(),
-            spec_changed,
             family_found,
             facts_read,
         }))
@@ -1059,40 +1024,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_remove_tag_rejects_system_tag() {
-        let repo = Arc::new(MockRepo::new());
-        let service = ModelService::new(repo);
-
-        let mut new_model = NewModel::new(
-            "qwen-test".to_string(),
-            PathBuf::from("/path/to/m.gguf"),
-            Some(7.0),
-            Utc::now(),
-        );
-        new_model.tags = vec!["chat".to_string(), "format:qwen-xml".to_string()];
-        let created = service.add(new_model).await.unwrap();
-
-        // Standard removal rejected.
-        let err = service
-            .remove_tag(created.id, "format:qwen-xml")
-            .await
-            .unwrap_err();
-        assert!(matches!(err, CoreError::Validation(_)));
-
-        // Tag still present.
-        let tags = service.get_tags(created.id).await.unwrap();
-        assert!(tags.contains(&"format:qwen-xml".to_string()));
-
-        // Force variant succeeds.
-        service
-            .remove_tag_force(created.id, "format:qwen-xml")
-            .await
-            .unwrap();
-        let tags = service.get_tags(created.id).await.unwrap();
-        assert!(!tags.contains(&"format:qwen-xml".to_string()));
-    }
-
-    #[tokio::test]
     async fn test_remove_tag_allows_user_tag() {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
@@ -1103,18 +1034,17 @@ mod tests {
             Some(7.0),
             Utc::now(),
         );
-        new_model.tags = vec!["chat".to_string(), "format:hermes".to_string()];
+        new_model.tags = vec!["chat".to_string(), "favorite".to_string()];
         let created = service.add(new_model).await.unwrap();
 
         service.remove_tag(created.id, "chat").await.unwrap();
         let tags = service.get_tags(created.id).await.unwrap();
-        assert_eq!(tags, vec!["format:hermes".to_string()]);
+        assert_eq!(tags, vec!["favorite".to_string()]);
     }
 
     /// Stub parser that emits a fixed capability set for retag tests.
     struct StubCapsParser {
         tags: Vec<String>,
-        spec: Option<crate::domain::DialectSpec>,
     }
 
     impl crate::ports::GgufParserPort for StubCapsParser {
@@ -1136,7 +1066,6 @@ mod tests {
             crate::ports::GgufCapabilities {
                 flags: crate::domain::gguf::CapabilityFlags::empty(),
                 extensions,
-                dialect: self.spec.clone(),
             }
         }
 
@@ -1184,18 +1113,17 @@ mod tests {
         let created = service.add(new_model).await.unwrap();
 
         let parser = StubCapsParser {
-            tags: vec!["format:qwen-xml".to_string()],
-            spec: None,
+            tags: vec!["agent".to_string()],
         };
         let diff = service
             .retag_model(created.id, &parser, false)
             .await
             .unwrap();
-        assert_eq!(diff.unwrap().added, vec!["format:qwen-xml".to_string()]);
+        assert_eq!(diff.unwrap().added, vec!["agent".to_string()]);
 
         let tags = service.get_tags(created.id).await.unwrap();
         assert!(tags.contains(&"chat".to_string()));
-        assert!(tags.contains(&"format:qwen-xml".to_string()));
+        assert!(tags.contains(&"agent".to_string()));
     }
 
     #[tokio::test]
@@ -1209,12 +1137,11 @@ mod tests {
             Some(7.0),
             Utc::now(),
         );
-        new_model.tags = vec!["format:qwen-xml".to_string()];
+        new_model.tags = vec!["agent".to_string()];
         let created = service.add(new_model).await.unwrap();
 
         let parser = StubCapsParser {
-            tags: vec!["format:qwen-xml".to_string()],
-            spec: None,
+            tags: vec!["agent".to_string()],
         };
         let diff = service
             .retag_model(created.id, &parser, false)
@@ -1235,15 +1162,13 @@ mod tests {
             Utc::now(),
         );
         new_model.tags = vec![
-            "favorite".to_string(),      // user
-            "format:hermes".to_string(), // stale auto
-            "reasoning".to_string(),     // stale auto capability
+            "favorite".to_string(),  // user
+            "reasoning".to_string(), // stale auto capability
         ];
         let created = service.add(new_model).await.unwrap();
 
         let parser = StubCapsParser {
-            tags: vec!["format:qwen-xml".to_string()],
-            spec: None,
+            tags: vec!["agent".to_string()],
         };
         service
             .retag_model(created.id, &parser, true)
@@ -1252,8 +1177,7 @@ mod tests {
 
         let tags = service.get_tags(created.id).await.unwrap();
         assert!(tags.contains(&"favorite".to_string()));
-        assert!(tags.contains(&"format:qwen-xml".to_string()));
-        assert!(!tags.contains(&"format:hermes".to_string()));
+        assert!(tags.contains(&"agent".to_string()));
         assert!(!tags.contains(&"reasoning".to_string()));
     }
 
@@ -1272,10 +1196,7 @@ mod tests {
         let created = service.add(new_model).await.unwrap();
 
         // Detection reports no MTP support.
-        let parser = StubCapsParser {
-            tags: Vec::new(),
-            spec: None,
-        };
+        let parser = StubCapsParser { tags: Vec::new() };
         service
             .retag_model(created.id, &parser, true)
             .await
@@ -1283,101 +1204,5 @@ mod tests {
 
         let tags = service.get_tags(created.id).await.unwrap();
         assert!(!tags.contains(&"mtp".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_retag_additive_fills_a_missing_spec() {
-        let repo = Arc::new(MockRepo::new());
-        let service = ModelService::new(repo.clone());
-
-        let mut new_model = NewModel::new(
-            "m".to_string(),
-            PathBuf::from("/p.gguf"),
-            Some(7.0),
-            Utc::now(),
-        );
-        new_model.tags = vec!["format:qwen-xml".to_string()];
-        let created = service.add(new_model).await.unwrap();
-
-        let parser = StubCapsParser {
-            tags: vec!["format:qwen-xml".to_string()],
-            spec: Some(crate::domain::DialectSpec::qwen_xml()),
-        };
-        let diff = service
-            .retag_model(created.id, &parser, false)
-            .await
-            .unwrap()
-            .expect("spec fill must count as a change");
-        assert!(diff.spec_changed);
-        assert!(diff.added.is_empty() && diff.removed.is_empty());
-
-        let model = service.get_by_id(created.id).await.unwrap().unwrap();
-        assert_eq!(
-            model.dialect_spec,
-            Some(crate::domain::DialectSpec::qwen_xml())
-        );
-    }
-
-    #[tokio::test]
-    async fn test_retag_additive_never_overwrites_an_existing_spec() {
-        let repo = Arc::new(MockRepo::new());
-        let service = ModelService::new(repo.clone());
-
-        let derived = crate::domain::DialectSpec {
-            tool_open: "«TC»".to_string(),
-            tool_close: "«/TC»".to_string(),
-            ..crate::domain::DialectSpec::qwen_xml()
-        };
-        let mut new_model = NewModel::new(
-            "m".to_string(),
-            PathBuf::from("/p.gguf"),
-            Some(7.0),
-            Utc::now(),
-        );
-        new_model.dialect_spec = Some(derived.clone());
-        let created = service.add(new_model).await.unwrap();
-
-        let parser = StubCapsParser {
-            tags: Vec::new(),
-            spec: Some(crate::domain::DialectSpec::qwen_xml()),
-        };
-        let diff = service
-            .retag_model(created.id, &parser, false)
-            .await
-            .unwrap();
-        assert!(diff.is_none(), "additive retag must not rewrite a spec");
-
-        let model = service.get_by_id(created.id).await.unwrap().unwrap();
-        assert_eq!(model.dialect_spec, Some(derived));
-    }
-
-    #[tokio::test]
-    async fn test_retag_full_rederives_and_can_clear_the_spec() {
-        let repo = Arc::new(MockRepo::new());
-        let service = ModelService::new(repo.clone());
-
-        let mut new_model = NewModel::new(
-            "m".to_string(),
-            PathBuf::from("/p.gguf"),
-            Some(7.0),
-            Utc::now(),
-        );
-        new_model.dialect_spec = Some(crate::domain::DialectSpec::qwen_xml());
-        let created = service.add(new_model).await.unwrap();
-
-        // Detection derives no spec — full mode must clear it.
-        let parser = StubCapsParser {
-            tags: Vec::new(),
-            spec: None,
-        };
-        let diff = service
-            .retag_model(created.id, &parser, true)
-            .await
-            .unwrap()
-            .expect("clearing the spec is a change");
-        assert!(diff.spec_changed);
-
-        let model = service.get_by_id(created.id).await.unwrap().unwrap();
-        assert_eq!(model.dialect_spec, None);
     }
 }

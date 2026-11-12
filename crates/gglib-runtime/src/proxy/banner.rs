@@ -27,9 +27,9 @@ fn use_color() -> bool {
 /// Print what the runtime decided for a launch, and why.
 ///
 /// The visible counterpart to [`crate::launch_narration::narrate`]: gglib
-/// auto-sizes the RAM cache, quantizes the KV cache, enables MTP, picks a
-/// dialect parser and resolves the context through a five-level chain, and
-/// before this existed it did all of that in silence.
+/// auto-sizes the RAM cache, quantizes the KV cache, enables MTP and resolves
+/// the context through a five-level chain, and before this existed it did all
+/// of that in silence.
 pub(crate) fn print_launch_narration(narration: &LaunchNarration) {
     for line in render_launch_narration(narration, use_color()) {
         println!("{line}");
@@ -86,9 +86,9 @@ mod tests {
             LaunchNarration::new("qwen3-30b-a3b", Some("Q4_K_M".to_string()), 18_476_297_420);
         n.push(LaunchDecision::new("ctx", "32768", "model server_defaults"));
         n.push(LaunchDecision::new(
-            "dialect",
-            "qwen-xml -> OpenAI tool_calls",
-            "format:qwen-xml tag",
+            "cache",
+            "6.0 GiB",
+            "auto from free RAM",
         ));
         n
     }
@@ -103,7 +103,7 @@ mod tests {
                 .iter()
                 .any(|l| l.contains("32768") && l.contains("(model server_defaults)"))
         );
-        assert!(lines.iter().any(|l| l.contains("(format:qwen-xml tag)")));
+        assert!(lines.iter().any(|l| l.contains("(auto from free RAM)")));
     }
 
     #[test]
@@ -120,10 +120,10 @@ mod tests {
     fn labels_are_padded_to_a_common_column() {
         let lines = render_launch_narration(&narration(), false);
         let ctx = lines.iter().find(|l| l.contains("32768")).unwrap();
-        let dialect = lines.iter().find(|l| l.contains("qwen-xml")).unwrap();
+        let cache = lines.iter().find(|l| l.contains("6.0 GiB")).unwrap();
         let ctx_value = ctx.find("32768").unwrap();
-        let dialect_value = dialect.find("qwen-xml").unwrap();
-        assert_eq!(ctx_value, dialect_value);
+        let cache_value = cache.find("6.0 GiB").unwrap();
+        assert_eq!(ctx_value, cache_value);
     }
 
     /// Piped or captured output must carry no escape sequences at all.

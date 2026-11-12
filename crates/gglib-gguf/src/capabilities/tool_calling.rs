@@ -99,11 +99,9 @@ pub(crate) fn detect_tool_support(metadata: &HashMap<String, String>) -> ToolCal
         detection.detected_format = Some(detected_formats[0].to_string());
     }
 
-    // Qwen models reuse the `<tool_call>...</tool_call>` markup but emit it
-    // inline as XML inside the text channel rather than as the OpenAI-style
-    // `tool_calls` array.  When the chat template matches a `<tool_call>`
-    // pattern AND the model name identifies as Qwen, override the format
-    // hint so the normalization layer selects the Qwen XML parser.
+    // Qwen models reuse the `<tool_call>...</tool_call>` markup. When the
+    // chat template matches a `<tool_call>` pattern AND the model name
+    // identifies as Qwen, report the format as Qwen's rather than Hermes'.
     if detection.supports_tool_calling
         && let Some(name) = metadata.get("general.name")
     {

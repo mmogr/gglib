@@ -133,30 +133,6 @@ async fn a_tag_for_a_missing_model_is_not_found() {
     assert!(matches!(missed, GuiError::NotFound { .. }), "{missed:?}");
 }
 
-/// A system tag is not the caller's to remove, and saying so is a refusal
-/// of the request, not a fault of the daemon.
-#[tokio::test]
-async fn removing_a_system_tag_is_a_validation_failure() {
-    let ops = ModelOps::new(ModelDeps {
-        core: test_core().await,
-        runtime: Arc::new(NoopModelRuntime),
-        gguf_parser: Arc::new(NoopGgufParser),
-        emitter: Arc::new(NoopEmitter::new()),
-    });
-    let tag = "format:qwen-xml".to_owned();
-    assert!(gglib_core::domain::is_system_tag(&tag));
-
-    let refused = ops
-        .remove_tag(1, tag)
-        .await
-        .expect_err("a system tag stays");
-
-    assert!(
-        matches!(refused, GuiError::ValidationFailed(_)),
-        "{refused:?}"
-    );
-}
-
 /// The GUI shows this path and command as the way out, so they are the path
 /// gglib looks for llama-server at and the constant the CLI's own test parses
 /// as its install command.

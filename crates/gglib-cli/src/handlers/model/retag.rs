@@ -1,8 +1,7 @@
 //! Retag command handler.
 //!
-//! Re-derives auto-generated tags (capability flags + `format:*` dialect
-//! tags) for one or more models from their persisted GGUF metadata, which
-//! backfills the `format:*` tags on a catalog row that lacks them.
+//! Re-derives auto-generated capability tags for one or more models from
+//! their persisted GGUF metadata.
 //!
 //! Default behaviour is additive: missing tags are appended, nothing is
 //! removed. `--full` drops and re-derives the entire auto-generated
@@ -63,9 +62,6 @@ pub(crate) async fn execute(
                 }
                 if !pass.removed.is_empty() {
                     println!("  [{id}] {name} — removed: {}", pass.removed.join(", "));
-                }
-                if pass.spec_changed {
-                    println!("  [{id}] {name} — dialect spec re-derived");
                 }
                 if let Some(family) = pass.family_found {
                     println!("  [{id}] {name} — draws as {}", family.label());

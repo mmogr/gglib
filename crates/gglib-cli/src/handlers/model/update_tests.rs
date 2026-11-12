@@ -13,7 +13,6 @@ fn create_test_model() -> Model {
     Model {
         components: Vec::new(),
         image_family: None,
-        dialect_spec: None,
         id: 1,
         name: "Original Name".to_string(),
         model_key: String::new(),

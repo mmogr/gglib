@@ -14,7 +14,6 @@ pub mod defect_counts;
 pub mod defects;
 mod defects_agent;
 pub mod device_budget;
-pub mod dialect;
 pub mod engine_pins;
 pub mod figures;
 mod file_type;
@@ -189,9 +188,6 @@ pub use image_family::{
 pub use intervention::{Intervention, InterventionKind, Refusal};
 pub use runtime_kind::RuntimeKind;
 
-// Re-export dialect types at the domain level for convenience
-pub use dialect::{BodyCodec, DialectSpec, EmissionProfile};
-
 // Re-export model-naming types at the domain level for convenience
 pub use model_naming::{
     LISTED_ID_SEPARATOR, ListedModel, ListedSuffix, NameSource, openai_model_ids, repo_short_name,
@@ -216,6 +212,5 @@ pub(crate) use context_fit::SECOND_RUNG;
 pub use context_fit::{FitInputs, fit_context, fit_context_explained};
 pub use generation_config::generation_config_candidates;
 pub use generation_config::parse_generation_config;
-pub use model::is_system_tag;
 pub(crate) use model::missing_roles;
 pub use model_naming::declared_name;

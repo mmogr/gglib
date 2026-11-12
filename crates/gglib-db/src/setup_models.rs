@@ -72,11 +72,7 @@ pub(super) async fn create_models_table(pool: &SqlitePool) -> Result<()> {
     // `setup_recipes.rs`.
     add_column_if_missing(pool, "models", "defaults_origin", "TEXT").await?;
 
-    // Migration: add dialect_spec to models — the structured tool-call
-    // dialect detected at import/retag time (JSON-serialized
-    // `gglib_core::domain::DialectSpec`). No backfill: rows without a spec
-    // fall back to their `format:*` tag at context-resolution time, and
-    // `gglib model retag` re-derives the spec from persisted metadata.
+    // `dialect_spec`: nothing reads or writes it any more.
     add_column_if_missing(pool, "models", "dialect_spec", "TEXT").await?;
 
     // Migration: add template_caps to models — llama-server's per-template

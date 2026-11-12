@@ -18,11 +18,10 @@ gglib-core = { workspace = true }
 # Logging
 tracing = { workspace = true }
 
-# Chat templates: the render-and-diff dialect derivation
-# (capabilities::template_probe) and a chat rendered as llama-server renders
-# it (render). Only this crate uses the two minijinja crates, so their
-# versions are here. `preserve_order` keeps a mapping's keys in the order it
-# was built, as llama's own Jinja engine does.
+# Chat templates: a chat rendered as llama-server renders it (render). Only
+# this crate uses the two minijinja crates, so their versions are here.
+# `preserve_order` keeps a mapping's keys in the order it was built, as
+# llama's own Jinja engine does.
 minijinja = { version = "2", features = ["json", "loop_controls", "preserve_order"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 serde_json = { workspace = true }

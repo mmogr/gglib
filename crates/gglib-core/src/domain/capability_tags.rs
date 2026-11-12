@@ -8,14 +8,9 @@
 //! `embedding` auto-enables `--embeddings`, and `reasoning` supplies a whole
 //! sampling recipe.
 //!
-//! Distinct from [`crate::normalize::tags`], which holds `format:*` tags for
-//! the dialect registry. Those describe how a model's *output* is shaped; these
-//! describe what the model can *do*.
-//!
 //! # Why the constants exist
 //!
-//! Same rule `normalize::tags` states: no other crate should hard-code these
-//! strings. The tag is a stored value with a producer and many consumers, and a
+//! No other crate should hard-code these strings. The tag is a stored value with a producer and many consumers, and a
 //! typo on the consumer side is silent — a model simply stops being treated as
 //! a reasoning model, with no error anywhere.
 //!
@@ -172,9 +167,7 @@ mod tests {
         assert!(is_reasoning(&tags(&["REASONING"])));
     }
 
-    /// A near-miss must not match. `reasoning` is a whole tag, not a prefix —
-    /// `format:think-tag` and friends describe output shape and live in
-    /// `normalize::tags`.
+    /// A near-miss must not match. `reasoning` is a whole tag, not a prefix.
     #[test]
     fn a_tag_that_merely_contains_the_word_does_not_match() {
         assert!(!is_reasoning(&tags(&["reasoning-lite"])));

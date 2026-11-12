@@ -263,19 +263,16 @@ impl ModelRuntimePort for CountingRuntime {
     }
 }
 
-/// Catalog port that always resolves the requested model with the given tags
-/// and (optionally) a persisted dialect spec.
+/// Catalog port that always resolves the requested model with the given tags.
 #[derive(Debug)]
 pub(crate) struct TaggedCatalog {
     pub name: String,
     pub tags: Vec<String>,
-    pub dialect: Option<gglib_core::domain::DialectSpec>,
 }
 
 impl TaggedCatalog {
     fn summary(&self) -> ModelSummary {
         ModelSummary {
-            dialect: self.dialect.clone(),
             tags: self.tags.clone(),
             ..ModelSummary::bare(1, &self.name)
         }
@@ -330,7 +327,6 @@ impl MultiModelCatalog {
         let tagged = TaggedCatalog {
             name: name.clone(),
             tags: tags.clone(),
-            dialect: None,
         };
         ModelSummary {
             id: u32::try_from(index).unwrap_or(0) + 1,
@@ -835,7 +831,6 @@ pub(crate) async fn spawn_proxy_with_runtime(
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
         tags,
-        dialect: None,
     });
     spawn_proxy_with_catalog(runtime, catalog).await
 }
@@ -886,7 +881,6 @@ pub(crate) async fn spawn_proxy_with_cache_for_model(
         catalog_port: Arc::new(TaggedCatalog {
             name: model_name.into(),
             tags: vec![],
-            dialect: None,
         }),
         cache_enabled: true,
         slot_dir: Some(slot_dir),

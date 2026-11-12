@@ -177,7 +177,7 @@ pub(crate) async fn execute(
         // the name shown above is the stored one — announcing a blanket
         // "refreshed" over it would tell the user something the database did
         // not do.
-        println!("Replaced: tags, capabilities, dialect spec.");
+        println!("Replaced: tags, capabilities.");
         println!("Updated where newly detected: quantization, context length, expert counts.");
         println!("Unchanged: name, parameter count, architecture.");
     } else {

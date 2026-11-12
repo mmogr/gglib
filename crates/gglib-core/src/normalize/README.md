@@ -9,7 +9,6 @@ written.
 
 ## Module map
 
-- [`tags`] — `format:*` constants, the tags detection stores on a model.
 - [`residue`] — chunk-safe scanner for tool-call markup that reached
   client-visible text (the proxy's drift alarm).
 - [`history`] — [`strip_thinking_debt`], which drops reasoning left in

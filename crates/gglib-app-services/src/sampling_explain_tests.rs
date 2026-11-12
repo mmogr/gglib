@@ -276,7 +276,6 @@ fn an_unreviewed_recipe_ranks_below_global_settings() {
         ..Settings::with_defaults()
     };
     let auto = Model {
-        dialect_spec: None,
         inference_defaults: Some(InferenceConfig {
             temperature: Some(1.0),
             ..Default::default()
@@ -294,7 +293,6 @@ fn an_unreviewed_recipe_ranks_below_global_settings() {
     );
 
     let user = Model {
-        dialect_spec: None,
         defaults_origin: Some(DefaultsOrigin::User),
         ..auto
     };
@@ -334,7 +332,6 @@ fn every_surface_spells_an_origin_the_same_way() {
         DefaultsOrigin::Measured,
     ] {
         let stored = Model {
-            dialect_spec: None,
             defaults_origin: Some(origin),
             ..model()
         };
@@ -374,7 +371,6 @@ fn every_surface_spells_an_origin_the_same_way() {
 #[test]
 fn the_reasoning_tag_supplies_the_reasoning_recipe() {
     let reasoning = Model {
-        dialect_spec: None,
         tags: vec!["Reasoning".to_owned()],
         ..model()
     };
@@ -401,7 +397,6 @@ fn a_claimed_temperature_passes_over_the_trio_beneath_it() {
         },
     );
     let tuned = Model {
-        dialect_spec: None,
         inference_defaults: Some(InferenceConfig {
             presence_penalty: Some(1.5),
             ..Default::default()

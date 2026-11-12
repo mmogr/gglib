@@ -17,25 +17,6 @@ use super::server_config::ServerConfig;
 use super::shard_name::gguf_stem;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// System tags
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Prefix marking a tag as runtime-load-bearing.
-///
-/// Tags with this prefix (e.g. `format:qwen-xml`) drive the universal
-/// normalization pipeline's parser selection at compose time. Removing
-/// one would silently break dialect handling for the affected model, so
-/// the tag-mutation API rejects deletions.
-pub(super) const SYSTEM_TAG_PREFIX: &str = "format:";
-
-/// Returns `true` when `tag` is a system tag that callers must not
-/// remove through the standard tag-mutation API.
-#[must_use]
-pub fn is_system_tag(tag: &str) -> bool {
-    tag.starts_with(SYSTEM_TAG_PREFIX)
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Model Types
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -125,21 +106,13 @@ pub struct Model {
     /// be overridden at request time. Part of the 5-level fallback chain.
     #[serde(default)]
     pub server_defaults: Option<ServerConfig>,
-    /// Tool-call dialect spec detected at import/retag time.
-    ///
-    /// Stored as JSON in the database. `None` for rows imported before
-    /// specs existed and for models whose dialect could not be derived —
-    /// consumers fall back to the `format:*` tag mapping.
-    #[serde(default)]
-    pub dialect_spec: Option<crate::domain::dialect::DialectSpec>,
     /// llama-server's template-capability self-report (`chat_template_caps`
     /// from `GET /props`), recorded once a launch has observed it.
     ///
     /// Stored as JSON in the database. `None` means **never observed** — the
     /// third state of ADR 0007's tri-state, never to be collapsed into "not
-    /// supported". Unlike [`Self::dialect_spec`] this is not derived at
-    /// import time: it is a fact about the binary–model pair, so only a
-    /// launch can learn it.
+    /// supported". It is not derived at import time: it is a fact about the
+    /// binary–model pair, so only a launch can learn it.
     #[serde(default)]
     pub template_caps: Option<crate::domain::TemplateCaps>,
     /// Denormalised benchmark summary joined from `model_benchmark_summaries`.
@@ -233,9 +206,6 @@ pub struct NewModel {
     /// Per-model server startup defaults.
     #[serde(default)]
     pub server_defaults: Option<ServerConfig>,
-    /// See [`Model::dialect_spec`].
-    #[serde(default)]
-    pub dialect_spec: Option<crate::domain::dialect::DialectSpec>,
     /// See [`Model::image_family`].
     #[serde(default)]
     pub image_family: Option<ImageFamily>,
@@ -377,7 +347,6 @@ impl NewModel {
             inference_defaults: None,
             defaults_origin: None,
             server_defaults: None,
-            dialect_spec: None,
             image_family: None,
             components: Vec::new(),
         }

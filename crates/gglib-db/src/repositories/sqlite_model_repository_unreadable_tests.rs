@@ -58,25 +58,8 @@ fn temperature(value: f32) -> InferenceConfig {
     }
 }
 
-/// Rows written before the column existed (or carrying garbage) read
-/// as "no spec" — the tag fallback applies downstream.
-#[tokio::test]
-async fn unreadable_dialect_spec_reads_as_none() {
-    let repo = repo().await;
-    let inserted = repo.insert(&make_model("Legacy")).await.unwrap();
-    assert_eq!(inserted.dialect_spec, None);
-
-    sqlx::query("UPDATE models SET dialect_spec = 'not json' WHERE id = ?")
-        .bind(inserted.id)
-        .execute(&repo.pool)
-        .await
-        .unwrap();
-    let fetched = repo.get_by_id(inserted.id).await.unwrap();
-    assert_eq!(fetched.dialect_spec, None);
-}
-
-/// Same tolerance as `dialect_spec`: garbage in the column degrades to
-/// "never observed" rather than failing every read of the row.
+/// Garbage in the column degrades to "never observed" rather than failing
+/// every read of the row.
 #[tokio::test]
 async fn unreadable_template_caps_reads_as_none() {
     let repo = repo().await;
@@ -93,13 +76,12 @@ async fn unreadable_template_caps_reads_as_none() {
 }
 
 /// Each lenient column, holding text this build cannot read.
-const UNREADABLE: [(&str, &str); 10] = [
+const UNREADABLE: [(&str, &str); 9] = [
     ("tags", "not json"),
     ("metadata", r#"{"general.name":1}"#),
     ("inference_defaults", r#"{"temperature":"warm"}"#),
     ("defaults_origin", "published"),
     ("server_defaults", "not json"),
-    ("dialect_spec", "not json"),
     ("template_caps", "not json"),
     ("image_family", "flux9"),
     ("download_date", "yesterday"),
@@ -175,7 +157,7 @@ async fn a_new_value_replaces_unreadable_text() {
     assert_eq!(read.template_caps, Some(caps));
 }
 
-/// The rest of the ten take a new value too, each on its own: changing one
+/// The rest of the nine take a new value too, each on its own: changing one
 /// date leaves the other's text alone.
 #[tokio::test]
 async fn a_new_value_replaces_unreadable_text_in_each_other_column() {

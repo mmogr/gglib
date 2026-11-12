@@ -8,8 +8,8 @@
 //! so.
 
 use gglib_core::domain::{
-    BodyCodec, DefaultsOrigin, DialectSpec, EmissionProfile, FileType, ImageFamily,
-    InferenceConfig, ReasoningEffort, ServerConfig, TemplateCaps,
+    DefaultsOrigin, FileType, ImageFamily, InferenceConfig, ReasoningEffort, ServerConfig,
+    TemplateCaps,
 };
 use gglib_core::ports::{McpServerRepository, ModelFilesRepositoryPort};
 use gglib_core::{McpLifecycle, ModelCapabilities, ModelRepository, SettingsRepository};
@@ -63,18 +63,6 @@ async fn models_read_back_whole() {
         ..Default::default()
     };
     assert_eq!(agent.server_defaults, Some(server));
-    let dialect = DialectSpec {
-        id: "qwen-xml".into(),
-        tool_open: "<tool_call>".into(),
-        tool_close: "</tool_call>".into(),
-        body_codecs: vec![BodyCodec::Json, BodyCodec::FunctionXml],
-        emission: EmissionProfile {
-            newline_after_open: true,
-            newline_before_close: true,
-        },
-        id_prefix: "call_qwen_".into(),
-    };
-    assert_eq!(agent.dialect_spec, Some(dialect));
     assert_eq!(agent.image_family, None);
     // By hand: the summary a benchmark leaves, read through the join.
     let summary = agent.benchmark_summary.expect("model 1 has a summary");

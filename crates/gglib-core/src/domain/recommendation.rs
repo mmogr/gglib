@@ -13,9 +13,7 @@
 //! Its cost — someone has to revisit it as models age — is paid once per
 //! release rather than once per user.
 //!
-//! Candidates are biased towards models whose tool-call dialect
-//! [`crate::normalize`] already parses. Recommending a model gglib cannot
-//! normalize would sell the user the exact failure the proxy exists to fix.
+//! Candidates are biased towards models that call tools well.
 //!
 //! A phone has a table of its own, [`PHONE_SHORTLIST`]: small models chosen
 //! for plain chat, sized against a phone's memory rather than a desktop
@@ -242,11 +240,8 @@ static SHORTLIST: &[ModelCandidate] = &[
 /// The phone shortlist, largest first.
 ///
 /// Small models for plain chat on a phone, so the module's tool-call bias does
-/// not decide this table: Qwen3 writes tool calls in the `<tool_call>`
-/// envelope the normaliser parses, Llama 3.2 in Llama 3's bare JSON, for which
-/// the template probe derives no dialect, and Gemma 3's template has no tool
-/// calls at all. Every repository is public, so none needs a Hugging Face
-/// token.
+/// not decide this table (Gemma 3's template has no tool calls at all). Every
+/// repository is public, so none needs a Hugging Face token.
 ///
 /// Each row is sized at 8192 tokens, the second rung of `context_fit`'s
 /// ladder, so what this table offers a phone is a model

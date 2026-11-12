@@ -4,9 +4,9 @@
  * What the runtime decided when it launched the running model, and why.
  *
  * The GUI counterpart to the CLI startup banner: gglib auto-sizes the RAM
- * cache, quantizes the KV cache, enables speculative decoding, picks a tool-call
- * dialect parser and resolves the context through a five-level chain, and until
- * this panel existed a GUI user's only evidence of any of it was the README.
+ * cache, quantizes the KV cache, enables speculative decoding and resolves the
+ * context through a five-level chain, and until this panel existed a GUI
+ * user's only evidence of any of it was the README.
  *
  * Every row is rendered exactly as the backend ordered and worded it — see
  * `gglib_core::domain::LaunchNarration`. Nothing is re-derived, re-sorted or

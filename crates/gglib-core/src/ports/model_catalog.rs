@@ -11,7 +11,6 @@ use thiserror::Error;
 
 use crate::domain::ComponentRole;
 use crate::domain::DefaultsOrigin;
-use crate::domain::DialectSpec;
 use crate::domain::ImageFamily;
 use crate::domain::InferenceConfig;
 use crate::domain::KvShape;
@@ -85,11 +84,6 @@ pub struct ModelSummary {
     pub defaults_origin: Option<DefaultsOrigin>,
     /// Per-model server defaults (`context_length`, etc.) from the database.
     pub server_defaults: Option<ServerConfig>,
-    /// Persisted tool-call dialect spec, when detection identified one.
-    ///
-    /// `None` for rows imported before specs existed and for models whose
-    /// dialect could not be derived.
-    pub dialect: Option<DialectSpec>,
     /// llama-server's template-capability self-report, when a launch has
     /// recorded one (see [`Model::template_caps`](crate::domain::Model)).
     ///
