@@ -49,7 +49,6 @@ const mockServerInfo: McpServerInfo = {
   server: {
     id: 1,
     name: 'Test Server',
-    server_type: 'stdio',
     config: {
       command: 'npx',
       args: ['-y', 'test-server'],
@@ -159,7 +158,6 @@ describe('useMcpServers', () => {
     it('adds server and refreshes list', async () => {
       const newServer = {
         name: 'New',
-        server_type: 'stdio' as const,
         config: { command: 'test' },
         enabled: true,
         lifecycle: 'lazy' as const,
@@ -197,7 +195,6 @@ describe('useMcpServers', () => {
         act(async () => {
           await result.current.addServer({
             name: 'Bad',
-            server_type: 'stdio',
             config: {},
             enabled: true,
             lifecycle: 'lazy' as const,
@@ -415,13 +412,13 @@ describe('useMcpServers', () => {
       // First call throws
       await expect(
         act(async () => {
-          await result.current.addServer({ name: 'New', server_type: 'stdio', config: {}, enabled: true, lifecycle: 'lazy' as const, env: [] });
+          await result.current.addServer({ name: 'New', config: {}, enabled: true, lifecycle: 'lazy' as const, env: [] });
         })
       ).rejects.toThrow('First error');
 
       // Second call succeeds
       await act(async () => {
-        const server = await result.current.addServer({ name: 'New', server_type: 'stdio', config: {}, enabled: true, lifecycle: 'lazy' as const, env: [] });
+        const server = await result.current.addServer({ name: 'New', config: {}, enabled: true, lifecycle: 'lazy' as const, env: [] });
         expect(server.server.id).toBe(2);
       });
     });

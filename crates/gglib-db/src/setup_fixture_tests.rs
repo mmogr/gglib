@@ -19,6 +19,8 @@ use super::{backup_beside, setup_database, setup_test_database};
 mod history;
 #[path = "setup_fixture_library_tests.rs"]
 mod library;
+#[path = "setup_fixture_sse_tests.rs"]
+mod sse;
 
 /// The schema generation gglib 0.33.0 stamps.
 const FIXTURE_GENERATION: i64 = 5;

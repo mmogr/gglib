@@ -68,22 +68,23 @@ pub enum ModelCommand {
         /// Name or ID of the model to update
         identifier: String,
         /// New name for the model
-        #[arg(short, long)]
+        #[arg(long)]
         name: Option<String>,
         /// Update parameter count (in billions)
-        #[arg(short, long)]
+        #[arg(long)]
         param_count: Option<f64>,
         /// Update architecture
-        #[arg(short, long)]
+        #[arg(long)]
         architecture: Option<String>,
         /// Update quantization type
-        #[arg(short, long)]
+        #[arg(long)]
         quantization: Option<String>,
-        /// Update context length
-        #[arg(short, long)]
+        /// Overwrite the stored trained context length (the model's window,
+        /// not the size it is served at)
+        #[arg(long)]
         context_length: Option<u64>,
         /// Add or update metadata (format: key=value)
-        #[arg(short, long, action = clap::ArgAction::Append)]
+        #[arg(long, action = clap::ArgAction::Append)]
         metadata: Vec<String>,
         /// Remove specific metadata keys (comma-separated)
         #[arg(long)]
@@ -226,7 +227,7 @@ pub enum ModelCommand {
         /// Name or ID of the model to repair
         identifier: String,
         /// Specific file indices to repair, as verify lists them (comma-separated, e.g., "0,2,5")
-        #[arg(short, long)]
+        #[arg(long)]
         shards: Option<String>,
         /// Answer yes to the confirmation, so nothing is asked
         #[arg(short = 'y', long)]
@@ -259,21 +260,13 @@ pub enum ModelCommand {
         /// Unsloth Dynamic quant like "UD-Q4_K_M")
         #[arg(short, long)]
         quantization: Option<String>,
-        /// List available quantizations for the model
+        /// List available quantizations for the model, and download nothing.
+        ///
+        /// A private repository needs `HF_TOKEN` set in this shell. A download
+        /// runs on the daemon, which reads `HF_TOKEN` where it started, once,
+        /// as it starts.
         #[arg(long)]
         list_quants: bool,
-        /// Not currently honoured: the daemon owns the download and registers
-        /// the model when it completes. Downloads still run; use
-        /// `gglib model remove <id>` afterwards to drop the row and keep the file.
-        #[arg(long)]
-        skip_db: bool,
-        /// `HuggingFace` token for private models (for `--list-quants` only).
-        ///
-        /// For downloads, set the `HF_TOKEN` environment variable instead, where
-        /// the gglib daemon starts: the daemon runs the download, and reads the
-        /// variable once, as it starts.
-        #[arg(long)]
-        token: Option<String>,
     },
 
     /// Check for updates to downloaded models
@@ -300,10 +293,10 @@ pub enum ModelCommand {
         /// Search query (model name, author, or keywords)
         query: String,
         /// Limit number of results
-        #[arg(short, long, default_value = "10")]
+        #[arg(short = 'n', long, default_value = "10")]
         limit: u32,
         /// What to sort the results by
-        #[arg(short, long, value_enum, default_value_t)]
+        #[arg(long, value_enum, default_value_t)]
         sort: CliHubSort,
         /// Search for image models (text-to-image GGUF repositories) in
         /// place of models that chat
@@ -317,7 +310,7 @@ pub enum ModelCommand {
         #[arg(value_enum, default_value_t)]
         category: CliBrowseCategory,
         /// Limit number of results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short = 'n', long, default_value = "20")]
         limit: u32,
         /// Filter by model size (e.g., "7B", "13B", "70B")
         #[arg(long)]
@@ -423,14 +416,14 @@ pub enum ModelCommand {
     /// # Examples
     ///
     ///   gglib model load 3
-    ///   gglib model load "Qwen3-30B" --context 32768
+    ///   gglib model load "Qwen3-30B" --context-size 32768
     ///   gglib model load 3 --pin          # and pin the endpoint to it
     Load {
         /// Name or ID of the model to load
         identifier: String,
         /// Context size to serve at: a number of tokens, or `max` for the
         /// model's trained window. Omitted, the daemon fits it.
-        #[arg(long, alias = "ctx-size", value_name = "N|max")]
+        #[arg(short = 'c', long = "context-size", value_name = "N|max")]
         context: Option<String>,
         /// Pin the endpoint to this model first: every request for another
         /// model is refused while the pin holds.

@@ -39,7 +39,7 @@ use super::shared::{log_inference_info, log_mlock_info};
 ///
 /// On the paired machine "serve" is what the word can mean there: have the
 /// model resident now, so the first turn does not wait. Only the name and
-/// `--ctx-size` travel; every other flag configures a proxy on *this*
+/// `--context-size` travel; every other flag configures a proxy on *this*
 /// machine, and there is no proxy of this machine's on that one to
 /// configure.
 #[allow(clippy::too_many_arguments)]
@@ -134,9 +134,9 @@ async fn serve_here(
     .await?;
     let model = found?;
 
-    // The raw `--ctx-size` flag is shape-validated at parse time, before the
+    // The raw `--context-size` flag is shape-validated at parse time, before the
     // model is known; resolving it here against the model's GGUF context
-    // length is what makes `--ctx-size max` work.
+    // length is what makes `--context-size max` work.
     let ctx_arg = parse_ctx_size_flag(context.ctx_size.as_deref())?;
 
     // The cascade itself is shared with the GUI's pinned start

@@ -1,4 +1,4 @@
-$ grep -E "WARN|ERROR" server.log | gglib q -Q "What went wrong here?"
+$ grep -E "WARN|ERROR" server.log | gglib q --quiet "What went wrong here?"
 The logs indicate that the application is experiencing a **database connection pool exhaustion** issue. Here's what went wrong:
 
 1. **Database Pool at Capacity**:

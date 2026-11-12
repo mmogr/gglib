@@ -99,7 +99,7 @@ fn chat_with_a_missing_image_fails_by_its_path_before_a_model_is_looked_up() {
     );
 }
 
-/// `gglib q` prints the receipt of an image it attached, and `-Q` keeps it
+/// `gglib q` prints the receipt of an image it attached, and `--quiet` keeps it
 /// quiet. Both go on to the refusal of a question with no model.
 #[test]
 fn q_prints_an_images_receipt_and_quiet_suppresses_it() {
@@ -107,7 +107,7 @@ fn q_prints_an_images_receipt_and_quiet_suppresses_it() {
     let path = shot(&dir);
 
     let loud = gglib(&dir, &["q", "--image"], &path);
-    let quiet = gglib(&dir, &["q", "-Q", "--image"], &path);
+    let quiet = gglib(&dir, &["q", "--quiet", "--image"], &path);
 
     let loud = String::from_utf8_lossy(&loud.stderr);
     assert!(loud.lines().any(|line| line == RECEIPT), "{loud}");

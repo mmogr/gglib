@@ -17,22 +17,14 @@ pub enum McpCommand {
         #[arg(long)]
         name: String,
 
-        /// Server type: "stdio" (a process gglib starts). "sse" (HTTP) is not
-        /// supported yet, and is refused
-        #[arg(long, value_name = "TYPE")]
-        r#type: String,
-
-        /// Command to run (stdio only)
+        /// The executable gglib starts the server with, e.g. npx; its
+        /// arguments go in --args
         #[arg(long)]
-        command: Option<String>,
+        command: String,
 
-        /// Arguments for the command (stdio only, comma-separated e.g. '--port,3000')
+        /// Arguments for the command (comma-separated e.g. '--port,3000')
         #[arg(long, value_delimiter = ',')]
         args: Vec<String>,
-
-        /// URL of an sse server (not supported yet)
-        #[arg(long)]
-        url: Option<String>,
 
         /// Working directory for the server process
         #[arg(long)]

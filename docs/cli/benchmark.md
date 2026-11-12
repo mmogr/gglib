@@ -7,7 +7,7 @@ pipeline between a client and llama-server buys. Every run is kept, and
 
 <!-- snippet: benchmark-compare -->
 ```console
-$ gglib benchmark compare -p "Write a haiku about a lighthouse, and nothing else." -m Qwen3-4B-Instruct-2507 -m Qwen3.8-27B --max-tokens 400
+$ gglib benchmark compare --prompt "Write a haiku about a lighthouse, and nothing else." -m Qwen3-4B-Instruct-2507 -m Qwen3.8-27B --max-tokens 400
 
   ╭─ 📊 Benchmark Compare ─────────────────╮
   Models : Qwen3-4B-Instruct-2507, Qwen3.8-27B
@@ -34,9 +34,9 @@ rock endures below
 ## `compare`
 
 One prompt through N models, one after another, each output followed by
-its speed: `-p` is the prompt, `-m` names each model, `-s` an optional system
-prompt, and `--temperature`, `--max-tokens` and `--ctx-size` apply to every
-model in the run.
+its speed: `--prompt` is the prompt, `-m` names each model, `-s` an optional system
+prompt, and `--temperature`, `--max-tokens` and `-c`/`--context-size` (a
+number of tokens) apply to every model in the run.
 
 ## `perf`
 

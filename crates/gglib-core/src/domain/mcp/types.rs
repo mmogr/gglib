@@ -44,42 +44,6 @@ impl std::str::FromStr for McpLifecycle {
     }
 }
 
-/// Type of MCP server connection.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum McpServerType {
-    /// Stdio-based server - gglib spawns and manages the process
-    #[default]
-    Stdio,
-    /// SSE-based server - an external process reached over HTTP. Not
-    /// supported yet: the type is kept so a stored one still reads, and the
-    /// service refuses to add, change or run one.
-    Sse,
-}
-
-impl std::fmt::Display for McpServerType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Stdio => write!(f, "stdio"),
-            Self::Sse => write!(f, "sse"),
-        }
-    }
-}
-
-impl std::str::FromStr for McpServerType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "stdio" => Ok(Self::Stdio),
-            "sse" => Ok(Self::Sse),
-            other => Err(format!(
-                "unknown server type '{other}'; expected stdio or sse"
-            )),
-        }
-    }
-}
-
 /// Runtime status of an MCP server.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -93,8 +57,6 @@ pub enum McpServerStatus {
     Running,
     /// Server encountered an error
     Error(String),
-    /// Server is of a kind gglib cannot run
-    Unsupported,
 }
 
 /// Environment variable entry for MCP servers.
@@ -122,11 +84,10 @@ impl McpEnvEntry {
 
 /// Execution configuration for an MCP server.
 ///
-/// This contains the runtime configuration needed to start/connect to a server.
-/// For stdio servers, `command` is required. For SSE servers, `url` is required.
+/// This contains the runtime configuration needed to start a server; `command`
+/// is required.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct McpServerConfig {
-    // --- Stdio server fields ---
     /// Command to execute (e.g., "npx" or "/opt/homebrew/bin/npx").
     /// Can be a simple command name (resolved via PATH + platform defaults)
     /// or an absolute path. Required for stdio servers.
@@ -151,12 +112,6 @@ pub struct McpServerConfig {
     /// Useful for nvm/asdf shims or custom tool locations.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path_extra: Option<String>,
-
-    // --- SSE server fields ---
-    /// URL for SSE connection (e.g., `http://localhost:3001/sse`)
-    /// Required for SSE servers.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
 }
 
 impl McpServerConfig {
@@ -174,63 +129,32 @@ impl McpServerConfig {
             args: Some(args),
             working_dir,
             path_extra,
-            url: None,
         }
     }
 
-    /// Create an SSE server configuration.
-    #[must_use]
-    pub fn sse(url: impl Into<String>) -> Self {
-        Self {
-            command: None,
-            resolved_path_cache: None,
-            args: None,
-            working_dir: None,
-            path_extra: None,
-            url: Some(url.into()),
-        }
-    }
-
-    /// Validate configuration based on server type.
+    /// Validate the configuration.
     ///
-    /// Returns an error if required fields are missing or invalid for the server type.
-    pub fn validate(&self, server_type: McpServerType) -> Result<(), String> {
-        match server_type {
-            McpServerType::Stdio => {
-                // Stdio servers MUST have command
-                let command = self
-                    .command
-                    .as_ref()
-                    .ok_or_else(|| "Stdio server requires command".to_string())?;
+    /// Returns an error if the command is missing or empty, or the working
+    /// directory is not absolute.
+    pub fn validate(&self) -> Result<(), String> {
+        let command = self
+            .command
+            .as_ref()
+            .ok_or_else(|| "Stdio server requires command".to_string())?;
 
-                if command.is_empty() {
-                    return Err("Stdio server command cannot be empty".to_string());
-                }
-
-                // working_dir MUST be absolute if specified
-                if let Some(ref cwd) = self.working_dir
-                    && !cwd.is_empty()
-                    && !std::path::Path::new(cwd).is_absolute()
-                {
-                    return Err(format!("Stdio server working_dir must be absolute: {cwd}"));
-                }
-
-                Ok(())
-            }
-            McpServerType::Sse => {
-                // SSE servers MUST have url
-                let url = self
-                    .url
-                    .as_ref()
-                    .ok_or_else(|| "SSE server requires url".to_string())?;
-
-                if url.is_empty() {
-                    return Err("SSE server url cannot be empty".to_string());
-                }
-
-                Ok(())
-            }
+        if command.is_empty() {
+            return Err("Stdio server command cannot be empty".to_string());
         }
+
+        // working_dir MUST be absolute if specified
+        if let Some(ref cwd) = self.working_dir
+            && !cwd.is_empty()
+            && !std::path::Path::new(cwd).is_absolute()
+        {
+            return Err(format!("Stdio server working_dir must be absolute: {cwd}"));
+        }
+
+        Ok(())
     }
 }
 
@@ -246,10 +170,7 @@ pub struct McpServer {
     /// User-friendly name for the server.
     pub name: String,
 
-    /// Connection type (stdio or SSE).
-    pub server_type: McpServerType,
-
-    /// Execution configuration (command, args, URL, etc.).
+    /// Execution configuration (command, args, etc.).
     pub config: McpServerConfig,
 
     /// Whether tools from this server are included in chat.
@@ -295,10 +216,7 @@ pub struct NewMcpServer {
     /// User-friendly name for the server.
     pub name: String,
 
-    /// Connection type (stdio or SSE).
-    pub server_type: McpServerType,
-
-    /// Execution configuration (command, args, URL, etc.).
+    /// Execution configuration (command, args, etc.).
     pub config: McpServerConfig,
 
     /// Whether tools from this server are included in chat.
@@ -322,21 +240,7 @@ impl NewMcpServer {
     ) -> Self {
         Self {
             name: name.into(),
-            server_type: McpServerType::Stdio,
             config: McpServerConfig::stdio(exe_path, args, None, path_extra),
-            enabled: true,
-            lifecycle: McpLifecycle::Lazy,
-            env: Vec::new(),
-        }
-    }
-
-    /// Create a new SSE-based MCP server.
-    #[must_use]
-    pub fn new_sse(name: impl Into<String>, url: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            server_type: McpServerType::Sse,
-            config: McpServerConfig::sse(url),
             enabled: true,
             lifecycle: McpLifecycle::Lazy,
             env: Vec::new(),
@@ -380,10 +284,6 @@ pub struct UpdateMcpServer {
     /// New user-friendly name for the server.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-
-    /// New connection type (stdio or SSE).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub server_type: Option<McpServerType>,
 
     /// New execution configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -501,48 +401,11 @@ mod tests {
         .with_lifecycle(McpLifecycle::Eager);
 
         assert_eq!(server.name, "Test Server");
-        assert_eq!(server.server_type, McpServerType::Stdio);
         assert_eq!(server.config.command, Some("npx".to_string()));
         assert_eq!(server.env.len(), 1);
         assert_eq!(server.env[0].key, "API_KEY");
         assert_eq!(server.env[0].value, "secret123");
         assert_eq!(server.lifecycle, McpLifecycle::Eager);
-    }
-
-    #[test]
-    fn test_new_sse_server() {
-        let server = NewMcpServer::new_sse("External Server", "http://localhost:3001/sse");
-
-        assert_eq!(server.name, "External Server");
-        assert_eq!(server.server_type, McpServerType::Sse);
-        assert_eq!(
-            server.config.url,
-            Some("http://localhost:3001/sse".to_string())
-        );
-        assert!(server.config.command.is_none());
-    }
-
-    #[test]
-    fn a_server_type_is_spelled_one_way_printed_parsed_and_on_the_wire() {
-        for (server_type, spelled) in [(McpServerType::Stdio, "stdio"), (McpServerType::Sse, "sse")]
-        {
-            assert_eq!(server_type.to_string(), spelled);
-            assert_eq!(spelled.parse::<McpServerType>(), Ok(server_type));
-            assert_eq!(
-                serde_json::to_string(&server_type).unwrap(),
-                format!("\"{spelled}\"")
-            );
-        }
-    }
-
-    #[test]
-    fn an_unknown_server_type_is_refused_by_name() {
-        assert_eq!(
-            "grpc".parse::<McpServerType>(),
-            Err("unknown server type 'grpc'; expected stdio or sse".to_string())
-        );
-        // The stored and sent spelling is lowercase, and nothing else parses.
-        assert!("Stdio".parse::<McpServerType>().is_err());
     }
 
     #[test]
@@ -572,7 +435,6 @@ mod tests {
     fn test_serialization() {
         let server = NewMcpServer::new_stdio("Test", "node", vec!["server.js".to_string()], None);
         let json = serde_json::to_string(&server).unwrap();
-        assert!(json.contains("\"server_type\":\"stdio\""));
         assert!(json.contains("\"name\":\"Test\""));
     }
 

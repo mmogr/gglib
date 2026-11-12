@@ -25,8 +25,8 @@ mod backup;
 mod branches;
 #[path = "setup_generation.rs"]
 mod generation;
-#[path = "setup_mcp_lifecycle.rs"]
-mod mcp_lifecycle;
+#[path = "setup_mcp_servers.rs"]
+mod mcp_servers;
 #[path = "setup_migrations.rs"]
 mod migrations;
 #[path = "setup_model_components.rs"]
@@ -337,63 +337,7 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
     attachments::create_attachment_tables(pool).await?;
     branches::add_branch_columns(pool).await?;
 
-    // Create MCP servers table
-    sqlx::query(
-        r"
-        CREATE TABLE IF NOT EXISTS mcp_servers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
-            enabled INTEGER NOT NULL DEFAULT 1,
-            allow_remote INTEGER NOT NULL DEFAULT 0,
-            lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
-            command TEXT,
-            resolved_path_cache TEXT,
-            args TEXT NOT NULL DEFAULT '[]',
-            cwd TEXT,
-            path_extra TEXT,
-            url TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            last_connected_at TEXT,
-            is_valid INTEGER NOT NULL DEFAULT 0,
-            last_error TEXT
-        )
-        ",
-    )
-    .execute(pool)
-    .await?;
-
-    // Migration: whether paired devices may use a server, closed unless set.
-    // The upgrade that opens the servers the old list named is
-    // `remote_grant`, step 4 in `setup_migrations.rs`.
-    add_column_if_missing(
-        pool,
-        "mcp_servers",
-        "allow_remote",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    .await?;
-
-    // Create MCP server environment variables table
-    sqlx::query(
-        r"
-        CREATE TABLE IF NOT EXISTS mcp_server_env (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            server_id INTEGER NOT NULL,
-            key TEXT NOT NULL,
-            value TEXT NOT NULL,
-            FOREIGN KEY (server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE,
-            UNIQUE(server_id, key)
-        )
-        ",
-    )
-    .execute(pool)
-    .await?;
-
-    // Index for faster MCP env lookups
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_mcp_env_server ON mcp_server_env(server_id)")
-        .execute(pool)
-        .await?;
+    mcp_servers::create_mcp_tables(pool).await?;
 
     // The download queue lives in memory; reclaim the table that shadowed it.
     // Nothing ever wrote a row, so there is nothing to migrate.
@@ -614,10 +558,6 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
     )
     .execute(pool)
     .await?;
-
-    // Stored `manual` servers made disabled `lazy` ones. At every open, off
-    // the `user_version` ladder: an older build can still write `manual`.
-    mcp_lifecycle::retire_manual_lifecycle(pool).await?;
 
     // After every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;

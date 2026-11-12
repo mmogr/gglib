@@ -4,4 +4,4 @@
  * What a tool server (an MCP server) is doing. A failed server's reason is
  * its status's, beside this.
  */
-export type McpState = "running" | "starting" | "stopped" | "failed" | "unsupported";
+export type McpState = "running" | "starting" | "stopped" | "failed";

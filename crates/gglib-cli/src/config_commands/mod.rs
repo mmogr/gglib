@@ -77,15 +77,7 @@ pub enum ConfigCommand {
         command: SdCommand,
     },
     /// Check system dependencies required for gglib
-    CheckDeps {
-        /// Provision the `hf_xet` accelerator; `gglib config fast-downloads
-        /// enable` is the command to use.
-        ///
-        /// Hidden, and kept working because older docs and release notes tell
-        /// people to run it.
-        #[arg(long, hide = true)]
-        setup_fast_downloads: bool,
-    },
+    CheckDeps,
     /// Enable or inspect the optional `hf_xet` download accelerator
     FastDownloads {
         #[command(subcommand)]

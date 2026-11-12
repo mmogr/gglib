@@ -2,11 +2,12 @@
 
 /**
  * Request to queue a download.
+ *
+ * An unknown field is refused, not ignored: a client still sending the
+ * old `quant` would otherwise queue whatever quantization is chosen.
  */
 export type QueueDownloadRequest = { model_id: string, 
 /**
- * Quantization to download; left out, one is chosen. The page sends it
- * as "quantization" and the CLI as "quant", so both field names are
- * accepted.
+ * Quantization to download; left out or `null`, one is chosen.
  */
 quantization?: string, };

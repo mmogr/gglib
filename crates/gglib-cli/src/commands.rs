@@ -16,7 +16,9 @@ use crate::model_commands::ModelCommand;
 use crate::profile_args::ProfileArgs;
 use crate::proxy_bind_args::ProxyBindArgs;
 use crate::remote_flag::RemoteFlag;
-use crate::shared_args::{AccessArgs, CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use crate::shared_args::{
+    AccessArgs, CacheArgs, ChatSamplingArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions,
+};
 pub(crate) use crate::subcommands::{
     AttachmentCommand, ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand,
 };
@@ -128,7 +130,7 @@ pub enum Commands {
         #[arg(long = "system-prompt", short = 's')]
         system_prompt: Option<String>,
         #[command(flatten)]
-        sampling: SamplingArgs,
+        sampling: ChatSamplingArgs,
         #[command(flatten)]
         profile: ProfileArgs,
         /// Disable tool access (plain LLM chat without filesystem or MCP tools)
@@ -139,7 +141,7 @@ pub enum Commands {
         /// Maximum agent iterations before giving up
         /// [default: the limit the chat saved, with --continue; else the
         /// persisted setting, or 25 if unset]
-        #[arg(long = "max-iterations")]
+        #[arg(long = "max-tool-iterations")]
         max_iterations: Option<usize>,
         /// Tool allowlist; may be repeated or comma-separated.
         /// Omit to allow all tools. (e.g. "`mcp_search,builtin_time`")
@@ -166,7 +168,7 @@ pub enum Commands {
     },
 
     /// Ask a question with optional context from stdin or file
-    #[command(display_order = 12, alias = "q", after_help = crate::subcommands::QUESTION_EXAMPLES)]
+    #[command(display_order = 12, visible_alias = "q", after_help = crate::subcommands::QUESTION_EXAMPLES)]
     Question {
         /// Question to ask (use {} as placeholder for piped/file input)
         question: String,
@@ -179,16 +181,16 @@ pub enum Commands {
         #[arg(short, long)]
         model: Option<String>,
         /// Read context from file instead of stdin
-        #[arg(short, long)]
+        #[arg(long)]
         file: Option<String>,
         /// Show the constructed prompt before sending
         #[arg(long = "show-prompt")]
         show_prompt: bool,
         /// Cleaner output for scripting (no tool progress, no reasoning tokens)
-        #[arg(long, short = 'Q')]
+        #[arg(long)]
         quiet: bool,
         #[command(flatten)]
-        sampling: SamplingArgs,
+        sampling: ChatSamplingArgs,
         #[command(flatten)]
         profile: ProfileArgs,
         /// Disable tool access (plain LLM question without filesystem or MCP tools)
@@ -198,7 +200,7 @@ pub enum Commands {
         remote: RemoteFlag,
         /// Maximum agent iterations
         /// [default: persisted setting, or 25 if unset]
-        #[arg(long = "max-iterations")]
+        #[arg(long = "max-tool-iterations")]
         max_iterations: Option<usize>,
         /// Tool allowlist (empty = all tools)
         #[arg(long, value_delimiter = ',')]

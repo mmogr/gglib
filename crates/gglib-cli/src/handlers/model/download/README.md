@@ -174,9 +174,7 @@ companions, before the queue), `remote.rs` (daemon queue monitor);
 
 **Options:**
 - `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "`Q4_K_M`")
-- `--list-quants` - List available quantizations, each with whether it fits this machine as the daemon judges it, then the repository's projectors with their sizes, the one every download fetches marked (uses `--token` if provided)
-- `--token <TOKEN>` - `HuggingFace` token (for `--list-quants` only; a download uses the `HF_TOKEN` of the environment the daemon started in)
-- `--skip-db` - Accepted and reported as not honoured: registration happens daemon-side
+- `--list-quants` - List available quantizations, each with whether it fits this machine as the daemon judges it, then the repository's projectors with their sizes, the one every download fetches marked; a private repository needs `HF_TOKEN` set in this shell (a download uses the `HF_TOKEN` of the environment the daemon started in)
 
 **Interactive mode (TTY, the in-process monitor):**
 - `[a]` — add another model to the queue while a download is running
@@ -306,7 +304,6 @@ async fn test_download_with_db_registration() {
     let args = DownloadArgs {
         repo_id: "test/model".to_string(),
         quantization: Some("Q4_K_M".to_string()),
-        skip_db: false,
         ..Default::default()
     };
     

@@ -7,7 +7,7 @@
 //! before the projector link, which reads the paths it rewrites, and the
 //! rest last.
 //!
-//! To add step 6: append it to [`step`], raise [`LATEST`] and
+//! To add step 7: append it to [`step`], raise [`LATEST`] and
 //! `SCHEMA_GENERATION` (`setup_generation.rs`), and rewrite the schema
 //! snapshot as that constant's doc says.
 
@@ -15,7 +15,7 @@ use anyhow::{Result, bail};
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool};
 
 /// The highest step, which a new file is stamped with.
-pub(super) const LATEST: i64 = 5;
+pub(super) const LATEST: i64 = 6;
 
 /// The file's `PRAGMA user_version`: the last step it has had.
 pub(super) async fn user_version(conn: impl SqliteExecutor<'_>) -> sqlx::Result<i64> {
@@ -66,6 +66,7 @@ async fn step(version: i64, conn: &mut SqliteConnection) -> Result<()> {
         3 => super::recipes::drop_stored_reasoning_recipes(conn).await,
         4 => super::remote_grant::flag_listed_servers(conn).await,
         5 => super::unknown_params::forget_zero_param_counts(conn).await,
+        6 => super::mcp_servers::rebuild_without_type(conn).await,
         _ => bail!("no migration to user_version {version}"),
     }
 }

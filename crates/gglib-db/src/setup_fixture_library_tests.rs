@@ -13,8 +13,7 @@ use gglib_core::domain::{
 };
 use gglib_core::ports::{McpServerRepository, ModelFilesRepositoryPort};
 use gglib_core::{
-    LoopGuardMode, McpLifecycle, McpServerType, ModelCapabilities, ModelRepository,
-    SettingsRepository,
+    LoopGuardMode, McpLifecycle, ModelCapabilities, ModelRepository, SettingsRepository,
 };
 
 use super::{at, open_fixture};
@@ -157,10 +156,7 @@ async fn settings_and_mcp_servers_read_back_whole() {
 
     let servers = SqliteMcpRepository::new(pool.clone()).list().await.unwrap();
     let [off, tools] = <[_; 2]>::try_from(servers).unwrap();
-    assert_eq!(
-        (tools.name.as_str(), tools.server_type),
-        ("fixture-tools", McpServerType::Stdio)
-    );
+    assert_eq!((tools.id, tools.name.as_str()), (1, "fixture-tools"));
     assert_eq!(
         (tools.enabled, tools.allow_remote, tools.is_valid),
         (true, true, true)

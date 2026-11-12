@@ -49,16 +49,18 @@ async fn plant_model(pool: &SqlitePool, name: &str, path: &str, key: &str, count
     .expect("a planted model");
 }
 
-/// Rows for steps 2 and 4: a loop guard switched off, and a remote tunnel
-/// whose list names a server.
+/// Rows for steps 2, 4 and 6: a loop guard switched off, a remote tunnel
+/// whose list names a server, and an SSE server.
 async fn plant_rows(pool: &SqlitePool) {
+    super::super::mcp_servers::as_before_step_6(pool).await;
     sql(
         pool,
         r#"INSERT INTO settings_kv (key, value, updated_at) VALUES
              ('proxy_loop_detection', 'false', 'then'),
              ('remote_enabled', 'true', 'then'),
              ('remote_serve', '{"mcpServers":["tavily"]}', 'then');
-           INSERT INTO mcp_servers (name, type) VALUES ('tavily', 'stdio');"#,
+           INSERT INTO mcp_servers (name, type) VALUES ('tavily', 'stdio');
+           INSERT INTO mcp_servers (name, type) VALUES ('remote', 'sse');"#,
     )
     .await;
 }
@@ -116,11 +118,11 @@ async fn a_file_never_stamped_takes_every_step_in_one_run_and_a_second_run_write
             .expect("the settings");
     let off = ("loop_guard_mode".to_owned(), r#""off""#.to_owned());
     assert_eq!(settings, [off], "step 2");
-    let flagged: i64 = sqlx::query_scalar("SELECT allow_remote FROM mcp_servers")
-        .fetch_one(&pool)
+    let servers: Vec<(String, i64)> = sqlx::query_as("SELECT name, allow_remote FROM mcp_servers")
+        .fetch_all(&pool)
         .await
-        .expect("the server");
-    assert_eq!(flagged, 1, "step 4");
+        .expect("the servers");
+    assert_eq!(servers, [("tavily".to_owned(), 1)], "steps 4 and 6");
 
     // A file at `LATEST` takes no write lock: another connection holds it.
     let after = everything(&pool).await;
@@ -186,10 +188,11 @@ async fn a_failed_step_leaves_the_stamp_of_the_last_good_one() {
         "{error:#}"
     );
     assert_eq!(version(&pool).await, 4);
-    let flagged: i64 = sqlx::query_scalar("SELECT allow_remote FROM mcp_servers")
-        .fetch_one(&pool)
-        .await
-        .expect("the server");
+    let flagged: i64 =
+        sqlx::query_scalar("SELECT allow_remote FROM mcp_servers WHERE name = 'tavily'")
+            .fetch_one(&pool)
+            .await
+            .expect("the server");
     assert_eq!(flagged, 1);
     let count: Option<f64> = sqlx::query_scalar("SELECT param_count_b FROM models")
         .fetch_one(&pool)

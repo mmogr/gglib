@@ -32,15 +32,14 @@ pub(crate) async fn tool_support(
 // Frontend sends { id, ...config } for start, { model_id } for stop.
 // ============================================================================
 
-/// Request body for starting a server via collection route.
-/// Maps frontend's `id` field to backend's `model_id`.
+/// Request body for starting a server via collection route: the model's
+/// `id` beside its launch options.
 #[derive(Debug, serde::Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct StartServerBody {
-    /// Model ID - frontend sends as `id`
+    /// The model's id.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
-    #[serde(alias = "id")]
-    pub model_id: Option<i64>,
+    pub id: Option<i64>,
     #[serde(flatten)]
     pub config: StartServerRequest,
 }
@@ -50,9 +49,9 @@ pub(crate) async fn start_body(
     State(state): State<AppState>,
     Json(body): Json<StartServerBody>,
 ) -> Result<Json<StartServerResponse>, HttpError> {
-    let model_id = body.model_id.ok_or_else(|| {
-        HttpError::BadRequest("Missing model_id (or id) in request body".to_string())
-    })?;
+    let model_id = body
+        .id
+        .ok_or_else(|| HttpError::BadRequest("Missing id in request body".to_string()))?;
     Ok(Json(state.servers.start(model_id, body.config).await?))
 }
 

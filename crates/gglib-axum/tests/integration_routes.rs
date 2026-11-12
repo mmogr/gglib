@@ -383,8 +383,8 @@ async fn settings_endpoint_accepts_patch() {
 async fn servers_start_collection_route_accepts_post() {
     let app = test_app(CorsConfig::AllowAll).await;
 
-    // Request with model_id in body (matches frontend transport contract)
-    let request_body = format!(r#"{{"model_id": 999, "port": {TEST_MODEL_PORT}}}"#);
+    // Request with id in body (matches frontend transport contract)
+    let request_body = format!(r#"{{"id": 999, "port": {TEST_MODEL_PORT}}}"#);
 
     let response = app
         .oneshot(
