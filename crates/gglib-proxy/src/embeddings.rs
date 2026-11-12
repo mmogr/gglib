@@ -140,7 +140,7 @@ pub(crate) async fn embeddings(
         state.dashboard.launch.set(narration);
     }
 
-    // Registered so embeddings traffic appears in `/v1/proxy/status` rather
+    // Registered so embeddings traffic appears in `/v1/gglib/proxy/status` rather
     // than looking like an idle proxy that is mysteriously busy. The guard
     // unregisters on drop, including on every early return below — and, since
     // it carries the admission lease, releases the model's VRAM slot with it.

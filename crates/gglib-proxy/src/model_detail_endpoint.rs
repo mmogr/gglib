@@ -1,4 +1,4 @@
-//! `GET /v1/models/{name}/detail`: one catalogued model, read in full.
+//! `GET /v1/gglib/models/{name}/detail`: one catalogued model, read in full.
 //!
 //! The `/v1/models` list carries what an `OpenAI` picker needs. A paired
 //! machine showing this machine's models beside its own needs what the

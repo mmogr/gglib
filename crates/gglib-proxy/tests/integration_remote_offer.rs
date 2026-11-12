@@ -111,7 +111,7 @@ async fn drawing(gateway: Option<StubGateway>, servers: Servers) -> Value {
     .await;
     let (base, cancel) = (proxy.base, proxy.cancel);
     let response = reqwest::Client::new()
-        .get(format!("{base}/v1/images/drawing"))
+        .get(format!("{base}/v1/gglib/images/drawing"))
         .bearer_auth(TOKEN)
         .send()
         .await

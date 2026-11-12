@@ -1,4 +1,4 @@
-//! `GET /v1/models/{name}/detail` over real HTTP: one model read in full, by
+//! `GET /v1/gglib/models/{name}/detail` over real HTTP: one model read in full, by
 //! whatever a chat request could name it with, and nothing about this
 //! machine's disk.
 
@@ -100,10 +100,10 @@ async fn proxy(runtime: Resident) -> (String, tokio_util::sync::CancellationToke
     .await
 }
 
-/// `GET {base}/v1/models/{path}/detail`, as status and JSON body.
+/// `GET {base}/v1/gglib/models/{path}/detail`, as status and JSON body.
 async fn detail(base: &str, path: &str) -> (StatusCode, Value) {
     let response = Client::new()
-        .get(format!("{base}/v1/models/{path}/detail"))
+        .get(format!("{base}/v1/gglib/models/{path}/detail"))
         .send()
         .await
         .expect("the proxy answers");
@@ -265,7 +265,7 @@ async fn a_pinned_endpoint_reads_only_its_pin() {
 async fn a_tunnelled_request_with_no_device_is_refused() {
     let (base, cancel) = proxy(Resident::default()).await;
     let response = Client::new()
-        .get(format!("{base}/v1/models/1/detail"))
+        .get(format!("{base}/v1/gglib/models/1/detail"))
         .header("via", "1.1 modelpipe")
         .header("x-modelpipe-peer", "3ca82708b995")
         .send()
@@ -286,7 +286,7 @@ async fn the_detail_and_load_routes_are_served_side_by_side() {
     let (base, cancel) = proxy(Resident::default()).await;
     let (read, _) = detail(&base, "1").await;
     let load: Value = Client::new()
-        .post(format!("{base}/v1/models/ghost/load"))
+        .post(format!("{base}/v1/gglib/models/ghost/load"))
         .send()
         .await
         .expect("the proxy answers")

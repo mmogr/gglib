@@ -34,7 +34,7 @@ impl FarProxy {
         self.send(post).await
     }
 
-    /// `GET /v1/images/drawing`: whether that machine can draw for a turn
+    /// `GET /v1/gglib/images/drawing`: whether that machine can draw for a turn
     /// sent with Draw pressed, why not, and its image models; with
     /// `image_model`, one of its ids, as `?image_model=<id>`, so it judges
     /// that choice.
@@ -49,7 +49,7 @@ impl FarProxy {
         let asked = image_model.map_or_else(String::new, |id| format!("?image_model={id}"));
         self.send(
             self.bounded
-                .get(self.url(&format!("/images/drawing{asked}"))),
+                .get(self.url(&format!("/gglib/images/drawing{asked}"))),
         )
         .await
     }

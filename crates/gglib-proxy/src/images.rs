@@ -48,7 +48,7 @@ use crate::models::ErrorResponse;
 use crate::remote::DeviceDrawing;
 use crate::server::{AppState, handle_runtime_error};
 
-/// `GET /v1/images/drawing`: whether a turn sent with Draw pressed can draw
+/// `GET /v1/gglib/images/drawing`: whether a turn sent with Draw pressed can draw
 /// here, and why not, by the same rule as the daemon's
 /// `GET /api/images/drawing`. A paired device asks before it sends `draw`.
 /// Beside it, `mcp_servers`: the servers a device's run may use, by id.

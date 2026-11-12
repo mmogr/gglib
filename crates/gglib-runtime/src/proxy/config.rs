@@ -59,8 +59,8 @@ pub struct ProxyConfig {
     /// `None` for an embedded server, where nothing is listening for the
     /// answers.
     pub remote: Option<Arc<dyn RemoteGatewayPort>>,
-    /// The daemon's ports a paired device reaches: its runs at `/v1/runs`
-    /// and the hub's chats at `/v1/chats`. Empty for an embedded server:
+    /// The daemon's ports a paired device reaches: its runs at `/v1/gglib/runs`
+    /// and the hub's chats at `/v1/gglib/chats`. Empty for an embedded server:
     /// those routes then answer 503.
     pub devices: DevicePorts,
 }

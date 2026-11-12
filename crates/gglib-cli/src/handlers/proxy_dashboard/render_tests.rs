@@ -72,7 +72,7 @@ fn render_frame_shows_placeholder_when_no_connections() {
         recent_requests: vec![],
     };
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         DEFAULT_TERM_WIDTH,
     );
@@ -110,7 +110,7 @@ fn render_frame_shows_connection_and_slot_bars() {
         recent_requests: vec![],
     };
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         DEFAULT_TERM_WIDTH,
     );
@@ -147,7 +147,7 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
     };
     let width = 80u16;
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         width,
     );
@@ -208,7 +208,7 @@ fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
     };
     let term_width = 40u16;
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         term_width,
     );
@@ -663,7 +663,7 @@ fn the_recent_requests_sit_before_the_total() {
         }],
     };
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         DEFAULT_TERM_WIDTH,
     );

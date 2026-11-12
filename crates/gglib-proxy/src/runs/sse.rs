@@ -6,7 +6,7 @@
 //! **no id**, so a client's reconnect cursor never counts it. It also closes when the server's shutdown token fires,
 //! since an open SSE response would otherwise hold the graceful shutdown
 //! open. Shared by both doors to the runs: the daemon's `/api/runs` and the
-//! proxy's `/v1/runs`, so the two cannot drift.
+//! proxy's `/v1/gglib/runs`, so the two cannot drift.
 
 use std::convert::Infallible;
 

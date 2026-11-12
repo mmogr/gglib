@@ -20,7 +20,7 @@ use crate::presentation::truncate_string;
 ///
 /// These are the diagnostic counters ADR 0006 keeps. Nothing acts on them
 /// automatically, which is exactly why they need somewhere to be read:
-/// `/v1/proxy/status` carries them, and this section is where a person reads
+/// `/v1/gglib/proxy/status` carries them, and this section is where a person reads
 /// them.
 ///
 /// Only models with something to report get a line, and listing every clean

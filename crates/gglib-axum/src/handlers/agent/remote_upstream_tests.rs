@@ -31,7 +31,7 @@ async fn a_far_chats_profile_rides_on_the_id_it_sends() {
     let upstream = remote(&far, &far_ref(3), &saved).await.expect("looked up");
 
     assert_eq!(upstream.model.as_deref(), Some("3:coding"));
-    assert_eq!(only(&fake).uri, "/v1/models/3/detail");
+    assert_eq!(only(&fake).uri, "/v1/gglib/models/3/detail");
 }
 
 /// A turn reached through [`far`] carries what its chat saved: its profile
@@ -83,7 +83,7 @@ async fn a_far_run_sends_the_id_and_is_made_by_the_far_name() {
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("GET", "/v1/models/3/detail")
+        ("GET", "/v1/gglib/models/3/detail")
     );
     assert!(carries_key(&seen), "{seen:?}");
 }

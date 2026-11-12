@@ -99,7 +99,7 @@ fn text_and_errors(body: &str) -> (String, Vec<String>) {
 async fn status_when_idle(base: &str) -> Value {
     let deadline = Instant::now() + PATIENCE;
     loop {
-        let status: Value = reqwest::get(format!("{base}/v1/proxy/status"))
+        let status: Value = reqwest::get(format!("{base}/v1/gglib/proxy/status"))
             .await
             .expect("status answers")
             .json()

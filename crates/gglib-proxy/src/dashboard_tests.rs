@@ -389,7 +389,7 @@ fn the_snapshot_reads_the_same_audit_store_the_poller_writes() {
 }
 
 /// Tier 1 parity: what the banner prints must also be reachable over
-/// `GET /v1/proxy/status`, which is this snapshot.
+/// `GET /v1/gglib/proxy/status`, which is this snapshot.
 #[test]
 fn snapshot_surfaces_the_recorded_launch_narration() {
     use gglib_core::domain::{LaunchDecision, LaunchNarration};

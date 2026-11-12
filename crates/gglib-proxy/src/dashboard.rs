@@ -4,8 +4,8 @@
 //! [`crate::connections::ActiveConnectionsRegistry`],
 //! [`crate::slots_poller::SlotsCache`], and
 //! [`crate::metrics::ContextMetricsStore`] into the single JSON shape
-//! returned by `GET /v1/proxy/status` and pushed (via
-//! [`gglib_broadcast::Broadcaster`]) over `GET /v1/proxy/status/stream`.
+//! returned by `GET /v1/gglib/proxy/status` and pushed (via
+//! [`gglib_broadcast::Broadcaster`]) over `GET /v1/gglib/proxy/status/stream`.
 //!
 //! ## Live updates without spreading broadcast plumbing everywhere
 //!
@@ -270,7 +270,7 @@ impl LaunchNarrationCache {
 }
 
 /// Cadence at which a fresh snapshot is recomputed and pushed to SSE
-/// subscribers of `GET /v1/proxy/status/stream`.
+/// subscribers of `GET /v1/gglib/proxy/status/stream`.
 const PUBLISH_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Broadcast channel capacity. A slow subscriber can fall behind by this
@@ -284,8 +284,8 @@ const BROADCAST_CAPACITY: usize = 8;
 
 /// The single, unified proxy dashboard data contract.
 ///
-/// This is both the `GET /v1/proxy/status` response body and the event type
-/// pushed over `GET /v1/proxy/status/stream`.
+/// This is both the `GET /v1/gglib/proxy/status` response body and the event type
+/// pushed over `GET /v1/gglib/proxy/status/stream`.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct DashboardSnapshot {

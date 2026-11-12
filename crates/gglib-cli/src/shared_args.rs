@@ -275,7 +275,7 @@ pub struct ServeOptions {
     /// `proxy_port` setting.
     ///
     /// The proxy dashboard is served from the same port at
-    /// `/v1/proxy/status` (JSON) and `/v1/proxy/status/stream` (SSE).
+    /// `/v1/gglib/proxy/status` (JSON) and `/v1/gglib/proxy/status/stream` (SSE).
     #[arg(short, long)]
     pub port: Option<u16>,
 }

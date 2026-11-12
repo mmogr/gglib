@@ -80,7 +80,7 @@ async fn round_trip(
     String::from_utf8(body).expect("utf-8 body")
 }
 
-/// Like [`round_trip`], but also polls `GET /v1/proxy/status` afterwards
+/// Like [`round_trip`], but also polls `GET /v1/gglib/proxy/status` afterwards
 /// until `predicate` accepts the dashboard snapshot (or a timeout expires),
 /// returning the body and the final snapshot. The drift alarm back-patches
 /// its flag from the streaming task after the body finishes, hence the
@@ -117,7 +117,7 @@ async fn round_trip_with_status(
     let mut status = Value::Null;
     for _ in 0..50 {
         status = client
-            .get(format!("{proxy_url}/v1/proxy/status"))
+            .get(format!("{proxy_url}/v1/gglib/proxy/status"))
             .send()
             .await
             .expect("status request")

@@ -1,5 +1,5 @@
-//! `GET /v1/chats`, `GET /v1/chats/{id}`, `POST /v1/chats/{id}/changes` and
-//! `POST /v1/chats/{id}/pictures`.
+//! `GET /v1/gglib/chats`, `GET /v1/gglib/chats/{id}`, `POST /v1/gglib/chats/{id}/changes` and
+//! `POST /v1/gglib/chats/{id}/pictures`.
 //!
 //! Every error message here is fixed text or a [`HubChatsError`]'s, which is
 //! fixed text too: nothing echoes a path, a title or a row.
@@ -58,7 +58,7 @@ pub(super) fn chats(state: &AppState) -> Option<Arc<dyn HubChatsPort>> {
     state.chats.clone()
 }
 
-/// `GET /v1/chats`: every chat, newest first.
+/// `GET /v1/gglib/chats`: every chat, newest first.
 pub(crate) async fn list_chats(State(state): State<AppState>) -> Answer {
     let list = chats(&state)
         .ok_or_else(unavailable)?
@@ -68,7 +68,7 @@ pub(crate) async fn list_chats(State(state): State<AppState>) -> Answer {
     Ok(Json(list).into_response())
 }
 
-/// `GET /v1/chats/{id}`: one chat and its rows. An id that is not a number
+/// `GET /v1/gglib/chats/{id}`: one chat and its rows. An id that is not a number
 /// names no chat.
 pub(crate) async fn open_chat(State(state): State<AppState>, Path(id): Path<String>) -> Answer {
     let chats = chats(&state).ok_or_else(unavailable)?;
@@ -79,7 +79,7 @@ pub(crate) async fn open_chat(State(state): State<AppState>, Path(id): Path<Stri
     Ok(Json(open).into_response())
 }
 
-/// `POST /v1/chats/{id}/changes`: an edit, a regenerate or a branch of one
+/// `POST /v1/gglib/chats/{id}/changes`: an edit, a regenerate or a branch of one
 /// chat, made as the hub's branching rules say (ADR 0017). The answer names
 /// the chat to show, whether it is a new branch, and whether its last
 /// question is now to be answered, which a turn that says `answer_saved`
@@ -116,7 +116,7 @@ fn not_a_change() -> Response {
         .into_response()
 }
 
-/// `POST /v1/chats/{id}/pictures`: keep a picture beside the one it was made
+/// `POST /v1/gglib/chats/{id}/pictures`: keep a picture beside the one it was made
 /// from (ADR 0018, decision 21). The body names two stored images, `from`
 /// and `image`; `image` joins the latest tool row of the chat that carries
 /// `from`, after the images that row has, and the answer is that row's

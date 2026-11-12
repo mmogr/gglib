@@ -49,6 +49,7 @@ crates/gglib-axum/src/handlers/agent/run_fixture.rs 372
 crates/gglib-axum/src/handlers/agent/run_folder_tests.rs 306
 crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 357
 crates/gglib-axum/src/handlers/proxy/wire_tests.rs 467
+crates/gglib-axum/src/handlers/remote/chats_tests.rs 303
 crates/gglib-axum/src/routes.rs 428
 crates/gglib-axum/tests/agent_runs_route.rs 367
 crates/gglib-axum/tests/conversation_settings_route.rs 445

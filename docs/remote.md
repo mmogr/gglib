@@ -781,9 +781,10 @@ readability.
 ## What the other machine can reach
 
 Everything the desktop's proxy serves — `/v1/models`, a model's detail at
-`/v1/models/{name}/detail`, `POST /v1/models/{name}/load`,
-`/v1/chat/completions`, `POST /v1/embeddings`, `POST /v1/images/generations`, `GET /v1/images/drawing`, `/v1/runs`, `/v1/chats`, `POST /v1/chats/{id}/changes`, `POST /v1/chats/{id}/pictures`, `/v1/attachments`, the dashboard, `POST /v1/proxy/cache/clear`, `POST /v1/proxy/shutdown` —
-with one exception. `/mcp`, the tool gateway, is refused to every request
+`/v1/gglib/models/{name}/detail`, `POST /v1/gglib/models/{name}/load`,
+`/v1/chat/completions`, `POST /v1/embeddings`, `POST /v1/images/generations`, `GET /v1/gglib/images/drawing`, `/v1/gglib/runs`, `/v1/gglib/chats`, `POST /v1/gglib/chats/{id}/changes`, `POST /v1/gglib/chats/{id}/pictures`, `/v1/gglib/attachments`, the dashboard, `POST /v1/gglib/proxy/cache/clear`, `POST /v1/gglib/proxy/shutdown` —
+with one exception. gglib's own routes are all under `/v1/gglib/`; the rest
+of `/v1` is OpenAI's. `/mcp`, the tool gateway, is refused to every request
 through the tunnel, whatever `enable` was given, because it starts any MCP
 server configured on the desktop and a leaked key with a shell server
 configured there is remote code execution. The refusal is a `403`
@@ -791,8 +792,8 @@ configured there is remote code execution. The refusal is a `403`
 the servers open to it (`gglib mcp allow-remote`) through its runs instead
 (below). The proxy tells a
 tunnelled request apart by a marker the tunnel edge sets and a peer cannot
-remove. Forging it denies yourself `/mcp`, and on `/v1/runs`, where a device
-sees the runs it started and every run on the desktop's chats, and `/v1/chats`,
+remove. Forging it denies yourself `/mcp`, and on `/v1/gglib/runs`, where a device
+sees the runs it started and every run on the desktop's chats, and `/v1/gglib/chats`,
 it lets a client that reaches the desktop's proxy directly act as that device:
 this machine not reading a device's reply is a courtesy of the API, not a
 boundary.
@@ -810,7 +811,7 @@ That synchronous form carries no progress, and a render takes minutes; with
 small preview frame, whose `size` is the size asked for, not its own), and
 one `image_generation.completed` per image, which also names the image
 model that drew it in gglib's own `model` key. Drawing uses the desktop and
-changes nothing on it, like a chat. `GET /v1/images/drawing` answers whether
+changes nothing on it, like a chat. `GET /v1/gglib/images/drawing` answers whether
 the desktop can draw, `{available, code?, reason?, model?, model_id?, models}`,
 with the reason when it cannot (no image runtime, no image model, several
 and no default). That answer is always a 200: its `code`,
@@ -847,15 +848,15 @@ name and id from `/v1/models`; this adds its family, whether its files are
 complete and which roles are not, which is the default and which is loaded.
 No path is sent, and nothing about a model that chats.
 
-`GET /v1/images/drawing?image_model=<id>` asks about one of those models, by
+`GET /v1/gglib/images/drawing?image_model=<id>` asks about one of those models, by
 its `id`: the answer is whether a message drawn with it would be accepted,
 `model` and `model_id` naming it when so. When not, `code` is the code such
 a request is refused with: `model_not_found` for a model no longer there,
 `not_an_image_model`, or `image_model_incomplete` with the missing roles in
 the reason. A chosen model is never swapped for the default.
 
-A paired device may read the desktop's chats at `/v1/chats` and carry one on
-with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?, draw?, image_model?}`: the
+A paired device may read the desktop's chats at `/v1/gglib/chats` and carry one on
+with `PUT /v1/gglib/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?, draw?, image_model?}`: the
 desktop runs the reply from its own record and saves both rows, marked with
 the device's name, and its own page and every paired device can follow that
 run. A chat that stored its model runs on that model by its id, the one its
@@ -911,10 +912,10 @@ the image tool is not one, and it holds for a chat with its
 tools turned off: the button is the person's choice for that message. A turn without the
 key is offered no image tool. A desktop that cannot draw refuses the turn,
 `400 drawing_unavailable`, with the reason; a device asks
-`GET /v1/images/drawing` first, and never sends the key to a desktop that
+`GET /v1/gglib/images/drawing` first, and never sends the key to a desktop that
 answers 404 there, which would refuse a body with a key it does not know.
 Cancelling the run while the picture is drawn (`POST
-/v1/runs/{id}/cancel`, a device's Stop) stops the render on the desktop:
+/v1/gglib/runs/{id}/cancel`, a device's Stop) stops the render on the desktop:
 `sd-server` cannot interrupt a job that is generating, so the desktop stops
 `sd-server`, the chats that waited behind the render go on, and the next
 picture loads the image model again. The run ends `cancelled`, as any
@@ -929,10 +930,10 @@ picture a tool made; a model with no projector reads the chat without it
 draw: a turn without `"draw": true` is still offered no image tool.
 
 A device that has drawn a picture again from one a tool drew, fixed or
-redone, keeps the result beside it with `POST /v1/chats/{id}/pictures` and
+redone, keeps the result beside it with `POST /v1/gglib/chats/{id}/pictures` and
 `{"from": <id>, "image": <id>}`. Both are ids of images the desktop holds:
 `from` is the picture it was made from, and `image` is the newer one, sent
-first to `POST /v1/attachments`. The desktop links `image` to the latest
+first to `POST /v1/gglib/attachments`. The desktop links `image` to the latest
 tool row of the chat that carries `from`, after the images that row has, in
 place and on no branch, and answers `200` with that row's images, oldest
 first, each `{id, mime, width, height}`, the kept one last. A picture the
@@ -945,12 +946,12 @@ there is
 the desktop does not hold, is `400 attachment_not_found`. A body that is
 not those two ids, one with any other key included, is `400
 invalid_request`. A refusal writes nothing. The route is for a named device
-only, as `/v1/chats` is. A desktop whose gglib predates it answers 404 with
+only, as `/v1/gglib/chats` is. A desktop whose gglib predates it answers 404 with
 no `code`. This machine's daemon does not relay it to a paired machine:
 there is no `/api/remote` route for it.
 
 A turn that draws may also say which of the desktop's image models draws
-it: `"image_model": <id>`, the `id` of a row in `GET /v1/images/drawing`'s
+it: `"image_model": <id>`, the `id` of a row in `GET /v1/gglib/images/drawing`'s
 `models`. It goes with `"draw": true`; a turn that says it without is
 `400 invalid_request`. Left out, the desktop's default rule draws (its
 default image model, else the only complete one). A chosen model that is no
@@ -959,13 +960,13 @@ with `model_not_found`, `not_an_image_model` or `image_model_incomplete` and
 the sentence that says why, before anything is written or loaded; it is
 never swapped for the default. The desktop remembers nothing of the choice:
 a device that keeps one says it on every turn that draws, and asks
-`GET /v1/images/drawing?image_model=<id>` to show whether it still holds.
+`GET /v1/gglib/images/drawing?image_model=<id>` to show whether it still holds.
 The chat model is not told of it and cannot fill it. A device sends the key
 only to a desktop whose availability answer carried `models`: an older one
 refuses a body with a key it does not know.
 
 A chat the device keeps itself can use the desktop's tools and draw too.
-`PUT /v1/runs/{id}?kind=chat&tools=3,7` takes the device's unchanged OpenAI
+`PUT /v1/gglib/runs/{id}?kind=chat&tools=3,7` takes the device's unchanged OpenAI
 chat request, whole history included, and runs it through the desktop's
 agent loop on the model it names, offered the tools of the servers it names
 by id, of those the desktop has open to paired devices (the ids in the
@@ -1046,7 +1047,7 @@ does not know; it lists no model as one that thinks either, so a client that
 offers the choice only for those models never sends it there.
 
 Such a turn may carry images, and they cross the tunnel by reference. The
-device sends each file once, as the raw body of `POST /v1/attachments`: a PNG
+device sends each file once, as the raw body of `POST /v1/gglib/attachments`: a PNG
 or a JPEG by its first bytes, at most 8 MiB, else `413 image_too_large` or
 `400 unsupported_image`. The desktop stores the bytes exactly as they came,
 under their SHA-256, and answers that id with the image's type, its size in
@@ -1060,9 +1061,9 @@ model_cannot_read_images`; each is answered before the model is loaded or a
 row is saved. So what crosses is the file, once;
 after that a turn is its text and ids, and an opened chat lists each row's
 images by id, type and size, with no bytes. A device reads the bytes of one
-with `GET /v1/attachments/{id}`, which answers them as they were sent, with
+with `GET /v1/gglib/attachments/{id}`, which answers them as they were sent, with
 `no-store`, so the device keeps no image, as it keeps no chat. Both routes
-are for a named device only, as `/v1/chats` is. An image no message names,
+are for a named device only, as `/v1/gglib/chats` is. An image no message names,
 last uploaded more than a day ago, is deleted when the desktop's daemon next
 starts, so one uploaded for a turn that was never sent does not stay; one a
 message names stays as long as the message does.
@@ -1086,7 +1087,10 @@ connect, and before each of gglib's own calls unless what it read then
 already serves that call. A desktop whose list has no `gglib` object runs a
 gglib from before devices said their version: each of those calls is refused
 with a sentence asking for it to be updated. One that does not list a
-feature has the calls that need it refused, saying so.
+feature has the calls that need it refused, saying so. A laptop or phone on a
+gglib from before its own routes moved under `/v1/gglib/` still reaches an
+updated desktop's OpenAI routes, but every one of gglib's own calls gets a
+404: update the devices along with it.
 
 A model's detail is what the desktop's own inspector shows, minus the
 paths of the file and its projector on the desktop's disk and the port it

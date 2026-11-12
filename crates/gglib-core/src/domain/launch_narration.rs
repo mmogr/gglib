@@ -19,7 +19,7 @@
 //! ## One record, three surfaces
 //!
 //! The same narration is rendered by the CLI banner at startup, served on
-//! `GET /v1/proxy/status`, and displayed in the GUI dashboard. It lives in
+//! `GET /v1/gglib/proxy/status`, and displayed in the GUI dashboard. It lives in
 //! `gglib-core` so all three can name the type without any of them depending
 //! on the runtime that produces it.
 //!

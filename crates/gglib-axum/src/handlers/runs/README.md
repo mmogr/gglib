@@ -14,7 +14,7 @@ runs/
              by `gglib_proxy::runs::sse`, which the proxy's door shares;
              `?kind=agent` starts this machine's turn on one of its chats
              (`LocalTurn`, `handlers/agent/hub_turn.rs`); the proxy's
-             `PUT /v1/runs/{id}?kind=agent` starts one for a paired device,
+             `PUT /v1/gglib/runs/{id}?kind=agent` starts one for a paired device,
              through the same handler
 ```
 

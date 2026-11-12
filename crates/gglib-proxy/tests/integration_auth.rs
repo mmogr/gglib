@@ -42,7 +42,7 @@ fn with_key(key: &str) -> ProxyAccessConfig {
 async fn an_unconfigured_proxy_serves_every_route_without_credentials() {
     let (base, _port, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
-    for path in ["/health", "/v1/models", "/v1/proxy/status"] {
+    for path in ["/health", "/v1/models", "/v1/gglib/proxy/status"] {
         let res = Client::new()
             .get(format!("{base}{path}"))
             .send()
@@ -245,7 +245,7 @@ async fn the_embeddings_route_requires_the_token() {
 async fn the_dashboard_routes_require_the_token() {
     let (base, _port, cancel) = spawn_proxy(with_key("secret123")).await;
 
-    for path in ["/v1/proxy/status", "/v1/proxy/status/stream"] {
+    for path in ["/v1/gglib/proxy/status", "/v1/gglib/proxy/status/stream"] {
         let res = Client::new()
             .get(format!("{base}{path}"))
             .send()
@@ -255,7 +255,7 @@ async fn the_dashboard_routes_require_the_token() {
     }
 
     let res = Client::new()
-        .post(format!("{base}/v1/proxy/cache/clear"))
+        .post(format!("{base}/v1/gglib/proxy/cache/clear"))
         .send()
         .await
         .unwrap();

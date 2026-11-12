@@ -117,7 +117,7 @@ through `/v1/models` need, VS Code Copilot's BYOK endpoint among them.
   `serve` offers to install it if it is missing, or older than its pinned
   release (`gglib config sd install`), prints the model's family and each
   component linked or missing, starts the same pinned proxy, and loads the
-  model once (`POST /v1/models/{name}/load`), so a refusal, the runtime not
+  model once (`POST /v1/gglib/models/{name}/load`), so a refusal, the runtime not
   installed, a component missing or no room beside a held model, is printed
   in words before the dashboard attaches. The chat-only flags (`--context-size`,
   `--mlock`, `--jinja`, MTP, sampling, a profile) are refused by name.

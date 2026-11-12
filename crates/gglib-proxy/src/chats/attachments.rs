@@ -1,4 +1,4 @@
-//! `POST /v1/attachments` and `GET /v1/attachments/{id}`: an image a paired
+//! `POST /v1/gglib/attachments` and `GET /v1/gglib/attachments/{id}`: an image a paired
 //! device sends ahead of the turn that names it, and one it reads back for
 //! a chat it has opened.
 //!
@@ -50,7 +50,7 @@ fn refused(err: &AttachmentError, status: u16) -> Response {
     (status, Json(body)).into_response()
 }
 
-/// `POST /v1/attachments`: store the body as an image, and answer its id,
+/// `POST /v1/gglib/attachments`: store the body as an image, and answer its id,
 /// its type and size, and the tokens it is estimated to cost.
 pub(crate) async fn upload_attachment(
     State(state): State<AppState>,
@@ -72,7 +72,7 @@ pub(crate) async fn upload_attachment(
     Ok(Json(stored).into_response())
 }
 
-/// `GET /v1/attachments/{id}`: the image's bytes, as they were sent, with
+/// `GET /v1/gglib/attachments/{id}`: the image's bytes, as they were sent, with
 /// the type its first bytes gave it, and not to be stored. A path that is
 /// not an id names no image.
 pub(crate) async fn fetch_attachment(

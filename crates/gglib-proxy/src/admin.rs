@@ -16,7 +16,7 @@ use tracing::{info, warn};
 
 use crate::server::AppState;
 
-/// Handle cache clear requests via `POST /v1/proxy/cache/clear`.
+/// Handle cache clear requests via `POST /v1/gglib/proxy/cache/clear`.
 ///
 /// Two independent caches sit behind this endpoint:
 ///
@@ -133,7 +133,7 @@ pub(crate) async fn handle_proxy_cache_clear(
         })),
     )
 }
-/// What `POST /v1/proxy/shutdown` requires in its body.
+/// What `POST /v1/gglib/proxy/shutdown` requires in its body.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ShutdownRequest {
     /// Must be the literal `"shutdown"`.

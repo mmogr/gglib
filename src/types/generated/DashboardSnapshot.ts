@@ -12,8 +12,8 @@ import type { UpstreamHealthSnapshot } from "./UpstreamHealthSnapshot";
 /**
  * The single, unified proxy dashboard data contract.
  *
- * This is both the `GET /v1/proxy/status` response body and the event type
- * pushed over `GET /v1/proxy/status/stream`.
+ * This is both the `GET /v1/gglib/proxy/status` response body and the event type
+ * pushed over `GET /v1/gglib/proxy/status/stream`.
  */
 export type DashboardSnapshot = { 
 /**

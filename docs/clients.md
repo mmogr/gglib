@@ -6,8 +6,8 @@ loopback — enter any placeholder if your client insists. Use the Model ID
 unless two models share one. In `/v1/models` it is an entry's `id`; the
 entry's `gglib_id` is gglib's own catalog id for it. The list's `gglib` object
 says which gglib answered: `{"version": "…", "features": [...]}`, the features
-being those of gglib's own routes this process serves (`chats`, `runs`,
-`drawing`, `status`). `gglib proxy test <model>`
+being those of gglib's own routes, under `/v1/gglib/`, that this process
+serves (`chats`, `runs`, `drawing`, `status`). `gglib proxy test <model>`
 prints these recipes with your endpoint's address and that model's id filled
 in, as `gglib up` does when it finishes. opencode does not read `/v1/models`,
 so its recipe lists each model you want to pick from by its id.
@@ -147,7 +147,7 @@ repositories have one; only the first has been read through gglib:
   ```
 
 - **The body limit is 32 MiB** on `POST /v1/chat/completions` and
-  `PUT /v1/runs/{id}`. A larger body is answered with HTTP 413 and the code
+  `PUT /v1/gglib/runs/{id}`. A larger body is answered with HTTP 413 and the code
   `request_too_large`.
 - **A tool's image appears in the reply and is fetched by id.** When an MCP
   tool returns an image in an agent run, gglib stores it as it stores an
@@ -156,7 +156,7 @@ repositories have one; only the first has been read through gglib:
   it. A client that reads the run's events, as a paired device does, finds it
   in the `tool_call_complete` frame's `result.images` and in the saved tool
   row's `images`, each as id, type, width and height, never its bytes, and
-  reads the bytes at `GET /v1/attachments/{id}`. Through the `/mcp` gateway
+  reads the bytes at `GET /v1/gglib/attachments/{id}`. Through the `/mcp` gateway
   nothing is stored: a server's image item comes back as an MCP image item,
   with its base64 `data` and `mimeType`.
 - **A model that reads images is shown the most recent drawn picture.** For
@@ -207,7 +207,7 @@ choice is the client's to keep: gglib remembers nothing of such a request.
 
 gglib's own turn routes take the choice as a word and remember it on the
 chat: `"thinking": "off"` or `"thinking": "default"` beside the message, on a
-paired device's turn (`PUT /v1/runs/{id}?kind=agent`), on the chat page's
+paired device's turn (`PUT /v1/gglib/runs/{id}?kind=agent`), on the chat page's
 turn on a paired machine (`PUT /api/remote/chats/{id}/turns/{run_id}`) and on
 this machine's own agent run (`PUT /api/runs/{id}?kind=agent`). Send it only
 on the turn that changes it. `off` runs that turn and the chat's later ones
@@ -273,7 +273,7 @@ client to replay; gglib's chat page replays every case in its tests.
 `prompt_progress` frames, which have no `choices`. On
 `POST /v1/chat/completions` a client that does not send it is sent neither:
 its stream is byte for byte what it was before the reading existed. A chat
-run (`PUT /v1/runs/{id}`) sets the key for every client, so a run's usage
+run (`PUT /v1/gglib/runs/{id}`) sets the key for every client, so a run's usage
 frame always carries the reading. A reply that is not streamed carries no
 reading.
 

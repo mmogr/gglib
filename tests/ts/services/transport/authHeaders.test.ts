@@ -71,8 +71,8 @@ const DAEMON_FETCHES: [name: string, path: string, start: (signal: AbortSignal) 
 
 /** Each raw fetch that is not to the daemon: its URL, and what starts it. */
 const OTHER_FETCHES: [name: string, url: string, start: () => unknown][] = [
-  ['the proxy dashboard stream', 'http://127.0.0.1:8080/v1/proxy/status/stream', () => subscribeProxyDashboard('127.0.0.1', 8080, null, noop)],
-  ['the proxy cache clear', 'http://127.0.0.1:8080/v1/proxy/cache/clear', () => clearProxyCache('127.0.0.1', 8080, null).catch(noop)],
+  ['the proxy dashboard stream', 'http://127.0.0.1:8080/v1/gglib/proxy/status/stream', () => subscribeProxyDashboard('127.0.0.1', 8080, null, noop)],
+  ['the proxy cache clear', 'http://127.0.0.1:8080/v1/gglib/proxy/cache/clear', () => clearProxyCache('127.0.0.1', 8080, null).catch(noop)],
 ];
 
 describe('API auth headers', () => {

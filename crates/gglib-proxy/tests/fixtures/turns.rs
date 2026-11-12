@@ -1,5 +1,5 @@
 //! A stand-in for the daemon's agent-run starter, for the proxy's
-//! `PUT /v1/runs/{id}?kind=agent` tests. Records every turn it is handed and
+//! `PUT /v1/gglib/runs/{id}?kind=agent` tests. Records every turn it is handed and
 //! answers from a script.
 
 use std::collections::BTreeSet;
