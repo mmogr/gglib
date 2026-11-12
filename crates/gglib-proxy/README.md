@@ -748,7 +748,7 @@ curl -X POST http://localhost:8080/mcp \
 | 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit) |
 | 400 | A message carries an image and the model has no projector linked (`model_cannot_read_images`) — see [Images](#images) |
 | 400 | A body, query or path segment that does not read, or a bad `X-Gglib-Session-Id` (`invalid_request`) |
-| 413 | The body of a chat completion, an image request or a run is over 32 MiB, or another route's over 2 MiB (`request_too_large`) |
+| 413 | The body of a chat completion, an image request or a run is over 32 MiB, or an embeddings request's, a load's or a shutdown's over 2 MiB (`request_too_large`) |
 | 504 | A chat completion that does not stream, or an embeddings request, outlasted its total bound (`upstream_timeout`) — see [When the upstream stops talking](#when-the-upstream-stops-talking) |
 | 401 | A key is configured and the request does not present it, or presents another (`invalid_api_key`) |
 | 403 | Refused by a guard: `host_not_allowed`, `origin_not_allowed`, `device_not_paired`, `device_not_named` or `mcp_not_allowed_over_tunnel` |
@@ -757,7 +757,8 @@ curl -X POST http://localhost:8080/mcp \
 
 Every one of these answers is `{"error": {"message", "type", "code"}}`, whatever
 refused (a route, a guard, an extractor, the router's fallback); `src/refusal.rs`
-writes the ones no handler does. The MCP gateway at `/mcp` speaks JSON-RPC instead.
+writes the ones no handler does. Past its guards, the MCP gateway at `/mcp`
+answers in JSON-RPC, or with a bare status as MCP's transport does.
 
 Every `code` this proxy writes, its runs' included, is listed with its type,
 status and meaning in [`docs/error-codes.json`](../../docs/error-codes.json).

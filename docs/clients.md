@@ -348,8 +348,9 @@ the file against the source.
 Every refusal is `{"error": {"message", "type", "code"}}`, the gglib routes'
 and the guards' included: a path no route serves is `404 unknown_route`, a
 method a route does not take is `405 method_not_allowed`, and a body, query or
-path that does not read is `400 invalid_request`. The MCP gateway at `/mcp`
-answers in JSON-RPC instead.
+path that does not read is `400 invalid_request`. Past its guards, the MCP
+gateway at `/mcp` answers in JSON-RPC, or with a bare status as MCP's
+transport does.
 
 ## Sampling profiles
 

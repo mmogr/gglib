@@ -25,7 +25,8 @@ const ABOUT: &str = "The error codes gglib writes itself, rather than relays fro
 llama-server, on its proxy and the daemon's runs. The proxy refuses with \
 {\"error\":{\"message\":...,\"type\":...,\"code\":...}}, whatever refused: a route, a guard, a \
 body, query or path that does not read, a method a route does not take, or a path no route \
-serves. The MCP gateway at /mcp speaks JSON-RPC instead. A stream already under way can end \
+serves. Past its guards, the MCP gateway at /mcp answers in JSON-RPC, or with a bare status \
+as MCP's transport does. A stream already under way can end \
 with that object as a data: frame. A run that failed carries {\"code\":...,\"message\":...} as its \
 error, on /v1/gglib/runs and /api/runs. The daemon's /api/runs refuses with \
 {\"error\":...,\"status\":...,\"type\":<code>}, and the proxy answers a paired device's turn on a \
@@ -112,7 +113,7 @@ const CODES: &[ErrorCode] = &[
     row("image_generation_failed", SERVER, Some(502), "No picture was drawn: the image runtime took the render and failed it, or lost it (the message carries its words; try another prompt or size, or retry); the image model was stopped while it drew; or a run sent with Draw ended because its model's first reply did not call the image tool (try again, or pick a model that calls tools)."),
     row("image_render_stalled", SERVER, Some(504), "The render made no progress for three minutes, or ran past its thirty-minute limit, so the image model was stopped; retry."),
     row("model_cannot_read_images", INVALID, Some(400), "A message carries an image and the model has no projector linked; link one with gglib model update <model> --projector <path>."),
-    row("request_too_large", INVALID, Some(413), "The request body is over its route's limit: 32 MiB for a chat completion, an image request or a run, 2 MiB on the other routes."),
+    row("request_too_large", INVALID, Some(413), "The request body is over its route's limit: 32 MiB for a chat completion, an image request or a run, 2 MiB for an embeddings request, a load or a shutdown."),
     // An image a message carries by id (`AttachmentError`).
     row("image_too_large", INVALID, Some(413), "An uploaded image is over the 8 MiB one image may be."),
     row("unsupported_image", INVALID, Some(400), "An uploaded file is not a PNG or a JPEG whose size can be read."),
