@@ -105,6 +105,19 @@ pub fn set_models_dir(
     Ok(resolved)
 }
 
+/// Store the models directory when nothing names one, so a later build with
+/// another default still finds this library's downloads.
+///
+/// Stores the path only; the directory is created when something is put in
+/// it. Does nothing when the environment names a directory or one is stored.
+pub fn store_default_models_dir() -> Result<(), PathError> {
+    let resolved = resolve_models_dir(None)?;
+    if resolved.source == ModelsDirSource::Default {
+        persist_models_dir(&resolved.path)?;
+    }
+    Ok(())
+}
+
 /// Resolve `path` to the one form the library identifies a model file by.
 ///
 /// Three separate places have to agree about what "the same file" means: the
