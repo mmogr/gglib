@@ -32,7 +32,7 @@ async fn before_step_7(planted: &str) -> SqlitePool {
         .await
         .expect("old tables");
     sqlx::raw_sql(planted).execute(&pool).await.expect("rows");
-    sqlx::query(&format!("PRAGMA user_version = {}", LATEST - 1))
+    sqlx::query("PRAGMA user_version = 6")
         .execute(&pool)
         .await
         .expect("a stamp");

@@ -1,5 +1,5 @@
--- generation 7
--- user_version 7
+-- generation 8
+-- user_version 8
 
 CREATE INDEX idx_agentic_results_model ON benchmark_agentic_results(model_id, created_at DESC);
 
@@ -240,7 +240,6 @@ CREATE TABLE models (
             model_key TEXT NOT NULL,
             file_paths_json TEXT,
             capabilities INTEGER DEFAULT 0,
-            dialect_spec TEXT,
             template_caps TEXT,
             image_family TEXT
         );

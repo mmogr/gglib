@@ -39,7 +39,9 @@ async fn models_read_back_whole() {
     assert_eq!(agent.architecture.as_deref(), Some("qwen3"));
     assert_eq!(agent.file_type, Some(FileType(15)));
     assert_eq!(agent.context_length, Some(32_768));
-    assert_eq!(agent.tags, ["reasoning", "agent", "format:hermes"]);
+    // Stored as `["reasoning","agent","format:hermes"]`; step 8 strips the
+    // `format:*` tag and keeps the order of the rest.
+    assert_eq!(agent.tags, ["reasoning", "agent"]);
     let caps = ModelCapabilities::SUPPORTS_SYSTEM_ROLE
         | ModelCapabilities::SUPPORTS_TOOL_CALLS
         | ModelCapabilities::SUPPORTS_REASONING;

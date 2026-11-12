@@ -47,7 +47,6 @@ fn models_ddl(table: &str) -> String {
             model_key TEXT NOT NULL,
             file_paths_json TEXT,
             capabilities INTEGER DEFAULT 0,
-            dialect_spec TEXT,
             template_caps TEXT,
             image_family TEXT
         )
@@ -72,8 +71,10 @@ pub(super) async fn create_models_table(pool: &SqlitePool) -> Result<()> {
     // `setup_recipes.rs`.
     add_column_if_missing(pool, "models", "defaults_origin", "TEXT").await?;
 
-    // `dialect_spec`: nothing reads or writes it any more.
-    add_column_if_missing(pool, "models", "dialect_spec", "TEXT").await?;
+    // Migration: the tool-call dialect spec goes. gglib no longer parses a
+    // model's tool calls, so nothing reads it; dropped in place, like
+    // `quantization` below.
+    drop_column_if_present(pool, "models", "dialect_spec").await?;
 
     // Migration: add template_caps to models — llama-server's per-template
     // capability self-report (`chat_template_caps` from GET /props),
