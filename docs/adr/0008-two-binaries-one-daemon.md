@@ -15,6 +15,11 @@ The recurring question is whether they should be one, and the recurring answer
 has been a shrug. This records the measurements so the question stops being
 re-litigated from intuition.
 
+> **Amended 2026-11-12.** The desktop app is now called gglib, and its
+> program file is `gglib-gui`, in `gglib.app` on macOS. The package that
+> builds it is still `gglib-app`: where the text below means the program,
+> read `gglib-gui`; where it means the crate, `gglib-app` still holds.
+
 The split is not what it looks like from the outside. It is not "GUI versus
 CLI": both are clients of a single daemon, and the daemon is the product.
 
@@ -96,6 +101,9 @@ bundle-relative. Nothing is signed either: the `macOS` bundle block carries only
 `entitlements` and `minimumSystemVersion`, with no `signingIdentity`, and
 `scripts/macos-install.command` exists precisely to strip the quarantine
 attribute from an unsigned app.
+
+> **Amended 2026-11-12.** The program file is `Contents/MacOS/gglib-gui` now,
+> inside `gglib.app`.
 
 What does break is narrower: no `Info.plist` identity, so a generic icon and no
 bundle-keyed TCC state. Note also that the release already ships the bare

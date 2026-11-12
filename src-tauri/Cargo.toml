@@ -10,6 +10,12 @@ edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# The program file is gglib-gui; the package keeps its name, gglib-app. Tauri's
+# bundler takes the one binary target as the app's main binary.
+[[bin]]
+name = "gglib-gui"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build.workspace = true
 

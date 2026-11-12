@@ -41,7 +41,7 @@ on ubuntu:24.04 '
   apt-get install -y --no-install-recommends curl
   sh /site/install.sh --cli
   gglib --version
-  cd /tmp && apt-get download gg-lib-gui
+  cd /tmp && apt-get download gglib-gui
   sh /site/install.sh --cli
   test "$(wc -l < /etc/apt/sources.list.d/gglib.list)" = 1
 '
@@ -52,7 +52,7 @@ on archlinux:base-devel '
   sh /site/install.sh --cli
   gglib --version
   pacman -Sdd --noconfirm gglib-gui-bin
-  test -x /usr/bin/gglib-app
+  test -x /usr/bin/gglib-gui
   sh /site/install.sh --cli
   test "$(grep -cx "\[gglib\]" /etc/pacman.conf)" = 1
 '
@@ -70,5 +70,5 @@ on fedora:latest '
   sh /site/install.sh
   gglib --version
   sh /site/install.sh
-  rpm -q gg-lib-gui
+  rpm -q gglib-gui
 '
