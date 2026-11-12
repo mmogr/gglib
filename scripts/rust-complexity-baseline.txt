@@ -20,8 +20,8 @@ crates/gglib-app-services/src/proxy_clients.rs 358
 crates/gglib-app-services/src/proxy_prove_tests.rs 373
 crates/gglib-app-services/src/remote/teardown.rs 331
 crates/gglib-app-services/src/runs/cell.rs 373
-crates/gglib-app-services/src/sampling_explain.rs 377
-crates/gglib-app-services/src/sampling_explain_tests.rs 635
+crates/gglib-app-services/src/sampling_explain.rs 391
+crates/gglib-app-services/src/sampling_explain_tests.rs 660
 crates/gglib-app-services/src/servers.rs 496
 crates/gglib-app-services/src/servers_events_tests.rs 335
 crates/gglib-app-services/src/service_graph.rs 321
@@ -88,10 +88,10 @@ crates/gglib-cli/src/handlers/up/mod.rs 328
 crates/gglib-cli/src/handlers/up/probe.rs 306
 crates/gglib-cli/src/handlers/up/warm.rs 351
 crates/gglib-cli/src/model_commands.rs 443
-crates/gglib-cli/src/presentation/explain_display.rs 349
-crates/gglib-cli/src/presentation/explain_display_tests.rs 597
+crates/gglib-cli/src/presentation/explain_display.rs 305
+crates/gglib-cli/src/presentation/explain_display_tests.rs 601
 crates/gglib-cli/src/presentation/inspect_display.rs 321
-crates/gglib-cli/src/presentation/launch_display.rs 456
+crates/gglib-cli/src/presentation/launch_display.rs 379
 crates/gglib-cli/tests/llama_asks_first.rs 400
 crates/gglib-cli/tests/mcp_servers.rs 711
 crates/gglib-cli/tests/setup_scripts.rs 366
@@ -123,7 +123,7 @@ crates/gglib-core/src/domain/inference.rs 1563
 crates/gglib-core/src/domain/inference_tests.rs 1280
 crates/gglib-core/src/domain/kv_estimate.rs 404
 crates/gglib-core/src/domain/kv_estimate_tests.rs 442
-crates/gglib-core/src/domain/launch_plan.rs 306
+crates/gglib-core/src/domain/launch_plan.rs 342
 crates/gglib-core/src/domain/mcp/types.rs 463
 crates/gglib-core/src/domain/model.rs 532
 crates/gglib-core/src/domain/model_detail.rs 305

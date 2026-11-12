@@ -19,7 +19,7 @@ import type { ChoiceSource } from '../../types/generated/ChoiceSource';
 import type { LaunchArg } from '../../types/generated/LaunchArg';
 import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import type { LaunchPlan } from '../../types/generated/LaunchPlan';
-import { PARAM_LABELS, describeSource, formatProvenanceValue, publishedByParam } from '../../utils/samplingProvenance';
+import { PARAM_LABELS, formatProvenanceValue, publishedByParam } from '../../utils/samplingProvenance';
 
 /**
  * The label for each decision key, in the order the rows are drawn: a
@@ -138,7 +138,6 @@ export const REASONING_KEYS: readonly ProvenanceParamKey[] = ['reasoningEffort',
  */
 export function settingsLine(sampling: SamplingExplanation, keys: readonly ProvenanceParamKey[]): { set: string; others: number } {
   const published = publishedByParam(sampling.published);
-  const ctx = { profile: sampling.profile, defaultsOrigin: sampling.defaultsOrigin };
   const groups = new Map<string, string[]>();
   const add = (source: string, value: string) => groups.set(source, [...(groups.get(source) ?? []), value]);
   let others = 0;
@@ -147,7 +146,7 @@ export function settingsLine(sampling: SamplingExplanation, keys: readonly Prove
     if (!keys.includes(param)) continue;
     const label = PARAM_LABELS[param] ?? param;
     const author = published.get(param);
-    if (entry.kind === 'layer') add(describeSource(entry, ctx), `${label} ${formatProvenanceValue(param, sampling.resolved)}`);
+    if (entry.kind === 'layer') add(entry.label, `${label} ${formatProvenanceValue(param, sampling.resolved)}`);
     else if (author?.state === 'deferred') add(CHOICE_WORDS.model_author, `${label} ${Number(author.published.toPrecision(6))}`);
     else others += 1;
   }

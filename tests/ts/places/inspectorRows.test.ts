@@ -74,15 +74,15 @@ describe('the rows', () => {
 });
 
 describe('the Sampling row', () => {
-  const unset = SAMPLING_KEYS.map((param) => ({ param, kind: 'unset' as const }));
+  const unset = SAMPLING_KEYS.map((param) => ({ param, kind: 'unset' as const, label: 'unset by design' }));
 
   it('says the set values by where they came from, then counts the rest', () => {
     const sampling = samplingExplanation({
       resolved: resolvedConfig({ topP: 0.95, topK: 64 }),
       sources: [
         ...unset.filter((e) => e.param !== 'topP' && e.param !== 'topK'),
-        { param: 'topP', kind: 'layer', layer: 'global' },
-        { param: 'topK', kind: 'layer', layer: 'global' },
+        { param: 'topP', kind: 'layer', layer: 'global', label: 'global settings' },
+        { param: 'topK', kind: 'layer', layer: 'global', label: 'global settings' },
       ],
     });
     expect(samplingValue(sampling)).toBe("Top P 0.95 · Top K 64 from global settings; 13 others use llama.cpp's defaults");
@@ -97,8 +97,8 @@ describe('the Sampling row', () => {
   });
 
   it('is set by you only when a field sits on your per-model layer', () => {
-    const own = samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'modelUserSet' }] });
-    const global = samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'global' }] });
+    const own = samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'modelUserSet', label: 'per-model defaults (user-set)' }] });
+    const global = samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'global', label: 'global settings' }] });
     expect(setByYou(own, SAMPLING_KEYS)).toBe(true);
     expect(setByYou(global, SAMPLING_KEYS)).toBe(false);
   });

@@ -14,7 +14,7 @@ Shared TypeScript helpers used across the React frontend.
 | `modelSearchParser.ts` | Parse HuggingFace search queries and filters |
 | `batchWithinWindow.ts` | Batch rapid events within a time window |
 | `mcp.ts` | MCP server status predicates (running / error state) |
-| `samplingProvenance.ts` | Render a resolved sampling parameter and the layer that supplied it; wording mirrors `gglib model explain` |
+| `samplingProvenance.ts` | Render a resolved sampling parameter, the model's published value for it and the caveats; wording mirrors `gglib model explain`. The layer that supplied each value is the daemon's `label` on its source |
 | `errors.ts` | `isAbortError`, the predicate for the `DOMException` both `fetch()` and stream reads throw when a signal fires, `formatError`, a thrown value as the message to show, and `loadFailed`, the one sentence a failed load or unload is said in on every surface: "Didn't load: <reason>" / "Didn't unload: <reason>", the reason the daemon's words (GUI words with no Rust twin) |
 | `imageFamily.ts` | An image family's name as Rust's `ImageFamily::label` gives it, and a component role's name |
 | `pictureMask.ts` | The mask a person brushes over a picture: strokes in the picture's own pixels painted on black, white where one paints and black where one rubs out, as the overlay shown and as the PNG sent; a pointer's place on the picture; bytes to base64 and back |

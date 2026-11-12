@@ -14,7 +14,7 @@ apart from the components that show them.
 | `connect.ts` | What the Endpoint page says of a proof (answered, or why not) and of a client's recipes (key lines said as the stored secret): the words `render_proof` and `render_client_config` print, held to `contracts/proxy/` |
 | `rate.ts` | How fast a model wrote, in the words `rate_words` prints ("34 t/s"): the daemon's `tokens_per_second` for a request (Recent, the loaded inspector, beside a log) and a reply (`turnFigures`), and the newest a model has; nothing is divided here. Held to `contracts/proxy/figures.json` and `contracts/runs/turn_made.json` |
 | `capabilityFlags.ts` | `CAPABILITY_FLAGS`, the capability bitflags as `gglib_core::domain::ModelCapabilities` numbers them, and `CapabilityFlagName` |
-| `launchFit.ts` | The unload sentence from `plan.unloads`, the words `gglib model explain` prints, held to `contracts/models/unload_reason.json`; `tokens`, a context size as `32K`. The fit sentence is the daemon's, served on `plan.fit.sentence` |
+| `launchFit.ts` | `tokens`, a context size as `32K`. The fit and unload sentences are the daemon's, served on `plan.fit.sentence` and `plan.unloads.sentence` |
 | `drawingValues.ts` | `drawingValuesFrom`, the drawing settings (default image model, MCP drawing) read from the stored `AppSettings` |
 
 <!-- module-docs:end -->

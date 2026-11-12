@@ -3,18 +3,12 @@
  *
  * The wording mirrors `gglib model explain`
  * (`crates/gglib-cli/src/presentation/explain_display.rs`) so the two surfaces
- * describe the same fact the same way. Kept apart from the component so each
- * mapping is directly testable.
+ * describe the same fact the same way. Where each value came from is not
+ * here: the daemon serves it on each source (`label`). Kept apart from the
+ * component so each mapping is directly testable.
  */
 
-import type {
-  DefaultsOriginName,
-  InferenceConfig,
-  ParamProvenance,
-  ProvenanceParamKey,
-  PublishedDefault,
-  SamplingParamKey,
-} from '../types';
+import type { InferenceConfig, ProvenanceParamKey, PublishedDefault, SamplingParamKey } from '../types';
 import { UNKNOWN } from './format';
 
 /**
@@ -45,60 +39,6 @@ export const PARAM_LABELS: Record<ProvenanceParamKey, string> = {
   reasoningEffort: 'Reasoning Effort',
   reasoningBudgetTokens: 'Reasoning Budget',
 };
-
-/** The facts about the model that change how a source reads. */
-export interface SourceContext {
-  /** The profile applied, if one was selected. */
-  profile?: string | null;
-  /**
-   * Where the model's stored defaults came from.
-   *
-   * The auto-detected and published rungs are the same rung, so naming it
-   * needs this. Absent on a backend that predates the field, which reads as
-   * the previous behaviour.
-   */
-  defaultsOrigin?: DefaultsOriginName | null;
-}
-
-/**
- * Describe where one resolved value came from.
- *
- * A layer index the server could not name renders as `unknown layer` rather
- * than being dropped — an unexplained value is worse than an oddly labelled
- * one in a view whose whole purpose is explanation.
- */
-export function describeSource(entry: ParamProvenance, ctx: SourceContext): string {
-  switch (entry.kind) {
-    case 'layer':
-      switch (entry.layer) {
-        case 'request':
-          return 'request parameters';
-        case 'profile':
-          return ctx.profile ? `profile '${ctx.profile}'` : 'profile';
-        case 'modelUserSet':
-          return 'per-model defaults (user-set)';
-        case 'global':
-          return 'global settings';
-        case 'modelAutoDetected':
-          // One rung, three possible sources — see `SourceContext.defaultsOrigin`.
-          if (ctx.defaultsOrigin === 'published') {
-            return 'per-model defaults (published by the model author)';
-          }
-          if (ctx.defaultsOrigin === 'measured') {
-            return 'per-model defaults (measured by a tune sweep)';
-          }
-          return 'per-model defaults (auto-detected: reasoning tag)';
-        default:
-          return 'unknown layer';
-      }
-    case 'coupled':
-      return 'unset (coupled to temperature layer)';
-    case 'unset':
-      return 'unset by design';
-    default:
-      return UNKNOWN;
-  }
-}
 
 /**
  * Format one resolved value for display.
