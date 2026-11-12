@@ -161,9 +161,8 @@ pub struct ModelDetailDto {
     /// A `bool` would collapse `unknown` into `false`, and a client would then
     /// grey out the reasoning control on every unlaunched model — the
     /// unknown-gates mistake ADR 0007 decision 3 forbids the server to make,
-    /// reproduced one layer out. The server's own suppression acts only on
-    /// [`Support::No`]; a surface should offer the control on `yes` and
-    /// `unknown` alike, and explain itself on `no`.
+    /// reproduced one layer out. A surface should offer the control on `yes`
+    /// and `unknown` alike, and explain itself on `no`.
     ///
     /// # Why the one field and not the whole caps object
     ///
@@ -177,7 +176,6 @@ pub struct ModelDetailDto {
     /// should get its own endpoint rather than a `serde` alias on this one.
     ///
     /// [`Support`]: gglib_core::domain::Support
-    /// [`Support::No`]: gglib_core::domain::Support::No
     #[serde(default)]
     pub reasoning_effort_support: gglib_core::domain::Support,
     // ── Timestamps ────────────────────────────────────────────────────────────

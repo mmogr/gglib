@@ -131,7 +131,6 @@ const AUDIT: SamplingAuditSnapshot = {
   recent_divergences: [],
   baseline: { state: 'not_yet_read' },
   published: { intents: 0, fields: [] },
-  effort_suppressed: { requests: 0, latest: null },
   reasoning: READBACK,
   client_field_names: { fields: [], untracked: 0 },
 };

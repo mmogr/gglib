@@ -73,8 +73,8 @@ pub struct SamplingArgs {
     /// How hard to ask the model to think: minimal, low, medium, high, xhigh, max.
     ///
     /// Applies only to models whose chat template declares that it reads the
-    /// variable; on any other model the level is dropped before the request is
-    /// sent and `gglib model explain` reports it as suppressed. Pair it with
+    /// variable; on any other model it is still sent and the template ignores
+    /// it. Pair it with
     /// `--reasoning-budget-tokens`, which llama.cpp enforces regardless.
     ///
     /// There is no `none`: upstream treats it as "erase the setting", which

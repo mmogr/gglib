@@ -186,44 +186,22 @@ stores the answer per model (`Model.template_caps`):
 | State | Meaning | What happens to a resolved `reasoning_effort` |
 |-------|---------|-----------------------------------------------|
 | **Yes** | the template declares it reads the variable | sent |
-| **No** | the template declares it does not | **suppressed** before the request goes out, and recorded as `suppressedByTemplate` in the provenance with the level and the rung that supplied it |
-| **Unknown** | nobody has asked yet, the read failed, the model is a passthrough, or the caps object did not carry the field | sent — a report that never arrived is never read as a negative one |
+| **No** | the template declares it does not | sent; the template ignores it |
+| **Unknown** | nobody has asked yet, the read failed, the model is a passthrough, or the caps object did not carry the field | sent |
 
-Suppression is *recorded* rather than performed quietly because it is
-otherwise unrecoverable: neither reasoning control is echoed in `/slots` or
-`/props` (finding 7a), so no readback will ever notice that a level went
-nowhere. The record is the resolved parameter's provenance
-(`SuppressedByTemplate`) plus the dropped level and the rung that supplied it.
-
-Three surfaces read it, and they answer two different questions:
-
-- **`gglib model explain`** and **`GET /api/models/:id/explain`** ask *would a
-  request against this model send the level it resolves?* They apply the same
-  predicate the pipeline does — `request_pipeline::suppress_stored_effort`, the
-  function the live gate itself calls — so an explanation cannot describe a gate
-  that differs from the one that runs. The CLI prints the row as
-  `reasoning_effort — ← suppressed by this model's template` with the level and
-  the rung on a note beneath; the DTO carries them on `effortSuppressed`. Both
-  are conditional: nothing has been sent.
-- **The proxy's sampling audit** answers *did it happen?* Every request that
-  suppressed a level increments `effort_suppressed.requests` and replaces
-  `effort_suppressed.latest`, which carry the level and the rung by name. This
-  is the unconditional twin, and the audit is its home by elimination — it is
-  an observation about gglib's own behaviour that no wire reading can
-  corroborate.
-
-Both leave the level out of `resolved` and the rung out of the provenance
-table, because that is what would be (or was) sent. `GET /api/models/:id/detail`
-carries the input to the decision rather than its output:
-`reasoningEffortSupport` is the tri-state `yes` / `no` / `unknown`, never a
-bool, so a client can grey a control out on a positive `no` without greying it
-out on every model nobody has launched.
+gglib reads the answer and never edits a request on it: a resolved level is
+always sent, and a template that does not read it ignores it (ADR 0007
+finding 7c). `GET /api/models/:id/detail` carries the answer as
+`reasoningEffortSupport`, the tri-state `yes` / `no` / `unknown`, never a
+bool, so a client can hide a control on a positive `no` without hiding it
+on every model nobody has launched. The proxy dashboard shows the running
+model's answer beside the level the last request resolved.
 
 The GUI is the client that does exactly that. Its effort control is *hidden*
-only on a measured `no`, and replaced there by a sentence saying gglib will
-remove the level — a control that vanished silently would read as a feature
-gglib does not have. On `unknown` the control is offered with a caption saying
-the template has not been observed and that the level will be sent as given;
+only on a measured `no`, and replaced there by a sentence saying the
+template does not read a level — a control that vanished silently would read
+as a feature gglib does not have. On `unknown` the control is offered with a caption saying
+the template has not been observed and that the level is sent either way;
 the model inspector's Details carry the same fact as a line of their own,
 Reasoning effort, with a Re-check beside it while the model runs (while it
 does not, an unobserved model's line says the answer is known after its
@@ -234,9 +212,9 @@ outranked it would be the defect this whole mechanism exists to remove. The
 global settings surface has no model in scope, so it hides nothing and names
 the condition in the caption instead.
 
-`reasoning_budget_tokens` is never suppressed. It does not go through the
-template at all, so template support is not a question that applies to it —
-which is why the starter profiles below set both halves.
+`reasoning_budget_tokens` does not go through the template at all, so
+template support is not a question that applies to it — which is why the
+starter profiles below set both halves.
 
 ### There is no `none`, and the absence is the decision
 
@@ -523,8 +501,7 @@ top_k                   20      ← global settings
 presence_penalty        —       ← unset (coupled to temperature layer)
 top_p                   —       ← unset by design (llama.cpp's own default applies)
 max_tokens              —       ← unset by design
-reasoning_effort        —       ← suppressed by this model's template
-      ! 'high' from profile 'coding'; not sent
+reasoning_effort        high    ← profile 'coding'
 reasoning_budget_tokens 16384   ← profile 'coding'
 ```
 

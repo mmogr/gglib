@@ -53,7 +53,7 @@ function caption(support: TemplateSupport | undefined): string {
     case 'unknown':
       // The state most models are in. Worded as a gap in gglib's knowledge,
       // never as a property of the model — the level is still sent.
-      return 'Not yet observed — start the model to find out whether its template reads this. Until then a level set here is sent as given.';
+      return 'Not yet observed — start the model to find out whether its template reads this. A level set here is sent either way.';
     default:
       // No model in scope. Name the condition instead of the model, the same
       // move `fallbackCaption` makes for a value it cannot attribute.
@@ -79,9 +79,8 @@ const UnsupportedNote: FC = () => (
     <span className="flex items-start gap-xs text-xs text-text-muted">
       <Icon icon={Info} size={13} className="mt-[2px] shrink-0" />
       <span>
-        This model&apos;s template does not declare reasoning effort. gglib removes the level
-        before the request is sent, so there is nothing to set here — the reasoning budget below
-        still applies.
+        This model&apos;s template does not read a reasoning level, so there is none to set here.
+        The reasoning budget below still applies.
       </span>
     </span>
   </div>
@@ -97,7 +96,7 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
   const captionId = `${id}-description`;
 
   // The one state that hides the control. `unknown` deliberately does not:
-  // the server's own suppression acts only on a measured `no` (ADR 0007
+  // only a measured `no` says the template ignores the level (ADR 0007
   // decision 3), so hiding on `unknown` would gate the control on every model
   // nobody has launched — which is most of them.
   if (support === 'no') return <UnsupportedNote />;

@@ -8,25 +8,16 @@
 //! # Why it is shared rather than written twice
 //!
 //! `gglib model explain` and the GUI's sampling panel had a copy each, and
-//! they had to agree: the same ladder, followed by the same stage-5b effort
-//! gate applied to the resolution rather than to a request. Two copies of a
-//! rule can only ever drift into two accounts of one resolution, and the whole
-//! value of an explain surface is that it describes the resolution that
-//! actually runs. So the rule lives here once, and `ModelOps::explain`
-//! in `gglib-app-services` builds from it the one explanation both draw.
-//!
-//! It sits beside [`effort_gate`](super::effort_gate) because
-//! [`suppress_stored_effort`] does, and applying that gate offline is half of
-//! what this function is.
+//! they had to agree on the same ladder. Two copies of a rule can only ever
+//! drift into two accounts of one resolution, and the whole value of an
+//! explain surface is that it describes the resolution that actually runs. So
+//! the rule lives here once, and `ModelOps::explain` in `gglib-app-services`
+//! builds from it the one explanation both draw.
 
-use crate::domain::{
-    FieldSources, InferenceConfig, InferenceProfile, ModelSamplingContext, TemplateCaps,
-};
-
-use super::effort_gate::{SuppressedEffort, suppress_stored_effort};
+use crate::domain::{FieldSources, InferenceConfig, InferenceProfile, ModelSamplingContext};
 
 /// Resolve stored sampling for one model, and report where each value came
-/// from and whether the template gate silently dropped an effort level.
+/// from.
 ///
 /// The request rung is deliberately empty: this explains configuration, not a
 /// call, so there are no per-request parameters to occupy the top of the
@@ -37,14 +28,11 @@ pub fn explain_stored(
     model_defaults: Option<&InferenceConfig>,
     global_defaults: Option<&InferenceConfig>,
     model_ctx: ModelSamplingContext,
-    caps: &Option<TemplateCaps>,
-) -> (InferenceConfig, FieldSources, Option<SuppressedEffort>) {
-    let (mut resolved, mut sources) = InferenceConfig::default().resolve_with_profile_explained(
+) -> (InferenceConfig, FieldSources) {
+    InferenceConfig::default().resolve_with_profile_explained(
         profile.map(|selected| &selected.config),
         model_defaults,
         global_defaults,
         model_ctx,
-    );
-    let suppressed = suppress_stored_effort(&mut resolved, &mut sources, caps);
-    (resolved, sources, suppressed)
+    )
 }

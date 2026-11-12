@@ -5,7 +5,6 @@ pub(crate) mod constrain;
 pub(crate) mod content;
 pub(crate) mod drawn_note;
 pub(crate) mod drawn_picture;
-pub(crate) mod effort_gate;
 pub mod explain;
 pub(crate) mod image_size;
 pub(crate) mod images;
@@ -32,7 +31,6 @@ pub use drawn_note::{
     PLACEMENT as DRAWN_NOTE_PLACEMENT, Placement as DrawnNotePlacement,
 };
 pub use drawn_picture::{DRAWN_PICTURE_LINE, ShownPicture, shown_picture};
-pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
 pub use explain::explain_stored;
 pub use image_size::{
     JPEG_MIME, MAX_HEADER_BYTES, PNG_MIME, data_url_image_size, image_mime, image_size,

@@ -141,8 +141,8 @@ pub enum ModelCommand {
         /// Set the default reasoning effort: minimal, low, medium, high, xhigh, max.
         ///
         /// Applies only to models whose chat template declares that it reads
-        /// the variable; elsewhere the level is dropped before the request is
-        /// sent. There is no `none` — pass `--reasoning-budget-tokens 0` to
+        /// the variable; on any other model it is still sent and the template
+        /// ignores it. There is no `none` — pass `--reasoning-budget-tokens 0` to
         /// stop thinking.
         #[arg(long = "reasoning-effort", value_parser = crate::reasoning_args::parse_effort)]
         reasoning_effort: Option<gglib_core::domain::ReasoningEffort>,
