@@ -186,7 +186,7 @@ crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 368
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 403
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1180
 crates/gglib-db/src/repositories/sqlite_model_repository_components_tests.rs 372
-crates/gglib-db/src/setup.rs 737
+crates/gglib-db/src/setup.rs 731
 crates/gglib-db/src/setup_backup_tests.rs 313
 crates/gglib-db/src/setup_models.rs 318
 crates/gglib-db/src/setup_models_tests.rs 325

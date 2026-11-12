@@ -3,10 +3,10 @@
 //!
 //! A `#[path]` child of `setup.rs`. A server is a process gglib starts, so
 //! `mcp_servers` keeps no type and no URL, and its lifecycle is `eager` or
-//! `lazy`. A library from before had both columns, a CHECK that admitted
+//! `lazy`. A library from before had both columns and a CHECK that admitted
 //! `manual`, and could hold SSE servers, which gglib never ran: step 6
-//! deletes those with their variables, then rebuilds the two tables. It runs
-//! after `retire_manual_lifecycle`, so no `manual` row is left to copy.
+//! deletes those with their variables, makes each `manual` server what it
+//! behaved as, a disabled `lazy` one (#1699), then rebuilds the two tables.
 
 use anyhow::Result;
 use sqlx::{SqliteConnection, SqlitePool};
@@ -77,9 +77,10 @@ pub(super) async fn create_mcp_tables(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-/// Step 6: delete every SSE server and its variables, then rebuild both
-/// tables without `type` and `url`. A library that has neither column, as
-/// a new one, is left as it is.
+/// Step 6: delete every SSE server and its variables, make every `manual`
+/// server a disabled `lazy` one, then rebuild both tables without `type` and
+/// `url` and with a lifecycle CHECK of `eager` and `lazy`. A library that
+/// has neither column, as a new one, is left as it is.
 ///
 /// `SQLite`'s table rebuild, inside the step's transaction, with foreign
 /// keys on, which a transaction cannot turn off. So the variables move to a
@@ -108,6 +109,14 @@ pub(super) async fn rebuild_without_type(conn: &mut SqliteConnection) -> Result<
         .execute(&mut *conn)
         .await?
         .rows_affected();
+    // `manual` never started a server unasked; a disabled lazy one does not
+    // either, and starts on first use once enabled.
+    let retired = sqlx::query(
+        "UPDATE mcp_servers SET lifecycle = 'lazy', enabled = 0 WHERE lifecycle = 'manual'",
+    )
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
 
     let servers_mark = high_mark(conn, "mcp_servers").await?;
     let env_mark = high_mark(conn, "mcp_server_env").await?;
@@ -144,7 +153,9 @@ pub(super) async fn rebuild_without_type(conn: &mut SqliteConnection) -> Result<
 
     tracing::info!(
         deleted,
-        "deleted the SSE MCP servers, which gglib never ran, and the columns they used"
+        retired,
+        "deleted the SSE MCP servers, which gglib never ran, and the columns they used, \
+         and made the `manual` ones lazy and disabled"
     );
     Ok(())
 }

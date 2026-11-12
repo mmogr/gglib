@@ -25,8 +25,6 @@ mod backup;
 mod branches;
 #[path = "setup_generation.rs"]
 mod generation;
-#[path = "setup_mcp_lifecycle.rs"]
-mod mcp_lifecycle;
 #[path = "setup_mcp_servers.rs"]
 mod mcp_servers;
 #[path = "setup_migrations.rs"]
@@ -560,10 +558,6 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
     )
     .execute(pool)
     .await?;
-
-    // Stored `manual` servers made disabled `lazy` ones, before step 6
-    // rebuilds the table with a CHECK that refuses `manual`.
-    mcp_lifecycle::retire_manual_lifecycle(pool).await?;
 
     // After every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;

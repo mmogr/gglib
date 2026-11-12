@@ -4,7 +4,7 @@ mod exec;
 mod types;
 mod utils;
 
-pub use api::{hub_client, stored_variant_label};
+pub use api::stored_variant_label;
 pub use exec::{check_update, update_model};
 pub use types::*;
 

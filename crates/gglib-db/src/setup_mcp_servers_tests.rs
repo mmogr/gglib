@@ -160,3 +160,52 @@ async fn a_new_library_is_left_as_it_is() {
     assert_eq!(left(&pool).await.0, [(1, "files".to_owned())]);
     assert_eq!(user_version(&pool).await.unwrap(), LATEST);
 }
+
+/// A `manual` server, enabled or not, comes out a disabled `lazy` one, so a
+/// server that never ran unasked still does not; an eager or lazy one keeps
+/// its lifecycle and its switch.
+#[tokio::test]
+async fn a_manual_server_comes_out_lazy_and_disabled_and_the_rest_as_they_were() {
+    let pool = before_step_6().await;
+    let planted = [
+        ("eager-off", "eager", false),
+        ("eager-on", "eager", true),
+        ("lazy-off", "lazy", false),
+        ("lazy-on", "lazy", true),
+        ("manual-off", "manual", false),
+        ("manual-on", "manual", true),
+    ];
+    for (name, lifecycle, enabled) in planted {
+        sqlx::query(
+            "INSERT INTO mcp_servers (name, type, lifecycle, enabled) VALUES (?, 'stdio', ?, ?)",
+        )
+        .bind(name)
+        .bind(lifecycle)
+        .bind(enabled)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    run(&pool, LATEST).await.unwrap();
+
+    let servers: Vec<(String, String, bool)> =
+        sqlx::query_as("SELECT name, lifecycle, enabled FROM mcp_servers ORDER BY name")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let row = |name: &str, lifecycle: &str, enabled: bool| {
+        (name.to_owned(), lifecycle.to_owned(), enabled)
+    };
+    assert_eq!(
+        servers,
+        [
+            row("eager-off", "eager", false),
+            row("eager-on", "eager", true),
+            row("lazy-off", "lazy", false),
+            row("lazy-on", "lazy", true),
+            row("manual-off", "lazy", false),
+            row("manual-on", "lazy", false),
+        ]
+    );
+}

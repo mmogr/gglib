@@ -2,8 +2,8 @@
  * One tool server as a row: its name, its state as a shape and a word, and
  * how many tools it offers while it runs. A hover (or focus) shows Test,
  * Start or Stop, Edit and ⋯ Remove…, each greyed with why where it cannot
- * act. A server gglib cannot run (an SSE one) offers only Remove…. A stdio
- * server whose command no longer resolves says "Needs relink" with Fix.
+ * act. A server whose command no longer resolves says "Needs relink" with
+ * Fix.
  *
  * The name opens the row: the command it runs, its tools, and Devices may
  * use it where the server can be opened to paired devices. How the row's

@@ -223,7 +223,7 @@ async fn set_enabled(ctx: &CliContext, identifier: &str, enabled: bool) -> Resul
 
 /// Open each of `identifiers` to paired devices, or close it: the flag's own
 /// write, which never stops a server. Every one is found, and checked when
-/// opening, before any is changed, so a typo or an SSE server in the last
+/// opening, before any is changed, so a typo or `builtin` in the last
 /// changes none.
 async fn set_allow_remote(ctx: &CliContext, identifiers: &[String], allow: bool) -> Result<()> {
     let mut found = Vec::with_capacity(identifiers.len());
