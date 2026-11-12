@@ -72,7 +72,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 │  ┌──────────────────────────────────────────────────────────────────────────────┐    │
 │  │ /v1/chat/completions            server.rs ─▶ forward.rs                      │    │
 │  │ /v1/embeddings                  embeddings.rs                                │    │
-│  │ /v1/models                      models_endpoint.rs                           │    │
+│  │ /v1/models(/{name})             models_endpoint.rs                           │    │
 │  │ /v1/gglib/models/{name}/detail  model_detail_endpoint.rs                     │    │
 │  │ /v1/gglib/models/{name}/load    load_endpoint.rs                             │    │
 │  │ /v1/images/generations          images.rs                                    │    │
@@ -114,7 +114,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`serve_config.rs`** — `ServeConfig`: everything `serve()` is started with, one named field each
 - **`host_facts.rs`** — `HostFacts`: the readers a caller hands in for this machine's name and the free space on a disk, each optional; `HostFacts::none()` has neither
 - **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
-- **`models_endpoint.rs`** — `GET /v1/models`: each model's advertised context window, which has to describe what a launch would serve, less a safety margin
+- **`models_endpoint.rs`** — `GET /v1/models`: each model's advertised context window, which has to describe what a launch would serve, less a safety margin; and `GET /v1/models/{name}`, one entry of that list
 - **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
 - **`models_gglib.rs`** — `GglibInfo`, the list's `gglib` object: this build's version and the features (`Feature`) this process serves, which `models_endpoint.rs` reads off the ports it was handed
 - **`profiles.rs`** — Which `{model}:{profile}` variants `/v1/models` lists
@@ -238,6 +238,7 @@ with `403 device_not_named`.
 |----------|--------|------|-------------|
 | `/health` | GET | open | Health check (always 200, `{"status":"ok"}` and nothing else) |
 | `/v1/models` | GET | bearer | List available models, each with its catalog id, and this machine's name — see [The model list](#the-model-list) |
+| `/v1/models/{name}` | GET | bearer | The entry `/v1/models` lists with that `id`, exactly as listed; any other id is `404 model_not_found` |
 | `/v1/gglib/models/{name}/detail` | GET | bearer | One model in full, by id, name or `name:profile` — see [The model list](#the-model-list) |
 | `/v1/gglib/models/{name}/load` | POST | bearer | Have a model resident before a turn needs it, admitted as a chat completion would be; optional `num_ctx` in the body; answers `{model, started, context}` |
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
@@ -302,6 +303,11 @@ first label and kept only when that is 1 to 63 ASCII letters, digits, `-` or
 the reader `ServeConfig.host` carries, and it is absent when there is no
 reader or the host name is unreadable or is not a plain label. `/health`
 never carries it: it answers without credentials.
+
+`GET /v1/models/{name}` is `OpenAI`'s read of one model: the entry the list
+holds under that `id`, picked from the same list, so the two never disagree.
+Only a listed `id` is answered (a `/` in it sent as `%2F`); anything else,
+a catalogue id or an unlisted profile included, is `404 model_not_found`.
 
 `GET /v1/gglib/models/{name}/detail` answers one model as a `ModelLookup`:
 `detail` is the `ModelDetailDto` the inspector reads, without `filePath` or

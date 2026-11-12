@@ -83,6 +83,10 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
     let mut protected = Router::new()
         .route("/v1/models", get(crate::models_endpoint::list_models))
         .route(
+            "/v1/models/{name}",
+            get(crate::models_endpoint::retrieve_model),
+        )
+        .route(
             "/v1/gglib/models/{name}/load",
             post(crate::load_endpoint::load_model),
         )
