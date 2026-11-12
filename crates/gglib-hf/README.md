@@ -72,8 +72,9 @@ async fn example() {
   models that chat (`filter=gguf`, keeping the hits whose pipeline is a chat one or none) or
   text-to-image ones (`filter=gguf&filter=text-to-image`)
 - **Variant Listing**: A repository's variants: its GGUF files grouped into shard sets,
-  each labelled as its uploader named it (`UD-Q4_K_XL`, `Q3_K_P`, `FastMTP-32K`), with no
-  quant read from a name, so no two distinct files are merged as shards
+  each labelled as its uploader named it (`UD-Q4_K_XL`, `Q3_K_P`, `FastMTP-32K`), a quant
+  spelt in capitals (`Q6_k` is `Q6_K`), with no quant read from a name, so no two distinct
+  files are merged as shards
 - **Projector Listing**: A repository's projectors (`mmproj` files) are listed apart, with
   their OIDs. A projector is a variant of its own, never a shard of another
 - **File Resolution**: Find specific GGUF files for download, including sharded models

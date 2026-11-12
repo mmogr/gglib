@@ -85,7 +85,7 @@ async fn an_image_models_companions_are_queued_under_its_one_id() {
 
     assert_eq!(
         id.to_string(),
-        "leejet/FLUX.1-schnell-gguf:flux1-schnell-q8_0"
+        "leejet/FLUX.1-schnell-gguf:flux1-schnell-Q8_0"
     );
     let snapshot = manager.get_queue_snapshot().await.unwrap();
     assert_eq!(snapshot.waiting.len(), 1, "one row for the model");
@@ -152,7 +152,7 @@ async fn an_image_repository_with_none_asked_takes_the_largest_whose_weights_fit
         .await
         .unwrap();
 
-    assert_eq!(id.quantization(), Some("q5_k_m"));
+    assert_eq!(id.quantization(), Some("Q5_K_M"));
     let files = queued_files(&manager).await;
     assert_eq!(
         files[0].shard_info.as_ref().unwrap().filename,
@@ -210,7 +210,7 @@ async fn an_image_repository_with_no_budget_takes_its_smallest() {
         .await
         .unwrap();
 
-    assert_eq!(id.quantization(), Some("q4_k_m"));
+    assert_eq!(id.quantization(), Some("Q4_K_M"));
     assert_eq!(queued_files(&manager).await.len(), 4, "with its companions");
 }
 
@@ -251,7 +251,7 @@ async fn a_quantization_asked_for_an_image_model_is_the_one_fetched() {
         .await
         .unwrap();
 
-    assert_eq!(id.quantization(), Some("q4_k_m"));
+    assert_eq!(id.quantization(), Some("Q4_K_M"));
 }
 
 // ── Where each file goes ─────────────────────────────────────────────────

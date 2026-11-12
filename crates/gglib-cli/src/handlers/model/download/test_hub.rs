@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use gglib_core::ports::huggingface::HfPortResult;
+use gglib_core::ports::huggingface::{HfPortResult, variants_of};
 use gglib_core::ports::{
     HfClientPort, HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult, HfSortField,
@@ -88,6 +88,12 @@ impl Hub {
         ])
     }
 
+    /// One hit whose repository holds two quants, one spelt `Q6_k`, beside
+    /// a projector and an importance matrix.
+    pub(super) fn vision() -> Self {
+        Self::holding(vec![hit("owner/vision-GGUF", 5, 1, None)])
+    }
+
     /// `count` hits, named by their number.
     pub(super) fn numbered(count: u64) -> Self {
         Self::holding(
@@ -149,6 +155,17 @@ impl HfClientPort for Hub {
     }
 
     async fn list_quantizations(&self, model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
+        if model_id == "owner/vision-GGUF" {
+            return Ok(variants_of(
+                [
+                    "vision-Q4_K_M.gguf",
+                    "vision-Q6_k.gguf",
+                    "mmproj-vision-F16.gguf",
+                    "vision.imatrix.gguf",
+                ]
+                .map(|path| (path, 1)),
+            ));
+        }
         let names: &[&str] = match model_id {
             "MaziyarPanahi/Phi-4-mini-instruct-GGUF" => &["Q4_K_M", "Q8_0"],
             "unsloth/Phi-4-mini-instruct-GGUF" => &[],

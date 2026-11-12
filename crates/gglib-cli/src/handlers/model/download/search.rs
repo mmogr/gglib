@@ -11,7 +11,8 @@ use std::fmt::Write as _;
 use anyhow::{Result, anyhow};
 use gglib_app_services::types::{HfModelSummary, HfSearchRequest};
 use gglib_app_services::{GuiError, search_hf_models};
-use gglib_core::ports::{HfClientPort, HfModelKind, HfSortField};
+use gglib_core::ports::huggingface::said_as_a_quantization;
+use gglib_core::ports::{HfClientPort, HfModelKind, HfQuantInfo, HfSortField};
 
 use crate::presentation::{format_number, truncate_with};
 
@@ -84,7 +85,7 @@ pub(super) struct Layout {
 
 /// The GGUF repositories of `kind` on the Hub's first page of `limit` for
 /// `query`, or for no words at all, most of `sort_by` first, each with its
-/// quantizations. Fewer than `limit` when the Hub's page is shorter, or when
+/// quantizations (no projector or importance matrix among them). Fewer than `limit` when the Hub's page is shorter, or when
 /// hits are dropped for holding no GGUF file or not being of `kind`; a
 /// `limit` above 100 is asked as 100.
 pub(super) async fn find(
@@ -115,10 +116,20 @@ pub(super) async fn find(
         let quantizations = hf.list_quantizations(&model.id).await.unwrap_or_default();
         hits.push(Hit {
             model,
-            quantizations: quantizations.into_iter().map(|q| q.label).collect(),
+            quantizations: said_labels(quantizations),
         });
     }
     Ok(hits)
+}
+
+/// The labels of `variants` said as quantisations beside a hit: a
+/// projector's and an importance matrix's are left out, by their file names.
+fn said_labels(variants: Vec<HfQuantInfo>) -> Vec<String> {
+    variants
+        .into_iter()
+        .filter(said_as_a_quantization)
+        .map(|variant| variant.label)
+        .collect()
 }
 
 /// `hits` under `heading`, one numbered entry each, and the closing tips.

@@ -81,11 +81,11 @@ fn a_projector_takes_no_part_in_the_prefix_and_keeps_its_whole_name() {
             "Qwen-7B-Q8_0.gguf",
             "mmproj-Qwen-7B-f16.gguf"
         ]),
-        ["Q4_K_M", "Q8_0", "mmproj-Qwen-7B-f16"]
+        ["Q4_K_M", "Q8_0", "mmproj-Qwen-7B-F16"]
     );
     assert_eq!(
         labels(&["gemma-3-4b-it-Q4_K_M.gguf", "mmproj-model-f16.gguf"]),
-        ["gemma-3-4b-it-Q4_K_M", "mmproj-model-f16"],
+        ["gemma-3-4b-it-Q4_K_M", "mmproj-model-F16"],
         "one model variant beside a projector is labelled by its whole name"
     );
 }
@@ -105,8 +105,69 @@ fn a_name_several_folders_hold_is_labelled_by_its_folder() {
 
 #[test]
 fn a_lone_variant_is_its_whole_name_and_reserved_characters_become_dashes() {
-    assert_eq!(labels(&["gemma-3-1b-it-q4_0.gguf"]), ["gemma-3-1b-it-q4_0"]);
+    assert_eq!(labels(&["gemma-3-1b-it-q4_0.gguf"]), ["gemma-3-1b-it-Q4_0"]);
     assert_eq!(labels(&["a:b@c.gguf"]), ["a-b-c"]);
+}
+
+/// A token that spells a quantisation is written in capitals, whoever
+/// uploaded it, and every other token as its uploader wrote it.
+#[test]
+fn a_label_spells_its_quantisation_in_capitals() {
+    assert_eq!(
+        labels(&[
+            "model-INSTRUCT-Q6_k.gguf",
+            "model-Thinking-q4_k_s.gguf",
+            "model-iq4_xs.gguf",
+            "model.bf16.gguf",
+            "model-UD-tq1_0.gguf",
+        ]),
+        [
+            "BF16",
+            "INSTRUCT-Q6_K",
+            "IQ4_XS",
+            "Thinking-Q4_K_S",
+            "UD-TQ1_0"
+        ]
+    );
+    assert_eq!(
+        labels(&["model-FastMTP-32K.gguf", "model-Qwen3-q8_0.gguf"]),
+        ["FastMTP-32K", "Qwen3-Q8_0"],
+        "a token that only starts like one is kept"
+    );
+    for kept in [
+        "Q",
+        "Q4_KXLL",
+        "Q_4",
+        "IQ",
+        "f8",
+        "Qwen3",
+        "q4_k_m_x_y_zzzz",
+    ] {
+        assert!(!spells_a_quantization(kept), "{kept}");
+    }
+}
+
+/// A projector's and an importance matrix's file are not said as
+/// quantisations; a draft or MTP head is.
+#[test]
+fn a_projector_and_an_importance_matrix_are_not_said_as_quantisations() {
+    let said: Vec<String> = variants_of(
+        [
+            "model-Q4_K_M.gguf",
+            "model-Q8_0.gguf",
+            "mmproj-model-F16.gguf",
+            "model.imatrix.gguf",
+            "imatrix_unsloth.gguf",
+            "model-MTP-Q8_0.gguf",
+        ]
+        .map(|path| (path, 1)),
+    )
+    .into_iter()
+    .filter(said_as_a_quantization)
+    .map(|variant| variant.label)
+    .collect();
+
+    assert_eq!(said, ["MTP-Q8_0", "Q4_K_M", "Q8_0"]);
 }
 
 #[test]

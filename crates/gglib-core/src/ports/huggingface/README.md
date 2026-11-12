@@ -14,8 +14,9 @@ of orders a search can ask for: the browser sends it on the wire and the CLI's
 `--sort` maps onto it.
 
 A repository's variants (`list_quantizations`, `HfQuantInfo`) are its GGUF files
-grouped into shard sets, each labelled as its uploader named it (`variants_of`),
-and a request names one by its label (`match_label`), or by its whole file name,
+grouped into shard sets, each labelled as its uploader named it with a quant
+spelt in capitals (`variants_of`: `Q6_k` is `Q6_K`), and a request names one by
+its label in any case (`match_label`), or by its whole file name,
 as a pasted file's URL asks (`match_variant`). What a variant is comes
 from a 64 KiB head of its first file (`variant_role`, `read_roles`): a draft or
 helper is listed and never downloaded (`HELPER_FILES_REFUSAL`). A model stored
@@ -24,6 +25,9 @@ without a label is found again by the variant that holds its file
 variant's weights, and the repository's projector (`repository_projector`), the
 largest file whose head says it is one, the same for every variant.
 `largest_projector` is that choice alone, over variants whose roles are read.
+`said_as_a_quantization` is the one rule that reads a name for what a variant
+is, and only for a search's summary line: a projector's or an importance
+matrix's file is not said as a quantisation there.
 
 A search asks for one `HfModelKind`: models that chat (the default) or models
 that draw. `read_head` reads a file's first bytes (at most `SNIFF_HEAD_BYTES`

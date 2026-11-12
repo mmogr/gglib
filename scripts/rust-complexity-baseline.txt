@@ -142,6 +142,7 @@ crates/gglib-core/src/download/rate.rs 628
 crates/gglib-core/src/normalize/parsers/delimited.rs 985
 crates/gglib-core/src/normalize/stream.rs 662
 crates/gglib-core/src/ports/huggingface/image_companions_tests.rs 426
+crates/gglib-core/src/ports/huggingface/variants_tests.rs 357
 crates/gglib-core/src/ports/image_generation.rs 370
 crates/gglib-core/src/ports/model_catalog.rs 305
 crates/gglib-core/src/ports/model_runtime.rs 837
@@ -219,6 +220,7 @@ crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 606
 crates/gglib-hf/src/parsing.rs 434
 crates/gglib-hf/src/url.rs 449
+crates/gglib-hf/src/variants_tests.rs 328
 crates/gglib-mcp/src/builtin/generate_image.rs 380
 crates/gglib-mcp/src/builtin/generate_image_tests.rs 476
 crates/gglib-mcp/src/builtin/mod.rs 414
