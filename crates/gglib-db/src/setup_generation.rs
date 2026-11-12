@@ -17,6 +17,8 @@
 //! change to the schema fails that test until the generation is raised and
 //! the snapshot rewritten.
 
+use std::path::Path;
+
 use anyhow::{Result, bail};
 use sqlx::SqlitePool;
 
@@ -30,7 +32,7 @@ pub(super) const SCHEMA_GENERATION: i64 = 5;
 
 /// The generation stamped on the file `pool` opens, or `0` for a file no
 /// build has stamped: a new file, or one from before the generation existed.
-async fn stored(pool: &SqlitePool) -> Result<i64> {
+pub(super) async fn stored(pool: &SqlitePool) -> Result<i64> {
     let has_table: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_generation'",
     )
@@ -47,16 +49,18 @@ async fn stored(pool: &SqlitePool) -> Result<i64> {
     )
 }
 
-/// Refuse a database a newer build has written. Called before anything
-/// creates or alters a table.
-pub(super) async fn refuse_newer(pool: &SqlitePool) -> Result<()> {
+/// Refuse a database a newer build has written, naming the backup from
+/// before it was upgraded when there is one. Called before anything creates
+/// or alters a table.
+pub(super) async fn refuse_newer(pool: &SqlitePool, db_path: &Path) -> Result<()> {
     let found = stored(pool).await?;
     if found > SCHEMA_GENERATION {
+        let restore = super::backup::how_to_restore(db_path).unwrap_or_default();
         bail!(
             "this gglib library was last opened by a newer gglib (schema generation {found}; \
              this build knows {SCHEMA_GENERATION}). Run the newer gglib, or upgrade this one. \
              To keep a development build's library apart from your installed one, set \
-             GGLIB_DATA_DIR and GGLIB_DAEMON_PORT for it."
+             GGLIB_DATA_DIR and GGLIB_DAEMON_PORT for it.{restore}"
         );
     }
     Ok(())

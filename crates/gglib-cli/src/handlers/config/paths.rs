@@ -13,7 +13,8 @@ use gglib_core::paths::{ResolvedPaths, data_root_source};
 /// every resolved path, in `key = value` format. The first lines answer the
 /// question a machine with a packaged install and a build from a checkout
 /// raises: which binary is this, and is it on the default data root or one
-/// named by `GGLIB_DATA_DIR`.
+/// named by `GGLIB_DATA_DIR`. Last, the database's backup from before an
+/// upgrade, when there is one.
 pub(crate) fn execute() -> Result<()> {
     let binary = std::env::current_exe()
         .map_or_else(|e| format!("unknown ({e})"), |p| p.display().to_string());
@@ -23,5 +24,8 @@ pub(crate) fn execute() -> Result<()> {
     println!("daemon_port = {}", gglib_core::daemon_port());
     let paths = ResolvedPaths::resolve()?;
     println!("{paths}");
+    if let Some((_, backup)) = gglib_db::backup_beside(&paths.database_path) {
+        println!("database_backup = {}", backup.display());
+    }
     Ok(())
 }

@@ -58,6 +58,7 @@ This crate is in the **Infrastructure Layer** — it implements the repository p
 - **`factory.rs`** — Database connection factory and pooling
 - **`loop_guard_trip_writer.rs`** — The loop guard's batched writer: the sink the proxy records into, and the task that writes and prunes the log
 - **`setup.rs`** — Schema migrations and database initialization
+- **`setup_backup.rs`** — The copy of the database kept beside it, `<name>.gen<N>.bak`, from before an upgrade raised its generation; the first copy of a generation is kept and never written over, other generations' are removed, and an older build's refusal names it and how to put it back
 - **`setup_generation.rs`** — The schema generation, one number in its own `schema_generation` table that says which build's schema a file carries; a build that finds a higher one than its own refuses the file before touching it
 - **`sqlite_init.rs`** — `SQLite` initialised once, on one thread, before `setup_database` or `setup_test_database` opens a pool
 - **`setup_attachments.rs`** — The `attachments` table (an image's bytes under the SHA-256 of them) and `message_attachments` (the images each message carries, in order), and the sweep of images no message carries

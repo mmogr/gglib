@@ -15,9 +15,12 @@ use std::time::Duration;
 use gglib_core::ports::GgufParserPort;
 
 pub use attachments::sweep_unlinked_attachments;
+pub use backup::backup_beside;
 
 #[path = "setup_attachments.rs"]
 mod attachments;
+#[path = "setup_backup.rs"]
+mod backup;
 #[path = "setup_branches.rs"]
 mod branches;
 #[path = "setup_generation.rs"]
@@ -138,8 +141,9 @@ async fn column_present(pool: &SqlitePool, table: &str, column: &str) -> Result<
 /// This function:
 /// 1. Establishes a connection to the `SQLite` database file
 /// 2. Creates the database file if it doesn't exist; it and the directory holding it are made this user's alone
-/// 3. Creates all tables and indexes
-/// 4. Runs any necessary schema migrations, unless a newer build wrote the file
+/// 3. Copies a file it is about to upgrade to a backup beside it
+/// 4. Creates all tables and indexes
+/// 5. Runs any necessary schema migrations, unless a newer build wrote the file
 ///
 /// # Arguments
 ///
@@ -191,7 +195,8 @@ pub async fn setup_database(
         )
         .await?;
 
-    generation::refuse_newer(&pool).await?; // before anything is created or altered
+    generation::refuse_newer(&pool, db_path).await?; // before anything is created or altered
+    backup::before_upgrade(&pool, db_path).await?;
     create_schema_reading(&pool, gguf_parser).await?;
     generation::stamp(&pool).await?;
 
