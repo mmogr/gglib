@@ -10,7 +10,7 @@ pub enum BenchmarkCommand {
     #[command(display_order = 1)]
     Compare {
         /// Prompt to send to every model
-        #[arg(long, short = 'p')]
+        #[arg(long)]
         prompt: String,
 
         /// Model name or database ID (repeat for multiple models)
@@ -18,7 +18,7 @@ pub enum BenchmarkCommand {
         models: Vec<String>,
 
         /// Optional system prompt
-        #[arg(long = "system", short = 's')]
+        #[arg(long = "system-prompt", short = 's')]
         system_prompt: Option<String>,
 
         /// Sampling temperature override (0.0 – 2.0)
@@ -143,9 +143,8 @@ pub enum BenchmarkCommand {
         /// *measured* defaults — through the gate: the winner must clear the
         /// incumbent pair's mean by twice the run's own drift, with the
         /// per-task pairs agreeing. A refusal prints its evidence and
-        /// changes nothing. (`--apply-best` is an alias and goes through the
-        /// same gate.)
-        #[arg(long = "apply", alias = "apply-best")]
+        /// changes nothing.
+        #[arg(long = "apply")]
         apply: bool,
     },
 

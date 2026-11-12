@@ -168,7 +168,7 @@ pub enum Commands {
     },
 
     /// Ask a question with optional context from stdin or file
-    #[command(display_order = 12, alias = "q", after_help = crate::subcommands::QUESTION_EXAMPLES)]
+    #[command(display_order = 12, visible_alias = "q", after_help = crate::subcommands::QUESTION_EXAMPLES)]
     Question {
         /// Question to ask (use {} as placeholder for piped/file input)
         question: String,
@@ -181,13 +181,13 @@ pub enum Commands {
         #[arg(short, long)]
         model: Option<String>,
         /// Read context from file instead of stdin
-        #[arg(short, long)]
+        #[arg(long)]
         file: Option<String>,
         /// Show the constructed prompt before sending
         #[arg(long = "show-prompt")]
         show_prompt: bool,
         /// Cleaner output for scripting (no tool progress, no reasoning tokens)
-        #[arg(long, short = 'Q')]
+        #[arg(long)]
         quiet: bool,
         #[command(flatten)]
         sampling: ChatSamplingArgs,

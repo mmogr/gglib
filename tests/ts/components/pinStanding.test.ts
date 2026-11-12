@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { pinStanding } from '../../../src/places/settings/pinStanding';
 import type { PinState } from '../../../src/types/setup';
 
-const COMMAND = 'gglib config llama update';
+const COMMAND = 'gglib config llama install';
 
 function pin(overrides: Partial<PinState>): PinState {
   return {
@@ -63,7 +63,7 @@ describe('pinStanding', () => {
     ).toEqual({
       text: 'Pinned to b11429. The one installed, b10327, is older.',
       update: null,
-      fromTerminal: 'The update is a source build, run from a terminal: gglib config llama update.',
+      fromTerminal: 'The update is a source build, run from a terminal: gglib config llama install.',
     });
   });
 

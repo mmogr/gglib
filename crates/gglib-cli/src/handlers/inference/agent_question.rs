@@ -196,7 +196,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // ── Continuation prompt ──────────────────────────────────────────────
     // Offer to continue chatting if the initial question succeeded and we
     // are in an interactive terminal.  Skip when:
-    //   - quiet mode (-Q) — script-friendly output
+    //   - quiet mode (--quiet) — script-friendly output
     //   - stdin is not a TTY (piped input) — would read garbage or hang
     let interactive = !quiet && io::stdin().is_terminal();
 

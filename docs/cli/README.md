@@ -86,6 +86,24 @@ them once; the last column says which commands take each.
 
 `up` takes none of them: it is the defaults, on purpose.
 
+### Short flags
+
+Each letter means one flag wherever it is taken; every other flag is long
+only.
+
+| Short | Long | On |
+|---|---|---|
+| `-c` | `--context-size` | `serve`, `model load`, `benchmark` |
+| `-f` | `--follow` | `run start`, `run show` |
+| `-m` | `--model` | `q`, `image`, `run start`, `benchmark` |
+| `-n` | `--limit` | `chat history`, `benchmark list`, `model search`, `model browse` |
+| `-o` | `--output` | `image` |
+| `-p` | `--port` | `up`, `serve`, `proxy` and its subcommands |
+| `-q` | `--quantization` | `model download` |
+| `-s` | `--system-prompt` | `chat`, `benchmark compare` |
+| `-v` | `--verbose` | every command |
+| `-y` | `--yes` | every command that asks |
+
 ## How these pages were made
 
 Every output block on these pages but one was recorded by running the command, with

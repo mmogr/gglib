@@ -642,7 +642,7 @@ llama-install-auto: ## Install the pinned llama.cpp, answering its question when
 
 llama-update: ## Update llama.cpp to the pinned release
 	@echo "Updating llama.cpp..."
-	@$(GGLIB) config llama update
+	@$(GGLIB) config llama install
 
 llama-status: ## Show llama.cpp status
 	@$(GGLIB) config llama status

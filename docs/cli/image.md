@@ -7,7 +7,7 @@ is printed: `[image WxH] <path>`.
 
 ```bash
 gglib image "a lighthouse at dusk, oil painting"
-gglib image "a red fox in snow" --size 1024x768 -n 2 -o fox.png
+gglib image "a red fox in snow" --size 1024x768 --count 2 -o fox.png
 gglib image "a red fox in snow" --from fox.png --strength 0.4 -o fox-again.png
 gglib image "a fox's paw in snow" --from fox.png --mask paw.png -o fox-fixed.png
 ```
@@ -22,7 +22,7 @@ the runtime that draws them ([config](config.md#llama-and-sd)).
 - The model is the settings' default image model, else the only one with
   every file its family needs, unless `-m` names one.
 - The size is 1024x1024 unless `--size` gives another the family draws.
-  `-n` draws up to four; `--seed` repeats a drawing.
+  `--count` draws up to four; `--seed` repeats a drawing.
 - The line shows the render's state: queued, with its place; loading;
   sampling, step of total, and image of images for more than one; decoding.
   The first step of a Flux.1 render comes about 40 seconds in.

@@ -56,11 +56,9 @@ pub struct EngineStatus {
     /// The model running on this engine's server, if one is: nothing is
     /// installed or removed under it.
     pub serving: Option<String>,
-    /// The command that installs it from a terminal.
+    /// The command that installs it from a terminal, and updates it to the
+    /// pinned release, which a source build needs.
     pub install_command: String,
-    /// The command that updates it from a terminal, which a source build
-    /// needs.
-    pub update_command: String,
 }
 
 /// How an engine's install got there, as its record says.
@@ -121,11 +119,11 @@ impl SetupOps {
     }
 }
 
-/// The commands that install and update `kind` from a terminal.
-const fn commands(kind: RuntimeKind) -> (&'static str, &'static str) {
+/// The command that installs and updates `kind` from a terminal.
+const fn install_command(kind: RuntimeKind) -> &'static str {
     match kind {
-        RuntimeKind::Llama => (LLAMA_INSTALL_COMMAND, "gglib config llama update"),
-        RuntimeKind::StableDiffusion => (SD_INSTALL_COMMAND, "gglib config sd update"),
+        RuntimeKind::Llama => LLAMA_INSTALL_COMMAND,
+        RuntimeKind::StableDiffusion => SD_INSTALL_COMMAND,
     }
 }
 
@@ -142,7 +140,6 @@ fn common_status(
         Ok((description, warning)) => (Some(description), None, warning),
         Err(reason) => (None, Some(reason), None),
     };
-    let (install_command, update_command) = commands(kind);
     EngineStatus {
         kind,
         installed,
@@ -157,8 +154,7 @@ fn common_status(
         download_unavailable,
         warning,
         serving: None,
-        install_command: install_command.to_owned(),
-        update_command: update_command.to_owned(),
+        install_command: install_command(kind).to_owned(),
     }
 }
 
@@ -248,7 +244,7 @@ pub(crate) fn refuse_a_source_build(kind: RuntimeKind) -> Result<(), GuiError> {
     let InstallPlan::Build { no_download } = plan_install(kind, &state, false, false) else {
         return Ok(());
     };
-    let (_, command) = commands(kind);
+    let command = install_command(kind);
     let product = kind.label();
     Err(GuiError::Conflict(match no_download {
         Some(reason) => format!(

@@ -131,7 +131,7 @@ impl McpService {
                 failed.push((server.name, why));
                 continue;
             }
-            // Debug, not warn: the caller says it, and `-Q` keeps it silent.
+            // Debug, not warn: the caller says it, and `--quiet` keeps it silent.
             if let Err(e) = self.start_server(server.id).await {
                 tracing::debug!(
                     server_name = %server.name,

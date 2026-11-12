@@ -9,7 +9,7 @@ use crate::daemon_client::STAND_IN_PORT;
 use crate::handlers::agent_chat::turn::turn_stand_in::{Answer, stand_in};
 use gglib_core::domain::runs::RunStatus;
 
-/// `gglib q -Q -m qwen [--no-tools] --file <notes> "what is this?"`: a
+/// `gglib q --quiet -m qwen [--no-tools] --file <notes> "what is this?"`: a
 /// file, so that nothing is read from the test's stdin.
 fn question(no_tools: bool, notes: &std::path::Path) -> QuestionArgs {
     QuestionArgs {

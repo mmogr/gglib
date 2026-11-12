@@ -25,13 +25,13 @@ n
 ## `q`
 
 One-shot. `{}` in the question is replaced by piped or `--file` input, and
-`-Q` / `--quiet` strips tool progress and reasoning tokens for a script.
+`--quiet` strips tool progress and reasoning tokens for a script.
 Without `-m` it asks the default model (`default-model-id`, [config set](config.md#set-unset-show));
 under `--remote`, the model last asked of that machine.
 
 <!-- snippet: q-pipe -->
 ```console
-$ grep -E "WARN|ERROR" server.log | gglib q -Q "What went wrong here?"
+$ grep -E "WARN|ERROR" server.log | gglib q --quiet "What went wrong here?"
 The logs indicate that the application is experiencing a **database connection pool exhaustion** issue. Here's what went wrong:
 
 1. **Database Pool at Capacity**:
@@ -68,7 +68,7 @@ gglib q --remote -m <id> "Why is this test flaky?"   # on the paired machine
 ```
 
 - At a terminal, once the answer is in, `q` offers to go on as a chat
-  (`Continue chatting?`); `-Q`, or input from a pipe, skips the offer.
+  (`Continue chatting?`); `--quiet`, or input from a pipe, skips the offer.
 - The question is a saved chat from the start, made before it is asked:
   a question that fails keeps what arrived of its reply, marked as stopped.
 - Its file tools read the directory it was asked in.

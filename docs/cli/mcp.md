@@ -77,7 +77,7 @@ starts a throwaway copy, lists its tools, and stops it: it is how to see
 why a server will not start.
 
 - A server that cannot start says why: `chat` and `q` print one line on
-  stderr for each lazy server they go on without (none under `-Q`), and
+  stderr for each lazy server they go on without (none under `--quiet`), and
   that line and `test` end with what the server printed on stderr before
   it exited.
 

@@ -126,7 +126,6 @@ fn a_cpu_build_is_offered_with_its_warning() {
     assert_eq!(status.download_unavailable, None);
     assert_eq!(status.install, None);
     assert_eq!(status.install_command, "gglib config sd install");
-    assert_eq!(status.update_command, "gglib config sd update");
 }
 
 #[test]
@@ -214,7 +213,7 @@ fn a_llama_install_is_read_from_its_record_its_validation_and_its_binary() {
     );
     assert_eq!(json_state(&status), "not_working");
     assert_eq!(status.binary_path, "/data/.llama/bin/llama-server");
-    assert_eq!(status.update_command, "gglib config llama update");
+    assert_eq!(status.install_command, "gglib config llama install");
 }
 
 /// A downloaded sd install is not a build, and an unreadable record says why.
@@ -324,7 +323,7 @@ fn the_status_serializes_in_camel_case_with_its_kind() {
     assert_eq!(json["downloadUnavailable"], serde_json::Value::Null);
     assert_eq!(json["serving"], "flux");
     assert_eq!(json["installCommand"], SD_INSTALL_COMMAND);
-    assert_eq!(json["updateCommand"], "gglib config sd update");
+    assert!(json.get("updateCommand").is_none(), "{json}");
 }
 
 #[tokio::test]
@@ -527,7 +526,7 @@ async fn an_install_over_a_source_build_of_a_release_is_left_to_the_terminal() {
     let refused = refused_at_once(&setup, &Serving(Vec::new()), RuntimeKind::StableDiffusion).await;
 
     assert!(
-        matches!(&refused, GuiError::Conflict(m) if m == "stable-diffusion.cpp was built from source here, so it is updated from a terminal, which builds it again: run 'gglib config sd update'."),
+        matches!(&refused, GuiError::Conflict(m) if m == "stable-diffusion.cpp was built from source here, so it is updated from a terminal, which builds it again: run 'gglib config sd install'."),
         "{refused:?}"
     );
 }

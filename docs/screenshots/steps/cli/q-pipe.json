@@ -14,7 +14,7 @@
    "sleep": 0.5
   },
   {
-   "type": "grep -E \"WARN|ERROR\" server.log | gglib q -Q \"What went wrong here?\""
+   "type": "grep -E \"WARN|ERROR\" server.log | gglib q --quiet \"What went wrong here?\""
   },
   {
    "keys": "\r"

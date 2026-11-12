@@ -96,7 +96,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `question <text>` (alias `q`) | Ask a question, with optional piped or file context; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts, and the chat each branch was made from |
-| `image "<prompt>" [--size WxH] [-n N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
+| `image "<prompt>" [--size WxH] [--count N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
 | `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
 | `run start -m <model> <prompt> [--follow]` | Start a reply the daemon finishes and print its id, or the reply as it arrives with `--follow` |
 | `run list` | List the daemon's runs, newest first |
@@ -243,7 +243,7 @@ gglib q --image before.png --image after.png "What changed?"
 gglib q --show-prompt --file CODE.rs "Explain this"
 
 # Cleaner output for scripting (no prompt echo, no timings)
-gglib q -Q "What is 2+2?"
+gglib q --quiet "What is 2+2?"
 
 # Agentic mode: multi-step exploration with filesystem tools
 gglib q "How is error handling structured in this project?"
@@ -317,7 +317,7 @@ the next message draws, with qwen-image-q8, this session's image model
   the model. The CLI does not resize: a file is at most 8 MiB, and the images
   of one request at most 16 MiB together.
 - **The receipt.** One stderr line per image says its name, its size in pixels
-  and the prompt tokens it is estimated to cost. `gglib q -Q` suppresses it.
+  and the prompt tokens it is estimated to cost. `gglib q --quiet` suppresses it.
 - **A file that cannot be attached** — missing, not a PNG or a JPEG by its
   first bytes, or over the cap — is an error naming the path, before any model
   is looked up or loaded. `gglib q` still requires a question.
@@ -396,7 +396,7 @@ pre-Rich behaviour. This keeps piped output clean and machine-parseable:
 gglib q "Summarize this" > answer.txt
 
 # Quiet mode: suppresses tool progress, reasoning, iteration counts
-gglib q -Q "What is 2+2?" | pbcopy
+gglib q --quiet "What is 2+2?" | pbcopy
 ```
 
 ### Thinking Block

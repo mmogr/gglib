@@ -13,7 +13,7 @@
   {
    "name": "gglib q, in another terminal",
    "rows": 6,
-   "cmd": "sleep 6; gglib q -Q \"In one sentence, what is a GGUF file?\""
+   "cmd": "sleep 6; gglib q --quiet \"In one sentence, what is a GGUF file?\""
   }
  ],
  "steps": [

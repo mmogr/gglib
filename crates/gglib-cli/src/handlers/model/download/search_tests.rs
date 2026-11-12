@@ -160,7 +160,6 @@ async fn every_sort_value_is_asked_of_the_hub_as_its_own_order() {
         ("likes", HfSortField::Likes),
         ("created", HfSortField::Created),
         ("updated", HfSortField::Modified),
-        ("modified", HfSortField::Modified),
     ];
     // Every value clap offers is in the table above, so a new one is too.
     let offered: Vec<String> = CliHubSort::value_variants()
@@ -202,6 +201,7 @@ async fn a_sort_value_search_does_not_offer_is_refused_before_the_hub_is_asked()
 
     for value in [
         "trending",
+        "modified",
         "id",
         "alphabetical",
         "lastModified",

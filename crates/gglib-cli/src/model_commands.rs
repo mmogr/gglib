@@ -68,23 +68,23 @@ pub enum ModelCommand {
         /// Name or ID of the model to update
         identifier: String,
         /// New name for the model
-        #[arg(short, long)]
+        #[arg(long)]
         name: Option<String>,
         /// Update parameter count (in billions)
-        #[arg(short, long)]
+        #[arg(long)]
         param_count: Option<f64>,
         /// Update architecture
-        #[arg(short, long)]
+        #[arg(long)]
         architecture: Option<String>,
         /// Update quantization type
-        #[arg(short, long)]
+        #[arg(long)]
         quantization: Option<String>,
         /// Overwrite the stored trained context length (the model's window,
         /// not the size it is served at)
         #[arg(long)]
         context_length: Option<u64>,
         /// Add or update metadata (format: key=value)
-        #[arg(short, long, action = clap::ArgAction::Append)]
+        #[arg(long, action = clap::ArgAction::Append)]
         metadata: Vec<String>,
         /// Remove specific metadata keys (comma-separated)
         #[arg(long)]
@@ -227,7 +227,7 @@ pub enum ModelCommand {
         /// Name or ID of the model to repair
         identifier: String,
         /// Specific file indices to repair, as verify lists them (comma-separated, e.g., "0,2,5")
-        #[arg(short, long)]
+        #[arg(long)]
         shards: Option<String>,
         /// Answer yes to the confirmation, so nothing is asked
         #[arg(short = 'y', long)]
@@ -293,10 +293,10 @@ pub enum ModelCommand {
         /// Search query (model name, author, or keywords)
         query: String,
         /// Limit number of results
-        #[arg(short, long, default_value = "10")]
+        #[arg(short = 'n', long, default_value = "10")]
         limit: u32,
         /// What to sort the results by
-        #[arg(short, long, value_enum, default_value_t)]
+        #[arg(long, value_enum, default_value_t)]
         sort: CliHubSort,
         /// Search for image models (text-to-image GGUF repositories) in
         /// place of models that chat
@@ -310,7 +310,7 @@ pub enum ModelCommand {
         #[arg(value_enum, default_value_t)]
         category: CliBrowseCategory,
         /// Limit number of results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short = 'n', long, default_value = "20")]
         limit: u32,
         /// Filter by model size (e.g., "7B", "13B", "70B")
         #[arg(long)]
