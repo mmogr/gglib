@@ -222,7 +222,7 @@ async fn looping_history_is_rejected_before_admission() {
         body["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("--loop-guard-mode note"),
+            .contains("gglib config set loop-guard-mode note"),
         "error message must name the setting that stops it refusing"
     );
     assert_eq!(

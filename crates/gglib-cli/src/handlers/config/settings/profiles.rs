@@ -87,7 +87,7 @@ pub(crate) async fn handle_profile(ctx: &CliContext, command: ProfileCommand) ->
             };
             set(ctx, &name, edits).await
         }
-        ProfileCommand::Rm { name } => remove(ctx, &name).await,
+        ProfileCommand::Remove { name } => remove(ctx, &name).await,
         ProfileCommand::InstallTemplates { force } => install_templates(ctx, force).await,
     }
 }

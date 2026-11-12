@@ -4,9 +4,9 @@ Settings, the engines that run models, and where everything is. Settings
 are optional and persist; a change affects what happens next, not a model or
 a download already there.
 
-<!-- snippet: config-settings-show -->
+<!-- snippet: config-show -->
 ```console
-$ gglib config settings show
+$ gglib config show
 Current application settings:
 
   General
@@ -24,6 +24,7 @@ Current application settings:
   max-stagnation-steps     None
   max-tool-iterations      None
   mcp-drawing              None (off)
+  models-dir               /Users/mmogr/.local/share/gglib-demo/models (environment, Writable)
   proxy-allowed-hosts      None
   proxy-api-key            None
   proxy-autostart          None
@@ -47,22 +48,30 @@ Current application settings:
 ```
 <!-- /snippet -->
 
-## `settings`
+## `set`, `unset`, `show`
 
-Context size, ports, the download queue, the agent loop's limits, and the
-switches the desktop app offers under Settings › General
-(`--proxy-autostart`, `--close-to-tray`, `--start-at-login`).
+`show` prints every setting and the models directory, each under the key
+`set` and `unset` take. `set <key> <value>` stores one; `config set --help`
+lists the keys and what each takes. A value is a whole number, `true` or
+`false`, text, or a comma-separated list for `proxy-allowed-hosts`; one a
+setting does not allow is refused, and nothing is stored.
 
 ```bash
-gglib config settings set --default-context-size 131072
-gglib config settings set --proxy-port 8081 --llama-base-port 9300
-gglib config settings unset default-context-size
-gglib config settings reset   # the defaults; keeps the pairing, its devices, remote serving, the API key
-gglib config settings reveal proxy-api-key  # a stored secret, alone on stdout
+gglib config set default-context-size 131072
+gglib config set proxy-port 8081
+gglib config set default-model-id Qwen3-4B   # an id or a name
+gglib config set models-dir ~/models         # created when missing
+gglib config unset default-context-size
+gglib config reset   # the defaults; keeps the pairing, its devices, remote serving, the API key
+gglib config reveal proxy-api-key  # a stored secret, alone on stdout
 ```
 
-- `show` prints every setting and its value; a secret is shown as set or
-  not, and `reveal <name>` prints it alone on stdout, for a script.
+- A secret is shown as set or not; `reveal <name>` prints it alone on
+  stdout, for a script.
+- `default-model-id` is the model a command uses when none is named: `gglib
+  q` without `-m`, for one. `up` fills an empty default with the model it
+  served. `default-image-model-id` is the same for drawing, and is refused
+  unless the model draws.
 - `proxy-port` is where `proxy`, `serve` and `up` start the endpoint when
   they are given no `--port`, where the desktop app starts it, and where
   `proxy dashboard` and `proxy cache-clear` look for it.
@@ -81,34 +90,20 @@ gglib config settings reveal proxy-api-key  # a stored secret, alone on stdout
   agent run makes at once and how long one may take, for every daemon turn
   whose chat saved none of its own; the desktop app sets them under
   Settings › Tools › Agent limits.
+- `proxy-autostart`, `close-to-tray` and `start-at-login` are the switches
+  the desktop app offers under Settings › General.
+- `inference-profiles` is edited with `profile`, below, and
+  `inference-defaults` under Settings › Models in the app; `unset` clears
+  either. The `remote-*` keys are written by `gglib remote`.
 
-## `default`
-
-The model a command uses when none is named: `gglib q` without `-m`, for
-one. `gglib config default` shows it, `gglib config default <model>` sets
-it, `--clear` unsets it. `up` fills an empty default with the model it
-served.
-
-## `profile`
-
-Named sampling profiles, selectable per request as `<model>:<profile>`:
-`Qwen3-4B:coding` in a client's model field picks the model and the profile,
-and `--profile coding` does the same on `serve`, `chat` and `q`.
-
-- `list`, `show <name>`, `set <name> [flags]`, `rm <name>`. `set` stores
-  only the flags you pass, merged over what the profile already holds;
-  `--unset <parameter>` clears one. The rest fall through to the model's
-  own defaults, then the global ones ([Sampling resolution](../sampling.md)).
-- `install-templates` creates the built-in profiles, `coding` among them.
-
-## `models-dir`
+### `models-dir`
 
 The download folder: where `gglib model download`, `gglib up` and the app
 put the files they fetch. A model you `add` stays where it is, so the library
 need not be one folder. `show` prints the directory, where it was chosen
 (`explicit`, `environment` or `default`) and its state, the word Settings
-shows: Writable, Will be created or Not writable; `prompt` asks; `set <PATH>`
-stores one.
+shows: Writable, Will be created or Not writable. `unset models-dir` removes
+the stored folder, so the default applies.
 
 - A running daemon's next download goes to the new directory; a download
   already running finishes where it started.
@@ -116,6 +111,18 @@ stores one.
   directory.
 - The daemon's first start stores the default folder, so it then shows as
   `environment`, and a later release with another default keeps using it.
+
+## `profile`
+
+Named sampling profiles, selectable per request as `<model>:<profile>`:
+`Qwen3-4B:coding` in a client's model field picks the model and the profile,
+and `--profile coding` does the same on `serve`, `chat` and `q`.
+
+- `list`, `show <name>`, `set <name> [flags]`, `remove <name>`. `set` stores
+  only the flags you pass, merged over what the profile already holds;
+  `--unset <parameter>` clears one. The rest fall through to the model's
+  own defaults, then the global ones ([Sampling resolution](../sampling.md)).
+- `install-templates` creates the built-in profiles, `coding` among them.
 
 ## `llama` and `sd`
 
@@ -216,5 +223,5 @@ models_source = EnvVar
 
 ## Flags
 
-`gglib config <subcommand> --help` lists every flag; `gglib config settings
-set --help` lists every setting.
+`gglib config <subcommand> --help` lists every flag; `gglib config set
+--help` lists every setting.

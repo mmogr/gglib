@@ -1,4 +1,4 @@
-//! Which stream each line of `settings reveal` reaches, and the keys clap
+//! Which stream each line of `config reveal` reaches, and the keys clap
 //! takes for it.
 
 use clap::Parser;
@@ -6,7 +6,7 @@ use gglib_core::secret::SettingSecret;
 
 use super::write_value;
 use crate::commands::Commands;
-use crate::config_commands::{ConfigCommand, SettingsCommand};
+use crate::config_commands::ConfigCommand;
 
 const KEY: &str = "device-key-5f3a9c";
 
@@ -49,27 +49,27 @@ fn with_nothing_stored_nothing_is_printed_and_the_refusal_names_what_stores_one(
         "{refusal}"
     );
     assert!(
-        refusal.contains("`gglib config settings reveal proxy-api-key`"),
+        refusal.contains("`gglib config reveal proxy-api-key`"),
         "the refusal names the proxy's own key: {refusal}"
     );
 
     let (out, err, result) = run(SettingSecret::ProxyApiKey, None);
     let refusal = result.expect_err("nothing stored is a failure").to_string();
     assert_eq!((out.as_str(), err.as_str()), ("", ""));
-    assert!(refusal.contains("--proxy-api-key"), "{refusal}");
+    assert!(
+        refusal.contains("`gglib config set proxy-api-key <key>`"),
+        "{refusal}"
+    );
 }
 
-/// The secret `argv` asks `settings reveal` for, or clap's refusal.
+/// The secret `argv` asks `config reveal` for, or clap's refusal.
 fn parsed(argv: &[&str]) -> Result<SettingSecret, clap::Error> {
     let cli = crate::Cli::try_parse_from(argv)?;
     match cli.command {
         Some(Commands::Config {
-            command:
-                ConfigCommand::Settings {
-                    command: SettingsCommand::Reveal { key },
-                },
+            command: ConfigCommand::Reveal { key },
         }) => Ok(key.0),
-        _ => panic!("{argv:?} is not `config settings reveal`"),
+        _ => panic!("{argv:?} is not `config reveal`"),
     }
 }
 
@@ -87,8 +87,8 @@ fn each_reveal_command_parses_to_its_secret() {
 
 #[test]
 fn an_unknown_key_is_refused_by_clap_with_the_keys_it_takes() {
-    let refusal = parsed(&["gglib", "config", "settings", "reveal", "hf-token"])
-        .expect_err("not a secret settings keep");
+    let refusal =
+        parsed(&["gglib", "config", "reveal", "hf-token"]).expect_err("not a secret settings keep");
 
     assert_eq!(refusal.kind(), clap::error::ErrorKind::InvalidValue);
     let text = refusal.to_string();
@@ -117,7 +117,7 @@ fn long_help(argv: &[&str]) -> String {
 fn the_help_that_names_the_reveal_spells_it_as_reveal_command_does() {
     let reveal = SettingSecret::ProxyApiKey.reveal_command();
     for argv in [
-        ["gglib", "config", "settings", "reveal", "--help"].as_slice(),
+        ["gglib", "config", "reveal", "--help"].as_slice(),
         ["gglib", "proxy", "--help"].as_slice(),
         ["gglib", "serve", "--help"].as_slice(),
     ] {

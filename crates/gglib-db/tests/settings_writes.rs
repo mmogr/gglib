@@ -1,5 +1,5 @@
 //! Two writers on one settings file, each through a pool of its own, as the
-//! daemon and `gglib config settings set` are.
+//! daemon and `gglib config set` are.
 //!
 //! `SettingsService::update` used to read the whole record, merge, and save it
 //! whole, so a write that landed between another writer's read and its save

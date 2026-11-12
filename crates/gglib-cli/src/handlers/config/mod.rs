@@ -18,11 +18,11 @@ use crate::config_commands::ConfigCommand;
 /// Dispatch a `config` subcommand to its handler.
 pub(crate) async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
     match command {
-        ConfigCommand::Default { identifier, clear } => {
-            settings::handle_default_model(ctx, identifier, clear).await
-        }
-        ConfigCommand::ModelsDir { command } => settings::handle_models_dir(command),
-        ConfigCommand::Settings { command } => settings::handle_settings(ctx, command).await,
+        ConfigCommand::Show => settings::handle_show(ctx).await,
+        ConfigCommand::Set { key, value } => settings::handle_set(ctx, key, &value).await,
+        ConfigCommand::Unset { key } => settings::handle_unset(ctx, key).await,
+        ConfigCommand::Reset { yes } => settings::handle_reset(ctx, yes).await,
+        ConfigCommand::Reveal { key } => settings::handle_reveal(ctx, key.0).await,
         ConfigCommand::Profile { command } => settings::handle_profile(ctx, command).await,
         ConfigCommand::Llama { command } => llama::dispatch(command).await,
         ConfigCommand::Sd { command } => sd::dispatch(command).await,

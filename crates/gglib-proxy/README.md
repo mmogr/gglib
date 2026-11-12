@@ -503,7 +503,7 @@ against 98.6% under the cap, and cooling the model *increased* the
 loop/stagnation triggers the cap was supposed to avoid. A reasoning model
 decodes its `<think>` block and its tool call under one sampler configuration,
 so a cap imposed for structured output lands on the thinking too. DRY is not
-touched. Disable with `gglib config settings set --agentic-sampling false` or
+touched. Disable with `gglib config set agentic-sampling false` or
 `GGLIB_DISABLE_AGENTIC_SAMPLING=1`; see
 [Sampling resolution](../../docs/sampling.md#the-agentic-turn-temperature-ceiling).
 
@@ -711,7 +711,7 @@ Tool names are qualified as `{server_name}__{tool_name}` so tools from different
 
 ### Drawing
 
-`builtin` is not a server: it is where the gateway lists gglib's own tools, and no MCP server can be given that name. There is one, `builtin__generate_image`, and it is off unless switched on: Settings, or `gglib config settings set --mcp-drawing true`. While the switch is off, or nothing here can draw (a proxy outside the daemon, no image runtime, no image model to choose), `search_tools` and `get_tool_schema` do not know the tool, and an `invoke_tool` that names it anyway is refused with the reason before anything is drawn.
+`builtin` is not a server: it is where the gateway lists gglib's own tools, and no MCP server can be given that name. There is one, `builtin__generate_image`, and it is off unless switched on: Settings, or `gglib config set mcp-drawing true`. While the switch is off, or nothing here can draw (a proxy outside the daemon, no image runtime, no image model to choose), `search_tools` and `get_tool_schema` do not know the tool, and an `invoke_tool` that names it anyway is refused with the reason before anything is drawn.
 
 Its arguments are `prompt` (required), `size` as `WIDTHxHEIGHT`, `n` from 1 to 4 and `seed`; the image model is this machine's own choice. The result is one `image` item per image, base64 PNG, then one text item saying what was drawn. gglib stores none of it. A render takes minutes, so a `tools/call` that carries `_meta.progressToken` gets `notifications/progress` messages on the same SSE response before the result: `progress` rises with each wait the render reports before its first step, then with each new step and stage (a wait once steps have begun, and a step reported twice, send nothing), `total` appears once the first step has said how many there are, and `message` says where it has got to ("sampling step 3 of 20, image 1 of 1"). A call with no token gets only the result. A client that disconnects abandons the render.
 
@@ -748,7 +748,7 @@ curl -X POST http://localhost:8080/mcp \
 | 502 | Failed to connect to llama-server |
 | 404 | Model not found |
 | 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit, in any mode) |
-| 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
+| 400 | Loop or stagnation detected in the replayed history, under `loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
 | 400 | A message carries an image and the model has no projector linked (`model_cannot_read_images`) — see [Images](#images) |
 | 413 | The body of a chat completion or a run is over 32 MiB (`request_too_large`) |
 | 504 | A chat completion that does not stream, or an embeddings request, outlasted its total bound (`upstream_timeout`) — see [When the upstream stops talking](#when-the-upstream-stops-talking) |
@@ -885,7 +885,7 @@ request cannot clear a trip by doing so. Under `refuse` the first trip anywhere
 in the transcript still stands, as it always has. See
 [ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md).
 
-What a tripped guard does is one setting, `--loop-guard-mode`, with three
+What a tripped guard does is one setting, `loop-guard-mode`, with three
 values. The default, `note`, **forwards** the request with a fixed note
 appended to the last message's content behind a `[gglib loop guard]` marker,
 saying what repeated and how often: the request therefore pays the admission
@@ -900,7 +900,7 @@ ends with a user turn after the trip is noted rather than ended: a person may
 have spoken. `refuse` is the old
 behaviour — HTTP 400 before any of that cost, `type` and `code` being
 `loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
-shape), and the message naming `--loop-guard-mode note`. `off` does not scan at
+shape), and the message naming `loop-guard-mode note`. `off` does not scan at
 all.
 
 The note is delivered inside the last message rather than as a trailing
@@ -915,7 +915,7 @@ table is not re-derivable from this tree. The one limit: a template with no
 branch for the `tool` role drops the whole last message on an agentic tail,
 and the note with it.
 
-The escape hatch — `--loop-guard-mode off` — remains for a client that
+The escape hatch — `loop-guard-mode off` — remains for a client that
 legitimately repeats identical batches with nothing in between.
 (Replaying identical batches across a history no longer trips it — the count
 is back to back, and a repeat whose answer changed is not counted at all. A

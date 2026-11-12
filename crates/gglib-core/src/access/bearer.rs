@@ -82,7 +82,7 @@ pub fn bearer_matches(presented: Option<&str>, expected_key: &str) -> bool {
 /// honour a key rotated afterwards nor enforce a key set afterwards, and an
 /// endpoint that started open could not be closed without a restart.
 ///
-/// Nor can it be an in-process notification. `gglib config settings set`
+/// Nor can it be an in-process notification. `gglib config set`
 /// writes the database from a **separate process**, so nothing the daemon
 /// subscribes to would ever see it — the same reasoning
 /// [`SettingsCache`] already records for every

@@ -4,7 +4,7 @@
 //! A read says whether a secret is held and never what it is: the CLI prints
 //! [`SHOWN_AS`], the HTTP DTOs carry a flag or a list of keys. The value is
 //! handed back only by [`SecretsService::reveal`](crate::services::SecretsService::reveal),
-//! which `gglib config settings reveal` and `POST /api/secrets/reveal` call.
+//! which `gglib config reveal` and `POST /api/secrets/reveal` call.
 
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 pub const SHOWN_AS: &str = "(set, not shown)";
 
 /// How the command line shows `secret` held: [`SHOWN_AS`] and the command
-/// that prints it. `settings show`, `up` and the daemon's banner all print
+/// that prints it. `config show`, `up` and the daemon's banner all print
 /// this, so the three read the same.
 #[must_use]
 pub fn held_line(secret: SettingSecret) -> String {
@@ -60,11 +60,11 @@ impl SettingSecret {
 
 /// Each secret's name, written once: [`SettingSecret::name`] returns it and
 /// [`SettingSecret::reveal_command`] is built from it at compile time, so a
-/// hint cannot name a key `settings show` does not print.
+/// hint cannot name a key `config show` does not print.
 macro_rules! named {
     ($($variant:ident => $name:literal),+ $(,)?) => {
         impl SettingSecret {
-            /// The dotted name `gglib config settings show` prints the
+            /// The dotted name `gglib config show` prints the
             /// secret under, and `reveal` takes.
             #[must_use]
             pub const fn name(self) -> &'static str {
@@ -78,7 +78,7 @@ macro_rules! named {
             #[must_use]
             pub const fn reveal_command(self) -> &'static str {
                 match self {
-                    $(Self::$variant => concat!("gglib config settings reveal ", $name)),+
+                    $(Self::$variant => concat!("gglib config reveal ", $name)),+
                 }
             }
         }

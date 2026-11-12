@@ -48,7 +48,7 @@ pub use models::DEFAULT_MODELS_DIR_RELATIVE;
 pub use models::{
     ModelsDirResolution, ModelsDirSource, canonical_model_path, canonical_model_path_string,
     default_models_dir, repository_dir, resolve_models_dir, set_models_dir,
-    store_default_models_dir,
+    store_default_models_dir, unset_models_dir,
 };
 
 // PID tracking
@@ -62,7 +62,7 @@ pub(crate) use private::create_new_private_file;
 pub use private::{create_private_dir, create_private_file, make_private};
 
 // Directory operations
-pub use ensure::{DirectoryCreationStrategy, can_write_folder, ensure_directory};
+pub use ensure::{can_write_folder, ensure_directory};
 
 // Pure resolver for testing and CLI
 pub use resolver::ResolvedPaths;

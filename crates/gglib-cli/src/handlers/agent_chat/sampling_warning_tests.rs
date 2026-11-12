@@ -2,8 +2,8 @@
 
 use super::*;
 
-const NOTE: &str = "\"Let clients set sampling\" is on: gglib config settings set \
-                    --trust-client-sampling true";
+const NOTE: &str = "\"Let clients set sampling\" is on: gglib config set \
+                    trust-client-sampling true";
 
 fn trusting(trusted: Option<bool>) -> Settings {
     Settings {

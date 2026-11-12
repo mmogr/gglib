@@ -720,7 +720,7 @@ async fn with_no_model_named_the_default_image_model_draws_first() {
     let several = draw(two(), None, ImageRequest::new("a fox")).await;
     match several.unwrap_err() {
         ImageError::Unavailable { reason } => {
-            assert!(reason.contains("--default-image-model"), "{reason}");
+            assert!(reason.contains("default-image-model-id"), "{reason}");
         }
         other => panic!("expected Unavailable, got {other:?}"),
     }

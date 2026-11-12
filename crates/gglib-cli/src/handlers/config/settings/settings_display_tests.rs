@@ -93,7 +93,7 @@ fn setup_completed_is_hidden() {
 }
 
 /// The always-on proxy settings are configurable from the GUI and the Web
-/// UI, so `settings show` has to list them too — otherwise the CLI is the
+/// UI, so `config show` has to list them too — otherwise the CLI is the
 /// one interface that cannot tell you why the proxy came up on its own.
 #[test]
 fn always_on_proxy_settings_are_listed() {
@@ -109,7 +109,7 @@ fn always_on_proxy_settings_are_listed() {
 }
 
 /// The proxy key is held, not printed, and its row names the command that
-/// prints it. `settings set` echoes through these rows, so it does not print
+/// prints it. `config set` echoes through these rows, so it does not print
 /// the key it was just given either (ADR 0027).
 #[test]
 fn the_proxy_api_key_is_masked_and_names_its_reveal() {
@@ -123,9 +123,7 @@ fn the_proxy_api_key_is_masked_and_names_its_reveal() {
         rows.iter()
             .find(|(k, _)| k == "proxy-api-key")
             .map(|(_, v)| v.as_str()),
-        Some(
-            format!("{SHOWN_AS}  `gglib config settings reveal proxy-api-key` prints it").as_str()
-        ),
+        Some(format!("{SHOWN_AS}  `gglib config reveal proxy-api-key` prints it").as_str()),
         "{rows:?}"
     );
     assert!(
@@ -176,7 +174,7 @@ fn the_received_remote_key_is_masked_inside_the_pairing_record() {
 
     assert_eq!(
         value("remote-pairing.api-key"),
-        format!("{SHOWN_AS}  `gglib config settings reveal remote-pairing.api-key` prints it"),
+        format!("{SHOWN_AS}  `gglib config reveal remote-pairing.api-key` prints it"),
         "{rows:?}"
     );
     assert!(

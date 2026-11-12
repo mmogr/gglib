@@ -138,7 +138,7 @@ pub struct RemoteOps {
     ///
     /// It covers the roster's own writers and nothing else, and needs to: any
     /// other settings write — `disable`, `join`, the settings form, a proxy
-    /// minting its key, `gglib config settings set` or `reset` in another
+    /// minting its key, `gglib config set` or `reset` in another
     /// process — goes through `SettingsRepository::modify`, one transaction
     /// that rewrites only the fields it changed.
     roster: Arc<Mutex<()>>,

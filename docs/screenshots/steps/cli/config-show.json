@@ -14,7 +14,7 @@
    "sleep": 0.5
   },
   {
-   "type": "gglib config settings show"
+   "type": "gglib config show"
   },
   {
    "keys": "\r"

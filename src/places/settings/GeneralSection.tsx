@@ -6,8 +6,8 @@
  * The two desktop settings are read by the desktop app alone: the login item
  * is registered when the app starts (`src-tauri/src/autostart.rs`), and the
  * menu bar choice is read at each close (`src-tauri/src/main.rs`). A web page
- * has neither, so it does not draw them; `gglib config settings set
- * --start-at-login` and `--close-to-tray` still write them.
+ * has neither, so it does not draw them; `gglib config set
+ * start-at-login` and `close-to-tray` still write them.
  *
  * @module places/settings/GeneralSection
  */

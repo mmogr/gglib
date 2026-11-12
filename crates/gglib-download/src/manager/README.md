@@ -32,7 +32,7 @@ between the worker (core download logic) and publishing (the queue snapshot).
   unless the manager's config names one. The files after it go under the same
   one, and it is dropped when the download ends. So the next download goes
   where the directory resolves then, which follows one stored while the
-  manager runs, from the settings page or by `gglib config models-dir set`,
+  manager runs, from the settings page or by `gglib config set models-dir`,
   and a download part fetched is not split across two
 - **Ending** (`ending.rs`): A download ends as a whole, in one place,
   `end_download`: its files still pending leave the queue, its group is closed

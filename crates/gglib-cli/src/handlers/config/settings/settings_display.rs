@@ -14,7 +14,7 @@ const HIDDEN_KEYS: &[&str] = &["setup-completed"];
 /// The secret a row's key names, when it names one. Such a row says whether
 /// the secret is held and which command prints it, never what it is
 /// (ADR 0027): this output is what people paste into bug reports, and
-/// `gglib config settings reveal` is the one place a stored secret is
+/// `gglib config reveal` is the one place a stored secret is
 /// printed.
 ///
 /// Matched on the full dotted key, so a leaf inside a nested value can be
@@ -57,9 +57,9 @@ pub(super) fn camel_to_kebab(s: &str) -> String {
 
 /// `default-context-size` → `defaultContextSize`.
 ///
-/// The inverse of [`camel_to_kebab`], which `settings show` prints with, so
-/// the key a person reads out of that output is the key `settings unset`
-/// accepts.
+/// The inverse of [`camel_to_kebab`], which `config show` prints with, so
+/// the key a person reads out of that output is the key `config set` and
+/// `config unset` write.
 pub(super) fn kebab_to_camel(key: &str) -> String {
     let mut out = String::with_capacity(key.len());
     let mut upper_next = false;
@@ -265,17 +265,6 @@ pub(super) fn print_sections(sections: &[DisplaySection]) {
                 println!("  {key:<max_key_len$}  {val}");
             }
         }
-    }
-}
-
-/// Print flat rows with dynamic column alignment.
-///
-/// Used by the `settings set` confirmation to show only the changed rows
-/// without section headers (sectioning one or two rows would be noisy).
-pub(super) fn print_display_rows(rows: &[(String, String)]) {
-    let max_key_len = rows.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
-    for (key, val) in rows {
-        println!("  {key:<max_key_len$}  {val}");
     }
 }
 

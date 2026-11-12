@@ -134,5 +134,5 @@ none: one it resolved would be the directory as it started, and it would
 download there for the rest of its life. With none, the download manager
 asks `gglib_core::paths::resolve_models_dir` as each download starts, so a
 download goes where the directory resolves then: for a running daemon, one
-stored since from the settings page or with `gglib config models-dir set`,
+stored since from the settings page or with `gglib config set models-dir`,
 unless the daemon's own environment names one.

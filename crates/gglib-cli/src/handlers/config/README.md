@@ -5,8 +5,8 @@
 Configuration, tooling, and system management handlers.
 
 Dispatches [`ConfigCommand`] variants to focused sub-modules:
-settings/default/models-dir, llama.cpp lifecycle, dependency
-checks, the optional download accelerator, and resolved-path
+settings (`show`, `set`, `unset`, `reset`, `reveal`, profiles), llama.cpp
+lifecycle, dependency checks, the optional download accelerator, and resolved-path
 inspection.
 
 The two engines, llama.cpp and stable-diffusion.cpp, are installed the

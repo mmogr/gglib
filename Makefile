@@ -346,7 +346,7 @@ enforce: ## Run the architecture enforcement checks
 	@./scripts/check_param_source_exhaustive.sh
 	@# A setting that exists, is plumbed, is read, and is settable from nowhere
 	@# compiles perfectly — the failure is an absence. tool_call_repair sat that
-	@# way for months while `config settings show` printed it.
+	@# way for months while the settings listing printed it.
 	@./scripts/check_settings_surfaces.sh
 	@# `let _ = sqlx::query(…)` tolerates a locked database and a missing table
 	@# on the same terms as the duplicate column its comment named. #796 shipped
@@ -734,8 +734,7 @@ build-tauri: ## Build Tauri desktop app
 # has none, which at a terminal still asks before it starts. llama-install-auto is REQUIRED to succeed, since chat needs it; the
 # image runtime comes after it, and a failure there is said and skipped.
 setup: check-deps build-tauri install ## Full setup (check deps + build + install)
-	@echo "Configuring models directory (press Enter to accept the default)"
-	@./target/release/gglib config models-dir prompt
+	@echo "Models download to $$(./target/release/gglib config paths | sed -n 's/^models_dir = //p'); change that with: gglib config set models-dir <path>"
 	@# Optional accelerator. The command already refuses to fail — it skips
 	@# without a terminal and reports a failed provision as a skipped step —
 	@# but setup must not break over an optional extra, so belt and braces.
