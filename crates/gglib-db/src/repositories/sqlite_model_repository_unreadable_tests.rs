@@ -2,6 +2,7 @@
 //! rather than failing every read of the row, and an edit to another field
 //! keeps it.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use chrono::Utc;
@@ -172,6 +173,42 @@ async fn a_new_value_replaces_unreadable_text() {
     assert_eq!(read.inference_defaults, Some(temperature(0.4)));
     assert_eq!(read.defaults_origin, Some(DefaultsOrigin::User));
     assert_eq!(read.template_caps, Some(caps));
+}
+
+/// The rest of the ten take a new value too, each on its own: changing one
+/// date leaves the other's text alone.
+#[tokio::test]
+async fn a_new_value_replaces_unreadable_text_in_each_other_column() {
+    let repo = repo().await;
+    let id = repo.insert(&make_model("Omicron")).await.unwrap().id;
+    for (column, text) in [
+        ("metadata", r#"{"general.name":1}"#),
+        ("image_family", "flux9"),
+        ("download_date", "yesterday"),
+        ("last_update_check", "yesterday"),
+    ] {
+        plant(&repo, id, column, text).await;
+    }
+
+    let mut model = repo.get_by_id(id).await.unwrap();
+    model.metadata = HashMap::from([("general.name".to_string(), "Omicron".to_string())]);
+    model.image_family = Some(ImageFamily::Sdxl);
+    model.download_date = Some(Utc::now());
+    repo.update(&model).await.unwrap();
+
+    let read = repo.get_by_id(id).await.unwrap();
+    assert_eq!(read.metadata, model.metadata);
+    assert_eq!(read.image_family, Some(ImageFamily::Sdxl));
+    assert_eq!(read.download_date, model.download_date);
+    assert_eq!(
+        stored(&repo, id, "last_update_check").await.as_deref(),
+        Some("yesterday")
+    );
+
+    model.last_update_check = Some(Utc::now());
+    repo.update(&model).await.unwrap();
+    let read = repo.get_by_id(id).await.unwrap();
+    assert_eq!(read.last_update_check, model.last_update_check);
 }
 
 #[tokio::test]

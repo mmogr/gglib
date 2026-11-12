@@ -363,9 +363,11 @@ impl ModelRepository for SqliteModelRepository {
         self.with_components(stored).await
     }
 
-    /// A column read leniently keeps its stored text unless the edit changes
-    /// its value, so text this build cannot read survives an edit to another
-    /// field. Clearing such a value keeps it too; it already reads as none.
+    /// The ten columns read leniently, from `tags` to `last_update_check`,
+    /// keep their stored text unless the edit changes their value, so text
+    /// this build cannot read survives an edit to another field. Clearing such
+    /// a value keeps it too; it already reads as none. `capabilities` is still
+    /// written whole, so bits this build doesn't know are dropped.
     async fn update(&self, model: &Model) -> Result<(), RepositoryError> {
         let metadata_json = serde_json::to_string(&model.metadata)
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
