@@ -40,7 +40,11 @@ impl DaemonHandle {
             .timeout(Duration::from_secs(15))
             .send()
             .await?;
-        Ok(Self::expect_ok(response).await?.json().await?)
+        Ok(Self::expect_ok(response)
+            .await?
+            .json::<RemoteStatus>()
+            .await?
+            .with_lines())
     }
 
     /// Mint a key for one new device and offer a code that hands it over.
@@ -84,14 +88,20 @@ impl DaemonHandle {
         Ok(Self::expect_ok(response).await?.json().await?)
     }
 
-    /// The tunnel's status.
+    /// The tunnel's status. Its lines (`sharing`, `sharing_note`,
+    /// `reach_line`) are said here, by this build, as on every status read
+    /// below: the wire never carries them in.
     pub(crate) async fn remote_status(&self) -> Result<RemoteStatus> {
         let response = self
             .get(paths::REMOTE_STATUS_PATH)
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
-        Ok(Self::expect_ok(response).await?.json().await?)
+        Ok(Self::expect_ok(response)
+            .await?
+            .json::<RemoteStatus>()
+            .await?
+            .with_lines())
     }
 
     /// Reach another machine: bind a loopback port here that is its proxy.
@@ -116,7 +126,11 @@ impl DaemonHandle {
             .timeout(Duration::from_secs(15))
             .send()
             .await?;
-        Ok(Self::expect_ok(response).await?.json().await?)
+        Ok(Self::expect_ok(response)
+            .await?
+            .json::<RemoteStatus>()
+            .await?
+            .with_lines())
     }
 
     /// Stop the far daemon through the tunnel, then disconnect. The
@@ -129,7 +143,11 @@ impl DaemonHandle {
             .timeout(Duration::from_secs(30))
             .send()
             .await?;
-        Ok(Self::expect_ok(response).await?.json().await?)
+        Ok(Self::expect_ok(response)
+            .await?
+            .json::<RemoteStatus>()
+            .await?
+            .with_lines())
     }
 
     /// The paired machine's models, read through the tunnel by the daemon,

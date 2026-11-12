@@ -20,7 +20,10 @@ export interface RemoteState {
   ended: { reason: OfferEnd; device?: string; seq: number } | null;
 }
 
-/** A status with nothing on: what a fresh daemon reports. */
+/**
+ * A status with nothing on: what a fresh daemon reports, its lines unsaid
+ * until a read brings the daemon's.
+ */
 export const IDLE_STATUS: RemoteStatus = {
   enabled: false,
   ticket_fingerprint: null,
@@ -40,6 +43,10 @@ export const IDLE_STATUS: RemoteStatus = {
   remote_enabled: false,
   identity_path: null,
   devices: [],
+  sharing: '',
+  sharing_note: '',
+  reach_line: '',
+  reach_note: '',
 };
 
 /**

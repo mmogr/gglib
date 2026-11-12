@@ -104,9 +104,39 @@ pub struct RemoteStatus {
     /// beside it.
     #[serde(default)]
     pub devices: Vec<RemoteDevice>,
+    /// Whether this machine is shared, as every surface says it: "Sharing ·
+    /// 2 paired", "Switched on, nothing bound", "Not sharing". This and the
+    /// two lines below are said by [`Self::with_lines`] where the status is
+    /// assembled and where the CLI reads one, and never read from an answer.
+    #[serde(default, skip_deserializing)]
+    pub sharing: String,
+    /// The sentence for a switch on with nothing bound; empty otherwise.
+    #[serde(default, skip_deserializing)]
+    pub sharing_note: String,
+    /// The machine this one has joined and its reach: "desk · Connected ·
+    /// direct", "desk · Away" (each surface says how long after it). Empty
+    /// while none is joined.
+    #[serde(default, skip_deserializing)]
+    pub reach_line: String,
+    /// What becomes of a machine that is away, said after how long; empty
+    /// otherwise.
+    #[serde(default, skip_deserializing)]
+    pub reach_note: String,
 }
 
 impl RemoteStatus {
+    /// This status with [`Self::sharing`], [`Self::sharing_note`],
+    /// [`Self::reach_line`] and [`Self::reach_note`] said from its own fields.
+    #[must_use]
+    pub fn with_lines(mut self) -> Self {
+        let lines = super::status_lines::remote_status_lines(&self);
+        self.sharing = lines.sharing;
+        self.sharing_note = lines.sharing_note;
+        self.reach_line = lines.reach;
+        self.reach_note = lines.reach_note;
+        self
+    }
+
     /// What a sentence calls the paired machine: [`Self::paired_name`], or
     /// [`UNNAMED_PAIRED`] when there is none.
     #[must_use]

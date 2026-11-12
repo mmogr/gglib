@@ -358,14 +358,19 @@ describe('the tray panel', () => {
     };
 
     it('the joined machine with its reach, and sharing with how many are paired', async () => {
-      transport.getRemoteStatus.mockImplementation(async () => ({ ...DESK, enabled: true, devices: [device(), device({ id: 'dev-2' })] }));
+      transport.getRemoteStatus.mockImplementation(async () => ({
+        ...DESK,
+        enabled: true,
+        devices: [device(), device({ id: 'dev-2' })],
+        sharing: 'Sharing · 2 paired', sharing_note: '', reach_line: 'desk · Connected · direct',
+      }));
       await renderTray();
       const devices = await screen.findByRole('region', { name: 'Devices' });
       const [joined, sharing] = within(devices).getAllByRole('listitem');
       expect(joined).toHaveTextContent('desk');
       expect(joined).toHaveTextContent(REACH_WORDS.connected);
-      expect(sharing).toHaveTextContent('Sharing');
-      expect(sharing).toHaveTextContent('On · 2 paired');
+      expect(sharing).toHaveTextContent('This Mac');
+      expect(sharing).toHaveTextContent('Sharing · 2 paired');
     });
 
     it('away: the reach word the daemon gives, with its own mark', async () => {
@@ -378,18 +383,24 @@ describe('the tray panel', () => {
     });
 
     it('sharing alone, without a joined machine', async () => {
-      transport.getRemoteStatus.mockImplementation(async () => ({ ...IDLE_STATUS, enabled: true, devices: [device()] }));
+      transport.getRemoteStatus.mockImplementation(async () => ({
+        ...IDLE_STATUS,
+        enabled: true,
+        devices: [device()],
+        sharing: 'Sharing · 1 paired', sharing_note: '', reach_line: '',
+      }));
       await renderTray();
       const devices = await screen.findByRole('region', { name: 'Devices' });
-      expect(within(devices).getByRole('listitem')).toHaveTextContent('On · 1 paired');
+      expect(within(devices).getByRole('listitem')).toHaveTextContent('Sharing · 1 paired');
     });
 
-    it('sharing off is a fact: the block says Sharing Off, and no joined machine', async () => {
+    it('sharing off is a fact: the block says This Mac Not sharing, and no joined machine', async () => {
+      transport.getRemoteStatus.mockImplementation(async () => ({ ...IDLE_STATUS, sharing: 'Not sharing', sharing_note: '', reach_line: '' }));
       await renderTray();
       const devices = await screen.findByRole('region', { name: 'Devices' });
       const lines = within(devices).getAllByRole('listitem');
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toHaveTextContent('SharingOff');
+      expect(lines[0]).toHaveTextContent('This MacNot sharing');
       expect(lines[0].querySelector('[data-kind]')).toHaveAttribute('data-kind', 'off');
     });
 

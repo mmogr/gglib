@@ -1,6 +1,6 @@
 /**
  * The devices line says what the tunnel is doing in the daemon's words: the
- * machine this one has joined and its reach, sharing and how many paired,
+ * machine this one has joined and its reach, sharing as the daemon says it,
  * a pairing code still on offer as "code m:ss" counting down to its own
  * deadline, or nothing. A click opens the Devices place.
  */
@@ -71,18 +71,11 @@ describe('what the devices line says', () => {
     expect(devicesSaying(joined('disconnected'), null)).toEqual({ mark: 'off', word: 'Disconnected', name: 'desk' });
   });
 
-  it('sharing and how many devices are paired', () => {
-    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [] }, null)).toEqual({ mark: 'on', word: 'Sharing · 0 paired' });
-    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [device, { ...device, id: 'dev-2' }] }, null)).toEqual({
+  it("sharing, in the daemon's words", () => {
+    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [device, { ...device, id: 'dev-2' }], sharing: 'Sharing · 2 paired' }, null)).toEqual({
       mark: 'on',
       word: 'Sharing · 2 paired',
     });
-  });
-
-  it('sharing with a daemon that sends no roster counts none', () => {
-    const older: Record<string, unknown> = { ...IDLE_STATUS, enabled: true };
-    delete older.devices;
-    expect(devicesSaying(older as unknown as RemoteStatus, null)).toEqual({ mark: 'on', word: 'Sharing · 0 paired' });
   });
 
   it('a code on offer as its time left, over everything else, in plain text: ▲ is for warnings', () => {

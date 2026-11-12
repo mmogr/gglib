@@ -25,6 +25,7 @@ mod serve_rearm;
 mod serve_switch;
 mod slot;
 mod status;
+mod status_lines;
 mod stored_pairing;
 mod teardown;
 mod types;

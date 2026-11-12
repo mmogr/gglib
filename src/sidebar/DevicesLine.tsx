@@ -3,8 +3,9 @@
  *
  * `◎ Devices` and, at the right, what the tunnel is doing in the daemon's
  * words: the machine this one has joined with its reach (`REACH_WORDS`:
- * Connected, Away, Disconnected), else "Sharing · N paired" while this
- * machine lets devices in, else nothing. A pairing code still on offer is
+ * Connected, Away, Disconnected), else sharing as the daemon says it
+ * (`status.sharing`, "Sharing · N paired") while this machine lets
+ * devices in, else nothing. A pairing code still on offer is
  * said as "code 1:42", counting down to the code's own deadline, since it
  * outlives the page that revealed it (DV-1); it is plain text with no mark,
  * as the pairing sheet's "Expires in 1:42" is, since ▲ is for warnings
@@ -37,11 +38,7 @@ export function devicesSaying(status: RemoteStatus | null, codeLeft: number | nu
   if (status.connected !== null) {
     return { mark: REACH_MARK[status.reach], word: REACH_WORDS[status.reach], name: pairedName(status) };
   }
-  if (status.enabled) {
-    // `?? []`: a daemon from before the roster answers status without one.
-    const paired = (status.devices ?? []).length;
-    return { mark: 'on', word: `Sharing · ${paired} paired` };
-  }
+  if (status.enabled) return { mark: 'on', word: status.sharing };
   return null;
 }
 

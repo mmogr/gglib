@@ -114,7 +114,11 @@ fn the_status_sends_exactly_its_contract_fields() {
             "path",
             "peers",
             "reach",
+            "reach_line",
+            "reach_note",
             "remote_enabled",
+            "sharing",
+            "sharing_note",
             "stored_ticket_fingerprint",
             "ticket_fingerprint",
             "tunnelled_requests"
@@ -168,7 +172,8 @@ fn a_row_with_only_an_id_reads_as_a_roster_row() {
 }
 
 /// What the daemon writes, the CLI reads back unchanged: every field of a
-/// status with both sides up and a device on it.
+/// status with both sides up and a device on it, its lines said again on
+/// reading.
 #[test]
 fn a_status_reads_back_as_the_status_that_was_sent() {
     let sent = RemoteStatus {
@@ -205,10 +210,17 @@ fn a_status_reads_back_as_the_status_that_was_sent() {
                 ..row()
             },
         ],
-    };
+        sharing: String::new(),
+        sharing_note: String::new(),
+        reach_line: String::new(),
+        reach_note: String::new(),
+    }
+    .with_lines();
 
     let json = serde_json::to_string(&sent).unwrap();
-    let read: RemoteStatus = serde_json::from_str(&json).unwrap();
+    let read = serde_json::from_str::<RemoteStatus>(&json)
+        .unwrap()
+        .with_lines();
 
     assert_eq!(read, sent);
 }
