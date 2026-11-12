@@ -1,6 +1,6 @@
 //! The fold of the loop guard's switch into its mode (step 2), on database
 //! files of the test's own: what each stored pair answers once a boot has run
-//! it and step 6 after it, that it runs once, and what it writes.
+//! it and step 7 after it, that it runs once, and what it writes.
 
 use std::path::{Path, PathBuf};
 

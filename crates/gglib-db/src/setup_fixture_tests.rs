@@ -21,6 +21,8 @@ mod history;
 mod library;
 #[path = "setup_fixture_loop_guard_tests.rs"]
 mod loop_guard;
+#[path = "setup_fixture_sse_tests.rs"]
+mod sse;
 
 /// The schema generation gglib 0.33.0 stamps.
 const FIXTURE_GENERATION: i64 = 5;

@@ -2,11 +2,12 @@
 //!
 //! Reusable `#[derive(Args)]` structs that are flattened into multiple commands
 //! via `#[command(flatten)]`, eliminating duplicate field definitions across
-//! `Serve`, `Chat`, and `Question`.
+//! `Serve`, `Proxy`, `Chat`, and `Question`.
 
 use clap::Args;
 
-/// Sampling-parameter overrides common to all inference commands.
+/// Sampling-parameter overrides for the commands that configure a launch or
+/// the endpoint: `serve` and `proxy`. A chat takes [`ChatSamplingArgs`].
 ///
 /// Each field is optional. When `None`, the merge hierarchy — CLI → per-model
 /// defaults (user-set) → global defaults → the model's recipe — fills in the
@@ -72,14 +73,13 @@ pub struct SamplingArgs {
     /// How hard to ask the model to think: minimal, low, medium, high, xhigh, max.
     ///
     /// Applies only to models whose chat template declares that it reads the
-    /// variable; on any other model the level is dropped before the request is
-    /// sent and `gglib model explain` reports it as suppressed. Pair it with
+    /// variable; on any other model it is still sent and the template ignores
+    /// it. Pair it with
     /// `--reasoning-budget-tokens`, which llama.cpp enforces regardless.
     ///
     /// There is no `none`: upstream treats it as "erase the setting", which
     /// lets the template's own default fire (medium, on gpt-oss). Pass
-    /// `--reasoning-budget-tokens 0` to stop thinking (on `chat`,
-    /// `--thinking off`). A chat keeps neither flag.
+    /// `--reasoning-budget-tokens 0` to stop thinking.
     #[arg(long = "reasoning-effort", value_parser = crate::reasoning_args::parse_effort)]
     pub reasoning_effort: Option<gglib_core::domain::ReasoningEffort>,
     /// Ceiling on thinking tokens before the model is cut off.
@@ -87,8 +87,6 @@ pub struct SamplingArgs {
     /// A budget, not a taste: enforced by llama.cpp itself on every model, so
     /// unlike `--reasoning-effort` it applies whatever the chat template does.
     /// `-1` defers to the launch-time `--reasoning-budget`; `0` stops thinking.
-    /// A chat (`chat`, `q`) keeps no budget: `chat --thinking off` stops its
-    /// thinking.
     // `allow_hyphen_values` because `-1` is a documented value here, and
     // without it clap reads the leading `-` as the start of another flag and
     // reports `unexpected argument '-1'`. The parser still rejects anything
@@ -102,13 +100,34 @@ pub struct SamplingArgs {
     pub reasoning_budget_tokens: Option<i32>,
 }
 
-/// Context-size and memory-lock flags common to all inference commands.
+/// The sampling flags a chat keeps (`chat`, `q`): saved with the chat, and
+/// sent by each of its turns as a client's sampling.
+#[derive(Args, Debug, Clone, Default)]
+pub struct ChatSamplingArgs {
+    /// Temperature for sampling (0.0-2.0)
+    #[arg(long)]
+    pub temperature: Option<f32>,
+    /// Top-p sampling (0.0-1.0)
+    #[arg(long = "top-p")]
+    pub top_p: Option<f32>,
+    /// Top-k sampling
+    #[arg(long = "top-k")]
+    pub top_k: Option<i32>,
+    /// Maximum tokens to generate
+    #[arg(long = "max-tokens")]
+    pub max_tokens: Option<u32>,
+    /// Repeat penalty
+    #[arg(long = "repeat-penalty")]
+    pub repeat_penalty: Option<f32>,
+}
+
+/// Context-size and memory-lock flags for `serve`.
 #[derive(Args, Debug, Clone, Default)]
 pub struct ContextArgs {
     /// Context size override (number or 'max' for model metadata).
     /// Resolved through a 5-level fallback chain: runtime flag → per-model
     /// `server_defaults` (from DB) → global default → fitted to this machine → 4096.
-    #[arg(short, long)]
+    #[arg(short = 'c', long = "context-size", value_name = "N|max")]
     pub ctx_size: Option<String>,
     /// Enable memory lock
     #[arg(long)]

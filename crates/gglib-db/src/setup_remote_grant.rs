@@ -10,8 +10,8 @@
 //!
 //! It never opens more. It copies only from a machine whose tunnel was on,
 //! since one that was off reset its list at its next `enable` anyway; and
-//! only a name exactly one server has, when that server is stdio, as the
-//! list's own read opened, and never `builtin`. The rows are read as raw JSON
+//! only a name exactly one server has, as the list's own read opened, and
+//! never `builtin` (an SSE server it flags is deleted by step 6). The rows are read as raw JSON
 //! and never as `Settings`, which would drop the list once that field is
 //! gone, and fail on an unrelated row it cannot read.
 
@@ -31,28 +31,25 @@ const SERVE: &str = "remote_serve";
 /// The name gglib keeps for its own tools, never opened to a device.
 const RESERVED: &str = "builtin";
 
-/// Step 4: flag each listed name's one server, when it is stdio. A list
-/// that cannot be read opens nothing and never stops the boot.
+/// Step 4: flag each listed name's one server. A list that cannot be read
+/// opens nothing and never stops the boot. An SSE server flagged here is
+/// deleted by step 6.
 pub(super) async fn flag_listed_servers(conn: &mut SqliteConnection) -> Result<()> {
     let list = listed(stored_rows(conn).await?);
     if list.is_empty() {
         return Ok(());
     }
-    let servers: Vec<(i64, String, String)> =
-        sqlx::query_as("SELECT id, name, type FROM mcp_servers")
-            .fetch_all(&mut *conn)
-            .await?;
+    let servers: Vec<(i64, String)> = sqlx::query_as("SELECT id, name FROM mcp_servers")
+        .fetch_all(&mut *conn)
+        .await?;
 
     let mut flagged = 0_u64;
     for name in &list {
-        let mut named = servers.iter().filter(|(_, has, _)| has == name);
+        let mut named = servers.iter().filter(|(_, has)| has == name);
         // Two servers sharing a name opened neither under the list.
-        let (Some((id, _, kind)), None) = (named.next(), named.next()) else {
+        let (Some((id, _)), None) = (named.next(), named.next()) else {
             continue;
         };
-        if kind != "stdio" {
-            continue;
-        }
         flagged += sqlx::query("UPDATE mcp_servers SET allow_remote = 1 WHERE id = ?")
             .bind(id)
             .execute(&mut *conn)

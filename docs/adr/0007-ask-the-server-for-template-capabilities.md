@@ -269,6 +269,14 @@ an unidentified `RuntimeCapabilities` means every compensation stays on
 (`runtime_capabilities.rs:149`). Unknown ≠ unsupported, and an observation
 that fails to arrive must not masquerade as one that arrived negative.
 
+> **Amended 2026-11-12 — the caps are read, never used to edit the request**
+> (v1 decision 14). Stage 5b, `effort_gate.rs` and `SuppressedByTemplate` are
+> deleted. A resolved `reasoning_effort` is sent whatever the caps say; a
+> template that does not read it ignores it, as finding 7c saw live. The
+> `/props` read, the stored tri-state and the six levels stay: surfaces read
+> the tri-state to hide or caption the control, and stage 1 reads the caps
+> for prior reasoning ([ADR 0020](0020-prior-reasoning-is-kept-where-the-template-keeps-it.md)).
+
 **4. `"none"` is not a level gglib offers.** Finding 4 shows it delivering
 medium thinking on gpt-oss and nothing at all on most other templates, and
 the predicate that would make it honest is unobservable. "Stop thinking" is
@@ -314,6 +322,11 @@ inherited rather than invented:
    class that rule exists to exclude).
 3. **Provenance whenever it changes an outcome** — a suppressed value is
    reported suppressed, with the observation that suppressed it.
+
+> **Amended 2026-11-12.** Nothing is suppressed any more (decision 3's
+> amendment), so this observation no longer steers `reasoning_effort`. The
+> posture and its rules stand for the one decision it still steers, stage 1's
+> prior-reasoning strip.
 
 The appendix amends ADR 0001 so the next reader of "this ADR's implementation
 gates nothing" finds the exception where the rule is stated, not three
@@ -412,3 +425,6 @@ evidence-backed, and reversible.", insert:
 > self-report used as a policy input** — and carries its rules: snapshotted
 > once per launch, provenance whenever it changes an outcome, and unknown
 > never gates.
+
+> **Amended 2026-11-12.** Applied as written; ADR 0001 now carries a second
+> note recording that the suppression is gone.

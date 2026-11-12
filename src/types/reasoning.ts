@@ -25,9 +25,9 @@ import type { SamplingParamKey } from './index';
  * Mirrors the backend `gglib_core::domain::Support`. Three states, never two:
  * the caps are read from `GET /props` while the model runs, so every model
  * nobody has launched on this installation answers `unknown` — and collapsing
- * that into `no` would hide the control on most of the library. The server's
- * own suppression acts only on `no` (ADR 0007 decision 3), so a surface offers
- * the control on `yes` and `unknown` alike and explains itself on `no`.
+ * that into `no` would hide the control on most of the library (ADR 0007
+ * decision 3), so a surface offers the control on `yes` and `unknown` alike
+ * and explains itself on `no`.
  */
 // Aliased rather than renamed, to keep this commit free of consumer edits.
 // `ProxyReasoningRows.tsx` declares a *component* named `TemplateSupport`;

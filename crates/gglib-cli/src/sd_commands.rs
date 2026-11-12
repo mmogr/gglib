@@ -3,7 +3,7 @@
 //! The image runtime: `sd-server`, which serves the models that draw. The
 //! same verbs as [`LlamaCommand`](crate::llama_commands::LlamaCommand)
 //! without its `detect`: `install` installs the pinned release when what is
-//! there is missing or older, which is also what `update` does.
+//! there is missing or older, which is how it is updated too.
 
 use clap::Subcommand;
 
@@ -11,11 +11,10 @@ use clap::Subcommand;
 #[derive(Subcommand)]
 pub enum SdCommand {
     /// Install the pinned stable-diffusion.cpp release, or update to it
-    #[command(visible_alias = "update")]
     Install {
         /// Reinstall even when the pinned release is installed. Over a source
         /// build, takes the download where one fits
-        #[arg(short, long)]
+        #[arg(long)]
         force: bool,
         /// Force building from source instead of downloading pre-built binaries
         #[arg(long)]
@@ -77,24 +76,17 @@ mod tests {
                 build: true
             }
         ));
-        assert!(matches!(
-            parsed(&["gglib", "config", "sd", "install", "-f"]),
-            SdCommand::Install {
-                force: true,
-                build: false
-            }
-        ));
     }
 
+    /// `install` is how it is updated: there is no `update`, and no `-f`.
     #[test]
-    fn update_is_install_with_the_same_flags() {
-        assert!(matches!(
-            parsed(&["gglib", "config", "sd", "update"]),
-            SdCommand::Install {
-                force: false,
-                build: false
-            }
-        ));
+    fn there_is_no_update_and_no_short_force() {
+        for argv in [
+            &["gglib", "config", "sd", "update"][..],
+            &["gglib", "config", "sd", "install", "-f"],
+        ] {
+            assert!(crate::Cli::try_parse_from(argv).is_err(), "{argv:?}");
+        }
     }
 
     #[test]

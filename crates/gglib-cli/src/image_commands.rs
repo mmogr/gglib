@@ -31,7 +31,6 @@ pub struct ImageCommandArgs {
     pub size: Option<ImageSize>,
     /// How many images, 1 to 4
     #[arg(
-        short = 'n',
         long = "count",
         value_name = "N",
         default_value_t = 1,

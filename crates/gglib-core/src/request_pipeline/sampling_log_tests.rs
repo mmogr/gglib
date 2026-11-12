@@ -1,11 +1,8 @@
 //! Tests for [`super`] — the one line that records a request's sampling.
 //!
 //! These capture the event itself rather than asserting on the
-//! [`SamplingDecision`](super::SamplingDecision) the renderer is handed. The
-//! decision is post-gate no matter where the line is rendered from; what these
-//! pin is that the *line* is, which is the whole reason the renderer was moved
-//! out of stage 4. A test that read the struct back would pass just as happily
-//! with the `debug!` restored to its old position.
+//! [`SamplingDecision`](super::SamplingDecision) the renderer is handed: the
+//! line is the record, so the line is what they read.
 
 use std::sync::{Arc, Mutex};
 
@@ -83,9 +80,8 @@ fn capture(f: impl FnOnce()) -> Vec<(String, String)> {
 ///
 /// `tracing` records `message` first and the declared fields after it, so an
 /// event is the slice from its message up to the next one. Sliced rather than
-/// searched because stage 5b's own `debug!` also carries a `from` — taking the
-/// first match in the whole capture would read one line's provenance off
-/// another's.
+/// searched so that another event's `from` can never be read off as this
+/// line's.
 fn fields_of<'a>(events: &'a [(String, String)], name: &str) -> &'a [(String, String)] {
     let start = events
         .iter()
@@ -111,8 +107,8 @@ fn on_resolved_line(events: &[(String, String)], field: &str) -> String {
 }
 
 /// A model whose template positively does not read `reasoning_effort`, with a
-/// per-model recipe that names one — the shape stage 5b exists for.
-fn suppressing_model() -> ModelContext {
+/// per-model recipe that names one.
+fn non_reading_model() -> ModelContext {
     ModelContext {
         catalog_resolved: true,
         template_caps: Some(TemplateCaps {
@@ -132,45 +128,40 @@ fn body() -> serde_json::Value {
     serde_json::json!({"model": "m", "messages": [{"role": "user", "content": "hi"}]})
 }
 
-/// **The defect this module was created to fix.** Rendered inside stage 4, the
-/// line reported `Some(High)` from the model rung for a level stage 5b then
-/// deleted — and nothing downstream echoes either reasoning control, so that
-/// line was the only account of the request there would ever be.
+/// The template caps are read, never used to edit the request (ADR 0007
+/// finding 7c): a level resolved for a template that does not read it is
+/// still sent, and the line says so with its rung.
 #[test]
-fn a_suppressed_level_is_not_reported_as_resolved() {
+fn a_level_the_template_does_not_read_is_still_sent_and_reported() {
+    let mut value = body();
     let events = capture(|| {
-        let mut value = body();
         apply(
             &mut value,
-            &suppressing_model(),
+            &non_reading_model(),
             &SamplingLayers::default(),
             None,
         )
         .expect("no budget, so nothing to reject");
     });
 
-    assert_eq!(
-        on_resolved_line(&events, "reasoning_effort"),
-        "None",
-        "the line must describe what was sent, not what stage 4 folded"
-    );
+    assert_eq!(value["reasoning_effort"], "high", "{value}");
+    assert_eq!(on_resolved_line(&events, "reasoning_effort"), "Some(High)");
     assert!(
-        on_resolved_line(&events, "from").contains("reasoning_effort=suppressed-by-template"),
-        "provenance must name the suppression: {events:?}"
+        on_resolved_line(&events, "from").contains("reasoning_effort=model"),
+        "{events:?}"
     );
 }
 
-/// The other half: on a model that *does* read the variable, the same line has
-/// to carry the level and the rung. A renderer that simply stopped printing
-/// reasoning would pass the test above.
+/// The same on a model that *does* read the variable: the caps make no
+/// difference to what is sent.
 #[test]
-fn a_surviving_level_is_still_reported_with_its_rung() {
+fn a_level_the_template_reads_is_reported_with_its_rung() {
     let ctx = ModelContext {
         template_caps: Some(TemplateCaps {
             supports_reasoning_effort: Some(true),
             ..TemplateCaps::default()
         }),
-        ..suppressing_model()
+        ..non_reading_model()
     };
     let events = capture(|| {
         let mut value = body();
@@ -184,35 +175,7 @@ fn a_surviving_level_is_still_reported_with_its_rung() {
     );
 }
 
-/// Stage 5b's line is not made redundant by the move: after suppression the
-/// resolved line reads `None`, so the level that was dropped and the rung that
-/// asked for it exist nowhere else.
-#[test]
-fn the_gate_still_names_what_it_dropped() {
-    let events = capture(|| {
-        let mut value = body();
-        apply(
-            &mut value,
-            &suppressing_model(),
-            &SamplingLayers::default(),
-            None,
-        )
-        .expect("applies");
-    });
-
-    let fields = fields_of(&events, "reasoning_effort suppressed");
-    assert!(
-        fields.iter().any(|(k, v)| k == "level" && v == "high"),
-        "{events:?}"
-    );
-    assert!(
-        fields.iter().any(|(k, v)| k == "from" && v == "model"),
-        "{events:?}"
-    );
-}
-
-/// An ordinary request must still get its whole table — the move must not have
-/// dropped a field on the way out of stage 4.
+/// An ordinary request gets its whole table.
 #[test]
 fn every_resolved_parameter_still_reaches_the_line() {
     let events = capture(|| {

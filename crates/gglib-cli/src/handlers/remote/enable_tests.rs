@@ -6,11 +6,7 @@
 
 use clap::Parser as _;
 
-use super::{
-    ALLOW_MCP_GONE, EnableArgs, INVITE_NOTICE, RESUMED_NOTICE, body_of, mcp_notice,
-    refuse_allow_mcp,
-};
-use crate::commands::{Commands, RemoteCommand};
+use super::{EnableArgs, INVITE_NOTICE, RESUMED_NOTICE, body_of, mcp_notice};
 
 /// An invite claims the code it offered, not a device that may never come:
 /// the notice follows "expired and nobody paired" as readily as "paired",
@@ -87,38 +83,13 @@ fn with_none_open_the_notice_says_how_to_open_one() {
     assert!(!said.contains("--allow-mcp"), "{said}");
 }
 
-/// `--allow-mcp` still parses, hidden, and is refused with where the grant
-/// went, before anything else runs; without it nothing is refused, and the
-/// body sent to the daemon names no server.
+/// `enable` names no MCP server: `--allow-mcp` is not a flag, and the body
+/// sent to the daemon names none. A server is opened by a flag on it.
 #[test]
-fn allow_mcp_is_refused_with_a_pointer_and_the_body_names_no_server() {
+fn enable_names_no_mcp_server() {
     let argv = ["gglib", "remote", "enable", "--allow-mcp", "a"];
-    let cli = crate::Cli::try_parse_from(argv).unwrap_or_else(|e| panic!("{argv:?}: {e}"));
-    let Some(Commands::Remote {
-        command: RemoteCommand::Enable { allow_mcp, .. },
-    }) = cli.command
-    else {
-        panic!("{argv:?} is not `remote enable`");
-    };
-    let refused = refuse_allow_mcp(&allow_mcp).expect_err("refused");
-    assert_eq!(refused.to_string(), ALLOW_MCP_GONE);
-    assert!(ALLOW_MCP_GONE.contains("`gglib mcp allow-remote <names>`"));
-    assert!(refuse_allow_mcp(&[]).is_ok());
+    assert!(crate::Cli::try_parse_from(argv).is_err(), "{argv:?}");
 
     let body = serde_json::to_value(body_of(&EnableArgs::default())).expect("serialise");
     assert!(body.get("mcp_servers").is_none(), "{body}");
-}
-
-/// The flag is hidden from the help: it is there only to say it is gone.
-#[test]
-fn allow_mcp_is_not_in_the_help() {
-    use clap::CommandFactory as _;
-
-    let mut cli = crate::Cli::command();
-    let enable = cli
-        .find_subcommand_mut("remote")
-        .and_then(|remote| remote.find_subcommand_mut("enable"))
-        .expect("`remote enable`");
-    let help = enable.render_long_help().to_string();
-    assert!(!help.contains("--allow-mcp"), "{help}");
 }

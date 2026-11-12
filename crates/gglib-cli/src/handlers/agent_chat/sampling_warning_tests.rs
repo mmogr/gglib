@@ -17,11 +17,11 @@ fn trusting(trusted: Option<bool>) -> Settings {
 /// naming the setting and the command that turns it on.
 #[test]
 fn an_untrusted_endpoint_is_named_once_with_the_setting_and_its_command() {
-    let sampling = SamplingArgs {
+    let sampling = ChatSamplingArgs {
         temperature: Some(0.9),
         top_p: Some(0.5),
         top_k: Some(20),
-        ..SamplingArgs::default()
+        ..ChatSamplingArgs::default()
     };
     for trusted in [None, Some(false)] {
         let lines = notices(&sampling, Target::Local, &trusting(trusted));
@@ -42,44 +42,21 @@ fn an_untrusted_endpoint_is_named_once_with_the_setting_and_its_command() {
 /// nothing.
 #[test]
 fn nothing_is_said_when_the_endpoint_takes_what_the_chat_keeps() {
-    let named = SamplingArgs {
+    let named = ChatSamplingArgs {
         repeat_penalty: Some(1.1),
-        ..SamplingArgs::default()
+        ..ChatSamplingArgs::default()
     };
-    let max_tokens = SamplingArgs {
+    let max_tokens = ChatSamplingArgs {
         max_tokens: Some(256),
-        ..SamplingArgs::default()
+        ..ChatSamplingArgs::default()
     };
 
     assert!(notices(&named, Target::Local, &trusting(Some(true))).is_empty());
     assert!(notices(&named, Target::Remote, &trusting(None)).is_empty());
     assert!(notices(&max_tokens, Target::Local, &trusting(None)).is_empty());
-    assert!(notices(&SamplingArgs::default(), Target::Local, &trusting(None)).is_empty());
+    assert!(notices(&ChatSamplingArgs::default(), Target::Local, &trusting(None)).is_empty());
     let one = notices(&named, Target::Local, &trusting(None));
     assert!(one[0].contains("keeps --repeat-penalty, but"), "{one:?}");
-}
-
-/// A flag no chat keeps did not take effect, and the session says so,
-/// trusted or not, here or there, naming each and the five a chat keeps.
-#[test]
-fn a_flag_no_chat_keeps_is_said_not_to_take_effect() {
-    let sampling = SamplingArgs {
-        min_p: Some(0.05),
-        reasoning_budget_tokens: Some(0),
-        ..SamplingArgs::default()
-    };
-    for target in [Target::Local, Target::Remote] {
-        let lines = notices(&sampling, target, &trusting(Some(true)));
-
-        assert_eq!(
-            lines,
-            [
-                "  Warning: --min-p and --reasoning-budget-tokens did not take effect: a chat keeps \
-              only --temperature, --top-p, --top-k, --max-tokens and --repeat-penalty."
-            ],
-            "{target:?}"
-        );
-    }
 }
 
 #[test]

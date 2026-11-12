@@ -77,7 +77,6 @@ export function engine(kind: RuntimeKind, installed = false, overrides: Partial<
     warning: null,
     serving: null,
     installCommand: `gglib config ${WORD[kind]} install`,
-    updateCommand: `gglib config ${WORD[kind]} update`,
     ...overrides,
   };
 }

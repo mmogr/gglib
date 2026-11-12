@@ -3,7 +3,7 @@
 //! A `#[path]` child of `serve.rs`, which the two arms together took past
 //! the size budget. On the paired machine "serve" is what the word can mean
 //! there: the model resident before a turn needs it, so the first turn does
-//! not wait. Only the identifier and a numeric `--ctx-size` travel; every
+//! not wait. Only the identifier and a numeric `--context-size` travel; every
 //! other flag configures a proxy on *this* machine. The daemon carries the
 //! request through the tunnel, the identifier as one encoded path segment,
 //! so a name holding `/` reaches that machine whole.
@@ -13,7 +13,7 @@ use anyhow::Result;
 use crate::target::Target;
 
 /// Have the paired machine load the model now, so the first turn does not
-/// wait. Only the identifier and a numeric `--ctx-size` travel.
+/// wait. Only the identifier and a numeric `--context-size` travel.
 pub(super) async fn serve_far(
     target: Target,
     identifier: &str,
@@ -23,7 +23,7 @@ pub(super) async fn serve_far(
         None => None,
         Some(size) => Some(size.parse::<u64>().map_err(|_| {
             anyhow::anyhow!(
-                "on the paired machine --ctx-size is a number of tokens; `max` is decided by \
+                "on the paired machine --context-size is a number of tokens; `max` is decided by \
                  the machine that has the model"
             )
         })?),

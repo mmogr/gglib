@@ -5,7 +5,7 @@
 //! beside `loop_guard_mode`, consulted when no mode was stored: `false`
 //! answered `off`, anything else `note`. This stores `off` as the mode where
 //! the pair answered it and the mode alone would not, and deletes the switch.
-//! Step 6 then turns the mode into today's `loop_guard` switch, so a library
+//! Step 7 then turns the mode into today's `loop_guard` switch, so a library
 //! old enough to take both steps keeps a guard it had switched off.
 //!
 //! Plain SQL on the stored JSON text, which the build that wrote these rows

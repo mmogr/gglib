@@ -63,7 +63,7 @@ async fn status_then_removal(
         json["installCommand"],
         format!("gglib config {word} install")
     );
-    assert_eq!(json["updateCommand"], format!("gglib config {word} update"));
+    assert!(json.get("updateCommand").is_none(), "{json}");
     assert_eq!(json["serving"], serde_json::Value::Null);
     assert!(
         json["download"].is_string() ^ json["downloadUnavailable"].is_string(),

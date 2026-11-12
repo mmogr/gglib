@@ -72,7 +72,7 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
   const product = ENGINE_PRODUCT[kind];
   const heading = `engine-${kind}-heading`;
 
-  const standing = status ? pinStanding(status.pin, status.updateCommand) : null;
+  const standing = status ? pinStanding(status.pin, status.installCommand) : null;
   const serving = status?.serving ?? null;
   const stopFirst = serving ? `Stop ${serving} first.` : undefined;
   const busy = installing || uninstalling || serving !== null;
@@ -158,7 +158,7 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
       {builtBefore && (
         <Line>
           {product} was built from source here before, so it is built again from a terminal:{' '}
-          <code className="font-mono">{status?.updateCommand}</code>.
+          <code className="font-mono">{status?.installCommand}</code>.
         </Line>
       )}
       {missing && status?.downloadUnavailable && (

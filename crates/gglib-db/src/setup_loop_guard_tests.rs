@@ -1,4 +1,4 @@
-//! Step 6 on a library of the test's own, its log tables put back in the
+//! Step 7 on a library of the test's own, its log tables put back in the
 //! shape a build with modes left them: what each part of the step leaves.
 //! The 0.33.0 fixture's upgrade is `setup_fixture_*_tests.rs`.
 
@@ -25,7 +25,7 @@ CREATE TABLE loop_guard_scans (
 ";
 
 /// A library one step short of this build's, with the old log tables.
-async fn before_step_6(planted: &str) -> SqlitePool {
+async fn before_step_7(planted: &str) -> SqlitePool {
     let pool = setup_test_database().await.expect("a library");
     sqlx::raw_sql(OLD_TABLES)
         .execute(&pool)
@@ -53,7 +53,7 @@ async fn off_becomes_the_switch_and_the_retired_rows_go() {
         (r#""note""#, None),
         (r#""refuse""#, None),
     ] {
-        let pool = before_step_6(&format!(
+        let pool = before_step_7(&format!(
             "INSERT INTO settings_kv (key, value, updated_at) VALUES
                 ('loop_guard_mode', '{mode}', 'then'),
                 ('proxy_loop_detection', 'false', 'then'),
@@ -71,7 +71,7 @@ async fn off_becomes_the_switch_and_the_retired_rows_go() {
         ))
         .await;
 
-        run(&pool, LATEST).await.expect("step 6");
+        run(&pool, LATEST).await.expect("step 7");
 
         let mut kept = vec!["header_facts_read".to_owned(), "proxy_port".to_owned()];
         if after.is_some() {
@@ -93,7 +93,7 @@ async fn off_becomes_the_switch_and_the_retired_rows_go() {
 
 #[tokio::test]
 async fn the_log_loses_its_mode_and_scans_that_met_are_added() {
-    let pool = before_step_6(
+    let pool = before_step_7(
         "INSERT INTO loop_guard_trips VALUES
             (7, 100, 'qwen', '0.33.0', 'refuse', 'loop', 'sig', 'ses', NULL, NULL),
             (9, 200, 'qwen', '0.33.0', 'note', 'stagnation', NULL, 'ses', 6, 5);
@@ -105,7 +105,7 @@ async fn the_log_loses_its_mode_and_scans_that_met_are_added() {
     )
     .await;
 
-    run(&pool, LATEST).await.expect("step 6");
+    run(&pool, LATEST).await.expect("step 7");
 
     for table in ["loop_guard_trips", "loop_guard_scans"] {
         let columns = texts(
@@ -157,7 +157,7 @@ async fn the_log_loses_its_mode_and_scans_that_met_are_added() {
 async fn a_stored_report_loses_the_proxy_arms_mode_and_no_other_byte() {
     let with_mode = r#"{"proxy":{"settings":{"tool_call_repair":true,"loop_guard_mode":"note"}}}"#;
     let without = r#"{ "proxy": null, "model_name": "m" }"#;
-    let pool = before_step_6(&format!(
+    let pool = before_step_7(&format!(
         "INSERT INTO models (name, file_path, added_at, model_key) \
              VALUES ('m', '/m.gguf', 'then', 'local:m');
          INSERT INTO benchmark_agentic_results \
@@ -168,7 +168,7 @@ async fn a_stored_report_loses_the_proxy_arms_mode_and_no_other_byte() {
     ))
     .await;
 
-    run(&pool, LATEST).await.expect("step 6");
+    run(&pool, LATEST).await.expect("step 7");
 
     assert_eq!(
         texts(

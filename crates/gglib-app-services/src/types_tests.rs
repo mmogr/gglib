@@ -166,7 +166,6 @@ mod mcp_server_info_shape_tests {
             "server": {
                 "id": 1,
                 "name": "test",
-                "server_type": "stdio",
                 "config": {},
                 "enabled": true,
                 "lifecycle": "lazy",

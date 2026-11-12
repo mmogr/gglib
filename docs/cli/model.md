@@ -161,8 +161,8 @@ The layers, from strongest to weakest, are in
 The app's Load and Unload, from the terminal. `load` asks the daemon to
 start the model's server, llama-server or sd-server for an image model,
 and the daemon keeps it resident after the command returns; `list` then
-shows it serving. A model already loaded is reused. `--context N` or
-`--context max` sets the context it is served at; omitted, the daemon
+shows it serving. A model already loaded is reused. `--context-size N` (`-c`) or
+`--context-size max` sets the context it is served at; omitted, the daemon
 fits one. `--pin` pins the endpoint to the model first, as `gglib serve`
 does, so every request for another model is refused while the pin holds;
 an endpoint already running unpinned is the daemon's refusal, and
@@ -239,10 +239,10 @@ becomes a live monitor:
 - `search --images` and `browse --images` look for image models.
 - Private and gated repositories need `HF_TOKEN` in the environment. A
   command and the daemon each read it once, as they start: `search`,
-  `browse`, `check-updates` and `upgrade` ask the Hub with the command's own,
-  while a queued download, a repair's among them, runs on the daemon and uses
-  the daemon's, so the daemon must have been started with it.
-  `download --list-quants` takes `--token` instead.
+  `browse`, `check-updates`, `upgrade` and `download --list-quants` ask the
+  Hub with the command's own, while a queued download, a repair's among them,
+  runs on the daemon and uses the daemon's, so the daemon must have been
+  started with it.
 
 The transfer engine is described in the
 [download module](../../crates/gglib-cli/src/handlers/model/download/README.md).

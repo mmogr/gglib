@@ -1,8 +1,8 @@
-//! The loop guard's log tables, and step 6: the guard is on or off.
+//! The loop guard's log tables, and step 7: the guard is on or off.
 //!
 //! A `#[path]` child of `setup.rs`. The guard had three modes, `off`, `note`
 //! and `refuse`; it now has a switch, `loop_guard`, where no row means on and
-//! "on" is what `note` did. Step 6 leaves a library with no trace of the
+//! "on" is what `note` did. Step 7 leaves a library with no trace of the
 //! modes:
 //!
 //! - **Settings.** A stored `loop_guard_mode` of `"off"` becomes
@@ -22,7 +22,7 @@
 use anyhow::Result;
 use sqlx::SqliteConnection;
 
-/// The decisions table, as a new library gets it and step 6 rebuilds it.
+/// The decisions table, as a new library gets it and step 7 rebuilds it.
 pub(super) const TRIPS_TABLE: &str = "CREATE TABLE IF NOT EXISTS loop_guard_trips (
             id             INTEGER PRIMARY KEY,
             recorded_at    INTEGER NOT NULL,
@@ -39,7 +39,7 @@ pub(super) const TRIPS_TABLE: &str = "CREATE TABLE IF NOT EXISTS loop_guard_trip
 pub(super) const TRIPS_INDEX: &str = "CREATE INDEX IF NOT EXISTS idx_loop_guard_trips_recorded_at \
      ON loop_guard_trips(recorded_at)";
 
-/// The scans table, as a new library gets it and step 6 rebuilds it.
+/// The scans table, as a new library gets it and step 7 rebuilds it.
 pub(super) const SCANS_TABLE: &str = "CREATE TABLE IF NOT EXISTS loop_guard_scans (
             day           INTEGER NOT NULL,
             model_name    TEXT    NOT NULL,
@@ -99,7 +99,7 @@ const REPORTS: &str = "UPDATE benchmark_agentic_results
     WHERE json_valid(report_json)
     AND json_type(report_json, '$.proxy.settings.loop_guard_mode') IS NOT NULL";
 
-/// Step 6: the loop guard is on or off. See the module docs.
+/// Step 7: the loop guard is on or off. See the module docs.
 ///
 /// A table already without `mode` — a new library's — is not rebuilt, so the
 /// step is safe on any file this build made.

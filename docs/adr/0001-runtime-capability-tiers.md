@@ -143,6 +143,13 @@ separate, evidence-backed, and reversible.
 > once per launch, provenance whenever it changes an outcome, and unknown
 > never gates.
 
+> **Amended 2026-11-12.** The example has gone: gglib no longer suppresses a
+> resolved `reasoning_effort`, and sends it whatever the caps say (ADR 0007,
+> decision 3's amendment). The same self-report still gates one thing, stage
+> 1's strip of prior reasoning, which keeps that reasoning only where the caps
+> say `supports_preserve_reasoning`
+> ([ADR 0020](0020-prior-reasoning-is-kept-where-the-template-keeps-it.md)).
+
 ### Arbitration is static, resolved once per run
 
 The capability probe is taken when a server is launched and held for that

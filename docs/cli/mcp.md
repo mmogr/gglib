@@ -6,14 +6,14 @@ say so, a paired device's chats.
 
 <!-- snippet: mcp -->
 ```console
-$ gglib mcp add --name filesystem --type stdio --command npx --args="-y,@modelcontextprotocol/server-filesystem,."
+$ gglib mcp add --name filesystem --command npx --args="-y,@modelcontextprotocol/server-filesystem,."
 ✓ Added MCP server 'filesystem' (id: 4)
 $ gglib mcp list
 Found 1 MCP server(s):
 
-ID   Name                      Type   Enabled   Remote  Lifecycle   Status     Tools 
------------------------------------------------------------------------------------
-4    filesystem                stdio  yes       no      lazy        Stopped    0     
+ID   Name                      Enabled   Remote  Lifecycle   Status     Tools 
+----------------------------------------------------------------------------
+4    filesystem                yes       no      lazy        Stopped    0     
 $ gglib mcp test filesystem
 Testing connection to 'filesystem'...
 ✓ Connection successful — 14 tool(s) discovered
@@ -39,16 +39,15 @@ Testing connection to 'filesystem'...
 `list` reads each server's configuration from this machine's database, and
 its Status and Tools from the daemon, whose copy of a server is the one its
 chats use. Status is the state in the word the app shows too: Running,
-Starting, Stopped, Failed or Not supported yet; a failed server's reason is
+Starting, Stopped or Failed; a failed server's reason is
 said on its own line under the table. With no daemon running, those two
 columns show `—` and a line under the table says why; `list` never starts a
 daemon.
 
-- A server is `stdio`: `--command` and `--args` (comma-separated) say what
-  to run, `--working-dir`, `--env KEY=VALUE` and `--path-extra` shape its
-  process. `sse` (HTTP) servers are not supported yet: `add` refuses one,
-  and one already stored is listed as `Not supported yet`, is never
-  started, and can still be removed.
+- A server is a process gglib starts (`stdio`): `--command` and `--args`
+  (comma-separated) say what to run, `--working-dir`, `--env KEY=VALUE` and
+  `--path-extra` shape its process. There are no HTTP (`sse`) servers; an
+  older library's are deleted the first time this gglib opens it.
 - A server's name is its own: `add` refuses a name another server already
   has.
 - `--lifecycle` decides when gglib spawns the server: `eager` at host init,
@@ -78,7 +77,7 @@ starts a throwaway copy, lists its tools, and stops it: it is how to see
 why a server will not start.
 
 - A server that cannot start says why: `chat` and `q` print one line on
-  stderr for each lazy server they go on without (none under `-Q`), and
+  stderr for each lazy server they go on without (none under `--quiet`), and
   that line and `test` end with what the server printed on stderr before
   it exited.
 
@@ -89,7 +88,7 @@ why a server will not start.
 a name only one server has; `list` shows each server's `Remote`.
 
 - A change applies from a device's next run, with no restart.
-- An SSE server and `builtin` are never opened
+- `builtin` is never opened
   ([ADR 0025](../adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md)).
 
 ## Flags

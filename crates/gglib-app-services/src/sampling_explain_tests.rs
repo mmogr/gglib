@@ -583,7 +583,7 @@ fn a_field_with_no_gguf_key_never_appears() {
 }
 
 // =========================================================================
-// A suppressed reasoning effort (ADR 0007 stage 5b)
+// A template's caps are read, never used to edit the resolution (ADR 0007)
 // =========================================================================
 
 use gglib_core::domain::TemplateCaps;
@@ -599,130 +599,37 @@ fn model_whose_template(supports_reasoning_effort: Option<bool>) -> Model {
     }
 }
 
-fn high_effort_profile() -> InferenceProfile {
-    profile(
+/// A resolved level is sent whatever the template says about it; a template
+/// that does not read it ignores it. So every caps reading, `false` included,
+/// explains the same level from the same rung, and the budget beside it.
+#[test]
+fn every_template_reading_explains_the_same_effort() {
+    let high = profile(
         "high",
         InferenceConfig {
             reasoning_effort: Some(ReasoningEffort::High),
             reasoning_budget_tokens: Some(16384),
             ..InferenceConfig::default()
         },
-    )
-}
-
-/// **The whole point of the field.** With only the table, a client can see
-/// `kind: suppressedByTemplate` and `resolved.reasoningEffort: null` — enough
-/// to say *something* was dropped, and not enough to say what or whose. Both
-/// halves are destroyed by the gate, so they arrive here or nowhere.
-#[test]
-fn a_suppressed_effort_carries_the_level_and_the_rung_that_asked_for_it() {
-    let dto = explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
     );
-
-    let suppressed = dto.effort_suppressed.expect("the suppression is reported");
-    assert_eq!(suppressed.level, ReasoningEffort::High);
-    assert_eq!(suppressed.layer, Some(SamplingLayerDto::Profile));
-}
-
-/// The table and the new field have to tell one story: `resolved` shows what
-/// would be sent (nothing), and the provenance names the suppression rather
-/// than the rung whose value did not survive.
-#[test]
-fn the_table_agrees_with_the_suppression_it_reports() {
-    let dto = explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
-    );
-
-    assert_eq!(dto.resolved.reasoning_effort, None);
-    assert_eq!(
-        source_for(&dto, "reasoningEffort").kind,
-        ProvenanceKindDto::SuppressedByTemplate
-    );
-    assert_eq!(
-        source_for(&dto, "reasoningEffort").layer,
-        None,
-        "the rung is gone from the table by design; it is on effort_suppressed"
-    );
-}
-
-/// The budget is enforced by llama.cpp's own sampler, not by a template, so it
-/// survives on exactly the model where the effort does not. A client that
-/// greyed out both controls on a `no` would be wrong about the half that works.
-#[test]
-fn the_budget_survives_the_template_that_ignores_the_effort() {
-    let dto = explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
-    );
-
-    assert_eq!(dto.resolved.reasoning_budget_tokens, Some(16384));
-    assert_eq!(
-        source_for(&dto, "reasoningBudgetTokens").layer,
-        Some(SamplingLayerDto::Profile)
-    );
-}
-
-/// **Unknown never gates.** Caps are read from `/props` while a model runs, so
-/// a model nobody has launched has none — and reporting a suppression there
-/// would tell an operator their profile is inert on evidence that does not
-/// exist.
-#[test]
-fn a_model_whose_template_was_never_observed_suppresses_nothing() {
     for m in [
         model(),
         model_whose_template(None),
         model_whose_template(Some(true)),
+        model_whose_template(Some(false)),
     ] {
-        let dto = explain(&m, &Settings::with_defaults(), Some(&high_effort_profile()));
+        let dto = explain(&m, &Settings::with_defaults(), Some(&high));
 
-        assert_eq!(dto.effort_suppressed, None, "{:?}", m.template_caps);
-        assert_eq!(dto.resolved.reasoning_effort, Some(ReasoningEffort::High));
+        assert_eq!(
+            dto.resolved.reasoning_effort,
+            Some(ReasoningEffort::High),
+            "{:?}",
+            m.template_caps
+        );
         assert_eq!(
             source_for(&dto, "reasoningEffort").layer,
             Some(SamplingLayerDto::Profile)
         );
+        assert_eq!(dto.resolved.reasoning_budget_tokens, Some(16384));
     }
-}
-
-/// A suppressing model that nothing configured an effort for has nothing to
-/// report — the field must not become a permanent fixture on such rows.
-#[test]
-fn a_suppressing_model_with_no_effort_resolved_reports_nothing() {
-    let dto = explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        None,
-    );
-    assert_eq!(dto.effort_suppressed, None);
-}
-
-/// The wire contract, and the omission that keeps it off every ordinary
-/// payload: a `null` here on every model in the library would be a field a
-/// client has to check before it can learn nothing.
-#[test]
-fn the_suppression_is_absent_from_the_payload_unless_it_happened() {
-    let quiet = serde_json::to_string(&explain(
-        &model(),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
-    ))
-    .expect("serializes");
-    assert!(!quiet.contains("effortSuppressed"), "{quiet}");
-
-    let loud = serde_json::to_string(&explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
-    ))
-    .expect("serializes");
-    assert!(loud.contains(r#""effortSuppressed":{"#), "{loud}");
-    assert!(loud.contains(r#""level":"high""#), "{loud}");
-    assert!(loud.contains(r#""layer":"profile""#), "{loud}");
-    assert!(loud.contains(r#""kind":"suppressedByTemplate""#), "{loud}");
 }

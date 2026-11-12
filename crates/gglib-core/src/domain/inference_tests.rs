@@ -560,9 +560,6 @@ fn assert_sources_explain_values(layers: &[Option<&InferenceConfig>]) {
             ParamSource::Coupled | ParamSource::Unset => {
                 assert_eq!(value, None, "{name}: must be absent");
             }
-            // Suppression is a later pipeline stage acting on the folded
-            // result; the fold itself can never report it.
-            ParamSource::SuppressedByTemplate => unreachable!("{name}: the fold cannot suppress"),
         }
     }
 }

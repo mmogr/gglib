@@ -5,4 +5,4 @@ import type { McpLifecycle } from "./McpLifecycle";
 /**
  * Request to create a new MCP server.
  */
-export type CreateMcpServerRequest = { name: string, server_type: string, command: string | null, args: Array<string>, working_dir: string | null, path_extra: string | null, url: string | null, env: Array<McpEnvEntryDto>, lifecycle: McpLifecycle, };
+export type CreateMcpServerRequest = { name: string, command: string | null, args: Array<string>, working_dir: string | null, path_extra: string | null, env: Array<McpEnvEntryDto>, lifecycle: McpLifecycle, };

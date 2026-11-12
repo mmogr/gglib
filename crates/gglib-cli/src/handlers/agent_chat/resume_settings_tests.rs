@@ -20,7 +20,7 @@ pub(crate) fn chat_args() -> ChatArgs {
     ChatArgs {
         identifier: "qwen".to_owned(),
         system_prompt: None,
-        sampling: crate::shared_args::SamplingArgs::default(),
+        sampling: crate::shared_args::ChatSamplingArgs::default(),
         no_tools: false,
         target: Target::Local,
         max_iterations: None,

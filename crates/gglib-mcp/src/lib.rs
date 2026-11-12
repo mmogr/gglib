@@ -21,8 +21,8 @@ pub(crate) mod tool_images;
 
 // Re-export domain types from core for convenience
 pub use gglib_core::{
-    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
-    McpToolResult, NewMcpServer,
+    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpTool, McpToolResult,
+    NewMcpServer,
 };
 // Re-export this crate's public types
 pub use builtin::{

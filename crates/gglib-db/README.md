@@ -69,9 +69,10 @@ This crate is in the **Infrastructure Layer** — it implements the repository p
 - **`setup_migrations.rs`** — The one-time passes over rows, numbered on `PRAGMA user_version`, and the runner that takes each once, in order, with its stamp
 - **`setup_recipes.rs`** — The one-time clearing of stored copies of the `reasoning` recipe from `models` rows
 - **`setup_settings.rs`** — Step 2: the one-time fold of the loop guard's `proxy_loop_detection` row into `loop_guard_mode`
-- **`setup_loop_guard.rs`** — The loop guard's log tables, and step 6: the guard is on or off, with no mode left in settings, the log or stored reports
+- **`setup_loop_guard.rs`** — The loop guard's log tables, and step 7: the guard is on or off, with no mode left in settings, the log or stored reports
 - **`setup_remote_grant.rs`** — The one-time copy of the remote tunnel's old list of MCP servers onto each server's own `allow_remote` flag
 - **`setup_unknown_params.rs`** — The one-time change of parameter counts stored as `0.0` to unknown
+- **`setup_mcp_servers.rs`** — The `mcp_servers` and `mcp_server_env` tables, and step 6: the stored SSE servers, which gglib never ran, deleted with their variables, `manual` servers made disabled `lazy` ones, and both tables rebuilt without `type` and `url`, keeping ids
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
 ## Features
@@ -189,7 +190,7 @@ setting is gone. Two steps do:
 - Step 2 folds `proxy_loop_detection`, the loop guard's first switch, into
   `loop_guard_mode`: a `false` switch with no mode is stored as `"off"`, and
   the switch's row is deleted.
-- Step 6 makes the guard on or off: a `loop_guard_mode` of `"off"` becomes
+- Step 7 makes the guard on or off: a `loop_guard_mode` of `"off"` becomes
   `loop_guard = false`, any other mode becomes no row (on), and the mode's row
   goes with every row of a setting deleted before it that nothing reads. It
   also drops the `mode` column from the loop guard's log, adding together scan
@@ -203,9 +204,11 @@ backfill (a blocking syscall per row, paid once per library), `2` the loop
 guard's fold above, `3` the stored copies of the `reasoning` recipe cleared,
 `4` the remote tunnel's old `--allow-mcp` list copied onto
 `mcp_servers.allow_remote` (only from a machine whose tunnel was on, and only a
-name exactly one server has, when that server is stdio), `5` the parameter
-counts stored as `0.0` made unknown, and `6` the loop guard made on or off
-(above). Step 1 runs before the projector link,
+name exactly one server has), `5` the parameter counts stored as `0.0` made
+unknown, `6` the stored SSE MCP servers and their variables deleted,
+`manual` servers made disabled `lazy` ones, and `mcp_servers` rebuilt without
+its `type` and `url` columns, and `7` the loop guard made on or off (above).
+Step 1 runs before the projector link,
 which reads the paths it rewrites; the rest run last, after the `models`
 rebuild. The column set is deliberately not on it. The `template_caps` column post-dates
 the first stamp, so a database stamped `1` or later may or may not carry it,
@@ -250,7 +253,7 @@ mod tests {
 |---|---|
 | `SqliteModelRepository` | insert/list, get_by_id, get_by_name, update, delete, not-found errors, upsert dedup, an upsert takes no id |
 | `SqliteChatHistoryRepository` | create/list conversations, get by id, count, update title, delete, messages round-trip, update/delete messages |
-| `SqliteMcpRepository` | insert/get/list/update/delete servers, an SSE server, a failed insert or update leaving nothing partial, the type strings the schema admits, a database holding two servers of one name |
+| `SqliteMcpRepository` | insert/get/list/update/delete servers, a failed insert or update leaving nothing partial, a row written by SQL read back, a database holding two servers of one name |
 | `SqliteSettingsRepository` | load empty, save and load, clear individual fields |
 | `SqliteBenchmarkRepository` | `applied_json` through both read paths, an agentic run's type and report round-trip |
 | `SqliteAttachmentStore` | an image's facts and bytes read back, one id stored twice is one row, storing again moves its last-stored time, an unknown id, a store failure, ids found by their start |

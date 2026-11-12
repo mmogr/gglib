@@ -74,8 +74,8 @@ use tracing::{debug, error, info, warn};
 use gglib_core::LlmStreamEvent;
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
-    self, ContextBudget, ModelContext, SamplingDecision, SamplingLayers, SuppressedEffort,
-    TruncationError, TruncationReport,
+    self, ContextBudget, ModelContext, SamplingDecision, SamplingLayers, TruncationError,
+    TruncationReport,
 };
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder};
 
@@ -451,21 +451,6 @@ struct ShapedRequest {
     /// with `applied: false`, and [`crate::sampling_audit`] treats the two
     /// identically only because both mean "nothing to compare".
     sampling: Option<SamplingDecision>,
-    /// The `reasoning_effort` stage 5b threw away, if it threw one away.
-    ///
-    /// Carried separately from [`Self::sampling`] because it is not recoverable
-    /// from it: the gate clears `resolved.reasoning_effort` and overwrites the
-    /// rung in `sources` with
-    /// [`SuppressedByTemplate`](gglib_core::domain::ParamSource::SuppressedByTemplate),
-    /// so by the time a decision reaches a consumer, *which* level was dropped
-    /// and *who* asked for it are gone.
-    ///
-    /// Without it, on every request against a model whose template ignores
-    /// the variable, the pipeline would compute the record ADR 0007 exists to
-    /// preserve and the proxy would bin it. Nothing downstream could notice —
-    /// neither reasoning control is echoed by any readback (finding 7a), so
-    /// there is no wire evidence to contradict.
-    effort_suppressed: Option<SuppressedEffort>,
 }
 
 /// Run the shared request-shaping pipeline over a body held as `Bytes`.
@@ -497,10 +482,6 @@ fn shape_request_body(
             carries_images: false,
             grammar_enforced: false,
             sampling: None,
-            // The pipeline never ran, so no stage could have suppressed
-            // anything. Distinct from `Some`-less-because-nothing-was-dropped
-            // only in that there was also no decision to drop it from.
-            effort_suppressed: None,
         });
     };
 
@@ -518,7 +499,6 @@ fn shape_request_body(
             carries_images,
             grammar_enforced,
             sampling: Some(report.sampling),
-            effort_suppressed: report.effort_suppressed,
         }),
         Err(e) => {
             warn!(error = %e, "failed to re-serialize request body after shaping; forwarding original");
@@ -534,15 +514,6 @@ fn shape_request_body(
                 carries_images,
                 grammar_enforced: false,
                 sampling: Some(sampling),
-                // Reported even though the shaped body was discarded, and
-                // unlike `applied` it is not cleared. The two say different
-                // things: `applied: false` means the resolved values never
-                // reached upstream, while a suppression is a fact about what
-                // gglib *decided*, and the original body being forwarded does
-                // not un-decide it. The level still did not reach the model —
-                // the client's own body carried no `reasoning_effort` from the
-                // ladder to begin with.
-                effort_suppressed: report.effort_suppressed,
             })
         }
     }
@@ -770,7 +741,6 @@ pub(crate) async fn forward_chat_completion(
         carries_images,
         grammar_enforced,
         sampling: decision,
-        effort_suppressed,
     } = shaped;
 
     // Hand the readback this request's intent, and count what the client's own
@@ -778,14 +748,8 @@ pub(crate) async fn forward_chat_completion(
     // rides the connection guard because that is the object whose lifetime is
     // already exactly "while this request is in flight", which is also exactly
     // when a slot can report `params` for it.
-    //
-    // The suppression goes to the audit and *not* onto the connection: the
-    // connection's copy exists to be matched against a `/slots` observation,
-    // and no observation of a suppressed effort will ever arrive (ADR 0007
-    // finding 7a). Its home is the store, which is the one surface whose job is
-    // to record what gglib did when nothing downstream can corroborate it.
     if let Some(decision) = decision {
-        sampling_audit.record_intent(&decision, effort_suppressed.as_ref());
+        sampling_audit.record_intent(&decision);
         connection.record_sampling(decision);
     }
 

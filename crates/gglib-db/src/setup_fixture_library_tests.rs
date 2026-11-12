@@ -12,9 +12,7 @@ use gglib_core::domain::{
     InferenceConfig, ReasoningEffort, ServerConfig, TemplateCaps,
 };
 use gglib_core::ports::{McpServerRepository, ModelFilesRepositoryPort};
-use gglib_core::{
-    McpLifecycle, McpServerType, ModelCapabilities, ModelRepository, SettingsRepository,
-};
+use gglib_core::{McpLifecycle, ModelCapabilities, ModelRepository, SettingsRepository};
 
 use super::{at, open_fixture};
 use crate::{
@@ -158,10 +156,7 @@ async fn settings_and_mcp_servers_read_back_whole() {
 
     let servers = SqliteMcpRepository::new(pool.clone()).list().await.unwrap();
     let [off, tools] = <[_; 2]>::try_from(servers).unwrap();
-    assert_eq!(
-        (tools.name.as_str(), tools.server_type),
-        ("fixture-tools", McpServerType::Stdio)
-    );
+    assert_eq!((tools.id, tools.name.as_str()), (1, "fixture-tools"));
     assert_eq!(
         (tools.enabled, tools.allow_remote, tools.is_valid),
         (true, true, true)

@@ -1,4 +1,4 @@
-//! The 0.33.0 fixture through step 6, with rows planted on the copy that the
+//! The 0.33.0 fixture through step 7, with rows planted on the copy that the
 //! fixture lacks: a guard switched off, two scans that differ only by mode,
 //! and a report whose proxy arm names its mode. The fixture file itself is
 //! never written.

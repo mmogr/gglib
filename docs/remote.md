@@ -267,7 +267,7 @@ name the servers a session opened, in a list kept apart from them. The first
 start of this build flags each server that list named on its own row, once,
 when remote access was on, and only a name exactly one server has, when that
 server is stdio.
-`gglib remote enable --allow-mcp` is now refused, and says to run
+`gglib remote enable` no longer takes `--allow-mcp`; run
 `gglib mcp allow-remote <names>` instead. A machine enabled with the older
 `/mcp` switch still comes back with no MCP server open.
 
@@ -450,7 +450,7 @@ it.
 | Command | With `--remote` |
 |---|---|
 | `chat`, `q` | A turn on the desktop, as above: the model resolved there once, then sent by its id. |
-| `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the model's id or name and a numeric `--ctx-size` travel. |
+| `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the model's id or name and a numeric `--context-size` travel. |
 | `image "<prompt>"` | Draw with the desktop's image model, `-m` naming one of its ids or names, and save the pictures on the laptop. Without `-m` the desktop's default draws. |
 | `model list` | The desktop's catalogue as its proxy publishes it, one row per model: its id on the desktop, its name, the context it would be served with, and the profiles it can be asked for with. A turn names one as `<id>` or `<id>:<profile>`. |
 | `model inspect <model>` | Everything the desktop stores about one of its models, as its own inspector shows it, but for the paths of its file and its projector on its disk; then the command that chats with it. `--json` prints the same detail. |

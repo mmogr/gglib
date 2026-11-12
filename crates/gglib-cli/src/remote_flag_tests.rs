@@ -113,7 +113,7 @@ fn the_flags_of_the_in_process_loop_are_refused_on_both_agent_commands() {
         &["--port", "9000"][..],
         &["--observation-tool", "read_file"],
         &["--max-observation-steps", "3"],
-        &["--ctx-size", "8192"],
+        &["--context-size", "8192"],
         &["-c", "8192"],
         &["--mlock"],
     ] {
