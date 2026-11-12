@@ -29,7 +29,7 @@ export async function listMcpServers(): Promise<McpServerInfo[]> {
  */
 export async function addMcpServer(server: NewMcpServer): Promise<McpServerInfo> {
   // The nested config flattened into the request. The daemon requires `name`
-  // and `server_type` alone; the four optional strings are left out when empty.
+  // and `server_type` alone; the three optional strings are left out when empty.
   const request: Pick<CreateMcpServerRequest, 'name' | 'server_type'> &
     Partial<CreateMcpServerRequest> = {
     name: server.name,
@@ -38,7 +38,6 @@ export async function addMcpServer(server: NewMcpServer): Promise<McpServerInfo>
     args: server.config.args || [],
     working_dir: server.config.working_dir || undefined,
     path_extra: server.config.path_extra || undefined,
-    url: server.config.url || undefined,
     env: server.env.map(({ key, value }) => ({ key, value: value ?? '' })),
     lifecycle: server.lifecycle,
   };
@@ -59,7 +58,6 @@ export async function updateMcpServer(
   if (updates.config?.args !== undefined) request.args = updates.config.args;
   if (updates.config?.working_dir !== undefined) request.working_dir = updates.config.working_dir;
   if (updates.config?.path_extra !== undefined) request.path_extra = updates.config.path_extra;
-  if (updates.config?.url !== undefined) request.url = updates.config.url;
   if (updates.env !== undefined) {
     // A variable with no value keeps the stored one, so the key goes alone.
     request.env = updates.env.map(({ key, value }) => (value === undefined ? { key } : { key, value }));

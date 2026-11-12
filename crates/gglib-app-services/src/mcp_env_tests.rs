@@ -48,7 +48,6 @@ fn create(env: Vec<McpEnvEntryDto>) -> CreateMcpServerRequest {
         args: vec![],
         working_dir: None,
         path_extra: None,
-        url: None,
         env,
         lifecycle: McpLifecycle::Lazy,
     }

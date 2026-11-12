@@ -5,9 +5,7 @@
 //! process spawning outside of the client.
 
 use crate::client::{McpClient, McpClientError};
-use gglib_core::{
-    McpServer, McpServerStatus, McpServerType, McpServiceError, McpTool, McpToolResult,
-};
+use gglib_core::{McpServer, McpServerStatus, McpTool, McpToolResult};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -104,10 +102,7 @@ impl McpManager {
 
     /// Start an MCP server.
     ///
-    /// For stdio servers, spawns the process and initializes the MCP session.
-    /// No other kind is started. `McpService` refuses an SSE server before it
-    /// asks for a start; one that reaches here all the same is refused with
-    /// [`McpManagerError::InvalidConfig`], in the service's words.
+    /// Spawns the stdio server's process and initializes the MCP session.
     pub(crate) async fn start_server(
         &self,
         server: &McpServer,
@@ -122,15 +117,7 @@ impl McpManager {
             }
         }
 
-        // Start based on server type
-        let (client, tools) = match server.server_type {
-            McpServerType::Stdio => self.start_stdio_server(server).await?,
-            McpServerType::Sse => {
-                return Err(McpManagerError::InvalidConfig(
-                    McpServiceError::SseNotSupported.to_string(),
-                ));
-            }
-        };
+        let (client, tools) = self.start_stdio_server(server).await?;
 
         // Store running server
         {
@@ -155,7 +142,7 @@ impl McpManager {
         // Validate configuration
         server
             .config
-            .validate(server.server_type)
+            .validate()
             .map_err(McpManagerError::InvalidConfig)?;
 
         // For stdio servers, we expect a resolved absolute path in resolved_path_cache

@@ -50,7 +50,6 @@ impl McpOps {
                 args: server.config.args.clone(),
                 working_dir: server.config.working_dir.clone(),
                 path_extra: server.config.path_extra.clone(),
-                url: server.config.url.clone(),
             },
             enabled: server.enabled,
             allow_remote: server.allow_remote,
@@ -98,7 +97,6 @@ impl McpOps {
             args: Some(req.args),
             working_dir: req.working_dir,
             path_extra: req.path_extra,
-            url: req.url,
         };
 
         let new_server = NewMcpServer {
@@ -156,9 +154,6 @@ impl McpOps {
         }
         if let Some(path_extra) = req.path_extra {
             server.config.path_extra = Some(path_extra);
-        }
-        if let Some(url) = req.url {
-            server.config.url = Some(url);
         }
         if let Some(env) = req.env {
             server.env = updated_env(&server.env, env)?;
@@ -248,8 +243,8 @@ impl McpOps {
     /// server as it now stands. The flag's own write: a running server keeps
     /// running, and a device's next run reads it.
     ///
-    /// An unknown `id` is not found, as for [`Self::test_connection`]; an
-    /// SSE server or `builtin` opened is the caller's to fix.
+    /// An unknown `id` is not found, as for [`Self::test_connection`];
+    /// `builtin` opened is the caller's to fix.
     pub async fn set_allow_remote(&self, id: i64, allow: bool) -> Result<McpServerDto, GuiError> {
         match self.mcp.set_allow_remote(id, allow).await {
             Ok(server) => Ok(Self::server_to_dto(&server)),

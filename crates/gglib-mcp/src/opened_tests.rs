@@ -356,23 +356,14 @@ async fn a_running_server_keeps_running_when_opened_and_closed() {
     service.shutdown().await;
 }
 
-/// An SSE server and one stored as `builtin` are refused when opened, each
-/// with its own reason, and stay closed; closing either is never refused.
+/// A server stored as `builtin` is refused when opened, with its reason, and
+/// stays closed; closing it is never refused.
 #[tokio::test]
-async fn an_sse_server_and_builtin_are_refused_opening_but_not_closing() {
+async fn builtin_is_refused_opening_but_not_closing() {
     let (service, repo) = service();
-    // Only the repository can hold these: the service refuses both on add.
-    let sse = repo
-        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
-        .await
-        .unwrap();
+    // Only the repository can hold it: the service refuses it on add.
     let builtin = repo.insert(stdio("builtin", "npx")).await.unwrap();
 
-    let refused = service.set_allow_remote(sse.id, true).await;
-    assert!(
-        matches!(refused, Err(McpServiceError::SseNotSupported)),
-        "{refused:?}"
-    );
     let refused = service.set_allow_remote(builtin.id, true).await;
     let Err(why) = refused else {
         panic!("builtin was opened: {refused:?}")
@@ -382,15 +373,12 @@ async fn an_sse_server_and_builtin_are_refused_opening_but_not_closing() {
         why.to_string(),
         "'builtin' is gglib's own tools and is never opened to devices"
     );
-    assert!(!open(&service, sse.id).await && !open(&service, builtin.id).await);
+    assert!(!open(&service, builtin.id).await);
 
-    // A database written before either was refused can hold them open.
-    repo.set_allow_remote(sse.id, true).await.unwrap();
+    // A database written before it was refused can hold it open.
     repo.set_allow_remote(builtin.id, true).await.unwrap();
-    for id in [sse.id, builtin.id] {
-        let closed = service.set_allow_remote(id, false).await.unwrap();
-        assert!(!closed.allow_remote && !open(&service, id).await);
-    }
+    let closed = service.set_allow_remote(builtin.id, false).await.unwrap();
+    assert!(!closed.allow_remote && !open(&service, builtin.id).await);
 }
 
 #[tokio::test]
@@ -408,22 +396,18 @@ async fn an_unknown_server_is_not_found() {
     );
 }
 
-/// Only a server flagged open, enabled, stdio and not `builtin` is open to
+/// Only a server flagged open, enabled and not `builtin` is open to
 /// devices; an unflagged one is not, whatever else it is.
 #[tokio::test]
-async fn only_a_flagged_enabled_stdio_server_is_open_to_devices() {
+async fn only_a_flagged_enabled_server_is_open_to_devices() {
     let (service, repo) = service();
     let tavily = repo.insert(stdio("tavily", "npx")).await.unwrap();
     repo.insert(stdio("fs", "npx")).await.unwrap();
     let mut off = stdio("off", "npx");
     off.enabled = false;
     let off = repo.insert(off).await.unwrap();
-    let sse = repo
-        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
-        .await
-        .unwrap();
     let builtin = repo.insert(stdio("builtin", "npx")).await.unwrap();
-    for id in [tavily.id, off.id, sse.id, builtin.id] {
+    for id in [tavily.id, off.id, builtin.id] {
         repo.set_allow_remote(id, true).await.unwrap();
     }
 

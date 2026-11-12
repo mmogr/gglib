@@ -1,5 +1,5 @@
--- generation 5
--- user_version 5
+-- generation 6
+-- user_version 6
 
 CREATE INDEX idx_agentic_results_model ON benchmark_agentic_results(model_id, created_at DESC);
 

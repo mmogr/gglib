@@ -41,6 +41,8 @@ mod recipes;
 mod remote_grant;
 #[path = "setup_settings.rs"]
 mod settings;
+#[path = "setup_sse_servers.rs"]
+mod sse_servers;
 #[path = "setup_unknown_params.rs"]
 mod unknown_params;
 

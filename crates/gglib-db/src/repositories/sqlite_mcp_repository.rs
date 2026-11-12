@@ -17,23 +17,24 @@ use gglib_core::ports::{McpRepositoryError, McpServerRepository};
 
 use super::row_mappers::parse_datetime;
 
-/// Every `mcp_servers` column, as [`McpServerRow`] reads them.
-const MCP_SERVER_COLUMNS: &str = "id, name, type, enabled, allow_remote, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, created_at, last_connected_at, is_valid, last_error";
+/// Every `mcp_servers` column [`McpServerRow`] reads. Not `url`, which only
+/// an SSE server, which gglib no longer keeps, ever set.
+const MCP_SERVER_COLUMNS: &str = "id, name, type, enabled, allow_remote, lifecycle, command, resolved_path_cache, args, cwd, path_extra, created_at, last_connected_at, is_valid, last_error";
 
 /// Adds a server's row. It sets every column but the id, the two
 /// timestamps and `allow_remote`, in the order [`SqliteMcpRepository::write`]
 /// binds them. A new row is closed to paired devices by the column's
 /// default.
 const INSERT_SERVER: &str = "INSERT INTO mcp_servers \
-     (name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, is_valid, last_error) \
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+     (name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, is_valid, last_error) \
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
 /// Replaces a server's row: the columns [`INSERT_SERVER`] sets, in its
 /// order, then the id of the row. Never `allow_remote`, which only
 /// [`McpServerRepository::set_allow_remote`] writes: a whole-row write made
 /// from a copy read before a deny would otherwise open the server again.
 const UPDATE_SERVER: &str = "UPDATE mcp_servers \
-     SET name = ?, type = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, url = ?, is_valid = ?, last_error = ? \
+     SET name = ?, type = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, is_valid = ?, last_error = ? \
      WHERE id = ?";
 
 /// `SQLite` implementation of the MCP server repository.
@@ -66,7 +67,6 @@ struct McpServerRow {
     args: Option<String>,
     cwd: Option<String>,
     path_extra: Option<String>,
-    url: Option<String>,
     created_at: String,
     last_connected_at: Option<String>,
     is_valid: bool,
@@ -97,12 +97,22 @@ struct Written<'a> {
 
 /// Convert a `McpServerRow` (with env) to domain `McpServer`.
 ///
-/// The schema's CHECK constraints admit only the strings the type and the
-/// lifecycle parse, except `manual`, which an older build can still write.
-/// Opening the database makes such a row a disabled `lazy` one (#1699); one
-/// written while this process has the database open is read the same way,
-/// so it is never started.
-fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
+/// The schema's CHECK constraints admit only the strings the lifecycle
+/// parses, except `manual`, which an older build can still write. Opening
+/// the database makes such a row a disabled `lazy` one (#1699); one written
+/// while this process has the database open is read the same way, so it is
+/// never started.
+///
+/// A type other than `stdio` is refused, never read as stdio: the CHECK
+/// still admits `sse`, which opening the database deletes (step 6), and an
+/// older build could write one while this process has it open.
+fn row_to_server(
+    row: McpServerRow,
+    env: Vec<McpEnvEntry>,
+) -> Result<McpServer, McpRepositoryError> {
+    let server_type = row.server_type.parse::<McpServerType>().map_err(|reason| {
+        McpRepositoryError::Internal(format!("MCP server {} cannot be read: {reason}", row.id))
+    })?;
     let retired_manual = row.lifecycle == "manual";
     let config = McpServerConfig {
         command: row.command,
@@ -110,13 +120,12 @@ fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
         args: row.args.and_then(|a| serde_json::from_str(&a).ok()),
         working_dir: row.cwd,
         path_extra: row.path_extra,
-        url: row.url,
     };
 
-    McpServer {
+    Ok(McpServer {
         id: row.id,
         name: row.name,
-        server_type: row.server_type.parse::<McpServerType>().unwrap_or_default(),
+        server_type,
         config,
         enabled: row.enabled && !retired_manual,
         allow_remote: row.allow_remote,
@@ -126,7 +135,7 @@ fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
         last_connected_at: parse_datetime(row.last_connected_at),
         is_valid: row.is_valid,
         last_error: row.last_error,
-    }
+    })
 }
 
 /// Decode a base64-encoded environment variable value.
@@ -188,7 +197,7 @@ impl McpServerRepository for SqliteMcpRepository {
 
         let env = self.fetch_env(id).await?;
 
-        Ok(row_to_server(row, env))
+        row_to_server(row, env)
     }
 
     async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
@@ -203,7 +212,7 @@ impl McpServerRepository for SqliteMcpRepository {
 
         let env = self.fetch_env(row.id).await?;
 
-        Ok(row_to_server(row, env))
+        row_to_server(row, env)
     }
 
     async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
@@ -217,7 +226,7 @@ impl McpServerRepository for SqliteMcpRepository {
         let mut servers = Vec::with_capacity(rows.len());
         for row in rows {
             let env = self.fetch_env(row.id).await?;
-            servers.push(row_to_server(row, env));
+            servers.push(row_to_server(row, env)?);
         }
 
         Ok(servers)
@@ -295,8 +304,7 @@ impl SqliteMcpRepository {
     /// A failure at any step rolls the transaction back, so the database
     /// never holds a server without its env, nor half of an update.
     async fn write(&self, id: Option<i64>, server: Written<'_>) -> Result<i64, McpRepositoryError> {
-        // `args` is NOT NULL: a server with none, as every SSE server is,
-        // stores an empty list.
+        // `args` is NOT NULL: a server with none stores an empty list.
         let args = serde_json::to_string(server.config.args.as_deref().unwrap_or_default())
             .map_err(internal)?;
 
@@ -316,7 +324,6 @@ impl SqliteMcpRepository {
         .bind(args)
         .bind(&server.config.working_dir)
         .bind(&server.config.path_extra)
-        .bind(&server.config.url)
         .bind(server.is_valid)
         .bind(server.last_error);
         if let Some(id) = id {

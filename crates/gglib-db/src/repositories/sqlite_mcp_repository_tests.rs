@@ -33,32 +33,6 @@ fn with_a_repeated_env_key(server: NewMcpServer) -> NewMcpServer {
 }
 
 #[tokio::test]
-async fn an_sse_server_is_added_and_read_back() {
-    let repo = repository().await;
-
-    let added = repo
-        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
-        .await
-        .expect("an SSE server has no args, and is stored all the same");
-
-    let read = repo.get_by_id(added.id).await.unwrap();
-    assert_eq!(read.server_type, McpServerType::Sse);
-    assert_eq!(
-        read.config.url,
-        Some("http://localhost:3001/sse".to_string())
-    );
-    assert_eq!(read.config.command, None);
-
-    let stored: (String, String) =
-        sqlx::query_as("SELECT type, args FROM mcp_servers WHERE id = ?")
-            .bind(added.id)
-            .fetch_one(&repo.pool)
-            .await
-            .unwrap();
-    assert_eq!(stored, ("sse".to_string(), "[]".to_string()));
-}
-
-#[tokio::test]
 async fn a_stdio_server_reads_back_as_it_was_written() {
     let repo = repository().await;
 
@@ -296,50 +270,74 @@ async fn a_connection_is_stamped_on_the_server_it_names() {
     ));
 }
 
-/// The strings the `type` column's CHECK admits are the strings production
-/// has stored. Each is written here as SQL writes it, not through the
-/// mapping under test.
+/// `stdio`, written as SQL writes it and not through the mapping under test,
+/// reads back, and is what a write stores.
 #[tokio::test]
-async fn every_type_string_the_schema_admits_reads_back_and_is_what_a_write_stores() {
+async fn a_stdio_type_string_reads_back_and_is_what_a_write_stores() {
     let repo = repository().await;
 
-    for (stored, server_type) in [("stdio", McpServerType::Stdio), ("sse", McpServerType::Sse)] {
-        sqlx::query(
-            "INSERT INTO mcp_servers (name, type, created_at, last_connected_at) \
-             VALUES (?, ?, '2020-01-02 03:04:05', '2021-06-07 08:09:10')",
-        )
-        .bind(format!("raw-{stored}"))
-        .bind(stored)
-        .execute(&repo.pool)
+    sqlx::query(
+        "INSERT INTO mcp_servers (name, type, created_at, last_connected_at) \
+         VALUES ('raw-stdio', 'stdio', '2020-01-02 03:04:05', '2021-06-07 08:09:10')",
+    )
+    .execute(&repo.pool)
+    .await
+    .unwrap();
+
+    let read = repo.get_by_name("raw-stdio").await.unwrap();
+    assert_eq!(read.server_type, McpServerType::Stdio);
+    assert_eq!(
+        read.created_at,
+        Utc.with_ymd_and_hms(2020, 1, 2, 3, 4, 5).unwrap()
+    );
+    assert_eq!(
+        read.last_connected_at,
+        Some(Utc.with_ymd_and_hms(2021, 6, 7, 8, 9, 10).unwrap())
+    );
+
+    let mut written = read.clone();
+    written.name = "written-stdio".to_owned();
+    repo.update(&written).await.unwrap();
+    let on_disk: String = sqlx::query_scalar("SELECT type FROM mcp_servers WHERE id = ?")
+        .bind(read.id)
+        .fetch_one(&repo.pool)
         .await
         .unwrap();
-
-        let read = repo.get_by_name(&format!("raw-{stored}")).await.unwrap();
-        assert_eq!(read.server_type, server_type);
-        assert_eq!(
-            read.created_at,
-            Utc.with_ymd_and_hms(2020, 1, 2, 3, 4, 5).unwrap()
-        );
-        assert_eq!(
-            read.last_connected_at,
-            Some(Utc.with_ymd_and_hms(2021, 6, 7, 8, 9, 10).unwrap())
-        );
-
-        let mut written = read.clone();
-        written.name = format!("written-{stored}");
-        repo.update(&written).await.unwrap();
-        let on_disk: String = sqlx::query_scalar("SELECT type FROM mcp_servers WHERE id = ?")
-            .bind(read.id)
-            .fetch_one(&repo.pool)
-            .await
-            .unwrap();
-        assert_eq!(on_disk, stored);
-    }
+    assert_eq!(on_disk, "stdio");
 
     let other = sqlx::query("INSERT INTO mcp_servers (name, type) VALUES ('raw-grpc', 'grpc')")
         .execute(&repo.pool)
         .await;
     assert!(other.is_err(), "the schema admits no third type string");
+}
+
+/// The CHECK still admits `sse`, which an older build can write while this
+/// one has the database open. Such a row is refused by name, never read as
+/// stdio, by a read of it and by the listing.
+#[tokio::test]
+async fn an_sse_row_is_refused_and_never_read_as_stdio() {
+    let repo = repository().await;
+    let id: i64 = sqlx::query_scalar(
+        "INSERT INTO mcp_servers (name, type, url) VALUES ('remote', 'sse', 'http://h/sse') \
+         RETURNING id",
+    )
+    .fetch_one(&repo.pool)
+    .await
+    .unwrap();
+
+    for refused in [
+        repo.get_by_id(id).await.map(|_| ()),
+        repo.get_by_name("remote").await.map(|_| ()),
+        repo.list().await.map(|_| ()),
+    ] {
+        let Err(McpRepositoryError::Internal(reason)) = refused else {
+            panic!("an sse row was read: {refused:?}");
+        };
+        assert!(
+            reason.contains("unknown server type 'sse'; expected stdio"),
+            "{reason}"
+        );
+    }
 }
 
 /// Names are kept unique by the service, not by an index: a database that

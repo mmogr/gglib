@@ -8,10 +8,9 @@
 
 use anyhow::{Result, anyhow};
 use gglib_app_services::types::{McpServerInfo, McpServerStatusDto, McpToolInfo};
-use gglib_core::McpServiceError;
 use gglib_core::daemon_port;
 use gglib_core::domain::McpState;
-use gglib_core::domain::mcp::{McpLifecycle, McpServerType, NewMcpServer};
+use gglib_core::domain::mcp::{McpLifecycle, NewMcpServer};
 use gglib_mcp::McpService;
 
 use crate::bootstrap::CliContext;
@@ -26,10 +25,8 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
         McpCommand::List => list(ctx).await,
         McpCommand::Add {
             name,
-            r#type,
             command,
             args,
-            url,
             working_dir,
             path_extra,
             env,
@@ -39,10 +36,8 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
             add(
                 ctx,
                 &name,
-                &r#type,
-                command.as_deref(),
+                &command,
                 args,
-                url.as_deref(),
                 working_dir.as_deref(),
                 path_extra,
                 &env,
@@ -131,19 +126,10 @@ async fn daemon_servers(ctx: &CliContext) -> Result<Vec<McpServerInfo>, String> 
 /// `daemon`'s list, its state in the word every surface uses, and a dash in
 /// each when there is no daemon to read. A failed server's reason is said
 /// under the table ([`failure_line`]).
-///
-/// A server gglib cannot run has no status and no tools to count, daemon or
-/// not. Its word says so across the two cells, which it fills exactly.
 fn status_and_tools(server: &gglib_core::McpServer, daemon: Option<&[McpServerInfo]>) -> String {
-    if server.server_type == McpServerType::Sse {
-        return McpState::Unsupported.word().to_owned();
-    }
     let Some(info) = in_daemon(server, daemon) else {
         return format!("{:<10} {:<6}", "—", "—");
     };
-    if info.state == McpState::Unsupported {
-        return McpState::Unsupported.word().to_owned();
-    }
     format!("{:<10} {:<6}", info.state.word(), info.tools.len())
 }
 
@@ -175,28 +161,15 @@ fn failure_line(
 async fn add(
     ctx: &CliContext,
     name: &str,
-    server_type: &str,
-    command: Option<&str>,
+    command: &str,
     args: Vec<String>,
-    url: Option<&str>,
     working_dir: Option<&str>,
     path_extra: Option<String>,
     env_pairs: &[String],
     lifecycle: String,
     disabled: bool,
 ) -> Result<()> {
-    let server_type = server_type
-        .parse::<McpServerType>()
-        .map_err(|e| anyhow!("Invalid --type value: {e}"))?;
-    let mut new_server = match server_type {
-        McpServerType::Stdio => {
-            let cmd = command.ok_or_else(|| anyhow!("--command is required for stdio servers"))?;
-            NewMcpServer::new_stdio(name, cmd, args, path_extra)
-        }
-        // The service refuses an SSE server whatever its URL is, so a missing
-        // one is not asked for first.
-        McpServerType::Sse => NewMcpServer::new_sse(name, url.unwrap_or_default()),
-    };
+    let mut new_server = NewMcpServer::new_stdio(name, command, args, path_extra);
 
     // Apply optional settings
     if let Some(dir) = working_dir {
@@ -287,9 +260,6 @@ async fn set_allow_remote(ctx: &CliContext, identifiers: &[String], allow: bool)
 /// A disabled server is not started, as no chat gets its tools.
 async fn tools(ctx: &CliContext, identifier: &str) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
-    if server.server_type == McpServerType::Sse {
-        return Err(McpServiceError::SseNotSupported.into());
-    }
     if !server.enabled {
         println!(
             "'{}' is disabled, so chats don't get its tools; `gglib mcp enable {}` includes them.",
@@ -347,7 +317,6 @@ async fn tools_in_the_daemon(daemon: &DaemonHandle, id: i64) -> Result<Option<Ve
     match info.status {
         McpServerStatusDto::Running => Ok(Some(info.tools)),
         McpServerStatusDto::Starting => Ok(None),
-        McpServerStatusDto::Unsupported => Err(McpServiceError::SseNotSupported.into()),
         McpServerStatusDto::Stopped | McpServerStatusDto::Error(_) => {
             eprintln!("  starting '{}' in the daemon\u{2026}", info.server.name);
             match daemon.mcp_start(id).await {

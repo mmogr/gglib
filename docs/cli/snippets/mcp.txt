@@ -1,4 +1,4 @@
-$ gglib mcp add --name filesystem --type stdio --command npx --args="-y,@modelcontextprotocol/server-filesystem,."
+$ gglib mcp add --name filesystem --command npx --args="-y,@modelcontextprotocol/server-filesystem,."
 ✓ Added MCP server 'filesystem' (id: 4)
 $ gglib mcp list
 Found 1 MCP server(s):

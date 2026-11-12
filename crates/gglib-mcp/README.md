@@ -109,7 +109,7 @@ This enables:
 - **`client.rs`** — Low-level JSON-RPC 2.0 client for the MCP protocol
 - **`manager.rs`** — Server process lifecycle management (start/stop/status)
 - **`service.rs`** — High-level facade for MCP operations (CRUD + lifecycle); server names are unique, and `builtin` is refused on add and on rename, because the proxy's `/mcp` gateway lists gglib's own tools as `builtin__<tool>`
-- **`opened.rs`** — The MCP servers this machine opens to its paired devices: the flag on each server (`set_allow_remote`, its own write, which refuses opening SSE and `builtin` and never stops a server), the servers open (`open_to_devices`), the same for a device to choose from by id, by name then id and each listed (`device_servers`), and the tools a device's run is offered from those of them it may use (`opened_tools(&DeviceServers)`, which drops an id that is not open, with a warning, before any server starts), and the enabled servers this machine's own run starts before it reads their tools (`start_enabled`, at once, skipping SSE and any that cannot start)
+- **`opened.rs`** — The MCP servers this machine opens to its paired devices: the flag on each server (`set_allow_remote`, its own write, which refuses opening `builtin` and never stops a server), the servers open (`open_to_devices`), the same for a device to choose from by id, by name then id and each listed (`device_servers`), and the tools a device's run is offered from those of them it may use (`opened_tools(&DeviceServers)`, which drops an id that is not open, with a warning, before any server starts), and the enabled servers this machine's own run starts before it reads their tools (`start_enabled`, at once, skipping any that cannot start)
 - **`stderr_tail.rs`** — The last 4 KiB a server printed on stderr, read to its end by a task of its own (on Windows, a thread of its own)
 - **`path.rs`** — Path validation and PATH environment variable utilities
 - **`combined.rs`** — Unified tool executor dispatching to MCP and builtin tools
@@ -140,7 +140,7 @@ Manages running MCP server processes:
 
 High-level facade combining persistence and lifecycle:
 - CRUD operations for server configurations; an add or a rename to a name another server has is refused
-- One rule for the kind of server that is run: stdio. An SSE server is refused on add, on update and on every start, a stored one is listed as unsupported and left alone at start-up, and it can still be removed
+- One kind of server: stdio, a process gglib starts. A stored row of any other type is refused when read
 - Server start/stop with event emission
 - A test of a stored server (`test_server`): resolve its executable, start a throwaway instance, list its tools, stop it
 - Tool listing and invocation across all running servers

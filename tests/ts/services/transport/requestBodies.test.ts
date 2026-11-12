@@ -304,17 +304,17 @@ describe('what a typed request body sends', () => {
   it('adding an MCP server with no arguments sends an empty list', async () => {
     const server = {
       name: 'events',
-      server_type: 'sse' as const,
-      config: { url: 'http://127.0.0.1:9000/sse' },
+      server_type: 'stdio' as const,
+      config: { command: 'events-mcp' },
       enabled: true,
       lifecycle: 'eager' as const,
       env: [],
     };
     expect((await sent(() => addMcpServer(server))).body).toStrictEqual({
       name: 'events',
-      server_type: 'sse',
+      server_type: 'stdio',
+      command: 'events-mcp',
       args: [],
-      url: 'http://127.0.0.1:9000/sse',
       env: [],
       lifecycle: 'eager',
     });

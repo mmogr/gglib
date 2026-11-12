@@ -36,8 +36,7 @@ pub(crate) async fn update(
 
 /// Open an MCP server to paired devices, or close it: whether a device's
 /// runs are offered its tools, from the next run on. Never stops it, and an
-/// edit never changes it. 404 for an unknown id; 400 for opening an SSE
-/// server or `builtin`.
+/// edit never changes it. 404 for an unknown id; 400 for opening `builtin`.
 pub(crate) async fn set_remote(
     State(state): State<AppState>,
     Path(id): Path<i64>,

@@ -1,5 +1,5 @@
-//! What the add and update routes answer for an SSE server: a bad request,
-//! in the service's words.
+//! What the MCP routes answer for what cannot be added or opened: a bad
+//! request, in the service's words.
 
 use std::sync::Arc;
 
@@ -49,38 +49,26 @@ async fn send(
     (status, serde_json::from_slice(&bytes).unwrap())
 }
 
-/// The update is of a row the repository stored, as a database written while
-/// SSE servers were accepted holds one: the add route stores none.
+/// An `sse` server is a type there is not: a bad request on add, naming the
+/// one type there is, and nothing is stored.
 #[tokio::test]
-async fn an_sse_server_is_a_bad_request_on_add_and_on_update_in_the_services_words() {
-    let (dir, state) = state().await;
+async fn an_sse_server_is_a_bad_request_on_add() {
+    let (_dir, state) = state().await;
     let app = router(&state);
-    let refused = (
-        StatusCode::BAD_REQUEST,
-        json!({
-            "error": "SSE servers are not supported yet; only stdio servers can be run",
-            "status": 400
-        }),
+
+    let new = json!({ "name": "remote", "server_type": "sse" });
+    assert_eq!(
+        send(&app, "POST", "/api/mcp/servers", &new).await,
+        (
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "unknown server type 'sse'; expected stdio", "status": 400 })
+        )
     );
-
-    let new = json!({ "name": "remote", "server_type": "sse", "url": "http://localhost:3001/sse" });
-    assert_eq!(send(&app, "POST", "/api/mcp/servers", &new).await, refused);
     assert!(state.mcp_ops.list().await.unwrap().is_empty());
-
-    let url = format!("sqlite:{}", dir.path().join("gglib.db").display());
-    let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
-    let stored = gglib_db::SqliteMcpRepository::new(pool)
-        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
-        .await
-        .unwrap();
-    let route = format!("/api/mcp/servers/{}", stored.id);
-    let edit = json!({ "enabled": false });
-    assert_eq!(send(&app, "PUT", &route, &edit).await, refused);
-    assert!(state.mcp_ops.list().await.unwrap()[0].server.enabled);
 }
 
 /// The flag's route: the server as it now stands, 404 for an unknown id, and
-/// a bad request for opening an SSE server, in the service's words.
+/// a bad request for opening `builtin`, in the service's words.
 #[tokio::test]
 async fn the_remote_route_sets_the_flag_and_refuses_what_it_cannot_open() {
     let (dir, state) = state().await;
@@ -107,23 +95,6 @@ async fn the_remote_route_sets_the_flag_and_refuses_what_it_cannot_open() {
     let url = format!("sqlite:{}", dir.path().join("gglib.db").display());
     let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
     let repository = gglib_db::SqliteMcpRepository::new(pool);
-    let stored = repository
-        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
-        .await
-        .unwrap();
-    let route = format!("/api/mcp/servers/{}/remote", stored.id);
-    let refused = send(&app, "PUT", &route, &json!({ "allow": true })).await;
-    assert_eq!(
-        refused,
-        (
-            StatusCode::BAD_REQUEST,
-            json!({
-                "error": "SSE servers are not supported yet; only stdio servers can be run",
-                "status": 400
-            })
-        )
-    );
-
     // An older database can hold a row named `builtin`; `mcp add` refuses one now.
     let builtin = repository
         .insert(NewMcpServer::new_stdio("builtin", "npx", vec![], None))

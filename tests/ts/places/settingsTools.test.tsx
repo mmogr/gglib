@@ -40,11 +40,6 @@ const tavily = (server: Partial<McpServer> = {}, info: Partial<McpServerInfo> = 
     server: mcpServer({ id: 3, name: 'tavily', config: { command: 'npx', args: ['-y', 'tavily-mcp'] }, ...server }),
     ...info,
   });
-const sse = () =>
-  mcpServerInfo({
-    server: mcpServer({ id: 7, name: 'remote', server_type: 'sse', config: { url: 'http://localhost:3001/sse' } }),
-    status: 'unsupported',
-  });
 const tools = [
   { name: 'search', description: 'Search the web', input_schema: null },
   { name: 'extract', description: null, input_schema: null },
@@ -80,7 +75,6 @@ describe('a row', () => {
       mcpServerInfo({ server: mcpServer({ id: 4, name: 'github' }), status: 'stopped' }),
       mcpServerInfo({ server: mcpServer({ id: 5, name: 'brave' }), status: 'starting' }),
       mcpServerInfo({ server: mcpServer({ id: 6, name: 'broken' }), status: { error: 'spawn npx ENOENT' } }),
-      sse(),
     );
 
     expect(row('tavily').getByText('Running')).toBeInTheDocument();
@@ -90,7 +84,6 @@ describe('a row', () => {
     expect(row('brave').getByText('Starting')).toBeInTheDocument();
     expect(row('broken').getByText('Failed')).toBeInTheDocument();
     expect(row('broken').getByText('spawn npx ENOENT')).toBeInTheDocument();
-    expect(row('remote').getByText('Not supported yet')).toBeInTheDocument();
   });
 
   it('offers a stopped server Test, Start, Edit and Remove…, and a running one Stop', async () => {
@@ -102,17 +95,6 @@ describe('a row', () => {
     expect(row('tavily').queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
     expect(row('github').getByRole('button', { name: 'Stop' })).toBeEnabled();
     expect(row('github').queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
-  });
-
-  it('offers a server gglib cannot run only Remove…, and removes it', async () => {
-    const user = await openTools(sse());
-
-    for (const name of ['Test', 'Start', 'Stop', 'Edit', 'Fix']) {
-      expect(row('remote').queryByRole('button', { name })).not.toBeInTheDocument();
-    }
-    await user.click(await removeItem(user, 'remote'));
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(transport.removeMcpServer).toHaveBeenCalledWith(7));
   });
 
   it('greys Start for a server not used in chats, and Remove… while it runs, each with why', async () => {
@@ -280,18 +262,15 @@ describe('an opened row', () => {
     expect(box()).not.toBeChecked();
   });
 
-  it('never offers an SSE server or the builtin to devices, and says a disabled one offers nothing', async () => {
+  it('never offers the builtin to devices, and says a disabled server offers nothing', async () => {
     const user = await openTools(
       tavily({ enabled: false, allow_remote: true }),
-      sse(),
       mcpServerInfo({ server: mcpServer({ id: 9, name: 'builtin' }) }),
     );
-    for (const name of ['tavily', 'remote', 'builtin']) await user.click(opener(name));
+    for (const name of ['tavily', 'builtin']) await user.click(opener(name));
 
     expect(row('tavily').getByRole('checkbox', { name: /Devices may use it/ })).toBeChecked();
     expect(row('tavily').getByText('Disabled, so it offers no tools')).toBeInTheDocument();
-    expect(row('remote').queryByRole('checkbox')).not.toBeInTheDocument();
-    expect(row('remote').getByText('http://localhost:3001/sse')).toBeInTheDocument();
     expect(row('builtin').queryByRole('checkbox')).not.toBeInTheDocument();
   });
 });

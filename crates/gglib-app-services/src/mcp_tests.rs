@@ -6,7 +6,6 @@ use gglib_core::{McpLifecycle, McpServerRepository};
 use gglib_db::{SqliteMcpRepository, setup_test_database};
 
 use super::*;
-use crate::types::McpServerStatusDto;
 
 /// The ops, with the service and the repository under them for a test that
 /// has to compare against the one or store what the other would refuse.
@@ -29,7 +28,6 @@ fn stdio_req(name: &str) -> CreateMcpServerRequest {
         args: vec![],
         working_dir: None,
         path_extra: None,
-        url: None,
         env: vec![],
         lifecycle: McpLifecycle::Lazy,
     }
@@ -55,76 +53,20 @@ async fn add_server_appears_in_list() {
     assert_eq!(servers[0].server.server_type, "stdio");
 }
 
-/// What an SSE server is refused with, wherever it is refused.
-const SSE_NOT_SUPPORTED: &str = "SSE servers are not supported yet; only stdio servers can be run";
-
-/// Whether `result` is the refusal of an SSE server, as a request the caller
-/// is to change.
-fn is_the_sse_refusal<T>(result: &Result<T, GuiError>) -> bool {
-    matches!(result, Err(GuiError::ValidationFailed(why)) if why == SSE_NOT_SUPPORTED)
-}
-
-#[tokio::test]
-async fn adding_an_sse_server_is_a_validation_failure_with_the_reason_and_stores_nothing() {
-    let ops = make_ops().await;
-    let mut req = stdio_req("remote");
-    req.server_type = "sse".to_string();
-    req.command = None;
-    req.url = Some("http://localhost:3001/sse".to_string());
-
-    let result = ops.add(req).await;
-
-    assert!(is_the_sse_refusal(&result), "got {result:?}");
-    assert!(ops.list().await.unwrap().is_empty());
-}
-
-/// The row is stored by the repository, as a database written while SSE
-/// servers were accepted holds one.
-#[tokio::test]
-async fn a_stored_sse_server_is_listed_as_unsupported_refused_a_run_and_an_edit_and_still_removed()
-{
-    let (ops, _, repo) = make_ops_over().await;
-    let stored = NewMcpServer::new_sse("remote", "http://localhost:3001/sse");
-    let id = repo.insert(stored).await.unwrap().id;
-
-    let listed = ops.list().await.unwrap();
-    assert_eq!(listed.len(), 1);
-    assert_eq!(listed[0].server.server_type, "sse");
-    assert!(
-        matches!(listed[0].status, McpServerStatusDto::Unsupported),
-        "got {:?}",
-        listed[0].status
-    );
-    assert_eq!(listed[0].state, gglib_core::domain::McpState::Unsupported);
-
-    let started = ops.start(id).await;
-    assert!(is_the_sse_refusal(&started), "got {started:?}");
-    let disable = UpdateMcpServerRequest {
-        enabled: Some(false),
-        ..UpdateMcpServerRequest::default()
-    };
-    let edited = ops.update(id, disable).await;
-    assert!(is_the_sse_refusal(&edited), "got {edited:?}");
-    assert!(ops.list().await.unwrap()[0].server.enabled);
-    let tested = ops.test_connection(id).await.unwrap();
-    assert!(!tested.ok);
-    assert_eq!(tested.error, Some(SSE_NOT_SUPPORTED.to_string()));
-
-    ops.remove(id).await.expect("remove should succeed");
-    assert!(ops.list().await.unwrap().is_empty());
-}
-
 #[tokio::test]
 async fn invalid_server_type_returns_validation_error() {
     let ops = make_ops().await;
     let mut req = stdio_req("bad");
-    req.server_type = "grpc".to_string(); // unsupported
-    let result = ops.add(req).await;
-    assert!(
-        matches!(&result, Err(GuiError::ValidationFailed(why))
-            if why == "unknown server type 'grpc'; expected stdio or sse"),
-        "expected ValidationFailed, got {result:?}"
-    );
+    for server_type in ["grpc", "sse"] {
+        req.server_type = server_type.to_string();
+        let result = ops.add(req.clone()).await;
+        let expected = format!("unknown server type '{server_type}'; expected stdio");
+        assert!(
+            matches!(&result, Err(GuiError::ValidationFailed(why)) if *why == expected),
+            "expected ValidationFailed, got {result:?}"
+        );
+    }
+    assert!(ops.list().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -312,22 +254,17 @@ async fn a_server_is_opened_to_devices_and_an_edit_leaves_it_open() {
     assert!(!ops.set_allow_remote(id, false).await.unwrap().allow_remote);
 }
 
-/// An unknown server is not found, not a failure of this machine; an SSE
-/// server opened is the caller's to fix, and closing it is not refused.
+/// An unknown server is not found, not a failure of this machine.
 #[tokio::test]
-async fn an_unknown_server_is_not_found_and_an_sse_one_is_refused_opening() {
-    let (ops, _, repo) = make_ops_over().await;
-    let stored = NewMcpServer::new_sse("remote", "http://localhost:3001/sse");
-    let id = repo.insert(stored).await.unwrap().id;
+async fn an_unknown_server_is_not_found() {
+    let ops = make_ops().await;
+    let id = ops.add(stdio_req("tools")).await.unwrap().server.id;
 
     let unknown = ops.set_allow_remote(id + 100, true).await;
     assert!(
         matches!(&unknown, Err(GuiError::NotFound { entity: "MCP server", id: missing }) if *missing == (id + 100).to_string()),
         "got {unknown:?}"
     );
-    let opened = ops.set_allow_remote(id, true).await;
-    assert!(is_the_sse_refusal(&opened), "got {opened:?}");
-    assert!(!ops.set_allow_remote(id, false).await.unwrap().allow_remote);
 }
 
 /// A server that errored is served as failed, with its reason kept in its
@@ -336,7 +273,7 @@ async fn an_unknown_server_is_not_found_and_an_sse_one_is_refused_opening() {
 async fn an_errored_server_is_served_failed_with_its_reason() {
     let (_, _, repo) = make_ops_over().await;
     let stored = repo
-        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
+        .insert(NewMcpServer::new_stdio("tools", "npx", vec![], None))
         .await
         .unwrap();
     let info = McpServerInfo::new(

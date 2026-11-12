@@ -473,10 +473,6 @@ pub struct McpServerConfigDto {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path_extra: Option<String>,
-    /// URL for SSE connection (required for sse)
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
 }
 
 /// An environment variable a new server is created with. Requests only:
@@ -509,8 +505,6 @@ pub enum McpServerStatusDto {
     Starting,
     Running,
     Error(String),
-    /// Of a kind gglib cannot run: an SSE server.
-    Unsupported,
 }
 
 /// MCP server info for GUI display (nested structure matching TS expectations).
@@ -546,7 +540,6 @@ impl From<McpServerStatus> for McpServerStatusDto {
             McpServerStatus::Stopped => Self::Stopped,
             McpServerStatus::Starting => Self::Starting,
             McpServerStatus::Error(msg) => Self::Error(msg),
-            McpServerStatus::Unsupported => Self::Unsupported,
         }
     }
 }
@@ -562,7 +555,6 @@ pub struct CreateMcpServerRequest {
     pub args: Vec<String>,
     pub working_dir: Option<String>,
     pub path_extra: Option<String>,
-    pub url: Option<String>,
     #[serde(default)]
     pub env: Vec<McpEnvEntryDto>,
     #[serde(default)]
@@ -578,7 +570,6 @@ pub struct UpdateMcpServerRequest {
     pub args: Option<Vec<String>>,
     pub working_dir: Option<String>,
     pub path_extra: Option<String>,
-    pub url: Option<String>,
     /// The whole list of variables the server keeps, when sent.
     pub env: Option<Vec<McpEnvUpdateDto>>,
     pub enabled: Option<bool>,

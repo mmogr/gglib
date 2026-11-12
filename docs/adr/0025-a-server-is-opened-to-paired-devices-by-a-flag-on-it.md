@@ -56,6 +56,12 @@ row. Opening an SSE server is refused (`SseNotSupported`), and so is opening
 one named `builtin` (`NeverOpened`), with a sentence of its own. Closing is
 never refused.
 
+> **Amended 2026-11-12 — there are no SSE servers.** gglib dropped the type:
+> a library's stored SSE servers are deleted when it is opened (migration
+> step 6), and a row of any type but `stdio` is refused when read. The
+> `SseNotSupported` refusal is gone with them; opening `builtin` is the one
+> refusal left, and `open_to_devices` no longer asks a server's type.
+
 ### 3. One read says what is open
 
 `McpService::open_to_devices` is the servers that are flagged, enabled,
