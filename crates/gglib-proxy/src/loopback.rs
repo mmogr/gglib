@@ -34,7 +34,7 @@
 //!
 //! Two CLI commands take the proxy's host from the user (`proxy dashboard` and
 //! `proxy cache-clear`, default `127.0.0.1`, and a proxy started with
-//! `--share-lan` is reachable from elsewhere). [`client_for`] gives them the
+//! `--host 0.0.0.0` is reachable from elsewhere). [`client_for`] gives them the
 //! loopback client when the host names this machine and reqwest's default,
 //! which honours a proxy, when it does not.
 //!

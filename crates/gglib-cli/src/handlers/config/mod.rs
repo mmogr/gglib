@@ -24,8 +24,8 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result
         ConfigCommand::ModelsDir { command } => settings::handle_models_dir(command),
         ConfigCommand::Settings { command } => settings::handle_settings(ctx, command).await,
         ConfigCommand::Profile { command } => settings::handle_profile(ctx, command).await,
-        ConfigCommand::Llama { command } => llama::dispatch(ctx, command).await,
-        ConfigCommand::Sd { command } => sd::dispatch(ctx, command).await,
+        ConfigCommand::Llama { command } => llama::dispatch(command).await,
+        ConfigCommand::Sd { command } => sd::dispatch(command).await,
         ConfigCommand::CheckDeps {
             setup_fast_downloads,
         } => {

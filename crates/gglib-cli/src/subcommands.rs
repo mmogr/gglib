@@ -137,24 +137,15 @@ pub enum DaemonCommand {
     /// The daemon is the one process on this machine that spawns and owns
     /// llama-server. Other commands start it automatically when they need it;
     /// run it manually for a foreground session or a service manager unit.
+    /// It listens on this machine only (127.0.0.1).
     Run {
-        /// Expose the daemon on all LAN interfaces (0.0.0.0) and advertise
-        /// it over mDNS
-        ///
-        /// The management API then requires a bearer token: the stored API
-        /// key, minted and stored at startup if none exists, which
-        /// `gglib config settings reveal proxy-api-key` prints. It can
-        /// still start and stop inference on this machine — only use on
-        /// networks you trust.
-        #[arg(long)]
-        share_lan: bool,
-
-        /// Accept this Host header value in addition to loopback and IP
-        /// literals (repeatable)
+        /// Accept this Host header value in addition to loopback
+        /// (repeatable)
         ///
         /// The daemon refuses requests whose Host names a hostname it was
         /// never told about — the DNS-rebinding guard. Name your DNS alias
-        /// here if you reach a shared daemon through one.
+        /// for this machine's loopback here if you reach the daemon through
+        /// one.
         #[arg(long = "allowed-host", value_name = "HOST")]
         allowed_host: Vec<String>,
     },

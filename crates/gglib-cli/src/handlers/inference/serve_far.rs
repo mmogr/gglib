@@ -10,13 +10,11 @@
 
 use anyhow::Result;
 
-use crate::bootstrap::CliContext;
 use crate::target::Target;
 
 /// Have the paired machine load the model now, so the first turn does not
 /// wait. Only the identifier and a numeric `--ctx-size` travel.
 pub(super) async fn serve_far(
-    ctx: &CliContext,
     target: Target,
     identifier: &str,
     ctx_size: Option<&str>,
@@ -30,7 +28,7 @@ pub(super) async fn serve_far(
             )
         })?),
     };
-    let paired = target.paired(ctx).await?;
+    let paired = target.paired().await?;
     let machine = &paired.name;
     eprintln!("  Asking {machine} to load '{identifier}'\u{2026}");
     let loaded = paired.handle.paired_load(identifier, num_ctx).await?;

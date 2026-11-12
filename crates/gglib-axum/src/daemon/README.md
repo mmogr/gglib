@@ -22,10 +22,8 @@ line of defence — a foreign process on the port is reported, not fought.
 This module is responsible for:
 
 - the singleton lock and the "already running (pid N)" refusal,
-- resolving the management API's access policy
-  ([`access`](crate::access)): the Host-header allowlist is always on, and
-  a non-loopback bind (`--share-lan`) requires the stored API key, minting
-  one if none exists,
+- the management API's access policy ([`access`](crate::access)): the
+  Host-header allowlist, and the daemon token minted anew at every start,
 - sweeping orphaned llama-server pidfiles at startup (moved here from the
   desktop app, which used to kill a concurrent CLI's servers),
 - SIGINT/SIGTERM handling and the `POST /api/daemon/shutdown` route's

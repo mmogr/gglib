@@ -7,7 +7,6 @@ use gglib_app_services::RemoteEnableResponse;
 
 use super::enable::{Arming, print_notice};
 use super::pairing_tui::{self, Outcome};
-use crate::bootstrap::CliContext;
 use crate::daemon_client;
 
 /// Execute `gglib remote invite`.
@@ -23,8 +22,8 @@ use crate::daemon_client;
 /// Shares `enable --invite`'s screen rather than growing one of its own:
 /// what a person is shown is the same thing, and the only reason `enable`
 /// can show it is that it happens to be offering a code at the time.
-pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+pub(crate) async fn invite(no_qr: bool) -> Result<()> {
+    let handle = daemon_client::ensure_daemon().await?;
 
     let offered = handle.remote_invite().await?;
 

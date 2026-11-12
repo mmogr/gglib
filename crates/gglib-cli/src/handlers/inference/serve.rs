@@ -75,7 +75,7 @@ pub(crate) async fn execute(
                 )
                 .await
             },
-            async move || serve_far(ctx, target, &far_identifier, far_ctx_size.as_deref()).await,
+            async move || serve_far(target, &far_identifier, far_ctx_size.as_deref()).await,
         )
         .await
 }
@@ -128,7 +128,6 @@ async fn serve_here(
 
     // Ensure llama.cpp is installed before the daemon needs it.
     crate::handlers::config::engine::ensure_installed(
-        ctx,
         gglib_core::domain::RuntimeKind::Llama,
         false,
     )
@@ -222,7 +221,7 @@ async fn serve_here(
         selection.profile.as_ref().map(|p| p.name.clone()),
     );
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let started = super::proxy::start_on(&handle, &body, &settings).await?;
     let reach = super::proxy::reached(options.host.as_deref(), &settings);
     super::proxy::attach_dashboard(ctx, reach, started.port, access.api_key).await

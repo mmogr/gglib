@@ -10,10 +10,7 @@ use anyhow::{Context, Result, anyhow};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use gglib_core::ports::SettingsRepository;
-use gglib_core::secret::{SettingSecret, held_line};
-use gglib_core::{ApiKeySource, CorsConfig, daemon_port, paths::data_root};
-use gglib_runtime::proxy::resolve_api_key;
+use gglib_core::{CorsConfig, daemon_port, paths::data_root};
 
 use crate::bootstrap::bootstrap;
 use crate::config::ServerConfig;
@@ -25,42 +22,30 @@ use crate::state::AppState;
 pub use lock::DaemonLock;
 pub use shutdown::SHUTDOWN_WATCHDOG;
 
-/// CORS origins the daemon always allows.
+/// The address the daemon binds. It listens on this machine only.
+const DAEMON_HOST: &str = "127.0.0.1";
+
+/// The CORS policy for `/api`: the origins the daemon always allows.
 ///
 /// The desktop `WebView` origins plus the Vite dev server — the browser-facing
 /// clients that reach the daemon cross-origin. Same-origin requests (the SPA
 /// the daemon itself serves) need no CORS at all.
-pub(crate) fn daemon_cors_origins() -> Vec<String> {
-    vec![
+#[must_use]
+pub fn daemon_cors() -> CorsConfig {
+    CorsConfig::AllowOrigins(vec![
         "tauri://localhost".into(),
         "http://tauri.localhost".into(),
         "https://tauri.localhost".into(),
         "http://localhost:5173".into(), // Vite dev server
-    ]
+    ])
 }
 
-/// How the daemon binds, and which origins and hosts it answers.
-#[derive(Debug, Clone)]
+/// Which hosts the daemon answers to.
+#[derive(Debug, Clone, Default)]
 pub struct DaemonOptions {
-    /// Bind host. The default is loopback; anything else is an explicit,
-    /// eyes-open decision (`gglib daemon run --share-lan`).
-    pub host: String,
-    /// CORS policy for `/api`.
-    pub cors: CorsConfig,
-    /// `Host` header values accepted in addition to loopback (and, on a
-    /// non-loopback bind, IP literals). The mDNS name and `--allowed-host`
-    /// entries arrive here.
+    /// `Host` header values accepted in addition to loopback: the
+    /// `--allowed-host` entries.
     pub allowed_hosts: Vec<String>,
-}
-
-impl Default for DaemonOptions {
-    fn default() -> Self {
-        Self {
-            host: "127.0.0.1".into(),
-            cors: CorsConfig::AllowOrigins(daemon_cors_origins()),
-            allowed_hosts: Vec::new(),
-        }
-    }
 }
 
 /// Run the gglib daemon until a shutdown signal or `/api/daemon/shutdown`.
@@ -73,11 +58,10 @@ impl Default for DaemonOptions {
 /// 2. Sweep orphaned llama-server pidfiles left by a crashed daemon.
 /// 3. [`bootstrap`] the one `AxumContext` —
 ///    and with it the one `ProcessManager` on this machine.
-/// 4. Resolve the access policy — Host allowlist always, bearer token for
-///    non-loopback binds, a new daemon token on every `/api` route — then
-///    bind
-///    `{host}:{daemon_port()}` and serve the management API (and the dashboard,
-///    when this binary carries one).
+/// 4. Resolve the access policy — the Host allowlist, and a new daemon token
+///    on every `/api` route — then bind `127.0.0.1:{daemon_port()}` and
+///    serve the management API (and the dashboard, when this binary carries
+///    one).
 /// 5. Honour `proxy_autostart` so the `OpenAI` endpoint comes up with the
 ///    daemon rather than with the desktop app, then `remote_enabled` so a
 ///    machine told once to be reachable is reachable again after a reboot,
@@ -120,29 +104,28 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     // A paired device's turn on a hub chat runs the agent loop composed here.
     crate::handlers::agent::hub_turn::bind(&state);
 
-    // 4. Access policy, then the router. The Host guard is always on; the
-    //    bearer token exists only for non-loopback binds, where the socket
-    //    stops being the boundary; the daemon token, minted anew, always.
-    let api_key = resolve_daemon_api_key(&opts.host, &state.core.settings().repo()).await;
+    // 4. Access policy, then the router: the Host guard, and the daemon
+    //    token, minted anew.
     let access = Arc::new(
-        crate::access::DaemonAccess::new(api_key, &opts.host, opts.allowed_hosts.clone())
+        crate::access::DaemonAccess::new(opts.allowed_hosts)
             .with_daemon_token(crate::trust::daemon_token()),
     );
+    let cors = daemon_cors();
 
     // Router. The dashboard is compiled in (see `crate::ui`), never found by
     // probing the working directory.
     let app = if crate::ui::has_embedded_ui() {
         info!("serving the dashboard compiled into this binary");
-        crate::ui::create_embedded_spa_router(Arc::clone(&state), &opts.cors, access)
+        crate::ui::create_embedded_spa_router(Arc::clone(&state), &cors, access)
     } else {
         warn!(
             "this binary carries no dashboard — it was built without `npm run build`. \
              Serving the API only; every route works, there is just no dashboard page."
         );
-        crate::routes::create_router(Arc::clone(&state), &opts.cors, access)
+        crate::routes::create_router(Arc::clone(&state), &cors, access)
     };
 
-    let addr = format!("{}:{}", opts.host, daemon_port());
+    let addr = format!("{DAEMON_HOST}:{}", daemon_port());
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .with_context(|| {
@@ -215,64 +198,3 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
 
     Ok(())
 }
-
-/// Settle the bearer token for a daemon about to bind `bind_host`.
-///
-/// A loopback bind gets no token, whatever is stored: the socket is the
-/// boundary, and demanding one would break every existing local client for
-/// no gain. That question comes first here, where the proxy asks it last.
-/// Anything else takes the proxy's own answer, [`resolve_api_key`]: the
-/// stored `proxy_api_key` — one machine key across both surfaces — or a
-/// fresh one, minted and stored, when the setting is empty or blank. The
-/// banner, [`api_key_banner`], says so once at startup.
-async fn resolve_daemon_api_key(
-    bind_host: &str,
-    settings: &Arc<dyn SettingsRepository>,
-) -> Option<String> {
-    if gglib_core::access::is_loopback_host(bind_host) {
-        return None;
-    }
-
-    let (key, source) = resolve_api_key(None, bind_host, settings).await;
-    if let Some(key) = &key {
-        info!("management API requires a bearer token ({source:?})");
-        for line in api_key_banner(key, source) {
-            eprintln!("{line}");
-        }
-    }
-    key
-}
-
-/// What the daemon prints about its key at startup, where the operator who
-/// chose a non-loopback bind will see it.
-///
-/// The key itself only when it was minted and could not be stored: the
-/// banner is then its only copy. A stored key is named and never printed
-/// (ADR 0027): this banner is in the terminal a `--share-lan` daemon was
-/// started from, and terminal output is what gets pasted into issues.
-fn api_key_banner(key: &str, source: ApiKeySource) -> Vec<String> {
-    if source == ApiKeySource::GeneratedUnsaved {
-        return vec![
-            format!(
-                "  \u{1f511} Management API key (generated, and NOT saved: copy it now): {key}"
-            ),
-            format!("     Clients on the network must send: Authorization: Bearer {key}"),
-        ];
-    }
-    let from = if source == ApiKeySource::Settings {
-        "from settings"
-    } else {
-        "generated and saved"
-    };
-    vec![
-        format!(
-            "  \u{1f511} Management API key ({from}): {}",
-            held_line(SettingSecret::ProxyApiKey)
-        ),
-        "     Clients on the network send it as: Authorization: Bearer <key>".to_owned(),
-    ]
-}
-
-#[cfg(test)]
-#[path = "api_key_tests.rs"]
-mod api_key_tests;

@@ -2,20 +2,20 @@
  * Whether a daemon is there at all, and whether it takes this page's token.
  *
  * `probeDaemon` asks `/health`, the route the desktop app's own probe and
- * the CLI ask, which sits outside the token and key guards: a refused token
- * or a missing API key is a daemon that is there. As those probes do, it
+ * the CLI ask, which sits outside the token guard: a refused token is a
+ * daemon that is there. As those probes do, it
  * counts only an answer that says it is gglib's (`service: "gglib-daemon"`):
  * another program on the port is no daemon. The daemon lets the pages it
  * lets read `/api` read `/health` too (CORS), the desktop window included.
  * It is a plain `fetch`, so it never runs the client's 401 handling (the
- * API key prompt, the token re-read).
+ * token re-read).
  *
  * `tokenRefusal` is the one `/api` read (`/api/version`) a browser tab makes
  * to learn whether the daemon takes the token it holds. A daemon that
  * started since the tab took it refuses it, and the daemon's own sentence
  * (open the page from the link `gglib web` prints) is the answer. It goes
- * through `apiFetch`, which prompts for nothing; a refusal of any other kind
- * (an API key wanted) is not this one, and reads as `null`.
+ * through `apiFetch`, which retries nothing; a refusal of any other kind is
+ * not this one, and reads as `null`.
  */
 
 import { TransportError } from '../errors';

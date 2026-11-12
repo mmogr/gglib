@@ -229,7 +229,7 @@ pub(crate) async fn execute_repair(
         .file_path
         .parent()
         .context("the model's file has no folder")?;
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let repair = handle.repair_model(model.id, shard_indices);
     download::monitor_repair(&handle, Arc::clone(&ctx.console), folder, repair).await
 }

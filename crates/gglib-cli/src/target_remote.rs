@@ -44,11 +44,11 @@ impl super::Target {
     ///
     /// A daemon that is not running or not connected, each in the sentence
     /// that names the command to run.
-    pub(crate) async fn paired(self, ctx: &CliContext) -> Result<Paired> {
+    pub(crate) async fn paired(self) -> Result<Paired> {
         if self == Self::Local {
             bail!("internal: the local target has no far machine");
         }
-        let Ok(handle) = daemon_client::running(ctx).await else {
+        let Ok(handle) = daemon_client::running().await else {
             bail!(
                 "reaching the paired machine needs the daemon running and connected to it: \
                  `gglib remote join` first"
@@ -76,7 +76,7 @@ impl super::Target {
     /// As [`paired`](Self::paired), and a pairing this machine holds no key
     /// for — in the sentence that names the command to run.
     pub(crate) async fn far(self, ctx: &CliContext) -> Result<Far> {
-        let Paired { connection, .. } = self.paired(ctx).await?;
+        let Paired { connection, .. } = self.paired().await?;
         let stored = ctx
             .app
             .settings()

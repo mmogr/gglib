@@ -111,7 +111,7 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
     println!("✓ Settings updated successfully:");
     print_display_rows(&changed_rows);
     if sets_queue_size
-        && let Some(warning) = queue_size::tell_daemon(ctx, updated.max_download_queue_size).await
+        && let Some(warning) = queue_size::tell_daemon(updated.max_download_queue_size).await
     {
         eprintln!("{warning}");
     }

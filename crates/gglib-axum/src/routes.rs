@@ -17,9 +17,8 @@ use crate::access::DaemonAccess;
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
-use crate::trust::{ApiCredentials, bearer_guard};
+use crate::trust::bearer_guard;
 use gglib_core::CorsConfig;
-use gglib_core::services::SettingsCache;
 use gglib_proxy::access::{build_cors_layer, host_guard, origin_guard};
 
 /// Build all API routes without `/api` prefix (for nesting under /api).
@@ -92,8 +91,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
         )
         // A stored secret, for the page's Show and Copy and the proxy key its
         // dashboard, tray and Clear Cache present (ADR 0027). POST, so the
-        // origin guard stands in front of it. A shared daemon's API key gets
-        // back only itself; the handler says why.
+        // origin guard stands in front of it.
         .route("/secrets/reveal", post(handlers::secrets::reveal))
         // Proxy API
         .route("/proxy/status", get(handlers::proxy::status))
@@ -304,7 +302,7 @@ fn config_routes() -> Router<AppState> {
 /// The router core shared by [`create_router`], [`create_spa_router`] and
 /// [`crate::create_embedded_spa_router`]: `/health` plus `/api/*`, with CORS,
 /// the origin guard and the bearer guard scoped to `/api/*`. The bearer guard
-/// asks the daemon token, or the API key when the daemon bound with one.
+/// asks the daemon token.
 ///
 /// The Host guard is *not* applied here — each public constructor layers it
 /// last, after any fallback service, so it wraps everything the router will
@@ -312,21 +310,14 @@ fn config_routes() -> Router<AppState> {
 pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<DaemonAccess>) -> Router {
     let cors = build_cors_layer(cfg);
 
-    let settings = Arc::new(SettingsCache::new(state.core.settings().repo()));
-    let credentials = ApiCredentials {
-        policy: access.bearer_policy(settings),
-        token: access.daemon_token().cloned(),
-    };
-    // A daemon that bound *with* a key follows a later rotation of it, and one
-    // that bound without takes only the token and keeps taking only the token
-    // — `DaemonAccess::bearer_policy` says why that asymmetry is the point.
+    let token = access.daemon_token().cloned();
     // /health stays outside the group: probes must not need
     // credentials. The origin guard reads the same config CORS does. CORS is
     // layered outside both guards so preflight OPTIONS requests, which never
     // carry Authorization, are answered by the CORS layer instead of a 401.
     let api = api_routes()
         .with_state(state)
-        .layer(middleware::from_fn_with_state(credentials, bearer_guard))
+        .layer(middleware::from_fn_with_state(token, bearer_guard))
         .layer(middleware::from_fn_with_state(
             Arc::new(cfg.clone()),
             origin_guard::<DaemonAccess>,
@@ -334,7 +325,7 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
         .layer(cors.clone());
 
     Router::new()
-        // Outside the token, key and origin guards: a probe needs no
+        // Outside the token and origin guards: a probe needs no
         // credentials. CORS is layered on it alone, so a page this daemon lets
         // read `/api` (the desktop window, a local dev page) can read the
         // answer too and see it is gglib, not another program on the port.
