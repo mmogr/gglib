@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use super::types::HfQuantInfo;
 use super::variant_match::{delimits_a_name, holds_token};
 use crate::domain::shard_name::{gguf_stem, shard_parts};
+use crate::download::GgufFileRole;
 
 /// Why a draft or helper variant is not downloaded as a model.
 pub const HELPER_FILES_REFUSAL: &str = "gglib can't run draft or helper files on their own";
@@ -43,6 +44,27 @@ pub fn said_as_a_quantization(variant: &HfQuantInfo) -> bool {
     ![PROJECTOR_TOKEN, IMATRIX_TOKEN]
         .iter()
         .any(|token| holds_token(name, token, delimits_a_name))
+}
+
+/// The largest of `variants` that is a model's weights: one whose header
+/// says so, or, unread, one [`said_as_a_quantization`] (no projector's or
+/// importance matrix's file). `None` when none is.
+///
+/// A variant named for an MTP head is kept: a repository may name every
+/// model file so (`Qwopus3.8-27B-Flash-V2-MTP-Q4_K_M`), and a separate MTP
+/// draft is small and never the largest. What a repository's size is
+/// judged by before any header is read ([`super::plausible_total`]).
+#[must_use]
+pub fn largest_weights(variants: &[HfQuantInfo]) -> Option<&HfQuantInfo> {
+    let weights = |variant: &&HfQuantInfo| {
+        variant
+            .role
+            .map_or_else(|| said_as_a_quantization(variant), GgufFileRole::is_weights)
+    };
+    variants
+        .iter()
+        .filter(weights)
+        .max_by_key(|variant| variant.total_size)
 }
 
 /// `files`, each a path and a size, grouped into the repository's variants

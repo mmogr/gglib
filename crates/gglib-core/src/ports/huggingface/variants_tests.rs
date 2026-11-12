@@ -1,4 +1,5 @@
 use super::*;
+use crate::download::GgufFileRole;
 use crate::ports::huggingface::{LabelMismatch, label_refusal, match_label, match_variant};
 
 fn labels(files: &[&str]) -> Vec<String> {
@@ -354,4 +355,40 @@ fn a_quant_at_the_end_of_an_underscored_name_names_its_variant() {
         match_variant(&neighbours, "Q6_K").map(|v| v.label.as_str()),
         Err(LabelMismatch::None)
     );
+}
+
+/// A repository's largest weights are its largest model's files: a
+/// projector or an importance matrix is passed over by name until its
+/// header is read, and anything by its header after. A file named for an
+/// MTP head is weights by name: Qwopus names every model file so.
+#[test]
+fn the_largest_weights_are_a_models() {
+    let mut variants = variants_of([
+        ("model-Q4_K_M-00001-of-00002.gguf", 3),
+        ("model-Q4_K_M-00002-of-00002.gguf", 3),
+        ("model-Q8_0.gguf", 5),
+        ("mmproj-model-F32.gguf", 9),
+        ("model.imatrix.gguf", 9),
+    ]);
+    let largest = |variants: &[HfQuantInfo]| largest_weights(variants).map(|v| v.label.clone());
+
+    assert_eq!(largest(&variants).as_deref(), Some("Q4_K_M"));
+
+    let q4 = variants.iter_mut().find(|v| v.label == "Q4_K_M").unwrap();
+    q4.role = Some(GgufFileRole::Sidecar);
+    assert_eq!(largest(&variants).as_deref(), Some("Q8_0"));
+    let helpers: Vec<HfQuantInfo> = variants
+        .into_iter()
+        .filter(|v| !v.label.starts_with('Q'))
+        .collect();
+    assert_eq!(helpers.len(), 2);
+    assert_eq!(largest(&helpers), None);
+
+    // Jackrong's Qwopus3.8-27B-Flash-V2-GGUF, at its sizes on the Hub.
+    let qwopus = variants_of([
+        ("Qwopus3.8-27B-Flash-V2-MTP-BF16.gguf", 54_657_733_568),
+        ("Qwopus3.8-27B-Flash-V2-MTP-Q4_K_M.gguf", 16_810_714_048),
+        ("mmproj-F32.gguf", 1_842_940_992),
+    ]);
+    assert_eq!(largest(&qwopus).as_deref(), Some("BF16"));
 }

@@ -30,7 +30,9 @@ pub struct HfModelSummary {
     pub likes: u64,
     /// Last modified timestamp
     pub last_modified: Option<String>,
-    /// Total parameter count in billions (the GGUF header's, when the Hub gives it)
+    /// Total parameter count in billions: the Hub's, unless the repository's
+    /// file names state a count more than twice it that its largest weights
+    /// could hold; a lookup by ID with neither takes those weights' header's.
     pub parameters_b: Option<f64>,
     /// Model description/README excerpt
     pub description: Option<String>,

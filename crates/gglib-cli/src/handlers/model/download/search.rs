@@ -1,6 +1,6 @@
 //! Search handler for `HuggingFace` Hub.
 //!
-//! The search is [`search_hf_models`], the one the GUI's browser runs, over
+//! The search is [`search_hf_hits`], the one the GUI's browser runs, over
 //! the Hub client this process was bootstrapped with, which holds its Hub
 //! token. This module prints the hits; `browse` prints them under its own
 //! headings. Either asks for models that chat, or with `--images` for image
@@ -10,8 +10,8 @@ use std::fmt::Write as _;
 
 use anyhow::{Result, anyhow};
 use gglib_app_services::types::{HfModelSummary, HfSearchRequest};
-use gglib_app_services::{GuiError, search_hf_models};
-use gglib_core::ports::huggingface::said_as_a_quantization;
+use gglib_app_services::{GuiError, search_hf_hits};
+use gglib_core::ports::huggingface::{said_as_a_quantization, variants_of};
 use gglib_core::ports::{HfClientPort, HfModelKind, HfQuantInfo, HfSortField};
 
 use crate::presentation::{format_number, truncate_with};
@@ -102,24 +102,26 @@ pub(super) async fn find(
         kind,
         ..HfSearchRequest::default()
     };
-    let found = search_hf_models(hf, request)
+    let found = search_hf_hits(hf, request)
         .await
         .map_err(|refused| match refused {
             GuiError::Internal(reason) => anyhow!(reason),
             other => other.into(),
         })?;
 
-    let mut hits = Vec::with_capacity(found.models.len());
-    for model in found.models {
-        // Shown beside the hit and no more than that: a repository whose
-        // files cannot be listed is a hit all the same.
-        let quantizations = hf.list_quantizations(&model.id).await.unwrap_or_default();
-        hits.push(Hit {
-            model,
-            quantizations: said_labels(quantizations),
-        });
-    }
-    Ok(hits)
+    // Each hit's variants are read from the files its answer names, with no
+    // request of their own.
+    Ok(found
+        .items
+        .into_iter()
+        .map(|info| {
+            let variants = variants_of(info.file_paths.iter().map(|path| (path.as_str(), 0)));
+            Hit {
+                model: info.into(),
+                quantizations: said_labels(variants),
+            }
+        })
+        .collect())
 }
 
 /// The labels of `variants` said as quantisations beside a hit: a

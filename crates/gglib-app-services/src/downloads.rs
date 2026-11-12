@@ -7,10 +7,12 @@ use gglib_core::download::{DownloadId, QueueSnapshot};
 use gglib_core::paths::resolve_models_dir;
 use gglib_core::ports::huggingface::read_heads;
 use gglib_core::ports::{
-    DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, ToolSupportDetectorPort,
+    DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, HfSearchResult,
+    ToolSupportDetectorPort,
 };
 
 use crate::error::GuiError;
+use crate::hf_count::checked_parameters;
 use crate::hf_image_preview::image_look;
 use crate::hf_quantizations::{listed_pick, quantizations_response};
 use crate::types::{
@@ -299,7 +301,18 @@ impl DownloadOps {
             )));
         }
 
-        Ok(info.into())
+        let parameters_b = checked_parameters(
+            self.hf_client.as_ref(),
+            self.gguf_parser.as_ref(),
+            model_id,
+            info.parameters_b,
+            &quants,
+        )
+        .await;
+        Ok(HfModelSummary {
+            parameters_b,
+            ..info.into()
+        })
     }
 }
 
@@ -308,11 +321,28 @@ impl DownloadOps {
 ///
 /// The one search every surface runs: the browser's, through
 /// [`DownloadOps::search_hf_models`], and `gglib model search` and `browse`,
-/// which hold the Hub client and no `DownloadOps`.
+/// which hold the Hub client and no `DownloadOps` and print each hit's
+/// variants beside it, read from its files' names ([`search_hf_hits`]).
 pub async fn search_hf_models(
     hf: &dyn HfClientPort,
     request: HfSearchRequest,
 ) -> Result<HfSearchResponse, GuiError> {
+    let response = search_hf_hits(hf, request).await?;
+    Ok(HfSearchResponse {
+        models: response.items.into_iter().map(Into::into).collect(),
+        next_cursor: response.next_cursor,
+        total_count: None,
+    })
+}
+
+/// [`search_hf_models`]' page as the Hub client answers it.
+///
+/// Each hit comes with the paths of the files its answer names, which the
+/// CLI reads its variants from without a listing of its own.
+pub async fn search_hf_hits(
+    hf: &dyn HfClientPort,
+    request: HfSearchRequest,
+) -> Result<HfSearchResult, GuiError> {
     let options = HfSearchOptions {
         query: request.query,
         min_params_b: request.min_params_b,
@@ -324,16 +354,9 @@ pub async fn search_hf_models(
         kind: request.kind,
     };
 
-    let response = hf
-        .search(&options)
+    hf.search(&options)
         .await
-        .map_err(|e| GuiError::Internal(format!("HF search failed: {e}")))?;
-
-    Ok(HfSearchResponse {
-        models: response.items.into_iter().map(Into::into).collect(),
-        next_cursor: response.next_cursor,
-        total_count: None,
-    })
+        .map_err(|e| GuiError::Internal(format!("HF search failed: {e}")))
 }
 
 #[cfg(test)]

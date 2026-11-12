@@ -49,7 +49,8 @@ This crate is a **Shared Facade** — sitting between adapters and infrastructur
 
 **Module Descriptions:**
 - **`benchmark/`** — `BenchmarkOps`: the compare, perf, tune and agentic benchmark runs, called by the daemon's benchmark routes
-- **`downloads.rs`** — `DownloadOps` download queue and progress operations, and `search_hf_models`, the Hub search the browser runs through `DownloadOps` and `gglib model search` and `browse` call over the bootstrapped Hub client
+- **`downloads.rs`** — `DownloadOps` download queue and progress operations, and `search_hf_models`, the Hub search the browser runs through `DownloadOps`, which `gglib model search` and `browse` call over the bootstrapped Hub client as `search_hf_hits`, each hit with the paths of the files its answer names
+- **`hf_count.rs`** — A repository's parameter count as the browser's summary shows it: the count a search gives (`sized_parameters_b`), else the head of its largest weights', each only when those weights could hold it
 - **`hf_quantizations.rs`** — A repository's quantizations as the `HuggingFace` browser shows them, each with the projector its download fetches
 - **`hub_chats.rs`** — `HubChats`, the hub's chats as a paired device reads them, with each chat's live run
 - **`error.rs`** — `GuiError` semantic error type for all app-service operations, and what a core error becomes in it (`From<CoreError>`): a refused input is a validation failure, a missing row is not found, a duplicate is a conflict, and only a failure of the store is internal
@@ -134,6 +135,7 @@ handwritten mock structs in `src/test_support.rs` (no external mocking framework
 | Module | Tests |
 |--------|-------|
 | `downloads.rs` | 14 — queue snapshot, a queued download's id, cancel (by id, not found), remove, reorder, cancel-all; and the Hub search: what it asks for, chat models by default, the browser's search, a repository by its id, a refused search |
+| `hf_count.rs` | 5 — a count the Hub read from a draft gives way to the names, or to the model's header when names state none, a count the files can hold is the Hub's with no head read, none when no header tells or it misreads, and the Hub's kept with no weights to judge by |
 | `models.rs` | 30 — list empty, get not-found, add+list, a file already in the library, a forced re-download, a sibling shard refused, missing file, remove not-found, the broadcasts on add, update, remove, tag and retag (and none on a blocked remove or a retag that changes nothing), the parameter count, a removal blocked or forced through the shared runtime, one running check per listing, tags, server defaults, and `explain`: the sampling, and the launch as the runtime plans it |
 | `settings.rs` | 24 — get defaults, profiles through the API (round trip, an unrelated update, an invalid one, the templates, camel case), memory threshold (Some/None), nulls in an update, the models directory: saved and read back, its default, a refused path; and the drawing settings |
 | `mcp.rs` | 18 — list empty, add+list, remove, a taken name on add and on rename, a server named `builtin`, servers already sharing a name, a failed test, a test of a missing server, a server opened to devices; and environment values, never answered with a value |

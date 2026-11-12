@@ -70,7 +70,11 @@ async fn example() {
 
 - **Model Search**: Search `HuggingFace` Hub for GGUF models with pagination and sorting, of
   models that chat (`filter=gguf`, keeping the hits whose pipeline is a chat one or none) or
-  text-to-image ones (`filter=gguf&filter=text-to-image`)
+  text-to-image ones (`filter=gguf&filter=text-to-image`). The Hub's parameter count, which
+  it reads from one file that can be a draft's, stands unless the hit's file names state a
+  count more than twice it; only such a hit's GGUF files are sized (one `paths-info` request
+  each, eight hits at once), and its count is the one its largest weights could hold, before the
+  size filters judge it
 - **Variant Listing**: A repository's variants: its GGUF files grouped into shard sets,
   each labelled as its uploader named it (`UD-Q4_K_XL`, `Q3_K_P`, `FastMTP-32K`), a quant
   spelt in capitals (`Q6_k` is `Q6_K`), with no quant read from a name, so no two distinct
