@@ -133,18 +133,16 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
 | `proxy test [<id\|name>]` | Send one real request through the running endpoint and say who answered and in how long, then how a client connects to it: the address, the key rule, the Model ID and a recipe per client, all the daemon's; with no model named, the pinned model, else the one loaded model |
 | `proxy stop` | Stop the proxy on the running daemon; it keeps running there after `gglib proxy` or `gglib serve` detach |
-| `config settings show` | Show current configuration; a stored secret is shown as `(set, not shown)` with the command that prints it |
-| `config settings set [flags]` | Update application settings, one flag each |
-| `config settings unset <key>` | Clear one setting, returning it to unset (for `default-context-size`, sized per launch again) |
-| `config settings reset` | Reset every preference to its default; keeps the joined machine, the devices it admits, remote access and the proxy's API key |
-| `config settings reveal <key>` | Print a stored secret, `proxy-api-key` or `remote-pairing.api-key`, alone on stdout, so `$(gglib config settings reveal proxy-api-key)` is exactly the key |
-| `config default <id\|name>` | Set/show/clear the default model |
-| `config models-dir show\|prompt\|set <path>` | Show, ask for, or set the models directory |
+| `config show` | Show every setting and the models directory; a stored secret is shown as `(set, not shown)` with the command that prints it |
+| `config set <key> <value>` | Set one setting by the key `show` prints; `config set --help` lists the keys and what each takes. `default-model-id` takes a model's id or name, and `models-dir` stores the download folder, creating it |
+| `config unset <key>` | Clear one setting, returning it to unset (for `default-context-size`, sized per launch again; for `models-dir`, the default folder) |
+| `config reset` | Reset every preference to its default; keeps the joined machine, the devices it admits, remote access and the proxy's API key |
+| `config reveal <key>` | Print a stored secret, `proxy-api-key` or `remote-pairing.api-key`, alone on stdout, so `$(gglib config reveal proxy-api-key)` is exactly the key |
 | `config paths` | Show the resolved path of every gglib directory |
 | `config profile list` | List named sampling profiles |
 | `config profile show <name>` | Show one profile's parameters |
 | `config profile set <name> [flags]` | Create or update a profile (only the flags passed are set; `--unset <param>` clears one) |
-| `config profile rm <name>` | Delete a profile |
+| `config profile remove <name>` | Delete a profile |
 | `config profile install-templates` | Install the starter profiles: three sampling (coding, chat, creative) and six reasoning rungs (minimal…max) |
 | `config llama install [--build] [--force]` (also `update`) | Install the pinned llama.cpp release when it is missing or older than the pin, or build it from source with `--build` |
 | `config llama status` | Show what is installed, and where it stands against the pinned release |
@@ -431,7 +429,7 @@ text reaches stdout. This works regardless of rendering mode.
 **Set a default model** to avoid using `--model` every time:
 
 ```bash
-gglib config default 1
+gglib config set default-model-id 1
 ```
 
 ## Usage

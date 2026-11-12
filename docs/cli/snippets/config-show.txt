@@ -1,4 +1,4 @@
-$ gglib config settings show
+$ gglib config show
 Current application settings:
 
   General
@@ -16,6 +16,7 @@ Current application settings:
   max-stagnation-steps     None
   max-tool-iterations      None
   mcp-drawing              None (off)
+  models-dir               /Users/mmogr/.local/share/gglib-demo/models (environment, Writable)
   proxy-allowed-hosts      None
   proxy-api-key            None
   proxy-autostart          None

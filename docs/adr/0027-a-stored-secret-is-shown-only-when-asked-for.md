@@ -65,6 +65,12 @@ still opens every other `/api` route, and through them can run an MCP
 server's command, with its env values, as the owner. `gglib remote key
 --show` is removed, and its stdout contract moves to `reveal`.
 
+> **Amended 2026-11-12 — the commands are renamed.** `gglib config settings`
+> is gone, with no alias. The reveal is `gglib config reveal <key>`, the
+> listing is `gglib config show`, and a key is stored with
+> `gglib config set proxy-api-key <key>`. What each does is unchanged, and
+> `set` still prints the key it stored as held, not as typed.
+
 ### 4. A key the daemon minted and could not store is printed once
 
 A daemon started `--share-lan` mints a key when none is stored. If it then

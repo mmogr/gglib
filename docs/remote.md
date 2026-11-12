@@ -350,10 +350,10 @@ through the tunnel — proxy, models, downloads — and then disconnects, and it
 asks you to type `shutdown` first, because nothing can start that daemon
 again from the laptop. `--yes` skips the question for scripts.
 
-`gglib config settings reveal remote-pairing.api-key` prints this laptop's
+`gglib config reveal remote-pairing.api-key` prints this laptop's
 device key on stdout, and nothing else, for a client that is not gglib (see
 [Using it](#using-it)). The warning that it is a secret goes to stderr; with no
-pairing stored it exits 1. `gglib config settings show` says only whether the
+pairing stored it exits 1. `gglib config show` says only whether the
 key is held.
 
 ## Using it
@@ -533,11 +533,11 @@ deliberate; see [Why the port does not inject the key](#why-the-port-does-not-in
 The key is the one this laptop was given when it paired — its own device
 key, not the desktop's `proxy_api_key`, which never leaves the desktop.
 `gglib remote status` here says whether this machine holds one, and
-`gglib config settings reveal remote-pairing.api-key` prints it, alone, so a
+`gglib config reveal remote-pairing.api-key` prints it, alone, so a
 script can hand it on:
 
 ```sh
-curl -H "Authorization: Bearer $(gglib config settings reveal remote-pairing.api-key)" http://127.0.0.1:8180/v1/models
+curl -H "Authorization: Bearer $(gglib config reveal remote-pairing.api-key)" http://127.0.0.1:8180/v1/models
 ```
 
 The per-client recipes in [clients.md](clients.md) apply unchanged apart from
@@ -570,8 +570,8 @@ proxy directly, with `403 device_not_paired`. A pairing code is not a key: the
 edge answers it on its own pairing route, and refuses it everywhere else with
 `401`, like any key it does not hold.
 
-Rotating the key on the desktop (`gglib config settings set
---proxy-api-key`) reaches the running tunnel within two settings-cache
+Rotating the key on the desktop (`gglib config set
+proxy-api-key <key>`) reaches the running tunnel within two settings-cache
 windows, about ten seconds, and changes only that last hop. No device has to
 re-pair, though a request made inside that window can be refused.
 
@@ -585,9 +585,9 @@ longer a rotation, which un-pairs nobody; it is that the desktop has retired
 this device, or that the two are mid-rotation and the edge has a stale
 credential for the proxy — that one clears itself within a few seconds.
 
-**The key is not something to type in.** There is no
-`gglib config settings set --remote-api-key`, and that is deliberate rather
-than missing: the laptop's copy is written only by `gglib remote join`,
+**The key is not something to type in.** `gglib config set` refuses
+`remote-pairing`, and that is deliberate rather than missing: the laptop's copy is
+written only by `gglib remote join`,
 which redeems a code and stores the key *together with the ticket it came
 from*. A hand-set key could name a machine the stored ticket does not, which
 is exactly the desync — connected, holding the wrong machine's key, every
@@ -700,11 +700,11 @@ bound anywhere else is covered two paragraphs down, and this procedure does
 not do what it looks like there:
 
 ```
-gglib config settings unset proxy-api-key
+gglib config unset proxy-api-key
 gglib proxy stop        # then start it again on loopback — the default host
 ```
 
-`gglib config settings set --proxy-api-key ""` is *not* it; a blank would read
+`gglib config set proxy-api-key ""` is *not* it; a blank would read
 as "authentication is on" while accepting `Bearer ` from anyone, so it is
 refused with `Proxy API key cannot be blank — clear it instead to disable
 authentication`. In the desktop app, the API key's Clear under
@@ -735,10 +735,10 @@ key back into `proxy_api_key`, so the setting you cleared is populated again,
 with a value you have never seen. The proxy comes back closed, your existing
 clients start getting `401`, and the `unset` reads as having done nothing.
 
-Read the new key with `gglib config settings reveal proxy-api-key`, which
-prints it alone on stdout (`settings show` says only that one is set). Then
+Read the new key with `gglib config reveal proxy-api-key`, which
+prints it alone on stdout (`config show` says only that one is set). Then
 either hand it to the clients, or set one you choose with `gglib config
-settings set --proxy-api-key <key>`.
+set proxy-api-key <key>`.
 
 There is no supported way to run an unauthenticated non-loopback proxy, and
 that is the point rather than an accident of this procedure: the only path
@@ -1106,7 +1106,7 @@ the laptop an authenticated client of the desktop, which is a larger grant
 than the one you made when you paired. gglib's own commands attach the key
 because you asked them to; a third-party client supplies it as its API key,
 which is the ordinary OpenAI-compatible arrangement, and
-`gglib config settings reveal remote-pairing.api-key` prints it for that
+`gglib config reveal remote-pairing.api-key` prints it for that
 client. The key in question is
 this device's own, which is also what bounds the mistake: a key that leaks
 here is one the desktop can retire on its own.

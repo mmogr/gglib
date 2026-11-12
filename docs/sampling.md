@@ -618,13 +618,13 @@ and this server's global settings, defeating the point of configuring either.
 
 ```bash
 # Inspect the current setting
-gglib config settings show
+gglib config show
 
 # Trust clients that expose real sampling controls to their user (e.g. OpenWebUI)
-gglib config settings set --trust-client-sampling true
+gglib config set trust-client-sampling true
 
 # Back to the default
-gglib config settings set --trust-client-sampling false
+gglib config set trust-client-sampling false
 ```
 
 `{model}:{profile}` selection is unaffected either way — that is not a client
@@ -933,7 +933,7 @@ describe nearly no traffic. The corollary is that this is an *agentic-turn*
 adjustment, not a tool-emission one — it applies to prose turns in an agentic
 session too, which is why the cap is mild rather than near-greedy.
 
-Disable it with `gglib config settings set --agentic-sampling false`, or
+Disable it with `gglib config set agentic-sampling false`, or
 per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`. The setting is this
 machine's. The proxy follows it, and so does a chat with one of this machine's
 models: `gglib chat` and `gglib q` on a model in the library, and a chat in

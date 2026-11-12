@@ -26,7 +26,7 @@ n
 
 One-shot. `{}` in the question is replaced by piped or `--file` input, and
 `-Q` / `--quiet` strips tool progress and reasoning tokens for a script.
-Without `-m` it asks the default model ([config default](config.md#default));
+Without `-m` it asks the default model (`default-model-id`, [config set](config.md#set-unset-show));
 under `--remote`, the model last asked of that machine.
 
 <!-- snippet: q-pipe -->
@@ -178,8 +178,8 @@ A chat keeps five sampling flags, `--temperature`, `--top-p`, `--top-k`,
 flag does not take effect, and the session says so on stderr.
 
 - Each turn sends the five as a client's sampling. The endpoint takes them
-  only while **Let clients set sampling** is on (`gglib config settings set
-  --trust-client-sampling true`), `--max-tokens` whatever it is; while it is
+  only while **Let clients set sampling** is on (`gglib config set
+  trust-client-sampling true`), `--max-tokens` whatever it is; while it is
   off, a session that names one of the other four says so once, on stderr,
   before its first turn.
 - Each turn names the chat's profile on its model, `<id>:<profile>`, and the
