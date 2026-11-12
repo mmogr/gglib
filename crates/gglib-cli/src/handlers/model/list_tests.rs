@@ -358,3 +358,34 @@ fn the_model_id_column_prints_the_id_a_client_sends() {
         Some(lines[0].find("Model ID").unwrap() + 12)
     );
 }
+
+/// A summary from compare runs alone has no speed, so no speed column is
+/// shown for it; one row with a speed brings the column back.
+#[test]
+fn the_speed_column_shows_only_when_a_row_has_a_speed() {
+    let summary = |latest_tg_tps: Option<f64>| {
+        serde_json::from_value(serde_json::json!({
+            "model_id": 1,
+            "best_tg_tps": null,
+            "best_pp_tps": null,
+            "latest_tg_tps": latest_tg_tps,
+            "latest_pp_tps": null,
+            "latest_backend": null,
+            "perf_run_count": 0,
+            "compare_run_count": 3,
+            "last_benchmarked_at": "2026-10-31T12:00:00Z",
+            "updated_at": "2026-10-31T12:00:00Z",
+        }))
+        .unwrap()
+    };
+    let mut compared = model(1, "compared");
+    compared.benchmark_summary = Some(summary(None));
+    let table = render_table(std::slice::from_ref(&compared));
+    assert!(!table.contains("t/s"), "{table}");
+
+    let mut timed = model(2, "timed");
+    timed.benchmark_summary = Some(summary(Some(41.3)));
+    let table = render_table(&[compared, timed]);
+    assert!(table.lines().next().unwrap().contains("⚡ t/s"), "{table}");
+    assert!(table.contains("41.3"), "{table}");
+}
