@@ -1,10 +1,10 @@
-//! What `gglib config models-dir show` prints: the folder, how it was
-//! chosen, and its state in the word every surface uses.
+//! The row `gglib config show` prints for `models-dir`: the folder, how it
+//! was chosen, and its state in the word every surface uses.
 
 use gglib_app_services::types::ModelsDirectoryInfo;
 use gglib_core::domain::ModelsDirState;
 
-use super::models_dir_lines;
+use super::models_dir::row;
 
 fn folder(exists: bool, writable: bool) -> ModelsDirectoryInfo {
     ModelsDirectoryInfo {
@@ -19,23 +19,24 @@ fn folder(exists: bool, writable: bool) -> ModelsDirectoryInfo {
 
 #[test]
 fn the_folder_is_shown_with_its_source_and_its_state() {
+    let shown = |exists, writable| row(&folder(exists, writable));
     assert_eq!(
-        models_dir_lines(&folder(true, true)),
-        [
-            "Current models directory: /data/models (source: environment)",
-            "Status: Writable",
-        ]
+        shown(true, true),
+        (
+            "models-dir".to_owned(),
+            "/data/models (environment, Writable)".to_owned()
+        )
     );
     assert_eq!(
-        models_dir_lines(&folder(false, true))[1],
-        "Status: Will be created"
+        shown(false, true).1,
+        "/data/models (environment, Will be created)"
     );
     assert_eq!(
-        models_dir_lines(&folder(true, false))[1],
-        "Status: Not writable"
+        shown(true, false).1,
+        "/data/models (environment, Not writable)"
     );
     assert_eq!(
-        models_dir_lines(&folder(false, false))[1],
-        "Status: Not writable"
+        shown(false, false).1,
+        "/data/models (environment, Not writable)"
     );
 }

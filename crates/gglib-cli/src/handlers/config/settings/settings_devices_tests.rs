@@ -1,4 +1,4 @@
-//! What `gglib config settings show` prints of the device roster.
+//! What `gglib config show` prints of the device roster.
 
 use gglib_core::secret::SHOWN_AS;
 use gglib_core::{Device, Settings};

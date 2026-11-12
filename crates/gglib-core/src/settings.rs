@@ -72,7 +72,7 @@ pub struct Settings {
     /// `None` means the user has chosen nothing, and is the ordinary state —
     /// it is what lets the daemon size each launch rather than pinning it.
     /// A value here is read as a number the user typed and outranks that, so
-    /// nothing writes one on their behalf and `settings unset` returns it. See
+    /// nothing writes one on their behalf and `config unset` returns it. See
     /// [`crate::server_config::resolve_context_size_with_source`] for the chain
     /// and `Self::with_defaults` for why this field is the one left unset.
     pub default_context_size: Option<u64>,
@@ -326,9 +326,9 @@ pub struct Settings {
     /// here, so later sessions need only the ticket — or nothing, since the
     /// ticket is part of the record. `gglib q --remote` and
     /// `gglib chat --remote` attach the key as the bearer. Nothing writes it
-    /// by hand, and `gglib config settings show` reports the key as held or
+    /// by hand, and `gglib config show` reports the key as held or
     /// not rather than printing it;
-    /// `gglib config settings reveal remote-pairing.api-key` prints it, alone
+    /// `gglib config reveal remote-pairing.api-key` prints it, alone
     /// and only when asked, for a client that is not gglib.
     ///
     /// A database written before the halves were bound holds
@@ -352,7 +352,7 @@ impl Settings {
     #[must_use]
     pub const fn with_defaults() -> Self {
         Self {
-            // `None`, not the floor. This is what `gglib config settings
+            // `None`, not the floor. This is what `gglib config
             // reset` writes, and a stored value is the evidence that the user
             // chose a number — the settings modal shows an empty box when
             // unset and writes back blank. Writing 4096 here would fabricate

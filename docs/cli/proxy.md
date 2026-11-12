@@ -40,7 +40,7 @@ config builder, so a model behaves identically however it was started.
 - Sampling flags given here are proxy-wide defaults; per-request and
   per-model values still win ([Sampling resolution](../sampling.md)).
 - Without `--port`, `proxy`, `serve` and `up` start the endpoint on the
-  stored `proxy_port` (`gglib config settings set --proxy-port`), where the
+  stored `proxy_port` (`gglib config set proxy-port`), where the
   desktop app starts it, and `proxy dashboard` and `proxy cache-clear` look
   for it there.
 - The endpoint runs on the daemon, so it outlives the terminal that started
@@ -112,7 +112,7 @@ through `/v1/models` need, VS Code Copilot's BYOK endpoint among them.
 
 - `--port` is the endpoint; the daemon allocates the upstream llama-server
   port behind it, from `llama_base_port`
-  (`gglib config settings set --llama-base-port`).
+  (`gglib config set llama-base-port`).
 - An image model is served by stable-diffusion.cpp's `sd-server` instead.
   `serve` offers to install it if it is missing, or older than its pinned
   release (`gglib config sd install`), prints the model's family and each

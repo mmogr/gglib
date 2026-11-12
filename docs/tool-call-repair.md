@@ -140,7 +140,7 @@ All four must hold. Anything else forwards unchanged.
    `GGLIB_DISABLE_TOOL_REPAIR` env kill switch matching the convention of
    `GGLIB_DISABLE_GRAMMAR` and `GGLIB_DISABLE_AGENTIC_SAMPLING`).
 
-   Settable as `gglib config settings set --tool-call-repair false`, or from
+   Settable as `gglib config set tool-call-repair false`, or from
    Settings › Endpoint › What gglib does to requests › Repair broken tool
    calls in the app. Turn it off to measure what a model
    actually produces: with repair on, a model that packages tool calls badly

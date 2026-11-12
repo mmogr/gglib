@@ -1,44 +1,31 @@
-//! `gglib config models-dir set` and `prompt`, and what the next run resolves.
+//! `gglib config set models-dir` and `unset models-dir`, and what the next
+//! run resolves.
 //!
 //! Two runs of the binary, because the point is the second one. It starts in
 //! a directory that is not the data root, as every `gglib` does: nothing
 //! loads a `.env` into its environment, and the stored directory is read
 //! from the data root's `.env` alone.
 
-use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Command, Output};
 
 /// `gglib config <args>` over `data` as its data root, started in `cwd`, with
-/// `models_dir` as the directory its environment names, if any, and `typed`
-/// on its standard input, if anything.
-fn config(
-    data: &Path,
-    cwd: &Path,
-    models_dir: Option<&Path>,
-    args: &[&str],
-    typed: Option<&str>,
-) -> Output {
+/// `models_dir` as the directory its environment names, if any. `data` is
+/// its home too, so the default directory is never the user's own.
+fn config(data: &Path, cwd: &Path, models_dir: Option<&Path>, args: &[&str]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_gglib"));
     command
         .arg("config")
         .args(args)
         .current_dir(cwd)
         .env("GGLIB_DATA_DIR", data)
+        .env("HOME", data)
         .env_remove("GGLIB_MODELS_DIR")
-        .env_remove("GGLIB_RESOURCE_DIR")
-        .stdin(typed.map_or_else(Stdio::null, |_| Stdio::piped()))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .env_remove("GGLIB_RESOURCE_DIR");
     if let Some(dir) = models_dir {
         command.env("GGLIB_MODELS_DIR", dir);
     }
-    let mut child = command.spawn().expect("starting `gglib config`");
-    if let Some(typed) = typed {
-        let mut stdin = child.stdin.take().expect("its standard input");
-        stdin.write_all(typed.as_bytes()).expect("typing at it");
-    }
-    child.wait_with_output().expect("running `gglib config`")
+    command.output().expect("running `gglib config`")
 }
 
 fn text(out: &Output) -> String {
@@ -49,13 +36,14 @@ fn text(out: &Output) -> String {
     )
 }
 
-/// What `show` prints for a directory the store, not a default, supplied,
-/// and that is there to write to.
-fn shown(dir: &Path) -> String {
-    format!(
-        "Current models directory: {} (source: environment)\nStatus: Writable",
-        dir.display()
-    )
+/// The value `show` prints on its `models-dir` row.
+fn shown(show: &Output) -> String {
+    let stdout = String::from_utf8_lossy(&show.stdout);
+    let row = stdout
+        .lines()
+        .find_map(|line| line.trim_start().strip_prefix("models-dir "))
+        .unwrap_or_else(|| panic!("no models-dir row\n{}", text(show)));
+    row.trim().to_owned()
 }
 
 #[test]
@@ -69,57 +57,86 @@ fn a_models_directory_set_by_one_run_is_the_one_the_next_run_resolves() {
         data.path(),
         elsewhere.path(),
         Some(&before),
-        &["models-dir", "set", &chosen.to_string_lossy()],
-        None,
+        &["set", "models-dir", &chosen.to_string_lossy()],
     );
     assert!(set.status.success(), "the set must succeed\n{}", text(&set));
     assert!(chosen.is_dir(), "the directory is created");
 
-    let show = config(
-        data.path(),
-        elsewhere.path(),
-        None,
-        &["models-dir", "show"],
-        None,
-    );
+    let show = config(data.path(), elsewhere.path(), None, &["show"]);
     assert!(show.status.success(), "{}", text(&show));
-    assert!(
-        String::from_utf8_lossy(&show.stdout).contains(&shown(&chosen)),
-        "the next run must resolve the stored directory\n{}",
-        text(&show)
+    assert_eq!(
+        shown(&show),
+        format!("{} (environment, Writable)", chosen.display()),
+        "the next run must resolve the stored directory"
     );
 }
 
-/// `prompt` stores the directory typed at it, as `set` stores its argument.
+/// A `set` under a `GGLIB_MODELS_DIR` says the environment outranks what it
+/// stored, so it never names a folder `show` then contradicts.
 #[test]
-fn a_models_directory_typed_at_the_prompt_is_the_one_the_next_run_resolves() {
+fn a_set_under_the_environment_says_the_environment_outranks_it() {
     let data = tempfile::tempdir().expect("temp data dir");
     let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
-    let before = data.path().join("before");
-    let chosen = data.path().join("typed models");
+    let from_env = data.path().join("from env");
+    let chosen = data.path().join("chosen");
 
-    let prompt = config(
+    let set = config(
         data.path(),
         elsewhere.path(),
-        Some(&before),
-        &["models-dir", "prompt"],
-        Some(&format!("{}\n", chosen.display())),
+        Some(&from_env),
+        &["set", "models-dir", &chosen.to_string_lossy()],
     );
-    assert!(prompt.status.success(), "{}", text(&prompt));
-    assert!(chosen.is_dir(), "the directory is created");
 
-    let show = config(
-        data.path(),
-        elsewhere.path(),
-        None,
-        &["models-dir", "show"],
-        None,
-    );
-    assert!(show.status.success(), "{}", text(&show));
+    assert!(set.status.success(), "{}", text(&set));
+    let said = String::from_utf8_lossy(&set.stdout);
     assert!(
-        String::from_utf8_lossy(&show.stdout).contains(&shown(&chosen)),
-        "the next run must resolve the directory typed at the prompt\n{}",
-        text(&show)
+        said.contains("outranks it")
+            && said.contains(&format!("downloads go to {}", from_env.display())),
+        "{}",
+        text(&set)
+    );
+}
+
+/// `unset` removes the stored directory and leaves the other lines, so the
+/// next run resolves the default.
+#[test]
+fn an_unset_models_directory_leaves_the_next_run_on_the_default() {
+    let data = tempfile::tempdir().expect("temp data dir");
+    let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
+    let chosen = data.path().join("chosen");
+    let kept = "GGLIB_RESOURCE_DIR=\"/somewhere\"";
+    let set = config(
+        data.path(),
+        elsewhere.path(),
+        None,
+        &["set", "models-dir", &chosen.to_string_lossy()],
+    );
+    assert!(set.status.success(), "{}", text(&set));
+    let env = data.path().join(".env");
+    let stored = std::fs::read_to_string(&env).expect("the .env");
+    std::fs::write(&env, format!("{stored}{kept}\n")).expect("a line after it");
+
+    let unset = config(
+        data.path(),
+        elsewhere.path(),
+        None,
+        &["unset", "models-dir"],
+    );
+    assert!(unset.status.success(), "{}", text(&unset));
+    assert!(
+        String::from_utf8_lossy(&unset.stdout).contains("downloads go to the default"),
+        "{}",
+        text(&unset)
+    );
+
+    let show = config(data.path(), elsewhere.path(), None, &["show"]);
+    assert!(show.status.success(), "{}", text(&show));
+    assert!(shown(&show).contains(" (default, "), "{}", text(&show));
+    let env = std::fs::read_to_string(&env).expect("the .env");
+    assert!(!env.contains("GGLIB_MODELS_DIR"), "{env}");
+    assert!(
+        env.lines().any(|l| l == kept),
+        "the other line stays\n{env}"
     );
 }
 
@@ -142,12 +159,11 @@ fn a_stored_directory_with_a_space_in_its_name_is_read_back_and_the_other_lines_
         data.path(),
         elsewhere.path(),
         Some(&before),
-        &["models-dir", "set", &chosen.to_string_lossy()],
-        None,
+        &["set", "models-dir", &chosen.to_string_lossy()],
     );
     assert!(set.status.success(), "the set must succeed\n{}", text(&set));
 
-    let paths = config(data.path(), elsewhere.path(), None, &["paths"], None);
+    let paths = config(data.path(), elsewhere.path(), None, &["paths"]);
     assert!(paths.status.success(), "{}", text(&paths));
     let stdout = String::from_utf8_lossy(&paths.stdout);
     for line in [
@@ -167,35 +183,28 @@ fn a_stored_directory_with_a_space_in_its_name_is_read_back_and_the_other_lines_
     );
 }
 
-/// A directory that is absent is refused under `--no-create`, in the words
-/// the command has always used, and the next run resolves what it did before.
+/// A path that cannot be a directory is refused in the words the command
+/// has always used, and nothing is stored.
 #[test]
 fn a_refused_models_directory_is_not_stored() {
     let data = tempfile::tempdir().expect("temp data dir");
     let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
-    let before = data.path().join("before");
-    let absent = data.path().join("absent");
+    let file = data.path().join("a file");
+    std::fs::write(&file, "in the way").expect("a file where the folder would go");
 
     let set = config(
         data.path(),
         elsewhere.path(),
-        Some(&before),
-        &[
-            "models-dir",
-            "set",
-            &absent.to_string_lossy(),
-            "--no-create",
-        ],
         None,
+        &["set", "models-dir", &file.to_string_lossy()],
     );
 
     assert!(!set.status.success(), "{}", text(&set));
-    let refusal = format!("Directory {} does not exist", absent.display());
+    let refusal = format!("{} exists but is not a directory", file.display());
     assert!(
         String::from_utf8_lossy(&set.stderr).contains(&refusal),
         "{}",
         text(&set)
     );
-    assert!(!absent.exists());
     assert!(!data.path().join(".env").exists(), "nothing is stored");
 }

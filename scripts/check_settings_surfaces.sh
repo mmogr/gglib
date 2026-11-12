@@ -4,7 +4,7 @@
 # `tool_call_repair` sat in `Settings` for months with no CLI flag, no
 # TypeScript field and no GUI control. It was defined, mirrored into
 # `SettingsUpdate`, carried on the wire by `AppSettings`, read by the proxy —
-# and settable from nowhere. `gglib config settings show` even *printed* it,
+# and settable from nowhere. The CLI's settings listing even *printed* it,
 # because that display is derived from serde, so the CLI advertised a setting
 # it could not write.
 #
@@ -16,9 +16,10 @@
 #
 # A field is reachable if it is settable from the CLI, or from the GUI:
 #
-#   CLI — a `--kebab-case` flag on `gglib config settings set`, which means the
-#         field appears in `SettingsSetArgs`, in
-#         `config_commands/settings_args.rs`.
+#   CLI — a key `gglib config set` writes, which means the field's
+#         kebab-case name is a row of `KEYS`, in
+#         `config_commands/setting_key.rs`, that takes a value (not
+#         `Takes::Whole` or `Takes::Elsewhere`, which `set` refuses).
 #   GUI — the camelCase name appears in `src/`, which is where the TypeScript
 #         mirror and the settings place both live.
 #
@@ -42,12 +43,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 SETTINGS_RS="crates/gglib-core/src/settings.rs"
-CLI_SET_ARGS="crates/gglib-cli/src/config_commands/settings_args.rs"
+CLI_KEYS="crates/gglib-cli/src/config_commands/setting_key.rs"
 
 GUI_DIR="src"
 
-if [ ! -f "$CLI_SET_ARGS" ]; then
-  echo -e "${RED}❌ ${CLI_SET_ARGS} does not exist${NC}"
+if [ ! -f "$CLI_KEYS" ]; then
+  echo -e "${RED}❌ ${CLI_KEYS} does not exist${NC}"
   echo
   echo "The CLI half of this guard reads that file. When the path is wrong the"
   echo "grep below fails per field, and because it sits inside an \`if\` it does"
@@ -70,8 +71,7 @@ fi
 # Fields nothing settable is expected for, and why.
 declare -A EXEMPT=(
   [setup_completed]="written by setup's Open gglib when it finishes, not chosen"
-  [default_model_id]="set by \`gglib model default\`, not by config settings"
-  [inference_defaults]="edited through \`gglib config inference\` and the model inspector"
+  [inference_defaults]="edited under Settings › Models and in the model inspector, not one value"
   [inference_profiles]="edited through \`gglib config profile\` and the profile editor"
   [remote_pairing]="the ticket and key \`gglib remote join\` receives when a pairing code is redeemed, not chosen"
   [remote_enabled]="the switch \`gglib remote enable\`/\`disable\` set; a settings field that could claim a machine is reachable with nothing bound would be a lie"
@@ -115,12 +115,23 @@ to_camel() {
   }'
 }
 
+# Every row of `KEYS`, as `name Takes-variant`, one per line. The table is
+# joined onto one line first, so an entry rustfmt breaks across lines reads
+# the same as one it leaves on one.
+key_rows=$(
+  awk '/^pub\(crate\) const KEYS/ { inside = 1; next } inside && /^\];/ { exit } inside' "$CLI_KEYS" |
+    tr '\n' ' ' |
+    grep -oE 'key\([[:space:]]*"[a-z0-9-]+",[[:space:]]*Takes::[A-Za-z]+' |
+    sed -E 's/key\([[:space:]]*"([a-z0-9-]+)",[[:space:]]*Takes::([A-Za-z]+)/\1 \2/'
+)
+
+# The keys `config set` writes: every row but those that take no value.
+settable_keys=$(printf '%s\n' "$key_rows" | awk '$2 != "Whole" && $2 != "Elsewhere" { print $1 }')
+
 # CLI detection, factored into a function so the self-test below exercises the
-# same code path the real scan uses. The `pub ` is optional because the fields
-# moved from a clap variant's inline list (no `pub`) to a named `Args` struct
-# (`pub`) — a pattern that assumes either one silently matches nothing.
+# same code path the real scan uses.
 cli_has_field() {
-  grep -qE "^[[:space:]]+(pub )?$1: Option<" "$CLI_SET_ARGS"
+  printf '%s\n' "$settable_keys" | grep -qx "${1//_/-}"
 }
 
 # GUI detection, factored out for the same reason. No `2>/dev/null`: the only
@@ -147,31 +158,30 @@ if gui_has_field "definitely_not_a_settings_field"; then
   exit 1
 fi
 
-# Every field `SettingsSetArgs` declares, by name — matched loosely, on any
-# field of any type. Deliberately a different pattern from `cli_has_field`'s:
-# where the two disagree about a field `Settings` also declares, the strict one
-# has drifted and the cross-check after the scan says so. A count that only
-# fails at zero catches the detector dying; this catches it going partially
-# deaf, which is the same bug arriving more quietly.
-declared_flags=$(
-  awk '
-    /^pub struct SettingsSetArgs \{/ { inside = 1; next }
-    inside && /^\}/                  { exit }
-    inside && /^[[:space:]]+(pub )?[a-z_0-9]+[[:space:]]*:/ {
-      line = $0
-      sub(/^[[:space:]]+/, "", line)
-      sub(/^pub /, "", line)
-      sub(/[[:space:]]*:.*/, "", line)
-      print line
-    }
-  ' "$CLI_SET_ARGS"
+# Every `key(` the table holds, counted loosely. Where the count and the rows
+# parsed above disagree, the parser has gone partially deaf: a row it cannot
+# read is a key this guard silently stops checking. A count that only fails
+# at zero catches the parser dying; this catches the same bug arriving more
+# quietly.
+declared_keys=$(
+  awk '/^pub\(crate\) const KEYS/ { inside = 1; next } inside && /^\];/ { exit } inside' "$CLI_KEYS" |
+    grep -oE 'key\(' | wc -l | tr -d ' '
 )
+parsed_keys=$(printf '%s\n' "$key_rows" | grep -c . || true)
 
-if [ -z "$declared_flags" ]; then
-  echo -e "${RED}❌ no flags found in SettingsSetArgs${NC}"
+if [ "$declared_keys" -eq 0 ]; then
+  echo -e "${RED}❌ no keys found in KEYS${NC}"
   echo
-  echo "The struct was renamed or reshaped, so the cross-check below compares"
-  echo "against nothing. Fix the parser rather than trusting this exit code."
+  echo "The table was renamed or reshaped, so the scan below compares against"
+  echo "nothing. Fix the parser rather than trusting this exit code."
+  exit 1
+fi
+
+if [ "$declared_keys" -ne "$parsed_keys" ]; then
+  echo -e "${RED}❌ KEYS has ${declared_keys} rows and the parser read ${parsed_keys}${NC}"
+  echo
+  echo "Each row must read \`key(\"name\", Takes::Variant…\`; a row in another"
+  echo "shape is a key this guard cannot see. Fix the parser or the row."
   exit 1
 fi
 
@@ -191,7 +201,7 @@ for field in $fields; do
   in_cli=false
   in_gui=false
 
-  # CLI: the field name appears in `SettingsSetArgs`.
+  # CLI: the field is a key `config set` writes.
   if cli_has_field "$field"; then
     in_cli=true
     cli_reachable=$((cli_reachable + 1))
@@ -223,9 +233,9 @@ echo
 if [ "$cli_reachable" -eq 0 ]; then
   echo -e "${RED}❌ no Settings field was found on the CLI surface${NC}"
   echo
-  echo "Either every flag was deleted from ${CLI_SET_ARGS}, or the detector no"
-  echo "longer matches it. The second is far more likely — check the pattern in"
-  echo "\`cli_has_field\` against the current shape of \`SettingsSetArgs\`."
+  echo "Either every key was deleted from ${CLI_KEYS}, or the parser no longer"
+  echo "reads it. The second is far more likely — check \`key_rows\` against the"
+  echo "current shape of \`KEYS\`."
   exit 1
 fi
 
@@ -235,32 +245,6 @@ if [ "$gui_reachable" -eq 0 ]; then
   echo "Either every setting was removed from ${GUI_DIR}/, or the detector no"
   echo "longer matches it. Check the pattern in \`gui_has_field\` and that"
   echo "\`to_camel\` still produces the names the TypeScript side uses."
-  exit 1
-fi
-
-# Partial drift: a flag `SettingsSetArgs` declares, that `Settings` also
-# declares and does not exempt, must have been found by `cli_has_field`. The
-# enumeration above and the detector use different patterns on purpose, so a
-# detector that has drifted out of step with the struct's shape fails here
-# instead of quietly under-reporting a subset.
-missed=()
-for flag in $declared_flags; do
-  printf '%s\n' $fields | grep -qx "$flag" || continue
-  [[ -v "EXEMPT[$flag]" ]] && continue
-  cli_has_field "$flag" || missed+=("$flag")
-done
-
-if [ ${#missed[@]} -gt 0 ]; then
-  echo -e "${RED}❌ the CLI detector missed ${#missed[@]} flag(s) that SettingsSetArgs declares${NC}"
-  echo
-  for flag in "${missed[@]}"; do
-    echo "  - ${flag}"
-  done
-  echo
-  echo "These are declared in ${CLI_SET_ARGS} and are non-exempt \`Settings\`"
-  echo "fields, so \`cli_has_field\` should match them. It does not, which means"
-  echo "its pattern no longer fits the struct — the same failure as a wrong"
-  echo "path, only partial. Fix the pattern; do not exempt your way out."
   exit 1
 fi
 
@@ -275,11 +259,9 @@ if [ ${#unreachable[@]} -gt 0 ]; then
 Each of these is stored, plumbed and read, and settable from no surface a
 person has. Pick one:
 
-  1. Give it a CLI flag: add it to `SettingsSetArgs` in
-     `crates/gglib-cli/src/config_commands/settings_args.rs` and map it in
-     `update_from`, in
-     `crates/gglib-cli/src/handlers/config/settings/set.rs`. That is the one
-     place: a test there fails for a flag left out of it.
+  1. Give it a CLI key: add a row to `KEYS` in
+     `crates/gglib-cli/src/config_commands/setting_key.rs`. That is the one
+     place: a test beside it fails for a field left out of it.
   2. Give it a GUI control: add the camelCase field to `src/types/index.ts`
      and a control in the settings place (`src/places/settings/`).
   3. Delete the setting, and whatever reads it.

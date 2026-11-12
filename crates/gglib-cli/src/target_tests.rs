@@ -50,7 +50,7 @@ fn the_use_side_reaches_the_machine_and_everything_else_is_about_this_one() {
         &["gglib", "remote", "status"],
         &["gglib", "proxy"],
         &["gglib", "daemon", "status"],
-        &["gglib", "config", "settings", "show"],
+        &["gglib", "config", "show"],
         &["gglib", "completions", "bash"],
     ] {
         let (name, reach) = reach(&parsed(argv));

@@ -23,8 +23,8 @@ pub(crate) fn notices(sampling: &SamplingArgs, target: Target, settings: &Settin
     if target == Target::Local && !trusted && !ignored.is_empty() {
         lines.push(format!(
             "  Note: this chat keeps {ignored}, but the endpoint uses its own sampling until \
-             \"Let clients set sampling\" is on: gglib config settings set \
-             --trust-client-sampling true"
+             \"Let clients set sampling\" is on: gglib config set \
+             trust-client-sampling true"
         ));
     }
     let unkept = flags(&not_kept(sampling));

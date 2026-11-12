@@ -1,7 +1,10 @@
-//! Unit tests for [`super`].
+//! Unit tests for the key names [`super`] builds its request under.
 
-use super::*;
-use crate::bootstrap::test_context;
+use gglib_app_services::types::UpdateSettingsRequest;
+use serde_json::Value;
+
+use super::super::settings_display::{camel_to_kebab, kebab_to_camel};
+use super::super::wire::known_keys;
 
 #[test]
 fn kebab_round_trips_through_camel() {
@@ -35,29 +38,7 @@ fn the_wire_type_is_its_own_manifest() {
     }
 }
 
-/// `proxy-loop-detection` named the loop guard's switch before
-/// `loop-guard-mode`, and is not a setting now: it is refused as any name the
-/// wire type does not carry is, and nothing is stored.
-#[tokio::test]
-async fn the_retired_loop_detection_key_is_refused_as_unknown() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = test_context(dir.path()).await;
-    let before = ctx.app.settings().get().await.expect("settings");
-
-    let refused = handle_unset(&ctx, "proxy-loop-detection")
-        .await
-        .expect_err("not a setting");
-
-    let said = format!("{refused:#}");
-    assert!(
-        said.starts_with("Unknown setting 'proxy-loop-detection'."),
-        "{said}"
-    );
-    assert!(said.contains("\n  loop-guard-mode\n"), "{said}");
-    assert_eq!(ctx.app.settings().get().await.expect("settings"), before);
-}
-
-/// The motivating case. `settings set` can only write a value, so before this
+/// The motivating case. `set` can only write a value, so before this
 /// existed a stored 4096 outranked the fitted rung with no way back short of
 /// resetting everything.
 #[test]
@@ -76,9 +57,8 @@ fn a_null_for_a_known_key_reads_as_clear_not_as_absent() {
     );
 }
 
-/// Every key `settings show` prints must be one `settings unset` accepts.
-/// The two surfaces disagreeing is the defect this subcommand exists to fix,
-/// one level up.
+/// Every key the wire type carries maps to a kebab-case key and back, so
+/// the name `config show` prints is the name the request is built under.
 #[test]
 fn every_known_key_is_accepted_in_kebab_form() {
     for camel in known_keys().keys() {

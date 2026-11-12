@@ -123,7 +123,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
                 anyhow!(
                     "No model specified and no default model set.\n\
                      Use --model <id-or-name> or set a default:\n  \
-                     gglib config default <id-or-name>"
+                     gglib config set default-model-id <id-or-name>"
                 )
             })?;
             let model = ctx

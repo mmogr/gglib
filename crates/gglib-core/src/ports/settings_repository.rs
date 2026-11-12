@@ -55,7 +55,7 @@ pub trait SettingsRepository: Send + Sync {
     /// A partial update needs this. Read, change and save as three calls,
     /// and a write that lands between the read and the save is overwritten
     /// by a record read before it. Settings are written by more than one
-    /// process — the daemon, and `gglib config settings set` in a terminal —
+    /// process — the daemon, and `gglib config set` in a terminal —
     /// so no lock held inside one of them can close that window.
     ///
     /// The default makes exactly those three calls and holds nothing between

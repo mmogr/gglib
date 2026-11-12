@@ -41,7 +41,7 @@ pub(crate) mod utils;
 // Re-export primary types for convenient access
 pub use bootstrap::{CliContext, bootstrap};
 pub use commands::Commands;
-pub use config_commands::{ConfigCommand, ModelsDirCommand, SettingsCommand};
+pub use config_commands::ConfigCommand;
 pub use dispatch::dispatch;
 pub use llama_commands::LlamaCommand;
 pub use model_commands::ModelCommand;

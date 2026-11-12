@@ -53,7 +53,7 @@ pub(crate) async fn execute(
         401 => {
             eprintln!(
                 "The proxy at {host}:{port} requires an API key. Pass --api-key, set \
-                 GGLIB_API_KEY, or store one with `gglib config settings set --proxy-api-key <key>`."
+                 GGLIB_API_KEY, or store one with `gglib config set proxy-api-key <key>`."
             );
             std::process::exit(1);
         }

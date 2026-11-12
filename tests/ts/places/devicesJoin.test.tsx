@@ -133,7 +133,7 @@ describe('Use another machine', () => {
     applyRemoteStatus(DESK);
     renderApp('/devices');
     expect(screen.getByText("Clients need this device's key:")).toBeInTheDocument();
-    expect(screen.getByText('gglib config settings reveal remote-pairing.api-key')).toBeInTheDocument();
+    expect(screen.getByText('gglib config reveal remote-pairing.api-key')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy the command that prints the key' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /show/i })).not.toBeInTheDocument();
   });

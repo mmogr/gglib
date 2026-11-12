@@ -154,7 +154,7 @@
   "several_and_no_default": {
     "available": false,
     "code": "drawing_unavailable",
-    "reason": "this machine has 2 image models that can draw (sdxl, sdxl-turbo); name the one to draw with, or set a default with `gglib config settings set --default-image-model <name>`",
+    "reason": "this machine has 2 image models that can draw (sdxl, sdxl-turbo); name the one to draw with, or set a default with `gglib config set default-image-model-id <name>`",
     "models": [
       {
         "id": 2,

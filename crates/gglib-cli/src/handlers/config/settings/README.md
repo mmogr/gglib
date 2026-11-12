@@ -2,11 +2,13 @@
 
 <!-- module-docs:start -->
 
-Settings, default-model, and models-directory handlers.
+Handlers for `gglib config show`, `set`, `unset`, `reset`, `reveal` and
+`profile`.
 
-These three sub-handlers were the original `config` dispatch targets.
-They now live inside the `config/` directory alongside llama, check-deps,
-and paths.
+`set` and `unset` take a key from `config_commands::SettingKey`'s table and
+write it through the wire type the settings API reads (`wire`), so the CLI
+and the app change a setting by one path. `models-dir` is the one key that is
+not a setting: it is a line in the data root's `.env` (`models_dir`).
 
 All display/formatting logic is in the sibling [`settings_display`] module.
 

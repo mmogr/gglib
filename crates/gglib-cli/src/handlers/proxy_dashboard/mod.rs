@@ -97,7 +97,7 @@ pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> R
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         anyhow::bail!(
             "the proxy at {host}:{port} requires an API key. Pass --api-key, set \
-             GGLIB_API_KEY, or store one with `gglib config settings set --proxy-api-key <key>`."
+             GGLIB_API_KEY, or store one with `gglib config set proxy-api-key <key>`."
         );
     }
     if !response.status().is_success() {

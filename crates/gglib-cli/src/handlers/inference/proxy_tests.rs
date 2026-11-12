@@ -73,7 +73,7 @@ fn zero_is_rejected_because_the_message_calls_it_invalid() {
 }
 
 /// One number, three surfaces, one range. `validate_settings` rejects
-/// below 512 and `--default-context-size` documents that bound, so this
+/// below 512 and `config set default-context-size` documents that bound, so this
 /// flag accepting 1 would make them disagree.
 #[test]
 fn the_flag_is_held_to_the_same_range_the_settings_are() {

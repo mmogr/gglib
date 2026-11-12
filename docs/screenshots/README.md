@@ -27,7 +27,7 @@ changes them:
 
 ```bash
 export GGLIB_DATA_DIR=$HOME/gglib-shots GGLIB_DAEMON_PORT=9897
-gglib config settings set --proxy-port 8181   # a Load turns the endpoint on at this port
+gglib config set proxy-port 8181   # a Load turns the endpoint on at this port
 gglib model add <a .gguf file>             # once per model; a library worth looking at
 gglib daemon run &                         # then turn the endpoint on from the GUI, or:
 curl -s -X POST -H "Authorization: Bearer $(cat $GGLIB_DATA_DIR/data/daemon_token)" \
@@ -81,12 +81,13 @@ your own proxy (`gglib proxy stop`) while you record:
 ```bash
 export GGLIB_DATA_DIR=$HOME/.local/share/gglib-demo GGLIB_DAEMON_PORT=9907
 export GGLIB_MODELS_DIR=$GGLIB_DATA_DIR/models
-gglib config settings set --proxy-port 8080 --llama-base-port 9300
+gglib config set proxy-port 8080
+gglib config set llama-base-port 9300
 gglib model add $GGLIB_MODELS_DIR/<the model to serve>.gguf
 ```
 
 The CLI snippets need no such stop: they can be recorded with the copy on
-`--proxy-port 9908 --llama-base-port 9600`, and `snippets.py` shows those
+proxy port 9908 and llama base port 9600, and `snippets.py` shows those
 ports as 8080 and 9300.
 
 ```bash

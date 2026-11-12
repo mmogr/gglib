@@ -79,7 +79,7 @@ async fn test_save_and_load_proxy_cache_on_disk() {
     repo.save(&settings).await.unwrap();
     assert_eq!(repo.load().await.unwrap().proxy_cache_on_disk, Some(true));
 
-    // `--proxy-cache-on-disk false` must be persistable as a real value,
+    // `proxy-cache-on-disk false` must be persistable as a real value,
     // not erased: it is the documented way to switch the cache back off.
     settings.proxy_cache_on_disk = Some(false);
     repo.save(&settings).await.unwrap();

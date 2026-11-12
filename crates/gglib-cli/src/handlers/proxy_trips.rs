@@ -53,7 +53,7 @@ fn render(out: &mut impl Write, days: &[LoopGuardTripDay], since_days: u32) -> s
         writeln!(
             out,
             "The loop guard scanned nothing in the last {window} day(s), \
-             or it is off (`gglib config settings set --loop-guard-mode note`)."
+             or it is off (`gglib config set loop-guard-mode note`)."
         )?;
         return Ok(());
     }

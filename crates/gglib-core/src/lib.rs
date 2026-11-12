@@ -68,7 +68,7 @@ pub use is_local_origin::is_local_origin;
 pub use utils::timing::{elapsed_ms, format_duration_human};
 
 pub use paths::{
-    DirectoryCreationStrategy, ModelsDirSource, PathError, data_root, database_path,
-    default_models_dir, ensure_directory, llama_config_path, llama_cpp_dir, llama_server_path,
-    resolve_models_dir, resource_root, set_models_dir,
+    ModelsDirSource, PathError, data_root, database_path, default_models_dir, ensure_directory,
+    llama_config_path, llama_cpp_dir, llama_server_path, resolve_models_dir, resource_root,
+    set_models_dir,
 };
