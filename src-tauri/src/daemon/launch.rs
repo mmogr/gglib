@@ -13,7 +13,7 @@
 //! `AppImage` and the rpm carry their own copy (Tauri's `externalBin`, set by
 //! `tauri.sidecar.conf.json` when release.yml bundles), the deb depends on the
 //! `gglib` package of the same version, which installs `/usr/bin/gglib` beside
-//! `/usr/bin/gglib-app`, and the archives hold both. A build from a checkout
+//! `/usr/bin/gglib-gui`, and the archives hold both. A build from a checkout
 //! has `target/<profile>/gglib` beside it once the CLI is built. So the daemon
 //! the app starts is always the app's own version, whatever else is on
 //! `$PATH`.
@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn the_cli_is_taken_from_beside_the_app_or_not_at_all() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let app = dir.path().join("gglib-app");
+        let app = dir.path().join("gglib-gui");
         std::fs::write(&app, b"").expect("the app");
 
         assert_eq!(sibling_cli(&app), None);
@@ -127,6 +127,6 @@ mod tests {
     fn a_directory_named_like_the_cli_is_not_taken() {
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::create_dir(dir.path().join(cli_binary_name())).expect("a directory");
-        assert_eq!(sibling_cli(&dir.path().join("gglib-app")), None);
+        assert_eq!(sibling_cli(&dir.path().join("gglib-gui")), None);
     }
 }

@@ -277,7 +277,7 @@ and run `./gglib up`. The binaries are not code-signed yet:
 - **macOS** refuses a file a browser downloaded. Clear the flag with
   `xattr -d com.apple.quarantine ./gglib`, or for the desktop app, after
   dragging it to Applications,
-  `xattr -dr com.apple.quarantine "/Applications/GGLib GUI.app"`. The
+  `xattr -dr com.apple.quarantine /Applications/gglib.app`. The
   desktop app's tar.gz includes `macos-install.command`, which does this,
   and Homebrew does it for you.
 - **Windows** SmartScreen stops the desktop app's installer with "Windows

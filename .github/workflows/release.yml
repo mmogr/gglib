@@ -382,8 +382,16 @@ jobs:
       # to /usr/bin/gglib, the very file the CLI's own deb installs, and apt
       # refuses to install the two together. So the deb depends on the gglib
       # package of this version instead, which puts the CLI beside
-      # /usr/bin/gglib-app all the same. The rpm and AppImage carry it: there
+      # /usr/bin/gglib-gui all the same. The rpm and AppImage carry it: there
       # is no CLI rpm for them to depend on.
+      #
+      # On Linux, tauri.linux.conf.json makes productName "gglib-gui", so the
+      # deb and rpm are the package gglib-gui and not gglib, the CLI's own
+      # package, which the deb's Depends would otherwise name as itself. Its
+      # desktop template keeps the menu entry named gglib. On Windows,
+      # tauri.windows.conf.json does the same, so the per-user install goes to
+      # %LOCALAPPDATA%\gglib-gui and not %LOCALAPPDATA%\gglib, gglib's data
+      # folder.
       #
       # A release candidate's version, 0.26.2-rc.6, suits neither Linux
       # package as it stands. RPM refuses a `-` in a version, and dpkg reads
@@ -441,6 +449,7 @@ jobs:
           bundle="target/${{ matrix.target }}/release/bundle"
           if [ "${{ runner.os }}" = "Linux" ]; then
             deb=$(find "$bundle/deb" -maxdepth 1 -name '*.deb' | head -n1)
+            test "$(dpkg-deb --field "$deb" Package)" = gglib-gui
             dpkg-deb --field "$deb" Depends | tee /dev/stderr | grep -q 'gglib (= '
             version="${{ needs.meta.outputs.version }}"
             deb_version=$(dpkg-deb --field "$deb" Version)
@@ -451,6 +460,7 @@ jobs:
               exit 1
             fi
             rpm=$(find "$bundle/rpm" -maxdepth 1 -name '*.rpm' | head -n1)
+            test "$(rpm -qp --qf '%{NAME}' "$rpm")" = gglib-gui
             rpm -qlp "$rpm" | grep -qx '/usr/bin/gglib'
             want_rpm="$version-1"
             if [[ "$version" == *-* ]]; then want_rpm="${version%%-*}-0.${version#*-}"; fi
@@ -462,7 +472,7 @@ jobs:
             ( cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract >/dev/null )
             test -x "$RUNNER_TEMP/squashfs-root/usr/bin/gglib"
           else
-            test -x "$bundle/macos/GGLib GUI.app/Contents/MacOS/gglib"
+            test -x "$bundle/macos/gglib.app/Contents/MacOS/gglib"
           fi
         
       - name: Debug build output (Windows)
@@ -489,9 +499,9 @@ jobs:
           }
           Write-Output "Searching for all executables:"
           if (Test-Path target/) {
-            Get-ChildItem -Recurse -Name "gglib-app*" target/
+            Get-ChildItem -Recurse -Name "gglib-gui*" target/
           } else {
-            Write-Output "No gglib-app executables found"
+            Write-Output "No gglib-gui executables found"
           }
         shell: pwsh
 
@@ -520,15 +530,15 @@ jobs:
           echo "Searching for all .app bundles:"
           find target -name "*.app" -type d 2>/dev/null || echo "No .app bundles found"
           echo "Searching for all executables:"
-          find target -name "gglib-app*" -type f 2>/dev/null || echo "No gglib-app executables found"
+          find target -name "gglib-gui*" -type f 2>/dev/null || echo "No gglib-gui executables found"
 
       - name: Prepare GUI binary for packaging (Linux)
         if: runner.os == 'Linux'
         run: |
           mkdir -p gui-release
-          cp target/${{ matrix.target }}/release/gglib-app gui-release/
+          cp target/${{ matrix.target }}/release/gglib-gui gui-release/
           cp target/${{ matrix.target }}/release/gglib gui-release/
-          chmod +x gui-release/gglib-app gui-release/gglib
+          chmod +x gui-release/gglib-gui gui-release/gglib
 
       - name: Prepare GUI binary for packaging (macOS)
         if: startsWith(matrix.os, 'macos')
@@ -544,19 +554,19 @@ jobs:
           fi
           
           # First check for the bare binary (always created)
-          if [ -f "target/${{ matrix.target }}/release/gglib-app" ]; then
+          if [ -f "target/${{ matrix.target }}/release/gglib-gui" ]; then
             echo "Found bare binary in target-specific directory, copying..."
-            cp "target/${{ matrix.target }}/release/gglib-app" "target/${{ matrix.target }}/release/gglib" gui-release/
-            chmod +x gui-release/gglib-app gui-release/gglib
+            cp "target/${{ matrix.target }}/release/gglib-gui" "target/${{ matrix.target }}/release/gglib" gui-release/
+            chmod +x gui-release/gglib-gui gui-release/gglib
           else
-            echo "ERROR: Bare binary not found! target/${{ matrix.target }}/release/gglib-app does not exist."
+            echo "ERROR: Bare binary not found! target/${{ matrix.target }}/release/gglib-gui does not exist."
             exit 1
           fi
           
           # Try to copy the .app bundle if it exists (only created for native builds, not cross-compilation)
-          if [ -d "target/${{ matrix.target }}/release/bundle/macos/GGLib GUI.app" ]; then
+          if [ -d "target/${{ matrix.target }}/release/bundle/macos/gglib.app" ]; then
             echo "Found .app bundle in target-specific directory, copying..."
-            cp -r "target/${{ matrix.target }}/release/bundle/macos/GGLib GUI.app" gui-release/
+            cp -r "target/${{ matrix.target }}/release/bundle/macos/gglib.app" gui-release/
             
             # Copy the install script and README for macOS users
             echo "Copying macOS install script and README..."
@@ -572,7 +582,7 @@ jobs:
         shell: pwsh
         run: |
           mkdir gui-release
-          copy target\${{ matrix.target }}\release\gglib-app.exe gui-release\
+          copy target\${{ matrix.target }}\release\gglib-gui.exe gui-release\
           copy target\${{ matrix.target }}\release\gglib.exe gui-release\
 
       # The installers below were built by the step above and then discarded:
@@ -581,8 +591,8 @@ jobs:
       # `bundle\msi\*.msi` while the build asked for `--bundles nsis`, so it
       # could never match.
       #
-      # tauri-bundler derives these filenames from productName ("GGLib GUI"),
-      # which contains a space, and the exact separators and casing it applies
+      # tauri-bundler derives these filenames from productName ("gglib", and
+      # "gglib-gui" on Linux and Windows), and the exact separators and casing it applies
       # per format are decided inside the bundler. Glob for each one and rename
       # to a predictable, space-free asset name instead of hard-coding what we
       # guess it emits — and fail loudly on no match, because a silent no-match
