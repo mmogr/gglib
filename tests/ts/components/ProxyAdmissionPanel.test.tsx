@@ -28,6 +28,7 @@ function slot(overrides: Partial<ResidentSlotSnapshot> = {}): ResidentSlotSnapsh
     state: 'loaded',
     is_primary: true,
     resident_for_secs: 12,
+    resident_for: '12s',
     runtime: 'llama',
     ...overrides,
   };
@@ -114,7 +115,7 @@ describe('ProxyAdmissionPanel', () => {
     render(
       <ProxyAdmissionPanel
         admission={admission({
-          queued: [{ model_name: 'nomic-embed', waiting: 4, oldest_wait_ms: 2400 }],
+          queued: [{ model_name: 'nomic-embed', waiting: 4, oldest_wait_ms: 2400, oldest_wait: '2s' }],
         })}
       />,
     );
@@ -122,18 +123,6 @@ describe('ProxyAdmissionPanel', () => {
     expect(screen.getByText('nomic-embed')).toBeInTheDocument();
     expect(screen.getByText(/4 waiting/)).toBeInTheDocument();
     expect(screen.getByText(/oldest 2s/)).toBeInTheDocument();
-  });
-
-  it('renders a long wait in minutes rather than a large second count', () => {
-    render(
-      <ProxyAdmissionPanel
-        admission={admission({
-          queued: [{ model_name: 'nomic-embed', waiting: 1, oldest_wait_ms: 95_000 }],
-        })}
-      />,
-    );
-
-    expect(screen.getByText(/oldest 1m 35s/)).toBeInTheDocument();
   });
 
   /// Neither figure means anything alone — see the module docs.

@@ -42,21 +42,6 @@ export interface ProxyAdmissionPanelProps {
   admission?: AdmissionSnapshot | null;
 }
 
-/** Whole seconds, or a coarse minutes figure once a wait gets long. */
-function formatWait(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
-
-/** How long a model has been loaded, in the same shape as a wait. */
-function formatResidency(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-}
-
 /**
  * Colour for the second-slot state.
  *
@@ -96,7 +81,7 @@ const ResidentSlot: FC<{ slot: ResidentSlotSnapshot }> = ({ slot }) => (
     </div>
     <span className="text-xs text-text-muted font-mono tabular-nums shrink-0">
       {slot.inflight > 0 ? `${formatCount(slot.inflight)} in flight · ` : 'idle · '}
-      {formatResidency(slot.resident_for_secs)}
+      {slot.resident_for}
     </span>
   </div>
 );
@@ -133,7 +118,7 @@ const QueuedModel: FC<{ queued: QueuedModelSnapshot }> = ({ queued }) => (
   <div className="flex items-baseline justify-between gap-md">
     <span className="text-xs text-text-muted truncate">{queued.model_name}</span>
     <span className="text-sm text-text font-mono tabular-nums shrink-0">
-      {formatCount(queued.waiting)} waiting · oldest {formatWait(queued.oldest_wait_ms)}
+      {formatCount(queued.waiting)} waiting · oldest {queued.oldest_wait}
     </span>
   </div>
 );

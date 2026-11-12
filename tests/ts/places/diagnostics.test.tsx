@@ -165,7 +165,7 @@ const FULL: Partial<DashboardSnapshot> = {
   per_model_defects: { 'Qwen3-4B': modelDefectCounts({ requests: 1 }) },
   slots_available: true,
   slots_status: null,
-  slots: [slotSnapshot({ id: 0, is_processing: true, n_ctx: 4096, n_prompt_tokens: 1000, next_token: { n_decoded: 24 } })],
+  slots: [slotSnapshot({ id: 0, is_processing: true, n_ctx: 4096, tokens_in_use: 1024 })],
 };
 
 const TUNE_RUN = {
@@ -325,7 +325,7 @@ describe('the diagnostics place', () => {
       ['Requests', { active_connections: [activeConnection()] }],
       ['Requests', { recent_requests: [recentRequest()] }],
       ['Loaded and queue', { admission: { ...NONE.admission, slots: [residentSlot(1, 'Qwen3-4B')] } }],
-      ['Loaded and queue', { admission: { ...NONE.admission, queued: [{ model_name: 'Qwen3-4B', waiting: 1, oldest_wait_ms: 4000 }] } }],
+      ['Loaded and queue', { admission: { ...NONE.admission, queued: [{ model_name: 'Qwen3-4B', waiting: 1, oldest_wait_ms: 4000, oldest_wait: '4s' }] } }],
       ['Loaded and queue', { admission: { ...NONE.admission, generation: { render: { model_name: 'flux', step: 1, total: 20 }, llm_inflight: 0, waiting: 0 } } }],
       ['Loaded and queue', { admission: { ...NONE.admission, generation: { render: null, llm_inflight: 0, waiting: 2 } } }],
       ['Loaded and queue', { admission: { ...NONE.admission, total_queued: 3 } }],
@@ -485,8 +485,8 @@ describe('the diagnostics place', () => {
         admission: {
           ...dashboardSnapshot().admission,
           slots: [
-            residentSlot(1, 'Qwen3-4B', { inflight: 2, resident_for_secs: 60 }),
-            residentSlot(2, 'Gemma-3-4B-It', { slot: 1, is_primary: false, resident_for_secs: 3700 }),
+            residentSlot(1, 'Qwen3-4B', { inflight: 2, resident_for_secs: 60, resident_for: '1m 0s' }),
+            residentSlot(2, 'Gemma-3-4B-It', { slot: 1, is_primary: false, resident_for_secs: 3700, resident_for: '61m 40s' }),
           ],
         },
         slots_available: true,
@@ -502,7 +502,7 @@ describe('the diagnostics place', () => {
       await waitFor(() => expect(pairs()).toHaveLength(6));
       expect(pairs()).toEqual([
         'Port 9001',
-        'Uptime 1m 00s',
+        'Uptime 1m 0s',
         'Context 8,192 tokens',
         'KV use · slot 0 1,024 of 4,096 tokens · 25%',
         'Writing 34 t/s',
@@ -514,7 +514,7 @@ describe('the diagnostics place', () => {
 
       await user.selectOptions(picker, '2');
       // Not the primary: its slots are not polled, so no KV use; no rate recorded.
-      expect(pairs()).toEqual(['Port 9002', 'Uptime 1h 01m', 'Context 8,192 tokens', 'Active requests 0']);
+      expect(pairs()).toEqual(['Port 9002', 'Uptime 61m 40s', 'Context 8,192 tokens', 'Active requests 0']);
       expect(await screen.findByText('line from 9002')).toBeInTheDocument();
 
       stop(2);
@@ -533,9 +533,9 @@ describe('the diagnostics place', () => {
         slots_available: true,
         slots_status: null,
         slots: [
-          slotSnapshot({ id: 0, n_ctx: 4096, n_prompt_tokens: 1000, next_token: { n_decoded: 24 } }),
-          slotSnapshot({ id: 1, n_ctx: null, n_prompt_tokens: 500 }),
-          slotSnapshot({ id: 2, n_ctx: 4096, n_prompt_tokens: 2048 }),
+          slotSnapshot({ id: 0, n_ctx: 4096, tokens_in_use: 1024 }),
+          slotSnapshot({ id: 1, n_ctx: null, tokens_in_use: 500 }),
+          slotSnapshot({ id: 2, n_ctx: 4096, tokens_in_use: 2048 }),
         ],
       });
       const facts = screen.getByRole('complementary', { name: 'Facts' });

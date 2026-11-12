@@ -54,8 +54,8 @@ first, then runs on the download queue. The status is the model's, kept
 across leaving it and never shown on another; a file check answered here
 is the "files checked" time, since the daemon stores none.
 
-Words with no Rust twin, composed from Rust's fields here: "loaded 4m 10s"
-and the rate's "34 t/s" on a loaded model's status line, the Sampling row's count, "set by
+Words with no Rust twin, composed from Rust's fields here: "loaded" before
+the daemon's `resident_for` and the rate's "34 t/s" on a loaded model's status line, the Sampling row's count, "set by
 you", "Auto", "On", "Off", "Applies at next load.", "Copy as command",
 "Didn't load:" and "Didn't unload:" (`utils/errors` `loadFailed`),
 "Copied" beside ⋯ after ⋯ › Copy path and beside Copy as command, "Drawing needs
