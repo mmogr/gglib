@@ -32,7 +32,7 @@ fn the_wire_type_is_its_own_manifest() {
         keys.len()
     );
     assert!(keys.contains_key("defaultContextSize"));
-    assert!(keys.contains_key("loopGuardMode"));
+    assert!(keys.contains_key("loopGuard"));
     for (k, v) in &keys {
         assert_eq!(v, &Value::Null, "{k} should serialise as null when unset");
     }

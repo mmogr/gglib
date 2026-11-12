@@ -1,7 +1,7 @@
 //! The loop guard's log, which outlives the process.
 //!
-//! One row for every decision the guard took, and one row per day, model,
-//! gglib version and mode counting the requests it scanned. Unlike every
+//! One row for every decision the guard took, and one row per day, model and
+//! gglib version counting the requests it scanned. Unlike every
 //! counter in [`super::defects`], it survives a restart.
 //!
 //! It exists for one reader. ADR 0011's kill criterion asks whether the
@@ -13,13 +13,11 @@
 //! to. Nothing reads it but a person, through `gglib proxy trips`, the
 //! daemon's `GET /api/proxy/loop-guard-trips` and the panel under the guard's
 //! own setting; every row is dated, so the reader chooses the window; and
-//! every row names the gglib version and the guard's mode, so a reading can be
-//! kept to one gglib release and one behaviour instead of averaged across
-//! them. `note` notes a looping run once and ends it if it trips again (ADR
-//! 0021), so it logs two rows for such a run, and a stagnation trip that tool
-//! turns keep standing is noted on each later request, while `refuse`
-//! refuses every later turn — which, for a client with no recovery path,
-//! ends the session — so their trip counts are different populations.
+//! every row names the gglib version, so a reading can be kept to one gglib
+//! release instead of averaged across them. The guard notes a looping run
+//! once and ends it if it trips again (ADR 0021), so it logs two rows for such
+//! a run, and a stagnation trip that tool turns keep standing is noted on each
+//! later request.
 //!
 //! That meets the objection only in part. The version is the workspace's, so
 //! development builds between two releases share it. Nothing here records the
@@ -28,16 +26,16 @@
 //!
 //! # What a trip row is, and is not
 //!
-//! A row records the guard's **decision** — noted or refused — not what
-//! reached the model. Under `note` the request goes on after the decision, and
-//! the note can still fail to arrive: a chat template with no branch for the
+//! A row records the guard's **decision** — noted or ended — not what
+//! reached the model. A noted request goes on after the decision, and the
+//! note can still fail to arrive: a chat template with no branch for the
 //! `tool` role drops the last message and the note inside it; a conversation
 //! that also exceeds the context budget is refused `context_length_exceeded`;
 //! an embedding model or a failed admission refuses the request before it is
 //! sent; and an upstream that dies mid-request can fail the retry. Each of
 //! those is still a row here. The dashboard's `loop_guard_trips` is bumped
-//! only by a forwarded or refused request's snapshot, so under `note` this log
-//! can count more than the dashboard does for the same run.
+//! only by a forwarded or ended request's snapshot, so this log can count more
+//! than the dashboard does for the same run.
 //!
 //! The log can also count *less* than happened. A decision the writer cannot
 //! queue — a full queue, or a writer already stopped — is dropped while its
@@ -71,7 +69,6 @@ use std::fmt::Write as _;
 use sha2::{Digest, Sha256};
 
 use super::defect_counts::LoopGuardTrip;
-use crate::settings::LoopGuardMode;
 
 /// How many days the log keeps, and so the widest window a reader can ask for.
 pub const LOOP_GUARD_LOG_RETENTION_DAYS: u32 = 90;
@@ -132,7 +129,6 @@ pub struct LoopGuardTripEvent {
     recorded_at_secs: u64,
     model_name: String,
     detector: LoopGuardTrip,
-    mode: LoopGuardMode,
     signature_hash: Option<String>,
     session_hash: Option<String>,
     repeat_count: Option<u32>,
@@ -140,24 +136,15 @@ pub struct LoopGuardTripEvent {
 }
 
 impl LoopGuardTripEvent {
-    /// A decision taken at `recorded_at_secs` by `detector` under `mode`:
-    /// [`LoopGuardMode::Note`] decided to forward the request with a note,
-    /// or, for a run that tripped again after its note, to end the run
-    /// without forwarding it — the row does not say which (ADR 0021);
-    /// [`LoopGuardMode::Refuse`] refused it. Never [`LoopGuardMode::Off`],
-    /// which scans nothing and so decides nothing.
-    pub fn new(
-        recorded_at_secs: u64,
-        model_name: &str,
-        detector: LoopGuardTrip,
-        mode: LoopGuardMode,
-    ) -> Self {
-        debug_assert!(mode.scans(), "a guard that is off decides nothing");
+    /// A decision taken at `recorded_at_secs` by `detector`: to forward the
+    /// request with a note or, for a run that tripped again after its note,
+    /// to end the run without forwarding it — the row does not say which
+    /// (ADR 0021).
+    pub fn new(recorded_at_secs: u64, model_name: &str, detector: LoopGuardTrip) -> Self {
         Self {
             recorded_at_secs,
             model_name: bounded_model_name(model_name),
             detector,
-            mode,
             signature_hash: None,
             session_hash: None,
             repeat_count: None,
@@ -202,11 +189,6 @@ impl LoopGuardTripEvent {
         self.detector
     }
 
-    /// The mode the decision was taken under.
-    pub const fn mode(&self) -> LoopGuardMode {
-        self.mode
-    }
-
     /// The signature's hash, for a loop.
     pub fn signature_hash(&self) -> Option<&str> {
         self.signature_hash.as_deref()
@@ -229,7 +211,7 @@ impl LoopGuardTripEvent {
     }
 }
 
-/// One day of the log for one model, gglib version and mode: how many
+/// One day of the log for one model and gglib version: how many
 /// requests the guard scanned, and how many it acted on — ordinarily some of
 /// those, though a trip whose scan was lost has none.
 ///
@@ -246,14 +228,11 @@ pub struct LoopGuardTripDay {
     pub model_name: String,
     /// The gglib version that scanned them.
     pub gglib_version: String,
-    /// The mode they were scanned under: `note` or `refuse`.
-    pub mode: LoopGuardMode,
     /// Requests the guard scanned — the denominator.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub scanned: u64,
-    /// The requests it acted on: noted under `note`, refused under
-    /// `refuse`. A decision, not a delivery: a noted request can still fail
-    /// to reach the model.
+    /// The requests it acted on: noted, or ended. A decision, not a delivery:
+    /// a noted request can still fail to reach the model.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub trips: u64,
     /// Of the trips, the ones [`LoopGuardTrip::Loop`] raised.

@@ -18,23 +18,22 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::Settings;
 use gglib_core::ports::{
     Admission, InMemorySettings, LaunchOverrides, ModelCatalogPort, ModelRuntimeError,
     ModelRuntimePort, RunningTarget,
 };
-use gglib_core::{LoopGuardMode, Settings};
 
 use super::common::{TaggedCatalog, spawn_proxy_with_settings};
 
-/// Spawn a proxy whose loop guard runs in `mode`.
+/// Spawn a proxy whose loop guard is on or off as `guard` says.
 ///
-/// The guard's default is `note`, so a test that wants a refusal has to ask
-/// for one. Here rather than in `common.rs`, which is at its size baseline,
-/// and beside the histories these tests send.
-pub(crate) async fn spawn_proxy_in_mode(
+/// Here rather than in `common.rs`, which is at its size baseline, and beside
+/// the histories these tests send.
+pub(crate) async fn spawn_proxy_with_guard(
     runtime: Arc<dyn ModelRuntimePort>,
     model_name: &str,
-    mode: LoopGuardMode,
+    guard: bool,
 ) -> (String, CancellationToken) {
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
@@ -42,7 +41,7 @@ pub(crate) async fn spawn_proxy_in_mode(
         dialect: None,
     });
     let settings = Settings {
-        loop_guard_mode: Some(mode),
+        loop_guard: Some(guard),
         ..Settings::with_defaults()
     };
     spawn_proxy_with_settings(runtime, catalog, Arc::new(InMemorySettings::with(settings))).await

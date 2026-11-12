@@ -16,10 +16,10 @@
 //!   upstream, and its watchdog does on a stall). So this port answers every
 //!   admission with the held target, refuses any other model, and refuses to
 //!   stop anything.
-//! - **Fixed settings** ([`FixedSettings`]): repair on, the loop guard in its
-//!   default `note` mode, client sampling trusted so each run's seed survives,
-//!   and no global sampling defaults. A reading then means the same on any
-//!   machine. The report records the first two ([`ProxyArmSettings`]).
+//! - **Fixed settings** ([`FixedSettings`]): repair on, the loop guard on,
+//!   client sampling trusted so each run's seed survives, and no global
+//!   sampling defaults. A reading then means the same on any machine. The
+//!   report records whether repair could run ([`ProxyArmSettings`]).
 //! - **Its own defect ledger and no trip log.** No other arm sends it a
 //!   request, so the ledger's counts are this arm's alone. Benchmark traffic
 //!   never reaches the daemon's loop-guard log, which ADR 0011's kill
@@ -81,7 +81,6 @@ impl ProxyArm {
             tool_call_repair: !gglib_core::debug_switches::enabled(
                 gglib_proxy::repair::DISABLE_REPAIR_ENV,
             ),
-            loop_guard_mode: fixed.loop_guard_mode(),
         };
         let observers = gglib_proxy::ProxyObservers {
             defects: Arc::clone(&defects),

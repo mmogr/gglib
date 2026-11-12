@@ -141,18 +141,6 @@
       "meaning": "The conversation does not fit the model's context even trimmed; start a new one."
     },
     {
-      "code": "loop_detected",
-      "type": "loop_detected",
-      "status": 400,
-      "meaning": "The history repeats the same tool calls with the same results, so the request was refused or the agent run stopped."
-    },
-    {
-      "code": "stagnation_detected",
-      "type": "stagnation_detected",
-      "status": 400,
-      "meaning": "The assistant gave the same reply too often, so the request was refused or the agent run stopped."
-    },
-    {
       "code": "invalid_request",
       "type": "invalid_request_error",
       "status": 400,
@@ -349,6 +337,18 @@
       "type": null,
       "status": null,
       "meaning": "The agent reached its iteration limit without a final answer."
+    },
+    {
+      "code": "loop_detected",
+      "type": null,
+      "status": null,
+      "meaning": "The agent repeated the same tool calls and got the same results, so the run was stopped."
+    },
+    {
+      "code": "stagnation_detected",
+      "type": null,
+      "status": null,
+      "meaning": "The agent gave the same reply too often, so the run was stopped."
     },
     {
       "code": "too_many_tool_calls",

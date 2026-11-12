@@ -46,9 +46,9 @@ paired: PairedEffect | null,
  */
 defects: ModelDefectCounts, 
 /**
- * Two of the settings the proxy ran under. The others it was given are
- * fixed and not recorded: client sampling trusted, so each run's seed
- * reaches llama-server, and no global sampling defaults.
+ * One of the settings the proxy ran under. The others it was given are
+ * fixed and not recorded: the loop guard on, client sampling trusted, so
+ * each run's seed reaches llama-server, and no global sampling defaults.
  */
 settings: ProxyArmSettings, 
 /**

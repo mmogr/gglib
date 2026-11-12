@@ -25,7 +25,6 @@ use tokio::net::TcpListener;
 use tokio::sync::{Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::LoopGuardMode;
 use gglib_core::domain::loop_guard_log::LoopGuardTripEvent;
 use gglib_core::ports::{LoopGuardTripSink, ModelCatalogPort, ModelRuntimePort};
 use gglib_proxy::ServeConfig;
@@ -49,7 +48,7 @@ impl LoopGuardTripSink for GuardLog {
         self.0.lock().unwrap().push(event.model_name().to_owned());
     }
 
-    fn record_scan(&self, model_name: &str, _mode: LoopGuardMode, _at_secs: u64) {
+    fn record_scan(&self, model_name: &str, _at_secs: u64) {
         self.0.lock().unwrap().push(model_name.to_owned());
     }
 }

@@ -1,4 +1,5 @@
-//! The note the loop guard appends to a request it has decided not to refuse.
+//! The note the loop guard appends to a request whose run tripped it for the
+//! first time.
 //!
 //! # Where it goes, and why there
 //!
@@ -38,12 +39,12 @@
 //! `context_length_exceeded` inside the forward. The note is built and
 //! appended first — this runs before `shape_request_body` — so what fails is
 //! the sending, not the rendering. That is by construction the shape most
-//! likely to trip the guard, and it is where the default, `note`, buys nothing.
+//! likely to trip the guard, and it is where the note buys nothing.
 //!
 //! It also means the note's own characters are inside the payload the budget
 //! is measured against: 245–486 for a loop, about 206 for stagnation. A
-//! conversation that close to the ceiling is forwarded under `off` and
-//! refused under the default.
+//! conversation that close to the ceiling is forwarded with the guard off and
+//! refused with it on.
 //!
 //! **After the scan** is load-bearing: the note cannot trip the guard that
 //! wrote it. The sharper-sounding hazard — that `loop_guard`'s detectors reset
@@ -121,9 +122,8 @@ impl LoopGuardNote {
     ///
     /// The signature is **not** free of client input. It is
     /// `name:hash|name:hash…`: the arguments are hashed, but each tool *name*
-    /// is verbatim off the wire, unbounded and unescaped. Under `refuse` it
-    /// goes into an error body the client reads back; under `note` it goes
-    /// into the prompt. The client already owns the prompt, so this is not an
+    /// is verbatim off the wire, unbounded and unescaped, and it goes into the
+    /// prompt. The client already owns the prompt, so this is not an
     /// escalation — but an unbounded echo inside gglib's own marked sentence
     /// is worth bounding, so the interpolated signature is truncated to
     /// [`SIGNATURE_LIMIT`] characters with an ellipsis.

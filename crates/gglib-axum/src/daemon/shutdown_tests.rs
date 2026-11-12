@@ -128,7 +128,6 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
         .await
         .unwrap();
     assert_eq!(days.len(), 1, "{days:?}");
-    assert_eq!(days[0].mode, gglib_core::LoopGuardMode::Note);
     assert_eq!(
         (
             days[0].scanned,

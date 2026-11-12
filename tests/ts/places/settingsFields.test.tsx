@@ -84,7 +84,7 @@ const STORED = {
   proxyAutostart: true,
   startAtLogin: true,
   trustClientSampling: true,
-  loopGuardMode: 'note' as const,
+  loopGuard: null,
   titleGenerationPrompt: 'a prompt the user wrote',
   maxToolIterations: 12,
   toolCallRepair: false,
@@ -113,7 +113,7 @@ const changes: [string, string, Change, UpdateSettingsRequest][] = [
   ['endpoint', 'disk budget', retype('proxy-cache-disk-gb-input', '4'), { proxyCacheDiskGb: 4 }],
   ['endpoint', 'model servers start at', retype('server-port-input', '9200'), { llamaBasePort: 9200 }],
   ['endpoint', 'repair', disclosed('What gglib does to requests', tick('tool-call-repair-input')), { toolCallRepair: true }],
-  ['endpoint', 'loop guard off', disclosed('What gglib does to requests', tick('loop-guard-input')), { loopGuardMode: 'off' }],
+  ['endpoint', 'loop guard off', disclosed('What gglib does to requests', tick('loop-guard-input')), { loopGuard: false }],
   ['endpoint', 'client sampling', disclosed('What gglib does to requests', tick('trust-client-sampling-input')), { trustClientSampling: false }],
   ['models', 'queue size', retype('max-queue-size-input', '6'), { maxDownloadQueueSize: 6 }],
   ['models', 'context', retype('context-size-input', '4096'), { defaultContextSize: 4096 }],
@@ -281,28 +281,15 @@ describe('the models folder', () => {
   });
 });
 
-describe('Stop runaway loops', () => {
-  it('ticking it from off writes note', async () => {
-    resetDaemon({ loopGuardMode: 'off' });
+describe('Stop repeated calls', () => {
+  it('ticking it from off writes true', async () => {
+    resetDaemon({ loopGuard: false });
     renderApp('/settings/endpoint');
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'What gglib does to requests' }));
     expect(field('loop-guard-input')).not.toBeChecked();
     await user.click(field('loop-guard-input'));
-    await waitFor(() => expect(writes()).toEqual([{ loopGuardMode: 'note' }]));
-  });
-
-  it("shows the terminal's Refuse as on, says so, and Undo after unticking puts Refuse back", async () => {
-    resetDaemon({ loopGuardMode: 'refuse' });
-    renderApp('/settings/endpoint');
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'What gglib does to requests' }));
-    expect(field('loop-guard-input')).toBeChecked();
-    const said = screen.getByText(/^Refusing, as/);
-    expect(said).toHaveTextContent('Refusing, as gglib config set loop-guard-mode refuse set it: a looping request is answered with a 400.');
-    await user.click(field('loop-guard-input'));
-    await user.click(await screen.findByRole('button', { name: 'Undo' }));
-    await waitFor(() => expect(writes()).toEqual([{ loopGuardMode: 'off' }, { loopGuardMode: 'refuse' }]));
+    await waitFor(() => expect(writes()).toEqual([{ loopGuard: true }]));
   });
 });
 

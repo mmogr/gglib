@@ -1,37 +1,27 @@
 //! End-to-end tests for the pre-dispatch loop/stagnation guard.
 //!
-//! These are the **`refuse` mode's** cases: each drives the real proxy over
-//! HTTP with a request whose replayed `messages[]` history is the signal under
-//! test, and asserts a clean 400 with `loop_detected` / `stagnation_detected`
-//! before any model work, or an untouched 200 round-trip for benign traffic.
-//! That 400 is not what an external agentic client sees by default — the
-//! default forwards with a note, which is
-//! `integration_loop_guard_note.rs` — so every case here that expects a
-//! refusal asks for one.
-//!
-//! The "before any model work" half of the contract is load-bearing —
-//! `CountingRuntime` proves the guard fired before admission, i.e. before a
-//! model swap could have been paid for a hopeless request.
+//! These are the cases where the guard must not act: each drives the real
+//! proxy over HTTP with a request whose replayed `messages[]` history is the
+//! signal under test, and asserts an untouched round-trip for benign traffic,
+//! or for any traffic with the guard off. What a trip does is
+//! `integration_loop_guard_note.rs` (the first) and
+//! `integration_loop_guard_end.rs` (the second).
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 use reqwest::Client;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::Settings;
 use gglib_core::ports::{InMemorySettings, ModelCatalogPort, ModelRuntimePort};
-use gglib_core::{LoopGuardMode, Settings};
 
 mod fixtures;
 use fixtures::common::{
     CountingRuntime, TaggedCatalog, spawn_mock_upstream, spawn_proxy, spawn_proxy_with_runtime,
     spawn_proxy_with_settings,
 };
-use fixtures::loop_guard::{
-    assistant_call, chat_body, looping_history, repeated_read_history, spawn_proxy_in_mode,
-    stagnating_history,
-};
+use fixtures::loop_guard::{assistant_call, chat_body, looping_history, repeated_read_history};
 use fixtures::sse::BASIC_TEXT;
 
 /// Reading the same file repeatedly is the ordinary shape of an agentic
@@ -196,68 +186,6 @@ async fn a_trailing_user_turn_does_not_re_report_the_repeat() {
     cancel.cancel();
 }
 
-// ─── Guard trips ───────────────────────────────────────────────────────────
-
-/// Three identical tool-call batches → 400 `loop_detected`, with zero
-/// admissions: under `refuse` the guard must fire before the runtime is asked
-/// to swap. (`note`, the default, is `integration_loop_guard_note.rs`.)
-#[tokio::test]
-async fn looping_history_is_rejected_before_admission() {
-    let (runtime, admit_calls) = CountingRuntime::new(1, "test-model");
-    let (proxy_url, cancel) =
-        spawn_proxy_in_mode(runtime, "test-model", LoopGuardMode::Refuse).await;
-
-    let resp = Client::new()
-        .post(format!("{proxy_url}/v1/chat/completions"))
-        .json(&chat_body("test-model", looping_history(3)))
-        .send()
-        .await
-        .expect("proxy request");
-
-    assert_eq!(resp.status(), 400);
-    let body: Value = resp.json().await.expect("json error body");
-    assert_eq!(body["error"]["code"], "loop_detected");
-    assert_eq!(body["error"]["type"], "loop_detected");
-    assert!(
-        body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("gglib config set loop-guard-mode note"),
-        "error message must name the setting that stops it refusing"
-    );
-    assert_eq!(
-        admit_calls.load(Ordering::SeqCst),
-        0,
-        "guard must reject before admission — no model swap for a hopeless request"
-    );
-
-    cancel.cancel();
-}
-
-/// Six identical assistant responses → 400 `stagnation_detected`, under
-/// `refuse`.
-#[tokio::test]
-async fn stagnating_history_is_rejected() {
-    let (runtime, admit_calls) = CountingRuntime::new(1, "test-model");
-    let (proxy_url, cancel) =
-        spawn_proxy_in_mode(runtime, "test-model", LoopGuardMode::Refuse).await;
-
-    let history = stagnating_history(6);
-    let resp = Client::new()
-        .post(format!("{proxy_url}/v1/chat/completions"))
-        .json(&chat_body("test-model", history))
-        .send()
-        .await
-        .expect("proxy request");
-
-    assert_eq!(resp.status(), 400);
-    let body: Value = resp.json().await.expect("json error body");
-    assert_eq!(body["error"]["code"], "stagnation_detected");
-    assert_eq!(admit_calls.load(Ordering::SeqCst), 0);
-
-    cancel.cancel();
-}
-
 // ─── Benign traffic passes ─────────────────────────────────────────────────
 
 /// A varied multi-turn history must round-trip untouched — the guard exists
@@ -330,7 +258,7 @@ async fn observation_tool_repetition_passes() {
 
 // ─── The off switch ────────────────────────────────────────────────────────
 
-/// With the mode `off`, even a blatantly looping history must be forwarded —
+/// With the guard off, even a blatantly looping history must be forwarded —
 /// the escape hatch has to actually work.
 #[tokio::test]
 async fn disabled_guard_forwards_looping_history() {
@@ -349,7 +277,7 @@ async fn disabled_guard_forwards_looping_history() {
         dialect: None,
     });
     let settings = InMemorySettings::with(Settings {
-        loop_guard_mode: Some(LoopGuardMode::Off),
+        loop_guard: Some(false),
         ..Settings::with_defaults()
     });
     let (proxy_url, proxy_cancel) =

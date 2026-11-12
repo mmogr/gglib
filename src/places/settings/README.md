@@ -30,8 +30,7 @@ read. Numbers take their defaults and ranges from
 the default in the box and as "Default: N" under it, announced with the
 field (ST-2). The drawing reading is `readings/drawingValues`.
 
-The loop guard is a checkbox: on writes `note`, off writes `off`; `refuse`
-is the terminal's and shows as on with a line saying so. The image model
+The loop guard is a checkbox, on unless stored off. The image model
 choice lists only models that draw, keeping a stored id that is not one.
 
 Tools' tool servers are `tools/` (its own README): a row each and one
@@ -80,8 +79,7 @@ key stops being required when the endpoint next turns on."; "Saved." / "Undo"; "
 settings: <the daemon's words>"; "What gglib does to requests", "Agent
 limits", "Parallel tool calls", "Tool timeout (ms)", "How many tool calls an
 agent run makes at once.", "How long one tool call may take before it is
-stopped.", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
-request is answered with a 400."; the API key's "Set", "Replace", "Clear",
+stopped.", "Learn more about MCP"; the API key's "Set", "Replace", "Clear",
 "Cancel", "The new key", "none", the Show/Hide/Copy labels, "Copied" beside
 Copy (`components/CopyValue`) and the copy's failures, "Replace the API key?" with "Clients that send the
 old key are refused within a few seconds.", and "The key in use

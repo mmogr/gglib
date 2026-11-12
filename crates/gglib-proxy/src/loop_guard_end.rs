@@ -1,13 +1,13 @@
 //! The answer the loop guard gives in the model's place when a noted run
 //! trips again (ADR 0021).
 //!
-//! Under `note` the first trip in a run forwards the request with a note. If
+//! The first trip in a run forwards the request with a note. If
 //! the same run trips on a later request, the model kept repeating after it
 //! was told, and another note would buy another generation of the same. So
 //! the proxy does not forward that request: it answers it with a finished
 //! assistant message that calls no tool, which is the turn every agentic
 //! client seen so far ends its loop on. The status is 200, because the turn
-//! did finish, and a refusal is what `note` exists to avoid.
+//! did finish, and a refusal is what the note exists to avoid.
 //!
 //! The text is fixed and carries the note's marker, so the person reading the
 //! chat can tell gglib's words from the model's. Nothing from the request is

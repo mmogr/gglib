@@ -21,7 +21,6 @@ const day = (overrides: Partial<LoopGuardTripDay> = {}): LoopGuardTripDay => ({
   day: '2026-09-18',
   model_name: 'qwen3-coder',
   gglib_version: '0.18.0',
-  mode: 'note',
   scanned: 40,
   trips: 3,
   loops: 2,
@@ -50,9 +49,9 @@ describe('LoopGuardTripsPanel', () => {
     // A header row and one row per day.
     expect(rows).toHaveLength(3);
     const quiet = within(rows[2]).getAllByRole('cell').map((c) => c.textContent);
-    expect(quiet).toEqual(['2026-09-17', 'qwen3-coder', '0.18.0', 'note', '12', '0', '0', '0', '0']);
+    expect(quiet).toEqual(['2026-09-17', 'qwen3-coder', '0.18.0', '12', '0', '0', '0', '0']);
     const busy = within(rows[1]).getAllByRole('cell').map((c) => c.textContent);
-    expect(busy).toEqual(['2026-09-18', 'qwen3-coder', '0.18.0', 'note', '40', '3', '2', '1', '2']);
+    expect(busy).toEqual(['2026-09-18', 'qwen3-coder', '0.18.0', '40', '3', '2', '1', '2']);
     expect(screen.getByRole('heading', { name: 'What it did, the last 30 days' })).toBeInTheDocument();
   });
 

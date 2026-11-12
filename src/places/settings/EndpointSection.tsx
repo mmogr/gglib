@@ -4,16 +4,11 @@
  * does to requests" the three things the endpoint does to a request. Each
  * saves on change; those the endpoint reads when it turns on say so.
  *
- * The loop guard is on or off here: on writes `note`, off writes `off`.
- * `refuse` stays the terminal's (`gglib config set
- * loop-guard-mode refuse`), and is shown as on with a line saying so.
- *
  * @module places/settings/EndpointSection
  */
 
 import type { FC } from 'react';
 import { LLAMA_BASE_PORT, PROXY_CACHE_DISK_GB, PROXY_PORT } from '../../constants/settingsDefaults';
-import type { LoopGuardMode } from '../../types/generated/LoopGuardMode';
 import { Disclosure } from './Disclosure';
 import { NumberSetting, TextSetting, ToggleSetting } from './fields';
 import { ON_ENDPOINT_START, ON_GGLIB_START, ON_KEY_CHANGE } from './notes';
@@ -31,7 +26,7 @@ export function hostsFrom(typed: string): string[] | null {
   return hosts.length > 0 ? hosts : null;
 }
 
-/** Absent means on, for a correction the endpoint should not lose silently. */
+/** Absent means on, for a protection the endpoint should not lose silently. */
 const onUnlessOff = (stored: boolean | null) => stored !== false;
 
 export const EndpointSection: FC = () => (
@@ -100,23 +95,10 @@ export const EndpointSection: FC = () => (
         model produces.
       </ToggleSetting>
 
-      <ToggleSetting
-        k="loopGuardMode"
-        id="loop-guard-input"
-        label="Stop runaway loops"
-        on={(mode: LoopGuardMode | null) => mode !== 'off'}
-        toWire={(checked): LoopGuardMode => (checked ? 'note' : 'off')}
-        aside={(mode: LoopGuardMode | null) =>
-          mode === 'refuse' && (
-            <p className="m-0 text-xs text-text-secondary">
-              Refusing, as <code>gglib config set loop-guard-mode refuse</code> set it: a
-              looping request is answered with a 400.
-            </p>
-          )
-        }
-      >
-        A conversation that repeats the same tool calls and gets the same answers back, or repeats one
-        reply, is forwarded with a note saying what repeated, and its run ends if it repeats again.
+      <ToggleSetting k="loopGuard" id="loop-guard-input" label="Stop repeated calls" on={onUnlessOff}>
+        A conversation that repeats the exact same tool calls and gets the same answers back, or
+        repeats one reply, is forwarded with a note saying what repeated, and its run ends if it
+        repeats again. A loop whose calls vary is not caught.
       </ToggleSetting>
 
       <ToggleSetting k="trustClientSampling" id="trust-client-sampling-input" label="Let clients set sampling">

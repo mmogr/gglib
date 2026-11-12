@@ -2,12 +2,11 @@
 //! takes for it.
 
 use clap::Parser;
-use gglib_core::LoopGuardMode;
 use gglib_core::domain::agent::MIN_TOOL_TIMEOUT_MS;
 use gglib_core::settings::{CONTEXT_SIZE_RANGE, DOWNLOAD_QUEUE_RANGE, MIN_CACHE_DISK_GB, MIN_PORT};
 use gglib_core::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING};
 
-use super::{KEYS, SettingKey, Takes};
+use super::{KEYS, SettingKey};
 
 fn named(name: &str) -> SettingKey {
     *KEYS
@@ -56,26 +55,6 @@ fn each_bounded_keys_help_states_the_range_the_backend_holds_it_to() {
     }
 }
 
-/// The loop guard's words are the domain's own spellings, every one of
-/// them, and each reads back as the mode of that name.
-#[test]
-fn the_loop_guard_words_are_exactly_the_domains_modes() {
-    let Takes::Choice(words) = named("loop-guard-mode").takes else {
-        panic!("loop-guard-mode takes a word");
-    };
-    let modes = [
-        LoopGuardMode::Off,
-        LoopGuardMode::Note,
-        LoopGuardMode::Refuse,
-    ];
-    assert_eq!(words.len(), modes.len());
-    for (word, mode) in words.iter().zip(modes) {
-        let read: LoopGuardMode =
-            serde_json::from_value(serde_json::json!(word)).expect("a mode's name");
-        assert_eq!(read, mode, "{word}");
-    }
-}
-
 /// `config set --help` names every listed key with what it takes, and a key
 /// clap does not know is refused with that list rather than run.
 #[test]
@@ -101,7 +80,7 @@ fn the_help_lists_the_keys_and_an_unknown_key_is_refused_with_them() {
     };
     assert_eq!(refused.kind(), clap::error::ErrorKind::InvalidValue);
     let said = refused.to_string();
-    assert!(said.contains("loop-guard-mode"), "{said}");
+    assert!(said.contains("loop-guard"), "{said}");
 }
 
 /// A key `config show` prints and another command writes still parses, so

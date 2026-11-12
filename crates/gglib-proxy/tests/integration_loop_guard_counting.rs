@@ -1,6 +1,7 @@
 //! End to end: one client request counts one loop-guard intervention.
 //!
-//! Under `note` the guard records no snapshot of its own — the forward does —
+//! The guard records no snapshot of its own for a noted request — the forward
+//! does —
 //! so the ledger's "one request, one count" invariant rests on the forward
 //! path, which has **two** `metrics.record` sites and a retry that builds a
 //! second `ForwardRequest`. Each of these drives one of those three ways to
@@ -17,20 +18,19 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::LoopGuardMode;
 use gglib_core::ports::ModelRuntimePort;
 
 mod fixtures;
 use fixtures::common::FixedUpstream;
 use fixtures::loop_guard::{
-    DeadThenLive, chat_body, dashboard_of, looping_history, spawn_proxy_in_mode,
+    DeadThenLive, chat_body, dashboard_of, looping_history, spawn_proxy_with_guard,
     spawn_recording_upstream,
 };
 
 /// A history that trips the loop guard **and** cannot be trimmed to fit: three
 /// identical batches whose results are each far larger than the whole context
 /// budget, so every one of them is inside the protected tail. Three, not more:
-/// a fourth would be the run's second trip, which `note` ends rather than
+/// a fourth would be the run's second trip, which the guard ends rather than
 /// notes (ADR 0021).
 fn oversized_looping_history() -> Vec<Value> {
     let huge = "x".repeat(20_000);
@@ -57,9 +57,7 @@ fn oversized_looping_history() -> Vec<Value> {
 /// context budget still counts its trip.
 ///
 /// Not a corner. A conversation long and repetitive enough to trip the guard
-/// is by construction the shape that reaches the context ceiling, and under
-/// `refuse` the trip was always counted because the guard recorded its own
-/// snapshot before anything could abort.
+/// is by construction the shape that reaches the context ceiling.
 #[tokio::test]
 async fn a_noted_request_that_is_then_clamped_still_counts_its_trip() {
     let upstream_cancel = CancellationToken::new();
@@ -70,8 +68,7 @@ async fn a_noted_request_that_is_then_clamped_still_counts_its_trip() {
         slot_restore_supported: true,
         pinned: false,
     });
-    let (proxy_url, proxy_cancel) =
-        spawn_proxy_in_mode(runtime, "test-model", LoopGuardMode::Note).await;
+    let (proxy_url, proxy_cancel) = spawn_proxy_with_guard(runtime, "test-model", true).await;
 
     let resp = Client::new()
         .post(format!("{proxy_url}/v1/chat/completions"))
@@ -154,8 +151,7 @@ async fn an_upstream_dead_retry_of_a_noted_request_counts_one_trip() {
         dead,
         admits: Arc::clone(&admits),
     });
-    let (proxy_url, proxy_cancel) =
-        spawn_proxy_in_mode(runtime, "test-model", LoopGuardMode::Note).await;
+    let (proxy_url, proxy_cancel) = spawn_proxy_with_guard(runtime, "test-model", true).await;
 
     let mut body = chat_body("test-model", looping_history(3));
     body["stream"] = json!(true);

@@ -3,27 +3,23 @@
 //! [`crate::loop_guard`] owns the scan — what a replayed history means. This
 //! module owns what the proxy does about it: which readings reach the
 //! dashboard, what the loop guard's log records, and whether the request is
-//! forwarded, answered in the model's place, or refused.
+//! forwarded or answered in the model's place.
 //!
 //! A module of its own gives the decision its own return type
 //! ([`GuardStep`]), which `chat_completions` matches on, and a seam a test
 //! can reach without a running server.
 
-use axum::Json;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use tracing::warn;
 
+use gglib_core::Settings;
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::domain::loop_guard_log::LoopGuardTripEvent;
 use gglib_core::ports::LoopGuardTripSink;
-use gglib_core::{LoopGuardMode, Settings};
 
 use crate::loop_guard::{LoopGuardConfig, LoopGuardVerdict, scan_history};
 use crate::loop_guard_note::LoopGuardNote;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
-use crate::models::ErrorResponse;
 
 /// What the guard decided about one request.
 pub(crate) enum GuardStep {
@@ -42,21 +38,18 @@ pub(crate) enum GuardStep {
         note: LoopGuardNote,
         trip: LoopGuardTrip,
     },
-    /// Do not forward it: under `note`, the same run tripped again after its
-    /// note, so the caller answers with
+    /// Do not forward it: the same run tripped again after its note, so the
+    /// caller answers with
     /// [`ended_response`](crate::loop_guard_end::ended_response) — a finished
     /// assistant message, which ends the run (ADR 0021). A variant without the
     /// response because only the caller knows whether the client asked for a
     /// stream. The snapshot for the request has already been recorded.
     End,
-    /// Refuse it with this response, before any catalog/admission/model-swap
-    /// cost. The snapshot for the refused request has already been recorded.
-    Refuse(Response),
 }
 
 /// Where the step's readings go.
 pub(crate) struct GuardObservers<'a> {
-    /// The dashboard's store: a refusal's own snapshot, and the repeat
+    /// The dashboard's store: an ended run's own snapshot, and the repeat
     /// readings taken on every scan.
     pub(crate) metrics: &'a ContextMetricsStore,
     /// The loop guard's log, when this process keeps one: a scan for every
@@ -70,14 +63,11 @@ pub(crate) struct GuardObservers<'a> {
 ///
 /// Turn-level loop/stagnation guard (parity with the built-in agent's guards):
 /// act on a conversation whose replayed history already shows a stuck loop.
-/// Under [`LoopGuardMode::Refuse`] that is a refusal *before* paying
-/// admission, which is what stops a runaway agentic client burning a model
-/// swap plus a full generation per repeated turn; under the default,
-/// [`LoopGuardMode::Note`], the request is forwarded with a note and pays
-/// those costs, because a refusal is terminal for a client with no recovery
-/// path — and if the same run trips again after its note, the step answers
-/// [`GuardStep::End`] and the run is ended instead. See [`crate::loop_guard`]
-/// for the design (stateless history scan, fail-open).
+/// The first trip is forwarded with a note, because a refusal is terminal for
+/// a client with no recovery path; if the same run trips again after its
+/// note, the step answers [`GuardStep::End`] and the run is ended instead,
+/// before any admission or model-swap cost. See [`crate::loop_guard`] for the
+/// design (stateless history scan, fail-open).
 ///
 /// Fail-open by construction: a settings snapshot that switches the guard off,
 /// or an agent config with no loop threshold, returns [`GuardStep::Forward`]
@@ -102,7 +92,7 @@ pub(crate) fn run(
     // Counted for every request the guard looks at, trip or not: the
     // denominator the log's trips are read against.
     if let Some(trips) = observers.trips {
-        trips.record_scan(model_name, guard_cfg.mode(), now);
+        trips.record_scan(model_name, now);
     }
     let outcome = scan_history(body, &guard_cfg);
 
@@ -124,101 +114,66 @@ pub(crate) fn run(
         metrics.record_repeat_rescued(model_name);
     }
 
-    // Nothing tripped: the common case, and the only one with no mode to
-    // consult. `trip()` is `None` for exactly `Pass`, so this is also what
-    // lets everything below treat the verdict as tripped.
+    // Nothing tripped: the common case. `trip()` is `None` for exactly
+    // `Pass`, so this is also what lets everything below treat the verdict
+    // as tripped.
     let Some(trip) = outcome.verdict.trip() else {
         return GuardStep::Forward;
     };
     let tripped_before = outcome.tripped_before();
     let tripped = outcome.verdict;
-    // Logged here, once per request, whichever answer the mode gives: this is
-    // the one place that knows both the verdict and the mode. What happens to
-    // the request afterwards — a noted one can still fail to reach the model —
-    // is not the log's to say.
+    // Logged here, once per request, whether it is noted or ended. What
+    // happens to the request afterwards — a noted one can still fail to reach
+    // the model — is not the log's to say.
     if let Some(trips) = observers.trips {
         trips.record_trip(log_event(
             &tripped,
             trip,
-            guard_cfg.mode(),
             model_name,
             observers.session_id,
             now,
         ));
     }
 
-    // Matched variant by variant rather than `Note` versus everything else: a
-    // fourth mode would otherwise be silently treated as a refusal, and this
-    // is the one place a mode becomes a behaviour.
-    match guard_cfg.mode() {
-        // `from_settings` returns `None` for `Off`, so there is no config to
-        // reach this arm with — but saying so here is what makes the match
-        // exhaustive, so a new variant fails to compile instead of refusing.
-        LoopGuardMode::Off => {
-            debug_assert!(false, "a guard configured Off does not scan");
-            GuardStep::Forward
-        }
-        // The same run tripped on the turn before, so the request that
-        // carried that turn was already noted and the model kept repeating.
-        // Another note would buy another generation of the same: end the run
-        // instead (ADR 0021). Logged above like any trip; the snapshot is the
-        // step's own, since this request is never forwarded.
-        LoopGuardMode::Note if tripped_before => {
-            warn!(
-                model = %model_name,
-                verdict = ?tripped,
-                "loop guard ending a run that kept repeating after its note"
-            );
-            record_unforwarded(metrics, model_name, body.len(), trip, true, now);
-            GuardStep::End
-        }
-        LoopGuardMode::Note => {
-            // Deliberately not a refusal and not a snapshot of its own: the
-            // request goes on to be forwarded, and the forward records it.
-            // `trip` rides along so that one snapshot names the detector.
-            warn!(
-                model = %model_name,
-                verdict = ?tripped,
-                "loop guard forwarding request with a note"
-            );
-            let Some(note) = LoopGuardNote::for_verdict(&tripped) else {
-                unreachable!("a tripped verdict has a note")
-            };
-            GuardStep::Note { note, trip }
-        }
-        LoopGuardMode::Refuse => {
-            warn!(
-                model = %model_name,
-                verdict = ?tripped,
-                "loop guard aborting request before dispatch"
-            );
-            record_unforwarded(metrics, model_name, body.len(), trip, false, now);
-            let err = match tripped {
-                LoopGuardVerdict::LoopDetected { signature } => {
-                    ErrorResponse::loop_detected(&signature)
-                }
-                LoopGuardVerdict::StagnationDetected { count, max_steps } => {
-                    ErrorResponse::stagnation_detected(count, max_steps)
-                }
-                LoopGuardVerdict::Pass => unreachable!("Pass is handled above"),
-            };
-            GuardStep::Refuse((StatusCode::BAD_REQUEST, Json(err)).into_response())
-        }
+    // The same run tripped on the turn before, so the request that carried
+    // that turn was already noted and the model kept repeating. Another note
+    // would buy another generation of the same: end the run instead (ADR
+    // 0021). Logged above like any trip; the snapshot is the step's own,
+    // since this request is never forwarded.
+    if tripped_before {
+        warn!(
+            model = %model_name,
+            verdict = ?tripped,
+            "loop guard ending a run that kept repeating after its note"
+        );
+        record_ended(metrics, model_name, body.len(), trip, now);
+        return GuardStep::End;
     }
+    // Not a snapshot of its own: the request goes on to be forwarded, and the
+    // forward records it. `trip` rides along so that one snapshot names the
+    // detector.
+    warn!(
+        model = %model_name,
+        verdict = ?tripped,
+        "loop guard forwarding request with a note"
+    );
+    let Some(note) = LoopGuardNote::for_verdict(&tripped) else {
+        unreachable!("a tripped verdict has a note")
+    };
+    GuardStep::Note { note, trip }
 }
 
-/// The snapshot for a tripped request the step answers itself — refused, or
-/// `ended` — since no forward will record one for it.
-fn record_unforwarded(
+/// The snapshot for a run the step ended itself, since no forward will
+/// record one for it.
+fn record_ended(
     metrics: &ContextMetricsStore,
     model_name: &str,
     body_len: usize,
     trip: LoopGuardTrip,
-    ended: bool,
     now: u64,
 ) {
     metrics.record(ContextSnapshot {
-        interventions: crate::interventions::unforwarded_interventions(trip, ended),
+        interventions: crate::interventions::ended_interventions(trip),
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,
@@ -235,7 +190,7 @@ fn record_unforwarded(
         was_clamped: false,
         grammar_enforced: false,
         loop_guard_trip: Some(trip),
-        loop_guard_ended: ended,
+        loop_guard_ended: true,
         recorded_at_secs: now,
     });
 }
@@ -245,12 +200,11 @@ fn record_unforwarded(
 fn log_event(
     verdict: &LoopGuardVerdict,
     trip: LoopGuardTrip,
-    mode: LoopGuardMode,
     model_name: &str,
     session_id: Option<&str>,
     at: u64,
 ) -> LoopGuardTripEvent {
-    let event = LoopGuardTripEvent::new(at, model_name, trip, mode);
+    let event = LoopGuardTripEvent::new(at, model_name, trip);
     let event = match verdict {
         LoopGuardVerdict::LoopDetected { signature } => event.with_signature(signature),
         LoopGuardVerdict::StagnationDetected { count, max_steps } => event.with_repeats(

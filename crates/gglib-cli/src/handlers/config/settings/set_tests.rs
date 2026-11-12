@@ -1,7 +1,6 @@
 //! Unit tests for [`super`], over a database of the test's own.
 
 use clap::ValueEnum;
-use gglib_core::LoopGuardMode;
 use gglib_core::settings::SettingsError;
 
 use super::super::unset::handle_unset;
@@ -63,9 +62,9 @@ async fn a_value_the_key_does_not_take_is_refused_saying_what_it_takes() {
             "`mcp-drawing` takes true or false, got 'maybe'",
         ),
         (
-            "loop-guard-mode",
-            "warn",
-            "`loop-guard-mode` takes off, note or refuse, got 'warn'",
+            "loop-guard",
+            "refuse",
+            "`loop-guard` takes true or false, got 'refuse'",
         ),
     ] {
         let refused = handle_set(&ctx, key(name), typed)
@@ -82,14 +81,14 @@ async fn a_value_the_key_does_not_take_is_refused_saying_what_it_takes() {
 async fn a_valid_value_is_stored_and_the_others_are_left_alone() {
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
-    handle_set(&ctx, key("loop-guard-mode"), "off")
+    handle_set(&ctx, key("loop-guard"), "true")
         .await
         .expect("seeded");
     handle_set(&ctx, key("max-stagnation-steps"), "7")
         .await
         .expect("seeded");
 
-    handle_set(&ctx, key("loop-guard-mode"), "refuse")
+    handle_set(&ctx, key("loop-guard"), "false")
         .await
         .expect("stored");
     handle_set(&ctx, key("proxy-port"), "9191")
@@ -97,7 +96,7 @@ async fn a_valid_value_is_stored_and_the_others_are_left_alone() {
         .expect("stored");
 
     let stored = ctx.app.settings().get().await.expect("settings");
-    assert_eq!(stored.loop_guard_mode, Some(LoopGuardMode::Refuse));
+    assert_eq!(stored.loop_guard, Some(false));
     assert_eq!(stored.proxy_port, Some(9191));
     assert_eq!(stored.max_stagnation_steps, Some(7));
 }
