@@ -37,7 +37,7 @@ pub struct ApplyOutcome {
 /// winner's sparse overlay (unswept dimensions stay `None` and keep
 /// resolving through the chain, exactly as they did during the run), and
 /// `defaults_origin` becomes [`DefaultsOrigin::Measured`] — below global
-/// settings, exempt from the agentic ceiling, per its own docs. The run row
+/// settings, per its own docs. The run row
 /// records the [`ApplyRecord`] so the model's provenance stays traceable to
 /// the numbers that licensed it.
 pub async fn apply_tune_run(deps: &BenchmarkDeps, run_id: i64) -> Result<ApplyOutcome> {

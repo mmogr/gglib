@@ -73,11 +73,6 @@ const fn key(name: &'static str, takes: Takes, about: &'static str) -> SettingKe
 /// line in the data root's `.env` rather than a setting.
 pub(crate) const KEYS: &[SettingKey] = &[
     key(
-        "agentic-sampling",
-        Takes::Switch,
-        "Cap the temperature nobody chose on turns that carry tools (on when unset)",
-    ),
-    key(
         "close-to-tray",
         Takes::Switch,
         "Closing the desktop app's window hides it to the tray, leaving the endpoint serving",

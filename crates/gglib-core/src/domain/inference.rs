@@ -444,8 +444,8 @@ pub enum DefaultsOrigin {
     /// guess keyed off a tag.
     ///
     /// Kept apart from `User` for the reason that distinction exists at all:
-    /// this is not a value anybody in this installation decided, so the
-    /// agentic-turn ceiling may still cap it and global settings still win.
+    /// this is not a value anybody in this installation decided, so global
+    /// settings still win.
     Published,
     /// Written by a tune sweep: the winner of a measured comparison on this
     /// model, this quant, this hardware — not a person's choice, and not a
@@ -457,13 +457,6 @@ pub enum DefaultsOrigin {
     /// automated apply is not a person. Applying a winner overwrites
     /// `inference_defaults`, so it replaces a published recipe and the
     /// `reasoning` recipe alike.
-    ///
-    /// Unlike both of them, the **agentic-turn ceiling never caps it**. The
-    /// sweep resolves its candidates against this model's real context
-    /// (#748) precisely so the winner transfers to production; a ceiling
-    /// capping the stored winner would un-measure it on exactly the turns it
-    /// was measured for. The ceiling exists to bound values nobody examined —
-    /// a measured temperature is the most examined value in the system.
     Measured,
 }
 
@@ -1247,47 +1240,6 @@ impl InferenceConfig {
         };
 
         (result, sources)
-    }
-
-    /// The highest temperature an agentic turn should decode at, when the
-    /// model's class has one.
-    ///
-    /// A turn that carries tools may emit structured output. This is the
-    /// ceiling that caps its temperature — applied by
-    /// [`crate::request_pipeline::sampling`] *after* resolution, and only over
-    /// a value nobody deliberately chose. It never raises a temperature.
-    ///
-    /// # Reasoning models have no ceiling — measured, not argued
-    ///
-    /// A `reasoning` model does not decode its tool call in isolation: the
-    /// `<think>` block and the call are one completion under one sampler
-    /// configuration, so a cap imposed for the sake of structured output lands
-    /// on the reasoning phase too. Measured on `Qwen3.5-4B` (2026-08-10, tune
-    /// runs #12–#32; [ADR 0004]'s postscript), the recipe's uncapped `1.0` beat
-    /// a `0.6` cap on the paired composite at no cost in tool-call formatting,
-    /// and the cap drew *more* loop/stagnation triggers: cooling a thinking
-    /// model manufactures the repetition its own vendors warn about.
-    ///
-    /// So a reasoning model's resolved temperature stands on agentic turns,
-    /// which in the shipped default means the `reasoning` recipe's `1.0`.
-    ///
-    /// # `0.3` for everything else — unmeasured
-    ///
-    /// No non-reasoning model has been measured against this cap. Its
-    /// rationale is steady structured output without being greedy, and it
-    /// stays until it earns the same treatment: evidence, not argument.
-    ///
-    /// # It only lowers a value a rung supplied
-    ///
-    /// A ceiling gated on provenance caps a recipe nobody here reviewed and
-    /// stays out of the way everywhere a person actually made a choice. Where
-    /// no rung names a temperature, nothing is sent and the ceiling does not
-    /// add one: llama.cpp's own default applies (ADR 0022).
-    ///
-    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
-    #[must_use]
-    pub const fn agentic_temperature_ceiling(is_reasoning: bool) -> Option<f32> {
-        if is_reasoning { None } else { Some(0.3) }
     }
 
     /// Return a recommended [`InferenceConfig`] profile for reasoning / thinking models.

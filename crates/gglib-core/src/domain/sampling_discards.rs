@@ -99,8 +99,7 @@ fn non_finite_fields(c: &InferenceConfig) -> Vec<&'static str> {
 
 /// Whether the value at `rung` is the one that reached the resolution.
 ///
-/// Exhaustive rather than a `matches!`, per the argument on
-/// [`ParamSource::is_deliberate_choice`] and because
+/// Exhaustive rather than a `matches!`, because
 /// `scripts/check_param_source_exhaustive.sh` requires it: a new variant
 /// should force a decision here rather than default into "not ours".
 const fn won(source: ParamSource, rung: usize) -> bool {

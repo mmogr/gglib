@@ -47,8 +47,7 @@ use tracing::{debug, warn};
 use crate::turn_dialect::TurnDialect;
 use crate::unary_body::normalize_non_streaming_body;
 
-/// Environment kill switch, matching the contract of `GGLIB_DISABLE_GRAMMAR`
-/// and `GGLIB_DISABLE_AGENTIC_SAMPLING`.
+/// Environment kill switch, matching the contract of `GGLIB_DISABLE_GRAMMAR`.
 pub const DISABLE_REPAIR_ENV: &str = "GGLIB_DISABLE_TOOL_REPAIR";
 
 /// Whether [`DISABLE_REPAIR_ENV`] is set to a truthy value.
