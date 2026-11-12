@@ -384,20 +384,3 @@ async fn a_whole_row_write_leaves_the_remote_flag_as_it_was() {
     repo.update(&added).await.unwrap();
     assert!(repo.get_by_id(added.id).await.unwrap().allow_remote);
 }
-
-/// An older build can write a `manual`, enabled row while this process has
-/// the database open, after the startup step ran. It reads as a disabled
-/// `lazy` server, as the next open would make it, so nothing starts it.
-#[tokio::test]
-async fn a_manual_row_written_while_open_reads_as_disabled() {
-    let repo = repository().await;
-    sqlx::query("INSERT INTO mcp_servers (name, lifecycle, enabled) VALUES ('old', 'manual', 1)")
-        .execute(&repo.pool)
-        .await
-        .expect("a row an older build wrote");
-
-    let read = repo.get_by_name("old").await.expect("the row");
-
-    assert_eq!(read.lifecycle, McpLifecycle::Lazy);
-    assert!(!read.enabled, "a manual server never ran unasked");
-}

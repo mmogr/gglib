@@ -131,7 +131,7 @@ CREATE TABLE mcp_servers (
             name TEXT NOT NULL,
             enabled INTEGER NOT NULL DEFAULT 1,
             allow_remote INTEGER NOT NULL DEFAULT 0,
-            lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
+            lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy')),
             command TEXT,
             resolved_path_cache TEXT,
             args TEXT NOT NULL DEFAULT '[]',

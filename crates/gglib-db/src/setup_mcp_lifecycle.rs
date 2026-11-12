@@ -7,11 +7,10 @@
 //! `manual` server into what it behaved as: `lazy` and disabled. Enabled
 //! again, it starts on first use, like any lazy server.
 //!
-//! Run at every open, not on the `user_version` ladder: the `UPDATE` is its
-//! own guard, so a second run finds nothing to change, and an older build,
-//! whose schema still admits `manual`, can write one again after a newer
-//! build stamped the file. An older build reads `lazy` fine, so the schema's
-//! generation is unchanged.
+//! Run at every open, before the `user_version` ladder: the `UPDATE` is its
+//! own guard, so a second run finds nothing to change. Step 6 then rebuilds
+//! `mcp_servers` with a CHECK that refuses `manual`, so from there on there
+//! is nothing for it to find.
 
 use anyhow::Result;
 use sqlx::SqlitePool;

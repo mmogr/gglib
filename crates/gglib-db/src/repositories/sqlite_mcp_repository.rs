@@ -91,15 +91,9 @@ struct Written<'a> {
 // Helper functions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Convert a `McpServerRow` (with env) to domain `McpServer`.
-///
-/// The schema's CHECK constraints admit only the strings the lifecycle
-/// parses, except `manual`, which an older build can still write. Opening
-/// the database makes such a row a disabled `lazy` one (#1699); one written
-/// while this process has the database open is read the same way, so it is
-/// never started.
+/// Convert a `McpServerRow` (with env) to domain `McpServer`. The schema's
+/// CHECK admits only the lifecycles that parse.
 fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
-    let retired_manual = row.lifecycle == "manual";
     let config = McpServerConfig {
         command: row.command,
         resolved_path_cache: row.resolved_path_cache,
@@ -112,7 +106,7 @@ fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
         id: row.id,
         name: row.name,
         config,
-        enabled: row.enabled && !retired_manual,
+        enabled: row.enabled,
         allow_remote: row.allow_remote,
         lifecycle: row.lifecycle.parse::<McpLifecycle>().unwrap_or_default(),
         env,

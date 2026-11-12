@@ -561,8 +561,8 @@ async fn create_schema_reading(pool: &SqlitePool, gguf_parser: &dyn GgufParserPo
     .execute(pool)
     .await?;
 
-    // Stored `manual` servers made disabled `lazy` ones. At every open, off
-    // the `user_version` ladder: an older build can still write `manual`.
+    // Stored `manual` servers made disabled `lazy` ones, before step 6
+    // rebuilds the table with a CHECK that refuses `manual`.
     mcp_lifecycle::retire_manual_lifecycle(pool).await?;
 
     // After every table it reads exists, however old the library.

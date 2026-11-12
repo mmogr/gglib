@@ -2,9 +2,11 @@
 //! their shape.
 //!
 //! A `#[path]` child of `setup.rs`. A server is a process gglib starts, so
-//! `mcp_servers` keeps no type and no URL. A library from before had both,
-//! and could hold SSE servers, which gglib never ran: step 6 deletes those
-//! with their variables, then rebuilds the two tables without the columns.
+//! `mcp_servers` keeps no type and no URL, and its lifecycle is `eager` or
+//! `lazy`. A library from before had both columns, a CHECK that admitted
+//! `manual`, and could hold SSE servers, which gglib never ran: step 6
+//! deletes those with their variables, then rebuilds the two tables. It runs
+//! after `retire_manual_lifecycle`, so no `manual` row is left to copy.
 
 use anyhow::Result;
 use sqlx::{SqliteConnection, SqlitePool};
@@ -25,7 +27,7 @@ fn servers_ddl(table: &str) -> String {
             name TEXT NOT NULL,
             enabled INTEGER NOT NULL DEFAULT 1,
             allow_remote INTEGER NOT NULL DEFAULT 0,
-            lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
+            lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy')),
             command TEXT,
             resolved_path_cache TEXT,
             args TEXT NOT NULL DEFAULT '[]',

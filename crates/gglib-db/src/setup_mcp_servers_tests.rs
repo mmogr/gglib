@@ -73,8 +73,8 @@ async fn columns(pool: &SqlitePool, table: &str) -> Vec<String> {
 }
 
 /// The SSE server and its variable go; the stdio ones keep their ids and
-/// variables; the columns go; and the foreign key still holds, on the new
-/// table by its old name.
+/// variables; the columns go; the foreign key still holds, on the new table
+/// by its old name; and the lifecycle CHECK admits `eager` and `lazy` only.
 #[tokio::test]
 async fn sse_rows_and_the_retired_columns_go_and_the_rest_keeps_its_ids() {
     let pool = before_step_6().await;
@@ -112,6 +112,15 @@ async fn sse_rows_and_the_retired_columns_go_and_the_rest_keeps_its_ids() {
         .await
         .unwrap();
     assert_eq!(left(&pool).await.1, [search], "the cascade still holds");
+
+    // The lifecycle is `eager` or `lazy`: the rebuilt CHECK refuses `manual`.
+    for (lifecycle, admitted) in [("eager", true), ("lazy", true), ("manual", false)] {
+        let written = sqlx::query("INSERT INTO mcp_servers (name, lifecycle) VALUES ('x', ?)")
+            .bind(lifecycle)
+            .execute(&pool)
+            .await;
+        assert_eq!(written.is_ok(), admitted, "{lifecycle}: {written:?}");
+    }
 }
 
 /// The highest id is not given again: the next server is numbered after

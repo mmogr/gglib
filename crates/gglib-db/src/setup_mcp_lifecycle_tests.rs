@@ -15,20 +15,26 @@ async fn servers(pool: &SqlitePool) -> Vec<(String, String, bool)> {
         .expect("the rows")
 }
 
-/// A database with this build's schema holding `planted` as
-/// `(name, lifecycle, enabled)`, as an older build could have stored them:
-/// the schema still admits `manual`.
+/// A database as a build before step 6 left it, holding `planted` as
+/// `(name, lifecycle, enabled)`: that schema still admits `manual`.
 async fn stored_by_an_older_build(planted: &[(&str, &str, bool)]) -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     create_schema(&pool).await.unwrap();
+    super::super::mcp_servers::as_before_step_6(&pool).await;
+    sqlx::query("PRAGMA user_version = 5")
+        .execute(&pool)
+        .await
+        .unwrap();
     for (name, lifecycle, enabled) in planted {
-        sqlx::query("INSERT INTO mcp_servers (name, lifecycle, enabled) VALUES (?, ?, ?)")
-            .bind(name)
-            .bind(lifecycle)
-            .bind(enabled)
-            .execute(&pool)
-            .await
-            .expect("a planted server");
+        sqlx::query(
+            "INSERT INTO mcp_servers (name, type, lifecycle, enabled) VALUES (?, 'stdio', ?, ?)",
+        )
+        .bind(name)
+        .bind(lifecycle)
+        .bind(enabled)
+        .execute(&pool)
+        .await
+        .expect("a planted server");
     }
     pool
 }
