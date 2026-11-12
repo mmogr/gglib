@@ -1,4 +1,4 @@
-//! What `gglib model load` asks the daemon to start: `--context`, from the
+//! What `gglib model load` asks the daemon to start: `--context-size`, from the
 //! flag to the launch options the daemon makes of it.
 
 use std::io::Write as _;
@@ -58,7 +58,7 @@ async fn sent(body: &StartServerBody) -> (String, String) {
     daemon.join().expect("the stand-in ran")
 }
 
-/// `--context` reaches the launch. The load's body carries it under the
+/// `--context-size` reaches the launch. The load's body carries it under the
 /// name the daemon reads, and from the bytes that were sent the daemon's own
 /// request type and the planner a start runs make it the launch's explicit
 /// context. `max` is the model's trained window, and no flag is no opinion.

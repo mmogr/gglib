@@ -108,7 +108,7 @@ pub struct ContextArgs {
     /// Context size override (number or 'max' for model metadata).
     /// Resolved through a 5-level fallback chain: runtime flag → per-model
     /// `server_defaults` (from DB) → global default → fitted to this machine → 4096.
-    #[arg(short, long)]
+    #[arg(short = 'c', long = "context-size", value_name = "N|max")]
     pub ctx_size: Option<String>,
     /// Enable memory lock
     #[arg(long)]

@@ -48,7 +48,7 @@ impl ChatFlags<'_> {
     pub(super) fn typed(&self) -> Vec<&'static str> {
         let mut typed = Vec::new();
         if self.context.ctx_size.is_some() {
-            typed.push("--ctx-size");
+            typed.push("--context-size");
         }
         if self.context.mlock {
             typed.push("--mlock");

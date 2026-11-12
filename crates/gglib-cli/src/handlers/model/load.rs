@@ -18,7 +18,7 @@ use crate::bootstrap::CliContext;
 use crate::daemon_client::wire::{StartPinnedBody, StopServerBody};
 use crate::daemon_client::{self, Absent, DaemonHandle, StartProxyBody, StartServerBody};
 
-/// Execute `gglib model load <id> [--context N|max] [--pin]`.
+/// Execute `gglib model load <id> [--context-size N|max] [--pin]`.
 pub(crate) async fn load(
     ctx: &CliContext,
     identifier: &str,
@@ -26,7 +26,7 @@ pub(crate) async fn load(
     pin: bool,
 ) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
-    // A bad `--context` is refused before anything is installed or asked.
+    // A bad `--context-size` is refused before anything is installed or asked.
     let body = start_body(&model, context)?;
     // The engine the model runs under has to be here before the daemon is
     // asked for it, as `serve` and `chat` make sure of.

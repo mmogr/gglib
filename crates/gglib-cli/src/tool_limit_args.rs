@@ -9,6 +9,6 @@ pub struct ToolLimitArgs {
     #[arg(long = "tool-timeout-ms")]
     pub tool_timeout_ms: Option<u64>,
     /// Maximum number of tools executed in parallel per iteration
-    #[arg(long = "max-parallel")]
+    #[arg(long = "max-parallel-tools")]
     pub max_parallel: Option<usize>,
 }

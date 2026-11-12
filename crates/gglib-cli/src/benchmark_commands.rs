@@ -29,8 +29,8 @@ pub enum BenchmarkCommand {
         #[arg(long)]
         max_tokens: Option<u32>,
 
-        /// Context size override (number of tokens, or `max`)
-        #[arg(long)]
+        /// Context size override, in tokens, for every model compared
+        #[arg(short = 'c', long = "context-size", value_name = "N")]
         ctx_size: Option<u64>,
     },
 
@@ -136,7 +136,7 @@ pub enum BenchmarkCommand {
         weight_task_completion: Option<f32>,
 
         /// Context size override (number of tokens)
-        #[arg(long)]
+        #[arg(short = 'c', long = "context-size", value_name = "N")]
         ctx_size: Option<u64>,
 
         /// After the run completes, apply the winner as this model's
@@ -167,7 +167,7 @@ pub enum BenchmarkCommand {
         task_suite: String,
 
         /// Context size override (number of tokens)
-        #[arg(long)]
+        #[arg(short = 'c', long = "context-size", value_name = "N")]
         ctx_size: Option<u64>,
 
         /// RNG seeds to repeat every task under, once each. Every score is

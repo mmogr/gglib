@@ -18,7 +18,7 @@ pub(crate) struct ChatArgs {
     pub no_tools: bool,
     /// Which machine the turn runs on (ADR 0013).
     pub target: Target,
-    /// `--max-iterations`: saved with the chat, whose turns the daemon
+    /// `--max-tool-iterations`: saved with the chat, whose turns the daemon
     /// limits by it.
     pub max_iterations: Option<usize>,
     pub tools: Vec<String>,

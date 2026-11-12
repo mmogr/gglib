@@ -107,7 +107,7 @@ Session #20 saved. Resume with: gglib chat --continue 20
   keeps what had arrived of its reply, marked as stopped.
 - The flags a session names are saved with the chat, and the daemon reads
   them on every turn, the chat page's included: the model, `--tools`,
-  `--no-tools`, the tool limits, `--max-iterations`, `--profile` and five
+  `--no-tools`, the tool limits, `--max-tool-iterations`, `--profile` and five
   sampling flags. `--continue` keeps what the chat saved, with what its
   command line names in its place; `-s` replaces the chat's system prompt.
 - `/retry`, `/edit` and `/branch` are made by the daemon, as the chat page
@@ -163,7 +163,7 @@ explains the budget.
 Local models need guardrails to finish a tool-calling task, so the loop
 carries them.
 
-- `--max-iterations` caps the loop; without it, the limit a resumed chat
+- `--max-tool-iterations` caps the loop; without it, the limit a resumed chat
   saved, then the `max-tool-iterations` setting, which is the order the chat
   page and a paired device's turn follow too.
 - `--tools` is an allowlist, saved with the chat; parallelism and timeout

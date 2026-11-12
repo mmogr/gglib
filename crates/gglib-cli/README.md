@@ -75,7 +75,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model list` | List all models with metadata, the Model ID a client sends for each, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
 | `model inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
 | `model explain <id\|name> [--profile <name>]` | Show the launch gglib would make for the model, each argument with whose choice it was and why, the context fit, and every resolved inference parameter with the layer that supplied it |
-| `model load <id\|name> [--context <N\|max>] [--pin]` | Load a model into memory on the daemon, as the app's Load does; `--pin` pins the endpoint to it first |
+| `model load <id\|name> [--context-size <N\|max>] [--pin]` | Load a model into memory on the daemon, as the app's Load does; `--pin` pins the endpoint to it first |
 | `model unload <id\|name>` | Unload a model from memory on the daemon, as the app's Unload does |
 | `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |
 | `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its own launch defaults (`--jinja auto|on|off`, `--mtp auto|on|off`), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
@@ -88,7 +88,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model upgrade <id\|name> [--yes]` | Download a model's latest version and update its row |
 | `model verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `model repair <id\|name>` | Re-download corrupt shards for a model |
-| `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--ctx-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
+| `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--context-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--context-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
 | `chat <id\|name>` | Chat with a model interactively: the daemon runs each turn, through the endpoint, as it runs the chat page's, and the flags named are saved with the chat |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |

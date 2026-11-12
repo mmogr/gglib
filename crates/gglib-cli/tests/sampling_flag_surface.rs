@@ -53,7 +53,7 @@ const SERVE_NON_SAMPLING: &[&str] = &[
     "api-key",
     "cache",
     "cache-disk-gb",
-    "ctx-size",
+    "context-size",
     "host",
     "jinja",
     "mlock",
@@ -67,13 +67,13 @@ const SERVE_NON_SAMPLING: &[&str] = &[
 
 /// The same for `gglib proxy`: `CacheArgs`, `AccessArgs`, and the three it
 /// declares inline. No context or MTP flags — a standalone proxy has no
-/// specific model in scope, so `--default-context` stands in for `--ctx-size`.
+/// specific model in scope, so `--default-context-size` stands in for `--context-size`.
 const PROXY_NON_SAMPLING: &[&str] = &[
     "allowed-host",
     "api-key",
     "cache",
     "cache-disk-gb",
-    "default-context",
+    "default-context-size",
     "host",
     "port",
     "slot-dir",

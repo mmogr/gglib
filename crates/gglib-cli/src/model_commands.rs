@@ -79,8 +79,9 @@ pub enum ModelCommand {
         /// Update quantization type
         #[arg(short, long)]
         quantization: Option<String>,
-        /// Update context length
-        #[arg(short, long)]
+        /// Overwrite the stored trained context length (the model's window,
+        /// not the size it is served at)
+        #[arg(long)]
         context_length: Option<u64>,
         /// Add or update metadata (format: key=value)
         #[arg(short, long, action = clap::ArgAction::Append)]
@@ -423,14 +424,14 @@ pub enum ModelCommand {
     /// # Examples
     ///
     ///   gglib model load 3
-    ///   gglib model load "Qwen3-30B" --context 32768
+    ///   gglib model load "Qwen3-30B" --context-size 32768
     ///   gglib model load 3 --pin          # and pin the endpoint to it
     Load {
         /// Name or ID of the model to load
         identifier: String,
         /// Context size to serve at: a number of tokens, or `max` for the
         /// model's trained window. Omitted, the daemon fits it.
-        #[arg(long, alias = "ctx-size", value_name = "N|max")]
+        #[arg(short = 'c', long = "context-size", value_name = "N|max")]
         context: Option<String>,
         /// Pin the endpoint to this model first: every request for another
         /// model is refused while the pin holds.

@@ -35,8 +35,8 @@ rock endures below
 
 One prompt through N models, one after another, each output followed by
 its speed: `-p` is the prompt, `-m` names each model, `-s` an optional system
-prompt, and `--temperature`, `--max-tokens` and `--ctx-size` apply to every
-model in the run.
+prompt, and `--temperature`, `--max-tokens` and `-c`/`--context-size` (a
+number of tokens) apply to every model in the run.
 
 ## `perf`
 

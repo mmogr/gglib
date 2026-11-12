@@ -68,7 +68,7 @@ independently readable:
 - [`thinking_dispatch`] — `RenderContext`, thinking-event dispatch, spinner coordination
 
 A chat's limits and Thinking choice are the daemon's to resolve, by the
-rules it resolves the chat page's turns by: `--max-iterations` is saved
+rules it resolves the chat page's turns by: `--max-tool-iterations` is saved
 with the chat, and `--thinking on|off` is said on each of the session's
 turns, which the daemon remembers on the chat.
 

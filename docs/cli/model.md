@@ -161,8 +161,8 @@ The layers, from strongest to weakest, are in
 The app's Load and Unload, from the terminal. `load` asks the daemon to
 start the model's server, llama-server or sd-server for an image model,
 and the daemon keeps it resident after the command returns; `list` then
-shows it serving. A model already loaded is reused. `--context N` or
-`--context max` sets the context it is served at; omitted, the daemon
+shows it serving. A model already loaded is reused. `--context-size N` (`-c`) or
+`--context-size max` sets the context it is served at; omitted, the daemon
 fits one. `--pin` pins the endpoint to the model first, as `gglib serve`
 does, so every request for another model is refused while the pin holds;
 an endpoint already running unpinned is the daemon's refusal, and

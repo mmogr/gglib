@@ -817,7 +817,7 @@ Per-model server defaults can be set via the GUI or API (`PATCH /api/models/:id`
 `serverDefaults: { contextLength: 8192 }`), cleared with `serverDefaults: null`, or
 left unchanged by omitting the field. The CLI `serve`, `chat`, and `q` commands
 automatically consume these defaults, so models with large context windows don't need
-manual `--ctx-size` flags on every invocation.
+manual `--context-size` flags on every invocation.
 
 ## DRY
 

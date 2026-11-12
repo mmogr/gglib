@@ -139,7 +139,7 @@ pub enum Commands {
         /// Maximum agent iterations before giving up
         /// [default: the limit the chat saved, with --continue; else the
         /// persisted setting, or 25 if unset]
-        #[arg(long = "max-iterations")]
+        #[arg(long = "max-tool-iterations")]
         max_iterations: Option<usize>,
         /// Tool allowlist; may be repeated or comma-separated.
         /// Omit to allow all tools. (e.g. "`mcp_search,builtin_time`")
@@ -198,7 +198,7 @@ pub enum Commands {
         remote: RemoteFlag,
         /// Maximum agent iterations
         /// [default: persisted setting, or 25 if unset]
-        #[arg(long = "max-iterations")]
+        #[arg(long = "max-tool-iterations")]
         max_iterations: Option<usize>,
         /// Tool allowlist (empty = all tools)
         #[arg(long, value_delimiter = ',')]
