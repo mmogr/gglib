@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.35.0-rc.1](https://github.com/mmogr/gglib/compare/v0.34.0-rc.1...v0.35.0-rc.1) (2026-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **proxy:** `gglib config set loop-guard-mode off|note|refuse` is now `gglib config set loop-guard true|false` (loopGuard on the wire). refuse is gone: a library that stored it is upgraded to the guard on. The trip log's mode column and LoopGuardTripDay.mode are gone.
+* **cli:** flags are renamed or removed, and each short letter means one thing (`-c -f -m -n -o -p -q -s -v -y`). `--ctx-size` and `--context` are `--context-size`; `proxy --default-context` is `--default-context-size`; chat/q `--max-iterations` and `--max-parallel` are `--max-tool-iterations` and `--max-parallel-tools`. Removed: chat/q's twelve ignored sampling flags, `model download --skip-db` and `--token` (set `HF_TOKEN` for `--list-quants`), `config check-deps --setup-fast-downloads` (use `config fast-downloads enable`), `remote enable --allow-mcp` (use `mcp allow-remote`), `benchmark tune --apply-best` (use `--apply`), `model search --sort modified`, and install's `update` alias. Other short flags are long-only now (for example `q -Q` is `--quiet`, `model search -l` is `-n`). `mcp add` takes no `--type` or `--url`; stored SSE MCP servers are deleted on upgrade, and an MCP server's lifecycle is `eager` or `lazy`. `/api`: the download queue takes `quantization` only, start-server takes `id` only.
+* **sampling:** the `agentic-sampling` settings key and the `GGLIB_DISABLE_AGENTIC_SAMPLING` switch are gone; drop them from scripts and environments. Tool turns are no longer capped at 0.3. To keep a lower temperature on them, set it in a profile, on the model or globally.
+* **gui:** the desktop app is now gglib (gglib.app, program file gglib-gui). A manual macOS install leaves the old GGLib GUI.app behind: delete it. On Windows the app installs as gglib-gui (its install folder must not be gglib's data folder), beside the old GGLib GUI rather than over it: uninstall GGLib GUI. With Start at login on, the new app registers a login item of its own and the old one stays behind: remove the GGLib GUI entry once (macOS: ~/Library/LaunchAgents/GGLib GUI.plist; Linux: ~/.config/autostart/GGLib GUI.desktop; Windows: Startup apps), or the old app starts too. apt users run `sudo apt install gglib-gui` once, which replaces gg-lib-gui; dnf swaps it on upgrade. Data folders are keyed by com.gglib.gui and are untouched.
+* **cli:** `gglib config settings <cmd>` is now `gglib config <cmd>`, and each `--flag value` of `settings set` is `set flag value` (`--default-image-model` is `set default-image-model-id`). `config default <model>` is `config set default-model-id <model>`, `--clear` is `config unset default-model-id`. `config models-dir set <path>` is `config set models-dir <path>`, `show` is `config show`, `prompt` and `--no-create` are gone. `config profile rm` is `config profile remove`.
+* **daemon:** `gglib daemon run --share-lan` and `gglib web --share-lan` are removed, and the daemon no longer accepts the proxy's API key. Open the web page on the machine the daemon runs on, from the link `gglib web` prints. Other machines reach the models through the proxy (`gglib proxy --host 0.0.0.0`, which asks its key) or `gglib remote`. A client that sent the proxy key to `/api` must run as the owner on this machine, where it can read the daemon token.
+
+### What gglib now does
+
+* **cli:** every flag has one name, every short letter one meaning ([eeb66a9](https://github.com/mmogr/gglib/commit/eeb66a9a3584b823c847fbabb8d5e89c496a43ca))
+* **cli:** settings are set by key with gglib config set ([#1893](https://github.com/mmogr/gglib/issues/1893)) ([ee24078](https://github.com/mmogr/gglib/commit/ee240782c4c46c7e5e433d0abedbc3a8edb3bd8d))
+* **daemon:** the daemon listens on this machine only ([#1892](https://github.com/mmogr/gglib/issues/1892)) ([b083440](https://github.com/mmogr/gglib/commit/b083440dd4c0c385650ca45b2d252f9e8aef34b7))
+* **gui:** the desktop app is called gglib ([#1894](https://github.com/mmogr/gglib/issues/1894)) ([19f44df](https://github.com/mmogr/gglib/commit/19f44df2df1f5f7149f975b06df5d3e3a939f52c))
+* **proxy:** the loop guard is on or off ([#1901](https://github.com/mmogr/gglib/issues/1901)) ([66524d8](https://github.com/mmogr/gglib/commit/66524d8e649b616b7da0df9aeffd5993d8767f2a))
+* **sampling:** tool turns keep the temperature the ladder resolved ([#1896](https://github.com/mmogr/gglib/issues/1896)) ([0f15fa8](https://github.com/mmogr/gglib/commit/0f15fa8c591f2c6755ae17d18a62a84c02dfda09))
+
+
+### What it stopped getting wrong
+
+* **core:** a chat keeps settings it can't read when one is changed ([#1900](https://github.com/mmogr/gglib/issues/1900)) ([f291be1](https://github.com/mmogr/gglib/commit/f291be1a67788d3944769078ae0c7df8329fe584))
+
+
+### Internal
+
+* **sampling:** a template's capabilities are read, never used to edit the request ([#1897](https://github.com/mmogr/gglib/issues/1897)) ([54842d7](https://github.com/mmogr/gglib/commit/54842d7e52476d27110f1bb156f7bb22d7aa6251))
+
 ## [0.34.0-rc.1](https://github.com/mmogr/gglib/compare/v0.33.1-rc.1...v0.34.0-rc.1) (2026-11-12)
 
 
