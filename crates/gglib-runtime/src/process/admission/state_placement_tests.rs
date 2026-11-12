@@ -1,9 +1,8 @@
 //! Where an image model is placed, and what one too large for its place
 //! does to the line.
 //!
-//! Driven through the real [`AdmissionQueue`], as `queue_tests.rs` is; its
-//! own module because that file is frozen at its size, so the helpers are
-//! duplicated.
+//! Driven through the real [`AdmissionQueue`], as `queue_tests.rs` is, in a
+//! module of its own. Helpers are duplicated from `queue_tests.rs`.
 
 use std::sync::Arc;
 

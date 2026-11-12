@@ -5,8 +5,7 @@ mod patterns;
 mod reasoning;
 mod template_probe;
 
-/// What real chat templates do with the loop guard's note (#1052). Here
-/// rather than inside `template_probe`, which is at its size baseline.
+/// What real chat templates do with the loop guard's note (#1052).
 #[cfg(test)]
 #[path = "loop_guard_note_templates_tests.rs"]
 mod loop_guard_note_templates_tests;

@@ -142,11 +142,12 @@ async fn cache_clear_returns_400_on_invalid_session_id() {
 
     assert_eq!(resp.status(), 400);
     let body: serde_json::Value = resp.json().await.expect("json response");
+    assert_eq!(body["error"]["code"], "invalid_request", "{body}");
     assert!(
-        body["error"]
+        body["error"]["message"]
             .as_str()
-            .expect("error is string")
-            .contains("invalid session id")
+            .expect("a message")
+            .contains("invalid session ID")
     );
 
     cancel.cancel();
@@ -221,11 +222,12 @@ async fn cache_clear_returns_500_when_slot_dir_missing() {
 
     assert_eq!(resp.status(), 500);
     let body: serde_json::Value = resp.json().await.expect("json response");
+    assert_eq!(body["error"]["code"], "internal_error", "{body}");
     assert!(
-        body["error"]
+        body["error"]["message"]
             .as_str()
-            .expect("error is string")
-            .contains("slot_dir not configured")
+            .expect("a message")
+            .contains("no slot folder")
     );
 
     cancel.cancel();

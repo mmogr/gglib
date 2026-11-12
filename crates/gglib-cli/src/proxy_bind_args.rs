@@ -1,9 +1,7 @@
 //! Where `gglib proxy` binds, as a flag group.
 //!
-//! Three flags of `Commands::Proxy`, grouped here because the top-level enum
-//! is on the file-size ratchet — the same reason `subcommands.rs` exists —
-//! and a bind is a group of its own the way `SamplingArgs` and `CacheArgs`
-//! are.
+//! Three flags of `Commands::Proxy`, grouped here because a bind is a group
+//! of its own the way `SamplingArgs` and `CacheArgs` are.
 
 use clap::Args;
 

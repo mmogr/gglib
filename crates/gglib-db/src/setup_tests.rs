@@ -5,8 +5,7 @@
 //! beside `metrics.rs` in gglib-proxy. Declared as `mod tests` through
 //! `#[path]`, so every test keeps the `setup::tests::` path it had when it
 //! lived inline. The model-key backfill's tests are in
-//! `setup_backfill_tests.rs`: the two subjects together are 399 lines, over
-//! the 300 a new file may be.
+//! `setup_backfill_tests.rs`.
 
 use super::*;
 

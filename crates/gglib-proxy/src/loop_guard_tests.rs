@@ -1,7 +1,6 @@
 //! Unit tests for [`super`]: the pre-dispatch loop and stagnation guard.
 //!
-//! Split out of `loop_guard.rs` to keep that file under the repo's file-size
-//! ratchet; see `scripts/check_file_size.sh`.
+//! Split out of `loop_guard.rs`.
 
 use super::*;
 use gglib_core::domain::agent::{batch_results_hash, hash_result_content};

@@ -1,7 +1,5 @@
 //! Tests for the loop guard's switch: its default, and how a stored one is
 //! read, written and cleared.
-//!
-//! Their own file because `settings_tests.rs` is at its size baseline.
 
 use super::{Settings, SettingsUpdate};
 

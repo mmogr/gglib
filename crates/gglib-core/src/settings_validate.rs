@@ -1,9 +1,9 @@
 //! The inference-parameter validators, split from [`super`](crate::settings).
 //!
-//! Moved here whole, unchanged, so `settings.rs` could take the remote
-//! tunnel's two fields without growing past its ceiling. `validate_settings`
-//! stays beside the struct it validates and reaches these through the
-//! re-export; every external caller does too, so the module path is a detail.
+//! Moved here whole, unchanged, when the remote tunnel's two fields arrived.
+//! `validate_settings` stays beside the struct it validates and reaches these
+//! through the re-export; every external caller does too, so the module path
+//! is a detail.
 
 use std::fmt::{Debug, Display};
 use std::ops::RangeInclusive;

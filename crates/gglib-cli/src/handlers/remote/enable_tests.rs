@@ -1,8 +1,6 @@
 //! Tests for the copy `gglib remote enable` prints.
 //!
-//! A `#[path]` sibling rather than an inline `mod tests`, because the two
-//! together would cross the 300-line budget, the split `disable.rs` and its
-//! tests were made along.
+//! A `#[path]` sibling rather than an inline `mod tests`, the house layout.
 
 use clap::Parser as _;
 

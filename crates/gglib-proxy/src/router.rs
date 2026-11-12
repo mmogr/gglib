@@ -19,6 +19,10 @@
 //! ```
 //!
 //! gglib's own routes are under `/v1/gglib/`; the rest of `/v1` is `OpenAI`'s.
+//! A path no route serves, and a method a route does not take, are answered
+//! in the error envelope by `refusal`. A wrong method is answered inside its
+//! route's guards, so it is refused as the route's right method would be
+//! first; an unknown path is answered inside the guards above the match.
 //!
 //! `/health` sits outside the bearer group on purpose: it is polled before
 //! anyone has credentials. It is still behind the Host guard. Pairing has no
@@ -27,6 +31,7 @@
 
 use std::sync::Arc;
 
+use axum::middleware::from_fn_with_state;
 use axum::{
     Router,
     routing::{get, post, put},
@@ -47,6 +52,7 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
     // configured is remote code execution, not free inference (ADR 0012).
     let mcp = Router::new()
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
+        .method_not_allowed_fallback(crate::refusal::method_not_allowed)
         .route_layer(axum::middleware::from_fn(crate::remote::mcp_tunnel_guard));
 
     // The hub's chats and their images, for a paired device only: this
@@ -74,6 +80,7 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             "/v1/gglib/attachments/{id}",
             get(crate::chats::fetch_attachment),
         )
+        .method_not_allowed_fallback(crate::refusal::method_not_allowed)
         .route_layer(axum::middleware::from_fn(crate::chats::named_device_only));
 
     // Everything a client can reach with credentials. Grouped separately from
@@ -147,22 +154,25 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
     // passes it still has to name a device. That ordering is the point —
     // `ServeOptions::backend_auth` makes the bearer a header modelpipe wrote,
     // so for tunnelled traffic this is the only check left that can refuse.
+    // A wrong method is answered inside both guards, as in each group above:
+    // the method fallback is set before the guards that wrap it.
+    protected = protected.method_not_allowed_fallback(crate::refusal::method_not_allowed);
     protected = protected.route_layer(axum::middleware::from_fn(crate::remote::device_gate));
-    protected = protected.route_layer(axum::middleware::from_fn_with_state(
-        policy,
-        crate::access::bearer_guard,
-    ));
+    protected = protected.route_layer(from_fn_with_state(policy, crate::access::bearer_guard));
 
+    let marker = from_fn_with_state(state.clone(), crate::remote::remote_marker);
     Router::new()
         .route("/health", get(health_check))
         .merge(protected)
+        // `/health` alone takes this method fallback: each group above set
+        // its own inside its guards, and this one does not replace those.
+        // Both are set before the layers below, which wrap them.
+        .method_not_allowed_fallback(crate::refusal::method_not_allowed)
+        .fallback(crate::refusal::unknown_route)
         // Reads the tunnel markers the serve side sets, and records the
         // request as tunnelled for the gate above and the status surface.
         // Inside the Host guard: a request the guard refuses is not counted.
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            crate::remote::remote_marker,
-        ))
+        .layer(marker)
         // A change a page on another site sends is refused, judged by the
         // same config the CORS layer below answers from. Inside the Host
         // guard, which vouches for the `Host` a same-origin page is matched

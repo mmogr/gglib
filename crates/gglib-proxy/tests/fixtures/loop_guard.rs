@@ -25,8 +25,7 @@ use super::common::{TaggedCatalog, spawn_proxy_with_settings};
 
 /// Spawn a proxy whose loop guard is on or off as `guard` says.
 ///
-/// Here rather than in `common.rs`, which is at its size baseline, and beside
-/// the histories these tests send.
+/// Here rather than in `common.rs`, beside the histories these tests send.
 pub(crate) async fn spawn_proxy_with_guard(
     runtime: Arc<dyn ModelRuntimePort>,
     model_name: &str,

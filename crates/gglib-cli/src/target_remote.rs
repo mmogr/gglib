@@ -1,14 +1,13 @@
 //! The paired machine, as this machine reaches it.
 //!
-//! A `#[path]` child of `target.rs`, split off when the decisions there
-//! brought the file to the size budget. Everything here talks to the daemon
-//! and reads the pairing. [`Paired`] is the daemon and its connection, which
-//! a command that asks the daemon about the paired machine needs; [`Far`] is
+//! A `#[path]` child of `target.rs`. Everything here talks to the daemon and
+//! reads the pairing. [`Paired`] is the daemon and its connection, which a
+//! command that asks the daemon about the paired machine needs; [`Far`] is
 //! the far proxy itself, as the `FarProxy` the daemon's own `/api/remote`
 //! routes use, for a turn or a proxy client that talks to it directly. Each
-//! is established once, so "connected" and "holding a key"
-//! are refused with one set of sentences. Nothing here decides anything —
-//! which commands get either at all is the parent's table.
+//! is established once, so "connected" and "holding a key" are refused with
+//! one set of sentences. Nothing here decides anything — which commands get
+//! either at all is the parent's table.
 
 use anyhow::{Result, anyhow, bail};
 use gglib_app_services::{FarProxy, GuiError, RemoteConnection, far_credentials};

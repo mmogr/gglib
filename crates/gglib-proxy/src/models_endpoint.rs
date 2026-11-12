@@ -13,13 +13,14 @@
 //! `GET /v1/models/{name}` answers one entry of that same list.
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use tracing::{debug, error};
 
 use crate::models::{ErrorResponse, Feature, GglibInfo, ModelInfo, ModelsResponse};
 use crate::profiles::variant_entries;
+use crate::refusal::Segment;
 use crate::server::AppState;
 
 /// Percentage shaved off a model's raw context window when advertised via
@@ -94,7 +95,7 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
 /// it (a catalogue id, a profile not listed).
 pub(crate) async fn retrieve_model(
     State(state): State<AppState>,
-    Path(name): Path<String>,
+    Segment(name): Segment,
 ) -> Response {
     debug!(model = %name, "GET /v1/models/:name");
     let data = match entries(&state).await {

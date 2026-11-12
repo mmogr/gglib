@@ -1,8 +1,7 @@
 //! Tests for the model-key backfill: a row stored under a spelling of its
 //! path that is not the canonical one is re-keyed and repaired at boot.
 //!
-//! Split from `setup_tests.rs` by subject — the two files together are 399
-//! lines, over the 300 a new file may be. Declared as `mod backfill_tests`,
+//! Split from `setup_tests.rs` by subject. Declared as `mod backfill_tests`,
 //! so these two tests moved from `setup::tests::` to
 //! `setup::backfill_tests::`.
 

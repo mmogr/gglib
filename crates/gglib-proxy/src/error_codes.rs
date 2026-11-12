@@ -28,7 +28,10 @@ const PUBLISHED: &str = "docs/error-codes.json";
 #[cfg(test)]
 const ABOUT: &str = "The error codes gglib writes itself, rather than relays from \
 llama-server, on its proxy and the daemon's runs. The proxy refuses with \
-{\"error\":{\"message\":...,\"type\":...,\"code\":...}}, and a stream already under way can end \
+{\"error\":{\"message\":...,\"type\":...,\"code\":...}}, whatever refused: a route, a guard, a \
+body, query or path that does not read, a method a route does not take, or a path no route \
+serves. Past its guards, the MCP gateway at /mcp answers in JSON-RPC, or with a bare status \
+as MCP's transport does. A stream already under way can end \
 with that object as a data: frame. A run that failed carries {\"code\":...,\"message\":...} as its \
 error, on /v1/gglib/runs and /api/runs. The daemon's /api/runs refuses with \
 {\"error\":...,\"status\":...,\"type\":<code>}, and the proxy answers a paired device's turn on a \
@@ -38,8 +41,8 @@ code. type is the type the proxy writes beside the code: null where it writes mo
 or none. status is the HTTP status of every response that carries the code: null where those \
 responses' writers do not all fix the same one, or where no response carries it, only a stream \
 frame or a run's error. An availability answer is not such a response: GET /v1/gglib/images/drawing \
-and the daemon's GET /api/images/drawing always answer 200, and the code in that body is the \
-one a request to draw would be refused with.";
+and the daemon's GET /api/images/drawing answer 200 to any query that reads, and the code in \
+that body is the one a request to draw would be refused with.";
 
 /// One code: what a client matches on, the `type` written beside it, the
 /// status of the response that carries it, and a line on what it means.
@@ -115,7 +118,7 @@ const CODES: &[ErrorCode] = &[
     row("image_generation_failed", SERVER, Some(502), "No picture was drawn: the image runtime took the render and failed it, or lost it (the message carries its words; try another prompt or size, or retry); the image model was stopped while it drew; or a run sent with Draw ended because its model's first reply did not call the image tool (try again, or pick a model that calls tools)."),
     row("image_render_stalled", SERVER, Some(504), "The render made no progress for three minutes, or ran past its thirty-minute limit, so the image model was stopped; retry."),
     row("model_cannot_read_images", INVALID, Some(400), "A message carries an image and the model has no projector linked; link one with gglib model update <model> --projector <path>."),
-    row("request_too_large", INVALID, Some(413), "The request body is over the 32 MiB limit."),
+    row("request_too_large", INVALID, Some(413), "The request body is over its route's limit: 32 MiB for a chat completion, an image request or a run, 2 MiB for an embeddings request, a load or a shutdown."),
     // An image a message carries by id (`AttachmentError`).
     row("image_too_large", INVALID, Some(413), "An uploaded image is over the 8 MiB one image may be."),
     row("unsupported_image", INVALID, Some(400), "An uploaded file is not a PNG or a JPEG whose size can be read."),
@@ -133,6 +136,11 @@ const CODES: &[ErrorCode] = &[
     row("invalid_api_key", INVALID, Some(401), "The bearer token is missing or wrong."),
     row("device_not_paired", INVALID, Some(403), "A request came through the tunnel without a paired device's key."),
     row("mcp_not_allowed_over_tunnel", INVALID, Some(403), "The MCP gateway is never reachable through the tunnel."),
+    // What no route answers.
+    row("unknown_route", INVALID, Some(404), "No route serves the path. gglib's own routes are under /v1/gglib/."),
+    row("method_not_allowed", INVALID, Some(405), "The route does not take the request's method; the Allow header lists the ones it does."),
+    // Stopping the daemon (`POST /v1/gglib/proxy/shutdown`).
+    row("no_daemon_to_stop", INVALID, Some(409), "The proxy runs outside the gglib daemon, so there is nothing to stop from here."),
     // The runs and the hub's chats.
     row("device_not_named", INVALID, Some(403), "The route serves a paired device through the tunnel, and the request did not name one."),
     row("runs_unavailable", UNAVAILABLE, Some(503), "This proxy runs outside the gglib daemon, so it holds no runs."),

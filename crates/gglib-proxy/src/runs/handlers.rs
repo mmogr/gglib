@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_core::domain::runs::RunKind;
@@ -19,18 +19,10 @@ use serde_json::Value;
 
 use super::scope::Caller;
 use super::sse;
-use crate::models::ErrorResponse;
+use crate::refusal::{Segment, error, invalid};
 use crate::server::AppState;
 
 pub(super) type Answer = Result<Response, Response>;
-
-pub(super) fn error(status: StatusCode, error_type: &str, code: &str, message: String) -> Response {
-    (
-        status,
-        Json(ErrorResponse::with_code(message, error_type, code)),
-    )
-        .into_response()
-}
 
 /// A refusal from the runs, with its own status and code.
 fn refused(err: &RunsError) -> Response {
@@ -41,16 +33,6 @@ fn refused(err: &RunsError) -> Response {
         "invalid_request_error"
     };
     error(status, error_type, err.code(), err.to_string())
-}
-
-/// A request the route could not read.
-pub(super) fn invalid(message: &str) -> Response {
-    error(
-        StatusCode::BAD_REQUEST,
-        "invalid_request_error",
-        "invalid_request",
-        message.to_owned(),
-    )
 }
 
 /// The answer when this proxy was started without runs.
@@ -137,7 +119,7 @@ fn server_id(token: &str) -> Option<i64> {
 pub(crate) async fn put_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
-    Path(id): Path<String>,
+    Segment(id): Segment,
     query: Result<Query<PutQuery>, QueryRejection>,
     body: Result<Json<Value>, JsonRejection>,
 ) -> Answer {
@@ -201,7 +183,7 @@ pub(crate) async fn list_runs(State(state): State<AppState>, Caller(scope): Call
 pub(crate) async fn get_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
-    Path(id): Path<String>,
+    Segment(id): Segment,
 ) -> Answer {
     let info = runs(&state)
         .ok_or_else(unavailable)?
@@ -214,7 +196,7 @@ pub(crate) async fn get_run(
 pub(crate) async fn cancel_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
-    Path(id): Path<String>,
+    Segment(id): Segment,
 ) -> Answer {
     let info = runs(&state)
         .ok_or_else(unavailable)?
@@ -235,7 +217,7 @@ pub(crate) struct EventsQuery {
 pub(crate) async fn run_events(
     State(state): State<AppState>,
     Caller(scope): Caller,
-    Path(id): Path<String>,
+    Segment(id): Segment,
     query: Result<Query<EventsQuery>, QueryRejection>,
 ) -> Answer {
     let runs = runs(&state).ok_or_else(unavailable)?;

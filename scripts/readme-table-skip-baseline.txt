@@ -4,8 +4,7 @@
 # A new entry appearing here without being recorded is a failure: deleting a
 # table, or dropping the extensions from its first cells, would otherwise move
 # a README out of the checked set and print a larger skip count above a green
-# tick. Recording one is a reviewable line in a diff, which is the same
-# bargain `scripts/rust-complexity-baseline.txt` strikes.
+# tick. Recording one is a reviewable line in a diff.
 #
 # One is an exemption by design: `src/types` tabulates type names rather than
 # files. The rest describe their directory with no file table; each is a

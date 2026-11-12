@@ -1,12 +1,10 @@
 //! The remote tunnel's settings (ADR 0012): the connect side's stored
 //! pairing as one value, and the remote half of merging and validating.
 //!
-//! Split out via `#[path]`, the way `settings_validate.rs` is, and for the
-//! same reason: `settings.rs` sits exactly on its ratchet baseline, so a type
-//! that carries its own doc comment cannot live in it — and neither can the
-//! arms that grow with it. `merge` and `validate_settings` each call into
-//! here once, so a remote field added later touches `settings.rs` by one
-//! line for its declaration and nothing else.
+//! Split out via `#[path]`, the way `settings_validate.rs` is, so the remote
+//! half grows here and not in `settings.rs`. `merge` and `validate_settings`
+//! each call into here once, so a remote field added later touches
+//! `settings.rs` by one line for its declaration and nothing else.
 
 use serde::{Deserialize, Serialize};
 

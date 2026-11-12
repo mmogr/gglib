@@ -1,9 +1,7 @@
 //! Tests for [`super`] — which key the tunnel enforces, and when the mint
 //! for it is written down.
 //!
-//! A sibling file rather than an inline `mod tests`, for the reason
-//! `settings_remote_tests.rs` is one: `key.rs` is close enough to the 300-line
-//! budget that the tests would push it over.
+//! A sibling file rather than an inline `mod tests`, the house layout.
 
 use tokio_util::sync::CancellationToken;
 

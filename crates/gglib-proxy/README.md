@@ -109,6 +109,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`server.rs`** — The composition root: `AppState`, and `serve()`, which builds the state and the router; also the `/health`, `/v1/chat/completions`, `/v1/gglib/proxy/status`, and `/v1/gglib/proxy/status/stream` handlers
 - **`router.rs`** — Which routes exist, and which guards wrap which, in what order (see the [`access`](src/access/) module)
 - **`tunnel_routes.rs`** — `TUNNEL_REACHABLE`, every route a paired machine reaches through the tunnel; test builds only, held to `router.rs` by `router_tests.rs`
+- **`refusal.rs`** — The error envelope's shared writer, and the answers no handler writes: an unknown path, a wrong method, a request an extractor could not read
 - **`admin.rs`** — `POST /v1/gglib/proxy/cache/clear` and `POST /v1/gglib/proxy/shutdown`: clearing the caches, and stopping the daemon
 - **`observers.rs`** — `ProxyObservers`: what a proxy run reports to that outlives the run, owned by the supervisor so a restarted proxy keeps counting into the same place
 - **`serve_config.rs`** — `ServeConfig`: everything `serve()` is started with, one named field each
@@ -741,15 +742,23 @@ curl -X POST http://localhost:8080/mcp \
 |--------|-----------|
 | 503 | Model is loading (retry after) |
 | 502 | Failed to connect to llama-server |
-| 404 | Model not found |
+| 404 | Model not found (`model_not_found`), or no route serves the path (`unknown_route`) |
+| 405 | The route does not take the method (`method_not_allowed`); `Allow` lists the ones it does |
+| 409 | A shutdown asked of a proxy that runs outside the daemon (`no_daemon_to_stop`) |
 | 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit) |
 | 400 | A message carries an image and the model has no projector linked (`model_cannot_read_images`) — see [Images](#images) |
-| 413 | The body of a chat completion or a run is over 32 MiB (`request_too_large`) |
+| 400 | A body, query or path segment that does not read, or a bad `X-Gglib-Session-Id` (`invalid_request`) |
+| 413 | The body of a chat completion, an image request or a run is over 32 MiB, or an embeddings request's, a load's or a shutdown's over 2 MiB (`request_too_large`) |
 | 504 | A chat completion that does not stream, or an embeddings request, outlasted its total bound (`upstream_timeout`) — see [When the upstream stops talking](#when-the-upstream-stops-talking) |
 | 401 | A key is configured and the request does not present it, or presents another (`invalid_api_key`) |
 | 403 | Refused by a guard: `host_not_allowed`, `origin_not_allowed`, `device_not_paired`, `device_not_named` or `mcp_not_allowed_over_tunnel` |
-| 500 | Internal error |
+| 500 | Internal error (`internal_error`) |
 | 507 | A chat model's weights and its smallest context need more memory than this device gives a model (`model_does_not_fit`) |
+
+Every one of these answers is `{"error": {"message", "type", "code"}}`, whatever
+refused (a route, a guard, an extractor, the router's fallback); `src/refusal.rs`
+writes the ones no handler does. Past its guards, the MCP gateway at `/mcp`
+answers in JSON-RPC, or with a bare status as MCP's transport does.
 
 Every `code` this proxy writes, its runs' included, is listed with its type,
 status and meaning in [`docs/error-codes.json`](../../docs/error-codes.json).
