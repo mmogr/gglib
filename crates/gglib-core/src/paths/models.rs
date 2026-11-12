@@ -9,7 +9,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use super::config::{
-    MODELS_DIR_KEY, models_dir_line_stored, persist_models_dir, persisted_models_dir,
+    MODELS_DIR_KEY, forget_models_dir, models_dir_line_stored, persist_models_dir,
+    persisted_models_dir,
 };
 use super::ensure::{DirectoryCreationStrategy, ensure_directory};
 use super::error::PathError;
@@ -107,6 +108,15 @@ pub fn set_models_dir(
     ensure_directory(&resolved.path, strategy)?;
     persist_models_dir(&resolved.path)?;
     Ok(resolved)
+}
+
+/// Remove the stored models directory, and answer where it now resolves.
+///
+/// That is the default, unless `GGLIB_MODELS_DIR` in the environment names
+/// one, which outranks the stored line and is not this to change.
+pub fn unset_models_dir() -> Result<ModelsDirResolution, PathError> {
+    forget_models_dir()?;
+    resolve_models_dir(None)
 }
 
 /// Store the models directory when nothing names one, so a later build with
