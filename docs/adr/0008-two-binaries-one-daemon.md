@@ -126,6 +126,10 @@ transitively the proxy and agent crates. The CLI-exclusive dependencies are
 > **Amended 2026-10-31.** `gglib-sse` is now `gglib-broadcast`, renamed after
 > its `Broadcaster<T>` so it is not taken for `gglib_core::sse` (#1122).
 
+> **Amended 2026-11-12.** `mdns-sd` is gone with `--share-lan`: the daemon
+> listens on loopback only and advertises nothing
+> ([ADR 0027, decision 3's amendment](0027-a-stored-secret-is-shown-only-when-asked-for.md#3-one-reveal)).
+
 So the size argument runs opposite to the intuition: merging would cost the
 *CLI* a large GTK/WebKit closure, and cost the *desktop app* almost nothing.
 An asymmetric merge — make `gglib-app` the combined binary and keep `gglib`

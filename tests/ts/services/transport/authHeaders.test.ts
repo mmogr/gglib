@@ -25,8 +25,8 @@ import { TransportError } from '../../../../src/services/transport/errors';
  * There were three ways to build a raw `fetch` to the daemon, and they
  * disagreed: one read the token before the client had it, one asked Tauri for
  * the port on every call, and for a while one sent no credential at all, so
- * against a `--share-lan` daemon agent chat and the benchmark answered 401
- * once the key was entered while every other call succeeded. There is now
+ * against a daemon that wanted a key, agent chat and the benchmark answered
+ * 401 once it was entered while every other call succeeded. There is now
  * one, `apiFetch`, and this is the list of what goes through it.
  */
 

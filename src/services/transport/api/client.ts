@@ -12,7 +12,6 @@ import { readData, type ReadOptions } from '../errors';
 import { appLogger } from '../../platform';
 import { isDesktop } from '../../platform/detect';
 import { isDaemonTokenRefusal, serviceRestarted, takeDaemonToken } from './daemonToken';
-import { REVEAL_COMMAND } from '../../../constants/secrets';
 
 /**
  * Module-level API session context: where the daemon is and the token that
@@ -90,46 +89,6 @@ async function discoverEmbeddedApi(): Promise<EmbeddedApiInfo> {
 }
 
 /**
- * localStorage key holding the daemon's API key.
- *
- * Only relevant when the daemon is shared over the LAN (`--share-lan`), where
- * /api/* takes its key. A loopback daemon takes only its own token
- * (daemonToken.ts) and never asks for this — on either surface.
- */
-const WEB_API_KEY_STORAGE = 'gglib_api_key';
-
-function readStoredApiKey(): string | undefined {
-  try {
-    return localStorage.getItem(WEB_API_KEY_STORAGE) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Ask the user for the daemon's API key after a 401.
- * Returns true if a key was provided and stored (so the request can retry).
- */
-function promptForApiKey(): boolean {
-  const entered = window.prompt(
-    'This gglib daemon requires an API key. On the machine it runs on, ' +
-      `\`${REVEAL_COMMAND.proxy_api_key}\` prints it.\n` +
-      'Enter it to continue:'
-  );
-  if (!entered || !entered.trim()) {
-    return false;
-  }
-  try {
-    localStorage.setItem(WEB_API_KEY_STORAGE, entered.trim());
-  } catch {
-    // Storage unavailable (private mode) — the retry still works this session
-    // because the client cache rebuild re-reads via the in-memory session.
-  }
-  apiAuthToken = entered.trim();
-  return true;
-}
-
-/**
  * Cached client promise for lazy initialization.
  */
 let cachedClientPromise: Promise<HttpClient> | null = null;
@@ -190,21 +149,12 @@ function buildClient(config: HttpClientConfig): HttpClient {
         body: hasBody ? JSON.stringify(body) : undefined,
       });
       
-      // A 401 means a LAN-shared daemon wants its key, unless it is a daemon
-      // asking for its token, which no key opens: its body says how to get it.
-      // Only a newly entered key earns the retry — the desktop app used to
-      // rebuild an identically tokenless client here and fail again.
+      // A 401 is the daemon asking for its token: its body says how to get it.
       const refused = await isDaemonTokenRefusal(response);
       if (refused) resetClientCache(); // the next call rereads a token minted since
       if (refused && isDesktop()) { // the desktop rereads the file: retry once, never the sentence
         if (isRetry) throw serviceRestarted();
         return (await getClient()).request<T>(path, options, true);
-      }
-      if (response.status === 401 && !isRetry && !refused && promptForApiKey()) {
-        appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - retrying with entered API key');
-        resetClientCache();
-        const newClient = await getClient();
-        return newClient.request<T>(path, options, true);
       }
       
       return await readData<T>(response, { sensitive });
@@ -240,11 +190,8 @@ export async function getClient(): Promise<HttpClient> {
   cachedClientPromise = (async () => {
     try {
       // Every `/api/*` call takes the daemon's token: the desktop app reads it
-      // from the daemon's file, a page from the link `gglib web` prints. A
-      // daemon started with `--share-lan` also takes its key, which a page on
-      // another machine can only be given by hand, so the stored-key path
-      // stays for it, on both surfaces.
-      const token = takeDaemonToken() ?? readStoredApiKey() ?? apiAuthToken;
+      // from the daemon's file, a page from the link `gglib web` prints.
+      const token = takeDaemonToken() ?? apiAuthToken;
 
       if (isDesktop()) {
         const info = await discoverEmbeddedApi();

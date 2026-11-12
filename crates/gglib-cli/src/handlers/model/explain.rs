@@ -31,7 +31,7 @@ pub(crate) async fn execute(
     profile: Option<&str>,
 ) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
-    let explanation = explanation(ctx, ops, model.id, profile).await?;
+    let explanation = explanation(ops, model.id, profile).await?;
 
     print!(
         "{}",
@@ -52,13 +52,12 @@ pub(crate) async fn execute(
 /// its refusal is the answer; a plan made here would not know what it has
 /// loaded.
 async fn explanation(
-    ctx: &CliContext,
     ops: &ModelOps,
     id: i64,
     profile: Option<&str>,
 ) -> Result<LaunchExplanationDto> {
     if auth::daemon_token().is_some()
-        && let Ok(daemon) = running(ctx).await
+        && let Ok(daemon) = running().await
         && let Some(explained) = daemon.explain_model(id, profile).await?
     {
         return Ok(explained);

@@ -15,9 +15,9 @@ something that is *not* a gglib daemon is a hard error, never fought over.
 stops something on it, or asks it what only a running one knows (whether it
 is replying to the chat `gglib chat --continue` names): it hands back the
 daemon when one is up, says what is there instead when none is, and never
-launches one. Either way the [`DaemonHandle`] carries the credential
-[`auth::daemon_api_key`] resolves, and every call made through it sends that
-credential, so no command resolves or attaches one itself.
+launches one. Either way the [`DaemonHandle`] carries the daemon's token,
+which [`auth::daemon_token`] reads, and every call made through it sends that
+token, so no command reads or attaches one itself.
 
 This module is responsible for finding or starting the daemon and for the
 thin request wrappers commands share. It is **not** responsible for

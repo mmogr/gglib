@@ -637,9 +637,8 @@ and keeps it in the browser for that page's origin, so a bookmark works until
 the daemon next starts, and after that the link has to be opened again. That
 closes the API to another account on the machine, which can read neither the
 file nor the database. It does not close it to code running as you, which can
-read the file as it can read the rest of gglib's data directory. A daemon
-started with `--share-lan` also takes its API key, which the LAN holds; the
-proxy's key does not open a loopback daemon. Opening the link puts it on the
+read the file as it can read the rest of gglib's data directory. The
+daemon takes nothing else: the proxy's key does not open it. Opening the link puts it on the
 launcher's command line, which any account can list with `ps`, for the moment
 the launcher runs: on macOS that is
 `/usr/bin/open` until LaunchServices takes the link, after which it travels to
@@ -669,8 +668,7 @@ a page elsewhere cannot run a turn, load a model or clear the cache through it
 either. Nor can a browser extension: its origin, such as
 `chrome-extension://…` or `moz-extension://…`, is not among them, so the proxy
 refuses its changes even where the extension may read the answer, and no
-setting admits one. A daemon started with `--share-lan` lets every page read,
-and its token is what refuses them. Whatever serves a page on `localhost` is a
+setting admits one. Whatever serves a page on `localhost` is a
 process, the case above.
 
 **One identity, kept.** `enable` reuses this machine's stored endpoint key, so
@@ -768,10 +766,9 @@ the local proxy again; `gglib remote disable` switches remote access off.
 
 **The proxy, and only the proxy.** The daemon's management API on
 `127.0.0.1:9887` — the door `gglib`'s own commands and the desktop app come
-through — is not affected. A daemon bound on loopback, which is the default,
-asks its own token and no key, whatever `proxy_api_key` says later; a daemon
-started with `--share-lan` already had its key before the tunnel existed. Enabling remote access cannot lock
-you out of the tool you enabled it with.
+through — is not affected. The daemon listens on loopback only and asks its
+own token and no key, whatever `proxy_api_key` says. Enabling remote access
+cannot lock you out of the tool you enabled it with.
 
 **What the network learns.** By default the desktop publishes its address to
 n0's discovery service so the ticket keeps working when it changes network,

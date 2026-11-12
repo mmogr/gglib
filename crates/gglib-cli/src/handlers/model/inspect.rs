@@ -50,7 +50,7 @@ pub(crate) async fn execute(
                 print(&super::one_shot_model_ops(ctx).get_detail(model.id).await?)
             },
             async || {
-                let paired = target.paired(ctx).await?;
+                let paired = target.paired().await?;
                 let found = (paired.handle.paired_model(identifier).await)
                     .with_context(|| format!("looking up '{identifier}' on {}", paired.name))?;
                 print(&found.detail)?;

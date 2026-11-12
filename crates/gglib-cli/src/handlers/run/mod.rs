@@ -8,7 +8,6 @@ use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use gglib_core::domain::runs::is_run_id;
 
-use crate::bootstrap::CliContext;
 use crate::daemon_client::ensure_daemon;
 
 /// `gglib run`.
@@ -50,21 +49,21 @@ pub(crate) enum RunCommand {
 }
 
 /// Route a `gglib run` subcommand.
-pub(crate) async fn dispatch(ctx: &CliContext, args: RunArgs) -> Result<()> {
+pub(crate) async fn dispatch(args: RunArgs) -> Result<()> {
     match args.command {
         RunCommand::Start {
             model,
             prompt,
             follow,
-        } => start::start(&ensure_daemon(ctx).await?, &model, &prompt, follow).await,
-        RunCommand::List => read::list(&ensure_daemon(ctx).await?).await,
+        } => start::start(&ensure_daemon().await?, &model, &prompt, follow).await,
+        RunCommand::List => read::list(&ensure_daemon().await?).await,
         RunCommand::Show { id, follow } => {
             checked(&id)?;
-            read::show(&ensure_daemon(ctx).await?, &id, follow).await
+            read::show(&ensure_daemon().await?, &id, follow).await
         }
         RunCommand::Cancel { id } => {
             checked(&id)?;
-            read::cancel(&ensure_daemon(ctx).await?, &id).await
+            read::cancel(&ensure_daemon().await?, &id).await
         }
     }
 }

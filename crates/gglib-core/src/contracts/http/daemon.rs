@@ -385,8 +385,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
 ];
 
 /// The `type` of the daemon's 401 when it wanted its token, so a client can
-/// tell it from the API key's `INVALID_API_KEY` and show
-/// [`DAEMON_TOKEN_REQUIRED_MESSAGE`] rather than ask for a key.
+/// tell it from another program's and show [`DAEMON_TOKEN_REQUIRED_MESSAGE`].
 pub const DAEMON_TOKEN_REQUIRED_TYPE: &str = "DAEMON_TOKEN_REQUIRED";
 
 /// The `error` of that 401: what it wants and how to get it.

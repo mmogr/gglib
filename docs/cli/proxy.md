@@ -130,10 +130,8 @@ it start one when none is up; a foreign process on its port is reported, not
 fought.
 
 - `status` says whether it runs, its pid, and whether the proxy is up.
-- `run` runs it in the foreground. `--share-lan` binds it on every
-  interface and advertises it over mDNS, and the management API then demands
-  its bearer token; `--allowed-host` accepts one more Host header value,
-  beside loopback and IP literals.
+- `run` runs it in the foreground. It listens on `127.0.0.1` only;
+  `--allowed-host` accepts one more Host header value beside loopback.
 - `stop` stops the daemon, and with it every llama-server it owns.
 
 ## `gui` and `web`
@@ -142,9 +140,9 @@ fought.
 contributors). `gglib web` makes sure the daemon is up and prints the web
 page's address; the daemon serves the page and the API from one loopback
 port, and the link carries the daemon's token, so `web` opens your browser
-on it unless `--no-open`. To reach the page from another machine on your
-network, `gglib web --share-lan` runs the daemon in the foreground with the
-page on the network: it is shorthand for `gglib daemon run --share-lan`.
+on it unless `--no-open`. The page is for this machine only: the daemon
+listens on loopback, and another machine reaches models through the proxy
+(`proxy --host`) or a paired tunnel (`gglib remote`).
 
 ## Flags
 

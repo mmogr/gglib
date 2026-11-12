@@ -136,17 +136,6 @@ impl BearerPolicy {
         }
     }
 
-    /// A token that can never change and is never required. For hosts with no
-    /// settings to read, such as tests and embedded servers.
-    #[must_use]
-    pub fn fixed(key: Option<&str>) -> Self {
-        Self {
-            pinned: key.map(Arc::from),
-            floor: None,
-            settings: None,
-        }
-    }
-
     /// The token a request must present right now, or `None` while this
     /// endpoint is unauthenticated.
     ///

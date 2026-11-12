@@ -232,9 +232,6 @@ pub enum Commands {
     /// Ensures the daemon is running, prints the dashboard link and opens it in your browser.
     #[command(display_order = 21)]
     Web {
-        /// Shorthand for `gglib daemon run --share-lan` (foreground)
-        #[arg(long)]
-        share_lan: bool,
         /// Print the link without opening a browser
         #[arg(long)]
         no_open: bool,
