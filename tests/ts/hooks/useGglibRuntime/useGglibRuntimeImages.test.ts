@@ -16,11 +16,11 @@ vi.mock('../../../../src/services/platform', () => ({
 }));
 
 import { FakeDaemon } from '../../fixtures/fakeDaemon';
-import { FakeFarDaemon } from '../../fixtures/fakeFarDaemon';
+import { FAR_OLDER, FakeFarDaemon } from '../../fixtures/fakeFarDaemon';
 import { bytesOf, png, pngFile } from '../../fixtures/fakeImageStore';
 import { conversation, mount, regenerate, textOf } from './runtimeHarness';
 import { resetRemoteState } from '../../../../src/services/remoteRegistry';
-import { FAR_CANNOT_TAKE_IMAGES, NOT_IN_THIS_STORE } from '../../../../src/hooks/useGglibRuntime/imageRefusals';
+import { NOT_IN_THIS_STORE } from '../../../../src/hooks/useGglibRuntime/imageRefusals';
 import type { SentImage } from '../../../../src/hooks/useGglibRuntime/imageAttachments';
 import type { UseGglibRuntimeOptions } from '../../../../src/hooks/useGglibRuntime/useGglibRuntime';
 
@@ -231,17 +231,18 @@ describe('useGglibRuntime images on a far chat', () => {
     expect(daemons.here.requests).toEqual([]);
   });
 
-  it('a far gglib from before images is named as that, at the upload and at the turn', async () => {
+  it('a far gglib too old to say what it serves is asked to be updated, at the turn and at the upload', async () => {
     const hook = await mount(far);
     await attach(hook, pngFile(800, 600));
-    daemons.noImages = true;
+    daemons.older = true;
 
     await sendDraft(hook, 'what is this?');
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(new Error(FAR_CANNOT_TAKE_IMAGES)));
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onError.mock.calls.at(-1)![0].message).toBe(FAR_OLDER);
     await waitFor(() => expect(draft(hook).text).toBe('what is this?'));
 
     await attach(hook, pngFile(640, 480));
-    expect(onImageRefused).toHaveBeenCalledWith(FAR_CANNOT_TAKE_IMAGES);
+    expect(onImageRefused).toHaveBeenCalledWith(`The image could not be uploaded: ${FAR_OLDER}`);
   });
 
   /** The ids of the composer's images: each a composer id until it is sent. */

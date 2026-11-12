@@ -3,7 +3,9 @@
 //! request to that machine, and the name it is shown by.
 //!
 //! The name is that machine's own `machine_name`, read from its `/v1/models`
-//! once each connect has come up. Not sooner: the read goes through the live
+//! once each connect has come up, by the read that also keeps what that
+//! machine says of itself for the connection (`far_said.rs`), and from a
+//! gglib too old to say as well. Not sooner: the read goes through the live
 //! connection, which does not exist until `dial` installs it. It is kept on
 //! the stored pairing, so every surface shows it from the record without
 //! asking that machine anything, and it is refreshed on every connect. It is
@@ -75,7 +77,7 @@ impl RemoteOps {
     /// `join` to answer with.
     ///
     /// Never a reason for the join to fail. The read is one request, bounded
-    /// by [`FarProxy::models`]' three seconds; a machine that does not answer
+    /// by [`FarProxy::about`]'s three seconds; a machine that does not answer
     /// in time, refuses, or gives no name keeps the name it had, and the next
     /// connect tries again. Each of those is logged at debug and nothing
     /// more, because the connection it happened on is up.
@@ -92,7 +94,7 @@ pub(super) async fn learn_name_through(
     connected: &str,
 ) -> Option<String> {
     let read = match far {
-        Ok(far) => far.models().await.map(|listed| listed.machine_name),
+        Ok(far) => far.about().await.map(|about| about.machine_name),
         Err(e) => Err(FarError::Failed(e)),
     };
     match read {

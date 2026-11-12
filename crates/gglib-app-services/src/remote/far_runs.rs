@@ -2,8 +2,11 @@
 //! run's events as they come.
 //!
 //! The events are the one stream here, read through the streaming client.
+//! Each call is made only to a machine that says it shares its runs
+//! (`far_said.rs`).
 
 use gglib_core::domain::runs::is_run_id;
+use gglib_proxy::models::Feature;
 
 use super::FarProxy;
 use crate::error::GuiError;
@@ -13,8 +16,11 @@ impl FarProxy {
     ///
     /// # Errors
     ///
-    /// `Unavailable` when the request did not get through.
+    /// `Conflict` when that machine does not share its runs, or runs a gglib
+    /// too old to say ([`FarProxy::offers`]); `Unavailable` when the request
+    /// did not get through.
     pub async fn list_runs(&self) -> Result<reqwest::Response, GuiError> {
+        self.offers(&[Feature::Runs]).await?;
         self.send(self.bounded.get(self.url("/runs"))).await
     }
 
@@ -22,9 +28,11 @@ impl FarProxy {
     ///
     /// # Errors
     ///
-    /// As [`FarProxy::add_turn`].
+    /// `ValidationFailed` for a run id the hub would not accept, before
+    /// anything is sent; otherwise as [`FarProxy::list_runs`].
     pub async fn cancel_run(&self, run_id: &str) -> Result<reqwest::Response, GuiError> {
         let path = format!("{}/cancel", run_path(run_id)?);
+        self.offers(&[Feature::Runs]).await?;
         self.send(self.bounded.post(self.url(&path))).await
     }
 
@@ -33,13 +41,14 @@ impl FarProxy {
     ///
     /// # Errors
     ///
-    /// As [`FarProxy::add_turn`].
+    /// As [`FarProxy::cancel_run`].
     pub async fn run_events(
         &self,
         run_id: &str,
         after: u32,
     ) -> Result<reqwest::Response, GuiError> {
         let path = format!("{}/events?after={after}", run_path(run_id)?);
+        self.offers(&[Feature::Runs]).await?;
         let request = self
             .streaming
             .get(self.url(&path))

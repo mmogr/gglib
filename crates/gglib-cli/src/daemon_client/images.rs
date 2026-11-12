@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_util::StreamExt as _;
-use gglib_app_services::FarProxy;
+use gglib_app_services::{FarProxy, GuiError};
 use gglib_core::contracts::http::images::{
     DrawingAvailability, ImageGenerationsRequest, ImageStreamEvent,
 };
@@ -147,7 +147,9 @@ impl ImageGenerationPort for ImageGenerator {
     /// `/v1/images/drawing` there), as it gave it: its image model when it
     /// can draw, its code and reason when it cannot, and its image models;
     /// `chosen` goes as `?image_model=<id>`. A daemon that cannot be
-    /// reached, or is too old to have the route, cannot draw.
+    /// reached, or is too old to have the route, cannot draw; nor can a
+    /// paired machine that does not draw for this one, or runs a gglib too
+    /// old to say, in the sentence `FarProxy` says it in.
     async fn drawing(&self, chosen: Option<u32>) -> DrawingAvailability {
         let unavailable = |reason: String| drawing_refusal(&ImageError::Unavailable { reason });
         let answered = match self {
@@ -156,7 +158,10 @@ impl ImageGenerationPort for ImageGenerator {
                 let path = format!("{}{asked}", paths::IMAGES_DRAWING_PATH);
                 daemon.get(&path).send().await.map_err(|e| e.to_string())
             }
-            Self::Far(proxy) => proxy.drawing(chosen).await.map_err(|e| e.to_string()),
+            Self::Far(proxy) => match proxy.drawing(chosen).await {
+                Err(GuiError::Conflict(sentence)) => return unavailable(sentence),
+                answered => answered.map_err(|e| e.to_string()),
+            },
         };
         let response = match answered {
             Ok(response) => response,
@@ -164,11 +169,11 @@ impl ImageGenerationPort for ImageGenerator {
         };
         if !response.status().is_success() {
             let remedy = match self {
-                Self::Daemon(_) => "restart it so it runs this version",
-                Self::Far(_) => "it may run a gglib older than this one",
+                Self::Daemon(_) => "; restart it so it runs this version",
+                Self::Far(_) => "",
             };
             return unavailable(format!(
-                "{} answered {} when asked whether it can draw; {remedy}",
+                "{} answered {} when asked whether it can draw{remedy}",
                 self.who(),
                 response.status().as_u16()
             ));

@@ -57,8 +57,8 @@ crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320
 crates/gglib-cli/src/commands.rs 325
 crates/gglib-cli/src/daemon_client/calls.rs 385
-crates/gglib-cli/src/daemon_client/images.rs 321
-crates/gglib-cli/src/daemon_client/images_tests.rs 466
+crates/gglib-cli/src/daemon_client/images.rs 326
+crates/gglib-cli/src/daemon_client/images_tests.rs 493
 crates/gglib-cli/src/daemon_client/wire_tests.rs 301
 crates/gglib-cli/src/handlers/agent_chat/config.rs 477
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 460
