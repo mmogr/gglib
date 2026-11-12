@@ -780,7 +780,8 @@ readability.
 
 ## What the other machine can reach
 
-Everything the desktop's proxy serves — `/v1/models`, a model's detail at
+Everything the desktop's proxy serves — `/v1/models` and one entry of it at
+`/v1/models/{name}`, a model's detail at
 `/v1/gglib/models/{name}/detail`, `POST /v1/gglib/models/{name}/load`,
 `/v1/chat/completions`, `POST /v1/embeddings`, `POST /v1/images/generations`, `GET /v1/gglib/images/drawing`, `/v1/gglib/runs`, `/v1/gglib/chats`, `POST /v1/gglib/chats/{id}/changes`, `POST /v1/gglib/chats/{id}/pictures`, `/v1/gglib/attachments`, the dashboard, `POST /v1/gglib/proxy/cache/clear`, `POST /v1/gglib/proxy/shutdown` —
 with one exception. gglib's own routes are all under `/v1/gglib/`; the rest
