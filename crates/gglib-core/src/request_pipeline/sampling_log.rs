@@ -1,6 +1,6 @@
 //! The one `debug!` line that describes a request's whole sampling decision.
 //!
-//! [`apply`](super::apply) renders it once, after stage 4 has resolved the
+//! [`apply`](super::apply()) renders it once, after stage 4 has resolved the
 //! request. Neither reasoning control is echoed by any readback ([ADR 0007]
 //! finding 7a), so for those two this line is the only record of what was
 //! sent.
