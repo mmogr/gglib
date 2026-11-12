@@ -270,7 +270,7 @@ crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
 crates/gglib-proxy/tests/integration_models_by_id.rs 425
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 584
-crates/gglib-proxy/tests/integration_turns.rs 486
+crates/gglib-proxy/tests/integration_turns.rs 529
 crates/gglib-runtime/src/binary_install/checkout.rs 398
 crates/gglib-runtime/src/binary_install/checkout_tests.rs 457
 crates/gglib-runtime/src/binary_install/install_tests.rs 438
