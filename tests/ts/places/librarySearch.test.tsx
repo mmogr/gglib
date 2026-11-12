@@ -251,7 +251,8 @@ describe('the one search', () => {
     await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(b);
     await waitFor(() => expect(at()).toBe('/get/owner/b'));
-    expect([a.tabIndex, b.tabIndex]).toEqual([-1, 0]);
+    // The pick renders a beat after the address moves.
+    await waitFor(() => expect([a.tabIndex, b.tabIndex]).toEqual([-1, 0]));
   });
 
   it('a run of keys opens the repo it ends on, read once, as one history entry', async () => {
@@ -308,7 +309,10 @@ describe('the one search', () => {
     a.focus();
     await user.keyboard('{ArrowDown}');
     await waitFor(() => expect(at()).toBe('/get/owner/b'));
-    // Pressed on the picked row: the second run replaces it.
+    // Pressed on the picked row, once it shows as picked: the second run
+    // replaces it.
+    const b = screen.getByRole('option', { name: /owner\/b/ });
+    await waitFor(() => expect(b).toHaveAttribute('aria-selected', 'true'));
     await user.keyboard('{ArrowDown}');
     await waitFor(() => expect(at()).toBe('/get/owner/c'));
     await act(() => router.navigate(-1));
