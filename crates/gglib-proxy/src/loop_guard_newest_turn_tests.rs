@@ -1,8 +1,8 @@
 //! What a verdict is about: the newest turn each detector judged, not the
 //! worst moment in the transcript (ADR 0021).
 //!
-//! A module of its own because `loop_guard_tests.rs` is frozen at its size by
-//! the complexity ratchet. Helpers are duplicated for the same reason.
+//! A module of its own beside `loop_guard_tests.rs`. Helpers are duplicated
+//! from it.
 
 use super::*;
 use serde_json::{Value, json};

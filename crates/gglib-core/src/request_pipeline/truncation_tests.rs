@@ -1,6 +1,4 @@
 //! Tests for [`super::truncate_history`].
-//!
-//! Split out via `#[path]` so the stage itself stays inside the file budget.
 
 use super::{super::tests_support::chars, *};
 use serde_json::json;

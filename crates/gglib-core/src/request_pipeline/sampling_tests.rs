@@ -1,6 +1,4 @@
 //! Tests for [`super::resolve_sampling`] and the sampling layer cascade.
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 use crate::domain::{ParamSource, ReasoningEffort};

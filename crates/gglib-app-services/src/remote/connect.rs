@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use super::RemoteOps;
-use super::far_proxy::FarProxy;
+use super::far_proxy::{FarProxy, Said};
 use super::paired_machine::far_credentials;
 use super::slot::{Busy, Taken};
 use super::stored_pairing::names_the_same_machine;
@@ -46,6 +46,8 @@ pub(super) struct LiveConnect {
     /// away, or negative while it is here. Written by the watcher, read by
     /// `status`; the port is bound either way.
     away_since: Arc<AtomicI64>,
+    /// What the far machine last said of itself, for every `far` built on it.
+    said: Said,
 }
 
 impl LiveConnect {
@@ -210,9 +212,15 @@ impl RemoteOps {
                 "not connected to a remote machine — `gglib remote join` first".to_owned(),
             ));
         };
+        let said = self
+            .live_connect
+            .lock()
+            .await
+            .full()
+            .map(|l| l.said.clone());
         let stored = self.settings().await?.remote_pairing;
         let credentials = far_credentials(stored.as_ref(), &connection.ticket_fingerprint)?;
-        FarProxy::new(&connection.base_url, &credentials)
+        Ok(FarProxy::new(&connection.base_url, &credentials)?.keeping(said.unwrap_or_default()))
     }
 
     /// [`far`](Self::far), when `machine` is the one connected to.

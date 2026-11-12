@@ -42,6 +42,9 @@ This crate implements:
   nothing is sent back. A reply cut off in its text is taken as if it had
   stopped, with a `system_warning` that it was cut off. The words after a
   Draw's picture are the exception and are always answered for
+- **Refusals** — a request the endpoint refused with an `UpstreamRefusal` ends
+  the run with `AgentError::Refused`, its `error` event carrying the
+  endpoint's code
 - **Context pruning** — drops old tool messages when the conversation exceeds the
   configured character budget
 

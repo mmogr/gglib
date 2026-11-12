@@ -152,7 +152,7 @@ async fn assert_upstream_freed(arrivals: &mut Arrivals) {
 
 /// The proxy's dashboard.
 async fn status(base: &str) -> Value {
-    reqwest::get(format!("{base}/v1/proxy/status"))
+    reqwest::get(format!("{base}/v1/gglib/proxy/status"))
         .await
         .expect("status answers")
         .json()

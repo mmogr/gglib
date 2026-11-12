@@ -1,4 +1,4 @@
-//! Integration tests for `POST /v1/proxy/cache/clear`.
+//! Integration tests for `POST /v1/gglib/proxy/cache/clear`.
 //!
 //! Spawns the real `gglib_proxy::serve` (not a hand-rolled router), sharing
 //! its mock ports with `integration_slot_roundtrip.rs` via `tests/fixtures`
@@ -84,7 +84,7 @@ async fn cache_clear_recycles_the_model_when_disk_cache_is_disabled() {
     let (base_url, cancel, stops) = spawn_proxy(false, None).await;
 
     let resp = Client::new()
-        .post(format!("{base_url}/v1/proxy/cache/clear"))
+        .post(format!("{base_url}/v1/gglib/proxy/cache/clear"))
         .send()
         .await
         .expect("request should succeed");
@@ -110,7 +110,7 @@ async fn cache_clear_with_session_id_does_not_recycle_the_model() {
     let (base_url, cancel, stops) = spawn_proxy(true, Some(tmp_dir.path().to_path_buf())).await;
 
     let resp = Client::new()
-        .post(format!("{base_url}/v1/proxy/cache/clear"))
+        .post(format!("{base_url}/v1/gglib/proxy/cache/clear"))
         .header("X-Gglib-Session-Id", "some_session")
         .send()
         .await
@@ -134,7 +134,7 @@ async fn cache_clear_returns_400_on_invalid_session_id() {
     let (base_url, cancel, _stops) = spawn_proxy(true, Some(tmp_dir.path().to_path_buf())).await;
 
     let resp = Client::new()
-        .post(format!("{base_url}/v1/proxy/cache/clear"))
+        .post(format!("{base_url}/v1/gglib/proxy/cache/clear"))
         .header("x-gglib-session-id", "../etc/passwd")
         .send()
         .await
@@ -142,11 +142,12 @@ async fn cache_clear_returns_400_on_invalid_session_id() {
 
     assert_eq!(resp.status(), 400);
     let body: serde_json::Value = resp.json().await.expect("json response");
+    assert_eq!(body["error"]["code"], "invalid_request", "{body}");
     assert!(
-        body["error"]
+        body["error"]["message"]
             .as_str()
-            .expect("error is string")
-            .contains("invalid session id")
+            .expect("a message")
+            .contains("invalid session ID")
     );
 
     cancel.cancel();
@@ -160,7 +161,7 @@ async fn cache_clear_clears_all_when_no_session_id() {
     let (base_url, cancel, _stops) = spawn_proxy(true, Some(tmp_dir.path().to_path_buf())).await;
 
     let resp = Client::new()
-        .post(format!("{base_url}/v1/proxy/cache/clear"))
+        .post(format!("{base_url}/v1/gglib/proxy/cache/clear"))
         .send()
         .await
         .expect("request should succeed");
@@ -186,7 +187,7 @@ async fn cache_clear_populates_per_session_cleared() {
     let (base_url, cancel, _stops) = spawn_proxy(true, Some(tmp_dir.path().to_path_buf())).await;
 
     let resp = Client::new()
-        .post(format!("{base_url}/v1/proxy/cache/clear"))
+        .post(format!("{base_url}/v1/gglib/proxy/cache/clear"))
         .header("x-gglib-session-id", "test-session-abc")
         .send()
         .await
@@ -214,18 +215,19 @@ async fn cache_clear_returns_500_when_slot_dir_missing() {
     let (base_url, cancel, _stops) = spawn_proxy(true, None).await;
 
     let resp = Client::new()
-        .post(format!("{base_url}/v1/proxy/cache/clear"))
+        .post(format!("{base_url}/v1/gglib/proxy/cache/clear"))
         .send()
         .await
         .expect("request should succeed");
 
     assert_eq!(resp.status(), 500);
     let body: serde_json::Value = resp.json().await.expect("json response");
+    assert_eq!(body["error"]["code"], "internal_error", "{body}");
     assert!(
-        body["error"]
+        body["error"]["message"]
             .as_str()
-            .expect("error is string")
-            .contains("slot_dir not configured")
+            .expect("a message")
+            .contains("no slot folder")
     );
 
     cancel.cancel();

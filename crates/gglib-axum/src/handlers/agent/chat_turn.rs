@@ -1,5 +1,5 @@
 //! A chat run with builtins: the proxy's
-//! `PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`,
+//! `PUT /v1/gglib/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`,
 //! or `tools=none`, for a chat a paired phone keeps itself, run here because
 //! the agent loop, its slot and the image tool are the daemon's. Its query
 //! is a [`ChatQuery`]: whether it draws, and which of the servers open to

@@ -8,33 +8,41 @@
 //! as writing a code, and what the scan cannot see, is in `error_codes_scan`.
 //!
 //! A code relayed from llama-server or from a far machine is not gglib's and
-//! is not here. To add a code, write it, add its row here, and run
+//! is not here; [`is_gglib_code`] asks which a code is, for an agent run
+//! that ends with the code its model's endpoint refused it with. To add a
+//! code, write it, add its row here, and run
 //! `GGLIB_WRITE_ERROR_CODES=1 cargo test -p gglib-proxy error_codes` to
 //! rewrite the file.
 
 use serde::Serialize;
 
+#[cfg(test)]
 /// The published file's shape. A change that would break a client that reads
 /// version 0 is a new version.
 const VERSION: u32 = 0;
 
+#[cfg(test)]
 /// The published file, from the repository root.
 const PUBLISHED: &str = "docs/error-codes.json";
 
+#[cfg(test)]
 const ABOUT: &str = "The error codes gglib writes itself, rather than relays from \
 llama-server, on its proxy and the daemon's runs. The proxy refuses with \
-{\"error\":{\"message\":...,\"type\":...,\"code\":...}}, and a stream already under way can end \
+{\"error\":{\"message\":...,\"type\":...,\"code\":...}}, whatever refused: a route, a guard, a \
+body, query or path that does not read, a method a route does not take, or a path no route \
+serves. Past its guards, the MCP gateway at /mcp answers in JSON-RPC, or with a bare status \
+as MCP's transport does. A stream already under way can end \
 with that object as a data: frame. A run that failed carries {\"code\":...,\"message\":...} as its \
-error, on /v1/runs and /api/runs. The daemon's /api/runs refuses with \
+error, on /v1/gglib/runs and /api/runs. The daemon's /api/runs refuses with \
 {\"error\":...,\"status\":...,\"type\":<code>}, and the proxy answers a paired device's turn on a \
 hub chat with the daemon's refusal of it. The daemon's guards in front of /api refuse with \
 upper-case types of their own, such as HOST_NOT_ALLOWED, which are not listed here. Match on \
 code. type is the type the proxy writes beside the code: null where it writes more than one, \
 or none. status is the HTTP status of every response that carries the code: null where those \
 responses' writers do not all fix the same one, or where no response carries it, only a stream \
-frame or a run's error. An availability answer is not such a response: GET /v1/images/drawing \
-and the daemon's GET /api/images/drawing always answer 200, and the code in that body is the \
-one a request to draw would be refused with.";
+frame or a run's error. An availability answer is not such a response: GET /v1/gglib/images/drawing \
+and the daemon's GET /api/images/drawing answer 200 to any query that reads, and the code in \
+that body is the one a request to draw would be refused with.";
 
 /// One code: what a client matches on, the `type` written beside it, the
 /// status of the response that carries it, and a line on what it means.
@@ -110,7 +118,7 @@ const CODES: &[ErrorCode] = &[
     row("image_generation_failed", SERVER, Some(502), "No picture was drawn: the image runtime took the render and failed it, or lost it (the message carries its words; try another prompt or size, or retry); the image model was stopped while it drew; or a run sent with Draw ended because its model's first reply did not call the image tool (try again, or pick a model that calls tools)."),
     row("image_render_stalled", SERVER, Some(504), "The render made no progress for three minutes, or ran past its thirty-minute limit, so the image model was stopped; retry."),
     row("model_cannot_read_images", INVALID, Some(400), "A message carries an image and the model has no projector linked; link one with gglib model update <model> --projector <path>."),
-    row("request_too_large", INVALID, Some(413), "The request body is over the 32 MiB limit."),
+    row("request_too_large", INVALID, Some(413), "The request body is over its route's limit: 32 MiB for a chat completion, an image request or a run, 2 MiB for an embeddings request, a load or a shutdown."),
     // An image a message carries by id (`AttachmentError`).
     row("image_too_large", INVALID, Some(413), "An uploaded image is over the 8 MiB one image may be."),
     row("unsupported_image", INVALID, Some(400), "An uploaded file is not a PNG or a JPEG whose size can be read."),
@@ -128,6 +136,11 @@ const CODES: &[ErrorCode] = &[
     row("invalid_api_key", INVALID, Some(401), "The bearer token is missing or wrong."),
     row("device_not_paired", INVALID, Some(403), "A request came through the tunnel without a paired device's key."),
     row("mcp_not_allowed_over_tunnel", INVALID, Some(403), "The MCP gateway is never reachable through the tunnel."),
+    // What no route answers.
+    row("unknown_route", INVALID, Some(404), "No route serves the path. gglib's own routes are under /v1/gglib/."),
+    row("method_not_allowed", INVALID, Some(405), "The route does not take the request's method; the Allow header lists the ones it does."),
+    // Stopping the daemon (`POST /v1/gglib/proxy/shutdown`).
+    row("no_daemon_to_stop", INVALID, Some(409), "The proxy runs outside the gglib daemon, so there is nothing to stop from here."),
     // The runs and the hub's chats.
     row("device_not_named", INVALID, Some(403), "The route serves a paired device through the tunnel, and the request did not name one."),
     row("runs_unavailable", UNAVAILABLE, Some(503), "This proxy runs outside the gglib daemon, so it holds no runs."),
@@ -164,10 +177,11 @@ const CODES: &[ErrorCode] = &[
     row("stagnation_detected", UNTYPED, None, "The agent gave the same reply too often, so the run was stopped."),
     row("too_many_tool_calls", UNTYPED, None, "The model asked for more tool calls at once than are allowed."),
     row("turn_too_long", UNTYPED, None, "The model's turn was cut off at its token limit while it wrote a tool call, or before it wrote any text, so the agent run stopped rather than use half of it; retry, or turn thinking off."),
-    row("agent_error", UNTYPED, None, "The agent loop failed; the run's last event says why."),
+    row("agent_error", UNTYPED, None, "The agent loop failed; the run's last event says why. A run whose model's server refused its request ends with the refusal's code instead when it is one of these."),
     row("transcript_not_saved", UNTYPED, None, "The reply could not be saved to its conversation."),
 ];
 
+#[cfg(test)]
 /// The published file's whole text.
 fn render() -> String {
     #[derive(Serialize)]
@@ -186,17 +200,30 @@ fn render() -> String {
     text
 }
 
+/// Whether `code` is one of gglib's own codes, a row of the table, rather
+/// than one relayed from llama-server or the tunnel, or one this build does
+/// not know.
+#[must_use]
+pub fn is_gglib_code(code: &str) -> bool {
+    CODES.iter().any(|row| row.code == code)
+}
+
+#[cfg(test)]
 #[path = "error_codes_tokens.rs"]
 mod error_codes_tokens;
 
+#[cfg(test)]
 #[path = "error_codes_items.rs"]
 mod error_codes_items;
 
+#[cfg(test)]
 #[path = "error_codes_scan.rs"]
 mod error_codes_scan;
 
+#[cfg(test)]
 #[path = "error_codes_tests.rs"]
 mod error_codes_tests;
 
+#[cfg(test)]
 #[path = "error_codes_scan_tests.rs"]
 mod error_codes_scan_tests;

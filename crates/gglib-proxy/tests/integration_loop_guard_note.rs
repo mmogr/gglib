@@ -4,11 +4,9 @@
 //! *upstream* receives. These drive the real proxy over HTTP against an
 //! upstream that keeps the body it was sent, so every claim about the note is
 //! read off the bytes llama-server would have parsed: that the request was
-//! forwarded at all, that the note is the last thing in the last message, that
-//! it names what repeated, and that nothing else about the request moved.
-//!
-//! Their own file because `integration_loop_guard.rs` is frozen at its size by
-//! the complexity ratchet.
+//! forwarded at all, that the note is the last thing in the last message,
+//! that it names what repeated, and that nothing else about the request
+//! moved.
 
 use std::sync::Arc;
 
@@ -52,7 +50,7 @@ async fn forward_under(guard: bool, history: Vec<Value>) -> (u16, Option<Value>,
     let _ = resp.bytes().await;
 
     let status_json: Value = Client::new()
-        .get(format!("{proxy_url}/v1/proxy/status"))
+        .get(format!("{proxy_url}/v1/gglib/proxy/status"))
         .send()
         .await
         .expect("status request")

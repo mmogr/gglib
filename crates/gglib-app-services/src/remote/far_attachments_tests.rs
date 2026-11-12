@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gglib_core::domain::AttachmentId;
+use gglib_proxy::models::{Feature, GglibInfo};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
@@ -61,11 +62,12 @@ async fn far_proxy(
         &credentials,
         bounded,
         streaming,
-    );
+    )
+    .knowing(GglibInfo::this_build(Feature::ALL));
     (seen, far)
 }
 
-/// The bytes go to `POST /v1/attachments` as they came, with the key and the
+/// The bytes go to `POST /v1/gglib/attachments` as they came, with the key and the
 /// caller's content type, and the far machine's answer comes back although
 /// it took longer than a bounded request may: the streaming client sent it.
 #[tokio::test]
@@ -82,7 +84,7 @@ async fn an_upload_is_posted_whole_and_outlasts_the_bounded_limit() {
     assert_eq!(answer.text().await.unwrap(), r#"{"id":"x"}"#);
     let seen = std::mem::take(&mut *seen.lock().unwrap());
     assert!(
-        seen.head.starts_with("post /v1/attachments http/1.1"),
+        seen.head.starts_with("post /v1/gglib/attachments http/1.1"),
         "{}",
         seen.head
     );
@@ -99,7 +101,7 @@ async fn an_upload_is_posted_whole_and_outlasts_the_bounded_limit() {
     assert!(seen.body == image, "the body is the image, byte for byte");
 }
 
-/// An image is read at `GET /v1/attachments/{id}` with the key, and its
+/// An image is read at `GET /v1/gglib/attachments/{id}` with the key, and its
 /// bytes and type come back as the far machine sent them, through the
 /// streaming client.
 #[tokio::test]
@@ -119,7 +121,7 @@ async fn a_fetch_reads_the_image_by_its_id_and_outlasts_the_bounded_limit() {
     let seen = std::mem::take(&mut *seen.lock().unwrap());
     assert!(
         seen.head
-            .starts_with(&format!("get /v1/attachments/{id} http/1.1")),
+            .starts_with(&format!("get /v1/gglib/attachments/{id} http/1.1")),
         "{}",
         seen.head
     );

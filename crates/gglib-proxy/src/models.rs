@@ -254,6 +254,10 @@ pub struct Usage {
 mod models_list;
 pub use models_list::{IMAGE_GENERATION_CAPABILITY, ModelInfo, ModelsResponse, VISION_CAPABILITY};
 
+#[path = "models_gglib.rs"]
+mod models_gglib;
+pub use models_gglib::{Feature, GglibInfo, THIS_VERSION};
+
 // =============================================================================
 // Error Response Types
 // =============================================================================

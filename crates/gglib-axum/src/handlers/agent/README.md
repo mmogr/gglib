@@ -63,6 +63,11 @@ model is offered has no such argument, and nothing sent to the chat model
 holds the id. Nothing is remembered here: the surface that keeps the choice
 says it on each run that draws.
 
+A run whose request the model's endpoint refused, this machine's or a
+paired machine's, ends `failed` with the refusal's code when it is one of
+gglib's own (`gglib_proxy::error_codes::is_gglib_code`), and `agent_error`
+otherwise (`run::run_error`).
+
 Inline `<think>` reclassification is handled upstream by
 [`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
 handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
@@ -239,7 +244,7 @@ key of a device's turn names a path.
 # A paired device's turn
 
 `hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
-starts: `PUT /v1/runs/{id}?kind=agent` on the proxy's door carries only a
+starts: `PUT /v1/gglib/runs/{id}?kind=agent` on the proxy's door carries only a
 chat's id and the device's message, with any image named by the id its
 upload answered, and the chat's Thinking choice on the turn that changes it;
 a turn may be its images alone. An image the turn or the
@@ -332,7 +337,7 @@ device's in three things only:
   with `400 invalid_request`.
 
 `chat_turn` is the starter's other door, the proxy's
-`PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired
+`PUT /v1/gglib/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired
 phone keeps itself, sent whole as an `OpenAI` request and run through the
 loop so that it can use the servers it names and draw, its query read as a
 `ChatQuery`. `tools=none` is such a chat with no server: offered no MCP

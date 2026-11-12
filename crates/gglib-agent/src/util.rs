@@ -12,6 +12,7 @@ pub(crate) async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &st
     let _ = tx
         .send(AgentEvent::Error {
             message: message.to_owned(),
+            code: None,
         })
         .await;
 }

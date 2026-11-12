@@ -50,7 +50,13 @@ remote/
                       each connect and kept on the record
   far_proxy.rs      — FarProxy, the far machine as every request made
                       *through* the tunnel reaches it: its address, its key,
-                      which machine it is, its name, and the two clients
+                      which machine it is, its name, what it said of
+                      itself, and the two clients
+  far_said.rs       — what the far machine says of itself (the `gglib`
+                      object on its model list), kept for the connection,
+                      and the check each of gglib's own calls passes first:
+                      a gglib too old to say is asked to update, and a
+                      feature it does not list is refused
   far_chats.rs      — FarProxy's requests for the far machine's chats, and
                       a turn on one, carried on for this machine's chat page
   far_runs.rs       — FarProxy's requests for the runs this device may see
@@ -62,8 +68,7 @@ remote/
                       the streaming client, which limits silence and not
                       the whole exchange
   far_read.rs       — the far answers this side reads rather than passes
-                      on: the model list, one model, a load, the shutdown,
-                      and the far build too old to publish model ids
+                      on: the model list, one model, a load, the shutdown
   gateway.rs        — RemoteGateway: the port the proxy tells (a tunnelled
                       request arrived) and asks whether a session is live,
                       and the invite a session holds
@@ -362,10 +367,18 @@ then disconnects. One-way: nothing here can start that daemon again.
 
 The far model list is read into the proxy's own `ModelsResponse` and handed
 on as `PairedModels`: the machine, its row of the use-don't-change table
-(`Machine::actions`), and every entry, profile variants included. A far build
-from before models carried ids fails that read for want of `gglib_id`, and has
-no detail route, so it answers a lookup with a 404 that names no code; both
-are a `Conflict` that asks for that machine to be updated, with no fallback.
+(`Machine::actions`), and every entry, profile variants included.
+
+The list's `gglib` object says that machine's version and the features it
+serves. It is read on each connect, with the name, and whenever the list is,
+and kept with the connection. Each of gglib's own calls (chats and their
+images, runs, drawing, a model's detail, a load, the shutdown) passes
+`FarProxy::offers` first: a list with no `gglib` object is a gglib from before
+devices said their version, a `Conflict` asking for that machine to be
+updated; a feature it does not list is a `Conflict` saying so. Only a kept
+answer that serves the call skips the read, so a machine updated while this
+one stayed connected is served at once. No version is compared and nothing
+falls back.
 
 # What the gateway is for
 

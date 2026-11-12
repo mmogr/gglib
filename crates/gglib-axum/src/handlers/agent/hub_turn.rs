@@ -1,5 +1,5 @@
 //! A turn on one of this machine's chats: a paired device's, at the proxy's
-//! `PUT /v1/runs/{id}?kind=agent`, or this machine's own, in its own scope
+//! `PUT /v1/gglib/runs/{id}?kind=agent`, or this machine's own, in its own scope
 //! ([`RunScope::Local`]). Both run here because the agent loop is composed
 //! here, and both go through [`start`].
 //!
@@ -13,7 +13,7 @@
 //! iteration limit they do not name from this machine's settings), and with
 //! thinking off
 //! when the turn says so or the chat remembers it (`thinking`). The reply
-//! runs on the chat's model, loaded as `/v1/models/{name}/load` loads it
+//! runs on the chat's model, loaded as `/v1/gglib/models/{name}/load` loads it
 //! when it is not running, as an agent run in the turn's scope whose every
 //! request goes through this machine's endpoint, saved to the chat.
 //!

@@ -1,5 +1,5 @@
 /**
- * Proxy dashboard pieces, as the `/v1/proxy/status/stream` frame sends them.
+ * Proxy dashboard pieces, as the `/v1/gglib/proxy/status/stream` frame sends them.
  *
  * Nothing on the dashboard contract uses `skip_serializing_if` — `gglib-proxy`
  * uses it elsewhere, on `models.rs` and the MCP types, but on nothing the

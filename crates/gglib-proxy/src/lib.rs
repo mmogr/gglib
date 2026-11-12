@@ -31,10 +31,9 @@ pub(crate) mod connections;
 pub mod dashboard;
 pub(crate) mod embeddings;
 pub(crate) mod fallback_session;
-// Test-only: the published error codes' table and the checks that hold it to
-// the source and to docs/error-codes.json.
-#[cfg(test)]
-mod error_codes;
+// The published error codes' table, and in test builds the checks that hold
+// it to the source and to docs/error-codes.json.
+pub mod error_codes;
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
 pub(crate) mod generation;
@@ -58,6 +57,7 @@ pub(crate) mod models_endpoint;
 pub(crate) mod observers;
 pub(crate) mod profiles;
 pub mod props;
+pub(crate) mod refusal;
 pub(crate) mod remote;
 pub mod repair;
 pub(crate) mod router;
@@ -77,7 +77,7 @@ pub(crate) mod slots_poller;
 pub(crate) mod sse_stream;
 pub mod template_caps_read;
 pub(crate) mod token_calibration;
-// Test builds only, like `error_codes` above, but public under
+// Test builds only, but public under
 // `test-support`: `gglib-cli`'s tests read the list as well as this crate's.
 #[cfg(any(test, feature = "test-support"))]
 pub mod tunnel_routes;
@@ -92,7 +92,7 @@ pub(crate) mod upstream_read;
 mod upstream_shape_tests;
 pub(crate) mod usage_reading;
 
-// What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
+// What `POST /v1/gglib/models/{name}/load` answers, for a paired machine that reads it.
 pub use host_facts::{FreeDiskReader, HostFacts, MachineNameReader};
 pub use load_endpoint::LoadResponse;
 pub use observers::ProxyObservers;

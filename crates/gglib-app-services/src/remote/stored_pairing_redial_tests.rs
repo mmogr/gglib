@@ -1,13 +1,11 @@
 //! Tests for what a dial with no code owes the record.
 //!
-//! [`settle`]'s codeless arm, split from `stored_pairing_tests.rs` when the
-//! two arms together crossed the 300-line budget
-//! `scripts/check_file_size.sh` allows. The seam is the one the
-//! function already has: a dial that carries a code is pairing, and
-//! everything it decides is about the key that comes back; a dial without
-//! one is a machine this laptop already knows, and everything it decides is
-//! about keeping the record true — the address that machine now answers at,
-//! and the port it answers on here. Two subjects, two files.
+//! [`settle`]'s codeless arm, split from `stored_pairing_tests.rs` along the
+//! seam the function already has: a dial that carries a code is pairing, and
+//! everything it decides is about the key that comes back; a dial without one
+//! is a machine this laptop already knows, and everything it decides is about
+//! keeping the record true — the address that machine now answers at, and the
+//! port it answers on here. Two subjects, two files.
 
 use std::sync::Arc;
 

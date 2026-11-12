@@ -2,7 +2,7 @@
  * Proxy dashboard transport types.
  *
  * The frontend connects directly to an already-running proxy's own HTTP port
- * (`http://{host}:{port}/v1/proxy/status/stream`), the same way the CLI's
+ * (`http://{host}:{port}/v1/gglib/proxy/status/stream`), the same way the CLI's
  * `gglib proxy dashboard` command does (see
  * `crates/gglib-cli/src/handlers/proxy_dashboard.rs`) — a real HTTP client of
  * the JSON contract. Unknown or extra fields are ignored by TypeScript's

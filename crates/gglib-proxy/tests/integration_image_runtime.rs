@@ -134,7 +134,7 @@ impl ModelRuntimePort for Draws {
 }
 
 /// `gglib serve <image model>`'s load, over HTTP: answered with context 0,
-/// and the launch's narration is on `/v1/proxy/status`.
+/// and the launch's narration is on `/v1/gglib/proxy/status`.
 #[tokio::test]
 async fn loading_an_image_model_answers_no_context_and_narrates_the_launch() {
     let (base, cancel) = spawn_proxy_with_catalog(
@@ -145,7 +145,7 @@ async fn loading_an_image_model_answers_no_context_and_narrates_the_launch() {
     let client = Client::new();
 
     let loaded: Value = client
-        .post(format!("{base}/v1/models/{DRAWS}/load"))
+        .post(format!("{base}/v1/gglib/models/{DRAWS}/load"))
         .send()
         .await
         .unwrap()
@@ -153,7 +153,7 @@ async fn loading_an_image_model_answers_no_context_and_narrates_the_launch() {
         .await
         .unwrap();
     let status: Value = client
-        .get(format!("{base}/v1/proxy/status"))
+        .get(format!("{base}/v1/gglib/proxy/status"))
         .send()
         .await
         .unwrap()

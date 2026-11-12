@@ -2,7 +2,7 @@
 import type { ModelDetailDto } from "./ModelDetailDto";
 
 /**
- * One model as `GET /v1/models/{name}/detail` answers it: what the
+ * One model as `GET /v1/gglib/models/{name}/detail` answers it: what the
  * identifier resolved to, and the profile it named.
  *
  * The identifier is resolved as a chat request's is — catalogue id first,

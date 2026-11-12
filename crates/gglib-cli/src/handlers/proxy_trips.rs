@@ -56,16 +56,27 @@ fn render(out: &mut impl Write, days: &[LoopGuardTripDay], since_days: u32) -> s
         )?;
         return Ok(());
     }
+    // MODEL and VERSION are as wide as their widest value, so an rc version
+    // or a long model name never pushes its row out of line.
+    let width = |header: &str, cell: fn(&LoopGuardTripDay) -> &str| {
+        days.iter()
+            .map(|d| cell(d).chars().count())
+            .max()
+            .unwrap_or(0)
+            .max(header.len())
+    };
+    let model_w = width("MODEL", |d| &d.model_name);
+    let version_w = width("VERSION", |d| &d.gglib_version);
     writeln!(out, "The loop guard's log, the last {window} day(s):")?;
     writeln!(
         out,
-        "{:<10}  {:<28}  {:<9}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
+        "{:<10}  {:<model_w$}  {:<version_w$}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
         "DAY (UTC)", "MODEL", "VERSION", "SCANNED", "TRIPS", "LOOPS", "STAGN.", "SESSIONS"
     )?;
     for d in days {
         writeln!(
             out,
-            "{:<10}  {:<28}  {:<9}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
+            "{:<10}  {:<model_w$}  {:<version_w$}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
             d.day,
             d.model_name,
             d.gglib_version,

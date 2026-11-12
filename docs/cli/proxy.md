@@ -31,7 +31,7 @@ $ gglib daemon status
 ## `proxy`
 
 Serves `/v1/chat/completions`, `/v1/embeddings`, `/v1/models`,
-`/v1/images/generations` and `/mcp` (MCP Streamable HTTP) from one port. When a request names a model that is
+`/v1/models/{name}`, `/v1/images/generations` and `/mcp` (MCP Streamable HTTP) from one port. When a request names a model that is
 not resident, the proxy queues it, launches the model, and applies flags
 derived from its capability tags: `mtp` → speculative decoding, `reasoning`
 → `--reasoning-format`, `agent` → `--jinja`. Every surface uses the same
@@ -87,15 +87,15 @@ on, by day.
 ```console
 $ gglib proxy trips
 The loop guard's log, the last 30 day(s):
-DAY (UTC)   MODEL                         VERSION    SCANNED  TRIPS  LOOPS  STAGN.  SESSIONS
-2026-11-09  Qwen3-4B-Instruct-2507        0.31.0-rc.8        9      0      0       0         0
-2026-11-07  Qwen3-4B-Instruct-2507        0.31.0-rc.3        1      0      0       0         0
-2026-11-07  Qwen3-4B-Instruct-2507        0.31.0-rc.5        1      0      0       0         0
-2026-11-07  Qwen3.8-27B                   0.31.0-rc.3        1      0      0       0         0
-2026-10-31  Qwen3-30B-A3B                 0.29.0-rc.1        1      0      0       0         0
-2026-10-31  Qwen3-4B-Instruct-2507        0.29.0-rc.4        2      0      0       0         0
-2026-10-31  Qwen3.8-27B                   0.29.0-rc.1       10      0      0       0         0
-2026-10-31  Qwen3.8-27B                   0.29.0-rc.4        1      0      0       0         0
+DAY (UTC)   MODEL                   VERSION      SCANNED  TRIPS  LOOPS  STAGN.  SESSIONS
+2026-11-09  Qwen3-4B-Instruct-2507  0.31.0-rc.8        9      0      0       0         0
+2026-11-07  Qwen3-4B-Instruct-2507  0.31.0-rc.3        1      0      0       0         0
+2026-11-07  Qwen3-4B-Instruct-2507  0.31.0-rc.5        1      0      0       0         0
+2026-11-07  Qwen3.8-27B             0.31.0-rc.3        1      0      0       0         0
+2026-10-31  Qwen3-30B-A3B           0.29.0-rc.1        1      0      0       0         0
+2026-10-31  Qwen3-4B-Instruct-2507  0.29.0-rc.4        2      0      0       0         0
+2026-10-31  Qwen3.8-27B             0.29.0-rc.1       10      0      0       0         0
+2026-10-31  Qwen3.8-27B             0.29.0-rc.4        1      0      0       0         0
 
 A trip is the guard's decision, not a delivery: a noted request can still fail to reach the model.
 ```
@@ -117,7 +117,7 @@ through `/v1/models` need, VS Code Copilot's BYOK endpoint among them.
   `serve` offers to install it if it is missing, or older than its pinned
   release (`gglib config sd install`), prints the model's family and each
   component linked or missing, starts the same pinned proxy, and loads the
-  model once (`POST /v1/models/{name}/load`), so a refusal, the runtime not
+  model once (`POST /v1/gglib/models/{name}/load`), so a refusal, the runtime not
   installed, a component missing or no room beside a held model, is printed
   in words before the dashboard attaches. The chat-only flags (`--context-size`,
   `--mlock`, `--jinja`, MTP, sampling, a profile) are refused by name.

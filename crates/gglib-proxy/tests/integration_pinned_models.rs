@@ -162,7 +162,7 @@ async fn pinned_proxy_serves_the_dashboard() {
     .await;
 
     let resp = Client::new()
-        .get(format!("{base}/v1/proxy/status"))
+        .get(format!("{base}/v1/gglib/proxy/status"))
         .send()
         .await
         .unwrap();

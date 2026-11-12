@@ -2,11 +2,10 @@
 //!
 //! `chat`, `proxy`, `daemon` and `attachment` each carry a second level of
 //! subcommands (`gglib chat history`, `gglib proxy stop`, `gglib daemon run`,
-//! `gglib attachment save`). They live
-//! here rather than beside [`Commands`](crate::commands::Commands) because
-//! that enum sits on the 300 LOC ratchet, and a nested enum is the part of it
-//! with no coupling to the top level — nothing here names a flag group, so the
-//! split costs no shared context.
+//! `gglib attachment save`). They live here rather than beside
+//! [`Commands`](crate::commands::Commands) because a nested enum has no
+//! coupling to the top level — nothing here names a flag group, so the split
+//! costs no shared context.
 //!
 //! Re-exported from [`crate::commands`], so callers keep naming them
 //! `crate::commands::ChatCommand` and the move is invisible to dispatch.
@@ -51,7 +50,7 @@ pub enum AttachmentCommand {
 pub enum ProxyCommand {
     /// Show a live terminal dashboard for an already-running proxy
     ///
-    /// Connects to `GET /v1/proxy/status/stream` on the target proxy and
+    /// Connects to `GET /v1/gglib/proxy/status/stream` on the target proxy and
     /// redraws active connections, llama.cpp `/slots` context usage, and
     /// the running request count in place until Ctrl+C is pressed.
     Dashboard {

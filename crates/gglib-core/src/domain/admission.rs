@@ -3,7 +3,7 @@
 //! The serializable half of admission control. `gglib-runtime` owns the live
 //! state and the scheduling decisions; this module owns the shape those
 //! decisions are reported in, so `gglib-proxy` can put them on
-//! `GET /v1/proxy/status` without depending on the runtime crate.
+//! `GET /v1/gglib/proxy/status` without depending on the runtime crate.
 //!
 //! Everything here is a point-in-time projection, the same way the proxy's
 //! active-connection registry projects itself for the dashboard. Nothing here

@@ -84,9 +84,8 @@ Two things ts-rs cannot infer, and `scripts/check_ts_bindings.sh` enforces:
 cannot produce — and `skip_serializing_if` does not imply optional, so a field
 serde omits still emits as `field: T | null` unless it carries `#[ts(optional)]`.
 
-The directory is exempt from the README and file-size checks and from eslint.
-Generated code has no author to address a finding to, and a 400-line binding is
-however long its Rust type is.
+The directory is exempt from the README check and from eslint. Generated code
+has no author to address a finding to.
 
 ## Type Alignment
 

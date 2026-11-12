@@ -8,11 +8,10 @@
 //! kept whole as [`FarError::Refused`], for the daemon to hand on in its own
 //! shape.
 //!
-//! A far machine on a build from before models carried ids is told apart
-//! here, once, and refused with one sentence: its list does not read, because
-//! `gglib_id` is missing, and its model detail route does not exist, so it
-//! answers a 404 with no error code. Nothing is shimmed: that machine is
-//! asked to update.
+//! A far machine whose list has no `gglib` object runs a gglib from before
+//! devices said their version, and is refused with one sentence asking for it
+//! to be updated (`far_said.rs`), before its models are read: an older list
+//! may not read as this build's at all. Nothing is shimmed.
 
 use std::time::Duration;
 
@@ -51,7 +50,7 @@ pub enum FarError {
         body: Vec<u8>,
     },
     /// Anything else: the request did not get through, the answer did not
-    /// read, or the far machine runs a build too old to ask.
+    /// read, or the far machine does not serve what was asked.
     Failed(GuiError),
 }
 
@@ -68,56 +67,52 @@ impl FarProxy {
     /// # Errors
     ///
     /// [`FarError::Refused`] for a far refusal; `Conflict`, asking for an
-    /// update, for a list with no `gglib_id`; `Unavailable` when the
+    /// update, for a list with no `gglib` object; `Unavailable` when the
     /// request did not get through in three seconds, or the list does not
-    /// read for another reason.
+    /// read.
     pub async fn models(&self) -> Result<ModelsResponse, FarError> {
-        let request = self.bounded.get(self.url("/models")).timeout(LIST_TIMEOUT);
-        let body = accepted(self.send(request).await?).await?;
-        serde_json::from_slice(&body).map_err(|e| {
-            if e.to_string().contains("`gglib_id`") {
-                FarError::Failed(self.older())
-            } else {
-                unreadable(&e)
-            }
-        })
+        let (body, about) = self.listed().await?;
+        if about.gglib.is_none() {
+            return Err(FarError::Failed(self.older()));
+        }
+        decode(&body)
     }
 
-    /// `GET /v1/models/{identifier}/detail`: one model, resolved there as a
+    /// The model list's body, as it came.
+    pub(super) async fn list_body(&self) -> Result<Vec<u8>, FarError> {
+        let request = self.bounded.get(self.url("/models")).timeout(LIST_TIMEOUT);
+        accepted(self.send(request).await?).await
+    }
+
+    /// `GET /v1/gglib/models/{identifier}/detail`: one model, resolved there as a
     /// turn sent with `identifier` would be. The identifier travels as one
     /// path segment, so a name holding `/` or `:` arrives whole.
     ///
     /// # Errors
     ///
-    /// [`FarError::Refused`] for a far refusal that names its code;
-    /// `Conflict`, asking for an update, for a 404 that names none, which is a
-    /// build with no such route; `Unavailable` as for [`FarProxy::models`].
+    /// [`FarError::Refused`] for a far refusal; `Conflict`, asking for an
+    /// update, for a gglib from before devices said their version;
+    /// `Unavailable` as for [`FarProxy::models`].
     pub async fn lookup(&self, identifier: &str) -> Result<ModelLookup, FarError> {
-        let path = format!("/models/{}/detail", path_segment(identifier));
-        let answer = self.send(self.bounded.get(self.url(&path))).await?;
-        match accepted(answer).await {
-            Err(FarError::Refused { status, body, .. })
-                if status == StatusCode::NOT_FOUND && !names_a_code(&body) =>
-            {
-                Err(FarError::Failed(self.older()))
-            }
-            read => decode(&read?),
-        }
+        self.offers(&[]).await?;
+        let path = format!("/gglib/models/{}/detail", path_segment(identifier));
+        decode(&accepted(self.send(self.bounded.get(self.url(&path))).await?).await?)
     }
 
-    /// `POST /v1/models/{identifier}/load` with `{num_ctx}`: have the model
+    /// `POST /v1/gglib/models/{identifier}/load` with `{num_ctx}`: have the model
     /// resident now, so the first turn does not wait.
     ///
     /// # Errors
     ///
-    /// [`FarError::Refused`] for a far refusal; `Unavailable` as for
-    /// [`FarProxy::models`].
+    /// [`FarError::Refused`] for a far refusal; `Conflict` as for
+    /// [`FarProxy::lookup`]; `Unavailable` as for [`FarProxy::models`].
     pub async fn load(
         &self,
         identifier: &str,
         num_ctx: Option<u64>,
     ) -> Result<LoadResponse, FarError> {
-        let path = format!("/models/{}/load", path_segment(identifier));
+        self.offers(&[]).await?;
+        let path = format!("/gglib/models/{}/load", path_segment(identifier));
         let request = self
             .bounded
             .post(self.url(&path))
@@ -126,19 +121,20 @@ impl FarProxy {
         decode(&accepted(self.send(request).await?).await?)
     }
 
-    /// Stop the far daemon: `POST /v1/proxy/shutdown` with the confirmation
+    /// Stop the far daemon: `POST /v1/gglib/proxy/shutdown` with the confirmation
     /// word the route requires (ADR 0012, decision 7). A one-way door, so it
     /// is not retried.
     ///
     /// # Errors
     ///
     /// `ValidationFailed` when the key is refused, `Conflict` when the far
-    /// proxy is not running under a daemon, `Unavailable` when the request
-    /// did not get through.
+    /// proxy is not running under a daemon or as for [`FarProxy::lookup`],
+    /// `Unavailable` when the request did not get through.
     pub async fn shutdown(&self) -> Result<(), GuiError> {
+        self.offers(&[]).await?;
         let request = self
             .bounded
-            .post(self.url("/proxy/shutdown"))
+            .post(self.url("/gglib/proxy/shutdown"))
             .json(&serde_json::json!({ "confirm": "shutdown" }));
         match self.send(request).await?.status() {
             s if s.is_success() => {
@@ -156,15 +152,6 @@ impl FarProxy {
                 "the shutdown request was answered with {s}"
             ))),
         }
-    }
-
-    /// What a far machine on a build that publishes no model ids is told,
-    /// by the name it is shown by.
-    fn older(&self) -> GuiError {
-        GuiError::Conflict(format!(
-            "{} runs an older gglib that publishes no model ids — update it",
-            self.shown_name()
-        ))
     }
 }
 
@@ -194,18 +181,8 @@ fn decode<T: DeserializeOwned>(body: &[u8]) -> Result<T, FarError> {
 
 /// An answer this build cannot read. Not the update sentence: a far machine
 /// on a newer build than this one may have changed a shape this one knows.
-fn unreadable(e: &serde_json::Error) -> FarError {
+pub(super) fn unreadable(e: &serde_json::Error) -> FarError {
     FarError::Failed(GuiError::Unavailable(format!(
         "the other machine answered something this build cannot read: {e}"
     )))
-}
-
-/// Whether a refusal's body is the proxy's `{"error": {"code": …}}`. Every
-/// refusal a gglib proxy writes names one; axum's own 404 for a route that
-/// does not exist is empty.
-fn names_a_code(body: &[u8]) -> bool {
-    serde_json::from_slice::<serde_json::Value>(body)
-        .ok()
-        .and_then(|v| v.pointer("/error/code").and_then(|c| c.as_str()).map(drop))
-        .is_some()
 }

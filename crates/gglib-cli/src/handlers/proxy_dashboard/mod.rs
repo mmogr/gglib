@@ -80,11 +80,11 @@ impl Drop for TerminalGuard {
 
 /// Execute `gglib proxy dashboard`.
 ///
-/// Connects to `http://{host}:{port}/v1/proxy/status/stream`, prints the
+/// Connects to `http://{host}:{port}/v1/gglib/proxy/status/stream`, prints the
 /// hydration snapshot immediately, then redraws in place on every subsequent
 /// tick until `Ctrl+C` is pressed or the connection is closed by the server.
 pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> Result<()> {
-    let url = format!("http://{host}:{port}/v1/proxy/status/stream");
+    let url = format!("http://{host}:{port}/v1/gglib/proxy/status/stream");
 
     let mut request = gglib_proxy::loopback::client_for(&host).get(&url);
     if let Some(key) = api_key {

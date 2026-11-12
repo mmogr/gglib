@@ -1,9 +1,6 @@
 //! Tests for the settings display rows.
 //!
-//! Split out via `#[path]`, the house answer to a file at its size budget:
-//! `settings_display.rs` sits over the ratchet's line and may shrink but not
-//! grow, and the masking rule the stored pairing needed had to be written
-//! somewhere.
+//! A `#[path]` sibling of `settings_display.rs`, the house layout.
 
 use gglib_core::domain::InferenceConfig;
 use gglib_core::secret::SHOWN_AS;

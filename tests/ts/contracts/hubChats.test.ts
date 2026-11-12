@@ -3,11 +3,11 @@
  * sends.
  *
  * `contracts/chats/recorded.json` is written by `gglib-core`'s wire tests
- * from the real serialisation of `GET /v1/chats`, `GET /v1/chats/{id}`, a
- * device's turn (`PUT /v1/runs/{id}?kind=agent`) with and without an image
+ * from the real serialisation of `GET /v1/gglib/chats`, `GET /v1/gglib/chats/{id}`, a
+ * device's turn (`PUT /v1/gglib/runs/{id}?kind=agent`) with and without an image
  * and one that turns thinking off, and the answer to the upload that image
- * was sent by (`POST /v1/attachments`); and of a branch opened, the change
- * that made it (`POST /v1/chats/{id}/changes`) and its answer, and the turn
+ * was sent by (`POST /v1/gglib/attachments`); and of a branch opened, the change
+ * that made it (`POST /v1/gglib/chats/{id}/changes`) and its answer, and the turn
  * that answers the branch's question (ADR 0017). It fails there when it
  * goes stale. ggchat hand-copies the same file. Here each body must fit the
  * generated types, carry the keys and value types they promise, and leave

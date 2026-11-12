@@ -1,4 +1,4 @@
-//! `/v1/runs/*` on the real proxy: the door a paired device reaches its own
+//! `/v1/gglib/runs/*` on the real proxy: the door a paired device reaches its own
 //! runs through, and who the proxy takes each caller for.
 //!
 //! The runs are a stand-in (`fixtures::runs`) that records the scope of every
@@ -47,7 +47,7 @@ async fn a_new_run_is_201_and_an_existing_one_200_with_the_run_as_the_body() {
     let (base, cancel) = serve(Some(Arc::clone(&runs))).await;
     let put = || {
         Client::new()
-            .put(format!("{base}/v1/runs/abc"))
+            .put(format!("{base}/v1/gglib/runs/abc"))
             .json(&serde_json::json!({"messages": []}))
             .send()
     };
@@ -88,7 +88,7 @@ async fn forged_markers_are_taken_for_the_device_they_name() {
     let runs = Arc::new(FakeRuns::default());
     let (base, cancel) = serve(Some(Arc::clone(&runs))).await;
     Client::new()
-        .get(format!("{base}/v1/runs"))
+        .get(format!("{base}/v1/gglib/runs"))
         .header("via", "1.1 modelpipe")
         .header("x-modelpipe-device", DEVICE)
         .send()
@@ -130,7 +130,7 @@ async fn every_refusal_carries_the_registry_code_in_the_proxy_error_shape() {
     ] {
         *runs.fail.lock().unwrap() = Some(err.clone());
         let response = Client::new()
-            .put(format!("{base}/v1/runs/r1"))
+            .put(format!("{base}/v1/gglib/runs/r1"))
             .json(&serde_json::json!({}))
             .send()
             .await
@@ -152,7 +152,7 @@ async fn a_refusal_echoes_nothing_the_client_sent() {
     let secret = "zzq-private-words";
 
     let response = Client::new()
-        .put(format!("{base}/v1/runs/r1"))
+        .put(format!("{base}/v1/gglib/runs/r1"))
         .header("content-type", "application/json")
         .body(format!("{{\"messages\": \"{secret}"))
         .send()
@@ -164,7 +164,7 @@ async fn a_refusal_echoes_nothing_the_client_sent() {
     assert!(!body.to_string().contains(secret), "{body}");
 
     let response = Client::new()
-        .get(format!("{base}/v1/runs/r1/events?after={secret}"))
+        .get(format!("{base}/v1/gglib/runs/r1/events?after={secret}"))
         .send()
         .await
         .unwrap();
@@ -182,7 +182,7 @@ async fn a_runs_events_are_the_daemons_frames_after_the_cursor() {
     let runs = Arc::new(FakeRuns::default());
     let (base, cancel) = serve(Some(Arc::clone(&runs))).await;
     let response = Client::new()
-        .get(format!("{base}/v1/runs/r1/events?after=5"))
+        .get(format!("{base}/v1/gglib/runs/r1/events?after=5"))
         .send()
         .await
         .unwrap();
@@ -205,7 +205,7 @@ async fn a_runs_event_stream_ends_when_the_proxy_shuts_down() {
     runs.endless.store(true, Ordering::SeqCst);
     let (base, cancel) = serve(Some(Arc::clone(&runs))).await;
     let response = Client::new()
-        .get(format!("{base}/v1/runs/r1/events"))
+        .get(format!("{base}/v1/gglib/runs/r1/events"))
         .send()
         .await
         .unwrap();
@@ -232,7 +232,7 @@ async fn a_device_through_the_tunnel_is_served_in_its_own_scope() {
         spawn_proxy_serving(PROXY_KEY, Some(Arc::clone(&runs) as Arc<dyn RunsPort>)).await;
     let (serving, connected, base) = tunnel_to(&proxy_url).await;
 
-    let answer = get(&format!("{base}/runs"), Some(DEVICE_KEY)).await;
+    let answer = get(&format!("{base}/gglib/runs"), Some(DEVICE_KEY)).await;
     assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);
     assert_eq!(runs.scopes(), vec![RunScope::Device(DEVICE.to_owned())]);
 

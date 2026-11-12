@@ -41,10 +41,11 @@ variants included), `GET /api/remote/models/{model}` one model as a
 `ModelLookup`, and `POST /api/remote/models/{model}/load` a `LoadResponse`.
 `{model}` is an identifier that machine resolves, sent as one encoded path
 segment. These are read rather than passed through, so the CLI and the page
-parse far rows in one place; a refusal is handed on as the chats' are, and a
-far build too old to publish model ids is a `409` that asks for an update.
+parse far rows in one place; a refusal is handed on as the chats' are.
 Every far route is a `409` that says `gglib remote join` while this machine is
-joined to nothing.
+joined to nothing, and every far route but the render a `409` in a sentence
+when that machine runs a gglib too old to say its version (asking for it to
+be updated) or does not list the feature the route needs.
 
 Two decisions live here rather than in `RemoteOps`:
 
