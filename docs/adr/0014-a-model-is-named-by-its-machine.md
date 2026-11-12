@@ -271,6 +271,13 @@ to remove, kept alive for as long as anyone runs an old build. An older
 machine pointed at a newer one keeps working, because the fields are
 additive.
 
+> **Amended 2026-11-12 — an older gglib is told apart by its version
+> answer.** `/v1/models` now carries a `gglib` object (the version, and the
+> features that process serves). A paired machine whose list has none is a
+> gglib from before it, and every one of gglib's own calls to it is a 409
+> asking for it to be updated, before the call is sent. The missing
+> `gglib_id` and the bare 404 are no longer read; the refusal is the same.
+
 ## Consequences
 
 **What a person notices:**

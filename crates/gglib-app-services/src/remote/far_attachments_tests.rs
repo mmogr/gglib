@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gglib_core::domain::AttachmentId;
+use gglib_proxy::models::{Feature, GglibInfo};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
@@ -61,7 +62,8 @@ async fn far_proxy(
         &credentials,
         bounded,
         streaming,
-    );
+    )
+    .knowing(GglibInfo::this_build(Feature::ALL));
     (seen, far)
 }
 

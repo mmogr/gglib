@@ -4,10 +4,12 @@
 //! tunnel that is relayed carries it slowly: the bounded client's limit on a
 //! whole exchange would cut a healthy upload off, where the streaming
 //! client's limit is on silence alone. Nothing here logs or keeps a byte of
-//! an image.
+//! an image. Both are asked only of a machine that says it shares its chats
+//! (`far_said.rs`), whose images they are.
 
 use gglib_core::contracts::http::attachments::PROXY_ATTACHMENTS_PATH;
 use gglib_core::domain::AttachmentId;
+use gglib_proxy::models::Feature;
 
 use super::FarProxy;
 use crate::error::GuiError;
@@ -20,12 +22,13 @@ impl FarProxy {
     ///
     /// # Errors
     ///
-    /// `Unavailable` when the request did not get through.
+    /// As [`FarProxy::list_chats`].
     pub async fn upload_attachment(
         &self,
         bytes: impl Into<reqwest::Body>,
         content_type: Option<&str>,
     ) -> Result<reqwest::Response, GuiError> {
+        self.offers(&[Feature::Chats]).await?;
         let mut request = self
             .streaming
             .post(self.url(PROXY_ATTACHMENTS_PATH))
@@ -40,8 +43,9 @@ impl FarProxy {
     ///
     /// # Errors
     ///
-    /// `Unavailable` when the request did not get through.
+    /// As [`FarProxy::list_chats`].
     pub async fn fetch_attachment(&self, id: &AttachmentId) -> Result<reqwest::Response, GuiError> {
+        self.offers(&[Feature::Chats]).await?;
         let path = format!("{PROXY_ATTACHMENTS_PATH}/{id}");
         self.send(self.streaming.get(self.url(&path))).await
     }

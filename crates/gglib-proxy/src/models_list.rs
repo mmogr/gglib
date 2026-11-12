@@ -15,6 +15,8 @@ use gglib_core::server_config::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::GglibInfo;
+
 /// Response from /v1/models endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -29,6 +31,13 @@ pub struct ModelsResponse {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub machine_name: Option<String>,
+    /// What this gglib says of itself: its version, and which of gglib's own
+    /// features this process serves ([`GglibInfo`]). Not part of `OpenAI`'s
+    /// shape. Absent from a gglib from before devices said their version,
+    /// which is how another gglib tells one apart.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gglib: Option<GglibInfo>,
 }
 
 impl ModelsResponse {
@@ -111,6 +120,7 @@ impl ModelsResponse {
             object: "list".to_string(),
             data,
             machine_name: None,
+            gglib: None,
         }
     }
 }

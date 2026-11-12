@@ -252,7 +252,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       // hand the text and images of the send back to the composer.
       if (cid !== undefined) await reader.showSaved(cid, signal).catch(() => {});
       const folderTold = folder?.refused(error, cid) ?? null;
-      const refused = sendRefusal(error, far, attached.length > 0) ?? folderTold;
+      const refused = sendRefusal(error) ?? folderTold;
       // A store that lost an image: added back, it is uploaded again.
       if (codeOf(error) === 'attachment_not_found') images.forget(attached.flatMap((image) => image.file ?? []));
       handBack();

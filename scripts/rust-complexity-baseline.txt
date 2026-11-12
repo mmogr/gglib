@@ -57,8 +57,8 @@ crates/gglib-bootstrap/src/builder.rs 336
 crates/gglib-broadcast/src/lib.rs 320
 crates/gglib-cli/src/commands.rs 325
 crates/gglib-cli/src/daemon_client/calls.rs 385
-crates/gglib-cli/src/daemon_client/images.rs 321
-crates/gglib-cli/src/daemon_client/images_tests.rs 466
+crates/gglib-cli/src/daemon_client/images.rs 326
+crates/gglib-cli/src/daemon_client/images_tests.rs 493
 crates/gglib-cli/src/daemon_client/wire_tests.rs 301
 crates/gglib-cli/src/handlers/agent_chat/config.rs 477
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 460
@@ -246,7 +246,7 @@ crates/gglib-proxy/src/mcp/drawing.rs 337
 crates/gglib-proxy/src/mcp/handlers.rs 533
 crates/gglib-proxy/src/metrics.rs 528
 crates/gglib-proxy/src/metrics_tests.rs 336
-crates/gglib-proxy/src/models.rs 514
+crates/gglib-proxy/src/models.rs 518
 crates/gglib-proxy/src/models_tests.rs 537
 crates/gglib-proxy/src/props.rs 563
 crates/gglib-proxy/src/props_baseline_tests.rs 408
@@ -267,10 +267,10 @@ crates/gglib-proxy/tests/integration_generation.rs 325
 crates/gglib-proxy/tests/integration_loop_guard.rs 322
 crates/gglib-proxy/tests/integration_mcp_drawing.rs 458
 crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
-crates/gglib-proxy/tests/integration_models_by_id.rs 405
+crates/gglib-proxy/tests/integration_models_by_id.rs 425
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 584
-crates/gglib-proxy/tests/integration_turns.rs 463
+crates/gglib-proxy/tests/integration_turns.rs 529
 crates/gglib-runtime/src/binary_install/checkout.rs 398
 crates/gglib-runtime/src/binary_install/checkout_tests.rs 457
 crates/gglib-runtime/src/binary_install/install_tests.rs 438

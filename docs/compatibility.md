@@ -11,6 +11,10 @@ From 1.0.0, gglib follows a simple rule. A release that breaks anything in the f
 - **Settings keys.**
 - **Your library.** A newer gglib opens a library an older one wrote, and upgrades it in place. An older gglib refuses a library a newer one has upgraded, rather than writing to it.
 
+## Adding to an answer
+
+A gglib answer only gains fields, and each new one is optional. A reader ignores any field it doesn't know, and any feature name in `/v1/models`' `gglib.features` it doesn't know. What a device sends to gglib's own routes is strict the other way: a hub refuses a turn on one of its chats, a change to a chat, or a branch whose body has a key it doesn't know. So a client sends a new key only to a hub whose `features` names the feature that brought it. Removing or changing a field is a new major version.
+
 ## Not covered
 
 These can change in any release:

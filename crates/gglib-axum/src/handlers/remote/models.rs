@@ -6,8 +6,8 @@
 //! read into the far proxy's own `ModelInfo` and answered with the machine
 //! it came from and what may be done to a model there, so the CLI and the
 //! page parse far rows in one place. A far refusal keeps its status and its
-//! code, as the chats' do, and a refused key is a `409`. A far machine on a
-//! build too old to publish model ids is a `409` asking for an update.
+//! code, as the chats' do, and a refused key is a `409`. A far gglib too old
+//! to say its version is a `409` asking for an update.
 
 use axum::Json;
 use axum::extract::{Path, State};

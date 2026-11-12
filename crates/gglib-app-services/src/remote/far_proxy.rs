@@ -1,8 +1,10 @@
 //! The far machine's proxy, reached *through* the tunnel: where it is, the
-//! key it admits this machine by, which machine it is, and the name it goes
-//! by. The routes are each in the file of the feature that asks them:
-//! `far_chats.rs`, `far_runs.rs`, `far_images.rs`, `far_attachments.rs` and
-//! `far_read.rs`, each a `#[path]` child that adds to `impl FarProxy`.
+//! key it admits this machine by, which machine it is, the name it goes by,
+//! and what it said of itself. The routes are each in the file of the feature
+//! that asks them: `far_chats.rs`, `far_runs.rs`, `far_images.rs`,
+//! `far_attachments.rs` and `far_read.rs`, each a `#[path]` child that adds
+//! to `impl FarProxy`; `far_said.rs` asks, before each of gglib's own calls,
+//! whether that machine serves it.
 //!
 //! Each request goes to the far proxy over the local listener with the key
 //! `join` stored, which [`far_credentials`](super::paired_machine::far_credentials)
@@ -20,6 +22,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use gglib_core::domain::{Machine, UNNAMED_PAIRED};
+use gglib_proxy::models::GglibInfo;
 use gglib_runtime::Door;
 
 use super::paired_machine::FarCredentials;
@@ -35,7 +38,10 @@ mod far_images;
 mod far_read;
 #[path = "far_runs.rs"]
 mod far_runs;
+#[path = "far_said.rs"]
+mod far_said;
 pub use far_read::FarError;
+pub(super) use far_said::Said;
 
 /// How long a bounded request may take end to end. Generous because a first
 /// request may still be finishing the hole punch; bounded because a tunnel
@@ -70,6 +76,8 @@ pub struct FarProxy {
     fingerprint: String,
     /// The name the stored pairing has for it, which is what is shown.
     name: Option<String>,
+    /// What it last said of itself, kept for as long as the connection is.
+    said: Said,
     bounded: reqwest::Client,
     streaming: reqwest::Client,
 }
@@ -122,9 +130,26 @@ impl FarProxy {
             key: credentials.key.clone(),
             fingerprint: credentials.fingerprint.clone(),
             name: credentials.name.clone(),
+            said: Said::default(),
             bounded,
             streaming,
         }
+    }
+
+    /// This proxy, keeping what that machine says of itself in `said`: the
+    /// connection's, so one read serves every call made through it.
+    #[must_use]
+    pub(super) fn keeping(mut self, said: Said) -> Self {
+        self.said = said;
+        self
+    }
+
+    /// This proxy, already told what that machine serves, as a read of its
+    /// model list would have told it.
+    #[must_use]
+    pub fn knowing(self, gglib: GglibInfo) -> Self {
+        self.said.keep(Some(gglib));
+        self
     }
 
     /// The machine this proxy is on.

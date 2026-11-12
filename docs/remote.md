@@ -1076,13 +1076,19 @@ so, and otherwise as `application/octet-stream`, with `nosniff` and
 page uses both for a far chat: an image pasted, dropped or picked there is
 uploaded to the desktop's store as it is added, the turn names it by the id
 the desktop answered, and a turn's image is shown by reading it back through
-this route. A desktop whose gglib predates images answers the upload `404`
-and a turn that names one `400 invalid_request`; the page says the paired
-machine's gglib cannot take images yet.
+this route.
 
 The model list carries each model's id in the desktop's catalog
-(`gglib_id`) and the desktop's name (`machine_name`, its host name's first
-label). A model's detail is what the desktop's own inspector shows, minus the
+(`gglib_id`), the desktop's name (`machine_name`, its host name's first
+label), and which gglib it runs: `gglib`, its `version` and the `features`
+it serves (`chats`, `runs`, `drawing`, `status`). The laptop reads it on each
+connect, and before each of gglib's own calls unless what it read then
+already serves that call. A desktop whose list has no `gglib` object runs a
+gglib from before devices said their version: each of those calls is refused
+with a sentence asking for it to be updated. One that does not list a
+feature has the calls that need it refused, saying so.
+
+A model's detail is what the desktop's own inspector shows, minus the
 paths of the file and its projector on the desktop's disk and the port it
 serves on; whether the model reads images is sent (`imageInput`). Reading
 either changes nothing on the desktop, and `/health`, open to anyone who can
@@ -1123,7 +1129,8 @@ here is one the desktop can retire on its own.
 | `could not make …, where the key this machine joins with is kept` | The folder for the laptop's endpoint keys, which the message names, could not be made: a file is in its way, or this user cannot create a folder there. Move the file aside or fix the permissions, and run `gglib remote join` again. |
 | `<name> is not admitting this device's key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
 | `connected to a machine this one holds no key for` | The laptop is connected to a desktop whose key it does not hold: the stored pairing is another machine's, or there is none. Every request through the tunnel, `gglib daemon stop --remote` included, is refused here before anything is sent, so another machine's key never reaches this one. Run `gglib remote invite` on the desktop and `gglib remote join` with the full `<ticket>-<code>` string. |
-| `<name> runs an older gglib that publishes no model ids — update it` | `gglib model list --remote`, or the daemon's `/api/remote/models` route or one model's detail under it, asked the desktop for its models, and its gglib is from before models carried ids. Update gglib on the desktop; there is no fallback that lists them without ids. |
+| `<name> runs a gglib older than this machine's <version> — update gglib on <name>` | The desktop's model list does not say which gglib it runs, so it is from before devices said their version. Its models, chats and runs, whether it can draw, and `gglib daemon stop --remote` are refused from here until it is updated; there is no fallback. A render (`/v1/images/generations`, an OpenAI route) is still sent. Update gglib on the desktop. |
+| `<name>, on gglib <version>, does not share its chats with this machine` (or runs, or does not draw) | The desktop runs a current gglib, but the process answering does not serve that feature. |
 | `no model 7 here; desk's models need --remote (gglib model list --remote)` | The laptop has no model with that id or name, and is paired. An id from `gglib model list --remote` is the desktop's: add `--remote`. |
 | `looking up '7' on desk`, caused by a 404 | `chat`, `q` or `model inspect --remote` asked the desktop for a model it does not have. Nothing was sent as a turn. `gglib model list --remote` lists what it has. |
 | `this chat ran on a machine this one is no longer paired with, so it cannot be resumed here` | `gglib chat --continue` on a chat that ran on a desktop the laptop has since replaced with another pairing. Its model is that desktop's; join it again to resume the chat, or start a new one. |

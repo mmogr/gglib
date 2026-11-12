@@ -115,6 +115,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
 - **`models_endpoint.rs`** — `GET /v1/models`: each model's advertised context window, which has to describe what a launch would serve, less a safety margin
 - **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
+- **`models_gglib.rs`** — `GglibInfo`, the list's `gglib` object: this build's version and the features (`Feature`) this process serves, which `models_endpoint.rs` reads off the ports it was handed
 - **`profiles.rs`** — Which `{model}:{profile}` variants `/v1/models` lists
 - **`model_detail_endpoint.rs`** — `GET /v1/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
 - **`load_endpoint.rs`** — `POST /v1/models/{name}/load`: admits a model as a chat completion would and drops the lease at once, so the model is resident before a turn needs it; answers a `LoadResponse`

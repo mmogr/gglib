@@ -6,7 +6,7 @@ use std::time::Duration;
 use axum::http::{StatusCode, header};
 use http_body_util::BodyExt;
 
-use super::super::fake_far::{KEY, carries_key, far, json, only, read};
+use super::super::fake_far::{KEY, carries_key, far, far_untold, json, only, read};
 use super::{
     RemoteTurnBody, add_turn_via, cancel_run_via, drawing_via, list_chats_via, list_runs_via,
     open_chat_via, run_events_via,
@@ -189,8 +189,7 @@ async fn the_runs_and_a_cancel_reach_the_far_runs() {
     );
 }
 
-/// The far machine's drawing availability comes back as it answered, and an
-/// older far machine's 404 is passed on, which a client reads as "cannot".
+/// The far machine's drawing availability comes back as it answered.
 #[tokio::test]
 async fn the_far_drawing_availability_comes_back_as_it_was() {
     let answer = r#"{"available":true,"model":"sdxl"}"#;
@@ -205,10 +204,37 @@ async fn the_far_drawing_availability_comes_back_as_it_was() {
         ("GET", "/v1/images/drawing")
     );
     assert!(carries_key(&seen), "{seen:?}");
+}
 
-    let (_, older) = far(404, "").await;
-    let (status, _) = read(drawing_via(&older, None).await.unwrap()).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+/// A far gglib from before devices said their version is a `409` asking for
+/// it to be updated, and one that does not serve a feature a `409` saying so,
+/// each before the far route is asked: the page shows the sentence.
+#[tokio::test]
+async fn a_far_machine_that_does_not_serve_a_call_is_a_conflict_that_says_why() {
+    let cases = [
+        (
+            r#"{"object":"list","data":[]}"#,
+            format!(
+                "the paired machine runs a gglib older than this machine's {} — update gglib on \
+                 the paired machine",
+                gglib_proxy::models::THIS_VERSION
+            ),
+        ),
+        (
+            r#"{"object":"list","data":[],"gglib":{"version":"9.9.9","features":["status"]}}"#,
+            "the paired machine, on gglib 9.9.9, does not draw for this machine".to_owned(),
+        ),
+    ];
+    for (list, sentence) in cases {
+        let (fake, hub) = far_untold(200, list).await;
+
+        let err = drawing_via(&hub, None).await.unwrap_err();
+
+        let (status, body) = read(axum::response::IntoResponse::into_response(err)).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(json(&body)["error"], sentence.as_str(), "{body}");
+        assert_eq!(only(&fake).uri, "/v1/models");
+    }
 }
 
 /// A chosen image model goes to the far machine with the question, as the
