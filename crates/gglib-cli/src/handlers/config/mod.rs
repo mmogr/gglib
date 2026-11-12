@@ -26,11 +26,9 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result
         ConfigCommand::Profile { command } => settings::handle_profile(ctx, command).await,
         ConfigCommand::Llama { command } => llama::dispatch(command).await,
         ConfigCommand::Sd { command } => sd::dispatch(command).await,
-        ConfigCommand::CheckDeps {
-            setup_fast_downloads,
-        } => {
+        ConfigCommand::CheckDeps => {
             let probe = gglib_runtime::DefaultSystemProbe::new();
-            check_deps::execute(&probe, setup_fast_downloads).await
+            check_deps::execute(&probe)
         }
         ConfigCommand::FastDownloads { command } => fast_downloads::dispatch(command).await,
         ConfigCommand::Paths => paths::execute(),

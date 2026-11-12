@@ -144,7 +144,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/proxy/start` | Start the proxy; one already running with the same pin, sampling override and default profile is a success, and a different request is a 409 |
 | `POST` | `/api/proxy/start-pinned` | Start the proxy pinned to one model (the GUI's `gglib serve`) |
 | `POST` | `/api/proxy/stop` | Stop the proxy; one already stopped is a success |
-| `GET` | `/api/proxy/loop-guard-trips` | The loop guard's log, one row per UTC day, model, version and mode, newest day first |
+| `GET` | `/api/proxy/loop-guard-trips` | The loop guard's log, one row per UTC day, model and version, newest day first |
 | `POST` | `/api/daemon/shutdown` | Stop the daemon; answers 202 and tears down after the server stops accepting |
 | `GET` | `/api/events` | The event stream (SSE) every client of the daemon reads |
 | `POST` | `/api/events` | Put one event on that stream: what a `gglib` command sends for a change it made to the library in its own process |

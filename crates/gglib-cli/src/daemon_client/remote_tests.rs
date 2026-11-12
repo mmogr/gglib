@@ -35,7 +35,7 @@ fn a_load_posts_the_identifier_as_one_segment_with_its_context() {
     assert_eq!(body, serde_json::json!({ "num_ctx": 8192 }));
 }
 
-/// No `--ctx-size` is a `null` context: the model loads at the context it
+/// No `--context-size` is a `null` context: the model loads at the context it
 /// would be served with there.
 #[test]
 fn a_load_without_a_context_leaves_it_to_the_far_machine() {

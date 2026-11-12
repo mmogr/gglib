@@ -99,7 +99,7 @@ fn the_flag_is_held_to_the_same_range_the_settings_are() {
 /// Omitting the flag falls back to the stored setting, and only reaches
 /// per-launch sizing when that is unset too. The message said "omit the
 /// flag to fit the context to this machine", which is false for anyone
-/// with a `default_context_size` stored — and disagreed with this flag's
+/// with a `default-context-size` stored — and disagreed with this flag's
 /// own `--help`, which has always described the fallback correctly.
 #[test]
 fn the_remedy_describes_the_fallback_and_not_just_the_fit() {
@@ -107,7 +107,7 @@ fn the_remedy_describes_the_fallback_and_not_just_the_fit() {
         .expect_err("`8k` is not a number this flag accepts");
     let msg = format!("{err:#}");
     assert!(
-        msg.contains("default_context_size"),
+        msg.contains("`default-context-size` setting"),
         "omitting the flag falls back to the setting; the message must say so: {msg}"
     );
     assert!(

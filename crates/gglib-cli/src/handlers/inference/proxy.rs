@@ -40,10 +40,10 @@ fn resolve_default_context(
     let trimmed = raw.trim();
     let invalid = || {
         format!(
-            "Invalid --default-context '{trimmed}'. Use a number from {} to {}; 'max' is not \
+            "Invalid --default-context-size '{trimmed}'. Use a number from {} to {}; 'max' is not \
              supported here because `gglib proxy` serves every model, so no single trained \
-             context is in scope. Omit the flag to fall back to the app settings \
-             `default_context_size`, or, with that unset too, to per-launch sizing.",
+             context is in scope. Omit the flag to fall back to the \
+             `default-context-size` setting, or, with that unset too, to per-launch sizing.",
             CONTEXT_SIZE_RANGE.start(),
             CONTEXT_SIZE_RANGE.end(),
         )

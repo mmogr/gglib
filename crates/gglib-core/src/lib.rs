@@ -32,10 +32,10 @@ pub use domain::{
     ChatMessage, Conversation, ConversationUpdate, DEFAULT_MAX_ITERATIONS,
     DEFAULT_MAX_STAGNATION_STEPS, DeviceServers, LlmStreamEvent, LoopDetector,
     MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, McpEnvEntry,
-    McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
-    McpToolResult, Message, MessageContent, MessageRole, Model, ModelCapabilities, NameSource,
-    NewConversation, NewMcpServer, NewMessage, NewModel, StagnationDetector, ToolCall,
-    ToolDefinition, ToolIndex, ToolResult, repo_short_name, resolve_model_name, strip_gguf_suffix,
+    McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpTool, McpToolResult, Message,
+    MessageContent, MessageRole, Model, ModelCapabilities, NameSource, NewConversation,
+    NewMcpServer, NewMessage, NewModel, StagnationDetector, ToolCall, ToolDefinition, ToolIndex,
+    ToolResult, repo_short_name, resolve_model_name, strip_gguf_suffix,
     transform_messages_for_capabilities,
 };
 pub use download::{
@@ -57,8 +57,8 @@ pub use ports::{
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{
     DEFAULT_CONTEXT_SIZE, DEFAULT_DAEMON_PORT, DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT,
-    DEFAULT_REMOTE_PORT, Device, LoopGuardMode, RemotePairing, RemoteServe, Settings,
-    SettingsUpdate, daemon_port, validate_settings,
+    DEFAULT_REMOTE_PORT, Device, RemotePairing, RemoteServe, Settings, SettingsUpdate, daemon_port,
+    validate_settings,
 };
 
 // Re-export origin validation utility

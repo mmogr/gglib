@@ -5,7 +5,7 @@
 //! thing in that module that is not an `#[derive(Args)]` group, and the module
 //! is where the flag surface lives.
 
-use crate::shared_args::SamplingArgs;
+use crate::shared_args::ChatSamplingArgs;
 
 /// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)
 /// from CLI argument groups.
@@ -17,7 +17,7 @@ pub(crate) struct ConversationSettingsBuilder {
 
 impl ConversationSettingsBuilder {
     /// Start building settings from the sampling flags a conversation keeps.
-    pub(crate) fn new(sampling: &SamplingArgs) -> Self {
+    pub(crate) fn new(sampling: &ChatSamplingArgs) -> Self {
         Self {
             settings: gglib_core::domain::chat::ConversationSettings {
                 temperature: sampling.temperature,

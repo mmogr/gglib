@@ -84,16 +84,16 @@ async fn a_reset_drops_a_preference_this_build_cannot_read() {
     for (key, value) in kept_rows() {
         put(&pool, key, &value).await;
     }
-    put(&pool, "loop_guard_mode", r#""strict""#).await;
+    put(&pool, "loop_guard", r#""strict""#).await;
     put(&pool, "proxy_port", "9191").await;
     assert!(repo.load().await.is_err(), "the record starts unreadable");
 
     let reset = repo.reset_preferences().await.expect("the reset is stored");
 
-    assert_eq!(reset.dropped, ["loop_guard_mode"]);
+    assert_eq!(reset.dropped, ["loop_guard"]);
     assert!(reset.kept_unreadable.is_empty());
     let stored = repo.load().await.expect("the record reads after the reset");
-    assert_eq!(stored.loop_guard_mode, None);
+    assert_eq!(stored.loop_guard, None);
     assert_eq!(stored.proxy_port, Settings::with_defaults().proxy_port);
     for (key, value) in kept_rows() {
         assert_eq!(raw(&pool, key).await, Some(value), "{key}");
@@ -111,13 +111,13 @@ async fn a_kept_row_this_build_cannot_read_survives_a_reset() {
             put(&pool, key, &value).await;
         }
         put(&pool, unreadable, "{not json").await;
-        put(&pool, "loop_guard_mode", r#""strict""#).await;
+        put(&pool, "loop_guard", r#""strict""#).await;
 
         let reset = repo.reset_preferences().await.expect("the reset is stored");
 
         assert_eq!(reset.kept_unreadable, [unreadable]);
-        assert_eq!(reset.dropped, ["loop_guard_mode"]);
-        assert_eq!(raw(&pool, "loop_guard_mode").await, None);
+        assert_eq!(reset.dropped, ["loop_guard"]);
+        assert_eq!(raw(&pool, "loop_guard").await, None);
         for (key, value) in kept_rows() {
             let want = if key == unreadable {
                 "{not json"

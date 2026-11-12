@@ -71,11 +71,6 @@ pub enum InterventionKind {
 pub enum Refusal {
     /// The conversation could not be trimmed to fit the context.
     LongerThanContext,
-    /// The loop guard, in refuse mode, tripped.
-    Loop {
-        /// The detector that tripped.
-        detector: LoopGuardTrip,
-    },
 }
 
 impl InterventionKind {
@@ -92,9 +87,6 @@ impl InterventionKind {
             Self::Refused {
                 reason: Refusal::LongerThanContext,
             } => "Refused: longer than the context".to_owned(),
-            Self::Refused {
-                reason: Refusal::Loop { detector },
-            } => format!("Refused: {}", tripped(*detector)),
         }
     }
 }
@@ -127,11 +119,6 @@ mod tests {
             InterventionKind::Refused {
                 reason: Refusal::LongerThanContext,
             },
-            InterventionKind::Refused {
-                reason: Refusal::Loop {
-                    detector: LoopGuardTrip::Loop,
-                },
-            },
         ]
         .into_iter()
         .map(|what| Intervention::new(what).word)
@@ -146,7 +133,6 @@ mod tests {
                 "Noted a loop",
                 "Stopped stagnation",
                 "Refused: longer than the context",
-                "Refused: a loop",
             ]
         );
     }
@@ -162,14 +148,12 @@ mod tests {
             r#"{"what":{"kind":"trimmed","messages":4},"word":"Trimmed 4 old messages"}"#
         );
         let json = serde_json::to_string(&Intervention::new(InterventionKind::Refused {
-            reason: Refusal::Loop {
-                detector: LoopGuardTrip::Stagnation,
-            },
+            reason: Refusal::LongerThanContext,
         }))
         .unwrap();
         assert_eq!(
             json,
-            r#"{"what":{"kind":"refused","reason":{"kind":"loop","detector":"stagnation"}},"word":"Refused: stagnation"}"#
+            r#"{"what":{"kind":"refused","reason":{"kind":"longer_than_context"}},"word":"Refused: longer than the context"}"#
         );
     }
 }

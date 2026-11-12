@@ -74,7 +74,7 @@ pub struct PinnedLaunch {
 /// Resolve a pinned launch from a model, settings, and per-call overrides.
 ///
 /// `request.context_length` is already numeric — the CLI resolves its
-/// `--ctx-size max` affordance against the model before calling this.
+/// `--context-size max` affordance against the model before calling this.
 /// `request.mlock == false` means "no opinion", never "disable": the flag's
 /// absence must leave lower tiers free to apply.
 #[must_use]

@@ -18,7 +18,7 @@ fn unified(explicit: ServerConfigOptions, globals: GlobalDefaults) -> UnifiedSer
     UnifiedServerConfig { explicit, globals }
 }
 
-/// `--ctx-size max` resolves against the model's GGUF context length,
+/// `--context-size max` resolves against the model's GGUF context length,
 /// which is only known after the model is fetched — hence the deferred
 /// parse the handler performs.
 #[test]
@@ -37,7 +37,7 @@ fn ctx_size_max_resolves_against_model_metadata() {
     assert_eq!(resolve_context_size(&cfg.resolved_options()), 131_072);
 }
 
-/// An omitted `--ctx-size` must fall through the cascade rather than
+/// An omitted `--context-size` must fall through the cascade rather than
 /// pinning the context to a hardcoded value.
 #[test]
 fn omitted_ctx_size_falls_through_to_the_global_default() {

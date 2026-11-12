@@ -1,38 +1,39 @@
 //! Tests for [`super::run`] — the guard's step, with no server around it.
 //!
-//! These characterise what the step answers under each mode of the setting.
-//! Each one pins something a caller depends on: that the switch-off path scans
-//! nothing, that a trip is refused with the 400 an external agentic client
-//! already handles, and that the readings the dashboard shows are recorded
-//! whether or not the verdict trips.
+//! These characterise what the step answers with the guard on and off. Each
+//! one pins something a caller depends on: that the switch-off path scans
+//! nothing, that a first trip is forwarded with a note, and that the readings
+//! the dashboard shows are recorded whether or not the verdict trips.
 
 use bytes::Bytes;
+use gglib_core::Settings;
 use gglib_core::domain::defects::LoopGuardTrip;
-use gglib_core::{LoopGuardMode, Settings};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::fixtures::{
-    MODEL, agentic_body, body, counts, in_mode, looping, observing, repeated_read, stagnating,
-    store,
+    MODEL, agentic_body, body, counts, looping, observing, repeated_read, stagnating, store,
+    switched_off,
 };
 use super::{GuardStep, run};
-use crate::generation::TurnGeneration;
 
 #[test]
 fn a_guard_switched_off_scans_nothing_and_forwards() {
-    let mut settings = Settings::with_defaults();
-    settings.loop_guard_mode = Some(LoopGuardMode::Off);
     let (metrics, ledger) = store();
 
-    let step = run(&settings, &body(looping(3)), MODEL, &observing(&metrics));
+    let step = run(
+        &switched_off(),
+        &body(looping(3)),
+        MODEL,
+        &observing(&metrics),
+    );
 
     assert!(matches!(step, GuardStep::Forward));
-    // Nothing was scanned, so nothing was recorded: not the refusal snapshot,
-    // and not the repeat readings a scan would have produced.
+    // Nothing was scanned, so nothing was recorded: no snapshot, and not the
+    // repeat readings a scan would have produced.
     assert_eq!(metrics.total_requests(), 0);
     let c = counts(&ledger);
     assert_eq!(c.loop_guard_trips, 0);
-    // All three diagnostic readings, not one: `off` means the scan does not
+    // All three diagnostic readings, not one: off means the scan does not
     // run, so none of them can be taken. Asserting a single reading would
     // pass for a guard that scanned and merely declined to act.
     assert_eq!(c.identical_result_repeats, 0);
@@ -72,88 +73,6 @@ fn an_unparseable_body_is_forwarded() {
 }
 
 #[test]
-fn a_repeated_batch_is_refused_and_counted_as_a_loop() {
-    let (metrics, ledger) = store();
-
-    let step = run(
-        &in_mode(LoopGuardMode::Refuse),
-        &body(looping(3)),
-        MODEL,
-        &observing(&metrics),
-    );
-
-    let GuardStep::Refuse(resp) = step else {
-        panic!("a repeated batch must not be forwarded");
-    };
-    assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
-    let c = counts(&ledger);
-    assert_eq!(c.loop_guard_trips, 1);
-    assert_eq!(c.loop_guard_loops, 1);
-    assert_eq!(c.loop_guard_stagnations, 0);
-    // The refused request records its own snapshot, naming the detector.
-    let recent = metrics.recent(1);
-    assert_eq!(recent.len(), 1);
-    assert_eq!(recent[0].loop_guard_trip, Some(LoopGuardTrip::Loop));
-    assert_eq!(recent[0].model_name, MODEL);
-    // Nothing was generated, and the snapshot says so by its defaults.
-    assert_eq!(
-        TurnGeneration::on(&recent[0]),
-        TurnGeneration::default(),
-        "a refused request has no readings, which is not readings of zero"
-    );
-}
-
-#[test]
-fn a_repeated_reply_is_refused_and_counted_as_stagnation() {
-    let (metrics, ledger) = store();
-
-    let step = run(
-        &in_mode(LoopGuardMode::Refuse),
-        &body(stagnating(6)),
-        MODEL,
-        &observing(&metrics),
-    );
-
-    let GuardStep::Refuse(resp) = step else {
-        panic!("a stagnating history must not be forwarded");
-    };
-    assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
-    let c = counts(&ledger);
-    assert_eq!(c.loop_guard_trips, 1);
-    assert_eq!(c.loop_guard_stagnations, 1);
-    assert_eq!(c.loop_guard_loops, 0);
-    assert_eq!(
-        metrics.recent(1)[0].loop_guard_trip,
-        Some(LoopGuardTrip::Stagnation)
-    );
-}
-
-#[tokio::test]
-async fn the_refusal_names_the_repeated_signature() {
-    let (metrics, _ledger) = store();
-
-    let GuardStep::Refuse(resp) = run(
-        &in_mode(LoopGuardMode::Refuse),
-        &body(looping(3)),
-        MODEL,
-        &observing(&metrics),
-    ) else {
-        panic!("a repeated batch must not be forwarded");
-    };
-
-    let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
-        .await
-        .expect("refusal body");
-    let err: Value = serde_json::from_slice(&bytes).expect("json error body");
-    assert_eq!(err["error"]["code"], "loop_detected");
-    let message = err["error"]["message"].as_str().expect("message");
-    assert!(
-        message.contains("write_file:"),
-        "the refusal names the repeated batch: {message}"
-    );
-}
-
-#[test]
 fn a_repeat_the_verdict_cannot_see_is_still_read() {
     let (metrics, ledger) = store();
 
@@ -180,7 +99,7 @@ fn a_repeat_the_verdict_cannot_see_is_still_read() {
 }
 
 #[test]
-fn the_default_notes_rather_than_refusing_and_records_nothing_itself() {
+fn a_first_trip_is_noted_and_records_nothing_itself() {
     for (history, expected) in [
         (looping(3), LoopGuardTrip::Loop),
         (stagnating(6), LoopGuardTrip::Stagnation),
@@ -193,7 +112,7 @@ fn the_default_notes_rather_than_refusing_and_records_nothing_itself() {
             MODEL,
             &observing(&metrics),
         ) else {
-            panic!("the default mode is `note`");
+            panic!("a first trip is noted");
         };
 
         assert_eq!(trip, expected, "the note carries its own detector");

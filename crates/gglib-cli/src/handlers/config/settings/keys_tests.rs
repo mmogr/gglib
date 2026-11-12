@@ -94,7 +94,6 @@ async fn every_key_show_prints_is_taken_by_set_and_unset() {
             Takes::Switch => "true".to_owned(),
             Takes::Text => "127.0.0.1".to_owned(),
             Takes::Hosts => "gglib.lan".to_owned(),
-            Takes::Choice(words) => words[0].to_owned(),
             Takes::Model => "flux".to_owned(),
             Takes::Folder => folder.display().to_string(),
             Takes::Whole(_) | Takes::Elsewhere(_) => "anything".to_owned(),

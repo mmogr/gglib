@@ -25,8 +25,7 @@ independently readable:
 - [`persistence`] — the chat's row: made, its settings and system prompt
   replaced; the daemon saves the turns
 - [`sampling_warning`] — the one line, before the first turn, that says
-  the endpoint uses its own sampling until "Let clients set sampling" is on,
-  and the one that names a sampling flag no chat keeps
+  the endpoint uses its own sampling until "Let clients set sampling" is on
 - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output,
   and a reply's figure line ("41 s · 13 t/s · 2,100 tokens reused", core's
   `TurnUsage::figure_line`, the GUI thread's words)
@@ -68,7 +67,7 @@ independently readable:
 - [`thinking_dispatch`] — `RenderContext`, thinking-event dispatch, spinner coordination
 
 A chat's limits and Thinking choice are the daemon's to resolve, by the
-rules it resolves the chat page's turns by: `--max-iterations` is saved
+rules it resolves the chat page's turns by: `--max-tool-iterations` is saved
 with the chat, and `--thinking on|off` is said on each of the session's
 turns, which the daemon remembers on the chat.
 

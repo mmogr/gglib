@@ -17,7 +17,7 @@ Current application settings:
   default-model-id         2 (Qwen3-4B-Instruct-2507)
   inference-profiles       None
   llama-base-port          9300
-  loop-guard-mode          None
+  loop-guard               None
   max-download-queue-size  None
   max-parallel-tools       None
   max-stagnation-steps     None
@@ -151,7 +151,7 @@ Binary version: version: 0.8.0-dev (build 11960, commit 8642541b2)
 ```
 <!-- /snippet -->
 
-- `install` (also spelled `update`) does nothing when the pinned release,
+- `install` is how an engine is updated too. It does nothing when the pinned release,
   or a later one, is installed, or when what is there is a binary gglib has
   no record of installing or a release it cannot compare offline. When the
   install is older than the pin it installs the pin: this platform's

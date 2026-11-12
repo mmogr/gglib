@@ -75,7 +75,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model list` | List all models with metadata, the Model ID a client sends for each, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
 | `model inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
 | `model explain <id\|name> [--profile <name>]` | Show the launch gglib would make for the model, each argument with whose choice it was and why, the context fit, and every resolved inference parameter with the layer that supplied it |
-| `model load <id\|name> [--context <N\|max>] [--pin]` | Load a model into memory on the daemon, as the app's Load does; `--pin` pins the endpoint to it first |
+| `model load <id\|name> [--context-size <N\|max>] [--pin]` | Load a model into memory on the daemon, as the app's Load does; `--pin` pins the endpoint to it first |
 | `model unload <id\|name>` | Unload a model from memory on the daemon, as the app's Unload does |
 | `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |
 | `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its own launch defaults (`--jinja auto|on|off`, `--mtp auto|on|off`), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
@@ -88,7 +88,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model upgrade <id\|name> [--yes]` | Download a model's latest version and update its row |
 | `model verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `model repair <id\|name>` | Re-download corrupt shards for a model |
-| `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--ctx-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
+| `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--context-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--context-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
 | `chat <id\|name>` | Chat with a model interactively: the daemon runs each turn, through the endpoint, as it runs the chat page's, and the flags named are saved with the chat |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
@@ -96,7 +96,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `question <text>` (alias `q`) | Ask a question, with optional piped or file context; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts, and the chat each branch was made from |
-| `image "<prompt>" [--size WxH] [-n N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
+| `image "<prompt>" [--size WxH] [--count N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
 | `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
 | `run start -m <model> <prompt> [--follow]` | Start a reply the daemon finishes and print its id, or the reply as it arrives with `--follow` |
 | `run list` | List the daemon's runs, newest first |
@@ -121,7 +121,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `remote join [<ticket>-<code>\|<ticket>] [--port PORT]` | Bind a local port that is another machine's proxy; the first time redeems the invite's code for this device's own key, later a bare ticket or nothing reuses the pairing |
 | `remote disconnect` | Close the local port; the far machine and the stored pairing stay |
 | `mcp list` | List the configured MCP servers, with each one's status and tool count in the daemon when one is running |
-| `mcp add --name <name> --type stdio --command <cmd> [flags]` | Add a stdio MCP server, with its arguments, working directory, `PATH` entries, environment and lifecycle (`eager` or `lazy`) |
+| `mcp add --name <name> --command <cmd> [flags]` | Add an MCP server (a process gglib starts), with its arguments, working directory, `PATH` entries, environment and lifecycle (`eager` or `lazy`) |
 | `mcp remove <server>` | Remove a server |
 | `mcp enable <server>`, `mcp disable <server>` | Include a server's tools in chat, or leave them out |
 | `mcp allow-remote <server>…`, `mcp deny-remote <server>…` | Offer servers' tools to paired devices' runs, or stop offering them |
@@ -130,7 +130,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `/retry`, `/edit <text>`, `/branch`, `/branches` (in a chat) | Answer the last question again, ask it again as `<text>`, copy the chat into a new branch, or list the chat's branches; see [Branches](#branches) |
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
-| `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
+| `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model and version, and the ones it noted or ended |
 | `proxy test [<id\|name>]` | Send one real request through the running endpoint and say who answered and in how long, then how a client connects to it: the address, the key rule, the Model ID and a recipe per client, all the daemon's; with no model named, the pinned model, else the one loaded model |
 | `proxy stop` | Stop the proxy on the running daemon; it keeps running there after `gglib proxy` or `gglib serve` detach |
 | `config show` | Show every setting and the models directory; a stored secret is shown as `(set, not shown)` with the command that prints it |
@@ -243,7 +243,7 @@ gglib q --image before.png --image after.png "What changed?"
 gglib q --show-prompt --file CODE.rs "Explain this"
 
 # Cleaner output for scripting (no prompt echo, no timings)
-gglib q -Q "What is 2+2?"
+gglib q --quiet "What is 2+2?"
 
 # Agentic mode: multi-step exploration with filesystem tools
 gglib q "How is error handling structured in this project?"
@@ -317,7 +317,7 @@ the next message draws, with qwen-image-q8, this session's image model
   the model. The CLI does not resize: a file is at most 8 MiB, and the images
   of one request at most 16 MiB together.
 - **The receipt.** One stderr line per image says its name, its size in pixels
-  and the prompt tokens it is estimated to cost. `gglib q -Q` suppresses it.
+  and the prompt tokens it is estimated to cost. `gglib q --quiet` suppresses it.
 - **A file that cannot be attached** — missing, not a PNG or a JPEG by its
   first bytes, or over the cap — is an error naming the path, before any model
   is looked up or loaded. `gglib q` still requires a question.
@@ -396,7 +396,7 @@ pre-Rich behaviour. This keeps piped output clean and machine-parseable:
 gglib q "Summarize this" > answer.txt
 
 # Quiet mode: suppresses tool progress, reasoning, iteration counts
-gglib q -Q "What is 2+2?" | pbcopy
+gglib q --quiet "What is 2+2?" | pbcopy
 ```
 
 ### Thinking Block

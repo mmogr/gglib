@@ -24,19 +24,9 @@ use crate::bootstrap::CliContext;
 /// download manager. `models_directory` is where a companion is looked for;
 /// `None` resolves it as the daemon does when it downloads.
 pub(super) fn listing_ops(ctx: &CliContext, models_directory: Option<PathBuf>) -> DownloadOps {
-    listing_ops_with(ctx, Arc::clone(&ctx.hf_client), models_directory)
-}
-
-/// [`listing_ops`] over the Hub client given: `--list-quants` with a
-/// token talks to the Hub as that token.
-pub(super) fn listing_ops_with(
-    ctx: &CliContext,
-    hf: Arc<dyn gglib_core::ports::huggingface::HfClientPort>,
-    models_directory: Option<PathBuf>,
-) -> DownloadOps {
     DownloadOps::new(DownloadDeps {
         downloads: Arc::clone(&ctx.downloads),
-        hf,
+        hf: Arc::clone(&ctx.hf_client),
         tool_detector: Arc::new(NotAsked),
         gguf_parser: Arc::clone(&ctx.gguf_parser),
         models_directory,

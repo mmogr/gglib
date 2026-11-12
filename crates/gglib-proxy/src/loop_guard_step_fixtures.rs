@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use gglib_core::Settings;
 use gglib_core::domain::defects::ModelDefectLedger;
-use gglib_core::{LoopGuardMode, Settings};
 use serde_json::{Value, json};
 
 use super::GuardObservers;
@@ -15,13 +15,10 @@ use crate::metrics::ContextMetricsStore;
 
 pub(super) const MODEL: &str = "test-model";
 
-/// Settings whose loop guard runs in `mode`.
-///
-/// Every test that wants a refusal asks for one: the default is `note`, which
-/// does not refuse.
-pub(super) fn in_mode(mode: LoopGuardMode) -> Settings {
+/// Settings whose loop guard is switched off.
+pub(super) fn switched_off() -> Settings {
     Settings {
-        loop_guard_mode: Some(mode),
+        loop_guard: Some(false),
         ..Settings::with_defaults()
     }
 }

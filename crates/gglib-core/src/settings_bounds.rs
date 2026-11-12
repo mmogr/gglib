@@ -22,7 +22,7 @@ use std::ops::RangeInclusive;
 /// [`validate_settings`](super::validate_settings) rejects anything outside
 /// it, and so do the flags that write this setting or default it.
 ///
-/// Not every context-size flag is bounded by it: `--ctx-size` names a
+/// Not every context-size flag is bounded by it: `--context-size` names a
 /// per-launch value rather than this setting, and `CtxSizeArg::parse` accepts
 /// any `u64`. That is a separate surface with a separate contract, not an
 /// omission here.

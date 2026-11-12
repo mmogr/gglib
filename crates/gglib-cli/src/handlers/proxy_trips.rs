@@ -7,9 +7,8 @@
 //! process exists to be read. The daemon's `GET /api/proxy/loop-guard-trips`
 //! reads the same tables for the GUI's settings panel.
 //!
-//! One row per UTC day, model, gglib version and mode: the requests the guard
-//! scanned, and the ones it acted on — noted under `note`, refused under
-//! `refuse` — by detector, with how many sessions they came from. The ones
+//! One row per UTC day, model and gglib version: the requests the guard
+//! scanned, and the ones it acted on — noted, or ended — by detector, with how many sessions they came from. The ones
 //! acted on are ordinarily among the requests scanned, but one whose scan was
 //! lost is not, so a row can show more trips than scans. A day scanned without
 //! a trip is printed with zero trips: that is the reading ADR 0011's criterion
@@ -53,28 +52,23 @@ fn render(out: &mut impl Write, days: &[LoopGuardTripDay], since_days: u32) -> s
         writeln!(
             out,
             "The loop guard scanned nothing in the last {window} day(s), \
-             or it is off (`gglib config set loop-guard-mode note`)."
+             or it is off (`gglib config set loop-guard true`)."
         )?;
         return Ok(());
     }
     writeln!(out, "The loop guard's log, the last {window} day(s):")?;
     writeln!(
         out,
-        "{:<10}  {:<28}  {:<9}  {:<6}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
-        "DAY (UTC)", "MODEL", "VERSION", "MODE", "SCANNED", "TRIPS", "LOOPS", "STAGN.", "SESSIONS"
+        "{:<10}  {:<28}  {:<9}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
+        "DAY (UTC)", "MODEL", "VERSION", "SCANNED", "TRIPS", "LOOPS", "STAGN.", "SESSIONS"
     )?;
     for d in days {
-        let mode = serde_json::to_value(d.mode)
-            .ok()
-            .and_then(|v| v.as_str().map(str::to_owned))
-            .unwrap_or_default();
         writeln!(
             out,
-            "{:<10}  {:<28}  {:<9}  {:<6}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
+            "{:<10}  {:<28}  {:<9}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
             d.day,
             d.model_name,
             d.gglib_version,
-            mode,
             d.scanned,
             d.trips,
             d.loops,

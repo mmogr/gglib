@@ -1159,14 +1159,14 @@ fn null_content_with_tool_calls_feeds_loop_only() {
 // ── Configuration ────────────────────────────────────────────────────────
 
 #[test]
-fn from_settings_gates_on_the_loop_guard_mode() {
+fn from_settings_gates_on_the_loop_guard_switch() {
     let mut settings = Settings::with_defaults();
     assert!(LoopGuardConfig::from_settings(&settings).is_some());
 
-    settings.loop_guard_mode = Some(LoopGuardMode::Refuse);
+    settings.loop_guard = Some(true);
     assert!(LoopGuardConfig::from_settings(&settings).is_some());
 
-    settings.loop_guard_mode = Some(LoopGuardMode::Off);
+    settings.loop_guard = Some(false);
     assert!(LoopGuardConfig::from_settings(&settings).is_none());
 }
 

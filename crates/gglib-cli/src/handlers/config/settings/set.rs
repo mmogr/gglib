@@ -65,7 +65,6 @@ fn read(takes: Takes, typed: &str) -> Option<Value> {
                 .map(Value::from)
                 .collect(),
         ),
-        Takes::Choice(words) => words.contains(&typed).then(|| typed.into()),
         Takes::Model | Takes::Folder | Takes::Whole(_) | Takes::Elsewhere(_) => None,
     }
 }

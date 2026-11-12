@@ -2,7 +2,7 @@
  * The loop guard's log, on Diagnostics › Live — the GUI face of
  * `gglib proxy trips`.
  *
- * Per UTC day, model, gglib version and mode: how many requests the guard
+ * Per UTC day, model and gglib version: how many requests the guard
  * scanned, how many it acted on, by detector, and from how many sessions —
  * the same columns the CLI prints. A day scanned without a trip is a row with
  * zero trips, which is the reading ADR 0011's kill criterion is about. Read
@@ -21,7 +21,6 @@ const COLUMNS = [
   'Day (UTC)',
   'Model',
   'Version',
-  'Mode',
   'Scanned',
   'Trips',
   'Loops',
@@ -84,13 +83,12 @@ export const LoopGuardTripsPanel: FC<{ state: LoopGuardTripsState }> = ({ state 
           <tbody>
             {days.map((d) => (
               <tr
-                key={`${d.day}|${d.model_name}|${d.gglib_version}|${d.mode}`}
+                key={`${d.day}|${d.model_name}|${d.gglib_version}`}
                 className="border-b border-border-light"
               >
                 <td className="px-xs py-2xs font-mono tabular-nums">{d.day}</td>
                 <td className="px-xs py-2xs font-mono">{d.model_name}</td>
                 <td className="px-xs py-2xs font-mono">{d.gglib_version}</td>
-                <td className="px-xs py-2xs">{d.mode}</td>
                 <td className="px-xs py-2xs tabular-nums">{d.scanned}</td>
                 <td className="px-xs py-2xs tabular-nums">{d.trips}</td>
                 <td className="px-xs py-2xs tabular-nums">{d.loops}</td>

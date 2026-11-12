@@ -8,15 +8,14 @@ use clap::Subcommand;
 ///
 /// The same verbs as stable-diffusion.cpp's (`SdCommand`), plus `detect`:
 /// `install` installs the pinned release when what is there is missing or
-/// older, which is also what `update` does.
+/// older, which is how it is updated too.
 #[derive(Subcommand)]
 pub enum LlamaCommand {
     /// Install the pinned llama.cpp release, or update to it
-    #[command(visible_alias = "update")]
     Install {
         /// Reinstall even when the pinned release is installed. Over a source
         /// build, takes the download where one fits
-        #[arg(short, long)]
+        #[arg(long)]
         force: bool,
         /// Build from source instead of downloading pre-built binaries
         #[arg(long)]
@@ -78,19 +77,12 @@ mod tests {
         }
     }
 
-    /// `update` is `install`: both install the pinned release when what is
-    /// there is missing or older.
+    /// `install` installs the pinned release when what is there is missing
+    /// or older, which is how it is updated: there is no `update`.
     #[test]
-    fn update_is_install_with_the_same_flags() {
+    fn install_takes_force_and_build() {
         assert!(matches!(
-            parsed(&["gglib", "config", "llama", "update"]),
-            LlamaCommand::Install {
-                force: false,
-                build: false
-            }
-        ));
-        assert!(matches!(
-            parsed(&["gglib", "config", "llama", "update", "--force", "--build"]),
+            parsed(&["gglib", "config", "llama", "install", "--force", "--build"]),
             LlamaCommand::Install {
                 force: true,
                 build: true
@@ -108,6 +100,8 @@ mod tests {
             &["gglib", "config", "llama", "install", "--vulkan"],
             &["gglib", "config", "llama", "rebuild"],
             &["gglib", "config", "llama", "check-updates"],
+            &["gglib", "config", "llama", "update"],
+            &["gglib", "config", "llama", "install", "-f"],
         ] {
             assert!(crate::Cli::try_parse_from(argv).is_err(), "{argv:?}");
         }

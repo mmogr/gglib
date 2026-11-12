@@ -125,13 +125,13 @@ generation_ms: number | null,
 tokens_per_second: number | null, 
 /**
  * The detector that made the pre-dispatch loop guard act on this request
- * — forward it with a note, end the run, or refuse it with an HTTP 400
- * (see `loop_guard`) — or `None`.
+ * — forward it with a note, or end the run (see `loop_guard`) — or
+ * `None`.
  */
 loop_guard_trip: LoopGuardTrip | null, 
 /**
- * `true` when the loop guard ended this request's run itself: under
- * `note`, the same run tripped again after its note, so the proxy
+ * `true` when the loop guard ended this request's run itself: the same
+ * run tripped again after its note, so the proxy
  * answered with a finished assistant message instead of forwarding it
  * (ADR 0021). `loop_guard_trip` names the detector.
  */

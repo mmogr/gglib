@@ -146,7 +146,6 @@ function status(
     warning: null,
     serving: null,
     installCommand: `gglib config ${e.word} install`,
-    updateCommand: `gglib config ${e.word} update`,
     ...overrides,
   };
 }
@@ -323,7 +322,7 @@ describe.each(KINDS)('the %s row', (kind) => {
     const r = await row(e.product);
 
     expect(await r.findByText(`${e.older} · Metal · built from source`)).toBeInTheDocument();
-    expect(r.getByText(`The update is a source build, run from a terminal: gglib config ${e.word} update.`)).toBeInTheDocument();
+    expect(r.getByText(`The update is a source build, run from a terminal: gglib config ${e.word} install.`)).toBeInTheDocument();
     expect(r.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
     await openMore(e.product);
     expect(r.queryByRole('menuitem', { name: 'Reinstall' })).not.toBeInTheDocument();
@@ -366,7 +365,7 @@ describe('the engine rows', () => {
     const r = await row('llama.cpp');
 
     expect(await r.findByText(/was built from source here before, so it is built again from a terminal/)).toBeInTheDocument();
-    expect(r.getByText('gglib config llama update')).toBeInTheDocument();
+    expect(r.getByText('gglib config llama install')).toBeInTheDocument();
     expect(r.queryByRole('button', { name: 'Install' })).not.toBeInTheDocument();
   });
 

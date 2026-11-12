@@ -34,7 +34,7 @@ const UNSET: AppSettings = {
   proxyCacheDiskGb: null,
   hasProxyApiKey: false,
   trustClientSampling: null,
-  loopGuardMode: null,
+  loopGuard: null,
   toolCallRepair: null,
   mcpDrawing: null,
   proxyAutostart: null,

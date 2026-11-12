@@ -21,7 +21,7 @@
 
 use std::collections::BTreeSet;
 
-use gglib_core::{DeviceServers, McpServer, McpServerStatus, McpServerType, McpServiceError};
+use gglib_core::{DeviceServers, McpServer, McpServerStatus, McpServiceError};
 use tracing::warn;
 
 use crate::service::{McpService, RESERVED_SERVER_NAME};
@@ -42,9 +42,8 @@ impl McpService {
     ///
     /// # Errors
     ///
-    /// Opening an SSE server is refused with
-    /// [`McpServiceError::SseNotSupported`], since gglib cannot run one, and
-    /// opening one named `builtin` with [`McpServiceError::NeverOpened`].
+    /// Opening a server named `builtin` is refused with
+    /// [`McpServiceError::NeverOpened`].
     /// Closing a server is never refused. An unknown `id` is the
     /// repository's `NotFound`.
     pub async fn set_allow_remote(
@@ -66,15 +65,14 @@ impl McpService {
         Ok(server)
     }
 
-    /// Refuse to open `server` to paired devices when it never can be: an
-    /// SSE server, which gglib cannot run, or `builtin`. A caller opening
-    /// several asks this of each before it changes any.
+    /// Refuse to open `server` to paired devices when it never can be:
+    /// `builtin`. A caller opening several asks this of each before it
+    /// changes any.
     ///
     /// # Errors
     ///
-    /// [`McpServiceError::SseNotSupported`] or [`McpServiceError::NeverOpened`].
+    /// [`McpServiceError::NeverOpened`].
     pub fn refuse_opening(server: &McpServer) -> Result<(), McpServiceError> {
-        Self::refuse_unsupported(server.server_type)?;
         if server.name == RESERVED_SERVER_NAME {
             return Err(McpServiceError::NeverOpened(server.name.clone()));
         }
@@ -82,7 +80,7 @@ impl McpService {
     }
 
     /// The servers a paired device's runs are offered: each one flagged
-    /// open, enabled, stdio, and not `builtin`, in the order they list.
+    /// open, enabled, and not `builtin`, in the order they list.
     ///
     /// # Errors
     ///
@@ -90,10 +88,7 @@ impl McpService {
     pub async fn open_to_devices(&self) -> Result<Vec<McpServer>, McpServiceError> {
         let mut servers = self.list_servers().await?;
         servers.retain(|server| {
-            server.allow_remote
-                && server.enabled
-                && server.server_type == McpServerType::Stdio
-                && server.name != RESERVED_SERVER_NAME
+            server.allow_remote && server.enabled && server.name != RESERVED_SERVER_NAME
         });
         Ok(servers)
     }
@@ -187,8 +182,7 @@ impl McpService {
     /// Start each enabled server this machine's own run may use that is not
     /// running: every one, or with `only` those whose ids it names. They
     /// start at once, so a server that hangs costs the run its own wait, not
-    /// one added to every other's. An SSE server, which gglib cannot run, is
-    /// left alone without a word. A server that cannot be started is skipped
+    /// one added to every other's. A server that cannot be started is skipped
     /// with one warning that names it and says why, as
     /// [`Self::opened_tools`] skips one; nothing here fails the run, which is
     /// then offered fewer tools.
@@ -200,11 +194,9 @@ impl McpService {
                 return;
             }
         };
-        let chosen = servers.iter().filter(|server| {
-            server.enabled
-                && server.server_type != McpServerType::Sse
-                && only.is_none_or(|ids| ids.contains(&server.id))
-        });
+        let chosen = servers
+            .iter()
+            .filter(|server| server.enabled && only.is_none_or(|ids| ids.contains(&server.id)));
         let starts = chosen.map(|server| async move {
             if let Err(why) = self.started(server).await {
                 warn!(server = %server.name, reason = %why, "an enabled MCP server is not running; it offers no tool");
@@ -229,14 +221,12 @@ impl McpService {
         if self.get_server_status(server.id).await == McpServerStatus::Running {
             return Ok(());
         }
-        if server.server_type == McpServerType::Stdio {
-            let resolved = self
-                .ensure_resolved(server.id)
-                .await
-                .map_err(|e| e.to_string())?;
-            if !resolved.success {
-                return Err(resolved.error_message_with_suggestions());
-            }
+        let resolved = self
+            .ensure_resolved(server.id)
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resolved.success {
+            return Err(resolved.error_message_with_suggestions());
         }
         self.ensure_started_for_call(server.id)
             .await

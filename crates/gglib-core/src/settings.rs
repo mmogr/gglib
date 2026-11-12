@@ -12,10 +12,6 @@ use crate::secret::held;
 mod settings_bounds;
 pub use settings_bounds::*;
 
-#[path = "settings_loop_guard.rs"]
-mod settings_loop_guard;
-pub use settings_loop_guard::LoopGuardMode;
-
 #[path = "settings_update.rs"]
 mod settings_update;
 pub use settings_update::{SettingsError, SettingsUpdate};
@@ -210,38 +206,34 @@ pub struct Settings {
     pub trust_client_sampling: Option<bool>,
 
     // ── Proxy loop guard ────────────────────────────────────────────
-    /// What the proxy's turn-level loop/stagnation guard does on
-    /// `/v1/chat/completions` when a replayed history trips it.
+    /// Whether the proxy's loop guard scans `/v1/chat/completions` requests.
     ///
-    /// A conversation that repeats the same tool-call batch back to back and
-    /// gets the same answer back each time, or repeats the same assistant
-    /// response anywhere in the session, beyond the shared agent-path
-    /// thresholds, is answered per [`LoopGuardMode`]: `note` (absent, and the
-    /// default) forwards it with a note saying what repeated and ends the run
-    /// if it trips again after that (ADR 0021), `refuse` rejects
-    /// it with a clean HTTP 400 before admission, and `off` does not scan.
-    /// Replaying identical batches across a history does not trip it — the
-    /// batch count is back to back — and a repeat whose answer changed is not
-    /// counted at all.
+    /// The guard catches an agent that repeats the exact same tool-call batch
+    /// back to back and gets the same answer back each time, or repeats the
+    /// same assistant response, beyond the shared agent-path thresholds. The
+    /// first trip forwards the request with a note saying what repeated; if
+    /// the same run trips again, the proxy ends it with a finished assistant
+    /// message instead of forwarding it (ADR 0021). It does not catch a loop
+    /// whose calls vary, and a repeat whose answer changed is not counted.
     ///
-    /// Note the polarity: absent means the guard is **on**, because it is
-    /// protection the endpoint should not silently lose, unlike
+    /// `None` (the default) means **on**, because it is protection the
+    /// endpoint should not silently lose, unlike
     /// [`Self::trust_client_sampling`], which is authority a client must be
-    /// explicitly granted.
+    /// explicitly granted. `Some(false)` does not scan.
     ///
     /// The stagnation threshold itself comes from
     /// [`Self::max_stagnation_steps`], shared with the built-in agent loop so
     /// the two paths cannot drift.
     ///
-    /// Read through [`Self::effective_loop_guard_mode`], which supplies the
+    /// Read through [`Self::effective_loop_guard`], which supplies the
     /// default.
-    pub loop_guard_mode: Option<LoopGuardMode>,
+    pub loop_guard: Option<bool>,
 
     /// Whether a tool call that fails schema validation is re-issued, with
     /// `tool_choice: "required"` or as a second draw under gglib's grammar.
     ///
     /// `None` (the default) means **on**, the same inverse polarity as
-    /// [`Self::loop_guard_mode`] and for the same reason: it is
+    /// [`Self::loop_guard`] and for the same reason: it is
     /// protection the endpoint should not lose silently. `Some(false)`
     /// forwards every call as emitted.
     ///
@@ -308,9 +300,9 @@ pub struct Settings {
     /// `gglib config reveal remote-pairing.api-key` prints it, alone
     /// and only when asked, for a client that is not gglib.
     ///
-    /// A database written before the halves were bound holds
-    /// `remote_api_key` and `remote_last_ticket` as separate rows, and both
-    /// are ignored — no alias, deliberately. Neither is evidence about the
+    /// A database written before the halves were bound held
+    /// `remote_api_key` and `remote_last_ticket` as separate rows; an upgrade
+    /// deletes both — no alias, deliberately. Neither is evidence about the
     /// other, and reading the one as belonging to the other is exactly the
     /// defect this field closes; such a machine loads as never paired and
     /// pairs again, which a stale ticket already required of it.
@@ -360,7 +352,7 @@ impl Settings {
             proxy_cache_disk_gb: None,
             proxy_api_key: None,
             trust_client_sampling: None,
-            loop_guard_mode: None,
+            loop_guard: None,
             tool_call_repair: None,
             mcp_drawing: None,
             proxy_autostart: None,
@@ -414,17 +406,14 @@ impl Settings {
         matches!(self.proxy_cache_on_disk, Some(true))
     }
 
-    /// What the loop guard does: the stored [`Self::loop_guard_mode`], or the
-    /// default, [`LoopGuardMode::Note`], when none is stored.
+    /// Whether the loop guard scans: the stored [`Self::loop_guard`], else
+    /// on.
     ///
     /// The one place the default is supplied, so the proxy, the CLI and
     /// anything that reports the setting cannot disagree about it.
     #[must_use]
-    pub const fn effective_loop_guard_mode(&self) -> LoopGuardMode {
-        match self.loop_guard_mode {
-            Some(mode) => mode,
-            None => LoopGuardMode::Note,
-        }
+    pub const fn effective_loop_guard(&self) -> bool {
+        !matches!(self.loop_guard, Some(false))
     }
 
     /// Whether `/mcp` offers the drawing tool: the stored
@@ -502,8 +491,8 @@ impl Settings {
         if let Some(v) = other.mcp_drawing {
             self.mcp_drawing = v;
         }
-        if let Some(ref v) = other.loop_guard_mode {
-            self.loop_guard_mode = *v;
+        if let Some(v) = other.loop_guard {
+            self.loop_guard = v;
         }
         if let Some(ref v) = other.proxy_autostart {
             self.proxy_autostart = *v;

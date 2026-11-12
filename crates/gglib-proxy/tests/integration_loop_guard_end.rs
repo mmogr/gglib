@@ -1,10 +1,11 @@
-//! End to end: under `note`, a run that trips again after its note is ended.
+//! End to end: a run that trips again after its note is ended.
 //!
 //! The proxy notes the first trip in a run and forwards the request. When the
 //! next request shows the same run tripping again, the model kept repeating
 //! after it was told, and the proxy answers in its place with a finished
 //! assistant message that calls no tool — the upstream is not asked (ADR
-//! 0021). `refuse` and `off` are unchanged, and the last two cases pin that.
+//! 0021). With the guard off the same history is forwarded untouched, and the
+//! last case pins that.
 //!
 //! Its own file because `integration_loop_guard_note.rs` is about the note's
 //! shape and `integration_loop_guard.rs` is frozen at its size.
@@ -15,17 +16,16 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::LoopGuardMode;
 use gglib_core::ports::ModelRuntimePort;
 
 mod fixtures;
 use fixtures::common::FixedUpstream;
 use fixtures::loop_guard::{
-    assistant_call, dashboard_of, looping_history, spawn_proxy_in_mode, spawn_recording_upstream,
-    stagnating_history,
+    assistant_call, dashboard_of, looping_history, spawn_proxy_with_guard,
+    spawn_recording_upstream, stagnating_history,
 };
 
-/// A proxy in `mode` in front of a recording upstream.
+/// A proxy with its guard on or off in front of a recording upstream.
 struct Rig {
     proxy_url: String,
     seen: Arc<std::sync::Mutex<Option<bytes::Bytes>>>,
@@ -33,7 +33,7 @@ struct Rig {
 }
 
 impl Rig {
-    async fn new(mode: LoopGuardMode) -> Self {
+    async fn new(guard: bool) -> Self {
         let upstream_cancel = CancellationToken::new();
         let (upstream_port, seen) = spawn_recording_upstream(upstream_cancel.clone()).await;
         let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
@@ -42,7 +42,7 @@ impl Rig {
             slot_restore_supported: true,
             pinned: false,
         });
-        let (proxy_url, proxy_cancel) = spawn_proxy_in_mode(runtime, "test-model", mode).await;
+        let (proxy_url, proxy_cancel) = spawn_proxy_with_guard(runtime, "test-model", guard).await;
         Self {
             proxy_url,
             seen,
@@ -110,7 +110,7 @@ fn last_content(forwarded: &Value) -> &str {
 /// the second.
 #[tokio::test]
 async fn a_run_that_trips_again_after_its_note_is_ended_without_the_upstream() {
-    let rig = Rig::new(LoopGuardMode::Note).await;
+    let rig = Rig::new(true).await;
 
     let (status, _, forwarded) = rig.send(3, true).await;
     assert_eq!(status, 200);
@@ -167,7 +167,7 @@ async fn a_run_that_trips_again_after_its_note_is_ended_without_the_upstream() {
 /// (#1435).
 #[tokio::test]
 async fn a_noted_stagnation_that_then_calls_a_tool_is_not_noted_again() {
-    let rig = Rig::new(LoopGuardMode::Note).await;
+    let rig = Rig::new(true).await;
 
     let (status, _, forwarded) = rig.send_history(stagnating_history(6), true).await;
     assert_eq!(status, 200);
@@ -205,7 +205,7 @@ async fn a_noted_stagnation_that_then_calls_a_tool_is_not_noted_again() {
 /// The same ending for a client that did not ask for a stream.
 #[tokio::test]
 async fn an_unstreamed_request_is_ended_with_a_finished_completion() {
-    let rig = Rig::new(LoopGuardMode::Note).await;
+    let rig = Rig::new(true).await;
 
     let (status, text, forwarded) = rig.send(4, false).await;
     assert_eq!(status, 200, "{text}");
@@ -218,23 +218,14 @@ async fn an_unstreamed_request_is_ended_with_a_finished_completion() {
 }
 
 #[tokio::test]
-async fn refuse_still_refuses_the_same_history() {
-    let rig = Rig::new(LoopGuardMode::Refuse).await;
-    let (status, text, forwarded) = rig.send(4, true).await;
-    assert_eq!(status, 400, "{text}");
-    assert!(text.contains("loop_detected"), "{text}");
-    assert!(forwarded.is_none());
-}
-
-#[tokio::test]
 async fn off_still_forwards_the_same_history_untouched() {
-    let rig = Rig::new(LoopGuardMode::Off).await;
+    let rig = Rig::new(false).await;
     let (status, _, forwarded) = rig.send(4, true).await;
     assert_eq!(status, 200);
     let forwarded = forwarded.expect("the upstream was reached");
     assert_eq!(
         last_content(&forwarded),
         "1 file changed",
-        "no note under `off`"
+        "no note with the guard off"
     );
 }

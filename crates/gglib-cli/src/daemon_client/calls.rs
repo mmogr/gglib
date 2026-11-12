@@ -335,7 +335,7 @@ mod tests {
         };
         let body = QueueDownloadBody {
             model_id: "owner/repo".to_owned(),
-            quant: None,
+            quantization: None,
         };
 
         let queued = STAND_IN_PORT
@@ -349,7 +349,8 @@ mod tests {
         assert_eq!(line, format!("POST {route} HTTP/1.1"));
         let sent: serde_json::Value = serde_json::from_str(&sent).expect("a JSON body");
         assert_eq!(sent["model_id"], "owner/repo");
-        assert!(sent["quant"].is_null(), "{sent}");
+        assert!(sent["quantization"].is_null(), "{sent}");
+        assert!(sent.get("quant").is_none(), "{sent}");
     }
 
     /// The ID read from the daemon's answer is the one the daemon wrote: a

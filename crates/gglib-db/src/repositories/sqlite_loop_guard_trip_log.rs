@@ -3,8 +3,8 @@
 //! through.
 //!
 //! Two tables. `loop_guard_trips` holds one row per decision the guard took.
-//! `loop_guard_scans` holds one row per UTC day, model, gglib version and
-//! mode, counting the requests the guard scanned — the denominator. The
+//! `loop_guard_scans` holds one row per UTC day, model and gglib version,
+//! counting the requests the guard scanned — the denominator. The
 //! summary has a row for every key **either** table holds: a day the guard
 //! scanned and never tripped comes back with `trips` at zero rather than not
 //! at all — the reading ADR 0011's criterion asks for — and a trip whose scan
@@ -15,14 +15,13 @@ use std::collections::HashMap;
 
 use sqlx::{Row, SqliteConnection, SqlitePool};
 
-use gglib_core::LoopGuardMode;
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::domain::loop_guard_log::{LoopGuardTripDay, LoopGuardTripEvent, epoch_day};
 use gglib_core::ports::RepositoryError;
 
-/// What one day's scans are counted under: the epoch day, the bounded model
-/// name and the mode. The gglib version is the writer's own, added at flush.
-pub(crate) type ScanKey = (i64, String, LoopGuardMode);
+/// What one day's scans are counted under: the epoch day and the bounded
+/// model name. The gglib version is the writer's own, added at flush.
+pub(crate) type ScanKey = (i64, String);
 
 const SECS_PER_DAY: i64 = 86_400;
 
@@ -46,25 +45,6 @@ const fn detector_str(detector: LoopGuardTrip) -> &'static str {
     }
 }
 
-const fn mode_str(mode: LoopGuardMode) -> &'static str {
-    match mode {
-        LoopGuardMode::Off => "off",
-        LoopGuardMode::Note => "note",
-        LoopGuardMode::Refuse => "refuse",
-    }
-}
-
-fn parse_mode(text: &str) -> Result<LoopGuardMode, RepositoryError> {
-    match text {
-        "note" => Ok(LoopGuardMode::Note),
-        "refuse" => Ok(LoopGuardMode::Refuse),
-        "off" => Ok(LoopGuardMode::Off),
-        other => Err(RepositoryError::Serialization(format!(
-            "unknown loop guard mode in the log: {other}"
-        ))),
-    }
-}
-
 fn storage(e: &sqlx::Error) -> RepositoryError {
     RepositoryError::Storage(e.to_string())
 }
@@ -84,14 +64,13 @@ pub(crate) async fn write_batch(
 ) -> Result<(), sqlx::Error> {
     for trip in trips {
         sqlx::query(
-            "INSERT INTO loop_guard_trips (recorded_at, model_name, gglib_version, mode, \
+            "INSERT INTO loop_guard_trips (recorded_at, model_name, gglib_version, \
              detector, signature_hash, session_hash, repeat_count, threshold) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(i64::try_from(trip.recorded_at_secs()).unwrap_or(i64::MAX))
         .bind(trip.model_name())
         .bind(version)
-        .bind(mode_str(trip.mode()))
         .bind(detector_str(trip.detector()))
         .bind(trip.signature_hash())
         .bind(trip.session_hash())
@@ -100,17 +79,16 @@ pub(crate) async fn write_batch(
         .execute(&mut *conn)
         .await?;
     }
-    for ((day, model_name, mode), scanned) in scans {
+    for ((day, model_name), scanned) in scans {
         sqlx::query(
-            "INSERT INTO loop_guard_scans (day, model_name, gglib_version, mode, scanned) \
-             VALUES (?, ?, ?, ?, ?) \
-             ON CONFLICT(day, model_name, gglib_version, mode) \
+            "INSERT INTO loop_guard_scans (day, model_name, gglib_version, scanned) \
+             VALUES (?, ?, ?, ?) \
+             ON CONFLICT(day, model_name, gglib_version) \
              DO UPDATE SET scanned = scanned + excluded.scanned",
         )
         .bind(day)
         .bind(model_name)
         .bind(version)
-        .bind(mode_str(*mode))
         .bind(i64::try_from(*scanned).unwrap_or(i64::MAX))
         .execute(&mut *conn)
         .await?;
@@ -126,8 +104,8 @@ pub(crate) async fn write_batch(
 /// "scanned, never tripped", which is exactly the false signal the log exists
 /// to rule out. Today is never cut by the cap, so a runaway day stays whole
 /// until it is over — and if today alone holds more trips than the cap, every
-/// earlier day goes. The cap counts trip rows; scan rows, one per day, model,
-/// version and mode (a client-chosen model name included), are bounded by the
+/// earlier day goes. The cap counts trip rows; scan rows, one per day, model
+/// and version (a client-chosen model name included), are bounded by the
 /// retention alone.
 pub(crate) async fn prune(
     conn: &mut SqliteConnection,
@@ -170,41 +148,41 @@ async fn delete_days_before(
 
 impl SqliteLoopGuardTripLog {
     /// Every day from `first_day` on (an [`epoch_day`]) that either table
-    /// holds a row for, one entry per model, gglib version and mode, newest
+    /// holds a row for, one entry per model and gglib version, newest
     /// day first. A day with scans and no trips is included, with `trips` at
     /// zero; so is a trip whose scan was lost, with `scanned` at zero.
     ///
     /// # Errors
     ///
     /// [`RepositoryError::Storage`] when the database refuses the read, and
-    /// [`RepositoryError::Serialization`] for a mode or a count the writer
+    /// [`RepositoryError::Serialization`] for a count the writer
     /// cannot have written.
     pub async fn summary(&self, first_day: i64) -> Result<Vec<LoopGuardTripDay>, RepositoryError> {
         let rows = sqlx::query(
             "WITH t AS ( \
-                 SELECT recorded_at / 86400 AS day, model_name, gglib_version, mode, \
+                 SELECT recorded_at / 86400 AS day, model_name, gglib_version, \
                         COUNT(*) AS trips, \
                         SUM(detector = 'loop') AS loops, \
                         SUM(detector = 'stagnation') AS stagnations, \
                         COUNT(DISTINCT session_hash) AS sessions \
                  FROM loop_guard_trips WHERE recorded_at >= ? \
-                 GROUP BY 1, 2, 3, 4 \
+                 GROUP BY 1, 2, 3 \
              ), s AS ( \
-                 SELECT day, model_name, gglib_version, mode, scanned \
+                 SELECT day, model_name, gglib_version, scanned \
                  FROM loop_guard_scans WHERE day >= ? \
              ), k AS ( \
-                 SELECT day, model_name, gglib_version, mode FROM s \
-                 UNION SELECT day, model_name, gglib_version, mode FROM t \
+                 SELECT day, model_name, gglib_version FROM s \
+                 UNION SELECT day, model_name, gglib_version FROM t \
              ) \
              SELECT date(k.day * 86400, 'unixepoch') AS day, k.model_name, k.gglib_version, \
-                    k.mode, COALESCE(s.scanned, 0) AS scanned, \
+                    COALESCE(s.scanned, 0) AS scanned, \
                     COALESCE(t.trips, 0) AS trips, COALESCE(t.loops, 0) AS loops, \
                     COALESCE(t.stagnations, 0) AS stagnations, \
                     COALESCE(t.sessions, 0) AS sessions \
              FROM k \
-             LEFT JOIN s USING (day, model_name, gglib_version, mode) \
-             LEFT JOIN t USING (day, model_name, gglib_version, mode) \
-             ORDER BY k.day DESC, k.model_name, k.gglib_version, k.mode",
+             LEFT JOIN s USING (day, model_name, gglib_version) \
+             LEFT JOIN t USING (day, model_name, gglib_version) \
+             ORDER BY k.day DESC, k.model_name, k.gglib_version",
         )
         .bind(first_day.saturating_mul(SECS_PER_DAY))
         .bind(first_day)
@@ -214,12 +192,10 @@ impl SqliteLoopGuardTripLog {
 
         rows.iter()
             .map(|row| {
-                let mode: String = row.try_get("mode").map_err(|e| storage(&e))?;
                 Ok(LoopGuardTripDay {
                     day: row.try_get("day").map_err(|e| storage(&e))?,
                     model_name: row.try_get("model_name").map_err(|e| storage(&e))?,
                     gglib_version: row.try_get("gglib_version").map_err(|e| storage(&e))?,
-                    mode: parse_mode(&mode)?,
                     scanned: count(row, "scanned")?,
                     trips: count(row, "trips")?,
                     loops: count(row, "loops")?,

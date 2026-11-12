@@ -12,7 +12,7 @@ use crate::repositories::SqliteLoopGuardTripLog;
 use crate::setup::{setup_database, setup_test_database};
 
 fn trip(model: &str) -> LoopGuardTripEvent {
-    LoopGuardTripEvent::new(now_secs(), model, LoopGuardTrip::Loop, LoopGuardMode::Note)
+    LoopGuardTripEvent::new(now_secs(), model, LoopGuardTrip::Loop)
 }
 
 async fn today(pool: &SqlitePool) -> Vec<LoopGuardTripDay> {
@@ -65,7 +65,7 @@ async fn stopping_writes_every_trip_and_every_scan_recorded_before_it() {
     let writer = LoopGuardTripWriter::spawn(pool.clone());
     let at = now_secs();
     for _ in 0..3 {
-        writer.record_scan("qwen", LoopGuardMode::Note, at);
+        writer.record_scan("qwen", at);
     }
     writer.record_trip(trip("qwen"));
     writer.record_trip(trip("qwen"));
@@ -89,15 +89,10 @@ async fn a_trip_outlives_the_database_connection_that_wrote_it() {
         .await
         .unwrap();
     let writer = LoopGuardTripWriter::spawn(pool.clone());
-    writer.record_scan("qwen", LoopGuardMode::Refuse, now_secs());
+    writer.record_scan("qwen", now_secs());
     writer.record_trip(
-        LoopGuardTripEvent::new(
-            now_secs(),
-            "qwen",
-            LoopGuardTrip::Loop,
-            LoopGuardMode::Refuse,
-        )
-        .with_signature("write_file:1"),
+        LoopGuardTripEvent::new(now_secs(), "qwen", LoopGuardTrip::Loop)
+            .with_signature("write_file:1"),
     );
     writer.shutdown().await;
     pool.close().await;
@@ -107,7 +102,6 @@ async fn a_trip_outlives_the_database_connection_that_wrote_it() {
         .unwrap();
     let days = today(&reopened).await;
     assert_eq!(days.len(), 1, "{days:?}");
-    assert_eq!(days[0].mode, LoopGuardMode::Refuse);
     assert_eq!((days[0].scanned, days[0].trips, days[0].loops), (1, 1, 1));
 }
 
@@ -121,7 +115,7 @@ async fn the_timer_flushes_scans_with_no_trip_among_them() {
             ..TripWriterLimits::default()
         },
     );
-    writer.record_scan("qwen", LoopGuardMode::Note, now_secs());
+    writer.record_scan("qwen", now_secs());
 
     let mut seen = Vec::new();
     for _ in 0..40 {
@@ -150,8 +144,8 @@ async fn a_refused_flush_loses_its_batch_and_the_writer_carries_on() {
     tokio::time::sleep(Duration::from_millis(20)).await;
     pool.close().await;
     writer.record_trip(trip("qwen"));
-    writer.record_scan("qwen", LoopGuardMode::Note, now_secs());
-    writer.record_scan("qwen", LoopGuardMode::Note, now_secs());
+    writer.record_scan("qwen", now_secs());
+    writer.record_scan("qwen", now_secs());
 
     for _ in 0..40 {
         if writer.lost() >= 3 {
@@ -177,7 +171,7 @@ async fn what_is_recorded_after_stopping_is_counted_as_lost_not_kept() {
     let writer = LoopGuardTripWriter::spawn(pool.clone());
     writer.shutdown().await;
 
-    writer.record_scan("qwen", LoopGuardMode::Note, now_secs());
+    writer.record_scan("qwen", now_secs());
     writer.record_trip(trip("qwen"));
 
     assert_eq!(writer.lost(), 2, "one scan and one decision, both counted");
@@ -220,7 +214,7 @@ async fn a_long_model_name_keys_its_scan_and_its_trip_alike() {
     let pool = setup_test_database().await.unwrap();
     let writer = LoopGuardTripWriter::spawn(pool.clone());
     let name = "m".repeat(300);
-    writer.record_scan(&name, LoopGuardMode::Note, now_secs());
+    writer.record_scan(&name, now_secs());
     writer.record_trip(trip(&name));
     writer.shutdown().await;
 
@@ -242,12 +236,7 @@ async fn a_new_writer_prunes_what_the_log_no_longer_keeps() {
     crate::repositories::sqlite_loop_guard_trip_log::write_batch(
         &mut conn,
         "0.0.0-test",
-        &[LoopGuardTripEvent::new(
-            old,
-            "m",
-            LoopGuardTrip::Loop,
-            LoopGuardMode::Note,
-        )],
+        &[LoopGuardTripEvent::new(old, "m", LoopGuardTrip::Loop)],
         &HashMap::new(),
     )
     .await

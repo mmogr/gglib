@@ -19,7 +19,6 @@ const SERVER_STATE_MARKS: Readonly<Record<McpState, MarkKind>> = {
   starting: 'changing',
   stopped: 'off',
   failed: 'failed',
-  unsupported: 'off',
 };
 
 export interface ServerState {

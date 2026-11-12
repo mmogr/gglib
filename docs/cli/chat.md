@@ -25,13 +25,13 @@ n
 ## `q`
 
 One-shot. `{}` in the question is replaced by piped or `--file` input, and
-`-Q` / `--quiet` strips tool progress and reasoning tokens for a script.
+`--quiet` strips tool progress and reasoning tokens for a script.
 Without `-m` it asks the default model (`default-model-id`, [config set](config.md#set-unset-show));
 under `--remote`, the model last asked of that machine.
 
 <!-- snippet: q-pipe -->
 ```console
-$ grep -E "WARN|ERROR" server.log | gglib q -Q "What went wrong here?"
+$ grep -E "WARN|ERROR" server.log | gglib q --quiet "What went wrong here?"
 The logs indicate that the application is experiencing a **database connection pool exhaustion** issue. Here's what went wrong:
 
 1. **Database Pool at Capacity**:
@@ -68,7 +68,7 @@ gglib q --remote -m <id> "Why is this test flaky?"   # on the paired machine
 ```
 
 - At a terminal, once the answer is in, `q` offers to go on as a chat
-  (`Continue chatting?`); `-Q`, or input from a pipe, skips the offer.
+  (`Continue chatting?`); `--quiet`, or input from a pipe, skips the offer.
 - The question is a saved chat from the start, made before it is asked:
   a question that fails keeps what arrived of its reply, marked as stopped.
 - Its file tools read the directory it was asked in.
@@ -107,7 +107,7 @@ Session #20 saved. Resume with: gglib chat --continue 20
   keeps what had arrived of its reply, marked as stopped.
 - The flags a session names are saved with the chat, and the daemon reads
   them on every turn, the chat page's included: the model, `--tools`,
-  `--no-tools`, the tool limits, `--max-iterations`, `--profile` and five
+  `--no-tools`, the tool limits, `--max-tool-iterations`, `--profile` and five
   sampling flags. `--continue` keeps what the chat saved, with what its
   command line names in its place; `-s` replaces the chat's system prompt.
 - `/retry`, `/edit` and `/branch` are made by the daemon, as the chat page
@@ -163,7 +163,7 @@ explains the budget.
 Local models need guardrails to finish a tool-calling task, so the loop
 carries them.
 
-- `--max-iterations` caps the loop; without it, the limit a resumed chat
+- `--max-tool-iterations` caps the loop; without it, the limit a resumed chat
   saved, then the `max-tool-iterations` setting, which is the order the chat
   page and a paired device's turn follow too.
 - `--tools` is an allowlist, saved with the chat; parallelism and timeout
@@ -173,9 +173,9 @@ carries them.
 
 ### Sampling
 
-A chat keeps five sampling flags, `--temperature`, `--top-p`, `--top-k`,
-`--max-tokens` and `--repeat-penalty`, and `--profile`. Any other sampling
-flag does not take effect, and the session says so on stderr.
+`chat` and `q` take five sampling flags, `--temperature`, `--top-p`,
+`--top-k`, `--max-tokens` and `--repeat-penalty`, and `--profile`, and the
+chat keeps them. The other sampling flags are `serve`'s and `proxy`'s.
 
 - Each turn sends the five as a client's sampling. The endpoint takes them
   only while **Let clients set sampling** is on (`gglib config set
@@ -185,8 +185,8 @@ flag does not take effect, and the session says so on stderr.
 - Each turn names the chat's profile on its model, `<id>:<profile>`, and the
   endpoint applies it whether or not it trusts clients' sampling. Under
   `--remote` the profile is the paired machine's.
-- `--reasoning-budget-tokens` is not kept: `--thinking off` stops a chat's
-  thinking.
+- There is no `--reasoning-budget-tokens` here: `--thinking off` stops a
+  chat's thinking.
 
 ### `/draw`
 

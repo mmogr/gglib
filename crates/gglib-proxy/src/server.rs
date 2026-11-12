@@ -585,10 +585,9 @@ pub(crate) async fn chat_completions(
     let model_context = gglib_core::request_pipeline::ModelContext::from(&model);
 
     // The turn-level loop/stagnation guard, keyed by the model the request
-    // resolved to. Under `refuse` it answers here, after the one catalog read
-    // above but before admission or any model swap is paid for; under `note`
-    // the request goes on and carries the note and the trip with it, unless
-    // the same run already had its note, when the run is ended here. See
+    // resolved to. A first trip goes on and carries the note and the trip
+    // with it; a run that already had its note is ended here, after the one
+    // catalog read above but before admission or any model swap is paid for. See
     // `loop_guard_step` for what it records and `loop_guard` for what a
     // replayed history means.
     let mut guard_note = None;
@@ -607,7 +606,6 @@ pub(crate) async fn chat_completions(
         crate::loop_guard_step::GuardStep::End => {
             return crate::loop_guard_end::ended_response(&model.name, is_streaming);
         }
-        crate::loop_guard_step::GuardStep::Refuse(response) => return response,
     }
 
     // Watchdog: if prior requests asked for a recycle (a strike streak, or a
