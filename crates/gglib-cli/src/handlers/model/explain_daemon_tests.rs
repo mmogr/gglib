@@ -86,9 +86,9 @@ async fn explained(
 }
 
 /// With a model loaded that the launch would unload, the daemon's plan says
-/// so and the command prints the sentence the GUI's Load palette shows
-/// (`contracts/models/unload_reason.json`). The command's own plan knows of
-/// nothing loaded, so the line can only have come from the daemon.
+/// so and the command prints the sentence it serves, the one the GUI's Load
+/// palette shows. The command's own plan knows of nothing loaded, so the
+/// line can only have come from the daemon.
 #[tokio::test]
 async fn a_load_that_would_unload_a_loaded_model_says_which_and_why() {
     let dir = tempfile::tempdir().unwrap();
@@ -98,10 +98,10 @@ async fn a_load_that_would_unload_a_loaded_model_says_which_and_why() {
         answer.plan.unloads, None,
         "the one-shot plan unloads nothing"
     );
-    answer.plan.unloads = Some(Unload {
-        model: "Qwen3-30B-A3B".to_owned(),
-        reason: UnloadReason::WouldNotFitBeside,
-    });
+    answer.plan.unloads = Some(Unload::new(
+        "Qwen3-30B-A3B".to_owned(),
+        UnloadReason::WouldNotFitBeside,
+    ));
     let (port, asked) = daemon("200 OK", serde_json::to_string(&answer).unwrap());
 
     let plan = explained(&ctx, &model, port, Some(TOKEN), None)

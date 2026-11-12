@@ -1,8 +1,8 @@
 //! Matching an `Authorization` header against the configured bearer token.
 //!
-//! Split from `mod.rs` rather than added to it because that file is near its
-//! complexity budget, and because this is one self-contained decision: given
-//! what a client sent and what the endpoint expects, does the request get in.
+//! Split from `mod.rs` rather than added to it because this is one
+//! self-contained decision: given what a client sent and what the endpoint
+//! expects, does the request get in.
 
 use std::sync::Arc;
 

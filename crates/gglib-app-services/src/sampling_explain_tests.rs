@@ -63,18 +63,19 @@ fn an_unknown_profile_is_refused_with_the_shared_message() {
 
 #[test]
 fn a_layer_index_resolves_to_its_rung_name() {
-    let entry = provenance("temperature", ParamSource::Layer(2));
+    let entry = provenance("temperature", ParamSource::Layer(2), None, None);
     assert_eq!(entry.kind, ProvenanceKindDto::Layer);
     assert_eq!(entry.layer, Some(SamplingLayerDto::ModelUserSet));
+    assert_eq!(entry.label, "per-model defaults (user-set)");
 }
 
 #[test]
 fn the_unsent_variants_stay_distinguishable_and_carry_no_layer() {
-    let coupled = provenance("min_p", ParamSource::Coupled);
+    let coupled = provenance("min_p", ParamSource::Coupled, None, None);
     assert_eq!(coupled.kind, ProvenanceKindDto::Coupled);
     assert_eq!(coupled.layer, None);
 
-    let unset = provenance("max_tokens", ParamSource::Unset);
+    let unset = provenance("max_tokens", ParamSource::Unset, None, None);
     assert_eq!(unset.kind, ProvenanceKindDto::Unset);
     assert_eq!(unset.layer, None);
 }
@@ -84,9 +85,10 @@ fn the_unsent_variants_stay_distinguishable_and_carry_no_layer() {
 /// read-only view.
 #[test]
 fn an_index_past_the_ladder_is_a_layer_without_a_name() {
-    let entry = provenance("temperature", ParamSource::Layer(9));
+    let entry = provenance("temperature", ParamSource::Layer(9), None, None);
     assert_eq!(entry.kind, ProvenanceKindDto::Layer);
     assert_eq!(entry.layer, None);
+    assert_eq!(entry.label, "an unnamed layer");
 }
 
 /// The client zips `sources[i].param` against `resolved`. If a field on
@@ -164,12 +166,12 @@ fn serializes_camel_case_with_the_layer_omitted_for_unset() {
     assert_eq!(value["profile"], json!(null));
     assert_eq!(
         value["sources"][0],
-        json!({ "param": "temperature", "kind": "unset" })
+        json!({ "param": "temperature", "kind": "unset", "label": "unset by design" })
     );
     // maxTokens is last in the canonical order, after the DRY block.
     assert_eq!(
         value["sources"][14],
-        json!({ "param": "maxTokens", "kind": "unset" })
+        json!({ "param": "maxTokens", "kind": "unset", "label": "unset by design" })
     );
 
     // ADR 0003 and ADR 0022: an untuned model resolves no sampler, and
@@ -256,6 +258,7 @@ fn a_profile_outranks_global_settings_and_is_echoed_back() {
         source_for(&dto, "temperature").layer,
         Some(SamplingLayerDto::Profile)
     );
+    assert_eq!(source_for(&dto, "temperature").label, "profile 'coding'");
     // Untouched by the profile, so the lower rung still fills it.
     assert_eq!(dto.resolved.top_k, Some(15));
     assert_eq!(
@@ -302,6 +305,27 @@ fn an_unreviewed_recipe_ranks_below_global_settings() {
     assert_eq!(
         source_for(&dto, "temperature").layer,
         Some(SamplingLayerDto::ModelUserSet)
+    );
+}
+
+/// The auto-detected rung is named by whose recipe it holds, which only the
+/// model's stored origin says.
+#[test]
+fn a_published_recipe_is_labelled_the_model_authors() {
+    let published = Model {
+        inference_defaults: Some(InferenceConfig {
+            temperature: Some(1.0),
+            ..Default::default()
+        }),
+        defaults_origin: Some(DefaultsOrigin::Published),
+        ..model()
+    };
+
+    let dto = explain(&published, &Settings::with_defaults(), None);
+
+    assert_eq!(
+        source_for(&dto, "temperature").label,
+        "per-model defaults (published by the model author)"
     );
 }
 

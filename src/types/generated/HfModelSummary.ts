@@ -29,7 +29,9 @@ likes: number,
  */
 last_modified: string | null, 
 /**
- * Total parameter count in billions (the GGUF header's, when the Hub gives it)
+ * Total parameter count in billions: the Hub's, unless the repository's
+ * file names state a count more than twice it that its largest weights
+ * could hold; a lookup by ID with neither takes those weights' header's.
  */
 parameters_b: number | null, 
 /**

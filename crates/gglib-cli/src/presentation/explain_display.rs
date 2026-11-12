@@ -10,11 +10,8 @@
 
 use std::fmt::Write as _;
 
-use gglib_app_services::{
-    ProvenanceKindDto, PublishedDefaultDto, PublishedStateDto, SamplingExplanationDto,
-    SamplingLayerDto,
-};
-use gglib_core::domain::{DefaultsOrigin, ReasoningEffort};
+use gglib_app_services::{PublishedDefaultDto, PublishedStateDto, SamplingExplanationDto};
+use gglib_core::domain::ReasoningEffort;
 use gglib_core::request_pipeline::CLIENT_AUTHORITATIVE_KEYS;
 
 /// Width of the parameter-name column.
@@ -161,7 +158,7 @@ pub(crate) fn explanation_lines(explanation: &SamplingExplanationDto) -> Vec<Str
         );
         let row = format!(
             "{field:<NAME_WIDTH$}{value:<VALUE_WIDTH$} {ARROW} {}",
-            describe(source.kind, source.layer, explanation)
+            source.label
         );
         let mut published = explanation.published.iter();
         let published = published.find(|entry| entry.param == source.param);
@@ -232,47 +229,6 @@ fn trim_f32_artifact(value: f64) -> f64 {
     let magnitude = value.abs().log10().floor();
     let factor = 10f64.powf(5.0 - magnitude);
     (value * factor).round() / factor
-}
-
-/// Name the rung a parameter resolved from, in the user's terms.
-///
-/// The wording for the model's own defaults matches `inspect_display`'s, so
-/// the two commands describe the same stored fact the same way.
-fn describe(
-    kind: ProvenanceKindDto,
-    layer: Option<SamplingLayerDto>,
-    explanation: &SamplingExplanationDto,
-) -> String {
-    match kind {
-        ProvenanceKindDto::Layer => match layer {
-            // The request rung is always empty for this command — nothing has
-            // been asked yet — so reaching it would be a wiring bug.
-            Some(SamplingLayerDto::Request) => "request parameters".to_owned(),
-            Some(SamplingLayerDto::Profile) => explanation
-                .profile
-                .as_ref()
-                .map_or_else(|| "profile".to_owned(), |name| format!("profile '{name}'")),
-            Some(SamplingLayerDto::ModelUserSet) => "per-model defaults (user-set)".to_owned(),
-            Some(SamplingLayerDto::Global) => "global settings".to_owned(),
-            // A published, a measured and the `reasoning` recipe share this
-            // rung — none was reviewed here, so all rank below global
-            // settings — and the origin is what names whose numbers they are.
-            Some(SamplingLayerDto::ModelAutoDetected) => match explanation.defaults_origin {
-                Some(DefaultsOrigin::Published) => {
-                    "per-model defaults (published by the model author)".to_owned()
-                }
-                Some(DefaultsOrigin::Measured) => {
-                    "per-model defaults (measured by a tune sweep)".to_owned()
-                }
-                _ => "per-model defaults (auto-detected: reasoning tag)".to_owned(),
-            },
-            // A rung the explanation could not name, which none of the five it
-            // resolves is.
-            None => "an unnamed layer".to_owned(),
-        },
-        ProvenanceKindDto::Coupled => "unset (coupled to temperature layer)".to_owned(),
-        ProvenanceKindDto::Unset => "unset by design".to_owned(),
-    }
 }
 
 /// Footnotes for the rungs this command cannot see.

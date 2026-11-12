@@ -49,10 +49,7 @@ pub(crate) fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities
         flags |= CapabilityFlags::EMBEDDING;
     }
 
-    GgufCapabilities {
-        flags,
-        extensions: std::collections::BTreeSet::new(),
-    }
+    GgufCapabilities { flags }
 }
 
 #[cfg(test)]

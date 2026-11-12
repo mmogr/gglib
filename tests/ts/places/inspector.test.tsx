@@ -169,7 +169,7 @@ describe('the inspector, a model on this machine', () => {
 
   it('groups the arguments by their decision, each row saying whose choice and why on hover', async () => {
     // The daemon names every field; here none resolves to anything.
-    const sources = [...SAMPLING_KEYS, ...REASONING_KEYS].map((param) => ({ param, kind: 'unset' as const }));
+    const sources = [...SAMPLING_KEYS, ...REASONING_KEYS].map((param) => ({ param, kind: 'unset' as const, label: 'unset by design' }));
     explain.answer = launchExplanation(samplingExplanation({ sources }), chatPlan());
     renderInspector();
     await screen.findByRole('group', { name: 'Context' });
@@ -315,7 +315,7 @@ describe('the inspector, a model on this machine', () => {
   it('reads set by you on a row the person set, and Reset clears that one value', async () => {
     const fit = chatPlan().fit!;
     explain.answer = launchExplanation(
-      samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'modelUserSet' }] }),
+      samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'modelUserSet', label: 'per-model defaults (user-set)' }] }),
       chatPlan({ fit: { ...fit, source: 'model_server_defaults' } }),
     );
     const model = guiModel({ ...GEMMA, serverDefaults: { contextLength: 16384, jinja: true } });
@@ -503,7 +503,7 @@ describe('the inspector, a model on this machine', () => {
   });
 
   it("resets the sampling values you set and leaves the reasoning ones", async () => {
-    explain.answer = launchExplanation(samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'modelUserSet' }] }), chatPlan());
+    explain.answer = launchExplanation(samplingExplanation({ sources: [{ param: 'topP', kind: 'layer', layer: 'modelUserSet', label: 'per-model defaults (user-set)' }] }), chatPlan());
     renderInspector(guiModel({ ...GEMMA, inferenceDefaults: resolvedConfig({ topP: 0.9, reasoningEffort: 'high' }) }));
     await screen.findByRole('group', { name: 'Sampling' });
     await userEvent.setup().click(within(row('Sampling')).getByRole('button', { name: 'Reset' }));

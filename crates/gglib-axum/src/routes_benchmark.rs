@@ -1,6 +1,6 @@
 //! The benchmark's routes, nested under `/api/benchmark`.
 //!
-//! Moved out of `routes.rs`, which is at its size budget, as `/remote` was.
+//! Moved out of `routes.rs`, as `/remote` was.
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;

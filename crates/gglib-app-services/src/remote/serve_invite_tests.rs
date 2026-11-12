@@ -1,12 +1,11 @@
 //! Tests for what arming the tunnel *offers*: nothing, unless someone asked
 //! to pair a device.
 //!
-//! Split from `serve_watch_tests.rs`, which is at its size budget and is
-//! about a different subject — what the serve side does about the proxy it
-//! fronts. These share that file's fixture, and through it `enable_tests.rs`'s:
-//! a real proxy on a free port, and a `modelpipe::serve` that binds an
-//! endpoint without reaching the network, so the whole of `arm` runs here
-//! rather than stopping at the bind.
+//! Split from `serve_watch_tests.rs`, which is about a different subject —
+//! what the serve side does about the proxy it fronts. These share that
+//! file's fixture, and through it `enable_tests.rs`'s: a real proxy on a free
+//! port, and a `modelpipe::serve` that binds an endpoint without reaching the
+//! network, so the whole of `arm` runs here rather than stopping at the bind.
 
 use gglib_core::ports::RemoteGatewayPort as _;
 

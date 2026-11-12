@@ -1,8 +1,8 @@
 //! Tests for [`super`]: whether a turn is re-issued, and which response wins.
 //!
-//! Moved out of `repair.rs` as they were, to keep that file within the Rust
-//! size ratchet. The accumulator and event synthesis tests are in
-//! `repair_stream_tests.rs`, a child of this module that shares its fixtures.
+//! Moved out of `repair.rs` as they were. The accumulator and event synthesis
+//! tests are in `repair_stream_tests.rs`, a child of this module that shares
+//! its fixtures.
 
 use super::*;
 use serde_json::json;

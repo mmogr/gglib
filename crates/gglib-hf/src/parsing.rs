@@ -7,7 +7,8 @@ use crate::error::{HfError, HfResult};
 use crate::kind::keeps;
 use crate::models::{HfEntryType, HfFileEntry};
 use gglib_core::ports::huggingface::{
-    HfModelKind, HfQuantInfo, HfRepoInfo, match_variant, variants_of,
+    HfModelKind, HfQuantInfo, HfRepoInfo, largest_weights, match_variant, names_contradict,
+    sized_parameters_b, variants_of,
 };
 use gglib_core::repo_short_name;
 use serde_json::Value;
@@ -25,21 +26,41 @@ use serde_json::Value;
 /// and `tags` alone, and the model info carries more; a field a response does
 /// not hold is absent from the summary.
 pub(crate) fn repo_info_from_json(json: &Value) -> Option<HfRepoInfo> {
+    listed_repo_info(json, None)
+}
+
+/// [`repo_info_from_json`], for a repository whose files were sized as
+/// `variants`, with their sizes, when its search answer contradicted the
+/// Hub's count ([`names_contradict_the_hub`]).
+///
+/// The Hub fills `gguf` from one file of the repository, which can be a
+/// draft or an MTP head's. With the files listed, the count is the one
+/// [`sized_parameters_b`] judges by their sizes; then the safetensors count
+/// and the config's, which a GGUF repository rarely has. The Hub's
+/// `context_length` goes with its count. Unlisted, the count is the Hub's.
+pub(crate) fn listed_repo_info(
+    json: &Value,
+    variants: Option<&[HfQuantInfo]>,
+) -> Option<HfRepoInfo> {
     let text = |path: &[&str]| at(json, path).and_then(Value::as_str).map(str::to_owned);
     let count = |key: &str| json.get(key).and_then(Value::as_u64).unwrap_or(0);
+    let billions = |path: &[&str]| at(json, path).and_then(Value::as_f64).map(|n| n / 1e9);
 
     let model_id = text(&["id"]).filter(|id| !id.is_empty())?;
 
+    let hub = hub_total(json);
+    // With no weights to judge by, the Hub's stands.
+    let hub_count = match variants {
+        Some(variants) if largest_weights(variants).is_some() => sized_parameters_b(hub, variants),
+        _ => hub,
+    };
+    let rejected = hub.is_some() && hub_count != hub;
+
     // The GGUF header's own count first: it is the one a GGUF repository
     // has. The other two are what a repository of safetensors weights gives.
-    let parameters_b = [
-        &["gguf", "total"][..],
-        &["safetensors", "total"],
-        &["config", "num_parameters"],
-    ]
-    .iter()
-    .find_map(|path| at(json, path).and_then(Value::as_f64))
-    .map(|parameters| parameters / 1_000_000_000.0);
+    let parameters_b = hub_count
+        .or_else(|| billions(&["safetensors", "total"]))
+        .or_else(|| billions(&["config", "num_parameters"]));
 
     let tags = json
         .get("tags")
@@ -64,10 +85,56 @@ pub(crate) fn repo_info_from_json(json: &Value) -> Option<HfRepoInfo> {
         chat_template: text(&["gguf", "chat_template"])
             .or_else(|| text(&["config", "chat_template"])),
         architecture: text(&["gguf", "architecture"]),
-        context_length: at(json, &["gguf", "context_length"]).and_then(Value::as_u64),
+        context_length: at(json, &["gguf", "context_length"])
+            .and_then(Value::as_u64)
+            .filter(|_| !rejected),
         tags,
         model_id,
+        file_paths: sibling_paths(json),
     })
+}
+
+/// The Hub's count, in billions: its `gguf.total`.
+fn hub_total(json: &Value) -> Option<f64> {
+    at(json, &["gguf", "total"])
+        .and_then(Value::as_f64)
+        .map(|n| n / 1e9)
+}
+
+/// The paths of the GGUF files a model object names (`siblings`).
+pub(crate) fn gguf_sibling_paths(json: &Value) -> Vec<String> {
+    sibling_paths(json)
+        .into_iter()
+        .filter(|path| {
+            std::path::Path::new(path)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
+        })
+        .collect()
+}
+
+/// The paths of the files a model object names (`siblings`).
+fn sibling_paths(json: &Value) -> Vec<String> {
+    json.get("siblings")
+        .and_then(Value::as_array)
+        .map(|siblings| {
+            siblings
+                .iter()
+                .filter_map(|file| file.get("rfilename").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether a search hit's model file names contradict the Hub's count:
+/// one states more than twice the Hub's `gguf.total`, or states a count
+/// where the Hub gives none. Only such a hit's files are sized, to judge
+/// the two by their sizes; any other keeps the Hub's count unasked.
+pub(crate) fn names_contradict_the_hub(hit: &Value) -> bool {
+    let paths = sibling_paths(hit);
+    let named = variants_of(paths.iter().map(|path| (path.as_str(), 0)));
+    names_contradict(hub_total(hit), &named)
 }
 
 /// The value at `path` in `json`, one key per level.
@@ -86,13 +153,16 @@ fn cut_description(description: &str) -> String {
     }
 }
 
-/// The hits of a search page that hold a GGUF file and are of `kind`, each as
-/// its summary.
-pub(crate) fn search_hits(hits: &[Value], kind: HfModelKind) -> Vec<HfRepoInfo> {
+/// The hits of a search page that name an ID, hold a GGUF file and are of
+/// `kind`, each with that ID.
+pub(crate) fn search_hits(hits: &[Value], kind: HfModelKind) -> Vec<(&str, &Value)> {
     hits.iter()
-        .filter(|hit| holds_a_gguf_file(hit))
-        .filter(|hit| keeps(kind, hit))
-        .filter_map(repo_info_from_json)
+        .filter_map(|hit| {
+            let id = hit.get("id").and_then(Value::as_str)?;
+            (!id.is_empty()).then_some((id, hit))
+        })
+        .filter(|(_, hit)| holds_a_gguf_file(hit))
+        .filter(|(_, hit)| keeps(kind, hit))
         .collect()
 }
 

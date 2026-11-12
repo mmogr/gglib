@@ -60,7 +60,12 @@ async fn every_format_tag_goes_and_the_rest_keep_their_order() {
     )
     .await;
     plant(&pool, "only", Some(r#"["format:qwen-xml"]"#)).await;
-    plant(&pool, "owner", Some(r#"["Format:mine","format:mistral"]"#)).await;
+    plant(
+        &pool,
+        "owner",
+        Some(r#"["Format:mine","formatted","format:mistral"]"#),
+    )
+    .await;
     stamp_older(&pool).await;
 
     run(&pool, LATEST).await.unwrap();
@@ -73,7 +78,7 @@ async fn every_format_tag_goes_and_the_rest_keep_their_order() {
     // The prefix as detection wrote it; a tag spelled otherwise is a user's.
     assert_eq!(
         tags_of(&pool, "owner").await.as_deref(),
-        Some(r#"["Format:mine"]"#)
+        Some(r#"["Format:mine","formatted"]"#)
     );
     assert_eq!(user_version(&pool).await.unwrap(), LATEST);
 }

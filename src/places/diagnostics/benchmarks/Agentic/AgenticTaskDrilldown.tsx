@@ -3,7 +3,6 @@ import { ChevronRight } from 'lucide-react';
 import { Button } from '../../../../components/ui/Button';
 import { Icon } from '../../../../components/ui/Icon';
 import { cn } from '../../../../utils/cn';
-import { isUnstable, passCounts } from './verdicts';
 import type { AgenticEvalReport } from '../../../../types/benchmark';
 
 const Td: FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
@@ -46,20 +45,15 @@ export const AgenticTaskDrilldown: FC<{ report: AgenticEvalReport }> = ({ report
               </tr>
             </thead>
             <tbody>
-              {report.tasks.map((t) => {
-                const [rawPassed, gglibPassed] = passCounts(t);
-                return (
-                  <tr key={t.task_id} className="border-b border-border-light last:border-b-0">
-                    <Td className="text-text-secondary">{t.task_id}</Td>
-                    <td className="px-md py-xs text-xs text-text-muted">{t.category}</td>
-                    <Td>{`${rawPassed}/${t.raw.length}`}</Td>
-                    <Td>{`${gglibPassed}/${t.gglib.length}`}</Td>
-                    <td className="px-md py-xs text-xs text-warning">
-                      {isUnstable(t) ? 'unstable' : ''}
-                    </td>
-                  </tr>
-                );
-              })}
+              {report.tasks.map((t) => (
+                <tr key={t.task_id} className="border-b border-border-light last:border-b-0">
+                  <Td className="text-text-secondary">{t.task_id}</Td>
+                  <td className="px-md py-xs text-xs text-text-muted">{t.category}</td>
+                  <Td>{`${t.raw_passed}/${t.raw.length}`}</Td>
+                  <Td>{`${t.gglib_passed}/${t.gglib.length}`}</Td>
+                  <td className="px-md py-xs text-xs text-warning">{t.unstable ? 'unstable' : ''}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

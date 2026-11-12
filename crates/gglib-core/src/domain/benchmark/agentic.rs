@@ -581,9 +581,48 @@ pub struct AgenticTaskComparison {
     pub raw: Vec<TuneTaskResult>,
     /// Per-seed results under the gglib arm, in seed order.
     pub gglib: Vec<TuneTaskResult>,
+    /// How many of `raw`'s seeds passed ([`Self::pass_counts`]). Served, and
+    /// counted again on every read rather than trusted from storage.
+    #[serde(default, skip_deserializing)]
+    pub raw_passed: usize,
+    /// How many of `gglib`'s seeds passed, as `raw_passed` is counted.
+    #[serde(default, skip_deserializing)]
+    pub gglib_passed: usize,
+    /// Whether either arm disagreed with itself across seeds
+    /// ([`Self::is_unstable`]), as `raw_passed` is counted.
+    #[serde(default, skip_deserializing)]
+    pub unstable: bool,
 }
 
 impl AgenticTaskComparison {
+    /// One task's per-seed results under both arms, with its pass counts and
+    /// stability counted.
+    #[must_use]
+    pub fn new(
+        task_id: String,
+        category: TaskCategory,
+        raw: Vec<TuneTaskResult>,
+        gglib: Vec<TuneTaskResult>,
+    ) -> Self {
+        Self {
+            task_id,
+            category,
+            raw,
+            gglib,
+            raw_passed: 0,
+            gglib_passed: 0,
+            unstable: false,
+        }
+        .counted()
+    }
+
+    /// This task with its served counts taken from its per-seed results.
+    fn counted(mut self) -> Self {
+        (self.raw_passed, self.gglib_passed) = self.pass_counts();
+        self.unstable = self.is_unstable();
+        self
+    }
+
     /// How many of this task's seeds passed under each arm.
     ///
     /// The per-task view of stability: `(2, 3)` means two of three seeds
@@ -638,7 +677,7 @@ pub struct AgenticEvalReport {
     pub seeds: Vec<u32>,
     /// Scores under the positive control arm, when it ran.
     ///
-    /// Read [`Self::control_verdict`] rather than these numbers directly: what
+    /// Read [`Self::control_verdict()`] rather than these numbers directly: what
     /// matters is not the control's score but whether it *differs*. Its
     /// [`ArmScores::seeds`] is usually smaller than the real arms' — see
     /// [`AgenticEvalConfig::control_seeds`] — so its composite is a coarser
@@ -647,7 +686,7 @@ pub struct AgenticEvalReport {
     pub control: Option<ArmScores>,
     /// Scores under the A/A arm — the raw pipeline again, different seeds.
     ///
-    /// Read [`Self::effect_verdict`] rather than this directly: the number that
+    /// Read [`Self::effect_verdict()`] rather than this directly: the number that
     /// matters is its *distance* from [`Self::raw`], not its own value.
     #[serde(default)]
     pub raw_replicate: Option<ArmScores>,
@@ -672,9 +711,8 @@ pub struct AgenticEvalReport {
     pub replicate_seed_sets: Vec<Vec<u32>>,
     /// The paired per-`(task, seed)` comparison, computed at assembly.
     ///
-    /// Stored rather than derived-only, unlike the verdicts: those re-derive
-    /// from two floats in any language, while this one carries a rank test
-    /// nobody should maintain twice. [`Self::paired_effect`] re-derives it
+    /// Stored, where the verdicts are recomputed on every read
+    /// ([`Self::with_verdicts`]). [`Self::paired_effect`] re-derives it
     /// from the drill-down for reports written before the field existed.
     #[serde(default)]
     pub paired: Option<PairedEffect>,
@@ -683,6 +721,16 @@ pub struct AgenticEvalReport {
     /// written before they existed.
     #[serde(default)]
     pub proxy: Option<ProxyArms>,
+    /// What the positive control demonstrated ([`Self::control_verdict()`]),
+    /// served so no surface re-derives it. Filled by [`Self::with_verdicts`]
+    /// from today's rule and never read back from storage; `None` when the
+    /// control did not run.
+    #[serde(default, skip_deserializing)]
+    pub control_verdict: Option<ControlVerdict>,
+    /// What the A/A arm says of the effect ([`Self::effect_verdict()`]),
+    /// served and filled as `control_verdict` is.
+    #[serde(default, skip_deserializing)]
+    pub effect_verdict: Option<EffectVerdict>,
 }
 
 /// The smallest composite gap the control arm must open for the apparatus to
@@ -705,6 +753,7 @@ pub const CONTROL_MIN_COMPOSITE_GAP: f64 = 0.05;
 ///
 /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "verdict", rename_all = "snake_case")]
 pub enum ControlVerdict {
     /// The control scored at least [`CONTROL_MIN_COMPOSITE_GAP`] below the
@@ -765,6 +814,7 @@ pub const EFFECT_NOISE_RATIO: f64 = 2.0;
 /// this enum are the honest resolution of a one-pair comparison — the effect is
 /// clearly bigger than the drift, or it is not clearly bigger than the drift.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "verdict", rename_all = "snake_case")]
 pub enum EffectVerdict {
     /// `|gglib − raw|` is at least [`EFFECT_NOISE_RATIO`] times the A/A gap.
@@ -779,7 +829,11 @@ pub enum EffectVerdict {
         /// of claim, and rendering them identically invites exactly the
         /// misreading the A/A arm exists to prevent.
         #[serde(default = "one")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         pairs: usize,
+        /// The factor `|effect|` had to reach over `noise`:
+        /// [`EFFECT_NOISE_RATIO`].
+        bar: f64,
     },
     /// The effect is not clearly larger than the drift between two runs of the
     /// same arm. It is not thereby *absent* — it is unresolved at this seed
@@ -791,7 +845,11 @@ pub enum EffectVerdict {
         noise: f64,
         /// Pairwise gaps behind `noise`.
         #[serde(default = "one")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         pairs: usize,
+        /// The factor `|effect|` had to reach over `noise`:
+        /// [`EFFECT_NOISE_RATIO`].
+        bar: f64,
     },
 }
 
@@ -878,6 +936,24 @@ impl ArmScores {
 }
 
 impl AgenticEvalReport {
+    /// This report with what today's rules say of it filled in: both
+    /// verdicts, and each task's pass counts and stability.
+    ///
+    /// Called where a report is assembled, read back from storage, and
+    /// received from the daemon, so a stored report from before a rule
+    /// changed is judged by the rule as it is now.
+    #[must_use]
+    pub fn with_verdicts(mut self) -> Self {
+        self.control_verdict = self.control_verdict();
+        self.effect_verdict = self.effect_verdict();
+        self.tasks = self
+            .tasks
+            .into_iter()
+            .map(AgenticTaskComparison::counted)
+            .collect();
+        self
+    }
+
     /// What the positive control demonstrated, or `None` when it did not run.
     ///
     /// `None` is distinct from any failure for the same reason `Blind` is
@@ -967,12 +1043,14 @@ impl AgenticEvalReport {
                     effect,
                     noise,
                     pairs,
+                    bar: EFFECT_NOISE_RATIO,
                 }
             } else {
                 EffectVerdict::WithinNoise {
                     effect,
                     noise,
                     pairs,
+                    bar: EFFECT_NOISE_RATIO,
                 }
             },
         )
@@ -987,10 +1065,9 @@ impl AgenticEvalReport {
         self.tasks.iter().filter(|t| t.is_unstable()).collect()
     }
 
-    /// The paired per-`(task, seed)` comparison, derived from the drill-down.
-    ///
-    /// Derived rather than stored, like the verdicts above it — which also
-    /// means a legacy report's stored per-seed detail yields it retroactively.
+    /// The paired per-`(task, seed)` comparison: the stored one, or one
+    /// derived from the drill-down for a report written before it was
+    /// stored, so a legacy report's per-seed detail yields it retroactively.
     /// `None` when no pair has both sides measured.
     #[must_use]
     pub fn paired_effect(&self) -> Option<PairedEffect> {

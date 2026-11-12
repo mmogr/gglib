@@ -30,6 +30,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::inference::DefaultsOrigin;
+
 /// Which rung of a sampling ladder supplied one resolved parameter.
 ///
 /// [`Layer`](Self::Layer) carries an index into the ladder that was resolved,
@@ -102,17 +104,46 @@ impl SamplingLayer {
             _ => None,
         }
     }
+}
 
-    /// Short human-readable label, e.g. `per-model defaults (user-set)`.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Request => "request parameters",
-            Self::Profile => "profile",
-            Self::ModelUserSet => "per-model defaults (user-set)",
-            Self::Global => "global settings",
-            Self::ModelAutoDetected => "per-model defaults (auto-detected)",
+/// Where one parameter of the five-rung ladder ([`SamplingLayer`]) came
+/// from, in a person's words: what `gglib model explain` prints beside the
+/// value, and the inspector and the sampling form show.
+///
+/// `profile` is the profile applied, which the profile rung is named by.
+/// `origin` is where the model's stored defaults came from: three recipes
+/// share the auto-detected rung (the `reasoning`-tag guess, the model
+/// author's published one and a tune sweep's), and only it tells them
+/// apart. A user-set rung reads as one whatever the origin.
+#[must_use]
+pub fn source_label(
+    source: ParamSource,
+    profile: Option<&str>,
+    origin: Option<DefaultsOrigin>,
+) -> String {
+    let layer = match source {
+        ParamSource::Layer(index) => SamplingLayer::from_index(index),
+        ParamSource::Coupled => return "unset (coupled to temperature layer)".to_owned(),
+        ParamSource::Unset => return "unset by design".to_owned(),
+    };
+    match layer {
+        Some(SamplingLayer::Request) => "request parameters".to_owned(),
+        Some(SamplingLayer::Profile) => {
+            profile.map_or_else(|| "profile".to_owned(), |name| format!("profile '{name}'"))
         }
+        Some(SamplingLayer::ModelUserSet) => "per-model defaults (user-set)".to_owned(),
+        Some(SamplingLayer::Global) => "global settings".to_owned(),
+        Some(SamplingLayer::ModelAutoDetected) => match origin {
+            Some(DefaultsOrigin::Published) => {
+                "per-model defaults (published by the model author)".to_owned()
+            }
+            Some(DefaultsOrigin::Measured) => {
+                "per-model defaults (measured by a tune sweep)".to_owned()
+            }
+            _ => "per-model defaults (auto-detected: reasoning tag)".to_owned(),
+        },
+        // A ladder longer than the five rungs, which none resolved here is.
+        None => "an unnamed layer".to_owned(),
     }
 }
 

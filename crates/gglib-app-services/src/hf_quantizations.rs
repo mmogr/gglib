@@ -91,7 +91,9 @@ impl VariantReader for ListedHeads<'_> {
 /// `budget_bytes`; `None` for a repository with no weights, and `None` when
 /// the heads cannot tell: a model's head that stops before its
 /// `general.file_type` (llama-quantize appends it past the first 64 KiB),
-/// where the download reads further and would choose differently.
+/// where the download reads further and would choose differently. The
+/// listing then asks the download's own picker
+/// ([`gglib_download::download_pick`]).
 pub(crate) async fn listed_pick(
     quants: &[(HfQuantInfo, Option<HeadMetadata>)],
     is_image: bool,
@@ -157,6 +159,10 @@ fn variant_fit(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use gglib_core::ports::huggingface::fake_hub::{FakeHub, hub_file};
+
     use super::*;
 
     fn quant(label: &str, shard_count: usize, total_size: u64) -> HfQuantInfo {
@@ -308,6 +314,49 @@ mod tests {
         );
     }
 
+    /// Reads a file as a chat model's whose type, its first byte, lies past
+    /// the first 64 KiB, as llama-quantize writes it.
+    struct TypedPastTheHead;
+
+    impl gglib_core::ports::GgufParserPort for TypedPastTheHead {
+        fn parse(
+            &self,
+            path: &std::path::Path,
+        ) -> Result<GgufMetadata, gglib_core::ports::GgufParseError> {
+            gglib_core::ports::NoopGgufParser.parse(path)
+        }
+        fn detect_capabilities(
+            &self,
+            metadata: &GgufMetadata,
+        ) -> gglib_core::ports::GgufCapabilities {
+            gglib_core::ports::NoopGgufParser.detect_capabilities(metadata)
+        }
+        fn tensor_table(
+            &self,
+            path: &std::path::Path,
+        ) -> Result<gglib_core::domain::TensorTable, gglib_core::ports::GgufParseError> {
+            gglib_core::ports::NoopGgufParser.tensor_table(path)
+        }
+        fn tensor_table_of_head(
+            &self,
+            head: &[u8],
+        ) -> Result<gglib_core::domain::TensorTable, gglib_core::ports::GgufParseError> {
+            gglib_core::ports::NoopGgufParser.tensor_table_of_head(head)
+        }
+        fn parse_head(
+            &self,
+            head: &[u8],
+            _file_name: &str,
+        ) -> Result<HeadMetadata, gglib_core::ports::GgufParseError> {
+            let mut parsed = shaped_head(true);
+            parsed.complete = head.len() > 64 << 10;
+            parsed.metadata.file_type = parsed
+                .complete
+                .then(|| gglib_core::domain::FileType(u32::from(head[0])));
+            Ok(parsed)
+        }
+    }
+
     /// A head with a trained context and a KV shape, as a chat model's has.
     fn shaped_head(weights: bool) -> HeadMetadata {
         let keys = [
@@ -403,8 +452,9 @@ mod tests {
         assert_eq!(listed_pick(&listed, false, None).await, Some(0));
 
         // As real repositories ship them: the quantized heads stop before
-        // their type, the full-precision head names it. The download reads
-        // further; the listing cannot, so it marks nothing.
+        // their type. The listing's heads cannot tell, and mark nothing; the
+        // download's own pick, reading each header further, names the same
+        // Q8_0 the typed heads name.
         let untyped = || {
             let mut head = shaped_head(true);
             head.metadata.file_type = None;
@@ -414,9 +464,33 @@ mod tests {
         let shipped = vec![
             (quant("Q4_K_M", 1, 4 << 30), untyped()),
             (quant("Q8_0", 1, 7 << 30), untyped()),
-            (quant("BF16", 1, 8 << 30), typed(32)),
+            (quant("BF16", 1, 8 << 30), untyped()),
         ];
         assert_eq!(listed_pick(&shipped, false, Some(32 << 30)).await, None);
+        let typed_past_the_head =
+            |path: &str, file_type: u8| (path.to_owned(), vec![file_type; 70 << 10]);
+        let hub = FakeHub {
+            weights: vec![
+                hub_file("m-Q4_K_M.gguf", 4 << 30, "a"),
+                hub_file("m-Q8_0.gguf", 7 << 30, "b"),
+                hub_file("m-BF16.gguf", 8 << 30, "c"),
+            ],
+            heads: vec![
+                typed_past_the_head("m-Q4_K_M.gguf", 15),
+                typed_past_the_head("m-Q8_0.gguf", 7),
+                typed_past_the_head("m-BF16.gguf", 32),
+            ],
+            ..FakeHub::default()
+        };
+        let read_further = gglib_download::download_pick(
+            Arc::new(hub),
+            Arc::new(TypedPastTheHead),
+            "o/r",
+            Some(32 << 30),
+        )
+        .await
+        .unwrap();
+        assert_eq!(read_further.as_deref(), Some("Q8_0"));
 
         let mut helper = quant("MTP", 1, 1 << 30);
         helper.role = Some(GgufFileRole::Sidecar);
@@ -471,7 +545,6 @@ mod tests {
     async fn the_listing_served_reads_the_repository_projectors() {
         use crate::downloads::{DownloadDeps, DownloadOps};
         use crate::test_support::{MockDownloadManager, MockHfClient, MockToolSupportDetector};
-        use std::sync::Arc;
 
         let ops = DownloadOps::new(DownloadDeps {
             downloads: Arc::new(MockDownloadManager::new()),
@@ -490,8 +563,11 @@ mod tests {
                 size_bytes: 7
             })
         );
-        // The fake hub serves no head bytes, so the listing cannot tell what
-        // the download would take, and marks nothing rather than guess.
+        // The fake hub serves no model's head, so the listing cannot tell
+        // what the download would take, and marks nothing rather than guess;
+        // the download's own pick, asked apart, names its one model.
         assert!(listed.quantizations.iter().all(|q| !q.picked));
+        let pick = ops.get_model_pick("o/r").await.unwrap();
+        assert_eq!(pick.label.as_deref(), Some("Q4_K_M"));
     }
 }

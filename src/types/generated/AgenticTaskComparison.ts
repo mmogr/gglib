@@ -27,4 +27,18 @@ raw: Array<TuneTaskResult>,
 /**
  * Per-seed results under the gglib arm, in seed order.
  */
-gglib: Array<TuneTaskResult>, };
+gglib: Array<TuneTaskResult>, 
+/**
+ * How many of `raw`'s seeds passed ([`Self::pass_counts`]). Served, and
+ * counted again on every read rather than trusted from storage.
+ */
+raw_passed: number, 
+/**
+ * How many of `gglib`'s seeds passed, as `raw_passed` is counted.
+ */
+gglib_passed: number, 
+/**
+ * Whether either arm disagreed with itself across seeds
+ * ([`Self::is_unstable`]), as `raw_passed` is counted.
+ */
+unstable: boolean, };

@@ -46,6 +46,12 @@ reports: string | null,
  */
 pin: PinState, 
 /**
+ * That standing in the words `gglib config llama|sd status` prints
+ * (`standing_line`); null with nothing installed, where the status
+ * already says so.
+ */
+standing: string | null, 
+/**
  * The download an install takes on this machine (`macOS ARM64 (Metal)`);
  * null when there is none.
  */

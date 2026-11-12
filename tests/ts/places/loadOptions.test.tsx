@@ -163,7 +163,7 @@ describe('the Load with options sheet', () => {
   it('shows what each field would otherwise use, from the explanation', async () => {
     const fit = chatPlan().fit!;
     explain.answer = launchExplanation(
-      samplingExplanation({ resolved: resolvedConfig({ topK: 64 }), sources: [{ param: 'topK', kind: 'layer', layer: 'modelUserSet' }] }),
+      samplingExplanation({ resolved: resolvedConfig({ topK: 64 }), sources: [{ param: 'topK', kind: 'layer', layer: 'modelUserSet', label: 'per-model defaults (user-set)' }] }),
       chatPlan({ fit: { ...fit, servesAt: 8192 } }),
     );
     renderInspector();

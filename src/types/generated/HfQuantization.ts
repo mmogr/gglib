@@ -42,6 +42,8 @@ fit_word: string | null,
 /**
  * Whether it is the variant `gglib model download <repo>` takes when
  * none is asked for, as the picker chooses from the heads this listing
- * read (no further header is read for it). At most one is.
+ * read (no further header is read for it). At most one is; where the
+ * heads stop before a quantized file's type, none is, and
+ * [`HfPickResponse`] names the pick.
  */
 picked: boolean, };

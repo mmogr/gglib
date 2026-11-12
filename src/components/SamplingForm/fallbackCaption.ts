@@ -18,7 +18,7 @@
  */
 
 import type { SamplingExplanation, SamplingLayerName, SamplingParamKey } from '../../types';
-import { describeSource, formatParamValue } from '../../utils/samplingProvenance';
+import { formatParamValue } from '../../utils/samplingProvenance';
 
 /** What sits below this surface in the ladder. */
 export type InferenceFallback =
@@ -143,14 +143,9 @@ export function fallbackCaption(
   const usable = usableEntry(field, fallback);
   if (!usable) return null;
 
-  const source = describeSource(usable.entry, {
-    profile: explanation.profile,
-    // Three origins share the auto-detected rung, and this is the only thing
-    // that separates them. Omitting it does not make the caption vaguer — it
-    // makes it name the reasoning-tag guess for all three, which is this
-    // module working something out for itself.
-    defaultsOrigin: explanation.defaultsOrigin,
-  });
+  // Where the value came from, in the daemon's words (the label
+  // `gglib model explain` prints).
+  const source = usable.entry.label;
   const value = explanation.resolved[field];
 
   if (value != null) return `Resolves to ${formatParamValue(field, value)} — ${source}`;

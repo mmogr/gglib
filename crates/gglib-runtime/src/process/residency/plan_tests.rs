@@ -267,10 +267,10 @@ fn a_plan_says_which_loaded_model_it_would_unload() {
     let against_primary = plan(&set, &launch_spec(7, "llama-3-8b"));
     assert_eq!(
         against_primary.unloads,
-        Some(Unload {
-            model: "qwen2.5".to_owned(),
-            reason: UnloadReason::WouldNotFitBeside,
-        })
+        Some(Unload::new(
+            "qwen2.5".to_owned(),
+            UnloadReason::WouldNotFitBeside
+        ))
     );
 
     let itself = plan(&set, &launch_spec(3, "qwen2.5"));

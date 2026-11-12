@@ -1,4 +1,5 @@
 use super::*;
+use crate::download::GgufFileRole;
 use crate::ports::huggingface::{LabelMismatch, label_refusal, match_label, match_variant};
 
 fn labels(files: &[&str]) -> Vec<String> {
@@ -81,11 +82,11 @@ fn a_projector_takes_no_part_in_the_prefix_and_keeps_its_whole_name() {
             "Qwen-7B-Q8_0.gguf",
             "mmproj-Qwen-7B-f16.gguf"
         ]),
-        ["Q4_K_M", "Q8_0", "mmproj-Qwen-7B-f16"]
+        ["Q4_K_M", "Q8_0", "mmproj-Qwen-7B-F16"]
     );
     assert_eq!(
         labels(&["gemma-3-4b-it-Q4_K_M.gguf", "mmproj-model-f16.gguf"]),
-        ["gemma-3-4b-it-Q4_K_M", "mmproj-model-f16"],
+        ["gemma-3-4b-it-Q4_K_M", "mmproj-model-F16"],
         "one model variant beside a projector is labelled by its whole name"
     );
 }
@@ -105,8 +106,69 @@ fn a_name_several_folders_hold_is_labelled_by_its_folder() {
 
 #[test]
 fn a_lone_variant_is_its_whole_name_and_reserved_characters_become_dashes() {
-    assert_eq!(labels(&["gemma-3-1b-it-q4_0.gguf"]), ["gemma-3-1b-it-q4_0"]);
+    assert_eq!(labels(&["gemma-3-1b-it-q4_0.gguf"]), ["gemma-3-1b-it-Q4_0"]);
     assert_eq!(labels(&["a:b@c.gguf"]), ["a-b-c"]);
+}
+
+/// A token that spells a quantisation is written in capitals, whoever
+/// uploaded it, and every other token as its uploader wrote it.
+#[test]
+fn a_label_spells_its_quantisation_in_capitals() {
+    assert_eq!(
+        labels(&[
+            "model-INSTRUCT-Q6_k.gguf",
+            "model-Thinking-q4_k_s.gguf",
+            "model-iq4_xs.gguf",
+            "model.bf16.gguf",
+            "model-UD-tq1_0.gguf",
+        ]),
+        [
+            "BF16",
+            "INSTRUCT-Q6_K",
+            "IQ4_XS",
+            "Thinking-Q4_K_S",
+            "UD-TQ1_0"
+        ]
+    );
+    assert_eq!(
+        labels(&["model-FastMTP-32K.gguf", "model-Qwen3-q8_0.gguf"]),
+        ["FastMTP-32K", "Qwen3-Q8_0"],
+        "a token that only starts like one is kept"
+    );
+    for kept in [
+        "Q",
+        "Q4_KXLL",
+        "Q_4",
+        "IQ",
+        "f8",
+        "Qwen3",
+        "q4_k_m_x_y_zzzz",
+    ] {
+        assert!(!spells_a_quantization(kept), "{kept}");
+    }
+}
+
+/// A projector's and an importance matrix's file are not said as
+/// quantisations; a draft or MTP head is.
+#[test]
+fn a_projector_and_an_importance_matrix_are_not_said_as_quantisations() {
+    let said: Vec<String> = variants_of(
+        [
+            "model-Q4_K_M.gguf",
+            "model-Q8_0.gguf",
+            "mmproj-model-F16.gguf",
+            "model.imatrix.gguf",
+            "imatrix_unsloth.gguf",
+            "model-MTP-Q8_0.gguf",
+        ]
+        .map(|path| (path, 1)),
+    )
+    .into_iter()
+    .filter(said_as_a_quantization)
+    .map(|variant| variant.label)
+    .collect();
+
+    assert_eq!(said, ["MTP-Q8_0", "Q4_K_M", "Q8_0"]);
 }
 
 #[test]
@@ -293,4 +355,40 @@ fn a_quant_at_the_end_of_an_underscored_name_names_its_variant() {
         match_variant(&neighbours, "Q6_K").map(|v| v.label.as_str()),
         Err(LabelMismatch::None)
     );
+}
+
+/// A repository's largest weights are its largest model's files: a
+/// projector or an importance matrix is passed over by name until its
+/// header is read, and anything by its header after. A file named for an
+/// MTP head is weights by name: Qwopus names every model file so.
+#[test]
+fn the_largest_weights_are_a_models() {
+    let mut variants = variants_of([
+        ("model-Q4_K_M-00001-of-00002.gguf", 3),
+        ("model-Q4_K_M-00002-of-00002.gguf", 3),
+        ("model-Q8_0.gguf", 5),
+        ("mmproj-model-F32.gguf", 9),
+        ("model.imatrix.gguf", 9),
+    ]);
+    let largest = |variants: &[HfQuantInfo]| largest_weights(variants).map(|v| v.label.clone());
+
+    assert_eq!(largest(&variants).as_deref(), Some("Q4_K_M"));
+
+    let q4 = variants.iter_mut().find(|v| v.label == "Q4_K_M").unwrap();
+    q4.role = Some(GgufFileRole::Sidecar);
+    assert_eq!(largest(&variants).as_deref(), Some("Q8_0"));
+    let helpers: Vec<HfQuantInfo> = variants
+        .into_iter()
+        .filter(|v| !v.label.starts_with('Q'))
+        .collect();
+    assert_eq!(helpers.len(), 2);
+    assert_eq!(largest(&helpers), None);
+
+    // Jackrong's Qwopus3.8-27B-Flash-V2-GGUF, at its sizes on the Hub.
+    let qwopus = variants_of([
+        ("Qwopus3.8-27B-Flash-V2-MTP-BF16.gguf", 54_657_733_568),
+        ("Qwopus3.8-27B-Flash-V2-MTP-Q4_K_M.gguf", 16_810_714_048),
+        ("mmproj-F32.gguf", 1_842_940_992),
+    ]);
+    assert_eq!(largest(&qwopus).as_deref(), Some("BF16"));
 }

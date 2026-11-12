@@ -141,6 +141,7 @@ fn summary(recorded: &Value) -> HfRepoInfo {
         architecture: recorded["gguf"]["architecture"].as_str().map(str::to_owned),
         context_length: recorded["gguf"]["context_length"].as_u64(),
         tags: Vec::new(),
+        file_paths: Vec::new(),
     }
 }
 

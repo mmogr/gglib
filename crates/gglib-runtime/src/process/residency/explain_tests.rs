@@ -115,10 +115,7 @@ fn unload_fixtures() -> (
 const GIB: u64 = 1024 * 1024 * 1024;
 
 fn unloads(model: &str, reason: UnloadReason) -> Unload {
-    Unload {
-        model: model.to_owned(),
-        reason,
-    }
+    Unload::new(model.to_owned(), reason)
 }
 
 /// What a chat plan would unload, by placement's rules, apart from any

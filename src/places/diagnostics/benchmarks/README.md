@@ -25,6 +25,6 @@ its own module.
 | Directory | Contents |
 |-----------|----------|
 | `Tune/` | Config form, live progress, and leaderboard components for tune-mode runs |
-| `Agentic/` | Raw-vs-gglib A/B eval: config form, live arm progress, the report (axis table, validity verdicts, efficiency, per-task drill-down), history list, and the client-side verdict derivations mirroring the Rust thresholds |
+| `Agentic/` | Raw-vs-gglib A/B eval: config form, live arm progress, the report (axis table, validity verdicts, efficiency, per-task drill-down), history list; the verdicts are served on the report |
 
 <!-- module-docs:end -->

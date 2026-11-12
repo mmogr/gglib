@@ -1059,14 +1059,11 @@ mod tests {
             &self,
             _metadata: &crate::ports::GgufMetadata,
         ) -> crate::ports::GgufCapabilities {
-            let mut extensions = std::collections::BTreeSet::new();
-            for t in &self.tags {
-                extensions.insert(t.clone());
+            let mut flags = crate::domain::gguf::CapabilityFlags::empty();
+            if self.tags.iter().any(|t| t == "agent") {
+                flags |= crate::domain::gguf::CapabilityFlags::TOOL_CALLING;
             }
-            crate::ports::GgufCapabilities {
-                flags: crate::domain::gguf::CapabilityFlags::empty(),
-                extensions,
-            }
+            crate::ports::GgufCapabilities { flags }
         }
 
         fn tensor_table(

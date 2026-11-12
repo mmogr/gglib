@@ -452,8 +452,10 @@ async fn cmd_agentic(
         daemon_client::paths::BENCHMARK_AGENTIC_PATH,
         &config,
         |event| {
+            // The verdicts are not read off the wire: they are judged here,
+            // by this build's rules, so `--json` and `--output` carry them.
             if let BenchmarkEvent::AgenticEvalComplete { report: r } = event {
-                report = Some((**r).clone());
+                report = Some((**r).clone().with_verdicts());
             }
             render_event(event);
         },

@@ -1,9 +1,8 @@
 //! Constructing an [`LlmCompletionAdapter`]: the two constructors and the
 //! `with_*` builders.
 //!
-//! Split from `mod.rs`, unchanged, when the bearer builder arrived and that
-//! file was at its budget. The struct and its request path stay there; this
-//! is only how one is assembled.
+//! Split from `mod.rs`, unchanged, when the bearer builder arrived. The
+//! struct and its request path stay there; this is only how one is assembled.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;

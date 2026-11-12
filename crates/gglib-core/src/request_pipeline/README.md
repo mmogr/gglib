@@ -84,7 +84,7 @@ does either.
   and oversized assistant turns to fit the model's context budget, and
   rejecting the request when it cannot be made to fit.
 - [`truncation_parts`] — `elide()`, the elision of one message in either
-  content shape; kept beside `truncation`, which is at its file budget.
+  content shape; kept beside `truncation`.
 - [`measure`] — [`ContextBudget`], the characters a request may measure and
   the context in tokens they stand for, and the measurement stage 3 takes: a
   request's serialized length, with each image counted at its estimated

@@ -15,7 +15,7 @@
 use gglib_core::domain::inference_profile::not_found_message;
 use gglib_core::domain::{
     DefaultsOrigin, InferenceConfig, InferenceProfile, Model, ModelSamplingContext,
-    ModelSamplingDefaults, ParamSource, SamplingLayer, SamplingOverride,
+    ModelSamplingDefaults, ParamSource, SamplingLayer, SamplingOverride, source_label,
 };
 use gglib_core::settings::Settings;
 use serde::{Deserialize, Serialize};
@@ -151,6 +151,10 @@ pub struct ParamProvenanceDto {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layer: Option<SamplingLayerDto>,
+    /// Where the value came from in a person's words (`source_label`), the
+    /// ones `gglib model explain` prints: `profile 'coding'`,
+    /// `per-model defaults (published by the model author)`.
+    pub label: String,
 }
 
 /// The wire form of [`ParamSource`], with the ladder index resolved to a name.
@@ -254,8 +258,14 @@ const fn layer_of(source: ParamSource) -> Option<SamplingLayerDto> {
     }
 }
 
-/// Translate one `(field, source)` pair into its wire form.
-fn provenance(field: &'static str, source: ParamSource) -> ParamProvenanceDto {
+/// Translate one `(field, source)` pair into its wire form, its label naming
+/// the `profile` applied and the `origin` of the model's stored defaults.
+fn provenance(
+    field: &'static str,
+    source: ParamSource,
+    profile: Option<&str>,
+    origin: Option<DefaultsOrigin>,
+) -> ParamProvenanceDto {
     let kind = match source {
         ParamSource::Layer(_) => ProvenanceKindDto::Layer,
         ParamSource::Coupled => ProvenanceKindDto::Coupled,
@@ -266,6 +276,7 @@ fn provenance(field: &'static str, source: ParamSource) -> ParamProvenanceDto {
         param: wire_key(field).to_owned(),
         kind,
         layer: layer_of(source),
+        label: source_label(source, profile, origin),
     }
 }
 
@@ -321,7 +332,10 @@ pub(crate) fn explain(
         resolved,
         sources: sources
             .iter()
-            .map(|(field, source)| provenance(field, source))
+            .map(|(field, source)| {
+                let profile = profile.map(|selected| selected.name.as_str());
+                provenance(field, source, profile, model.defaults_origin)
+            })
             .collect(),
         profile: profile.map(|selected| selected.name.clone()),
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
