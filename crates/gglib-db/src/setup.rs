@@ -785,3 +785,7 @@ mod models_pool_tests;
 #[cfg(test)]
 #[path = "setup_models_quantization_tests.rs"]
 mod models_quantization_tests;
+
+#[cfg(test)]
+#[path = "setup_fixture_tests.rs"]
+mod fixture_tests;
