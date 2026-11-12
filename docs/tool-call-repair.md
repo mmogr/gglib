@@ -202,7 +202,7 @@ either the original or the repaired call.
 
 **The re-issue itself is non-streaming.** A repair cannot be judged until the
 call is complete, so streaming it would buy no latency while requiring a second
-SSE pipeline — decoder, normalizer, encoder, `[DONE]` bookkeeping — to run
+SSE pipeline — decoder, encoder, `[DONE]` bookkeeping — to run
 inside the first. The buffered body is parsed once and synthesized back into
 `ToolCallDelta` events, so every frame the client sees still flows through the
 one `SseEncoder` that has been encoding the turn all along.
