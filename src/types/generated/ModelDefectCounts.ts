@@ -55,8 +55,8 @@ loop_guard_stagnations: number,
  *
  * One per turn the agent loop's guard ran on, trip or not. A run with
  * both `max_stagnation_steps` and `max_repeated_batch_steps` unset has no
- * guard, and records nothing here; that is the proxy's `off` case, which
- * records no scan either.
+ * guard, and records nothing here; that is the proxy's guard switched off,
+ * which records no scan either.
  *
  * Deliberately not folded into [`Self::requests`]. That counts a request
  * the proxy forwarded, and the agent loop forwards nothing — one turn

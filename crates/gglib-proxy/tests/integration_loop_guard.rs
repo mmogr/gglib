@@ -21,35 +21,51 @@ use fixtures::common::{
     CountingRuntime, TaggedCatalog, spawn_mock_upstream, spawn_proxy, spawn_proxy_with_runtime,
     spawn_proxy_with_settings,
 };
-use fixtures::loop_guard::{assistant_call, chat_body, looping_history, repeated_read_history};
+use fixtures::loop_guard::{
+    assistant_call, chat_body, dashboard_of, looping_history, repeated_read_history,
+};
+
+/// The forwarded request's own row on the dashboard: one request, and whether
+/// the guard acted on it. A trip is answered 200 like a pass, so the status
+/// alone cannot tell them apart.
+async fn assert_forwarded_untripped(proxy_url: &str, why: &str) {
+    let dashboard = dashboard_of(proxy_url).await;
+    let counts = &dashboard["per_model_defects"]["test-model"];
+    assert_eq!(counts["requests"].as_u64(), Some(1), "{why}: {dashboard}");
+    assert_eq!(
+        counts["loop_guard_trips"].as_u64(),
+        Some(0),
+        "{why}: {dashboard}"
+    );
+}
 use fixtures::sse::BASIC_TEXT;
 
 /// Reading the same file repeatedly is the ordinary shape of an agentic
 /// coding turn — read, edit, re-read to verify — and must reach the model.
 ///
-/// Before `read_file` was classified as an observation tool this returned
-/// 400 `loop_detected` on the third read, and because agentic clients replay
-/// the whole conversation every turn, the rejection was permanent for the
-/// rest of the session.
+/// Before `read_file` was classified as an observation tool the guard acted
+/// on the third read, and because agentic clients replay the whole
+/// conversation every turn, it acted on every turn after.
 #[tokio::test]
 async fn repeated_file_reads_are_not_a_loop() {
-    let (runtime, _admit_calls) = CountingRuntime::new(1, "test-model");
-    let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
+    let upstream_cancel = CancellationToken::new();
+    let upstream_port = spawn_mock_upstream(vec![BASIC_TEXT], upstream_cancel.clone()).await;
+    let (proxy_url, proxy_cancel) = spawn_proxy(upstream_port, "test-model", vec![]).await;
+    let mut body = chat_body("test-model", repeated_read_history(5));
+    body["stream"] = json!(true);
 
     let resp = Client::new()
         .post(format!("{proxy_url}/v1/chat/completions"))
-        .json(&chat_body("test-model", repeated_read_history(5)))
+        .json(&body)
         .send()
         .await
         .expect("proxy request");
+    assert_eq!(resp.status(), 200);
+    let _ = resp.bytes().await;
 
-    assert_ne!(
-        resp.status(),
-        400,
-        "five identical file reads must not be rejected as a loop"
-    );
-
-    cancel.cancel();
+    assert_forwarded_untripped(&proxy_url, "five identical file reads are not a loop").await;
+    proxy_cancel.cancel();
+    upstream_cancel.cancel();
 }
 
 /// The instrument must actually reach the ledger over a real request. The
@@ -213,7 +229,9 @@ async fn benign_multi_turn_history_round_trips() {
         .await
         .expect("proxy request");
 
-    assert_eq!(resp.status(), 200, "benign history must not trip the guard");
+    assert_eq!(resp.status(), 200);
+    let _ = resp.bytes().await;
+    assert_forwarded_untripped(&proxy_url, "benign history must not trip the guard").await;
 
     proxy_cancel.cancel();
     upstream_cancel.cancel();
@@ -246,11 +264,13 @@ async fn observation_tool_repetition_passes() {
         .await
         .expect("proxy request");
 
-    assert_eq!(
-        resp.status(),
-        200,
-        "observation-only repetition within the elevated threshold must pass"
-    );
+    assert_eq!(resp.status(), 200);
+    let _ = resp.bytes().await;
+    assert_forwarded_untripped(
+        &proxy_url,
+        "observation-only repetition within the elevated threshold must pass",
+    )
+    .await;
 
     proxy_cancel.cancel();
     upstream_cancel.cancel();
@@ -293,11 +313,9 @@ async fn disabled_guard_forwards_looping_history() {
         .await
         .expect("proxy request");
 
-    assert_eq!(
-        resp.status(),
-        200,
-        "disabled guard must forward even a looping history"
-    );
+    assert_eq!(resp.status(), 200);
+    let _ = resp.bytes().await;
+    assert_forwarded_untripped(&proxy_url, "a disabled guard must not act on a loop").await;
 
     proxy_cancel.cancel();
     upstream_cancel.cancel();

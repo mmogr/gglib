@@ -1,10 +1,7 @@
 //! Request bodies the loop-guard integration tests send.
 //!
 //! One home for them because a test binary cannot import another's private
-//! functions, so `integration_loop_guard_tally.rs` had copied three of these
-//! verbatim and said so in its own module doc. A fixture is the place a second
-//! caller belongs, and it leaves `integration_loop_guard.rs` — frozen at its
-//! size by the complexity ratchet — the room its own new cases need.
+//! functions, and several loop-guard test binaries send the same histories.
 
 use std::sync::{Arc, Mutex};
 

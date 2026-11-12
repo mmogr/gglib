@@ -265,7 +265,7 @@ crates/gglib-proxy/tests/integration_admission.rs 322
 crates/gglib-proxy/tests/integration_auth.rs 409
 crates/gglib-proxy/tests/integration_chats.rs 429
 crates/gglib-proxy/tests/integration_generation.rs 325
-crates/gglib-proxy/tests/integration_loop_guard.rs 304
+crates/gglib-proxy/tests/integration_loop_guard.rs 322
 crates/gglib-proxy/tests/integration_mcp_drawing.rs 458
 crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
 crates/gglib-proxy/tests/integration_models_by_id.rs 405
