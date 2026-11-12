@@ -38,6 +38,8 @@ across versions fails loudly rather than corrupting it.
 `set_models_dir` is the one way a surface changes it: it resolves the path,
 creates the directory and stores it in the data root's `.env`, quoted, so
 that a path with a space in it is still a line that file's loader reads.
+The daemon's first start stores the default the same way
+(`store_default_models_dir`), unless `.env` already has a line for it.
 `resolve_models_dir` reads it back: an explicit path first, then
 `GGLIB_MODELS_DIR` in the environment, then the stored directory, read with
 the loader's own parser, then the default. A daemon's download manager asks

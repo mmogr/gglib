@@ -126,6 +126,21 @@ fn read_env_value(key: &str) -> Option<String> {
         .find_map(|(name, value)| (name == key).then_some(value))
 }
 
+/// Whether a line of the `.env` file assigns `key`, whether or not the
+/// loader can read its value.
+fn env_file_assigns(key: &str) -> bool {
+    env_file_path()
+        .ok()
+        .and_then(|path| fs::read_to_string(path).ok())
+        .is_some_and(|contents| contents.lines().any(|line| assigns(line, key)))
+}
+
+/// Whether the `.env` file has a line for the models directory, even one the
+/// loader refuses, such as a bare path with a space an older build wrote.
+pub(super) fn models_dir_line_stored() -> bool {
+    env_file_assigns(MODELS_DIR_KEY)
+}
+
 /// The key the models directory is stored under, in the environment and in
 /// the `.env` file alike.
 pub(super) const MODELS_DIR_KEY: &str = "GGLIB_MODELS_DIR";

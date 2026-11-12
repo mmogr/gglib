@@ -152,6 +152,28 @@ fn a_models_directory_the_environment_names_is_not_stored() {
     assert!(!temp.path().join(".env").exists());
 }
 
+/// A line the loader refuses is left alone: it is the only record of the
+/// folder a user chose, written bare by a build before quoting.
+#[test]
+fn a_stored_line_the_loader_refuses_is_left_as_it_is() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let _data = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
+    let _models = EnvVarGuard::unset("GGLIB_MODELS_DIR");
+    let env = temp.path().join(".env");
+    let line = "GGLIB_MODELS_DIR=/Volumes/My Drive/models\n";
+    std::fs::write(&env, line).unwrap();
+    assert_eq!(
+        resolve_models_dir(None).unwrap().source,
+        ModelsDirSource::Default,
+        "the loader refuses the bare line"
+    );
+
+    store_default_models_dir().unwrap();
+
+    assert_eq!(std::fs::read_to_string(&env).unwrap(), line);
+}
+
 /// A stored folder stays the one stored.
 #[test]
 fn a_stored_models_directory_is_left_as_it_is() {
