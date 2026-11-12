@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.34.0-rc.1](https://github.com/mmogr/gglib/compare/v0.33.1-rc.1...v0.34.0-rc.1) (2026-11-12)
+
+
+### What gglib now does
+
+* **db:** back up the library before an upgrade changes it ([#1887](https://github.com/mmogr/gglib/issues/1887)) ([fff6174](https://github.com/mmogr/gglib/commit/fff6174bcbb5e5ebf4d89c60164a91707e000f99))
+
+
+### What it stopped getting wrong
+
+* **db:** an edit keeps a stored model setting this build cannot read ([#1885](https://github.com/mmogr/gglib/issues/1885)) ([06c209e](https://github.com/mmogr/gglib/commit/06c209ef56313b0bf49ef6d305582e5321ce33f0))
+* **paths:** the daemon stores the models folder the first time it starts ([#1886](https://github.com/mmogr/gglib/issues/1886)) ([efcdd3c](https://github.com/mmogr/gglib/commit/efcdd3c950b7616a2a7c223f1f9237ed82e5c8f5))
+
+
+### Internal
+
+* **db:** a library made by gglib 0.33.0 opens and reads back whole ([#1890](https://github.com/mmogr/gglib/issues/1890)) ([22c8f4c](https://github.com/mmogr/gglib/commit/22c8f4ca69b2e8b488cf832b28725b3f86aa36d7))
+* **db:** one numbered list of migrations ([#1888](https://github.com/mmogr/gglib/issues/1888)) ([b2cd138](https://github.com/mmogr/gglib/commit/b2cd13889ea672a917cae8b91f73a0b88cb5649a))
+* **frontend:** the library search tests wait for the pick to render ([#1891](https://github.com/mmogr/gglib/issues/1891)) ([4799a0d](https://github.com/mmogr/gglib/commit/4799a0dd1a7d3f9c64f7867837afe136254d2914))
+
 ## [0.33.1-rc.1](https://github.com/mmogr/gglib/compare/v0.33.0-rc.1...v0.33.1-rc.1) (2026-11-12)
 
 
