@@ -39,8 +39,8 @@ pub enum SseParseResult {
 /// Returns `None` when the frame carries no `usage` field. Deliberately
 /// returns just the event (not a full [`SseParseResult`]) — unlike
 /// [`parse_inline_error_frame`], a `usage` field does **not** imply the rest
-/// of the frame should be skipped. See the call site in [`parse_sse_frame`]
-/// for why.
+/// of the frame should be skipped. See the call site in [`events_of`] for
+/// why.
 fn parse_usage_event(parsed: &serde_json::Value) -> Option<LlmStreamEvent> {
     let usage = parsed.get("usage")?;
     let prompt_tokens =
@@ -72,7 +72,7 @@ fn parse_usage_event(parsed: &serde_json::Value) -> Option<LlmStreamEvent> {
 /// carries a `choices` key (even an empty one) — that shape doesn't match
 /// what downstream clients detect as an inline error, so it falls through
 /// to the remaining frame-shape checks instead.
-fn parse_inline_error_frame(parsed: &serde_json::Value) -> Option<SseParseResult> {
+fn parse_inline_error_frame(parsed: &serde_json::Value) -> Option<LlmStreamEvent> {
     let err = parsed.get("error")?;
     if parsed.get("choices").is_some() {
         return None;
@@ -98,13 +98,11 @@ fn parse_inline_error_frame(parsed: &serde_json::Value) -> Option<SseParseResult
                 .to_owned(),
         ),
     };
-    Some(SseParseResult::Events(vec![
-        LlmStreamEvent::UpstreamError {
-            message,
-            error_type,
-            code,
-        },
-    ]))
+    Some(LlmStreamEvent::UpstreamError {
+        message,
+        error_type,
+        code,
+    })
 }
 
 /// Parse a single SSE `data:` payload into zero or more [`LlmStreamEvent`]s.
@@ -122,27 +120,35 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     if data == "[DONE]" {
         return Ok(SseParseResult::Done);
     }
+    Ok(SseParseResult::Events(events_of(&frame_json(data)?)))
+}
 
-    let parsed: serde_json::Value = serde_json::from_str(data)
-        .map_err(|e| anyhow!("SSE frame JSON parse error: {e} — data: {data}"))?;
+/// One `data:` payload, other than `[DONE]`, parsed as JSON.
+pub(super) fn frame_json(data: &str) -> Result<serde_json::Value> {
+    serde_json::from_str(data)
+        .map_err(|e| anyhow!("SSE frame JSON parse error: {e} — data: {data}"))
+}
 
+/// The [`LlmStreamEvent`]s one parsed `data:` frame carries, in the order
+/// [`parse_sse_frame`] gives them. Empty for a frame that carries none, such
+/// as llama-server's opening role frame.
+#[must_use]
+pub fn events_of(parsed: &serde_json::Value) -> Vec<LlmStreamEvent> {
     // ── Prompt-progress frames (llama-server `return_progress: true`) ────
-    // These arrive during the pre-fill phase and have no `choices` array.
-    // We check for them *before* the choices guard so they aren't silently
-    // dropped as "no choices" frames.
+    // These arrive during the pre-fill phase. At b12110 they also carry the
+    // opening role delta in `choices`, which says nothing more: the frame
+    // after them repeats it. Read before the choices guard, and alone.
     if let Some(pp) = parsed.get("prompt_progress") {
         let processed = u32::try_from(pp["processed"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
         let total = u32::try_from(pp["total"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
         let cached = u32::try_from(pp["cache"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
         let time_ms = pp["time_ms"].as_u64().unwrap_or(0);
-        return Ok(SseParseResult::Events(vec![
-            LlmStreamEvent::PromptProgress {
-                processed,
-                total,
-                cached,
-                time_ms,
-            },
-        ]));
+        return vec![LlmStreamEvent::PromptProgress {
+            processed,
+            total,
+            cached,
+            time_ms,
+        }];
     }
 
     // ── Usage totals (`stream_options.include_usage: true`) ──────────────
@@ -154,7 +160,7 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     // reason to skip the rest of the frame would silently discard that
     // finish_reason/delta. Decided below once we know whether `choices`
     // is actually empty.
-    let usage_event = parse_usage_event(&parsed);
+    let usage_event = parse_usage_event(parsed);
 
     // ── Inline upstream error frame ───────────────────────────────────────
     // Some OpenAI-compatible servers (including llama.cpp) can emit a bare
@@ -166,8 +172,8 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     // Gateway extension specifically detect this shape via
     // `'error' in obj && !('choices' in obj)` to surface a real error
     // instead of hanging or seeing a silently truncated response.
-    if let Some(result) = parse_inline_error_frame(&parsed) {
-        return Ok(result);
+    if let Some(error) = parse_inline_error_frame(parsed) {
+        return vec![error];
     }
 
     // Guard against keepalive / error frames that carry no `choices` array.
@@ -178,10 +184,10 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     if choices.as_array().is_none_or(Vec::is_empty) {
         // Strict-OpenAI shape: no real choice, usage (if any) stands alone.
         if let Some(usage_event) = usage_event {
-            return Ok(SseParseResult::Events(vec![usage_event]));
+            return vec![usage_event];
         }
-        tracing::debug!(data = %data, "SSE frame has no 'choices' entries — skipping");
-        return Ok(SseParseResult::Events(vec![]));
+        tracing::debug!(frame = %parsed, "SSE frame has no 'choices' entries — skipping");
+        return vec![];
     }
     let choice = &choices[0];
     let delta = &choice["delta"];
@@ -251,7 +257,7 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
         });
     }
 
-    Ok(SseParseResult::Events(events))
+    events
 }
 
 // =============================================================================
@@ -261,6 +267,26 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The events of a frame are the same read from its text or its JSON.
+    #[test]
+    fn events_of_reads_a_parsed_frame_as_the_text_parser_does() {
+        let data = tool_frame(0, "c1", "f", "{}");
+        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+        let Ok(SseParseResult::Events(from_text)) = parse_sse_frame(&data) else {
+            panic!("a frame of events");
+        };
+        assert_eq!(events_of(&parsed), from_text);
+        assert_eq!(from_text.len(), 1);
+    }
+
+    /// llama-server's opening frame, a role and no text, carries no event.
+    #[test]
+    fn the_role_frame_carries_no_event() {
+        let role = serde_json::json!({"choices": [{"finish_reason": null, "index": 0,
+            "delta": {"role": "assistant", "content": null}}]});
+        assert!(events_of(&role).is_empty());
+    }
 
     // ── Frame builders ─────────────────────────────────────────────────────
 

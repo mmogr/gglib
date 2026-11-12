@@ -7,4 +7,4 @@ pub mod parser;
 pub use decoder::SseStreamDecoder;
 pub use encoder::{DONE_SENTINEL, SseEncoder};
 pub use frames::{DataFrames, Event};
-pub use parser::{SseParseResult, parse_sse_frame};
+pub use parser::{SseParseResult, events_of, parse_sse_frame};
