@@ -38,7 +38,7 @@ export function launchExplanation(
   plan: LaunchPlan = {
     program: 'llama-server',
     args: [],
-    narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [] },
+    narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [], fit: null },
     fit: null,
   },
 ): LaunchExplanation {
@@ -63,7 +63,7 @@ export function chatPlan(overrides: Partial<LaunchPlan> = {}): LaunchPlan {
       { flag: '--cache-type-k', value: 'q8_0', decision: 'kv', source: 'gglib', reason: 'q8_0 halves the KV cache at no measured cost' },
       { flag: '--cache-type-v', value: 'q8_0', decision: 'kv', source: 'gglib', reason: 'q8_0 halves the KV cache at no measured cost' },
     ],
-    narration: { model_name: 'gemma', quantization: 'Q4_K_M', weights_bytes: 2_500_000_000, decisions: [] },
+    narration: { model_name: 'gemma', quantization: 'Q4_K_M', weights_bytes: 2_500_000_000, decisions: [], fit: null },
     // The first fit `contracts/models/fit_sentence.json` records, words and
     // all (`tests/ts/contracts/fitSentence.test.ts` holds it there).
     fit: {

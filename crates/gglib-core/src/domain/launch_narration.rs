@@ -117,14 +117,15 @@ pub struct LaunchNarration {
     /// switched off (`GGLIB_DISABLE_CONTEXT_FIT`); a hub older than the field
     /// leaves it out.
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
     pub fit: Option<LaunchFit>,
 }
 
-/// The context fit a launch was sized by, as its narration carries it: every
-/// field of [`ContextFit`], unchanged, under snake_case keys like the rest
-/// of the narration (a plan's own `fit` keeps `ContextFit`'s camelCase).
-/// Converted from the launch's `ContextFit`, never computed again.
+/// The context fit a launch was sized by, as its narration carries it.
+///
+/// Every field of [`ContextFit`], unchanged, under `snake_case` keys like the
+/// rest of the narration (a plan's own `fit` keeps `ContextFit`'s
+/// `camelCase`). Converted from the launch's `ContextFit`, never computed
+/// again.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct LaunchFit {
@@ -310,7 +311,7 @@ mod tests {
     use crate::domain::{FitInputs, KvBytes};
 
     /// The narration's fit is the launch's `ContextFit`, every field of it,
-    /// under snake_case keys: its JSON is the `ContextFit`'s with each key
+    /// under `snake_case` keys: its JSON is the `ContextFit`'s with each key
     /// respelled and nothing added, dropped or changed.
     #[test]
     fn a_launch_fit_carries_every_field_of_the_context_fit() {

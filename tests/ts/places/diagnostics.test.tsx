@@ -159,7 +159,7 @@ const FULL: Partial<DashboardSnapshot> = {
   recent_requests: [recentRequest({ model_name: 'Qwen3-4B' })],
   total_requests: 1,
   admission: { ...dashboardSnapshot().admission, slots: [residentSlot(1, 'Qwen3-4B')] },
-  launch: { model_name: 'Qwen3-4B', quantization: 'Q4_K_M', weights_bytes: 2_684_354_560, decisions: [{ label: 'Context', value: '8192', source: 'model author' }] },
+  launch: { model_name: 'Qwen3-4B', quantization: 'Q4_K_M', weights_bytes: 2_684_354_560, decisions: [{ label: 'Context', value: '8192', source: 'model author' }], fit: null },
   cache: CACHE,
   sampling_audit: samplingAudit({ state: { state: 'blind', reason: 'no slot has reported yet' } }),
   per_model_defects: { 'Qwen3-4B': modelDefectCounts({ requests: 1 }) },

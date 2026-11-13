@@ -59,7 +59,7 @@ describe('ProxyLaunchPanel', () => {
 
   it('shows no fit from a hub older than the field', () => {
     const { fit: _absent, ...older } = launch();
-    render(<ProxyLaunchPanel launch={older} />);
+    render(<ProxyLaunchPanel launch={older as LaunchNarration} />);
     expect(screen.queryByRole('group', { name: 'Context fit' })).not.toBeInTheDocument();
   });
 });

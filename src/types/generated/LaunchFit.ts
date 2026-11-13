@@ -3,10 +3,12 @@ import type { ContextSizeSource } from "./ContextSizeSource";
 import type { LaunchDecision } from "./LaunchDecision";
 
 /**
- * The context fit a launch was sized by, as its narration carries it: every
- * field of [`ContextFit`], unchanged, under snake_case keys like the rest
- * of the narration (a plan's own `fit` keeps `ContextFit`'s camelCase).
- * Converted from the launch's `ContextFit`, never computed again.
+ * The context fit a launch was sized by, as its narration carries it.
+ *
+ * Every field of [`ContextFit`], unchanged, under `snake_case` keys like the
+ * rest of the narration (a plan's own `fit` keeps `ContextFit`'s
+ * `camelCase`). Converted from the launch's `ContextFit`, never computed
+ * again.
  */
 export type LaunchFit = { 
 /**

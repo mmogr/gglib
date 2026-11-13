@@ -153,7 +153,7 @@ infrastructure concerns (database, filesystem, etc.).
   budget (`select_evictions`); the scanning and deleting live in `gglib-proxy`
 - `launch_narration` - What the runtime decided for one llama-server launch,
   and why (`LaunchNarration`, `LaunchDecision`), with the fit its context
-  was sized by (`LaunchFit`, a `ContextFit` under snake_case keys) and the
+  was sized by (`LaunchFit`, a `ContextFit` under `snake_case` keys) and the
   banner's one row of it (`LaunchFit::banner_row`)
 - `launch_plan` - The launch gglib would make for a model, said flag by flag
   (`LaunchPlan`, `LaunchArg`, `ChoiceSource`, `ContextFit`): what `gglib

@@ -39,4 +39,4 @@ decisions: Array<LaunchDecision>,
  * switched off (`GGLIB_DISABLE_CONTEXT_FIT`); a hub older than the field
  * leaves it out.
  */
-fit?: LaunchFit | null, };
+fit: LaunchFit | null, };

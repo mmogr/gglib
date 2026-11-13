@@ -1098,9 +1098,9 @@ rows in order, each a `label`, a `value` and the `source` it came from.
 `fit` is the context fit the launch was sized by, the record `gglib model
 explain` shows for a launch not yet made. It is `null` for an image model and
 for a launch made with the fit switched off (`GGLIB_DISABLE_CONTEXT_FIT`), and
-absent from a hub older than the field. Its keys are snake_case, like the
+absent from a hub older than the field. Its keys are `snake_case`, like the
 rest of this document (`plan.fit` on `GET /api/models/{id}/explain` is the
-same record in camelCase):
+same record in `camelCase`):
 
 ```json
 "fit": {
