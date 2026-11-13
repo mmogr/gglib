@@ -99,7 +99,9 @@ pub(crate) fn context_text(fit: &ContextFit) -> String {
         fit.source.label()
     );
     let _ = writeln!(out, "  {:<22} {}", "fitted to hardware", opt(fit.fitted));
-    for figure in &fit.figures {
+    // Composed here from the fields, not read from `figures`: an older
+    // daemon serves a fit without them.
+    for figure in fit.figure_rows() {
         let _ = writeln!(
             out,
             "  {:<22} {}",
@@ -247,6 +249,14 @@ mod tests {
             context_text(&fit),
             "Context\n  Fits this machine with 32K context, of 128K trained.\n  serves at              32768 (fitted to hardware)\n  fitted to hardware     32768\n    memory               fits (35.81 GiB of 43.20 GiB usable)\n    device budget        48.00 GiB\n    weights              2.33 GiB\n    kv bytes/token       1097000\n    kv cache             33.48 GiB\n    trained window       131072\n    before snapping      40005\n"
         );
+
+        // A daemon older than `figures` serves a fit without them; the
+        // rows come from the fields all the same.
+        let older = ContextFit {
+            figures: Vec::new(),
+            ..fit.clone()
+        };
+        assert_eq!(context_text(&older), context_text(&fit));
     }
 
     /// The plans `contracts/models/launch_line.json` records: an ordinary

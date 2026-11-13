@@ -45,6 +45,14 @@ impl ContextFit {
         fit
     }
 
+    /// The figures as rows, the ones [`Self::figures`] serves: composed from
+    /// the fields, so a reader of a fit served without them (an older hub)
+    /// still has the rows.
+    #[must_use]
+    pub fn figure_rows(&self) -> Vec<LaunchDecision> {
+        fit_figures(self)
+    }
+
     /// The fit as one row of the launch banner, which has room for one:
     /// `fit  40005 before snapping  (48.00 GiB budget, 2.33 GiB weights,
     /// 1097000 bytes/token)`. The context row above it says the rung; this

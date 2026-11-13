@@ -128,8 +128,9 @@ pub struct ContextFit {
     /// [`ContextFit::new`]): the note as `memory` when there is one, then
     /// the budget, the weights, the KV cost a token and at the served
     /// context, the trained window and the context before snapping, each
-    /// `unknown` when it could not be read. `gglib model explain` and the
-    /// GUI print these rows as they are; the launch banner has room for one
+    /// `unknown` when it could not be read. The GUI shows these rows as they
+    /// are; `gglib model explain` composes the same rows from the fields
+    /// ([`ContextFit::figure_rows`]), and the launch banner has room for one
     /// ([`ContextFit::banner_row`]).
     #[serde(default)]
     pub figures: Vec<LaunchDecision>,
