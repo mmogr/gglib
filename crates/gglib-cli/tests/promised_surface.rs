@@ -11,7 +11,7 @@
 //!
 //! A line marked `(not covered)` is one the page lists under "Not covered"
 //! (benchmarks, `model explain`, the proxy dashboard, `llama_base_port`, the
-//! loop guard), so deleting it breaks nothing. Values a flag checks with a
+//! loop guard and its log, `proxy trips`), so deleting it breaks nothing. Values a flag checks with a
 //! function of its own, such as `--reasoning-effort`'s levels, are not clap's
 //! to list and are not here.
 //!
@@ -19,6 +19,7 @@
 //! global flag is listed once, on `gglib`, and clap's own `--help` and
 //! `--version` are not listed.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -41,6 +42,7 @@ const NOT_COVERED_COMMANDS: &[&str] = &[
     "gglib benchmark",
     "gglib model explain",
     "gglib proxy dashboard",
+    "gglib proxy trips",
 ];
 const NOT_COVERED_KEYS: &[&str] = &[
     "llama-base-port",
@@ -150,14 +152,40 @@ fn stored_keys() -> Vec<String> {
     fields.keys().cloned().collect()
 }
 
+/// Whether each stored key is hidden, read off the `config set` and
+/// `config unset` values clap lists: a key is hidden unless one of them
+/// lists its spelling unhidden. A key neither takes (the `remote_*` ones,
+/// which `gglib remote` writes) is hidden too, since no command names it.
+fn hidden_stored_keys(cli: &Command) -> BTreeMap<String, bool> {
+    let config = cli.find_subcommand("config").expect("gglib config");
+    let mut hidden = BTreeMap::new();
+    for name in ["set", "unset"] {
+        let key = config
+            .find_subcommand(name)
+            .and_then(|sub| sub.get_arguments().find(|arg| arg.get_id() == "key"))
+            .unwrap_or_else(|| panic!("gglib config {name} <key>"));
+        for value in key.get_possible_values() {
+            let stored = value.get_name().replace('-', "_");
+            let before = hidden.get(&stored).copied().unwrap_or(true);
+            hidden.insert(stored, before && value.is_hide_set());
+        }
+    }
+    hidden
+}
+
 fn render() -> String {
+    let cli = Cli::command();
     let mut out = String::from(HEADER);
     out.push_str("\n[commands]\n");
-    command(&Cli::command(), "gglib", &mut out);
+    command(&cli, "gglib", &mut out);
     out.push_str("\n[stored settings keys]\n");
+    let hidden = hidden_stored_keys(&cli);
     for key in stored_keys() {
         out.push_str(&key);
-        out.push_str(&marks(false, !NOT_COVERED_KEYS.contains(&key.as_str())));
+        out.push_str(&marks(
+            hidden.get(&key).copied().unwrap_or(true),
+            !NOT_COVERED_KEYS.contains(&key.as_str()),
+        ));
         out.push('\n');
     }
     out
@@ -195,6 +223,9 @@ fn the_walk_finds_commands_flags_and_keys() {
         "\n    proxy-port\n",
         "\ngglib benchmark (not covered)\n",
         "\nloop_guard (not covered)\n",
+        "\ninference_profiles\n",
+        "\nremote_enabled (hidden)\n",
+        "\nsetup_completed (hidden)\n",
     ] {
         assert!(
             rendered.contains(expected),

@@ -5,7 +5,7 @@
 //! and the write are the settings service's, in one step, so a refused value
 //! stores nothing and its refusal is the validator's own sentence.
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use serde_json::Value;
 
 use gglib_core::Settings;
@@ -20,7 +20,6 @@ use crate::handlers::model::resolver;
 pub(crate) async fn handle_set(ctx: &CliContext, key: SettingKey, typed: &str) -> Result<()> {
     let value = match key.takes {
         Takes::Folder => return models_dir::set(typed),
-        Takes::Whole(_) | Takes::Elsewhere(_) => bail!(not_set_here(key)),
         // Resolved here, as every command naming a model resolves it;
         // whether an image model draws is the settings service's check.
         Takes::Model => Value::from(resolver::resolve_model_identifier(ctx, typed).await?.id),
@@ -76,15 +75,6 @@ fn refusal(key: SettingKey, typed: &str) -> anyhow::Error {
         key.name,
         key.takes.described()
     )
-}
-
-/// The refusal of a key `set` does not write, saying what does.
-pub(super) fn not_set_here(key: SettingKey) -> String {
-    match key.takes {
-        Takes::Whole(where_) => format!("`{}` is not set from one value: it is {where_}", key.name),
-        Takes::Elsewhere(who) => format!("`{}` is not set by hand: {who}", key.name),
-        _ => format!("`{}` is set with `gglib config set`", key.name),
-    }
 }
 
 /// The value `config show` prints for `name` in `settings`: a secret as

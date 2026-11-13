@@ -139,8 +139,6 @@ gglib config set
     default-context-size
     default-image-model-id
     default-model-id
-    inference-defaults
-    inference-profiles
     llama-base-port (not covered)
     loop-guard (not covered)
     max-download-queue-size
@@ -156,10 +154,6 @@ gglib config set
     proxy-cache-on-disk
     proxy-host
     proxy-port
-    remote-devices (hidden)
-    remote-enabled (hidden)
-    remote-pairing (hidden)
-    remote-serve (hidden)
     setup-completed (hidden)
     start-at-login
     title-generation-prompt
@@ -190,10 +184,6 @@ gglib config unset
     proxy-cache-on-disk
     proxy-host
     proxy-port
-    remote-devices (hidden)
-    remote-enabled (hidden)
-    remote-pairing (hidden)
-    remote-serve (hidden)
     setup-completed (hidden)
     start-at-login
     title-generation-prompt
@@ -393,8 +383,8 @@ gglib proxy dashboard (not covered)
   --remote (not covered)
 gglib proxy stop
 gglib proxy test
-gglib proxy trips
-  --since
+gglib proxy trips (not covered)
+  --since (not covered)
 gglib q
   --file
   --image
@@ -497,11 +487,11 @@ proxy_cache_disk_gb
 proxy_cache_on_disk
 proxy_host
 proxy_port
-remote_devices
-remote_enabled
-remote_pairing
-remote_serve
-setup_completed
+remote_devices (hidden)
+remote_enabled (hidden)
+remote_pairing (hidden)
+remote_serve (hidden)
+setup_completed (hidden)
 start_at_login
 title_generation_prompt
 tool_call_repair

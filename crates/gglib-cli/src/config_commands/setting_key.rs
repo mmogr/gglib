@@ -1,13 +1,15 @@
 //! The keys `gglib config set` and `unset` take, and what each one takes.
 //!
-//! One row per key, named as `gglib config show` prints it. The table is the
-//! list `config set --help` shows, the list clap refuses an unknown key
-//! against, and the list `scripts/check_settings_surfaces.sh` reads to prove
-//! no `Settings` field is stranded without a way to set it. Its tests fail
-//! for a field the wire type or `show` has and the table does not.
+//! One row per key, named as `gglib config show` prints it. `config set`
+//! and `config unset` each take the rows they change, list them in `--help`
+//! and refuse any other key; the table is also what
+//! `scripts/check_settings_surfaces.sh` reads to prove no `Settings` field is
+//! stranded without a way to set it. Its tests fail for a field the wire type
+//! or `show` has and the table does not.
 
-use clap::ValueEnum;
-use clap::builder::PossibleValue;
+use std::fmt::Write as _;
+
+use clap::builder::{PossibleValue, PossibleValuesParser, TypedValueParser};
 use gglib_core::domain::agent::MIN_TOOL_TIMEOUT_MS;
 use gglib_core::settings::{CONTEXT_SIZE_RANGE, DOWNLOAD_QUEUE_RANGE, MIN_CACHE_DISK_GB, MIN_PORT};
 use gglib_core::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING};
@@ -37,11 +39,11 @@ pub(crate) enum Takes {
     Model,
     /// A folder, created when missing.
     Folder,
-    /// A value too large for one argument: `set` refuses it and says where
-    /// it is edited, and `unset` clears it.
+    /// A value too large for one argument: `set` does not take it, its help
+    /// says where it is edited, and `unset` clears it.
     Whole(&'static str),
-    /// A value another command writes: `set` and `unset` both refuse it and
-    /// say which.
+    /// A value another command writes: neither `set` nor `unset` takes it,
+    /// and their help says which command that is.
     Elsewhere(&'static str),
 }
 
@@ -58,12 +60,11 @@ pub struct SettingKey {
 }
 
 const fn key(name: &'static str, takes: Takes, about: &'static str) -> SettingKey {
-    let hidden = matches!(takes, Takes::Elsewhere(_));
     SettingKey {
         name,
         takes,
         about,
-        hidden,
+        hidden: false,
     }
 }
 
@@ -256,8 +257,9 @@ impl Takes {
             Self::Hosts => "hosts, comma-separated, each with or without a port".to_owned(),
             Self::Model => "a model's id or name".to_owned(),
             Self::Folder => "a path, created when missing".to_owned(),
-            Self::Whole(where_) => format!("not one value; {where_}"),
-            Self::Elsewhere(who) => format!("not set here; {who}"),
+            Self::Whole(where_) | Self::Elsewhere(where_) => {
+                format!("not one value; {where_}")
+            }
         }
     }
 }
@@ -267,20 +269,51 @@ impl SettingKey {
     pub(crate) fn help(&self) -> String {
         format!("{}: {}", self.about, self.takes.described())
     }
+
+    /// Whether the key is bookkeeping: left out of `--help` and of what
+    /// `config show` prints.
+    pub(crate) const fn hidden(&self) -> bool {
+        self.hidden
+    }
+
+    /// Whether `config set` takes the key: one value, which no other command
+    /// keeps.
+    pub(crate) const fn settable(&self) -> bool {
+        !matches!(self.takes, Takes::Whole(_) | Takes::Elsewhere(_))
+    }
+
+    /// Whether `config unset` takes the key: any but one another command
+    /// keeps.
+    pub(crate) const fn clearable(&self) -> bool {
+        !matches!(self.takes, Takes::Elsewhere(_))
+    }
 }
 
-impl ValueEnum for SettingKey {
-    fn value_variants<'a>() -> &'a [Self] {
-        KEYS
-    }
+/// The keys `takes` admits, as clap lists them and refuses any other.
+pub(crate) fn keys(takes: fn(&SettingKey) -> bool) -> impl TypedValueParser<Value = SettingKey> {
+    PossibleValuesParser::new(KEYS.iter().filter(|key| takes(key)).map(|key| {
+        PossibleValue::new(key.name)
+            .help(key.help())
+            .hide(key.hidden)
+    }))
+    .map(|name| {
+        *KEYS
+            .iter()
+            .find(|key| key.name == name)
+            .expect("clap admits only a key of the table")
+    })
+}
 
-    fn to_possible_value(&self) -> Option<PossibleValue> {
-        Some(
-            PossibleValue::new(self.name)
-                .help(self.help())
-                .hide(self.hidden),
-        )
+/// What `--help` ends with: each key `takes` does not admit, and where it is
+/// changed instead, so a key clap refuses is still a key the help explains.
+pub(crate) fn changed_elsewhere(takes: fn(&SettingKey) -> bool) -> String {
+    let mut out = "Changed elsewhere:".to_owned();
+    for key in KEYS.iter().filter(|key| !takes(key)) {
+        if let Takes::Whole(where_) | Takes::Elsewhere(where_) = key.takes {
+            let _ = write!(out, "\n  {}: {where_}", key.name);
+        }
     }
+    out
 }
 
 #[cfg(test)]

@@ -1,15 +1,16 @@
 //! Unit tests for [`super`], over a database of the test's own.
 
-use clap::ValueEnum;
 use gglib_core::settings::SettingsError;
 
-use super::super::unset::handle_unset;
 use super::*;
 use crate::bootstrap::test_context;
 
-/// The key `config set` parses `name` as.
+/// The table's row for `name`.
 pub(in crate::handlers::config::settings) fn key(name: &str) -> SettingKey {
-    SettingKey::from_str(name, false).unwrap_or_else(|e| panic!("{name}: {e}"))
+    *crate::config_commands::KEYS
+        .iter()
+        .find(|key| key.name == name)
+        .unwrap_or_else(|| panic!("no key {name}"))
 }
 
 /// The refusal is the validator's own sentence with nothing put around it,
@@ -124,59 +125,4 @@ async fn the_allowed_hosts_split_on_commas_and_replace_the_list() {
         stored.proxy_allowed_hosts.as_deref(),
         Some(&["gglib.lan".to_owned(), "192.168.1.20:8080".to_owned()][..])
     );
-}
-
-/// A key whose value is a whole record is not set from one argument; the
-/// refusal says where it is edited, and `unset` still clears it.
-#[tokio::test]
-async fn a_whole_record_is_refused_with_where_it_is_edited_and_unset_clears_it() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = test_context(dir.path()).await;
-
-    let refused = handle_set(&ctx, key("inference-profiles"), "coding")
-        .await
-        .expect_err("not one value");
-    assert_eq!(
-        format!("{refused:#}"),
-        "`inference-profiles` is not set from one value: it is edited with `gglib config profile`"
-    );
-    let refused = handle_set(&ctx, key("inference-defaults"), "{}")
-        .await
-        .expect_err("not one value");
-    assert!(
-        format!("{refused:#}").contains("Settings › Models"),
-        "{refused:#}"
-    );
-
-    handle_unset(&ctx, key("inference-profiles"))
-        .await
-        .expect("cleared");
-    let stored = ctx.app.settings().get().await.expect("settings");
-    assert_eq!(stored.inference_profiles, None);
-}
-
-/// The remote fields `config show` prints are written by `gglib remote`;
-/// `set` and `unset` name the command rather than call the key unknown, and
-/// store nothing.
-#[tokio::test]
-async fn a_remote_field_is_refused_by_set_and_unset_naming_its_command() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = test_context(dir.path()).await;
-    let before = ctx.app.settings().get().await.expect("settings");
-
-    let refused = handle_set(&ctx, key("remote-enabled"), "true")
-        .await
-        .expect_err("not by hand");
-    assert_eq!(
-        format!("{refused:#}"),
-        "`remote-enabled` is not set by hand: `gglib remote enable` and `gglib remote disable` switch it"
-    );
-    let refused = handle_unset(&ctx, key("remote-pairing"))
-        .await
-        .expect_err("not by hand");
-    assert!(
-        format!("{refused:#}").contains("`gglib remote join` writes it"),
-        "{refused:#}"
-    );
-    assert_eq!(ctx.app.settings().get().await.expect("settings"), before);
 }

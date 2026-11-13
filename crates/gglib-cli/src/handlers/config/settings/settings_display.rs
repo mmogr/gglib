@@ -7,9 +7,7 @@
 use gglib_core::Settings;
 use gglib_core::secret::{SHOWN_AS, SettingSecret, held, held_line};
 
-/// Keys that are purely internal bookkeeping and must not appear in
-/// user-facing output.
-const HIDDEN_KEYS: &[&str] = &["setup-completed"];
+use crate::config_commands::KEYS;
 
 /// The secret a row's key names, when it names one. Such a row says whether
 /// the secret is held and which command prints it, never what it is
@@ -143,8 +141,8 @@ fn mask_or_show(key: &str, leaf: serde_json::Value) -> String {
 /// Build display rows for a [`Settings`] value as `(key, value)` pairs.
 ///
 /// Keys are kebab-case. Nested structs are expanded into dot-notation sub-rows
-/// (e.g. `inference-defaults.temperature`). Rows for [`HIDDEN_KEYS`] are
-/// silently dropped.
+/// (e.g. `inference-defaults.temperature`). Rows for keys the table
+/// marks hidden are dropped.
 ///
 /// `default-model-id` and `default-image-model-id` are substituted with the
 /// pre-resolved `model_display` and `image_display` strings (or `"None"`) to
@@ -163,7 +161,7 @@ pub(super) fn settings_display_rows(
     for (snake_key, val) in obj {
         let kebab_key = snake_key.replace('_', "-");
 
-        if HIDDEN_KEYS.contains(&kebab_key.as_str()) {
+        if KEYS.iter().any(|key| key.name == kebab_key && key.hidden()) {
             continue;
         }
         let val = if kebab_key == "remote-devices" {

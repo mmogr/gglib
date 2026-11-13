@@ -25,7 +25,7 @@ These can change in any release:
 - the `GGLIB_DISABLE_*` switches;
 - the Rust crates' APIs;
 - the `llama_base_port` setting, which may go if llama-server's own router takes over residency;
-- the loop guard: its `loop-guard` setting, and what it catches and does.
+- the loop guard: its `loop-guard` setting, its log (`gglib proxy trips`), and what it catches and does.
 
 ## Platforms
 
