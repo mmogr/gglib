@@ -1132,6 +1132,10 @@ one row of it, and none when the fit reached no figure:
     fit       262144 unsnapped  (of 96.0 GiB, 4.0 GiB weights, 77 KiB/token)
 ```
 
+The fit appears once for each narration in the document: `launch.fit` for the
+model the endpoint last resolved, and `admission.slots[].launch.narration.fit`
+for each resident.
+
 #### `per_model_defects`
 
 The fleet totals above answer *"is something wrong"*; this answers *"with which
