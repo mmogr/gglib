@@ -138,7 +138,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `config unset <key>` | Clear one setting, returning it to unset (for `default-context-size`, sized per launch again; for `models-dir`, the default folder) |
 | `config reset` | Reset every preference to its default; keeps the joined machine, the devices it admits, remote access and the proxy's API key |
 | `config reveal <key>` | Print a stored secret, `proxy-api-key` or `remote-pairing.api-key`, alone on stdout, so `$(gglib config reveal proxy-api-key)` is exactly the key |
-| `config paths` | Show the resolved path of every gglib directory |
+| `config paths` | Show the resolved path of every gglib directory, then every `gglib` on `PATH` (which one `gglib` runs, which is running) and the desktop app, each with its version |
 | `config profile list` | List named sampling profiles |
 | `config profile show <name>` | Show one profile's parameters |
 | `config profile set <name> [flags]` | Create or update a profile (only the flags passed are set; `--unset <param>` clears one) |

@@ -195,7 +195,9 @@ The optional `hf_xet` download accelerator: `status`, `enable`, `disable`,
 
 ## `paths`
 
-Every location gglib resolved, with its source.
+Every location gglib resolved, with its source, then every gglib a user
+might run here: each `gglib` on `PATH` and the desktop app, which all
+share one data folder.
 
 <!-- snippet: config-paths -->
 ```console
@@ -211,6 +213,10 @@ llama_server_path = /Users/mmogr/Library/Application Support/gglib/.llama/bin/ll
 sd_server_path = /Users/mmogr/Library/Application Support/gglib/.sd/bin/sd-server
 models_dir = /Users/mmogr/Library/Application Support/gglib/models
 models_source = EnvVar
+gglib_on_path_1 = /Users/mmogr/.local/src/gglib/target/release/gglib (0.31.0-rc.8, runs as `gglib`, this one)
+gglib_on_path_2 = /Users/mmogr/.cargo/bin/gglib (0.31.0-rc.7, shadowed)
+gglib_on_path_3 = /opt/homebrew/bin/gglib (0.30.1, shadowed)
+desktop_app_1 = /Applications/gglib.app (0.30.1)
 ```
 <!-- /snippet -->
 
@@ -219,6 +225,17 @@ models_source = EnvVar
   gglib shares it unless `GGLIB_DATA_DIR` names another. This recording
   ran with `GGLIB_DATA_DIR` and `GGLIB_MODELS_DIR` set.
 - `daemon_port` is the daemon's management port, not the endpoint's.
+- `gglib_on_path_N` lists each `gglib` on `PATH` in the order a shell
+  tries them, once each however many entries or links reach it. The first
+  is the one `gglib` runs; the rest are shadowed. `this one` marks the
+  binary that answered; when it is not on `PATH`, a `running_from` line
+  says so. Another copy's version is its `--version`, given two seconds,
+  or `version unknown`.
+- `desktop_app_N` is each desktop app installed: `gglib.app` (or the older
+  `GGLib GUI.app`) in `/Applications` or `~/Applications` on a Mac, with
+  the version its `Info.plist` gives; `gglib-gui` on `PATH` on Linux,
+  with the version of the `gglib` beside it. The app is never launched.
+  With nothing found, `gglib_on_path` or `desktop_app` says `none found`.
 
 ## Flags
 

@@ -9,6 +9,12 @@ settings (`show`, `set`, `unset`, `reset`, `reveal`, profiles), llama.cpp
 lifecycle, dependency checks, the optional download accelerator, and resolved-path
 inspection.
 
+`paths` prints every resolved path, then `copies`' lines: each `gglib` on
+`PATH` in the order a shell tries them, which one `gglib` runs and which
+one is running, and the desktop app, each with its version. Another copy
+is asked only `--version`, by `copy_version`, with a two-second wait; the
+app is never launched.
+
 The two engines, llama.cpp and stable-diffusion.cpp, are installed the
 same way, by `engine`: `install`, which `update` is too, installs the pinned
 release when what is there is missing or older, and is refused while the

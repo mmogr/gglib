@@ -83,7 +83,7 @@ pub enum ConfigCommand {
         #[command(subcommand)]
         command: Option<FastDownloadsCommand>,
     },
-    /// Show resolved paths for all gglib directories
+    /// Show resolved paths for all gglib directories, and every gglib on PATH and the desktop app
     Paths,
 }
 

@@ -261,7 +261,10 @@ curl -fsSL https://mmogr.github.io/gglib/install.sh | sh -s -- --cli  # the CLI 
 [`install.sh`](packaging/install.sh) adds gglib's signed repository and key
 for apt, pacman or dnf, then installs from it. From then on `apt upgrade`,
 `pacman -Syu` or `dnf upgrade` keeps gglib up to date with the rest of the
-system. The script is short: read it first, or run its steps by hand.
+system. Before it installs anything it lists each gglib already on `PATH`,
+and the desktop app, and says which one `gglib` will run afterwards. It only
+tells you: it never asks or stops. `gglib config paths` lists every copy at
+any time. Read the script first, or run its steps by hand.
 
 The repositories carry stable releases for x86_64; release candidates are on
 the [Releases page](https://github.com/mmogr/gglib/releases) as prereleases.

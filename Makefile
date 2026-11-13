@@ -109,7 +109,7 @@ path-check:
 	elif [ -n "$$others" ]; then \
 		echo "⚠ This build now shadows another gglib on PATH:"; \
 		echo "$$others" | sed 's/^/    /'; \
-		echo "  Both use the same library. \`gglib config paths\` says which binary is running."; \
+		echo "  Both use the same library. \`gglib config paths\` lists every copy and which one runs."; \
 	fi
 
 # Asks before each of three things, in `scripts/uninstall.sh`: the program,

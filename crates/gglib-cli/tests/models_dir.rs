@@ -11,7 +11,9 @@ use std::process::{Command, Output};
 
 /// `gglib config <args>` over `data` as its data root, started in `cwd`, with
 /// `models_dir` as the directory its environment names, if any. `data` is
-/// its home too, so the default directory is never the user's own.
+/// its home too, so the default directory is never the user's own, and its
+/// `PATH` is a directory that is not there, so `config paths` finds no gglib
+/// of this machine's to ask for a version.
 fn config(data: &Path, cwd: &Path, models_dir: Option<&Path>, args: &[&str]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_gglib"));
     command
@@ -20,6 +22,7 @@ fn config(data: &Path, cwd: &Path, models_dir: Option<&Path>, args: &[&str]) -> 
         .current_dir(cwd)
         .env("GGLIB_DATA_DIR", data)
         .env("HOME", data)
+        .env("PATH", data.join("no-path"))
         .env_remove("GGLIB_MODELS_DIR")
         .env_remove("GGLIB_RESOURCE_DIR");
     if let Some(dir) = models_dir {

@@ -11,6 +11,11 @@
 # with it. --cli installs the CLI alone. After that, `apt upgrade`,
 # `pacman -Syu` or `dnf upgrade` updates gglib with everything else.
 #
+# Before it installs anything it lists each gglib already on PATH, with its
+# version, and the desktop app if one is installed, and says which gglib
+# `gglib` will run afterwards. That is all it does with them: it asks
+# nothing and stops for nothing.
+#
 # Running it again changes nothing that is already set up. Each package
 # manager's steps are the few lines in its function below, for anyone who
 # would rather run them by hand.
@@ -42,6 +47,122 @@ else
 fi
 
 [ "$(uname -m)" = x86_64 ] || die "the Linux packages are built for x86_64; this machine is $(uname -m)"
+
+# Every package puts gglib in this directory.
+packaged=/usr/bin
+
+# A directory with its links resolved, or nothing when it is not one. A
+# leading // is folded to /, as some shells keep it.
+real_dir() {
+  d="$(CDPATH='' cd -P "$1" 2>/dev/null && pwd -P)" || d=
+  while :; do
+    case "$d" in //*) d="${d#/}" ;; *) break ;; esac
+  done
+  printf '%s\n' "$d"
+}
+
+# A file with its links resolved, as far as this system can say.
+real_file() {
+  r=
+  if command -v realpath >/dev/null 2>&1; then r="$(realpath "$1" 2>/dev/null)" || r=; fi
+  if [ -z "$r" ]; then r="$(real_dir "${1%/*}")/${1##*/}"; fi
+  printf '%s\n' "$r"
+}
+
+# The version a gglib gives, or "version unknown". It is asked --version
+# alone, which every release answers before it opens its library, with
+# nothing on stdin. timeout kills it if it has not answered in two seconds;
+# without timeout (it comes with coreutils) the copy is not run at all. The
+# version is the first word that starts with a digit, if it is short and
+# plain.
+gglib_version() {
+  out=
+  if command -v timeout >/dev/null 2>&1; then
+    # `|| exit 1` keeps the subshell, whose stderr is closed, as the shell
+    # that waits for timeout: a shell says "Killed" of a child that was.
+    out="$(
+      exec 2>/dev/null
+      timeout -s KILL 2 "$1" --version </dev/null || exit 1
+    )" || out=
+  fi
+  line="${out%%
+*}"
+  version=
+  set -f
+  for word in $line; do
+    case "$word" in
+      [0-9]*) version="$word"; break ;;
+    esac
+  done
+  set +f
+  case "$version" in
+    '' | *[!0-9A-Za-z.+_-]*) version= ;;
+  esac
+  if [ -n "$version" ] && [ "${#version}" -le 40 ]; then
+    printf '%s\n' "$version"
+  else
+    echo "version unknown"
+  fi
+}
+
+# What is here already, walking PATH in the order the shell does: each
+# gglib (once, however many entries or links reach it) and the desktop app,
+# which is never run. `ahead` is a gglib found before $packaged, which
+# `gglib` will go on running.
+packaged_real="$(real_dir "$packaged")"
+reached=0
+found=
+apps=
+seen=:
+first=
+ahead=
+others=0
+old_ifs=$IFS
+set -f
+IFS=:
+for dir in ${PATH:-}; do
+  IFS=$old_ifs
+  set +f
+  [ -n "$dir" ] || continue
+  if [ -n "$packaged_real" ] && [ "$(real_dir "$dir")" = "$packaged_real" ]; then reached=1; fi
+  for name in gglib gglib-gui gg-lib-gui; do
+    [ -f "$dir/$name" ] && [ -x "$dir/$name" ] || continue
+    r="$(real_file "$dir/$name")"
+    case "$seen" in *":$r:"*) continue ;; esac
+    seen="$seen$r:"
+    if [ "$name" != gglib ]; then
+      apps="$apps
+gglib:   $dir/$name"
+      continue
+    fi
+    found="$found
+gglib:   $dir/gglib ($(gglib_version "$dir/gglib"))"
+    if [ "$r" != "$packaged_real/gglib" ]; then
+      others=1
+      if [ -z "$first" ] && [ "$reached" = 0 ]; then ahead="$dir/gglib"; fi
+    fi
+    if [ -z "$first" ]; then first="$dir/gglib"; fi
+  done
+done
+IFS=$old_ifs
+set +f
+
+if [ -n "$found" ]; then
+  say "already on PATH, in the order the shell tries them:$found"
+fi
+if [ -n "$apps" ]; then
+  say "the desktop app is already installed:$apps"
+fi
+if [ "$reached" = 0 ]; then
+  say "$packaged is not on PATH, so the gglib this installs runs only as $packaged/gglib${first:+; \`gglib\` will still run $first}."
+elif [ -n "$ahead" ]; then
+  say "$ahead comes before $packaged on PATH, so \`gglib\` will still run it, not the $packaged/gglib this installs."
+elif [ "$others" = 1 ]; then
+  say "$packaged/gglib, which this installs, comes first on PATH, so \`gglib\` will run it, not the others listed."
+fi
+if [ "$others" = 1 ]; then
+  say "every gglib here, and the desktop app, uses the same data folder."
+fi
 
 # Piped into sh, the script is the shell's stdin, so the package managers
 # read their prompts from the terminal instead, and you see and confirm what
