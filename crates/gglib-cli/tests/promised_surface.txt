@@ -1,0 +1,516 @@
+# The command line and settings keys docs/compatibility.md promises. A line
+# marked (not covered) is one the page lists under Not covered.
+# Rewrite with: GGLIB_WRITE_PROMISED_SURFACE=1 cargo test -p gglib-cli --test promised_surface
+
+[commands]
+gglib
+  --verbose -v
+gglib attachment
+gglib attachment save
+  --force
+gglib benchmark (not covered)
+gglib benchmark agentic (not covered)
+  --context-size -c (not covered)
+  --control-seeds (not covered)
+  --json (not covered)
+  --model -m (not covered)
+  --no-control (not covered)
+  --no-replicate (not covered)
+  --output (not covered)
+  --proxy (not covered)
+  --replicate-pairs (not covered)
+  --seeds (not covered)
+  --task-suite (not covered)
+gglib benchmark compare (not covered)
+  --context-size -c (not covered)
+  --max-tokens (not covered)
+  --model -m (not covered)
+  --prompt (not covered)
+  --system-prompt -s (not covered)
+  --temperature (not covered)
+gglib benchmark list (not covered)
+  --limit -n (not covered)
+gglib benchmark model (not covered)
+gglib benchmark perf (not covered)
+  --model -m (not covered)
+  --pp (not covered)
+  --reps (not covered)
+  --tg (not covered)
+gglib benchmark show (not covered)
+gglib benchmark tune (not covered)
+  --apply (not covered)
+  --context-size -c (not covered)
+  --model -m (not covered)
+  --prune-fraction (not covered)
+  --seed-from-family-presets (not covered)
+    true
+    false
+  --sweep (not covered)
+  --task-suite (not covered)
+  --weight-loop-avoidance (not covered)
+  --weight-task-completion (not covered)
+  --weight-tool-accuracy (not covered)
+gglib chat
+  --continue
+  --image
+  --max-parallel-tools
+  --max-tokens
+  --max-tool-iterations
+  --no-tools
+  --profile
+  --remote
+  --repeat-penalty
+  --system-prompt -s
+  --temperature
+  --thinking
+    on
+    off
+  --tool-timeout-ms
+  --tools
+  --top-k
+  --top-p
+gglib chat history
+  --limit -n
+gglib completions
+  <shell>
+    bash
+    elvish
+    fish
+    powershell
+    zsh
+gglib config
+gglib config check-deps
+gglib config fast-downloads
+gglib config fast-downloads disable
+gglib config fast-downloads enable
+  --python
+gglib config fast-downloads prompt
+gglib config fast-downloads status
+gglib config llama
+gglib config llama detect
+  --json
+gglib config llama install
+  --build
+  --force
+gglib config llama status
+gglib config llama uninstall
+  --yes -y
+gglib config paths
+gglib config profile
+gglib config profile install-templates
+  --force
+gglib config profile list
+gglib config profile remove
+gglib config profile set
+  --description
+  --dry-allowed-length
+  --dry-base
+  --dry-multiplier
+  --dry-penalty-last-n
+  --dynatemp-exponent
+  --dynatemp-range
+  --frequency-penalty
+  --list-in-models
+  --max-tokens
+  --min-p
+  --no-list-in-models
+  --presence-penalty
+  --reasoning-budget-tokens
+  --reasoning-effort
+  --repeat-penalty
+  --temperature
+  --top-k
+  --top-n-sigma
+  --top-p
+  --unset
+gglib config profile show
+gglib config reset
+  --yes -y
+gglib config reveal
+  <key>
+    proxy-api-key
+    remote-pairing.api-key
+gglib config sd
+gglib config sd install
+  --build
+  --force
+gglib config sd status
+gglib config sd uninstall
+  --yes -y
+gglib config set
+  <key>
+    close-to-tray
+    default-context-size
+    default-image-model-id
+    default-model-id
+    inference-defaults
+    inference-profiles
+    llama-base-port (not covered)
+    loop-guard (not covered)
+    max-download-queue-size
+    max-parallel-tools
+    max-stagnation-steps
+    max-tool-iterations
+    mcp-drawing
+    models-dir
+    proxy-allowed-hosts
+    proxy-api-key
+    proxy-autostart
+    proxy-cache-disk-gb
+    proxy-cache-on-disk
+    proxy-host
+    proxy-port
+    remote-devices (hidden)
+    remote-enabled (hidden)
+    remote-pairing (hidden)
+    remote-serve (hidden)
+    setup-completed (hidden)
+    start-at-login
+    title-generation-prompt
+    tool-call-repair
+    tool-timeout-ms
+    trust-client-sampling
+gglib config show
+gglib config unset
+  <key>
+    close-to-tray
+    default-context-size
+    default-image-model-id
+    default-model-id
+    inference-defaults
+    inference-profiles
+    llama-base-port (not covered)
+    loop-guard (not covered)
+    max-download-queue-size
+    max-parallel-tools
+    max-stagnation-steps
+    max-tool-iterations
+    mcp-drawing
+    models-dir
+    proxy-allowed-hosts
+    proxy-api-key
+    proxy-autostart
+    proxy-cache-disk-gb
+    proxy-cache-on-disk
+    proxy-host
+    proxy-port
+    remote-devices (hidden)
+    remote-enabled (hidden)
+    remote-pairing (hidden)
+    remote-serve (hidden)
+    setup-completed (hidden)
+    start-at-login
+    title-generation-prompt
+    tool-call-repair
+    tool-timeout-ms
+    trust-client-sampling
+gglib daemon
+gglib daemon run
+  --allowed-host
+gglib daemon status
+gglib daemon stop
+  --remote
+  --yes -y
+gglib gui
+  --dev
+gglib image
+  --count
+  --from
+  --mask
+  --model -m
+  --output -o
+  --remote
+  --seed
+  --size
+  --strength
+gglib mcp
+gglib mcp add
+  --args
+  --command
+  --disabled
+  --env
+  --lifecycle
+    eager
+    lazy
+  --name
+  --path-extra
+  --working-dir
+gglib mcp allow-remote
+gglib mcp deny-remote
+gglib mcp disable
+gglib mcp enable
+gglib mcp list
+gglib mcp remove
+  --yes -y
+gglib mcp test
+gglib mcp tools
+gglib model
+gglib model add
+  --component
+  --no-component
+  --reimport
+gglib model browse
+  --images
+  --limit -n
+  --size
+  <category>
+    popular
+    recent
+gglib model capabilities
+  --set
+    supports-system-role
+    requires-strict-turns
+    supports-tool-calls
+    supports-reasoning
+  --unset
+    supports-system-role
+    requires-strict-turns
+    supports-tool-calls
+    supports-reasoning
+gglib model check-updates
+  --all
+  --identifier
+gglib model download
+  --list-quants
+  --quantization -q
+gglib model explain (not covered)
+  --profile (not covered)
+gglib model inspect
+  --json
+  --metadata
+  --remote
+gglib model list
+  --max-params
+  --max-speed
+  --min-params
+  --min-speed
+  --order
+    desc
+    asc
+  --remote
+  --sort
+    added
+    name
+    params
+    speed
+  --tag
+gglib model load
+  --context-size -c
+  --pin
+gglib model remove
+  --yes -y
+gglib model repair
+  --shards
+  --yes -y
+gglib model retag
+  --all
+  --full
+gglib model search
+  --images
+  --limit -n
+  --sort
+    downloads
+    likes
+    created
+    updated
+gglib model unload
+gglib model update
+  --architecture
+  --clear-inference-defaults
+  --component
+  --context-length
+  --dry-allowed-length
+  --dry-base
+  --dry-multiplier
+  --dry-penalty-last-n
+  --dry-run
+  --dynatemp-exponent
+  --dynatemp-range
+  --frequency-penalty
+  --jinja
+    auto
+    on
+    off
+  --max-tokens
+  --metadata
+  --min-p
+  --mtp
+    auto
+    on
+    off
+  --name
+  --no-component
+  --no-projector
+  --param-count
+  --presence-penalty
+  --projector
+  --quantization
+  --reasoning-budget-tokens
+  --reasoning-effort
+  --remove-metadata
+  --repeat-penalty
+  --replace-metadata
+  --temperature
+  --top-k
+  --top-n-sigma
+  --top-p
+  --unset
+  --yes -y
+gglib model upgrade
+  --yes -y
+gglib model verify
+  --per-shard
+gglib proxy
+  --allowed-host
+  --api-key
+  --cache
+  --cache-disk-gb
+  --default-context-size
+  --dry-allowed-length
+  --dry-base
+  --dry-multiplier
+  --dry-penalty-last-n
+  --dynatemp-exponent
+  --dynatemp-range
+  --frequency-penalty
+  --host
+  --max-tokens
+  --min-p
+  --port -p
+  --presence-penalty
+  --reasoning-budget-tokens
+  --reasoning-effort
+  --repeat-penalty
+  --slot-dir
+  --temperature
+  --top-k
+  --top-n-sigma
+  --top-p
+gglib proxy cache-clear
+  --api-key
+  --host
+  --port -p
+  --remote
+  --session-id
+gglib proxy dashboard (not covered)
+  --api-key (not covered)
+  --host (not covered)
+  --port -p (not covered)
+  --remote (not covered)
+gglib proxy stop
+gglib proxy test
+gglib proxy trips
+  --since
+gglib question (alias q)
+  --file
+  --image
+  --max-parallel-tools
+  --max-tokens
+  --max-tool-iterations
+  --model -m
+  --no-tools
+  --profile
+  --quiet
+  --remote
+  --repeat-penalty
+  --show-prompt
+  --temperature
+  --tool-timeout-ms
+  --tools
+  --top-k
+  --top-p
+gglib remote
+gglib remote disable
+gglib remote disconnect
+gglib remote enable
+  --invite
+  --no-discovery
+  --no-qr
+  --relay
+gglib remote forget
+gglib remote invite
+  --no-qr
+gglib remote join
+  --no-discovery
+  --port
+  --relay
+gglib remote list
+gglib remote status
+gglib run
+gglib run cancel
+gglib run list
+gglib run show
+  --follow -f
+gglib run start
+  --follow -f
+  --model -m
+gglib serve
+  --allowed-host
+  --api-key
+  --cache
+  --cache-disk-gb
+  --context-size -c
+  --dry-allowed-length
+  --dry-base
+  --dry-multiplier
+  --dry-penalty-last-n
+  --dynatemp-exponent
+  --dynatemp-range
+  --frequency-penalty
+  --host
+  --jinja
+  --max-tokens
+  --min-p
+  --mlock
+  --mtp-draft-n-max
+  --mtp-draft-p-min
+  --port -p
+  --presence-penalty
+  --profile
+  --reasoning-budget-tokens
+  --reasoning-effort
+  --remote
+  --repeat-penalty
+  --slot-dir
+  --temperature
+  --top-k
+  --top-n-sigma
+  --top-p
+gglib up
+  --model
+  --port -p
+  --yes -y
+gglib web
+  --no-open
+
+[stored settings keys]
+close_to_tray
+default_context_size
+default_image_model_id
+default_model_id
+inference_defaults
+inference_profiles
+llama_base_port (not covered)
+loop_guard (not covered)
+max_download_queue_size
+max_parallel_tools
+max_stagnation_steps
+max_tool_iterations
+mcp_drawing
+proxy_allowed_hosts
+proxy_api_key
+proxy_autostart
+proxy_cache_disk_gb
+proxy_cache_on_disk
+proxy_host
+proxy_port
+remote_devices
+remote_enabled
+remote_pairing
+remote_serve
+setup_completed
+start_at_login
+title_generation_prompt
+tool_call_repair
+tool_timeout_ms
+trust_client_sampling
