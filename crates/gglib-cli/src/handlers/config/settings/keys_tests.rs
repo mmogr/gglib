@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use clap::ValueEnum;
+use clap::Parser as _;
 use gglib_core::Settings;
 use gglib_core::domain::{ImageFamily, NewModel};
 
@@ -12,7 +12,7 @@ use super::settings_display::{camel_to_kebab, settings_display_rows};
 use super::wire::known_keys;
 use super::{handle_set, handle_unset, shown_rows};
 use crate::bootstrap::{CliContext, test_context};
-use crate::config_commands::{Bound, SettingKey, Takes};
+use crate::config_commands::{Bound, KEYS, Takes};
 
 /// The setting a printed row belongs to: `remote-pairing.ticket` is
 /// `remote-pairing`'s.
@@ -52,25 +52,29 @@ fn the_table_is_what_show_prints_and_the_wire_type_carries() {
         .into_iter()
         .map(|(key, _)| top_level(&key))
         .collect();
-    let table: BTreeSet<String> = SettingKey::value_variants()
-        .iter()
-        .map(|key| key.name.to_owned())
-        .collect();
+    let table: BTreeSet<String> = KEYS.iter().map(|key| key.name.to_owned()).collect();
 
     let mut expected = &wire | &printed;
     expected.insert("models-dir".to_owned());
     assert_eq!(table, expected);
-    for key in SettingKey::value_variants() {
+    for key in KEYS {
         let elsewhere = matches!(key.takes, Takes::Elsewhere(_));
         let written = wire.contains(key.name) || key.name == "models-dir";
         assert_eq!(elsewhere, !written, "{}", key.name);
     }
 }
 
+/// Whether `gglib config <command> <name>` gets past clap.
+fn parses(command: &str, name: &str) -> bool {
+    crate::Cli::try_parse_from(["gglib", "config", command, name, "x"])
+        .or_else(|_| crate::Cli::try_parse_from(["gglib", "config", command, name]))
+        .is_ok()
+}
+
 /// Every key `config show` prints is one `config set` and `config unset`
-/// take: set to a value of its kind, shown changed, and cleared back to how
-/// it was shown; or refused with what does write it. None is refused as
-/// unknown.
+/// take, set to a value of its kind, shown changed, and cleared back to how
+/// it was shown; or one they do not take, which clap refuses and their
+/// `--help` names with where it is changed.
 #[tokio::test]
 async fn every_key_show_prints_is_taken_by_set_and_unset() {
     gglib_core::paths::isolate_data_root();
@@ -84,8 +88,9 @@ async fn every_key_show_prints_is_taken_by_set_and_unset() {
     assert!(printed.contains("models-dir"), "{printed:?}");
 
     for (at, name) in (0u64..).zip(&printed) {
-        let key = SettingKey::from_str(name, false)
-            .unwrap_or_else(|e| panic!("`config show` prints {name}, and `config set` says {e}"));
+        let key = super::set::tests::key(name);
+        assert_eq!(parses("set", name), key.settable(), "set {name}");
+        assert_eq!(parses("unset", name), key.clearable(), "unset {name}");
         let typed = match key.takes {
             Takes::Number(Bound::Closed(lo, _) | Bound::Clamped(lo, _)) => lo.to_string(),
             // Apart from each other, so two ports never collide.

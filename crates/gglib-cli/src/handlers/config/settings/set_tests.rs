@@ -1,15 +1,17 @@
 //! Unit tests for [`super`], over a database of the test's own.
 
-use clap::ValueEnum;
 use gglib_core::settings::SettingsError;
 
 use super::super::unset::handle_unset;
 use super::*;
 use crate::bootstrap::test_context;
 
-/// The key `config set` parses `name` as.
+/// The table's row for `name`.
 pub(in crate::handlers::config::settings) fn key(name: &str) -> SettingKey {
-    SettingKey::from_str(name, false).unwrap_or_else(|e| panic!("{name}: {e}"))
+    *crate::config_commands::KEYS
+        .iter()
+        .find(|key| key.name == name)
+        .unwrap_or_else(|| panic!("no key {name}"))
 }
 
 /// The refusal is the validator's own sentence with nothing put around it,

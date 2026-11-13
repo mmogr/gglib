@@ -8,6 +8,8 @@ mod setting_key;
 pub(crate) use secret_arg::SecretArg;
 #[cfg(test)]
 pub(crate) use setting_key::Bound;
+#[cfg(test)]
+pub(crate) use setting_key::KEYS;
 pub(crate) use setting_key::SettingKey;
 pub(crate) use setting_key::Takes;
 
@@ -26,8 +28,10 @@ pub enum ConfigCommand {
     /// model's id or name for `default-model-id` and
     /// `default-image-model-id`. A value the setting does not allow is
     /// refused and nothing is stored.
+    #[command(after_help = setting_key::changed_elsewhere(SettingKey::settable))]
     Set {
         /// The setting, as `show` prints it
+        #[arg(value_parser = setting_key::keys(SettingKey::settable))]
         key: SettingKey,
         /// Its new value
         #[arg(allow_hyphen_values = true)]
@@ -39,8 +43,10 @@ pub enum ConfigCommand {
     /// it is what lets each launch size the context to this machine, and
     /// `set` can only ever write a value. For `models-dir` it removes the
     /// stored folder, so the default applies.
+    #[command(after_help = setting_key::changed_elsewhere(SettingKey::clearable))]
     Unset {
         /// The setting, as `show` prints it
+        #[arg(value_parser = setting_key::keys(SettingKey::clearable))]
         key: SettingKey,
     },
     /// Reset every preference to its default
