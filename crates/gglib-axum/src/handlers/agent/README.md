@@ -351,7 +351,14 @@ Thinking off, runs it with a thinking budget of 0, and no row written anywhere. 
 the device's scope whose `frames` say `agent`.
 
 The run exists before its model does (`launch::launch_turn`). The `PUT`
-reads the turn, takes a slot, reserves the run and answers; finding or
+reads the turn, takes a slot, reserves the run and answers. A device's run
+(either door) that finds every slot taken takes a place in line instead
+(`slot_line`), and waits there as its run's first work, saying so each
+second (`waiting`, `agent_slot`, its place, 1 being next): first come,
+first served, at most `AGENT_SLOT_LINE` (16) waiting, one more refused
+`429 agent_busy`, and a wait past `AGENT_SLOT_WAIT` (two minutes) ending the
+run `failed` `agent_busy`. While anyone waits, no one takes a free slot past
+the line. This machine's own turn is refused `agent_busy` at once. Finding or
 loading the model, opening the endpoint's door, composing the loop and
 writing the turn's rows (`launch::begin_writes`) are the run's own work. A cold load, or a load queued behind an
 image render, is then a `waiting` event (`model_load`, naming the model and,

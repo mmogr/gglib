@@ -169,6 +169,13 @@ Costs, stated plainly:
 - The first run after a named lazy server stopped waits inside the run for
   it to start.
 
+> **Amended 2026-11-13 — a device's run waits for a slot.** While all four
+> slots are taken, a device's run waits in line for one, first come, first
+> served, saying so as a `waiting` event (`agent_slot`), instead of a
+> `429`. Up to 16 wait; one more is refused `429 agent_busy`, and a run that
+> waits two minutes ends `failed` `agent_busy`. The page's own turn is still
+> refused at once.
+
 ## Kill criteria
 
 1. **A client the owner means to serve needs `/mcp` itself.** The reading
