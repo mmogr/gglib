@@ -257,8 +257,9 @@ impl Takes {
             Self::Hosts => "hosts, comma-separated, each with or without a port".to_owned(),
             Self::Model => "a model's id or name".to_owned(),
             Self::Folder => "a path, created when missing".to_owned(),
-            Self::Whole(where_) => format!("not one value; {where_}"),
-            Self::Elsewhere(who) => format!("not set here; {who}"),
+            Self::Whole(where_) | Self::Elsewhere(where_) => {
+                format!("not one value; {where_}")
+            }
         }
     }
 }
@@ -267,6 +268,12 @@ impl SettingKey {
     /// The line `--help` shows for the key.
     pub(crate) fn help(&self) -> String {
         format!("{}: {}", self.about, self.takes.described())
+    }
+
+    /// Whether the key is bookkeeping: left out of `--help` and of what
+    /// `config show` prints.
+    pub(crate) const fn hidden(&self) -> bool {
+        self.hidden
     }
 
     /// Whether `config set` takes the key: one value, which no other command

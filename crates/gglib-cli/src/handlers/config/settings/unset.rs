@@ -6,20 +6,17 @@
 //! outranks that fit. `set` writes a value and never a clear, so without this
 //! the only way back was `reset`, which clears every other preference too.
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use serde_json::Value;
 
-use super::set::not_set_here;
 use super::{models_dir, queue_size, wire};
 use crate::bootstrap::CliContext;
 use crate::config_commands::{SettingKey, Takes};
 
 /// Execute `gglib config unset <key>`.
 pub(crate) async fn handle_unset(ctx: &CliContext, key: SettingKey) -> Result<()> {
-    match key.takes {
-        Takes::Folder => return models_dir::unset(),
-        Takes::Elsewhere(_) => bail!(not_set_here(key)),
-        _ => {}
+    if key.takes == Takes::Folder {
+        return models_dir::unset();
     }
     let request = wire::request(&key, Value::Null)?;
     let clears_queue_size = request.max_download_queue_size.is_some();

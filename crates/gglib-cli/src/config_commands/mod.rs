@@ -8,7 +8,6 @@ mod setting_key;
 pub(crate) use secret_arg::SecretArg;
 #[cfg(test)]
 pub(crate) use setting_key::Bound;
-#[cfg(test)]
 pub(crate) use setting_key::KEYS;
 pub(crate) use setting_key::SettingKey;
 pub(crate) use setting_key::Takes;

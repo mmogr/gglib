@@ -49,11 +49,12 @@ Current application settings:
 
 ## `set`, `unset`, `show`
 
-`show` prints every setting and the models directory, each under the key
-`set` and `unset` take. `set <key> <value>` stores one; `config set --help`
-lists the keys and what each takes. A value is a whole number, `true` or
-`false`, text, or a comma-separated list for `proxy-allowed-hosts`; one a
-setting does not allow is refused, and nothing is stored.
+`show` prints every setting and the models directory, each under its key.
+`set <key> <value>` stores one; `config set --help` lists the keys it takes
+and what each takes, and names the few that are changed elsewhere. A value
+is a whole number, `true` or `false`, text, or a comma-separated list for
+`proxy-allowed-hosts`; one a setting does not allow is refused, and nothing
+is stored.
 
 ```bash
 gglib config set default-context-size 131072

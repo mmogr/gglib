@@ -101,38 +101,28 @@ async fn every_key_show_prints_is_taken_by_set_and_unset() {
             Takes::Hosts => "gglib.lan".to_owned(),
             Takes::Model => "flux".to_owned(),
             Takes::Folder => folder.display().to_string(),
-            Takes::Whole(_) | Takes::Elsewhere(_) => "anything".to_owned(),
+            // clap keeps both from `set`, as the asserts above hold; `unset`
+            // clears the first and is kept from the second too.
+            Takes::Whole(_) => {
+                handle_unset(&ctx, key).await.expect(name);
+                continue;
+            }
+            Takes::Elsewhere(_) => continue,
         };
         let before = row(&ctx, name).await;
-        let set = handle_set(&ctx, key, &typed).await;
-
-        match key.takes {
-            Takes::Elsewhere(_) => {
-                let said = format!("{:#}", set.expect_err(name));
-                assert!(said.contains("is not set by hand: `gglib remote"), "{said}");
-                let said = format!("{:#}", handle_unset(&ctx, key).await.expect_err(name));
-                assert!(said.contains("is not set by hand: `gglib remote"), "{said}");
-            }
-            Takes::Whole(_) => {
-                let said = format!("{:#}", set.expect_err(name));
-                assert!(said.contains("is not set from one value"), "{said}");
-                handle_unset(&ctx, key).await.expect(name);
-            }
-            _ => {
-                // `GGLIB_MODELS_DIR` in this test's environment outranks the
-                // stored folder, so the row cannot change under it.
-                let shown =
-                    key.takes != Takes::Folder || std::env::var_os("GGLIB_MODELS_DIR").is_none();
-                set.unwrap_or_else(|e| panic!("set {name} {typed}: {e:#}"));
-                if shown {
-                    assert_ne!(row(&ctx, name).await, before, "{name} {typed}");
-                }
-                handle_unset(&ctx, key)
-                    .await
-                    .unwrap_or_else(|e| panic!("unset {name}: {e:#}"));
-                assert_eq!(row(&ctx, name).await, before, "{name}");
-            }
+        // `GGLIB_MODELS_DIR` in this test's environment outranks the stored
+        // folder, so the row cannot change under it.
+        let shown = key.takes != Takes::Folder || std::env::var_os("GGLIB_MODELS_DIR").is_none();
+        handle_set(&ctx, key, &typed)
+            .await
+            .unwrap_or_else(|e| panic!("set {name} {typed}: {e:#}"));
+        if shown {
+            assert_ne!(row(&ctx, name).await, before, "{name} {typed}");
         }
+        handle_unset(&ctx, key)
+            .await
+            .unwrap_or_else(|e| panic!("unset {name}: {e:#}"));
+        assert_eq!(row(&ctx, name).await, before, "{name}");
     }
 }
 
