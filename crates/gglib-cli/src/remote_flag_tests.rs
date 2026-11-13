@@ -145,8 +145,9 @@ fn the_root_does_not_offer_the_flag() {
 }
 
 /// Every command the parser knows, as its name and a command line that
-/// parses: its required arguments filled with the first value each takes.
-/// A parent that cannot run without a subcommand is not a line of its own.
+/// parses: its required arguments, and the first of each group it requires
+/// one of, filled with the first value each takes. A parent that cannot run
+/// without a subcommand is not a line of its own.
 fn every_command_line() -> Vec<(String, Vec<String>)> {
     fn walk(command: &clap::Command, path: &mut Vec<String>, out: &mut Vec<(String, Vec<String>)>) {
         for sub in command.get_subcommands() {
@@ -154,7 +155,15 @@ fn every_command_line() -> Vec<(String, Vec<String>)> {
             if !sub.is_subcommand_required_set() {
                 let mut argv = vec!["gglib".to_owned()];
                 argv.extend(path.iter().cloned());
-                for arg in sub.get_arguments().filter(|arg| arg.is_required_set()) {
+                let first_of_each_group: Vec<&clap::Id> = sub
+                    .get_groups()
+                    .filter(|group| group.is_required_set())
+                    .filter_map(|group| group.get_args().next())
+                    .collect();
+                let required = sub.get_arguments().filter(|arg| {
+                    arg.is_required_set() || first_of_each_group.contains(&arg.get_id())
+                });
+                for arg in required {
                     let value = arg
                         .get_possible_values()
                         .first()

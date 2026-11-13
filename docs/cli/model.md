@@ -250,7 +250,7 @@ The transfer engine is described in the
 
 ## `check-updates`, `upgrade`
 
-`check-updates --all`, or `--identifier <model>`, asks each downloaded
+`check-updates <model>`, or `--all`, asks each downloaded
 model's repository for its latest commit and reports an update when that
 differs from the commit recorded at download (any commit counts, a README
 edit among them); `upgrade <model>` replaces the file with that revision.

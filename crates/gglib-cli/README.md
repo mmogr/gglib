@@ -84,7 +84,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model download <repo>` | Download a model from `HuggingFace`; an image model's companions come too, named with their sizes before it is queued |
 | `model search <query>` | Search `HuggingFace` Hub for models; `--images` for image models |
 | `model browse [category] [--size S] [--images]` | Browse popular GGUF models on the `HuggingFace` Hub |
-| `model check-updates [--identifier <id\|name>] [--all]` | Check whether downloaded models have a newer commit on the Hub |
+| `model check-updates <id\|name>`, `model check-updates --all` | Check whether downloaded models have a newer commit on the Hub |
 | `model upgrade <id\|name> [--yes]` | Download a model's latest version and update its row |
 | `model verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `model repair <id\|name>` | Re-download corrupt shards for a model |

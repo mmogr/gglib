@@ -110,6 +110,34 @@ mod tests {
         );
     }
 
+    /// `model check-updates` takes its model as every model command does, or
+    /// `--all`: exactly one, and clap refuses both or neither.
+    #[test]
+    fn check_updates_takes_a_model_or_all_and_not_both() {
+        use crate::model_commands::ModelCommand;
+        use clap::Parser;
+        use clap::error::ErrorKind;
+        let parsed = |args: &[&str]| {
+            let line = [&["gglib", "model", "check-updates"], args].concat();
+            match Cli::try_parse_from(line).map(|cli| cli.command) {
+                Ok(Some(crate::commands::Commands::Model {
+                    command: ModelCommand::CheckUpdates { identifier, all },
+                })) => Ok((identifier, all)),
+                Ok(_) => panic!("expected check-updates"),
+                Err(err) => Err(err.kind()),
+            }
+        };
+
+        assert_eq!(parsed(&["qwen"]), Ok((Some("qwen".to_owned()), false)));
+        assert_eq!(parsed(&["--all"]), Ok((None, true)));
+        assert_eq!(parsed(&["qwen", "--all"]), Err(ErrorKind::ArgumentConflict));
+        assert_eq!(parsed(&[]), Err(ErrorKind::MissingRequiredArgument));
+        assert_eq!(
+            parsed(&["--identifier", "qwen"]),
+            Err(ErrorKind::UnknownArgument)
+        );
+    }
+
     /// No `--port` flag carries a default of its own. A default typed into
     /// clap reaches the handler as a port somebody chose, and on the five
     /// commands that name the proxy's port it would outrank the stored

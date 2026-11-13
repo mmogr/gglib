@@ -264,7 +264,6 @@ gglib model capabilities
     supports-reasoning
 gglib model check-updates
   --all
-  --identifier
 gglib model download
   --list-quants
   --quantization -q
