@@ -15,6 +15,7 @@
 #[path = "support/stub_tools.rs"]
 mod stub_tools;
 
+use std::io::Write as _;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -56,6 +57,21 @@ fn real(name: &str) -> Option<PathBuf> {
     })
 }
 
+/// This machine's own `name`, or none, with a note that the test stops
+/// there. Linux has each tool asked for here, from coreutils, so on Linux a
+/// missing one fails the test instead.
+fn real_or_skip(name: &str) -> Option<PathBuf> {
+    let found = real(name);
+    assert!(
+        found.is_some() || !cfg!(target_os = "linux"),
+        "Linux has {name}, from coreutils"
+    );
+    if found.is_none() {
+        eprintln!("skipped: this machine has no {name}");
+    }
+    found
+}
+
 /// Put this machine's `tool` on `machine`'s `PATH`, under its own name.
 fn with_real(machine: Machine, tool: &Path) -> Machine {
     let name = tool.file_name().expect("a tool has a name");
@@ -79,16 +95,30 @@ fn stub(machine: &Machine, dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-/// The shells the script is run with: `sh`, and `dash`, Debian's and
-/// Ubuntu's `sh`, where it is installed.
-const SHELLS: &[&str] = &["/bin/sh", "/bin/dash"];
+/// The shells the script is run with: `sh`, and where they are installed
+/// `dash`, Debian's and Ubuntu's `sh`, and `bash`, Arch's and Fedora's.
+const SHELLS: &[&str] = &["/bin/sh", "/bin/dash", "/bin/bash"];
+
+/// How the script reaches the shell.
+#[derive(Clone, Copy)]
+enum Fed {
+    /// `sh install.sh`, with no input.
+    AsAFile,
+    /// `curl … | sh`: the script is the shell's stdin.
+    OnStdin,
+}
+
+/// [`install_fed`], as `sh install.sh`.
+fn install(packaged: &Path, path: &[&Path]) -> Output {
+    install_fed(packaged, path, Fed::AsAFile)
+}
 
 /// Run a copy of `install.sh` whose packaged directory is `packaged`, with
-/// `path` as its whole `PATH`, in an empty directory, with no input, under
-/// each of [`SHELLS`] there is. Every shell must say the same before it
-/// installs (the stand-ins in a pipeline may answer in either order); the
-/// first one's run is returned.
-fn install(packaged: &Path, path: &[&Path]) -> Output {
+/// `path` as its whole `PATH`, in an empty directory, under each of
+/// [`SHELLS`] there is. Every shell must say the same before it installs
+/// (the stand-ins in a pipeline may answer in either order); the first
+/// one's run is returned.
+fn install_fed(packaged: &Path, path: &[&Path], fed: Fed) -> Output {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/install.sh");
     let text = std::fs::read_to_string(&source).expect("install.sh is read");
     assert_eq!(
@@ -99,19 +129,33 @@ fn install(packaged: &Path, path: &[&Path]) -> Output {
     let cwd = tempfile::tempdir().expect("an empty directory to run in");
     let copy = cwd.path().join("install.sh");
     let text = text.replace(PACKAGED, &format!("packaged='{}'\n", packaged.display()));
-    std::fs::write(&copy, text).expect("the copy is written");
+    std::fs::write(&copy, &text).expect("the copy is written");
     let run = |shell: &str| {
-        Command::new(shell)
-            .arg(&copy)
+        let mut command = Command::new(shell);
+        command
             .current_dir(cwd.path())
             .env_clear()
             .env("PATH", std::env::join_paths(path).expect("a PATH"))
             .env("HOME", cwd.path())
-            .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .expect("install.sh runs")
+            .stderr(Stdio::piped());
+        match fed {
+            Fed::AsAFile => command.arg(&copy).stdin(Stdio::null()).output(),
+            Fed::OnStdin => {
+                let mut child = command.stdin(Stdio::piped()).spawn().expect("a shell");
+                let mut stdin = child.stdin.take().expect("its stdin");
+                let script = text.clone();
+                // A shell that ends early closes the pipe; what it says
+                // shows that, so a failed write is not looked at.
+                let writer = std::thread::spawn(move || {
+                    let _ = stdin.write_all(script.as_bytes());
+                });
+                let out = child.wait_with_output();
+                writer.join().expect("the script is written");
+                out
+            }
+        }
+        .expect("install.sh runs")
     };
     let mut runs = SHELLS
         .iter()
@@ -317,6 +361,45 @@ fn without_timeout_to_bound_the_wait_no_copy_is_run() {
     );
 }
 
+/// `curl … | sh`: the script is the shell's stdin, and a copy that reads
+/// its own stdin is given none of it, so the rest of the script still runs.
+#[test]
+fn piped_into_sh_a_copy_that_reads_stdin_takes_none_of_the_script() {
+    let _guard = one_at_a_time();
+    let machine = apt_machine().with("timeout", TIMEOUT);
+    let root = tempfile::tempdir().expect("a directory for the copies");
+    let (packaged, early) = (root.path().join("usr/bin"), root.path().join("cargo/bin"));
+    std::fs::create_dir_all(&packaged).expect("the packaged directory");
+    // Its version's last number says whether it was given a line to read.
+    let reads = stub(
+        &machine,
+        &early,
+        "gglib",
+        "n=0\nwhile IFS= read -r line; do n=1; done\necho \"gglib 0.30.$n\"",
+    );
+    let bin = machine.path();
+
+    let out = install_fed(&packaged, &[&early, &bin, &packaged], Fed::OnStdin);
+
+    assert_installed(&machine, &out);
+    assert_eq!(
+        said_before_installing(&out).lines().collect::<Vec<_>>(),
+        [
+            "gglib: already on PATH, in the order the shell tries them:".to_owned(),
+            format!("gglib:   {} (0.30.0)", reads.display()),
+            format!(
+                "gglib: {} comes before {} on PATH, so `gglib` will still run it, not the {}/gglib this installs.",
+                reads.display(),
+                packaged.display(),
+                packaged.display()
+            ),
+            "gglib: every gglib here, and the desktop app, uses the same data folder.".to_owned(),
+        ],
+        "{}",
+        stderr(&out)
+    );
+}
+
 /// With this machine's own `timeout`: a copy that hangs, ignoring the
 /// polite signal and holding its output open from a child, is killed when
 /// its two seconds are up. It, a copy that fails and one that prints
@@ -325,8 +408,7 @@ fn without_timeout_to_bound_the_wait_no_copy_is_run() {
 #[test]
 fn a_copy_that_hangs_or_fails_reads_as_unknown_and_stops_nothing() {
     let _guard = one_at_a_time();
-    let (Some(timeout), Some(sleep)) = (real("timeout"), real("sleep")) else {
-        eprintln!("skipped: this machine has no timeout to bound the wait with");
+    let (Some(timeout), Some(sleep)) = (real_or_skip("timeout"), real_or_skip("sleep")) else {
         return;
     };
     let machine = with_real(with_real(apt_machine(), &timeout), &sleep);
@@ -439,8 +521,7 @@ fn a_second_run_names_the_packaged_copy_once_and_nothing_shadows_it() {
 #[test]
 fn a_link_to_the_packaged_file_is_not_another_copy() {
     let _guard = one_at_a_time();
-    let Some(realpath) = real("realpath") else {
-        eprintln!("skipped: this machine has no realpath");
+    let Some(realpath) = real_or_skip("realpath") else {
         return;
     };
     let machine = with_real(apt_machine().with("timeout", TIMEOUT), &realpath);
