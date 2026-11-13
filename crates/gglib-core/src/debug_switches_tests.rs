@@ -124,11 +124,7 @@ fn all_lists_every_switch_the_tree_reads() {
 fn agreeing_switch_sets_produce_no_warning() {
     assert!(describe_mismatch(&[], &[]).is_none());
     assert!(
-        describe_mismatch(
-            &["GGLIB_DISABLE_GRAMMAR"],
-            &["GGLIB_DISABLE_GRAMMAR".to_string()]
-        )
-        .is_none()
+        describe_mismatch(&["GGLIB_DISABLE_MTP"], &["GGLIB_DISABLE_MTP".to_string()]).is_none()
     );
 }
 

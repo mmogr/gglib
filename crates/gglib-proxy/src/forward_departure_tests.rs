@@ -17,7 +17,6 @@ use super::forward_stall_fixtures::{
 };
 use super::*;
 use crate::upstream_read::upstream_events;
-use gglib_core::domain::DialectSpec;
 
 /// An idle bound none of the tests that use it waits out.
 const LONG_IDLE: Duration = Duration::from_mins(1);
@@ -43,7 +42,6 @@ struct Departure {
 async fn leave_after(
     frames: usize,
     bytes: impl futures_util::Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
-    dialect: Option<DialectSpec>,
     idle: Duration,
 ) -> Departure {
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
@@ -66,7 +64,6 @@ async fn leave_after(
     let drain = drain_events(
         upstream_events(bytes, idle),
         "m".to_owned(),
-        TurnDialect::parsed(dialect),
         ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         &connection,
         None,
@@ -122,7 +119,7 @@ async fn a_client_that_leaves_during_a_silent_prefill_ends_the_turn_at_once_as_a
     // progress frames, has been sent one prefill comment and read nothing.
     let silent_prefill = upstream(at_once(vec![progress()]), Then::Silence);
 
-    let left = leave_after(0, silent_prefill, None, LONG_IDLE).await;
+    let left = leave_after(0, silent_prefill, LONG_IDLE).await;
 
     assert!(
         left.noticed_after < NOTICED_WITHIN,
@@ -146,7 +143,7 @@ async fn a_client_that_leaves_during_a_silent_prefill_ends_the_turn_at_once_as_a
 async fn a_turn_that_generates_nothing_while_its_client_stays_is_an_empty_response_and_saved() {
     let nothing = upstream(at_once(vec![finish(), done()]), Then::Close);
 
-    let turn = run_turn(nothing, None, Reader::default()).await;
+    let turn = run_turn(nothing, Reader::default()).await;
 
     assert!(!turn.outcome.client_aborted, "{}", turn.wire);
     assert!(!turn.outcome.left_before_first_token);
@@ -160,7 +157,7 @@ async fn a_client_that_stops_a_reply_still_being_written_is_seen_at_the_next_fra
         .map(|_| (Duration::from_millis(50), text("word ")))
         .collect();
 
-    let left = leave_after(2, upstream(talking, Then::Close), None, LONG_IDLE).await;
+    let left = leave_after(2, upstream(talking, Then::Close), LONG_IDLE).await;
 
     assert!(
         left.noticed_after < NOTICED_WITHIN,
@@ -174,37 +171,11 @@ async fn a_client_that_stops_a_reply_still_being_written_is_seen_at_the_next_fra
 }
 
 #[tokio::test]
-async fn a_client_that_leaves_while_a_tool_call_is_held_back_still_waits_for_the_stall() {
-    // A Qwen model writes its call as text, which the normalizer holds back
-    // until it is whole: the drain has seen the model generate, but has sent
-    // the client nothing, when the upstream goes silent and the client leaves.
-    let markup =
-        ["<tool_call>\n", "<function=read_file>\n"].map(|m| frame(&json!({ "content": m }), None));
-    let idle = LINGER * 5;
-
-    let left = leave_after(
-        0,
-        upstream(at_once(markup.to_vec()), Then::Silence),
-        Some(DialectSpec::qwen_xml()),
-        idle,
-    )
-    .await;
-
-    assert_the_stall_ended_it(&left, idle);
-}
-
-#[tokio::test]
 async fn a_client_that_leaves_a_reply_silent_after_its_reasoning_still_waits_for_the_stall() {
     let reasoning = frame(&json!({ "reasoning_content": "Let me think" }), None);
     let idle = LINGER * 5;
 
-    let left = leave_after(
-        1,
-        upstream(at_once(vec![reasoning]), Then::Silence),
-        None,
-        idle,
-    )
-    .await;
+    let left = leave_after(1, upstream(at_once(vec![reasoning]), Then::Silence), idle).await;
 
     // The frame the client took was the reply's, not the stall's notice.
     assert!(left.wire.contains("Let me think"), "{}", left.wire);
@@ -224,7 +195,6 @@ async fn a_client_that_leaves_a_reply_silent_after_a_native_tool_call_still_wait
     let left = leave_after(
         1,
         upstream(at_once(vec![frame(&call, None)]), Then::Silence),
-        None,
         idle,
     )
     .await;
@@ -244,7 +214,7 @@ async fn a_client_that_stops_reading_mid_reply_is_let_go_at_the_send_bound_as_a_
         ..Reader::default()
     };
 
-    let turn = run_turn(upstream(talking, Then::Silence), None, stops).await;
+    let turn = run_turn(upstream(talking, Then::Silence), stops).await;
 
     assert!(turn.took >= SEND, "let go after {:?}", turn.took);
     assert!(turn.took < SEND * 2, "let go after {:?}", turn.took);
@@ -271,7 +241,7 @@ async fn a_client_that_reads_slowly_but_keeps_reading_is_never_let_go() {
         ..Reader::default()
     };
 
-    let turn = run_turn(upstream(at_once(chunks), Then::Close), None, slow).await;
+    let turn = run_turn(upstream(at_once(chunks), Then::Close), slow).await;
 
     assert!(turn.took > SEND * 3, "took {:?}", turn.took);
     assert!(!turn.outcome.client_aborted, "{}", turn.wire);

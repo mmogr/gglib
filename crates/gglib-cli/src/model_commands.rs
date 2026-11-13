@@ -33,13 +33,13 @@ pub enum ModelCommand {
         /// Re-import a file already in the library, re-deriving its detected
         /// metadata from the file
         ///
-        /// Replaces tags, capabilities and the dialect spec — including with
-        /// nothing, so these can be cleared. Updates quantization, context
+        /// Replaces tags and capabilities — including with nothing, so these
+        /// can be cleared. Updates quantization, context
         /// length and the expert counts only where a value is newly detected;
         /// a stored one is never emptied. Re-reads each key of the file's
         /// header, keeping keys added with `model update --metadata`.
-        /// `gglib model retag` rebuilds only
-        /// tags and the dialect spec, so this is the wider of the two.
+        /// `gglib model retag` rebuilds only tags, so this is the wider of the
+        /// two.
         ///
         /// The model keeps its id, and its name, parameter count and
         /// architecture are left exactly as stored — those columns are not
@@ -191,15 +191,14 @@ pub enum ModelCommand {
 
     /// Re-derive auto-tags for installed models from their persisted GGUF metadata.
     ///
-    /// Use this after upgrading gglib to backfill new auto-tags (e.g. the
-    /// `format:*` dialect tags introduced for the universal normalization
-    /// pipeline) on models that were imported under an older release.
+    /// Use this after upgrading gglib to backfill auto-tags a newer release
+    /// detects on models that were imported under an older one.
     ///
     /// By default the operation is **additive**: new tags are appended,
     /// nothing is ever removed, and user-curated tags are left alone.
     /// Pass `--full` to drop and re-derive every tag in the auto-generated
-    /// namespace (capability flags + `format:*` tags) — user tags outside
-    /// that namespace are still preserved.
+    /// namespace (the capability tags) — user tags outside that namespace are
+    /// still preserved.
     Retag {
         /// Retag a single model by id, name, or HF identifier. Omit with
         /// `--all` to retag every model in the catalog.
@@ -207,8 +206,8 @@ pub enum ModelCommand {
         /// Retag every model in the catalog.
         #[arg(long)]
         all: bool,
-        /// Drop and re-derive every auto-generated tag (capability flags +
-        /// `format:*`) instead of merely appending missing ones.
+        /// Drop and re-derive every auto-generated tag instead of merely
+        /// appending missing ones.
         #[arg(long)]
         full: bool,
     },

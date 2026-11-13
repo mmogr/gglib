@@ -10,7 +10,7 @@
 //! the work**, and for gglib that process is the daemon. So
 //!
 //! ```text
-//! GGLIB_DISABLE_GRAMMAR=1 gglib benchmark agentic --model m
+//! GGLIB_DISABLE_TOOL_REPAIR=1 gglib benchmark agentic --model m
 //! ```
 //!
 //! sets the variable on a CLI process which resolves no sampling at all. The
@@ -30,9 +30,9 @@
 //!
 //! # Why a name list and not typed constants
 //!
-//! The switches live in three crates — `request_pipeline` here,
-//! `canonicalization`/`repair` in `gglib-proxy`, `command`/`cache_ram`/
-//! `kv_cache_type` in `gglib-runtime` — and this crate sits below all of them.
+//! The switches live in two crates — `canonicalization`/`repair` in
+//! `gglib-proxy`, `command`/`cache_ram`/`kv_cache_type` in `gglib-runtime` —
+//! and this crate sits below both.
 //! Names are the only thing they share. [`ALL`] is therefore a hand-written
 //! list, which is exactly the shape that rotted in `model_service`'s
 //! `AUTO_TAG_NAMES`, so `all_lists_every_switch_the_tree_reads` greps the
@@ -50,8 +50,6 @@ pub const ALL: &[&str] = &[
     "GGLIB_DISABLE_CACHE_AUTOSIZE",
     "GGLIB_DISABLE_CACHE_REUSE",
     "GGLIB_DISABLE_CONTEXT_FIT",
-    "GGLIB_DISABLE_DIALECT_PARSER",
-    "GGLIB_DISABLE_GRAMMAR",
     "GGLIB_DISABLE_KV_QUANT",
     "GGLIB_DISABLE_MTP",
     "GGLIB_DISABLE_PROMPT_CANONICALIZATION",

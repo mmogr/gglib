@@ -404,8 +404,8 @@ impl ModelOps {
     /// Re-run capability detection over the model's stored GGUF metadata.
     ///
     /// `full = false` only adds missing tags; `full = true` rebuilds the
-    /// system-tag namespace and re-derives the dialect spec. User-curated
-    /// tags outside that namespace survive either way. A model with no image
+    /// capability tags. User-curated tags outside that set survive either
+    /// way. A model with no image
     /// family has one read from its file when it names one, and a model
     /// without its type or bits per weight has them read from its file's
     /// header. Returns `changed: false` when the pass was a no-op.
@@ -430,7 +430,6 @@ impl ModelOps {
                     changed: diff.is_changed(),
                     added: diff.added,
                     removed: diff.removed,
-                    spec_changed: diff.spec_changed,
                     family_found: diff.family_found,
                     facts_read: diff.facts_read,
                 }
@@ -439,7 +438,6 @@ impl ModelOps {
                 changed: false,
                 added: Vec::new(),
                 removed: Vec::new(),
-                spec_changed: false,
                 family_found: None,
                 facts_read: false,
             },

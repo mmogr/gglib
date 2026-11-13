@@ -263,7 +263,6 @@ pub(crate) async fn spawn_proxy_under(
         catalog_port: Arc::new(TaggedCatalog {
             name: MODEL.into(),
             tags,
-            dialect: None,
         }),
         cancel,
         cache_enabled: slot_dir.is_some(),

@@ -104,8 +104,6 @@ pub(super) struct ModelDefectCounts {
     #[serde(default)]
     pub(super) unvalidatable_schemas: u64,
     #[serde(default)]
-    pub(super) normalization_errors: u64,
-    #[serde(default)]
     pub(super) identical_result_repeats: u64,
     #[serde(default)]
     pub(super) repeats_not_evaluated: u64,
@@ -141,7 +139,6 @@ impl ModelDefectCounts {
             && self.empty_responses == 0
             && self.dialect_residue == 0
             && self.unvalidatable_schemas == 0
-            && self.normalization_errors == 0
             // Not a defect, but still something to report: a model whose only
             // signal is repeated calls returning identical results has not
             // failed at anything gglib measures, and is the exact case this

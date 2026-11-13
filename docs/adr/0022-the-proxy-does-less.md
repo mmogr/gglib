@@ -1,6 +1,6 @@
 # ADR 0022 — The proxy does less: no `cache_prompt` pin, no sampling floor, and the dialect normaliser left ungated
 
-- **Status:** Accepted
+- **Status:** Accepted; decision 3 superseded (amended 2026-11-13)
 - **Date:** 2026-10-15
 - **Depends on:** [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md),
   [ADR 0004](0004-observe-the-sampling-boundary.md)
@@ -12,6 +12,14 @@
 > pin. Rechecked at `b11429`, the claims hold, but kill criterion 1's `/slots`
 > reading is 0 after every finished request, so it cannot be taken as written
 > ([log-0022](log-0022.md)).
+
+> **Amended 2026-11-13 — decision 3 is superseded.** The dialect normaliser is
+> deleted, not gated, and so are stage 6, which depended on it, and the strip
+> of stray `<think>` tags from a reply's content (stage 1's strip of prior
+> reasoning stays). gglib no longer parses tool-call markup, the #30118 case
+> included: llama-server parses what it can, and what it leaves in content
+> reaches the client as text, where the residue scanner counts it. The gate's
+> kill criterion has nothing left to reopen. Decisions 1 and 2 stand.
 
 ## Context
 
@@ -102,6 +110,9 @@ over.
 The `reasoning` recipe's `max_tokens` is 32768.
 
 ### 3. The dialect normaliser is not gated, because the reading the gate needs does not exist
+
+> **Amended 2026-11-13.** Superseded: the normaliser and stage 6 are deleted
+> (see the amendment at the top).
 
 The gate considered was: skip gglib's dialect normalisation, and the dialect
 grammar of stage 6, when llama-server reports at launch that it parses the

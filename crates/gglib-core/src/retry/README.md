@@ -80,8 +80,7 @@ about them.
   model, then issues one attempt against a **fresh admission, lease and
   settings snapshot**.
 - `gglib-proxy` `forward.rs`, the tool-call repair: one attempt with a
-  **re-issued request body** (`tool_choice: "required"`, or the same body again
-  under gglib's own grammar), bounded by its own
+  **re-issued request body** (`tool_choice: "required"`), bounded by its own
   timeout because it runs while the client is receiving nothing.
 
 Unifying either of those under a backoff policy would be a category error:

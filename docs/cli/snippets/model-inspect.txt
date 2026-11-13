@@ -12,7 +12,7 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 
   Tags
 ------------------------------------------------------------
-  agent, format:qwen-xml, reasoning
+  agent, reasoning
 
   Capabilities
 ------------------------------------------------------------

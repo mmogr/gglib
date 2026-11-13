@@ -44,8 +44,8 @@ hasProxyApiKey: boolean, trustClientSampling: boolean | null,
  */
 loopGuard: boolean | null, 
 /**
- * Whether a tool call failing schema validation is re-issued, with
- * `tool_choice: "required"` or under gglib's grammar. Absent means on.
+ * Whether a tool call failing schema validation is re-issued with
+ * `tool_choice: "required"`. Absent means on.
  */
 toolCallRepair: boolean | null, 
 /**

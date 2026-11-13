@@ -1,7 +1,6 @@
 //! What each event is on the wire: the frame an `OpenAI` client reads.
 
 use super::*;
-use crate::normalize::NormalizationErrorKind;
 
 pub(super) fn enc() -> SseEncoder {
     SseEncoder::new("chatcmpl-1", "test-model", 1_729_000_000)
@@ -213,18 +212,4 @@ fn prompt_progress_encodes_to_top_level_field() {
     assert_eq!(v["prompt_progress"]["cache"], 1);
     assert_eq!(v["prompt_progress"]["time_ms"], 100);
     assert!(v.get("choices").is_none());
-}
-
-#[test]
-fn normalization_error_is_suppressed() {
-    let out = enc().encode(&LlmStreamEvent::NormalizationError {
-        kind: NormalizationErrorKind::MalformedToolCallJson {
-            raw: "<tool_call>oops".to_owned(),
-        },
-        raw: "<tool_call>oops".to_owned(),
-    });
-    assert!(
-        out.is_none(),
-        "NormalizationError must never reach the wire"
-    );
 }

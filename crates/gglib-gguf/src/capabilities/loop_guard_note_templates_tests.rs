@@ -10,20 +10,19 @@
 //!
 //! Vendored from llama.cpp `e5a8d439`, `models/templates/`, byte for byte.
 //!
-//! **Scope.** This is minijinja with the same lenient environment
-//! `template_probe` uses, not llama-server's own Jinja engine, and the
-//! templates are llama.cpp's copies rather than each model's shipped one.
-//! Nothing here was run against a model. What it does establish is the part
-//! that no engine can differ on: a template that calls `raise_exception` on a
-//! trailing `system` message raises, and one with no branch for a role drops
-//! that message whole.
+//! **Scope.** This is minijinja with a lenient environment, not llama-server's
+//! own Jinja engine, and the templates are llama.cpp's copies rather than each
+//! model's shipped one. Nothing here was run against a model. What it does
+//! establish is the part that no engine can differ on: a template that calls
+//! `raise_exception` on a trailing `system` message raises, and one with no
+//! branch for a role drops that message whole.
 
-use minijinja::context;
+use minijinja::{Environment, UndefinedBehavior, context};
 use serde_json::{Value, json};
 
 use gglib_core::request_pipeline::append_text;
 
-use super::template_probe::build_env;
+use crate::template_env::base_env;
 
 const QWEN35: &str = include_str!("testdata/loop_guard_note/Qwen3.5-4B.jinja");
 const MISTRAL_NEMO: &str =
@@ -32,6 +31,16 @@ const DEEPSEEK_V31: &str = include_str!("testdata/loop_guard_note/deepseek-ai-De
 const GPT_OSS: &str = include_str!("testdata/loop_guard_note/openai-gpt-oss-120b.jinja");
 const PHI_35_MINI: &str =
     include_str!("testdata/loop_guard_note/microsoft-Phi-3.5-mini-instruct.jinja");
+
+/// A lenient environment for `template`: a missing variable renders as empty
+/// rather than erroring, and `strftime_now` returns a fixed date.
+fn build_env(template: &str) -> Result<Environment<'_>, minijinja::Error> {
+    let mut env = base_env();
+    env.set_undefined_behavior(UndefinedBehavior::Lenient);
+    env.add_function("strftime_now", |_format: String| String::from("2024-01-01"));
+    env.add_template("probe", template)?;
+    Ok(env)
+}
 
 /// A sentinel that no template emits on its own, standing in for the note's
 /// text. The note's actual wording and its `[gglib loop guard]` marker are the

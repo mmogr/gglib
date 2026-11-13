@@ -26,7 +26,6 @@ impl ModelSummary {
             inference_defaults: None,
             defaults_origin: None,
             server_defaults: None,
-            dialect: None,
             template_caps: None,
         }
     }

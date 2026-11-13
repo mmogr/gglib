@@ -77,8 +77,6 @@ infrastructure concerns (database, filesystem, etc.).
 - `capabilities` - Model capability detection and inference
 - `capability_tags` - The capability tags stored on a model and the
   predicates that read them (`capabilities_of`, `is_reasoning`, `is_embedding`)
-- `dialect` - How a model wraps tool calls, as data (`DialectSpec`), which
-  drives both the delimited parser and the decode-time grammar
 - `template_caps` - llama-server's report of what a loaded chat template
   supports (`TemplateCaps`), held as read, unreadable or not yet read
   (`TemplateCapsState`)

@@ -41,7 +41,6 @@ const counts = (overrides: Partial<ModelDefectCounts> = {}): ModelDefectCounts =
   reasoning_only: 0,
   dialect_residue: 0,
   unvalidatable_schemas: 0,
-  normalization_errors: 0,
   identical_result_repeats: 0,
   repeats_not_evaluated: 0,
   repeats_rescued: 0,

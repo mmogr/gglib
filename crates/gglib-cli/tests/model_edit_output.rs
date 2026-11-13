@@ -139,7 +139,7 @@ fn an_add_stores_the_count_typed_and_a_reimport_leaves_it() {
              only and leaves the stored parameter count alone.\n\
              \nRe-derived from file:\n\n\
              {stored}\
-             Replaced: tags, capabilities, dialect spec.\n\
+             Replaced: tags, capabilities.\n\
              Updated where newly detected: quantization, context length, expert counts.\n\
              Unchanged: name, parameter count, architecture.\n"
         )
@@ -174,7 +174,7 @@ fn an_add_of_a_file_already_in_the_library_is_refused_before_it_asks() {
 /// or that it was up to date, and then how many models it changed.
 ///
 /// The model's stored chat template is what detection reads. One that
-/// thinks and calls tools derives three tags and a dialect spec; an additive
+/// thinks and calls tools derives two tags; an additive
 /// pass adds them and, once the template is gone, keeps them, and a full
 /// pass drops them.
 #[test]
@@ -202,16 +202,14 @@ fn a_retag_prints_what_each_pass_changed_and_how_many_models_it_updated() {
     assert_eq!(
         added,
         "Retagging 1 model(s) (additive) ...\n\
-         \x20 [1] qwen.Q8_0 — added: agent, format:hermes, reasoning\n\
-         \x20 [1] qwen.Q8_0 — dialect spec re-derived\n\
+         \x20 [1] qwen.Q8_0 — added: agent, reasoning\n\
          Done. 1 model(s) updated.\n"
     );
     assert_eq!(kept, unchanged);
     assert_eq!(
         removed,
         "Retagging 1 model(s) (full rebuild) ...\n\
-         \x20 [1] qwen.Q8_0 — removed: agent, format:hermes, reasoning\n\
-         \x20 [1] qwen.Q8_0 — dialect spec re-derived\n\
+         \x20 [1] qwen.Q8_0 — removed: agent, reasoning\n\
          Done. 1 model(s) updated.\n"
     );
 }

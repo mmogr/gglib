@@ -52,7 +52,7 @@ it live in `gglib-integration-tests`.
   ┌───────────────────┐  POST /v1/chat  ┌──────────────────────────────────────────┐
   │ shape request     │ ──────────────▶ │ shim: render (gglib-gguf render_chat)    │
   │ forward           │  GET /props     │       tokenize, check n_ctx              │
-  │ NormalizingStream │  GET /slots     │       ▼                                  │
+  │ re-encode         │  GET /slots     │       ▼                                  │
   │ usage reading     │ ◀────────────── │ Engine: one turn ──▶ decode thread       │
   └───────────────────┘  llama's SSE    │                       Decoder::generate  │
                                         │       ▼                       │          │

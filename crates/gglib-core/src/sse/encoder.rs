@@ -2,10 +2,9 @@
 //! `chat.completion.chunk` `data:` frames.
 //!
 //! This is the inverse of [`super::parser::parse_sse_frame`] and is used by
-//! the proxy after the universal normalization layer has rewritten model-
-//! specific dialects (Qwen XML tool calls, bare `<think>` tags) into strict
-//! `OpenAI` events.  Re-emitting the canonical wire format ensures external
-//! clients (`OpenWebUI`, `OpenAI` SDKs, etc.) see only pristine `OpenAI` JSON
+//! the proxy to re-emit the events it decoded from llama-server.
+//! Re-emitting the canonical wire format ensures external clients
+//! (`OpenWebUI`, `OpenAI` SDKs, etc.) see only pristine `OpenAI` JSON
 //! regardless of which model is on the other end.
 //!
 //! # Frame envelope
@@ -80,8 +79,8 @@ impl SseEncoder {
 
     /// Encode a single [`LlmStreamEvent`] into one or more SSE frames.
     ///
-    /// Returns `None` when the event is not meant to appear on the wire (e.g.
-    /// [`LlmStreamEvent::NormalizationError`], which the proxy logs but never
+    /// Returns `None` when the event is not meant to appear on the wire
+    /// ([`LlmStreamEvent::WritingTime`], which the proxy reads but never
     /// forwards to clients).
     ///
     /// For [`LlmStreamEvent::Done`], the returned `String` is only the
@@ -171,7 +170,7 @@ impl SseEncoder {
                 *total_tokens,
                 *cached_tokens,
             )),
-            LlmStreamEvent::NormalizationError { .. } | LlmStreamEvent::WritingTime { .. } => None,
+            LlmStreamEvent::WritingTime { .. } => None,
             LlmStreamEvent::UpstreamError {
                 message,
                 error_type,

@@ -25,7 +25,6 @@ mod fixture {
         Model {
             components: Vec::new(),
             image_family: None,
-            dialect_spec: None,
             id: 1,
             name: "test-model".to_owned(),
             model_key: String::new(),

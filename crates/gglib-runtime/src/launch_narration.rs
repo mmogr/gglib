@@ -17,7 +17,6 @@ use gglib_core::domain::{
     LaunchDecision, LaunchNarration, RuntimeCapabilities, RuntimeFlags, RuntimeKind, SlotFootprint,
     format_gib, format_mib_as_gib,
 };
-use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use gglib_core::ports::{JinjaMode, ModelLaunchSpec};
 use gglib_core::server_config::ContextSizeSource;
 
@@ -83,7 +82,6 @@ pub(crate) fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
         n.push(flags);
     }
     n.push(sampling_decision());
-    n.push(dialect_decision(inputs));
 
     n
 }
@@ -311,33 +309,10 @@ fn flags_decision(inputs: &NarrationInputs<'_>) -> Option<LaunchDecision> {
     (!parts.is_empty()).then(|| LaunchDecision::bare("flags", parts.join(" \u{b7} ")))
 }
 
-/// Which tool-call dialect the proxy will normalize on the way out.
-///
-/// Always present, including the pass-through case: "this model's tool calls
-/// arrive as `OpenAI` JSON already" is exactly as informative as naming a
-/// parser, and its absence would read as a missing feature.
-fn dialect_decision(inputs: &NarrationInputs<'_>) -> LaunchDecision {
-    if inputs
-        .spec
-        .tags
-        .iter()
-        .any(|t| t.as_str() == FORMAT_QWEN_XML)
-    {
-        LaunchDecision::new(
-            "dialect",
-            "qwen-xml -> OpenAI tool_calls",
-            format!("{FORMAT_QWEN_XML} tag"),
-        )
-    } else {
-        LaunchDecision::new("dialect", "OpenAI tool_calls", "pass-through")
-    }
-}
-
 /// Sampling is decided per request, not at launch.
 ///
-/// Unconditional, and stated rather than omitted for the same reason
-/// `dialect_decision` is: a banner silent about sampling would read as an
-/// oversight. This says the absence of sampler flags is the decision, and
+/// Unconditional, and stated rather than omitted: a banner silent about
+/// sampling would read as an oversight. This says the absence of sampler flags is the decision, and
 /// where the real one is made. See `llama::args::sampling`.
 fn sampling_decision() -> LaunchDecision {
     LaunchDecision::new(
@@ -772,42 +747,16 @@ mod tests {
         assert!(narrate(&inputs(&s, &c, &r)).decision("flags").is_none());
     }
 
-    #[test]
-    fn dialect_line_names_the_parser_for_a_tagged_model() {
-        let (s, c, r) = (
-            spec(&[FORMAT_QWEN_XML]),
-            caps(),
-            cache_ram(Some(6144), CacheRamSource::Auto),
-        );
-        let n = narrate(&inputs(&s, &c, &r));
-        let dialect = n.decision("dialect").unwrap();
-        assert_eq!(dialect.value, "qwen-xml -> OpenAI tool_calls");
-    }
-
-    /// Pass-through is still a decision worth stating.
-    #[test]
-    fn dialect_line_states_pass_through_for_an_untagged_model() {
-        let (s, c, r) = (
-            spec(&[]),
-            caps(),
-            cache_ram(Some(6144), CacheRamSource::Auto),
-        );
-        let n = narrate(&inputs(&s, &c, &r));
-        assert_eq!(n.decision("dialect").unwrap().value, "OpenAI tool_calls");
-    }
-
     /// The mission caps the banner at ~12 lines; the decision list is what
     /// drives that, so it is asserted here rather than in the renderer.
     ///
     /// The renderer spends three lines on chrome (blank, headline, blank), so
-    /// nine decisions is the hard ceiling and this now sits exactly on it —
-    /// ADR 0003's `sampling` row took the last slot. That is deliberate: the
-    /// cap stops being notional, and the next decision anyone wants has to
-    /// displace one rather than quietly widen the banner.
+    /// nine decisions is the hard ceiling. The next decision anyone wants has
+    /// to fit under it or displace one rather than quietly widen the banner.
     #[test]
     fn narration_stays_within_the_banner_budget() {
         let (s, r) = (
-            spec(&[FORMAT_QWEN_XML]),
+            spec(&["agent", "reasoning", "mtp"]),
             cache_ram(Some(6144), CacheRamSource::Auto),
         );
         let mut c = caps();

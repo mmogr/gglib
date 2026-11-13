@@ -10,7 +10,7 @@
 export type LaunchDecision = { 
 /**
  * Short stable key naming the decision: `ctx`, `backend`, `kv`,
- * `cache`, `mtp`, `flags`, `dialect`.
+ * `cache`, `mtp`, `flags`.
  *
  * Stable because the GUI and the CLI dashboard both key styling off it;
  * treat it as part of the wire contract rather than a display string.

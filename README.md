@@ -105,11 +105,11 @@ order of how often it matters:
   machine, `q8_0` KV cache, Jinja templating, speculative decoding where the
   GGUF carries an MTP head, the projector when the model has one. No
   per-model config file. [Details →](docs/tags.md)
-- **Capability detection.** At import, gglib renders the chat template
-  against probe conversations to learn whether the model reasons, how it
-  writes tool calls, and whether it reads `reasoning_effort`. Clients get
-  strict OpenAI-format events whatever dialect the model speaks (Qwen XML
-  tool calls, bare `<think>` tags). [Details →](docs/tags.md#format-dialect-tags)
+- **Capability detection.** At import, gglib reads the chat template to
+  learn whether the model reasons and calls tools, and at launch asks
+  llama-server whether the template reads `reasoning_effort`. Tool calls and
+  reasoning are llama-server's to parse; gglib does not translate them.
+  [Details →](docs/tags.md)
 - **Sampling authority.** Request → profile → per-model → global → the
   model's own recipe. Client values are untrusted by default, so no request
   silently overrides your configuration. Append `:coding` to a model name

@@ -68,9 +68,8 @@ paired machine's, ends `failed` with the refusal's code when it is one of
 gglib's own (`gglib_proxy::error_codes::is_gglib_code`), and `agent_error`
 otherwise (`run::run_error`).
 
-Inline `<think>` reclassification is handled upstream by
-[`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
-handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
+llama-server splits reasoning from the answer upstream, so this handler
+only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
 
 An agent run stamps each turn's `turn_usage` event with the model it drove
 (`gglib_app_services::transcript::MadeBy`: locally the catalogue's name and

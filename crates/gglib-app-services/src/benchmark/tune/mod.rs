@@ -309,14 +309,11 @@ const MAX_CANDIDATES: usize = 256;
 /// thing for its `gglib` arm. Without it a candidate resolves against
 /// [`ModelContext::passthrough`], which quietly changes two things: a
 /// `reasoning`-tagged model is tuned without the `reasoning` recipe beneath
-/// it, and no dialect or capability shaping applies. Values tuned that way
+/// it, and no capability shaping applies. Values tuned that way
 /// do not transfer to production, which is the whole point of tuning them.
 pub(super) fn model_context_for(model: &Model) -> ModelContext {
     ModelContext {
         capabilities: model.capabilities,
-        // Same tag fallback the catalog resolution path applies in
-        // `From<&ModelSummary> for ModelContext`.
-        dialect: gglib_core::normalize::registry::dialect_for_tags(&model.tags),
         tags: model.tags.clone(),
         inference_defaults: model.inference_defaults.clone(),
         defaults_origin: model.defaults_origin,

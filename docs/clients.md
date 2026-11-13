@@ -332,11 +332,8 @@ words after a demanded call that has run, which keep that call's work and
 say they were cut off. A client that
 does not read the type can skip it.
 
-That is so where llama-server streams the call itself. On a model whose
-calls come as text markup (one with a dialect spec, see
-[tags.md](tags.md)), gglib holds the markup back until the call is complete
-and releases it whole, so `tool_call_writing` comes once, at the end, with a
-small `tokens`, and nothing comes while the markup streams.
+Only a call llama-server streams itself sends these. Tool-call markup
+llama-server leaves in the text is text, and sends none.
 
 ## Error codes
 

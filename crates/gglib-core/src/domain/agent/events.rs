@@ -6,7 +6,6 @@ use super::tool_call_writing::ToolCallWriting;
 use super::tool_progress::{PreviewFrame, ToolStage};
 use super::tool_types::{ToolCall, ToolResult};
 use super::turn_usage::TurnUsage;
-use crate::normalize::NormalizationErrorKind;
 
 // =============================================================================
 // Agent events (SSE stream units)
@@ -321,8 +320,7 @@ pub enum LlmStreamEvent {
     },
 
     /// How long the model spent writing: from the first generated token's
-    /// arrival to the last, timed on the upstream's own stream, before any
-    /// normalization holds dialect markup back.
+    /// arrival to the last, timed on the upstream's own stream.
     ///
     /// Sent at the stream's end by the agent path's adapter, and only when
     /// two or more tokens arrived; never on the wire.
@@ -369,21 +367,6 @@ pub enum LlmStreamEvent {
         error_type: String,
         /// Upstream `error.code` (or `"upstream_error"` if absent).
         code: String,
-    },
-
-    /// A non-fatal normalization issue surfaced by the
-    /// [`crate::normalize`] layer.
-    ///
-    /// Emitted when a dialect-specific parser detects malformed markup
-    /// (e.g. a Qwen `<tool_call>` whose body is not valid JSON, or a tag
-    /// that the stream ended without closing).  The stream is **not**
-    /// aborted; the offending bytes are simply discarded or surfaced via
-    /// this event so consumers can log diagnostics.
-    NormalizationError {
-        /// Structured detail about what went wrong.
-        kind: NormalizationErrorKind,
-        /// Short, human-readable excerpt of the offending input.
-        raw: String,
     },
 }
 

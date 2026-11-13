@@ -34,7 +34,6 @@ pub(crate) async fn spawn_proxy_with_guard(
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
         tags: vec![],
-        dialect: None,
     });
     let settings = Settings {
         loop_guard: Some(guard),

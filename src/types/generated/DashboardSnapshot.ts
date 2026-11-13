@@ -54,8 +54,8 @@ total_requests: number,
  */
 dialect_residue_total: number, 
 /**
- * Turns whose tool call failed schema validation and was re-issued, with
- * `tool_choice: "required"` or under gglib's own grammar, whether or not it worked.
+ * Turns whose tool call failed schema validation and was re-issued with
+ * `tool_choice: "required"`, whether or not it worked.
  *
  * A sustained non-zero rate says this model's `auto` path is
  * unconstrained upstream — the per-model signal ADR 0002 could otherwise

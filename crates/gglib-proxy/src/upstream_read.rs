@@ -4,7 +4,7 @@
 //!
 //! [`upstream_events`] is the first stage of the response pipeline in
 //! [`crate::forward`]: llama-server's SSE bytes in, [`LlmStreamEvent`]s out,
-//! ready for the normalizer. A reply that goes longer than
+//! ready for the encoder. A reply that goes longer than
 //! [`StreamBounds::idle`] without its next event (before the first token,
 //! without any bytes) ends the events with [`UpstreamStalled`].
 //! [`first_byte_timeout_frame`] is what the client gets instead of a reply
@@ -165,10 +165,8 @@ impl UpstreamStalled {
 /// after every event already decoded, and no `Done` follows it; the `Err` is
 /// how the turn ends. A stall's `Err` is an [`UpstreamStalled`]. The timer
 /// runs only while a read is waiting (see [`STREAM_IDLE_TIMEOUT`]). The drain
-/// ([`drain_events`](crate::forward::drain_events)) reads these events through
-/// the normalizer
-/// ([`NormalizingStream`](gglib_core::normalize::NormalizingStream)), which
-/// stops at the first `Err`, so it would see nothing after it either way.
+/// ([`drain_events`](crate::forward::drain_events)) reads these events as
+/// they come, so the `Err` is the last thing it sees.
 pub(crate) fn upstream_events<S, E>(
     bytes: S,
     idle: Duration,
@@ -228,7 +226,7 @@ where
 /// Whether `event` is a generated token: content, reasoning or a tool call.
 /// Once one has arrived, prefill is over. It is the test behind
 /// [`UpstreamStalled::after_first_token`], and the drain applies it to the
-/// same events, before the normalizer can hold any back: to tell a client
+/// same events as they arrive: to tell a client
 /// that left before the first token, and to stamp the clock behind a turn's
 /// `generation_ms`. It reads the kind of event, not what the event carries.
 pub(crate) fn is_generated_token(event: &LlmStreamEvent) -> bool {

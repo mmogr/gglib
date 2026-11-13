@@ -160,7 +160,6 @@ mod tests {
     fn model() -> Model {
         Model {
             components: Vec::new(),
-            dialect_spec: None,
             id: 7,
             name: "qwen3".to_string(),
             model_key: String::new(),

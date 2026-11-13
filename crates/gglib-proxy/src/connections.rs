@@ -425,7 +425,7 @@ pub(crate) const PROGRESS_EVERY: Duration = Duration::from_secs(5);
 /// Tells the queue a request's reply is still arriving, so the requests
 /// waiting behind it are not given up as stalled. Cloneable, so it can go
 /// where the guard cannot: the stream adapter that sees every upstream event
-/// before the normalizer holds any back. Reports at most once every
+/// as it arrives. Reports at most once every
 /// [`PROGRESS_EVERY`], and not at all for a request with no lease.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct StreamProgress(Option<Arc<Reporting>>);

@@ -1,11 +1,7 @@
 //! How long the model spent writing, timed on the upstream's own stream.
 //!
-//! A dialect parser holds tool-call markup back and releases it as one
-//! delta at the close tag, so the normalized stream's first delta can come
-//! a single decode step before its end. Timed there, a turn that only
-//! calls a tool writes in no time at all and its rate is impossible. So
-//! the time is taken here, on the decoded stream before normalization: from
-//! the first generated token's arrival to the last. It is sent at the end
+//! The time is taken on the decoded stream: from the first generated
+//! token's arrival to the last. It is sent at the end
 //! as [`LlmStreamEvent::WritingTime`], and only when two or more tokens
 //! arrived; a time that cannot be measured is left out, never guessed.
 

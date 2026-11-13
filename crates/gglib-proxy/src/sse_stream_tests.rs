@@ -36,7 +36,6 @@ async fn streamed_from(url: &str) -> String {
         rx,
         registry.register(1, "some-model", true, None),
         "some-model".to_owned(),
-        TurnDialect::parsed(None),
         Arc::new(UpstreamHealth::new()),
         StreamBounds::default(),
         Arc::new(TokenCalibration::new()),
@@ -48,7 +47,7 @@ async fn streamed_from(url: &str) -> String {
         None,
         None,
         None,
-        RepairTurn::OFF,
+        false,
     );
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await

@@ -1,11 +1,6 @@
 //! Non-streaming turns repaired end to end: the answer is judged, drawn
 //! again when its call does not validate, and the client is answered with
 //! the draw that validates.
-//!
-//! The second request's answer is read the way the first was. Under
-//! `tool_choice: "none"` llama-server parses no tool calls, so a second draw
-//! under gglib's grammar arrives as dialect markup and is read as a call
-//! before it is judged.
 
 use std::sync::Arc;
 
@@ -14,13 +9,6 @@ use serde_json::json;
 
 use super::*;
 use crate::metrics::ContextSnapshot;
-use gglib_core::domain::DialectSpec;
-
-/// A call missing its required `path`, as a Qwen model writes it.
-const BAD_MARKUP: &str = "<tool_call>\n<function=read_file>\n<parameter=max_lines>\n4242\n</parameter>\n</function>\n</tool_call>";
-
-/// A conformant call, as the same model writes it.
-const FIXED_MARKUP: &str = "<tool_call>\n<function=read_file>\n<parameter=path>\nfixed.rs\n</parameter>\n</function>\n</tool_call>";
 
 /// `max_lines` carrying a string, the way Llama 3.2 was measured wrong.
 const BAD_ARGUMENTS: &str = "{\"path\":\"a\",\"max_lines\":\"42\"}";
@@ -36,20 +24,13 @@ fn structured(id: &str, arguments: &str) -> serde_json::Value {
     }}]})
 }
 
-/// An answer whose call is still text, as a dialect model returns it under
-/// `tool_choice: "none"`.
-fn markup(content: &str) -> serde_json::Value {
-    json!({"choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}]})
-}
-
 /// A llama-server stand-in that answers in order: the first request gets
 /// `answers[0]`, the next `answers[1]`, and the last answer repeats; a `null`
 /// answer is a 500 with an empty body, and a [`refused`] one a 500 with a
 /// body. Every request is recorded.
 ///
 /// It dispatches on the ordinal because nothing in a body tells the two
-/// apart on this path: the first request is already `stream: false`, and a
-/// second draw under gglib's grammar keeps the first request's tool choice.
+/// apart reliably on this path: the first request is already `stream: false`.
 pub(super) async fn spawn_ordinal_mock(
     seen: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
     answers: Vec<serde_json::Value>,
@@ -131,7 +112,6 @@ pub(super) fn snapshot() -> ContextSnapshot {
         payload_chars_after: 0,
         messages_truncated: 0,
         was_clamped: false,
-        grammar_enforced: false,
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,
@@ -152,8 +132,7 @@ pub(super) fn snapshot() -> ContextSnapshot {
 pub(super) async fn run_turn(
     body: Bytes,
     answers: Vec<serde_json::Value>,
-    dialect: Option<DialectSpec>,
-    turn: RepairTurn,
+    repair_enabled: bool,
 ) -> (
     Vec<serde_json::Value>,
     serde_json::Value,
@@ -168,10 +147,9 @@ pub(super) async fn run_turn(
         Client::new().post(&url),
         body,
         "m",
-        &TurnDialect::parsed(dialect),
         &CacheMetricsStore::new(),
         (&metrics, seq),
-        turn,
+        repair_enabled,
         crate::unary_body::UNARY_TOTAL_TIMEOUT,
     )
     .await
@@ -202,7 +180,7 @@ async fn a_bad_unary_tool_call_is_reissued_and_the_client_gets_the_valid_one() {
         structured("call_fixed", FIXED_ARGUMENTS),
     ];
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, answer, metrics) = run_turn(body, answers, None, RepairTurn::ON).await;
+    let (requests, answer, metrics) = run_turn(body, answers, true).await;
 
     assert_eq!(requests.len(), 2, "one original, one repair");
     assert_eq!(requests[1]["tool_choice"], "required");
@@ -226,52 +204,12 @@ async fn a_bad_unary_tool_call_is_reissued_and_the_client_gets_the_valid_one() {
     );
 }
 
-/// Stage 6 installed gglib's grammar: the call is judged, drawn again under
-/// the same grammar, and the second draw's markup is read as a call.
-#[tokio::test]
-async fn a_unary_turn_gglibs_grammar_constrained_is_answered_in_markup_and_read_as_a_call() {
-    let body = forwarded_body(&json!({
-        "tool_choice": "none",
-        "grammar": "root ::= \"<tool_call>\" [^<]* \"</tool_call>\""
-    }));
-    let turn = RepairTurn {
-        enabled: true,
-        gglib_grammar: true,
-    };
-    let answers = vec![markup(BAD_MARKUP), markup(FIXED_MARKUP)];
-    let (requests, answer, metrics) =
-        run_turn(body, answers, Some(DialectSpec::qwen_xml()), turn).await;
-
-    assert_eq!(requests.len(), 2, "one original, one second draw");
-    assert_eq!(
-        requests[1]["tool_choice"], "none",
-        "the second draw keeps the tool choice gglib's grammar needs"
-    );
-    assert!(requests[1]["grammar"].is_string(), "and the grammar");
-    assert!(
-        arguments(&answer).contains("fixed.rs"),
-        "the fixed call reaches the client as a call: {answer}"
-    );
-    assert!(
-        !answer.to_string().contains("4242"),
-        "the bad call does not: {answer}"
-    );
-    assert_eq!(
-        (
-            metrics.tool_repairs_attempted(),
-            metrics.tool_repairs_succeeded()
-        ),
-        (1, 1)
-    );
-}
-
 /// A conformant call is answered as it came: one request, the same choices.
 #[tokio::test]
 async fn a_valid_unary_tool_call_is_not_reissued() {
     let good = structured("call_good", FIXED_ARGUMENTS);
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, answer, metrics) =
-        run_turn(body, vec![good.clone()], None, RepairTurn::ON).await;
+    let (requests, answer, metrics) = run_turn(body, vec![good.clone()], true).await;
 
     assert_eq!(requests.len(), 1, "nothing to repair, nothing re-issued");
     assert_eq!(answer["choices"], good["choices"]);
@@ -284,8 +222,7 @@ async fn a_valid_unary_tool_call_is_not_reissued() {
 async fn a_rejected_re_issue_falls_open_to_the_first_answer() {
     let bad = structured("call_bad", BAD_ARGUMENTS);
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, answer, metrics) =
-        run_turn(body, vec![bad.clone(), json!(null)], None, RepairTurn::ON).await;
+    let (requests, answer, metrics) = run_turn(body, vec![bad.clone(), json!(null)], true).await;
 
     assert_eq!(requests.len(), 2, "the re-issue was sent");
     assert_eq!(answer, bad, "and refused, so the first answer stands");
@@ -304,7 +241,7 @@ async fn repair_off_leaves_a_unary_body_as_it_came() {
     let bad = structured("call_bad", BAD_ARGUMENTS);
     let answers = vec![bad.clone(), structured("call_fixed", FIXED_ARGUMENTS)];
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
-    let (requests, answer, metrics) = run_turn(body, answers, None, RepairTurn::OFF).await;
+    let (requests, answer, metrics) = run_turn(body, answers, false).await;
 
     assert_eq!(requests.len(), 1, "nothing is asked twice with repair off");
     assert_eq!(
@@ -325,14 +262,14 @@ async fn a_unary_answer_names_the_served_model_not_the_gguf_path() {
     };
     let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let once = vec![at_path(structured("call_good", FIXED_ARGUMENTS))];
-    let (_, answer, _) = run_turn(body.clone(), once, None, RepairTurn::OFF).await;
+    let (_, answer, _) = run_turn(body.clone(), once, false).await;
     assert_eq!(answer["model"], "m");
 
     let twice = vec![
         at_path(structured("call_bad", BAD_ARGUMENTS)),
         at_path(structured("call_fixed", FIXED_ARGUMENTS)),
     ];
-    let (requests, answer, _) = run_turn(body, twice, None, RepairTurn::ON).await;
+    let (requests, answer, _) = run_turn(body, twice, true).await;
     assert_eq!(requests.len(), 2, "one original, one repair");
     assert_eq!(
         answer["choices"][0]["message"]["tool_calls"][0]["id"],

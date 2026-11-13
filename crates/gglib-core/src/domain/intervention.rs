@@ -44,8 +44,6 @@ pub enum InterventionKind {
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         messages: usize,
     },
-    /// A decode-time grammar held the output to a tool call.
-    Constrained,
     /// The loop guard tripped and forwarded the request with a note.
     NotedLoop {
         /// The detector that tripped.
@@ -81,7 +79,6 @@ impl InterventionKind {
             Self::RepairedToolCall => "Repaired a tool call".to_owned(),
             Self::Trimmed { messages: 1 } => "Trimmed 1 old message".to_owned(),
             Self::Trimmed { messages } => format!("Trimmed {messages} old messages"),
-            Self::Constrained => "Constrained tool calls".to_owned(),
             Self::NotedLoop { detector } => format!("Noted {}", tripped(*detector)),
             Self::StoppedLoop { detector } => format!("Stopped {}", tripped(*detector)),
             Self::Refused {
@@ -109,7 +106,6 @@ mod tests {
             InterventionKind::RepairedToolCall,
             InterventionKind::Trimmed { messages: 4 },
             InterventionKind::Trimmed { messages: 1 },
-            InterventionKind::Constrained,
             InterventionKind::NotedLoop {
                 detector: LoopGuardTrip::Loop,
             },
@@ -129,7 +125,6 @@ mod tests {
                 "Repaired a tool call",
                 "Trimmed 4 old messages",
                 "Trimmed 1 old message",
-                "Constrained tool calls",
                 "Noted a loop",
                 "Stopped stagnation",
                 "Refused: longer than the context",

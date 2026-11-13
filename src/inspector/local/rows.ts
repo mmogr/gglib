@@ -38,7 +38,6 @@ export const DECISION_LABELS: Readonly<Record<string, string | null>> = {
   mtp: 'Speculative',
   kv: 'KV cache',
   cache: 'Prompt cache',
-  dialect: 'Tool calls',
   backend: 'Backend',
   embeddings: 'Embeddings',
   mlock: 'Memory',

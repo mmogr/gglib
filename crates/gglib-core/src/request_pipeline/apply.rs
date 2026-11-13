@@ -11,7 +11,8 @@
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
 //! | 4 | Resolve the sampling hierarchy | [`super::sampling`] | top-level keys |
 //! | — | Log the sampling decision | [`super::sampling_log`] | the decision |
-//! | 6 | Constrain dialect tool calls | [`super::constrain`] | `tools`, `tool_choice`, tags |
+//!
+//! Stages 5 and 6 have gone (ADR 0022); their numbers are not reused.
 //!
 //! # The order is load-bearing
 //!
@@ -39,10 +40,6 @@
 //! the difference between measuring the conversation and measuring our own
 //! additions to it.
 //!
-//! **6 after 3.** The grammar stage 6 *adds* a top-level key, so it runs
-//! after the measurement for the same reason sampling does: the truncation
-//! budget measures the client's conversation, not our own additions to it.
-//!
 //! # Why the seam is `&mut Value` and not a typed request struct
 //!
 //! The proxy forwards requests from arbitrary external clients — IDE
@@ -68,9 +65,7 @@ use serde_json::Value;
 use super::measure::ContextBudget;
 use super::sampling::SamplingDecision;
 use super::truncation::{TruncationError, TruncationReport};
-use super::{
-    ModelContext, SamplingLayers, constrain, messages, sampling, sampling_log, tools, truncation,
-};
+use super::{ModelContext, SamplingLayers, messages, sampling, sampling_log, tools, truncation};
 
 /// What the pipeline did, for the caller that has to report or verify it.
 ///
@@ -119,17 +114,6 @@ pub fn apply(
 
     let sampling = sampling::resolve_sampling(body, ctx, layers);
     sampling_log::log_resolution(&sampling);
-
-    // Stage 6 runs unconditionally, because there is only one kind of trip
-    // through this pipeline: the repair path does not call `apply`, it
-    // mutates the already-resolved body and sends it. It must keep bypassing
-    // this pipeline, because `constrain` fires on `tool_choice: "required"`
-    // for dialect models, installs gglib's own grammar and rewrites
-    // `tool_choice` to `"none"` (llama-server rejects a custom grammar
-    // alongside `tools`), which on a repair would silently convert the
-    // re-issue into a request for no tool call at all. See
-    // `gglib_proxy::repair::repair_body`.
-    constrain::constrain_tool_calls(body, ctx);
     Ok(PipelineReport {
         truncation,
         sampling,

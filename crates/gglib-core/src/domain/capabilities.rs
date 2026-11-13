@@ -20,12 +20,11 @@
 //! `Model.capabilities`.  The proxy reads this value once per request via a
 //! single catalog lookup.
 //!
-//! ## 2. Response-side normalization pipeline
+//! ## 2. The response is llama-server's
 //!
-//! Separate from request rewriting, some models (e.g., Qwen) embed tool-call
-//! JSON inside XML tags in the response text.  This is handled by the
-//! `format:*` tag pipeline in `gglib-proxy::normalize`, which is entirely
-//! independent from `ModelCapabilities`.
+//! `ModelCapabilities` is request-side only. gglib does not reshape a reply:
+//! llama-server parses tool calls and reasoning itself, and what it leaves in
+//! the text reaches the client as written.
 //!
 //! ## Template analysis — positive vs. negative signals
 //!
@@ -62,15 +61,11 @@
 //! 1. Add a match arm in [`capabilities_from_architecture`] mapping the
 //!    architecture string to the appropriate flags.
 //! 2. Add a unit test in the `#[cfg(test)]` block at the bottom of this file.
-//! 3. If the architecture also needs **response-side** normalization (XML tool
-//!    calls, custom reasoning tags, etc.), follow the steps in `CONTRIBUTING.md`
-//!    under "Adding a new model architecture" to add a `format:*` parser as well.
-//! 4. No other files need touching — all call sites already use these functions.
+//! 3. No other files need touching — all call sites already use these functions.
 //!
 //! **Note on Qwen:** Qwen is intentionally absent from the registry.  Qwen's
 //! quantized builds always ship a full chat template, so
-//! [`infer_from_chat_template`] handles the request side.  Its response-side
-//! `<tool_call>` XML is handled by the `format:qwen-xml` tag pipeline.
+//! [`infer_from_chat_template`] handles the request side.
 
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
@@ -310,15 +305,11 @@ pub fn infer_from_chat_template(
 /// # Scope: request preprocessing only
 ///
 /// This registry governs `ModelCapabilities` flags (strict-turn coalescing,
-/// system-role conversion, etc.).  It does **not** handle response-stream
-/// dialect normalization — that is a separate concern handled by the
-/// `GgufCapabilities.extensions` → `format:*` tag → `get_parser()` pipeline
-/// in `gglib-core::normalize::registry`.
+/// system-role conversion, etc.).  It does **not** handle tool-call markup
+/// in the reply: llama-server parses that itself.
 ///
 /// For example:
-/// - **Qwen** tool-call XML normalization already flows through
-///   `detect_tool_support()` → `extensions.insert("format:qwen-xml")` →
-///   `to_tags()` → `get_parser()` → `DelimitedToolCallParser`.  Qwen's chat template
+/// - **Qwen**: its chat template
 ///   always contains `<tool_call>` patterns, so `infer_from_chat_template`
 ///   (Layer 1) sets `SUPPORTS_TOOL_CALLS` reliably.  No architecture entry
 ///   is needed here for Qwen.
@@ -368,9 +359,7 @@ pub fn capabilities_from_architecture(arch: Option<&str>) -> ModelCapabilities {
         }
 
         // All other architectures: no request-side constraints inferred from
-        // architecture alone.  Chat-template analysis may still set flags,
-        // and response-stream normalization is handled by the format:* tag
-        // pipeline independently.
+        // architecture alone.  Chat-template analysis may still set flags.
         _ => ModelCapabilities::empty(),
     }
 }

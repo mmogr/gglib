@@ -229,8 +229,8 @@ pub struct Settings {
     /// default.
     pub loop_guard: Option<bool>,
 
-    /// Whether a tool call that fails schema validation is re-issued, with
-    /// `tool_choice: "required"` or as a second draw under gglib's grammar.
+    /// Whether a tool call that fails schema validation is re-issued with
+    /// `tool_choice: "required"`.
     ///
     /// `None` (the default) means **on**, the same inverse polarity as
     /// [`Self::loop_guard`] and for the same reason: it is

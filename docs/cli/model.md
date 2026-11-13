@@ -60,7 +60,7 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 
   Tags
 ------------------------------------------------------------
-  agent, format:qwen-xml, reasoning
+  agent, reasoning
 
   Capabilities
 ------------------------------------------------------------
@@ -281,8 +281,8 @@ was recorded. `repair` re-downloads the shards that fail.
 What gglib derived from the file, and how to change it.
 
 - `retag` re-derives the auto-tags from persisted GGUF metadata. Run it
-  when a release adds a tag, so the library gains it: the `format:*`
-  dialect family, for one. It is additive by default and never touches
+  when a release adds a tag, so the library gains it. It is additive by
+  default and never touches
   user-curated tags; `--full` rebuilds the auto namespace only.
 - `capabilities <model>` shows the capability flags (system role, strict
   turns, tool calls, reasoning); `--set` and `--unset`, repeatable,

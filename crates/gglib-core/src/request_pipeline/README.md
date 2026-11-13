@@ -32,7 +32,7 @@ does either.
 **Resolution — what the model is**
 
 - [`model_context`] — [`ModelContext`], the resolved per-model facts
-  (capabilities, `format:*` tags, inference defaults, context length) that the
+  (capabilities, tags, inference defaults, context length) that the
   request and response stages are built from, plus the inert
   [`ModelContext::passthrough`] fallback.
 - [`mod@resolve`] — [`resolve()`], the single catalog round-trip that produces one,
@@ -94,9 +94,6 @@ does either.
   touches top-level sampling keys.
 - [`sampling_log`] — no stage of its own; the single `sampling resolved` debug
   line, rendered once stage 4 has resolved the request.
-- [`constrain`] — [`constrain_tool_calls()`], stage 6: gglib's own
-  decode-time grammar for a dialect model's tool calls. It runs after
-  stage 3 because the grammar adds a top-level key.
 
 **Checking and explaining — no stage**
 

@@ -8,7 +8,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, projector_path, param_count_b, architecture, variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec, template_caps, image_family";
+pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, projector_path, param_count_b, architecture, variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, template_caps, image_family";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
@@ -164,14 +164,6 @@ pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, Repos
         defaults_origin,
         server_defaults: row
             .try_get::<Option<String>, _>("server_defaults")
-            .ok()
-            .flatten()
-            .and_then(|json| serde_json::from_str(&json).ok()),
-        // Tolerant parse, like inference_defaults: a NULL column (legacy
-        // row) or unreadable JSON reads as "no spec" and the tag fallback
-        // applies downstream.
-        dialect_spec: row
-            .try_get::<Option<String>, _>("dialect_spec")
             .ok()
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok()),

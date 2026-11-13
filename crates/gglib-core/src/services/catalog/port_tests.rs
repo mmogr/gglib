@@ -13,7 +13,6 @@ fn base_model() -> Model {
     Model {
         components: Vec::new(),
         image_family: None,
-        dialect_spec: None,
         id: 7,
         name: "qwen3".to_string(),
         model_key: String::new(),

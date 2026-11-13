@@ -105,8 +105,8 @@ impl SqliteModelRepository {
 const UPSERT_MODEL: &str = r"INSERT INTO models (
         id, name, file_path, projector_path, param_count_b, architecture,
         variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count,
-        metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec, image_family
-    ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, image_family
+    ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(model_key) DO UPDATE SET
         file_path = excluded.file_path,
         -- Coalesced, not assigned. A re-registration that carries no
@@ -143,7 +143,6 @@ const UPSERT_MODEL: &str = r"INSERT INTO models (
         metadata = json_patch(COALESCE(models.metadata, '{}'), excluded.metadata),
         tags = excluded.tags,
         capabilities = excluded.capabilities,
-        dialect_spec = excluded.dialect_spec,
         inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
         defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
     ";
@@ -282,12 +281,6 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
-        // Serialize dialect_spec if present
-        let dialect_spec_json = model
-            .dialect_spec
-            .as_ref()
-            .and_then(|spec| serde_json::to_string(spec).ok());
-
         // Compute model key for deduplication
         let model_key = compute_model_key(model, &file_path_string);
 
@@ -343,7 +336,6 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&inference_defaults_json)
             .bind(&defaults_origin_str)
             .bind(&server_defaults_json)
-            .bind(&dialect_spec_json)
             .bind(model.image_family.map(ImageFamily::as_str))
             .execute(&self.pool)
             .await
@@ -363,7 +355,7 @@ impl ModelRepository for SqliteModelRepository {
         self.with_components(stored).await
     }
 
-    /// The ten columns read leniently, from `tags` to `last_update_check`,
+    /// The nine columns read leniently, from `tags` to `last_update_check`,
     /// keep their stored text unless the edit changes their value, so text
     /// this build cannot read survives an edit to another field. Clearing such
     /// a value keeps it too; it already reads as none. `capabilities` is still
@@ -387,11 +379,6 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
-        let dialect_spec_json = model
-            .dialect_spec
-            .as_ref()
-            .and_then(|spec| serde_json::to_string(spec).ok());
-
         // Written by `update` only: `insert` takes a `NewModel`, which has no
         // caps to carry — the observation exists only after a launch (ADR
         // 0007), and the upsert leaves the stored column alone so a re-import
@@ -411,7 +398,7 @@ impl ModelRepository for SqliteModelRepository {
         let held = held_row(&mut tx, model.id).await?;
         let defaults_changed = model.inference_defaults != held.inference_defaults;
         sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, variant_label = ?, file_type = ?, bits_per_weight = ?, context_length = ?, metadata = IIF(?, ?, metadata), hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = IIF(?, ?, download_date), last_update_check = IIF(?, ?, last_update_check), tags = IIF(?, ?, tags), capabilities = ?, inference_defaults = IIF(?, ?, inference_defaults), defaults_origin = IIF(?, ?, defaults_origin), server_defaults = IIF(?, ?, server_defaults), dialect_spec = IIF(?, ?, dialect_spec), template_caps = IIF(?, ?, template_caps), image_family = IIF(?, ?, image_family) WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, variant_label = ?, file_type = ?, bits_per_weight = ?, context_length = ?, metadata = IIF(?, ?, metadata), hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = IIF(?, ?, download_date), last_update_check = IIF(?, ?, last_update_check), tags = IIF(?, ?, tags), capabilities = ?, inference_defaults = IIF(?, ?, inference_defaults), defaults_origin = IIF(?, ?, defaults_origin), server_defaults = IIF(?, ?, server_defaults), template_caps = IIF(?, ?, template_caps), image_family = IIF(?, ?, image_family) WHERE id = ?"
         )
             .bind(&model.name)
             // Normalised exactly as `insert` does. `find_by_path` is a plain
@@ -447,8 +434,6 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&defaults_origin_str)
             .bind(model.server_defaults != held.server_defaults)
             .bind(&server_defaults_json)
-            .bind(model.dialect_spec != held.dialect_spec)
-            .bind(&dialect_spec_json)
             .bind(model.template_caps != held.template_caps)
             .bind(&template_caps_json)
             .bind(model.image_family != held.image_family)
@@ -959,55 +944,6 @@ mod tests {
         let repo = repo().await;
         let err = repo.delete(999).await.unwrap_err();
         assert!(matches!(err, RepositoryError::NotFound(_)));
-    }
-
-    #[tokio::test]
-    async fn dialect_spec_round_trips_through_insert_and_read() {
-        use gglib_core::domain::DialectSpec;
-        let repo = repo().await;
-        let mut model = make_model("Spec");
-        model.dialect_spec = Some(DialectSpec::qwen_xml());
-
-        let inserted = repo.insert(&model).await.unwrap();
-        assert_eq!(inserted.dialect_spec, Some(DialectSpec::qwen_xml()));
-
-        let fetched = repo.get_by_id(inserted.id).await.unwrap();
-        assert_eq!(fetched.dialect_spec, Some(DialectSpec::qwen_xml()));
-    }
-
-    /// Re-registering the same model overwrites the spec, like tags and
-    /// capabilities — a re-import re-derives, matching `retag --full`.
-    #[tokio::test]
-    async fn upsert_overwrites_the_dialect_spec() {
-        use gglib_core::domain::DialectSpec;
-        let repo = repo().await;
-
-        let mut first = make_model("Zeta");
-        first.dialect_spec = Some(DialectSpec::qwen_xml());
-        let inserted = repo.insert(&first).await.unwrap();
-        assert!(inserted.dialect_spec.is_some());
-
-        let second = make_model("Zeta"); // same model_key, no spec
-        let upserted = repo.insert(&second).await.unwrap();
-        assert_eq!(upserted.id, inserted.id, "same row, not a new one");
-        assert_eq!(upserted.dialect_spec, None, "spec overwritten on upsert");
-    }
-
-    #[tokio::test]
-    async fn update_persists_the_dialect_spec() {
-        use gglib_core::domain::DialectSpec;
-        let repo = repo().await;
-        let mut model = repo.insert(&make_model("Eta")).await.unwrap();
-
-        model.dialect_spec = Some(DialectSpec::qwen_xml());
-        repo.update(&model).await.unwrap();
-        let fetched = repo.get_by_id(model.id).await.unwrap();
-        assert_eq!(fetched.dialect_spec, Some(DialectSpec::qwen_xml()));
-
-        model.dialect_spec = None;
-        repo.update(&model).await.unwrap();
-        let fetched = repo.get_by_id(model.id).await.unwrap();
-        assert_eq!(fetched.dialect_spec, None, "update can clear the spec");
     }
 
     // ── template_caps (ADR 0007) ──────────────────────────────────────────

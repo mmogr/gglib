@@ -5,8 +5,6 @@
 //! its fixtures.
 
 use super::*;
-use gglib_core::domain::{DialectSpec, ModelCapabilities};
-use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use serde_json::json;
 
 fn request(tool_choice: &Value) -> Vec<u8> {
@@ -53,7 +51,7 @@ fn a_schema_violation_on_the_auto_path_is_reissued() {
     let d = decide(
         &request(&json!("auto")),
         &response(r#"{"path":"a","max_lines":"42"}"#),
-        RepairTurn::ON,
+        true,
     );
 
     let Decision::Reissue { body, violations } = d else {
@@ -81,7 +79,7 @@ fn the_repair_request_is_non_streaming() {
     let Decision::Reissue { body, .. } = decide(
         &request(&json!("auto")),
         &response(r#"{"path":"a","max_lines":"42"}"#),
-        RepairTurn::ON,
+        true,
     ) else {
         panic!("expected a re-issue");
     };
@@ -94,11 +92,7 @@ fn the_repair_request_is_non_streaming() {
 #[test]
 fn a_conformant_call_is_forwarded() {
     assert_eq!(
-        decide(
-            &request(&json!("auto")),
-            &response(r#"{"path":"a"}"#),
-            RepairTurn::ON
-        ),
+        decide(&request(&json!("auto")), &response(r#"{"path":"a"}"#), true),
         Decision::Forward(Skipped::Conformant)
     );
 }
@@ -111,7 +105,7 @@ fn an_already_required_request_is_not_reissued() {
         decide(
             &request(&json!("required")),
             &response(r#"{"path":"a","max_lines":"42"}"#),
-            RepairTurn::ON
+            true
         ),
         Decision::Forward(Skipped::AlreadyConstrained)
     );
@@ -124,7 +118,7 @@ fn an_absent_tool_choice_counts_as_auto() {
     let d = decide(
         &request(&json!(null)),
         &response(r#"{"path":"a","max_lines":"42"}"#),
-        RepairTurn::ON,
+        true,
     );
     assert!(matches!(d, Decision::Reissue { .. }));
 }
@@ -135,7 +129,7 @@ fn disabling_repair_forwards_everything() {
         decide(
             &request(&json!("auto")),
             &response(r#"{"path":"a","max_lines":"42"}"#),
-            RepairTurn::OFF
+            false
         ),
         Decision::Forward(Skipped::Disabled)
     );
@@ -144,7 +138,7 @@ fn disabling_repair_forwards_everything() {
 #[test]
 fn an_unreadable_body_is_forwarded() {
     assert_eq!(
-        decide(b"not json", &response(r#"{"path":"a"}"#), RepairTurn::ON),
+        decide(b"not json", &response(r#"{"path":"a"}"#), true),
         Decision::Forward(Skipped::Unreadable)
     );
 }
@@ -157,7 +151,7 @@ fn a_response_without_tool_calls_is_not_applicable() {
     .unwrap();
 
     assert_eq!(
-        decide(&request(&json!("auto")), &plain, RepairTurn::ON),
+        decide(&request(&json!("auto")), &plain, true),
         Decision::Forward(Skipped::NotApplicable)
     );
 }
@@ -197,65 +191,6 @@ fn an_unreadable_repair_is_discarded() {
 
     assert!(!did_repair);
     assert_eq!(chosen, original);
-}
-
-/// Why a repair body must never be sent back through the request
-/// pipeline.
-///
-/// Stage 6 fires on `tool_choice: "required"` for a dialect model,
-/// installs gglib's own grammar and rewrites `tool_choice` to `"none"` —
-/// llama-server rejects a custom grammar alongside `tools`. Applied to a
-/// repair that silently converts the re-issue into a request for no tool
-/// call at all: a full generation spent, nothing changed, no error
-/// anywhere.
-///
-/// `repair_body` avoids this by construction — it mutates the
-/// already-resolved body and sends it, never calling `apply`. This test
-/// demonstrates the damage that bypass prevents, so the reason survives
-/// as something executable rather than as a comment nobody re-derives.
-#[test]
-fn the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it() {
-    let ctx = ModelContext {
-        capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
-        catalog_resolved: true,
-        dialect: Some(DialectSpec::qwen_xml()),
-        ..ModelContext::passthrough()
-    };
-
-    let Decision::Reissue { body, .. } = decide(
-        &request(&json!("auto")),
-        &response(r#"{"path":"a","max_lines":"42"}"#),
-        RepairTurn::ON,
-    ) else {
-        panic!("expected a re-issue");
-    };
-
-    // What `repair_body` actually produces, and sends as-is.
-    let as_sent: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(
-        as_sent["tool_choice"], "required",
-        "the re-issue must reach llama-server still demanding a call"
-    );
-    assert!(
-        as_sent.get("grammar").is_none(),
-        "gglib must not install its own weaker grammar on the repair path"
-    );
-
-    // The same body put through the pipeline — the thing that must not
-    // happen. If this ever stops rewriting `tool_choice`, the bypass is
-    // no longer load-bearing and this test should be revisited.
-    let mut through_pipeline: Value = serde_json::from_slice(&body).unwrap();
-    gglib_core::request_pipeline::apply(
-        &mut through_pipeline,
-        &ctx,
-        &SamplingLayers::default(),
-        None,
-    )
-    .unwrap();
-    assert_eq!(
-        through_pipeline["tool_choice"], "none",
-        "stage 6 would ask for no tool call at all — hence the bypass"
-    );
 }
 
 #[path = "repair_stream_tests.rs"]

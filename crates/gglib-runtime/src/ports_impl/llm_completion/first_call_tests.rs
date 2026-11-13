@@ -3,8 +3,7 @@
 //! each request's body and answers from a script.
 //!
 //! The first request offers that tool alone and demands a call. The second
-//! carries no `tools`, no `tool_choice` and no grammar, for a model that
-//! writes its calls in a dialect as for any other, and a call its reply
+//! carries no `tools`, no `tool_choice` and no grammar, and a call its reply
 //! makes all the same is not run. Its last message is the composer's
 //! instruction for the reply, as a `user` message after the tool's result.
 //! A run that demands nothing sends what it always did.
@@ -16,8 +15,6 @@ use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{
     AgentConfig, AgentEvent, AgentMessage, FirstCall, ToolCall, ToolDefinition, ToolResult,
 };
-use gglib_core::domain::{DialectSpec, ModelCapabilities};
-use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use gglib_core::ports::{AgentError, ToolExecutorPort};
 use gglib_core::request_pipeline::ModelContext;
 use serde_json::{Value, json};
@@ -120,24 +117,10 @@ async fn run(
     Vec<Value>,
     Vec<String>,
 ) {
-    run_on(ModelContext::passthrough(), script, first_call).await
-}
-
-/// [`run`], on the model `context` describes.
-async fn run_on(
-    context: ModelContext,
-    script: Vec<String>,
-    first_call: Option<FirstCall>,
-) -> (
-    Result<String, AgentError>,
-    Vec<AgentEvent>,
-    Vec<Value>,
-    Vec<String>,
-) {
     let (base, bodies) = llama(script).await;
     let tools = Arc::new(TwoTools::default());
-    let adapter =
-        LlmCompletionAdapter::new(&base, Some("m".to_owned())).with_model_context(context);
+    let adapter = LlmCompletionAdapter::new(&base, Some("m".to_owned()))
+        .with_model_context(ModelContext::passthrough());
     let executor = Arc::clone(&tools) as Arc<dyn ToolExecutorPort>;
     let agent = AgentLoop::build(Arc::new(adapter), executor, None);
     let mut config = AgentConfig::default();
@@ -169,18 +152,6 @@ fn offered(body: &Value) -> Vec<&str> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-/// A model that writes its calls in Qwen's dialect.
-fn qwen() -> ModelContext {
-    ModelContext {
-        tags: vec![FORMAT_QWEN_XML.to_owned()],
-        dialect: Some(DialectSpec::qwen_xml()),
-        capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS
-            | ModelCapabilities::SUPPORTS_SYSTEM_ROLE,
-        catalog_resolved: true,
-        ..ModelContext::passthrough()
-    }
 }
 
 /// Whether `body` offers the model nothing to call: no `tools`, no
@@ -221,27 +192,6 @@ async fn the_first_request_demands_the_one_tool_and_the_second_offers_none() {
         [&json!({ "role": "user", "content": "draw a red fox" })]
     );
     assert_eq!(ran, [DRAW]);
-}
-
-/// A model that writes its calls in a dialect gets the grammar on its first
-/// request and none on its second. A second reply that writes the call out
-/// again in the dialect's markup is parsed as a call and not run; with no
-/// text beside it, the run ends in the composer's closing words.
-#[tokio::test]
-async fn a_dialect_models_second_request_has_no_grammar_and_its_markup_is_not_run() {
-    let markup = format!(
-        "<tool_call>\n{}\n</tool_call>",
-        json!({"name": DRAW, "arguments": {"prompt": "a red fox"}})
-    );
-    let script = vec![says(&markup), says(&markup)];
-
-    let (ended, _events, bodies, ran) = run_on(qwen(), script, Some(draw_first())).await;
-
-    assert_eq!(ended.unwrap(), NO_WORDS);
-    assert_eq!(bodies.len(), 2, "the second reply ended the run");
-    assert!(bodies[0]["grammar"].is_string(), "{}", bodies[0]);
-    assert!(offers_nothing(&bodies[1]), "{}", bodies[1]);
-    assert_eq!(ran, [DRAW], "the second reply's call was not run");
 }
 
 /// A run that demands nothing sends what it always did: every tool and the
@@ -316,37 +266,4 @@ fn only_tool_choice_tells_a_demanded_body_from_any_other() {
         none.get("tool_choice").is_none(),
         "no tools, nothing to demand"
     );
-}
-
-/// For a model that writes its calls in a dialect, the demand becomes the
-/// pipeline's grammar for a call of that one tool, whose qualified name,
-/// colon included, the grammar can spell.
-#[test]
-fn a_dialect_model_gets_a_grammar_for_the_one_demanded_tool() {
-    let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
-        .with_model_context(qwen());
-    let tools = [ToolDefinition::new(DRAW)];
-    let messages = [AgentMessage::user("draw a red fox")];
-
-    let body = adapter
-        .shaped_body(&messages, &tools, &ImageUrls::default(), true)
-        .unwrap();
-
-    let grammar = body["grammar"].as_str().expect("a grammar was installed");
-    assert!(grammar.contains(DRAW), "{grammar}");
-    assert_eq!(
-        body["tool_choice"], "none",
-        "the demand lives in the grammar"
-    );
-    let free = adapter
-        .shaped_body(&messages, &tools, &ImageUrls::default(), false)
-        .unwrap();
-    assert!(
-        free.get("grammar").is_none(),
-        "nothing demanded, no grammar"
-    );
-    let none = adapter
-        .shaped_body(&messages, &[], &ImageUrls::default(), false)
-        .unwrap();
-    assert!(offers_nothing(&none), "{none}");
 }

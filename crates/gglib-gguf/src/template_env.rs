@@ -1,8 +1,8 @@
 //! The minijinja environment every chat template render in this crate starts
 //! from: Python's string methods, which HF templates call freely, and
-//! `raise_exception`, through which a template refuses an input. The template
-//! probe and [`crate::render`] each lay their own undefined behaviour, clock
-//! and filters over it.
+//! `raise_exception`, through which a template refuses an input.
+//! [`crate::render`] and the capability tests each lay their own undefined
+//! behaviour, clock and filters over it.
 
 use minijinja::{Environment, Error, ErrorKind, Value};
 

@@ -73,7 +73,6 @@ async fn progress_turn(client_wants_progress: bool) -> ProgressTurn {
     stream_response_to_channel(
         resp,
         "m".to_owned(),
-        TurnDialect::parsed(None),
         tx,
         &connection,
         None,

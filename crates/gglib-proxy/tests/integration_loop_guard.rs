@@ -294,7 +294,6 @@ async fn disabled_guard_forwards_looping_history() {
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: "test-model".into(),
         tags: vec![],
-        dialect: None,
     });
     let settings = InMemorySettings::with(Settings {
         loop_guard: Some(false),

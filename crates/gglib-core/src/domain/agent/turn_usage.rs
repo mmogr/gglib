@@ -72,7 +72,7 @@ pub struct TurnUsage {
     /// From the stream's start to its end, in ms.
     pub duration_ms: u64,
     /// From the first generated token's arrival to the last, in ms, timed on
-    /// the upstream's stream before normalization; absent when it could not
+    /// the upstream's stream; absent when it could not
     /// be (fewer than two tokens, or an adapter that does not time it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub writing_ms: Option<u64>,

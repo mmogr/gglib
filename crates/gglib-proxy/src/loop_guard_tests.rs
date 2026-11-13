@@ -272,8 +272,8 @@ fn a_repeat_that_got_a_different_answer_is_not_reported() {
 
 #[test]
 fn synthetic_ids_that_repeat_across_turns_still_compare_the_right_results() {
-    // gglib mints tool-call ids itself for dialect models, restarting at
-    // zero on every response, so `call_qwen_0` recurs every turn. A join
+    // A history written when gglib minted tool-call ids itself, restarting
+    // at zero on every response, has `call_qwen_0` on every turn. A join
     // keyed globally by id would resolve both turns to the *last* result
     // and report an identical repeat no matter what came back. The join
     // is positional for exactly this reason.

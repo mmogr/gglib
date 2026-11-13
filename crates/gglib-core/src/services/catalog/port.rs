@@ -39,7 +39,6 @@ fn model_to_summary(m: &Model) -> ModelSummary {
     let file_size = m.file_path.metadata().map_or(0, |md| md.len());
 
     ModelSummary {
-        dialect: m.dialect_spec.clone(),
         template_caps: m.template_caps.clone(),
         id: m.id as u32,
         name: m.name.clone(),

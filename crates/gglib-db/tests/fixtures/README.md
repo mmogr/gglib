@@ -26,8 +26,9 @@ Written by 0.33.0's CLI:
   `qwen3`, a plain `llama`, and a Qwen-Image 2.1 image model), then
   `model update` (sampling defaults, `--jinja`, `--mtp`, metadata) and
   `model capabilities`. This gives `inference_defaults`, `defaults_origin`
-  (`user`), `server_defaults`, `dialect_spec`, `tags`, `metadata`,
-  `capabilities` and `image_family`.
+  (`user`), `server_defaults`, `dialect_spec` (dropped since), `tags`
+  (step 8 strips its `format:hermes`), `metadata`, `capabilities` and
+  `image_family`.
 - `settings_kv`: `config default`, `config profile set`, and
   `config settings set` (context size, proxy port, tool iterations, loop
   guard mode, client sampling, allowed hosts).

@@ -158,8 +158,8 @@ pub struct ModelDefectCounts {
     /// [`Self::agent_guard_loops`] that does fire.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub agent_guard_stagnations: u64,
-    /// Turns whose tool call failed schema validation and was re-issued,
-    /// with `tool_choice: "required"` or as a second draw under gglib's grammar.
+    /// Turns whose tool call failed schema validation and was re-issued
+    /// with `tool_choice: "required"`.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repairs_attempted: u64,
     /// Of those, the re-issues that produced a conformant call.
@@ -202,8 +202,8 @@ pub struct ModelDefectCounts {
     /// nothing at all is not.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub reasoning_only: u64,
-    /// Turns where dialect markup survived normalization into client-visible
-    /// output — the drift alarm, per model rather than fleet-wide.
+    /// Turns where tool-call markup reached client-visible output — the
+    /// drift alarm, per model rather than fleet-wide.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub dialect_residue: u64,
     /// Turns whose tool call could not be validated at all, so repair never
@@ -215,10 +215,6 @@ pub struct ModelDefectCounts {
     /// is measuring a much smaller slice of traffic than it appears to.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub unvalidatable_schemas: u64,
-    /// Turns whose normalization discarded a malformed dialect tool call and
-    /// surfaced the raw body as visible text instead.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub normalization_errors: u64,
     /// Turns whose newest tool-call batch repeated the batch before it and
     /// got an equal result back.
     ///

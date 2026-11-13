@@ -344,7 +344,6 @@ pub struct RetagResponse {
     pub changed: bool,
     pub added: Vec<String>,
     pub removed: Vec<String>,
-    pub spec_changed: bool,
     /// The image family read from the file for a model that had none.
     pub family_found: Option<gglib_core::domain::ImageFamily>,
     /// Whether the type, the bits per weight or the parameter count the model

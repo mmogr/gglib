@@ -30,20 +30,15 @@ messages_truncated: number,
  */
 was_clamped: boolean, 
 /**
- * `true` when the request pipeline originated a decode-time tool-call
- * grammar for this request (see `request_pipeline::constrain`).
- */
-grammar_enforced: boolean, 
-/**
- * `true` when dialect residue — tool-call markup that survived
- * normalization — reached this request's client-visible output (see
+ * `true` when dialect residue — tool-call markup llama-server left
+ * unparsed — reached this request's client-visible output (see
  * `gglib_core::normalize::residue`). Back-patched after the response
  * streams via [`ContextMetricsStore::flag_dialect_residue`].
  */
 dialect_residue: boolean, 
 /**
  * `true` when this turn's tool call failed schema validation and a
- * re-issue, under `required` or gglib's own grammar, produced a conformant one.
+ * re-issue under `required` produced a conformant one.
  * Back-patched after the response streams via
  * [`ContextMetricsStore::flag_tool_repair`].
  */
@@ -72,7 +67,7 @@ completion_tokens: number | null,
 /**
  * Characters of reasoning, counted as Unicode scalar values, not bytes.
  *
- * Streamed: summed over every reasoning delta read out of normalization,
+ * Streamed: summed over every reasoning delta read from the upstream,
  * the first generation's only on a re-issued turn. Non-streaming: the
  * length of the first choice's `message.reasoning_content` in the body
  * the client is answered with. Zero when there was none.
@@ -102,11 +97,8 @@ tool_calls: number,
 finish_reason: string | null, 
 /**
  * Milliseconds between the first and the last generated token the
- * upstream streamed, whatever the normalizer later made of them. A
- * token is a text, reasoning or tool-call delta, timed as its event is
- * read from the upstream and before normalization, so a call a model writes
- * as text is timed over all of its markup, though the normalizer makes
- * one event of it.
+ * upstream streamed. A token is a text, reasoning or tool-call delta,
+ * timed as its event is read from the upstream.
  *
  * Prefill progress, the usage frame, the turn's finish and an error
  * frame are not tokens. The wait before the first token is not in the

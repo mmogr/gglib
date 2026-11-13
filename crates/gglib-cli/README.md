@@ -402,7 +402,7 @@ gglib q --quiet "What is 2+2?" | pbcopy
 ### Thinking Block
 
 When a reasoning model emits chain-of-thought tokens (via `ReasoningDelta`
-events or inline `<think>` tags), the CLI wraps them in a visually distinct
+events), the CLI wraps them in a visually distinct
 block on stderr:
 
 ```text
@@ -420,9 +420,8 @@ Thinking visuals are suppressed when `--quiet` is set or stderr is not a TTY.
 
 ### Inline Thinking Reclassification
 
-Reasoning content is split from response text upstream by
-`gglib-core::normalize::NormalizingStream` (or by llama-server's
-`--reasoning-format auto`). The CLI consumes pre-classified
+Reasoning content is split from response text upstream by llama-server's
+`--reasoning-format auto`. The CLI consumes pre-classified
 `AgentEvent::ReasoningDelta` and routes reasoning to stderr while answer
 text reaches stdout. This works regardless of rendering mode.
 

@@ -5,10 +5,10 @@
 //! gglib makes a series of non-obvious choices every time it launches a
 //! model: it sizes the host-RAM prompt cache against free memory, quantizes
 //! the KV cache, enables speculative decoding from the model's own metadata,
-//! picks a tool-call dialect parser, and resolves the context size through a
-//! five-level fallback chain. Every one of those values already existed at
-//! launch — but only in a `debug!` line or a local variable, so the user's
-//! evidence that any of it happened was a 1,000-line README.
+//! and resolves the context size through a five-level fallback chain. Every
+//! one of those values already existed at launch — but only in a `debug!`
+//! line or a local variable, so the user's evidence that any of it happened
+//! was a 1,000-line README.
 //!
 //! [`LaunchNarration`] is the record of those decisions, captured once at
 //! spawn where each resolver's `*Source` enum is still in scope. It carries
@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct LaunchDecision {
     /// Short stable key naming the decision: `ctx`, `backend`, `kv`,
-    /// `cache`, `mtp`, `flags`, `dialect`.
+    /// `cache`, `mtp`, `flags`.
     ///
     /// Stable because the GUI and the CLI dashboard both key styling off it;
     /// treat it as part of the wire contract rather than a display string.

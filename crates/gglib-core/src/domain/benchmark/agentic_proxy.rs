@@ -6,9 +6,8 @@
 //!
 //! The raw and gglib arms open a task that demands a tool call with
 //! `tool_choice: "required"`. The proxy judges a call only on a turn left to
-//! the model (`tool_choice` `"auto"` or absent), or on one gglib's own grammar
-//! constrained, which it installs when a dialect model is asked for
-//! `"required"`. Any other `"required"` turn it forwards unjudged. So the proxy
+//! the model (`tool_choice` `"auto"` or absent); a `"required"` turn it
+//! forwards unjudged. So the proxy
 //! arm opens with `"auto"`, where the proxy judges every call whose schema it
 //! can judge, whatever the model's tool-call format, and so does the arm it is compared with,
 //! [`EvalArm::RawAuto`]: the same requests, sent straight to llama-server.

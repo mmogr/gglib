@@ -362,10 +362,10 @@ impl Standing {
 ///
 /// One pass. A tool result belongs to the assistant turn it immediately
 /// follows, so the join is positional rather than a global index by
-/// `tool_call_id` — gglib mints those ids itself for dialect models
-/// (`DelimitedToolCallParser` restarts at zero on every response), so
-/// `call_qwen_0` recurs on every turn of a replayed conversation and a global
-/// map would resolve every occurrence of a batch to the same result.
+/// `tool_call_id` — ids can repeat across turns (gglib's own dialect parser
+/// minted `call_qwen_0` afresh on every response, and histories written then
+/// are still replayed), and a global map would resolve every occurrence of a
+/// batch to the same result.
 pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
     let Ok(envelope) = serde_json::from_slice::<HistoryEnvelope>(body) else {
         return ScanOutcome {
