@@ -5,16 +5,16 @@
 Server-Sent Events (SSE) codec for `OpenAI`-compatible chat completion
 streams.
 
-This module is the **single source of truth** for translating between
-the `OpenAI` `chat.completion.chunk` SSE wire format and the typed
-[`crate::LlmStreamEvent`] domain values.  It contains four pieces:
+This module reads the `OpenAI` `chat.completion.chunk` SSE wire format
+into the typed [`crate::LlmStreamEvent`] domain values, and writes the few
+frames gglib adds to a reply. It contains four pieces:
 
 | Submodule | Role |
 |-----------|------|
 | [`frames`] | Byte-stream → complete lines, and each event: its `data:` payload, with its `id:` and `event:` for a caller that asks (under a size limit, or none); a character split across two chunks is decoded whole |
-| [`parser`] | Parse one `data:` JSON payload → typed events |
-| [`decoder`] | Stateful byte-stream → events (`[DONE]`), one complete line from [`frames`] at a time |
-| [`encoder`] | Typed event → `data:` JSON payload (for re-emission); the usage frame also carries a context reading when the encoder is given one |
+| [`parser`] | One `data:` payload → its JSON → typed events (`events_of`) |
+| [`decoder`] | Stateful byte-stream → `SseItem`s (each comment, each frame with its text, JSON and events, and `[DONE]`), or events alone, one complete line from [`frames`] at a time |
+| [`encoder`] | gglib's own frames: a notice as text, a repair's tool calls, a finish, an error frame |
 
 Promoting the codec to `gglib-core` lets every adapter (runtime, proxy,
 future GUIs) share a single, well-tested implementation rather than

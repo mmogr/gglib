@@ -934,8 +934,10 @@ pub(crate) fn parse_sse_frames(body: &str) -> (Vec<Value>, bool) {
     (frames, saw_done)
 }
 
-/// Assert that every frame has the `OpenAI` canonical envelope and a stable
-/// `id` / `model` / `created` triple. Returns the (id, model, created).
+/// Assert that every frame carries the `OpenAI` chunk envelope: the
+/// upstream's one `id` on every frame, `model` naming `expected_model` (the
+/// served name, never the upstream's), and a `created` of its own, which
+/// llama-server moves during a reply. Returns the (id, model, first created).
 pub(crate) fn assert_sse_canonical_envelope(
     frames: &[Value],
     expected_model: &str,
@@ -946,27 +948,17 @@ pub(crate) fn assert_sse_canonical_envelope(
     let model = first["model"].as_str().expect("string model").to_owned();
     let created = first["created"].as_u64().expect("u64 created");
 
-    assert!(
-        id.starts_with("chatcmpl-"),
-        "id should start with chatcmpl-, got {id}"
-    );
     assert_eq!(model, expected_model, "advertised model name mismatch");
 
     for f in frames {
-        // PromptProgress frames are top-level (no choices) — they still must
-        // share the envelope identity.
         assert_eq!(f["object"], "chat.completion.chunk");
-        assert_eq!(f["id"], json!(id), "id must be stable across frames");
+        assert_eq!(f["id"], json!(id), "one id across frames: {f}");
         assert_eq!(
             f["model"],
             json!(model),
-            "model must be stable across frames"
+            "the served name on every frame: {f}"
         );
-        assert_eq!(
-            f["created"],
-            json!(created),
-            "created must be stable across frames"
-        );
+        assert!(f["created"].is_u64(), "every frame has a created: {f}");
     }
 
     (id, model, created)

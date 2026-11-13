@@ -80,7 +80,7 @@ impl Held {
             .route(
                 "/v1/chat/completions",
                 post(answer(
-                    "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"index\":0}]}\n\n\
+                    "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"index\":0}],\"model\":\"/models/qwen.gguf\"}\n\n\
                      data: [DONE]\n\n",
                     "text/event-stream",
                 )),

@@ -1,19 +1,20 @@
-//! The upstream's streamed reply, read into typed events under an idle bound,
-//! and the `upstream_timeout` bodies a streaming client is sent when the
-//! upstream goes quiet: before its reply begins, or partway through it.
+//! The upstream's streamed reply, read into frames under an idle bound, and
+//! the `upstream_timeout` bodies a streaming client is sent when the upstream
+//! goes quiet: before its reply begins, or partway through it.
 //!
-//! [`upstream_events`] is the first stage of the response pipeline in
-//! [`crate::forward`]: llama-server's SSE bytes in, [`LlmStreamEvent`]s out,
-//! ready for the encoder. A reply that goes longer than
-//! [`StreamBounds::idle`] without its next event (before the first token,
-//! without any bytes) ends the events with [`UpstreamStalled`].
+//! [`upstream_frames`] is the first stage of the response pipeline in
+//! [`crate::forward`]: llama-server's SSE bytes in, [`SseItem`]s out, each
+//! frame with its JSON and its events, for the drain to forward. A reply that
+//! goes longer than [`StreamBounds::idle`] without its next frame (before the
+//! first token, without any bytes) ends the items with [`UpstreamStalled`].
 //! [`first_byte_timeout_frame`] is what the client gets instead of a reply
 //! when the upstream sent no response headers before the first-byte deadline,
 //! no other request was active, and the attempt was the last one or a recycle
 //! was pending.
 //! [`UpstreamStalled::notice`] and [`UpstreamStalled::error_frame`] are what
 //! it gets when a reply stops partway, and [`prefill_comment`] what a client
-//! that did not ask for progress gets after each batch of a prompt.
+//! that did not ask for progress gets in place of each `prompt_progress`
+//! frame.
 
 use std::time::Duration;
 
@@ -22,18 +23,19 @@ use futures_util::{Stream, StreamExt as _};
 use tracing::warn;
 
 use gglib_core::LlmStreamEvent;
-use gglib_core::sse::{SseEncoder, SseStreamDecoder};
+use gglib_core::sse::{SseEncoder, SseItem, SseStreamDecoder};
 
 use crate::forward::{FIRST_BYTE_DEADLINE_SECS, failed_turn_body};
 
-/// How long a streamed reply may wait for the upstream's next event before
+/// How long a streamed reply may wait for the upstream's next frame before
 /// the turn is ended as stalled.
 ///
 /// It times reads, not the turn. The timer starts when the drain asks for the
-/// next event and stops when a chunk decodes to one. Once the first token
-/// has come, a chunk that decodes to nothing, such as the `:` keep-alive
-/// comment llama-server sends while it works, leaves it running, so a reply
-/// that only pings is still judged stalled. While the drain waits on the client (`tx.send`) or on a repair
+/// next item and stops when a chunk holds a `data:` frame. Once the first
+/// token has come, a chunk with none, such as the `:` keep-alive comment
+/// llama-server sends while it works, leaves it running: the comment is
+/// passed on to the client, but a reply that only pings is still judged
+/// stalled. While the drain waits on the client (`tx.send`) or on a repair
 /// re-issue, the reader is parked at its `yield` and no read is being timed,
 /// so a slow client is never mistaken for a silent upstream. The converse
 /// holds too: this bound does not notice a client that stops reading, which
@@ -61,7 +63,7 @@ pub struct StreamBounds {
     /// How long to wait for response headers, per cycle; see
     /// [`FIRST_BYTE_DEADLINE_SECS`].
     pub first_byte: Duration,
-    /// How long the reply may wait for its next event; see
+    /// How long the reply may wait for its next frame; see
     /// [`STREAM_IDLE_TIMEOUT`].
     pub idle: Duration,
     /// How long one send to a streaming client may wait for it to make room;
@@ -104,11 +106,11 @@ impl StreamBounds {
     }
 }
 
-/// The upstream sent no event for [`StreamBounds::idle`] while the proxy
+/// The upstream sent no frame for [`StreamBounds::idle`] while the proxy
 /// waited for the next one: keep-alive comments aside once tokens flow, no
 /// bytes at all before the first.
 ///
-/// [`upstream_events`] ends with this as its `Err`, so the drain tells a stall
+/// [`upstream_frames`] ends with this as its `Err`, so the drain tells a stall
 /// from a transport error by downcasting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct UpstreamStalled {
@@ -152,25 +154,25 @@ impl UpstreamStalled {
     }
 }
 
-/// Decode an upstream SSE byte stream into typed events, waiting at most
-/// `idle` for each next event (before the first token, for any bytes).
+/// Read an upstream SSE byte stream into [`SseItem`]s, waiting at most `idle`
+/// for each next frame (before the first token, for any bytes).
 ///
 /// Reading stops at the end of the body or where the decoder says the stream
-/// ended (the `[DONE]` sentinel, an inline upstream error, or bytes it cannot
-/// decode), and nothing after that is read. Unless a `Done` or an inline
-/// upstream error has already ended the turn, the decoder then adds a
-/// fallback `Done`.
+/// ended (`[DONE]`, a frame with an inline upstream error, or bytes it cannot
+/// decode), and nothing after that is read. Nothing is added at the end: a
+/// body that stops without a finish frame ends with its last item.
 ///
-/// A transport error or a stall is different: the stream ends with one `Err`,
-/// after every event already decoded, and no `Done` follows it; the `Err` is
-/// how the turn ends. A stall's `Err` is an [`UpstreamStalled`]. The timer
-/// runs only while a read is waiting (see [`STREAM_IDLE_TIMEOUT`]). The drain
-/// ([`drain_events`](crate::forward::drain_events)) reads these events as
-/// they come, so the `Err` is the last thing it sees.
-pub(crate) fn upstream_events<S, E>(
+/// A transport error or a stall ends the items with one `Err`, after every
+/// item already read; a stall's is an [`UpstreamStalled`]. The timer runs only
+/// while a read is waiting (see [`STREAM_IDLE_TIMEOUT`]), and only a `data:`
+/// frame restarts it once the first token has come: a comment is passed on,
+/// but it is not the reply moving. The drain
+/// ([`drain_events`](crate::forward::drain_events)) reads these items as they
+/// come, so the `Err` is the last thing it sees.
+pub(crate) fn upstream_frames<S, E>(
     bytes: S,
     idle: Duration,
-) -> impl Stream<Item = anyhow::Result<LlmStreamEvent>>
+) -> impl Stream<Item = anyhow::Result<SseItem>>
 where
     S: Stream<Item = Result<Bytes, E>>,
     E: std::fmt::Display,
@@ -179,9 +181,9 @@ where
         let mut decoder = SseStreamDecoder::default();
         let mut byte_stream = std::pin::pin!(bytes);
         let mut after_first_token = false;
-        // When the wait for the next event ends. Restored once the events of
+        // When the wait for the next frame ends. Restored once the items of
         // a chunk have been taken. After the first token it is kept across a
-        // chunk that decodes to none, so keep-alive comments cannot hold a
+        // chunk with no frame in it, so keep-alive comments cannot hold a
         // silent reply open; before it they are all prefill sends.
         let mut deadline = tokio::time::Instant::now() + idle;
 
@@ -203,11 +205,13 @@ where
                     return;
                 }
             };
-            let (events, stop) = decoder.feed_bytes(&chunk);
-            let moved = !events.is_empty();
-            for event in events {
-                after_first_token |= event.as_ref().is_ok_and(is_generated_token);
-                yield event;
+            let (items, stop) = decoder.feed_frames(&chunk);
+            let moved = items.iter().any(|item| matches!(item, Ok(SseItem::Data { .. })));
+            for item in items {
+                if let Ok(SseItem::Data { events, .. }) = &item {
+                    after_first_token |= events.iter().any(is_generated_token);
+                }
+                yield item;
             }
             if stop {
                 break;
@@ -215,10 +219,6 @@ where
             if moved || !after_first_token {
                 deadline = tokio::time::Instant::now() + idle;
             }
-        }
-
-        if let Some(fallback) = decoder.finish() {
-            yield Ok(fallback);
         }
     }
 }
@@ -246,8 +246,8 @@ pub(crate) fn is_generated_token(event: &LlmStreamEvent) -> bool {
 /// than that timer (#1213).
 ///
 /// Invisible to clients: `parse_sse_frames` and every conforming SSE reader
-/// skip lines that are not `data:`, so this never puts the frame's
-/// `choices`-less chunk in front of a schema-validating client.
+/// skip lines that are not `data:`, so a client that did not order the frame
+/// never reads one.
 pub(crate) fn prefill_comment(processed: u32, total: u32) -> Bytes {
     Bytes::from(format!(": prefill {processed}/{total}\n\n"))
 }
@@ -278,3 +278,7 @@ pub(crate) fn first_byte_timeout_frame(model: &str, after: Duration) -> String {
 #[cfg(test)]
 #[path = "upstream_read_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "upstream_frames_tests.rs"]
+mod frames_tests;

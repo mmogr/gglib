@@ -176,11 +176,10 @@ fn first_tool_calls(response: &Value) -> Option<&Value> {
 ///
 /// `stream` is forced **off**. A repair cannot be judged until the call is
 /// complete, so streaming the re-issue would buy no latency while requiring a
-/// second SSE pipeline to run inside the first — with its own decoder,
-/// encoder and `[DONE]` bookkeeping. A buffered body is parsed
-/// once and synthesized into events by [`synthesize_tool_call_events`], which
-/// keeps every frame the client sees flowing through the one `SseEncoder` that
-/// has been encoding this turn all along.
+/// second SSE reader to run inside the first, with its own `[DONE]`
+/// bookkeeping. A buffered body is parsed once and synthesized into events by
+/// [`synthesize_tool_call_events`], which gglib writes as tool-call frames in
+/// the reply's own envelope, in place of the held ones.
 fn repair_body(request: &Value) -> Option<Bytes> {
     let mut repaired = request.clone();
     let obj = repaired.as_object_mut()?;

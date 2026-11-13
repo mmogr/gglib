@@ -9,8 +9,9 @@
 //! `return_progress` in its own body is told both, inside the `usage`
 //! object of the stream's usage frame. A chat run is such a client: it
 //! sets the key in the body it sends, whatever its own caller sent. Any
-//! other client is sent the frames it always was, byte for byte: a strict
-//! `OpenAI` client never sees a key it did not ask for.
+//! other client is sent llama-server's usage frame with nothing added: a
+//! strict `OpenAI` client never sees a key gglib made up. The reading is
+//! added by [`crate::frame_edit::add_reading`].
 
 use gglib_core::domain::agent::ContextReading;
 use gglib_core::request_pipeline::TruncationReport;

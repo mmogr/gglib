@@ -36,9 +36,14 @@ pub(crate) mod fallback_session;
 pub mod error_codes;
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
+// The edits a streamed frame takes on its way to the client.
+pub(crate) mod frame_edit;
 pub(crate) mod generation;
 pub(crate) mod host_facts;
 pub(crate) mod image_refusal;
+// llama-server's frames, as the drain tests feed them.
+#[cfg(test)]
+pub(crate) mod llama_frame_fixtures;
 // Public: the daemon mounts the same handler at `/api/images/generations`.
 pub mod images;
 pub(crate) mod images_stream;

@@ -16,7 +16,7 @@ use super::forward_stall_fixtures::{
     Reader, SEND, Then, at_once, done, finish, frame, progress, run_turn, text, upstream,
 };
 use super::*;
-use crate::upstream_read::upstream_events;
+use crate::upstream_read::upstream_frames;
 
 /// An idle bound none of the tests that use it waits out.
 const LONG_IDLE: Duration = Duration::from_mins(1);
@@ -62,7 +62,7 @@ async fn leave_after(
     });
 
     let drain = drain_events(
-        upstream_events(bytes, idle),
+        upstream_frames(bytes, idle),
         "m".to_owned(),
         ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         &connection,

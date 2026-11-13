@@ -1,6 +1,7 @@
 //! A streamed reply tells the client that asked how large the answering
 //! server's context was and how many messages were shortened to fit, and
-//! sends every other client the usage frame it always did.
+//! sends every other client llama-server's usage frame as it came, named as
+//! the served model.
 //!
 //! The real proxy, in front of a llama-server that streams a short reply and
 //! its usage. The fixtures launch every model at a context of 4096.
@@ -18,13 +19,14 @@ use fixtures::common::{parse_sse_frames, spawn_proxy};
 
 const MODEL: &str = "reading-model";
 
-/// A reply of one word, its end, and the usage llama-server reports for it.
+/// A reply of one word, its end, and the usage llama-server reports for it,
+/// each in the envelope llama-server writes.
 const REPLY: &str = concat!(
-    r#"data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}"#,
+    r#"data: {"choices":[{"finish_reason":null,"index":0,"delta":{"content":"Hello"}}],"created":1794482104,"id":"chatcmpl-up","model":"/models/m.gguf","system_fingerprint":"b12110-cd959bae9","object":"chat.completion.chunk"}"#,
     "\n\n",
-    r#"data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#,
+    r#"data: {"choices":[{"finish_reason":"stop","index":0,"delta":{}}],"created":1794482105,"id":"chatcmpl-up","model":"/models/m.gguf","system_fingerprint":"b12110-cd959bae9","object":"chat.completion.chunk"}"#,
     "\n\n",
-    r#"data: {"choices":[],"usage":{"prompt_tokens":812,"completion_tokens":96,"total_tokens":908}}"#,
+    r#"data: {"choices":[],"created":1794482105,"id":"chatcmpl-up","model":"/models/m.gguf","system_fingerprint":"b12110-cd959bae9","object":"chat.completion.chunk","usage":{"completion_tokens":96,"prompt_tokens":812,"total_tokens":908},"timings":{"prompt_n":812,"prompt_ms":1726.707}}"#,
     "\n\n",
     "data: [DONE]\n\n",
 );
@@ -104,10 +106,24 @@ fn usage_frame(wire: &str) -> (&str, Value) {
     (text, usage[0].clone())
 }
 
+/// llama-server's usage frame of [`REPLY`] as the proxy forwards it to a
+/// client that did not ask for a reading: only `model` changed, to the
+/// served name, and so written again from its JSON.
+fn upstream_usage_frame() -> String {
+    let payload = REPLY
+        .split("\n\n")
+        .find(|frame| frame.contains("\"usage\""))
+        .and_then(|frame| frame.strip_prefix("data: "))
+        .expect("the usage frame");
+    let mut frame: Value = serde_json::from_str(payload).expect("JSON");
+    frame["model"] = json!(MODEL);
+    format!("data: {frame}")
+}
+
 /// The reading is the context the answering server was launched with, and
 /// it goes only to a client whose own body set `return_progress`. A client
-/// that left the key out, or set it false, is sent the usage frame with the
-/// upstream's three counts and nothing else, byte for byte.
+/// that left the key out, or set it false, is sent llama-server's usage frame
+/// with nothing added.
 #[tokio::test]
 async fn a_streamed_reply_reports_the_launched_context_only_when_asked() {
     let (wire, _) = streamed(request(&hi(), Some(true))).await;
@@ -126,14 +142,8 @@ async fn a_streamed_reply_reports_the_launched_context_only_when_asked() {
 
     for unasked in [None, Some(false)] {
         let (wire, _) = streamed(request(&hi(), unasked)).await;
-        let (text, frame) = usage_frame(&wire);
-        let (id, created) = (frame["id"].as_str().unwrap(), &frame["created"]);
-        let want = format!(
-            "data: {{\"choices\":[],\"created\":{created},\"id\":\"{id}\",\"model\":\"{MODEL}\",\
-             \"object\":\"chat.completion.chunk\",\"usage\":{{\"completion_tokens\":96,\
-             \"prompt_tokens\":812,\"total_tokens\":908}}}}"
-        );
-        assert_eq!(text, want, "return_progress: {unasked:?}");
+        let (text, _) = usage_frame(&wire);
+        assert_eq!(text, upstream_usage_frame(), "return_progress: {unasked:?}");
         assert!(!wire.contains("context_size"), "{wire}");
         assert!(!wire.contains("trimmed_messages"), "{wire}");
     }

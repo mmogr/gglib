@@ -26,7 +26,7 @@ use fixtures::common::{
 
 const MODEL: &str = "chat-model";
 
-/// One non-streaming completion frame, which the proxy re-emits as SSE.
+/// One streamed chunk and `[DONE]`, which the proxy forwards.
 const CHAT_STREAM: &[u8] =
     b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"index\":0}]}\n\ndata: [DONE]\n\n";
 

@@ -121,7 +121,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`profiles.rs`** — Which `{model}:{profile}` variants `/v1/models` lists
 - **`model_detail_endpoint.rs`** — `GET /v1/gglib/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
 - **`load_endpoint.rs`** — `POST /v1/gglib/models/{name}/load`: admits a model as a chat completion would and drops the lease at once, so the model is resident before a turn needs it; answers a `LoadResponse`
-- **`forward.rs`** — HTTP forwarding to llama-server: the request shaped by core's `request_pipeline::apply`, and the streamed reply parsed and re-encoded
+- **`forward.rs`** — HTTP forwarding to llama-server: the request shaped by core's `request_pipeline::apply`, and the streamed reply forwarded frame for frame, its tool calls held for repair
+- **`frame_edit.rs`** — The only edits a forwarded frame takes: `model` named as served, the usage reading for a client that asked, an error frame's `code` as a string, and a finish frame's tool calls dropped once a repair has replaced them
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, and scanned by the drift alarm; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
@@ -145,7 +146,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
 - **`usage_reading.rs`** — What a streamed reply's usage frame also says of its context (the answering server's launched context and how many messages were shortened to fit), and that only a client whose own body set `return_progress` is told (see [The context reading](#the-context-reading))
 - **`client_send.rs`** — Each send of a streamed reply to its client waits at most the send bound, so a client that stopped reading is let go (see [When the upstream stops talking](#when-the-upstream-stops-talking))
-- **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the encoder, each read under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
+- **`upstream_read.rs`** — llama-server's streamed reply read into frames (each with its JSON and events) and comments for the drain, under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/gglib/proxy/status/stream` subscribers
 - **`sampling_audit.rs`** — Whether the sampling gglib resolved reached llama-server intact, compared against what a slot reports for the request; feeds `DashboardSnapshot.sampling_audit`
@@ -633,8 +634,8 @@ beside the upstream's counts:
 A client asks by setting `return_progress: true` in its own body, the key
 that also gets it `prompt_progress` frames. The proxy forces that key
 upstream for every streamed request, so what decides is what the client
-sent, read before the override. A client that did not send it gets the usage
-frame with the upstream's counts alone, byte for byte as before; chat runs
+sent, read before the override. A client that did not send it gets
+llama-server's usage frame with nothing added; chat runs
 set the key for every client, so a chat run's usage frame carries the reading.
 A reply that is not streamed carries none. The two names are `ContextReading`'s
 (`gglib_core::domain::agent`), which an agent run's `turn_usage` event
@@ -649,7 +650,7 @@ configurable.
 | Bound | Value | What it times | What the client gets |
 |-------|-------|---------------|----------------------|
 | First byte | 300 s a cycle | The wait for llama-server's response headers, that is, for a slot. Extended while another request is being served; otherwise retried twice, or not at all while a recycle is pending | A notice, `upstream_timeout`, `[DONE]` |
-| Idle | 300 s | Each read of the reply once it has begun. Time spent waiting on the client, or on a repair re-issue, does not count | The answer so far, a notice, `upstream_timeout`, `[DONE]`; only `[DONE]` if the answer had already finished |
+| Idle | 300 s | Each read of the reply once it has begun. Time spent waiting on the client, or on a repair re-issue, does not count, and nor does llama-server's `:` keep-alive comment once tokens flow (it is passed on to the client) | The answer so far, a notice, `upstream_timeout`, `[DONE]`; only `[DONE]` if the answer had already finished |
 | Repair re-issue | 60 s | The second request of a tool-call repair | The original tool call |
 
 A stall after the first generated token (content, reasoning or a tool call)

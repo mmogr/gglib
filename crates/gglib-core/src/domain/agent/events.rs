@@ -357,9 +357,9 @@ pub enum LlmStreamEvent {
     /// "no choices" as an empty keepalive/heartbeat frame.
     ///
     /// `error_type` and `code` default to `"server_error"`/`"upstream_error"`
-    /// respectively when the upstream frame omits them, mirroring the
-    /// existing convention in `gglib_proxy::forward`'s pre-flight upstream
-    /// error handling.
+    /// respectively when the upstream frame omits them or gives no string,
+    /// as the proxy's error before a reply does (`gglib_proxy`'s
+    /// `sse_stream`).
     UpstreamError {
         /// Human-readable error message.
         message: String,

@@ -14,7 +14,7 @@ use crate::generation::TurnGeneration;
 use crate::repair::RepairContext;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
-use crate::upstream_read::{StreamBounds, first_byte_timeout_frame, upstream_events};
+use crate::upstream_read::{StreamBounds, first_byte_timeout_frame, upstream_frames};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::sse::SseEncoder;
 
@@ -206,7 +206,7 @@ pub(crate) fn spawn_and_return(
                     enabled: repair_enabled,
                 });
                 let outcome = drain_events(
-                    upstream_events(resp.bytes_stream(), bounds.idle),
+                    upstream_frames(resp.bytes_stream(), bounds.idle),
                     model_name_owned.clone(),
                     tx,
                     &connection,

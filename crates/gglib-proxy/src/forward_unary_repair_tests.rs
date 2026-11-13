@@ -277,3 +277,17 @@ async fn a_unary_answer_names_the_served_model_not_the_gguf_path() {
     );
     assert_eq!(answer["model"], "m", "the second draw is named too");
 }
+
+/// A body that already names the served model, as the in-process shim's do,
+/// goes to the client as its own bytes: key order and spacing as written.
+/// Only a body the name changes is written again from its JSON.
+#[test]
+fn a_unary_answer_that_already_names_the_served_model_goes_out_as_it_came() {
+    let raw =
+        Bytes::from_static(br#"{ "object": "chat.completion",  "model": "m", "choices": [] }"#);
+    assert_eq!(served_as(raw.clone(), "m"), raw);
+
+    let renamed = served_as(Bytes::from_static(br#"{ "model": "/models/m.gguf" }"#), "m");
+    let renamed: serde_json::Value = serde_json::from_slice(&renamed).unwrap();
+    assert_eq!(renamed["model"], "m");
+}

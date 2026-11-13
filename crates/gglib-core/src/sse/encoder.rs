@@ -1,15 +1,12 @@
-//! Encode typed [`LlmStreamEvent`] values into OpenAI-compatible SSE
-//! `chat.completion.chunk` `data:` frames.
+//! Write gglib's own `chat.completion.chunk` SSE frames.
 //!
-//! This is the inverse of [`super::parser::parse_sse_frame`] and is used by
-//! the proxy to re-emit the events it decoded from llama-server.
-//! Re-emitting the canonical wire format ensures external clients
-//! (`OpenWebUI`, `OpenAI` SDKs, etc.) see only pristine `OpenAI` JSON
-//! regardless of which model is on the other end.
+//! The proxy forwards llama-server's frames as they came; this writes only
+//! the frames gglib adds to a reply: a notice as text, a repair's tool calls,
+//! the finish of a turn the proxy ends itself, and an in-stream error.
 //!
 //! # Frame envelope
 //!
-//! Every emitted chunk has this shape:
+//! Every chunk it writes has this shape:
 //!
 //! ```json
 //! {
@@ -21,13 +18,12 @@
 //! }
 //! ```
 //!
-//! Stable values (`id`, `model`, `created`) are carried on [`SseEncoder`] so
-//! they are identical across every chunk of a single response.
+//! The `id`, `model` and `created` are carried on [`SseEncoder`]; the proxy
+//! gives it those of the reply its frames join.
 
 use serde_json::{Value, json};
 
 use crate::LlmStreamEvent;
-use crate::domain::agent::ContextReading;
 
 /// The SSE stream-terminator sentinel.
 ///
@@ -39,10 +35,10 @@ use crate::domain::agent::ContextReading;
 /// be sent after `[DONE]` on the wire.
 pub const DONE_SENTINEL: &str = "data: [DONE]\n\n";
 
-/// Stateful encoder that produces OpenAI-shape SSE frames for one response.
+/// Encoder for gglib's own OpenAI-shape SSE frames in one response.
 ///
-/// The `id`, `model`, and `created` fields are stable across all frames the
-/// encoder produces, matching the `OpenAI` streaming contract.
+/// The `id`, `model`, and `created` fields are the same on every frame it
+/// writes.
 #[derive(Debug, Clone)]
 pub struct SseEncoder {
     /// Stable response id, e.g. `"chatcmpl-…"`.
@@ -51,9 +47,6 @@ pub struct SseEncoder {
     pub model: String,
     /// Unix epoch seconds when the response was created.
     pub created: u64,
-    /// What the usage frame also says of the context, for a client that
-    /// asked ([`Self::with_reading`]); `None` leaves the frame as it was.
-    reading: Option<ContextReading>,
 }
 
 impl SseEncoder {
@@ -64,24 +57,14 @@ impl SseEncoder {
             id: id.into(),
             model: model.into(),
             created,
-            reading: None,
         }
     }
 
-    /// Say `reading` inside `usage` in the usage frame, under the names a
-    /// `turn_usage` event spells them by, each only when it is known.
-    /// `None`, the default, writes the frame byte for byte as before.
-    #[must_use]
-    pub const fn with_reading(mut self, reading: Option<ContextReading>) -> Self {
-        self.reading = reading;
-        self
-    }
-
-    /// Encode a single [`LlmStreamEvent`] into one or more SSE frames.
+    /// Encode a text, tool-call or finish event as one SSE frame.
     ///
-    /// Returns `None` when the event is not meant to appear on the wire
-    /// ([`LlmStreamEvent::WritingTime`], which the proxy reads but never
-    /// forwards to clients).
+    /// Returns `None` for every other event: gglib writes no reasoning,
+    /// progress or usage frame of its own, and an error frame is
+    /// [`Self::upstream_error_frame`].
     ///
     /// For [`LlmStreamEvent::Done`], the returned `String` is only the
     /// terminating chunk (with `finish_reason` set) — it deliberately does
@@ -97,11 +80,6 @@ impl SseEncoder {
             LlmStreamEvent::TextDelta { content } => Some(self.frame(&json!({
                 "index": 0,
                 "delta": { "content": content },
-                "finish_reason": Value::Null,
-            }))),
-            LlmStreamEvent::ReasoningDelta { content } => Some(self.frame(&json!({
-                "index": 0,
-                "delta": { "reasoning_content": content },
                 "finish_reason": Value::Null,
             }))),
             LlmStreamEvent::ToolCallDelta {
@@ -133,104 +111,27 @@ impl SseEncoder {
                     "finish_reason": Value::Null,
                 })))
             }
-            LlmStreamEvent::PromptProgress {
-                processed,
-                total,
-                cached,
-                time_ms,
-            } => {
-                // prompt_progress frames live at the top level (no `choices`).
-                let value = json!({
-                    "id": self.id,
-                    "object": "chat.completion.chunk",
-                    "created": self.created,
-                    "model": self.model,
-                    "prompt_progress": {
-                        "processed": processed,
-                        "total": total,
-                        "cache": cached,
-                        "time_ms": time_ms,
-                    },
-                });
-                Some(format!("data: {value}\n\n"))
-            }
             LlmStreamEvent::Done { finish_reason } => Some(self.frame(&json!({
                 "index": 0,
                 "delta": {},
                 "finish_reason": finish_reason,
             }))),
-            LlmStreamEvent::Usage {
-                prompt_tokens,
-                completion_tokens,
-                total_tokens,
-                cached_tokens,
-            } => Some(self.usage_frame(
-                *prompt_tokens,
-                *completion_tokens,
-                *total_tokens,
-                *cached_tokens,
-            )),
-            LlmStreamEvent::WritingTime { .. } => None,
-            LlmStreamEvent::UpstreamError {
-                message,
-                error_type,
-                code,
-            } => Some(Self::upstream_error_frame(message, error_type, code)),
+            LlmStreamEvent::ReasoningDelta { .. }
+            | LlmStreamEvent::PromptProgress { .. }
+            | LlmStreamEvent::Usage { .. }
+            | LlmStreamEvent::WritingTime { .. }
+            | LlmStreamEvent::UpstreamError { .. } => None,
         }
-    }
-
-    /// Encode a [`LlmStreamEvent::Usage`] event.
-    ///
-    /// Per the `OpenAI` `stream_options.include_usage` convention, the
-    /// usage-totals chunk carries an empty `choices` array (not omitted —
-    /// see [`crate::LlmStreamEvent::Usage`] doc) and a top-level `usage`
-    /// object.
-    fn usage_frame(
-        &self,
-        prompt_tokens: u32,
-        completion_tokens: u32,
-        total_tokens: u32,
-        cached_tokens: Option<u32>,
-    ) -> String {
-        let mut usage = json!({
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": total_tokens,
-        });
-        // Re-emitted only when the upstream reported it, so the frame stays
-        // byte-identical to before for servers that don't. Clients such as the
-        // Copilot LLM Gateway extension surface this as `promptTokenDetails`.
-        if let Some(cached) = cached_tokens {
-            usage["prompt_tokens_details"] = json!({ "cached_tokens": cached });
-        }
-        // A reading is merged only for a client that asked for one. Its own
-        // serialisation leaves out what is unknown, so no key is `null`.
-        if let Some(reading) = self.reading
-            && let Ok(Value::Object(known)) = serde_json::to_value(reading)
-            && let Some(usage) = usage.as_object_mut()
-        {
-            usage.extend(known);
-        }
-        let value = json!({
-            "id": self.id,
-            "object": "chat.completion.chunk",
-            "created": self.created,
-            "model": self.model,
-            "choices": [],
-            "usage": usage,
-        });
-        format!("data: {value}\n\n")
     }
 
     /// One error frame, `data: {"error": {…}}`: the one place the in-stream
     /// error envelope is written.
     ///
-    /// An [`LlmStreamEvent::UpstreamError`] is encoded with it, and the proxy
-    /// calls it for the failures it reports itself.
+    /// The proxy calls it for the failures it reports itself.
     ///
     /// Deliberately bare — no `id`/`object`/`created`/`model` envelope and,
     /// crucially, no `choices` key at all (unlike every other frame this
-    /// encoder produces). Clients such as the GitHub Copilot LLM Gateway
+    /// encoder writes). Clients such as the GitHub Copilot LLM Gateway
     /// extension detect this exact shape
     /// (`'error' in obj && !('choices' in obj)`) to recognise an inline
     /// mid-stream failure; wrapping it in the usual envelope or adding an
@@ -266,7 +167,3 @@ impl SseEncoder {
 #[cfg(test)]
 #[path = "encoder_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "encoder_reading_tests.rs"]
-mod reading_tests;
