@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.36.0-rc.1](https://github.com/mmogr/gglib/compare/v0.35.0-rc.3...v0.36.0-rc.1) (2026-11-13)
+
+
+### What gglib now does
+
+* **agent:** a device's run waits for an agent slot instead of a 429 ([#1922](https://github.com/mmogr/gglib/issues/1922)) ([7c909ea](https://github.com/mmogr/gglib/commit/7c909ea0cfb0fa59de249355b93e0d825f7c9cc6)), closes [#1528](https://github.com/mmogr/gglib/issues/1528)
+* **cli:** config paths and install.sh report every gglib on PATH and the desktop app ([#1923](https://github.com/mmogr/gglib/issues/1923)) ([9f3e501](https://github.com/mmogr/gglib/commit/9f3e5010135197856ee9b2c87bafbad423e18dd9))
+* **runtime:** a launch's narration carries the fit its context was sized by ([#1924](https://github.com/mmogr/gglib/issues/1924)) ([6d1ad6b](https://github.com/mmogr/gglib/commit/6d1ad6bba40804eea5d67afdc678a635329273d0))
+
+
+### Documentation
+
+* **compat:** the promise names its CLI and settings list and its oldest library ([#1920](https://github.com/mmogr/gglib/issues/1920)) ([2609c74](https://github.com/mmogr/gglib/commit/2609c748aae95d915ec9a22a38b22d535830f02f))
+
+
+### Internal
+
+* **deps:** bump taiki-e/install-action ([#1917](https://github.com/mmogr/gglib/issues/1917)) ([0ea9ba1](https://github.com/mmogr/gglib/commit/0ea9ba1a3d829e735c3a1da45f95179c686148ee))
+
 ## [0.35.0-rc.3](https://github.com/mmogr/gglib/compare/v0.35.0-rc.2...v0.35.0-rc.3) (2026-11-13)
 
 
