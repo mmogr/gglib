@@ -210,3 +210,120 @@ fn a_command_takes_the_flag_exactly_when_it_uses_a_machine() {
         }
     }
 }
+
+/// A flag the paired machine would never receive is refused by name beside
+/// `--remote`, in the one sentence, and only the flags typed are named.
+#[test]
+fn a_flag_remote_would_not_carry_is_refused_by_name() {
+    assert_eq!(
+        refused(&[
+            "gglib",
+            "serve",
+            "7",
+            "--remote",
+            "--temperature",
+            "0.5",
+            "--port",
+            "9000"
+        ]),
+        "--remote has the paired machine load the model, and only its name and --context-size \
+         travel, so --port and --temperature would not reach it; drop them"
+    );
+    for flag in [
+        &["--mlock"][..],
+        &["--jinja", "on"],
+        &["--host", "0.0.0.0"],
+        &["--profile", "coding"],
+        &["--cache"],
+        &["--api-key", "k"],
+        &["--mtp-draft-n-max", "2"],
+    ] {
+        let argv = [&["gglib", "serve", "7", "--remote"][..], flag].concat();
+        let text = refused(&argv);
+        assert!(text.contains(&format!("so {} would", flag[0])), "{text}");
+    }
+    // Refused because typed, not for the value: `added` and `desc` are the
+    // defaults, typed out.
+    for flag in [
+        &["--sort", "added"][..],
+        &["--order", "desc"],
+        &["--tag", "chat"],
+        &["--min-params", "1"],
+        &["--max-params", "9"],
+        &["--min-speed", "1"],
+        &["--max-speed", "9"],
+    ] {
+        let argv = [&["gglib", "model", "list", "--remote"][..], flag].concat();
+        assert_eq!(
+            refused(&argv),
+            format!(
+                "--remote lists the paired machine's models as that machine sends them, so {} \
+                 would sort and filter nothing; drop it",
+                flag[0]
+            )
+        );
+    }
+    for client in ["dashboard", "cache-clear"] {
+        assert_eq!(
+            refused(&[
+                "gglib",
+                "proxy",
+                client,
+                "--remote",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "9887",
+                "--api-key",
+                "k",
+            ]),
+            "--remote names the paired machine's proxy, so --host, --port and --api-key would \
+             name a different one; drop them",
+            "{client}"
+        );
+    }
+}
+
+/// What does travel is not refused.
+#[test]
+fn what_remote_carries_is_not_refused() {
+    for argv in [
+        &["gglib", "serve", "7", "--remote", "--context-size", "8192"][..],
+        &["gglib", "serve", "7", "-c", "8192", "--remote", "-v"],
+        &[
+            "gglib",
+            "proxy",
+            "cache-clear",
+            "--remote",
+            "--session-id",
+            "s",
+        ],
+    ] {
+        assert!(remote(argv), "{}", argv.join(" "));
+    }
+}
+
+/// Each command [`CARRIED`] names declares `--remote`, and each argument it
+/// says travels is one that command takes: a renamed command or argument
+/// would otherwise leave the table refusing nothing, or the one that travels.
+#[test]
+fn the_carried_table_names_real_commands_and_arguments() {
+    let declared = declared_on();
+    let root = Cli::command();
+    for (path, travels, ..) in CARRIED {
+        assert!(
+            declared.iter().any(|d| d == path),
+            "`{path}` takes no --remote"
+        );
+        let mut command = &root;
+        for name in path.split(' ') {
+            command = command.find_subcommand(name).expect(path);
+        }
+        for id in travels {
+            assert!(
+                command.get_arguments().any(|arg| arg.get_id() == id),
+                "`{path}` has no argument `{id}`"
+            );
+        }
+    }
+}

@@ -50,17 +50,18 @@ impl Target {
     /// `proxy dashboard` and `proxy cache-clear` take a host, a port and a
     /// key because they connect to a proxy directly; on this machine those
     /// are the flags as typed (the port falling back to the stored
-    /// `proxy_port`, the key to the stored `proxy_api_key`), and on the
-    /// paired machine they are the tunnel's loopback port and the key this
-    /// machine received when it paired — the flags then name a proxy that is
-    /// not the one being asked about, and are refused rather than quietly
-    /// replaced.
+    /// `proxy_port`, the key to `GGLIB_API_KEY`, then the stored
+    /// `proxy_api_key`), and on the paired machine they are the tunnel's
+    /// loopback port and the key this machine received when it paired. The
+    /// flags would then name a proxy that is not the one being asked about,
+    /// so the parse refuses them typed beside `--remote`
+    /// ([`parse`](crate::remote_flag::parse)); what reaches here unrefused
+    /// is a default or the environment's, and is not used.
     ///
     /// # Errors
     ///
     /// On this machine, settings that cannot be read when no port was given.
-    /// On the paired machine, whatever [`far`](Self::far) says; and a host
-    /// or port given beside `--remote`.
+    /// On the paired machine, whatever [`far`](Self::far) says.
     pub(crate) async fn proxy_endpoint(
         self,
         ctx: &CliContext,
@@ -77,12 +78,6 @@ impl Target {
                 Ok((host, port, proxy_key(ctx, api_key).await))
             }
             Self::Remote => {
-                if host != "127.0.0.1" || port.is_some() || api_key.is_some() {
-                    anyhow::bail!(
-                        "--remote names the paired machine's proxy, so --host, --port and \
-                         --api-key would name a different one; drop them"
-                    );
-                }
                 let proxy = self.far(ctx).await?.proxy;
                 let port = proxy.port().ok_or_else(|| {
                     anyhow::anyhow!(

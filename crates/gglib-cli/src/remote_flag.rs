@@ -8,11 +8,15 @@
 //! [`Target::admit`] about the command it finds. A command that declares
 //! the flag but had it typed before its name is told where it goes. Which
 //! machine a command is for is read from the parse, on whichever command
-//! declared the flag, so no list here can disagree with the parser.
+//! declared the flag, so no list here can disagree with the parser. A flag
+//! typed beside `--remote` that the paired machine would never receive is
+//! refused by name, from the same parse: only the parse knows what was
+//! typed rather than defaulted or read from the environment.
 
 use std::ffi::OsString;
 
 use clap::error::{ContextKind, ContextValue, ErrorKind};
+use clap::parser::ValueSource;
 use clap::{ArgMatches, Args, CommandFactory as _, FromArgMatches as _};
 
 use crate::parser::Cli;
@@ -69,6 +73,9 @@ where
     match command.try_get_matches_from_mut(&argv) {
         Ok(mut matches) => {
             let remote = typed(&matches);
+            if remote && let Some(sentence) = not_carried(&matches) {
+                return Err(Refusal::Remote(sentence));
+            }
             let cli = Cli::from_arg_matches_mut(&mut matches)
                 .map_err(|error| Refusal::Clap(error.format(&mut command)))?;
             Ok((cli, remote))
@@ -113,6 +120,69 @@ fn typed(matches: &ArgMatches) -> bool {
         level = here.subcommand().map(|(_, sub)| sub);
     }
     false
+}
+
+/// The commands that take more than `--remote` carries to the paired
+/// machine: the arguments that do travel, why the rest do not, and what the
+/// rest would do there. Any other argument typed beside `--remote` on one of
+/// these is refused by name rather than dropped; a value from a default, a
+/// stored setting or the environment was not typed and is not refused.
+const CARRIED: [(&str, &[&str], &str, &str); 4] = [
+    (
+        "serve",
+        &["identifier", "ctx_size"],
+        "has the paired machine load the model, and only its name and --context-size travel",
+        "would not reach it",
+    ),
+    (
+        "model list",
+        &[],
+        "lists the paired machine's models as that machine sends them",
+        "would sort and filter nothing",
+    ),
+    (
+        "proxy dashboard",
+        &[],
+        "names the paired machine's proxy",
+        "would name a different one",
+    ),
+    (
+        "proxy cache-clear",
+        &["session_id"],
+        "names the paired machine's proxy",
+        "would name a different one",
+    ),
+];
+
+/// The sentence for flags typed beside `--remote` that [`CARRIED`] says the
+/// paired machine would never receive, named as `--help` lists them; `None`
+/// when everything typed travels.
+fn not_carried(matches: &ArgMatches) -> Option<String> {
+    let root = Cli::command();
+    let (mut command, mut here, mut path) = (&root, matches, Vec::new());
+    while let Some((name, sub)) = here.subcommand() {
+        command = command.find_subcommand(name)?;
+        here = sub;
+        path.push(name);
+    }
+    let (_, travels, why, would) = CARRIED.iter().find(|(name, ..)| *name == path.join(" "))?;
+    let flags: Vec<String> = command
+        .get_arguments()
+        .filter(|arg| arg.get_id() != REMOTE && !travels.contains(&arg.get_id().as_str()))
+        .filter(|arg| here.value_source(arg.get_id().as_str()) == Some(ValueSource::CommandLine))
+        .map(|arg| {
+            arg.get_long()
+                .map_or_else(|| arg.get_id().to_string(), |long| format!("--{long}"))
+        })
+        .collect();
+    let (last, rest) = flags.split_last()?;
+    let named = if rest.is_empty() {
+        last.clone()
+    } else {
+        format!("{} and {last}", rest.join(", "))
+    };
+    let them = if rest.is_empty() { "it" } else { "them" };
+    Some(format!("--remote {why}, so {named} {would}; drop {them}"))
 }
 
 /// Whether clap refused `--remote` itself, as an argument the command does
