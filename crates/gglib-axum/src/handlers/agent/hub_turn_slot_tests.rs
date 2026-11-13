@@ -17,7 +17,7 @@ use crate::handlers::agent::image_gate::image_gate_tests::model;
 use crate::handlers::agent::run_fixture::{
     End, LOCAL, finished_reply, launch, paced, prepared, saved, saving, settled, state,
 };
-use crate::handlers::agent::slot_line::{AGENT_SLOT_WAIT, Slot, SlotLine};
+use crate::handlers::agent::slot_line::{AGENT_SLOT_LINE, AGENT_SLOT_WAIT, Slot, SlotLine};
 use crate::state::AppState;
 
 /// `state`, its line of `cap` waiters giving up after `bound`.
@@ -73,6 +73,19 @@ fn the_line_waits_two_minutes() {
     assert_eq!(AGENT_SLOT_WAIT, Duration::from_mins(2));
 }
 
+/// The daemon's own line holds sixteen: the seventeenth is refused.
+#[tokio::test]
+async fn the_daemons_line_holds_sixteen() {
+    assert_eq!(AGENT_SLOT_LINE, 16);
+    let (_dir, state) = state().await;
+    let _held = take_permit(&state).expect("the one slot");
+    let line: Vec<Slot> = (0..16).map(|_| join(&state)).collect();
+
+    assert!(state.agent_line.take_or_join().is_none());
+    drop(line);
+    assert!(state.agent_line.take_or_join().is_some());
+}
+
 /// With the one slot held, a device's turn is accepted and waits, first in
 /// line, `queued`, having written nothing; then, its slot free, it runs on,
 /// to its model's load. This machine's own turn is refused at once.
@@ -93,7 +106,17 @@ async fn a_devices_turn_waits_in_line_and_this_machines_is_refused() {
     assert!(created.created);
     let wait = frame(&state, &phone, "d1", in_line(1)).await;
     assert_eq!(wait["said"], "Waiting for a free agent slot, 1 in line…");
-    assert!(wait.get("model").is_none());
+    let keys: Vec<&String> = wait.as_object().unwrap().keys().collect();
+    let named = [
+        "elapsed_ms",
+        "position",
+        "reason",
+        "said",
+        "step",
+        "total",
+        "type",
+    ];
+    assert_eq!(keys, named, "no model: {wait}");
     assert_eq!(status(&state, &phone, "d1"), RunStatus::Queued);
     assert_eq!(saved(&state, id).await.len(), 2, "nothing written");
 
@@ -192,6 +215,82 @@ async fn a_run_cancelled_in_line_leaves_it_and_the_next_moves_up() {
     assert_eq!(saved(&state, id).await.len(), 2, "nothing written");
     assert_eq!(state.agent_semaphore.available_permits(), 0);
     state.runs.shutdown();
+}
+
+/// A waiting run says so again each second, with the time it has waited.
+#[tokio::test]
+async fn a_waiting_run_says_so_again_each_second() {
+    let (_dir, state) = state().await;
+    let _held = take_permit(&state).expect("the one slot");
+    let id = chat(&state, None).await;
+    let phone = device("phone");
+    start(&state, phone.clone(), "d1", turn(id, "later"), None)
+        .await
+        .unwrap();
+
+    let waited = |f: &Value| f["elapsed_ms"].as_u64().is_some_and(|ms| ms >= 1000);
+    let again = frame(&state, &phone, "d1", waited).await;
+    assert_eq!(again["reason"], "agent_slot");
+    assert_eq!(again["position"], 1);
+    let said = again["said"].as_str().unwrap();
+    assert!(
+        said.starts_with("Waiting for a free agent slot, 1 in line… ") && said.ends_with(" s"),
+        "{said}"
+    );
+    state.runs.shutdown();
+}
+
+/// A forgotten device's phone-kept chat run leaves the line, and the run
+/// behind it moves up. Its turn on a hub chat is the chat's: it keeps its
+/// place.
+#[tokio::test]
+async fn a_forgotten_devices_chat_run_leaves_the_line() {
+    let (_dir, state) = state().await;
+    model(&state, "qwen-vision", true).await;
+    let _held = take_permit(&state).expect("the one slot");
+    let phone = device("phone");
+    let body = json!({ "model": "qwen-vision", "messages": [{ "role": "user", "content": "hi" }] });
+    let start_chat = crate::handlers::agent::chat_turn::start;
+    start_chat(&state, "phone", "p1", body, false.into())
+        .await
+        .unwrap();
+    let id = chat(&state, None).await;
+    start(&state, phone.clone(), "d1", turn(id, "later"), None)
+        .await
+        .unwrap();
+    frame(&state, &phone, "d1", in_line(2)).await;
+
+    assert_eq!(state.runs.forget_device("phone"), 1);
+    frame(&state, &phone, "d1", in_line(1)).await;
+
+    assert!(state.runs.existing(&phone, "p1").unwrap().is_none());
+    assert_eq!(status(&state, &phone, "d1"), RunStatus::Queued);
+    assert_eq!(state.agent_semaphore.available_permits(), 0);
+    state.runs.shutdown();
+}
+
+/// The daemon stopping ends a waiting run: it leaves the line, having taken
+/// no slot and written nothing.
+#[tokio::test]
+async fn a_waiting_run_leaves_the_line_at_shutdown() {
+    let (_dir, state) = state().await;
+    let _held = take_permit(&state).expect("the one slot");
+    let id = chat(&state, None).await;
+    let phone = device("phone");
+    start(&state, phone.clone(), "d1", turn(id, "later"), None)
+        .await
+        .unwrap();
+    frame(&state, &phone, "d1", in_line(1)).await;
+
+    state.runs.shutdown();
+    settled(&state).await;
+
+    let Slot::Waiting(place) = join(&state) else {
+        unreachable!("`join` takes a place")
+    };
+    assert_eq!(place.position(), 1, "the line is empty again");
+    assert_eq!(state.agent_semaphore.available_permits(), 0);
+    assert_eq!(saved(&state, id).await.len(), 2, "nothing written");
 }
 
 /// A run that waits past the bound ends `failed` `agent_busy`, having
