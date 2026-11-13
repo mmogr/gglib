@@ -189,6 +189,15 @@ async fn a_launched_resident_records_its_projector_and_serves_the_next_request()
     assert!(first.target.just_started);
     let installed = set.queue().slot(PRIMARY_SLOT).expect("a resident");
     assert_eq!(installed.projector, Some(projector));
+    // The launch's narration carries the fit its context was sized by,
+    // through the queue's copy of the request and onto the target.
+    let fit = first
+        .target
+        .narration
+        .as_ref()
+        .and_then(|n| n.fit.clone())
+        .expect("the launch's narration has its fit");
+    assert_eq!(fit.serves_at, installed.context_size);
     // The first request ends, and its lease with it: the next is not queued
     // behind it.
     let port = first.target.port;
@@ -201,6 +210,9 @@ async fn a_launched_resident_records_its_projector_and_serves_the_next_request()
     assert!(!second.target.just_started, "the resident serves");
     assert_eq!(second.target.port, port);
     assert_eq!(core.read().await.count(), 1, "one server, launched once");
+    // The reuse shows the fit of the launch that is serving it.
+    let reused = second.target.narration.as_ref().and_then(|n| n.fit.clone());
+    assert_eq!(reused, Some(fit));
 
     core.write().await.kill(LAUNCHED_ID).await.ok();
 }

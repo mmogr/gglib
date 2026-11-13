@@ -483,9 +483,6 @@ impl ResidentSet {
         let catalog = Arc::clone(&self.catalog);
         let observer = Arc::clone(&self.observer);
         let launch_request = LaunchRequest {
-            spec: request.spec.clone(),
-            opts: request.opts.clone(),
-            context: request.context,
             slot,
             evict,
             // A co-resident model gets no prompt cache of its own; the primary
@@ -495,10 +492,10 @@ impl ResidentSet {
             } else {
                 vram::secondary_cache_ram()
             },
-            // Carried through, not re-derived: the budget below reads the same
-            // field the launch waits on.
-            health_deadline_secs: request.health_deadline_secs,
-            fit: request.fit.clone(),
+            // The rest is carried through, not re-derived (the budget below
+            // reads the same `health_deadline_secs` the launch waits on), and
+            // by struct update, so a field added later cannot be left behind.
+            ..request.clone()
         };
 
         // Sized to this model, not to a constant, and read from the same field

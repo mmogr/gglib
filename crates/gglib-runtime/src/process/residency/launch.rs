@@ -45,6 +45,7 @@ pub(super) mod launch_files;
 /// A struct rather than nine parameters because every field is decided at a
 /// different point in `admit`, and threading them positionally through a
 /// `tokio::spawn` boundary made the ordering easy to get silently wrong.
+#[derive(Clone)]
 pub(super) struct LaunchRequest {
     /// The model to launch, already resolved from the catalog.
     pub spec: ModelLaunchSpec,
