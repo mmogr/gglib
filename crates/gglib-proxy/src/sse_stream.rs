@@ -17,6 +17,7 @@ use crate::upstream_health::UpstreamHealth;
 use crate::upstream_read::{StreamBounds, first_byte_timeout_frame, upstream_frames};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::sse::SseEncoder;
+use gglib_core::sse::parser::relayed_error;
 
 /// Maximum number of retry attempts for the pre-generation connection phase
 /// (TCP send / first-byte-deadline wait) before falling back to an inline
@@ -347,20 +348,10 @@ fn upstream_error_body(model: &str, status: StatusCode, body: &[u8]) -> String {
     )]
     let (message, error) = match serde_json::from_slice::<serde_json::Value>(body) {
         Ok(upstream) => {
-            let msg = upstream
-                .pointer("/error/message")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("upstream returned an error");
-            let typ = upstream
-                .pointer("/error/type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("server_error");
-            let code = upstream
-                .pointer("/error/code")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("upstream_error");
-            let error = SseEncoder::upstream_error_frame(msg, typ, code);
-            (msg.to_owned(), error)
+            let (msg, typ, code) =
+                relayed_error(upstream.get("error").unwrap_or(&serde_json::Value::Null));
+            let error = SseEncoder::upstream_error_frame(&msg, &typ, &code);
+            (msg, error)
         }
         Err(_) => {
             let raw = String::from_utf8_lossy(body);
