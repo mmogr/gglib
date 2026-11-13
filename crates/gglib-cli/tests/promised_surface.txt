@@ -449,6 +449,9 @@ gglib serve
   --frequency-penalty
   --host
   --jinja
+    auto
+    on
+    off
   --max-tokens
   --min-p
   --mlock

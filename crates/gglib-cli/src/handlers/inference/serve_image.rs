@@ -53,7 +53,7 @@ impl ChatFlags<'_> {
         if self.context.mlock {
             typed.push("--mlock");
         }
-        if self.options.jinja {
+        if self.options.jinja.is_some() {
             typed.push("--jinja");
         }
         if self.sampling.clone().into_override().is_some() {

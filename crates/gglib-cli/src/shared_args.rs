@@ -249,9 +249,11 @@ pub struct AccessArgs {
 /// Serve-command options that don't belong to another group.
 #[derive(Args, Debug, Clone)]
 pub struct ServeOptions {
-    /// Force-enable Jinja template parsing for chat templates
-    #[arg(long)]
-    pub jinja: bool,
+    /// Jinja templates for this launch: `on` sends --jinja, `off` sends
+    /// --no-jinja, `auto` leaves it to the model's own default and its
+    /// tags, as omitting the flag does.
+    #[arg(long, value_name = "auto|on|off", value_parser = ["auto", "on", "off"])]
+    pub jinja: Option<String>,
     /// Host the OpenAI-compatible endpoint binds to.
     ///
     /// Omit to use the stored `proxy_host` setting, loopback until one is
