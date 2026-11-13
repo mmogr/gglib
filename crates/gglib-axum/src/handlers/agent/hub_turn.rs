@@ -225,7 +225,22 @@ pub(super) async fn start(
             created: false,
         });
     }
-    let plan = plan(state, &scope, turn, folder).await?;
+    let Plan {
+        model,
+        chat,
+        transcript,
+        asked,
+        folder,
+    } = plan(state, &scope, turn, folder).await?;
+    // The paired machine's model is listed by the name the chat has for it:
+    // this machine's catalogue does not hold it.
+    let shown = if chat.far.is_some() {
+        model.clone()
+    } else {
+        shown_model(state, &model).await
+    };
+    // Taken last, with nothing awaited between a place in line and the run
+    // that waits in it: a place no run yet waits in holds the line up.
     let slot = if scope.device().is_some() {
         state.agent_line.take_or_join()
     } else {
@@ -234,20 +249,6 @@ pub(super) async fn start(
     let slot = slot.ok_or_else(agent_busy)?;
     // The run exists before its model does: found on its port or loaded,
     // and its loop composed, as the run's own work.
-    let Plan {
-        model,
-        chat,
-        transcript,
-        asked,
-        folder,
-    } = plan;
-    // The paired machine's model is listed by the name the chat has for it:
-    // this machine's catalogue does not hold it.
-    let shown = if chat.far.is_some() {
-        model.clone()
-    } else {
-        shown_model(state, &model).await
-    };
     let late = late_on(Arc::clone(state), model, chat, asked, folder);
     begin(state, scope, id, shown, transcript, late, slot)
 }

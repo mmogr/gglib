@@ -130,8 +130,10 @@ pub(super) async fn start(
         });
     }
     let (model, chat) = read(state, &body, drawing).await?;
-    let slot = state.agent_line.take_or_join().ok_or_else(agent_busy)?;
     let shown = shown_model(state, &model).await;
+    // Taken last, with nothing awaited between a place in line and the run
+    // that waits in it: a place no run yet waits in holds the line up.
+    let slot = state.agent_line.take_or_join().ok_or_else(agent_busy)?;
     let late = late_on(
         Arc::clone(state),
         model,
