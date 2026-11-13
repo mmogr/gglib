@@ -1033,7 +1033,7 @@ tools are offered to whatever model the request names: the model list says
 nothing yet of which models call tools, so a model that cannot is offered
 them anyway and may answer oddly. Every such run takes one of the
 desktop's four agent-loop slots, which a device's runs share with the
-desktop page's chats, those that draw included. While four run at once, a
+desktop page's chats and runs, those that draw included. While four run at once, a
 device's run, this one or a turn on a hub chat, waits in line for a slot:
 the `PUT` answers at once, and the run, still `queued`, says so each second
 as a `waiting` event with `"reason": "agent_slot"`, its `position` (1 is
