@@ -37,7 +37,7 @@ a prop.
 | `ConnectionRow.tsx` | One in-flight request: model name, phase, and a prompt-progress bar while the prompt is being processed |
 | `ModelSignalsCard.tsx` | One model's per-model signals, under the rules `gglib proxy dashboard` prints them by: only what fired, repairs as a ratio, trips by detector, agent-path trips against their own decisions, the repeat counters under "Observed" |
 | `ProxyAdmissionPanel.tsx` | Which models hold VRAM, what is queued behind them, the render on the GPU, why the second slot is or is not in use, requests admitted and swaps |
-| `ProxyLaunchPanel.tsx` | What the running model's launch decided, and why, as the backend worded it |
+| `ProxyLaunchPanel.tsx` | What the running model's launch decided, and why, and the fit its context was sized by, as the backend worded it |
 | `ProxyCachePanel.tsx` | The prompt cache's warnings, measured reuse, RAM budget and disk cache |
 | `ProxySamplingPanel.tsx` | Whether the resolved sampling reached llama-server, blind kept apart from agreement, and the build's baseline |
 | `ProxyReasoningRows.tsx` | The reasoning controls gglib sent, and the client fields the trust gate dropped |

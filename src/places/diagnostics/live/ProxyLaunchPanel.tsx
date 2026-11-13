@@ -17,7 +17,7 @@
  */
 
 import type { FC } from 'react';
-import type { LaunchNarration } from '../../../services/transport/types/dashboard';
+import type { LaunchDecision, LaunchNarration } from '../../../services/transport/types/dashboard';
 
 export interface ProxyLaunchPanelProps {
   /** `null`/`undefined` before the first request resolves a model. */
@@ -46,6 +46,20 @@ export function headline(launch: LaunchNarration): string {
   return parts.join(' · ');
 }
 
+/** One row: the label, the value, and the reason dimmed after them when there is one. */
+const DecisionRow: FC<{ decision: LaunchDecision; labelWidth: string }> = ({ decision, labelWidth }) => (
+  <div className="flex items-baseline gap-md">
+    <span className={`text-xs text-text-muted ${labelWidth} shrink-0`}>{decision.label}</span>
+    <span className="text-sm text-text font-mono tabular-nums">{decision.value}</span>
+    {/*
+      The provenance is why this panel exists rather than a config
+      dump, but it is the secondary read — dimmed so the eye takes the
+      decisions first and the reasons second.
+    */}
+    {decision.source && <span className="text-xs text-text-muted ml-auto">({decision.source})</span>}
+  </div>
+);
+
 export const ProxyLaunchPanel: FC<ProxyLaunchPanelProps> = ({ launch }) => {
   if (!launch) {
     return <p className="text-sm text-text-muted">No model resolved yet.</p>;
@@ -57,20 +71,23 @@ export const ProxyLaunchPanel: FC<ProxyLaunchPanelProps> = ({ launch }) => {
 
       <div className="flex flex-col gap-xs p-md rounded-base bg-surface-elevated">
         {launch.decisions.map((decision) => (
-          <div key={decision.label} className="flex items-baseline gap-md">
-            <span className="text-xs text-text-muted w-16 shrink-0">{decision.label}</span>
-            <span className="text-sm text-text font-mono tabular-nums">{decision.value}</span>
-            {/*
-              The provenance is why this panel exists rather than a config
-              dump, but it is the secondary read — dimmed so the eye takes the
-              decisions first and the reasons second.
-            */}
-            {decision.source && (
-              <span className="text-xs text-text-muted ml-auto">({decision.source})</span>
-            )}
-          </div>
+          <DecisionRow key={decision.label} decision={decision} labelWidth="w-16" />
         ))}
       </div>
+
+      {/*
+        The fit the context was sized by, in the daemon's words: the
+        sentence, then the figures `gglib model explain` prints. Absent for
+        an image model, and from a hub older than the field.
+      */}
+      {launch.fit && (
+        <div role="group" aria-label="Context fit" className="flex flex-col gap-xs p-md rounded-base bg-surface-elevated">
+          <p className="text-sm text-text">{launch.fit.sentence}</p>
+          {launch.fit.figures.map((figure) => (
+            <DecisionRow key={figure.label} decision={figure} labelWidth="w-28" />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
