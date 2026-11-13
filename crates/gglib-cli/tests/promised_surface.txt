@@ -487,11 +487,11 @@ proxy_cache_disk_gb
 proxy_cache_on_disk
 proxy_host
 proxy_port
-remote_devices
-remote_enabled
-remote_pairing
-remote_serve
-setup_completed
+remote_devices (hidden)
+remote_enabled (hidden)
+remote_pairing (hidden)
+remote_serve (hidden)
+setup_completed (hidden)
 start_at_login
 title_generation_prompt
 tool_call_repair
