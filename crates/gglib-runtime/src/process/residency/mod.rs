@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::RuntimeKind;
+use gglib_core::domain::{ContextFit, RuntimeKind};
 use gglib_core::ports::{
     Admission, AdmitObserver, CatalogError, GenerationTurn, LaunchOverrides, ModelCatalogPort,
     ModelLaunchSpec, ModelRuntimeError, PinnedSpec, ResidencyObserver, RunningTarget,
@@ -183,7 +183,7 @@ impl ResidentSet {
             .binary(RuntimeKind::StableDiffusion)
             .to_path_buf();
         launch::launch_files::preflight(&spec, &sd_server).await?;
-        let prepared = prepare(
+        let request = prepare(
             spec,
             &self.template_for(spec_id),
             self.cache_ram,
@@ -191,7 +191,7 @@ impl ResidentSet {
             default_ctx,
             &overrides,
         );
-        self.wait_for_slot(core, prepared.request, observer).await
+        self.wait_for_slot(core, request, observer).await
     }
 
     /// The launch gglib would make for `spec` now, without making it: the
@@ -498,6 +498,7 @@ impl ResidentSet {
             // Carried through, not re-derived: the budget below reads the same
             // field the launch waits on.
             health_deadline_secs: request.health_deadline_secs,
+            fit: request.fit.clone(),
         };
 
         // Sized to this model, not to a constant, and read from the same field
@@ -659,18 +660,13 @@ impl ResidentSet {
 /// What a launch of `spec` resolves before it joins the queue, from the
 /// options `template` and this request's overrides: the options, the
 /// context and the rung that chose it, and the fit the context was sized
-/// by. One function for the launch and for the plan of one, so the two
-/// cannot disagree.
-struct Prepared {
-    /// The launch, slot and eviction still the queue's to decide.
-    request: LaunchRequest,
-    /// What this machine would fit, and what the fit worked from: `None`
-    /// for an image model, which has no context. With
-    /// `GGLIB_DISABLE_CONTEXT_FIT` set nothing was fitted, and the inputs
-    /// say nothing either.
-    fit: Option<(Option<u64>, gglib_core::domain::FitInputs)>,
-}
-
+/// by. The slot and the eviction are still the queue's to decide. One
+/// function for the launch and for the plan of one, so the two cannot
+/// disagree.
+///
+/// The fit is `None` for an image model, which has no context. With
+/// `GGLIB_DISABLE_CONTEXT_FIT` set nothing was fitted, and its figures say
+/// nothing either.
 fn prepare(
     spec: ModelLaunchSpec,
     template: &ServerConfigOptions,
@@ -678,7 +674,7 @@ fn prepare(
     num_ctx: Option<u64>,
     default_ctx: Option<u64>,
     overrides: &LaunchOverrides,
-) -> Prepared {
+) -> LaunchRequest {
     let health_deadline_secs = crate::process::health::launch_deadline_secs(spec.file_size_bytes);
     let cache_ram = overrides.cache_ram.unwrap_or(cache_ram);
 
@@ -687,16 +683,14 @@ fn prepare(
     // and its family's margin (`secondary_verdict`), and launched with
     // the recipe.
     if spec.runtime() == RuntimeKind::StableDiffusion {
-        return Prepared {
-            request: LaunchRequest {
-                spec,
-                opts: ServerConfigOptions::default(),
-                context: (0, ContextSizeSource::BuiltInDefault),
-                slot: PRIMARY_SLOT, // replaced by the queue's decision
-                evict: None,
-                cache_ram,
-                health_deadline_secs,
-            },
+        return LaunchRequest {
+            spec,
+            opts: ServerConfigOptions::default(),
+            context: (0, ContextSizeSource::BuiltInDefault),
+            slot: PRIMARY_SLOT, // replaced by the queue's decision
+            evict: None,
+            cache_ram,
+            health_deadline_secs,
             fit: None,
         };
     }
@@ -765,17 +759,16 @@ fn prepare(
         spec.server_defaults.as_ref(),
     );
 
-    Prepared {
-        request: LaunchRequest {
-            spec,
-            opts,
-            context: (resolved_ctx, ctx_source),
-            slot: PRIMARY_SLOT, // replaced by the queue's decision
-            evict: None,
-            cache_ram,
-            health_deadline_secs,
-        },
-        fit: Some(fit.unwrap_or_else(|| (None, gglib_core::domain::FitInputs::default()))),
+    let (fitted, inputs) = fit.unwrap_or_default();
+    LaunchRequest {
+        spec,
+        opts,
+        context: (resolved_ctx, ctx_source),
+        slot: PRIMARY_SLOT, // replaced by the queue's decision
+        evict: None,
+        cache_ram,
+        health_deadline_secs,
+        fit: Some(ContextFit::new(resolved_ctx, ctx_source, fitted, &inputs)),
     }
 }
 

@@ -11,7 +11,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::launch_narration::LaunchNarration;
+use super::launch_narration::{LaunchDecision, LaunchNarration};
 use crate::server_config::ContextSizeSource;
 
 /// Whose choice an argument is.
@@ -124,6 +124,15 @@ pub struct ContextFit {
     /// fit spends, with the verdict: `fits (35.81 GiB of 43.20 GiB usable)`;
     /// `None` when the budget, the weights or the KV cost is unknown.
     pub note: Option<String>,
+    /// The figures above as a person reads them (composed by
+    /// [`ContextFit::new`]): the note as `memory` when there is one, then
+    /// the budget, the weights, the KV cost a token and at the served
+    /// context, the trained window and the context before snapping, each
+    /// `unknown` when it could not be read. `gglib model explain` and the
+    /// GUI print these rows as they are; the launch banner has room for one
+    /// ([`ContextFit::banner_row`]).
+    #[serde(default)]
+    pub figures: Vec<LaunchDecision>,
 }
 
 /// Why a launch unloads the model it names first.

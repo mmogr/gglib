@@ -76,7 +76,8 @@
         "model_name": "m",
         "quantization": null,
         "weights_bytes": 0,
-        "decisions": []
+        "decisions": [],
+        "fit": null
       },
       "fit": null
     },
@@ -147,7 +148,8 @@
         "model_name": "m",
         "quantization": null,
         "weights_bytes": 0,
-        "decisions": []
+        "decisions": [],
+        "fit": null
       },
       "fit": null
     },
@@ -197,7 +199,8 @@
         "model_name": "m",
         "quantization": null,
         "weights_bytes": 0,
-        "decisions": []
+        "decisions": [],
+        "fit": null
       },
       "fit": null
     },

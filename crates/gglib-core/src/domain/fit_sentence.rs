@@ -8,6 +8,7 @@
 //! [`usable_share`] of the budget), and this only spells it.
 
 use super::context_fit::FitInputs;
+use super::launch_narration::LaunchDecision;
 use super::launch_plan::ContextFit;
 use super::recommendation::usable_share;
 use crate::download::format::format_size;
@@ -36,10 +37,30 @@ impl ContextFit {
             unsnapped: inputs.unsnapped,
             sentence: String::new(),
             note: None,
+            figures: Vec::new(),
         };
         fit.sentence = fit_sentence(&fit);
         fit.note = fit_note(&fit);
+        fit.figures = fit_figures(&fit);
         fit
+    }
+
+    /// The fit as one row of the launch banner, which has room for one:
+    /// `fit  40005 before snapping  (48.00 GiB budget, 2.33 GiB weights,
+    /// 1097000 bytes/token)`. The context row above it says the rung; this
+    /// says what the rung was snapped from, and from what.
+    #[must_use]
+    pub fn banner_row(&self) -> LaunchDecision {
+        LaunchDecision::new(
+            "fit",
+            format!("{} before snapping", count(self.unsnapped)),
+            format!(
+                "{} budget, {} weights, {} bytes/token",
+                gib(self.budget_bytes),
+                gib(self.weights_bytes),
+                count(self.kv_bytes_per_token)
+            ),
+        )
     }
 }
 
@@ -95,6 +116,43 @@ pub(crate) fn fit_note(fit: &ContextFit) -> Option<String> {
         format_size(m.need),
         format_size(m.usable)
     ))
+}
+
+/// The fit's figures as rows: the note as `memory` when there is one, then
+/// each figure, `unknown` when it could not be read (a refusal, never a
+/// zero).
+fn fit_figures(fit: &ContextFit) -> Vec<LaunchDecision> {
+    let mut rows: Vec<LaunchDecision> = fit
+        .note
+        .iter()
+        .map(|note| LaunchDecision::bare("memory", note.clone()))
+        .collect();
+    rows.extend([
+        LaunchDecision::bare("device budget", gib(fit.budget_bytes)),
+        LaunchDecision::bare("weights", gib(fit.weights_bytes)),
+        LaunchDecision::bare("kv bytes/token", count(fit.kv_bytes_per_token)),
+        LaunchDecision::bare("kv cache", gib(fit.kv_bytes)),
+        LaunchDecision::bare("trained window", count(fit.trained_ctx)),
+        LaunchDecision::bare("before snapping", count(fit.unsnapped)),
+    ]);
+    rows
+}
+
+/// A figure as a number, or `unknown`.
+fn count(v: Option<u64>) -> String {
+    v.map_or_else(|| "unknown".to_owned(), |n| n.to_string())
+}
+
+/// Bytes as GiB to two places, or `unknown`.
+fn gib(v: Option<u64>) -> String {
+    v.map_or_else(
+        || "unknown".to_owned(),
+        |b| {
+            #[allow(clippy::cast_precision_loss)]
+            let g = b as f64 / (1024.0 * 1024.0 * 1024.0);
+            format!("{g:.2} GiB")
+        },
+    )
 }
 
 /// The served context's memory against what the runtime spends.

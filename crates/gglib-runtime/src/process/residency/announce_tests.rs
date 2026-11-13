@@ -278,6 +278,7 @@ async fn a_swap_announces_the_displaced_model_unloaded_before_it_is_stopped() {
         evict: None,
         cache_ram: CacheRamSetting::Auto,
         health_deadline_secs: 5,
+        fit: None,
     };
 
     let refused = set.launch(&core, &request, slot, evict).await;

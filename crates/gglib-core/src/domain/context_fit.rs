@@ -91,11 +91,13 @@ pub fn fit_context(
 /// visible when someone asks whether those judgements were right, rather than
 /// having to be re-derived from the rung alone.
 ///
-/// `gglib model explain` is where a person reads it, through
+/// A person reads it as a [`ContextFit`](super::ContextFit): from
+/// `gglib model explain` before a launch, through
 /// `residency::explain::explain_fit`, which supplies the same two budgets
-/// `admit` does. Before that it reached only a `debug!` line written after a
-/// launch, which is not a reading anyone could take across a catalog — and
-/// ADR 0009's first kill criterion needs exactly that.
+/// `admit` does, and from the running launch's narration (the banner,
+/// `GET /v1/gglib/proxy/status` and the GUI's launch panel). ADR 0009's first
+/// kill criterion needs both: a survey across a catalog, and readings from
+/// real sessions.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FitInputs {
     /// Device memory the fit was allowed to spend against.

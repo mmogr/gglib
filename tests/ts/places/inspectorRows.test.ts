@@ -48,6 +48,7 @@ describe('the rows', () => {
         { label: 'ctx', value: '131072', source: null },
         { label: 'flags', value: '--jinja (agent tag)', source: null },
       ],
+      fit: null,
     };
     expect(narrated(narration, 'ctx')).toBe('131,072');
     // The narration's `flags` line holds more than Templates' flag, so Templates never reads it.

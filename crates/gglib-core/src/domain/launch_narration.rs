@@ -34,6 +34,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::launch_plan::ContextFit;
+
 /// One resolved launch decision, paired with the reason it was chosen.
 ///
 /// [`Self::source`] is the whole point of the type — a value without its
@@ -105,6 +107,12 @@ pub struct LaunchNarration {
     pub weights_bytes: u64,
     /// The decisions, in the order they should be displayed.
     pub decisions: Vec<LaunchDecision>,
+    /// The context fit the launch was sized by, the record
+    /// `gglib model explain` shows for a launch not yet made. `None` for an
+    /// image model, which has no context, and from a hub older than the
+    /// field.
+    #[serde(default)]
+    pub fit: Option<ContextFit>,
 }
 
 impl LaunchNarration {
@@ -121,6 +129,7 @@ impl LaunchNarration {
             quantization,
             weights_bytes,
             decisions: Vec::new(),
+            fit: None,
         }
     }
 

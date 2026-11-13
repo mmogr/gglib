@@ -127,8 +127,9 @@ infrastructure concerns (database, filesystem, etc.).
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
 - `fit_sentence` - A context fit in words (`ContextFit::new` composes them):
-  the fit sentence and the Context note, served on `ContextFit` and
-  printed by `gglib model explain`
+  the fit sentence, the Context note and the figures' rows, served on
+  `ContextFit` and printed by `gglib model explain`, and the launch banner's
+  one row (`ContextFit::banner_row`)
 - `revision` - The revision a model's files came from, a commit sha or a
   ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine
@@ -152,7 +153,8 @@ infrastructure concerns (database, filesystem, etc.).
 - `slot_eviction` - Which on-disk KV slot files to delete to stay within a byte
   budget (`select_evictions`); the scanning and deleting live in `gglib-proxy`
 - `launch_narration` - What the runtime decided for one llama-server launch,
-  and why (`LaunchNarration`, `LaunchDecision`)
+  and why (`LaunchNarration`, `LaunchDecision`), with the fit its context
+  was sized by
 - `launch_plan` - The launch gglib would make for a model, said flag by flag
   (`LaunchPlan`, `LaunchArg`, `ChoiceSource`, `ContextFit`): what `gglib
   model explain` prints and `GET /api/models/{id}/explain` serves, and what

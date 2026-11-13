@@ -10,7 +10,44 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Fits this machine with 32K context, of 128K trained.",
-    "note": "fits (35.81 GiB of 43.20 GiB usable)"
+    "note": "fits (35.81 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "fits (35.81 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "33.48 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "40005",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 16384,
@@ -23,7 +60,44 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Fits this machine with 16K context, of 128K trained.",
-    "note": "fits (19.07 GiB of 43.20 GiB usable)"
+    "note": "fits (19.07 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "fits (19.07 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "16.74 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "40005",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 65536,
@@ -36,7 +110,44 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Serves at 64K context, of 128K trained; 32K fits this machine.",
-    "note": "does not fit (69.28 GiB of 43.20 GiB usable)"
+    "note": "does not fit (69.28 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "does not fit (69.28 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "66.96 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "40005",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 30000,
@@ -49,7 +160,44 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Fits this machine with 30,000 context, of 128K trained.",
-    "note": "fits (32.98 GiB of 43.20 GiB usable)"
+    "note": "fits (32.98 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "fits (32.98 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "30.65 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "40005",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 36000,
@@ -62,7 +210,44 @@
     "trainedCtx": 131072,
     "unsnapped": 40005,
     "sentence": "Fits this machine with 36,000 context, of 128K trained.",
-    "note": "fits (39.11 GiB of 43.20 GiB usable)"
+    "note": "fits (39.11 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "fits (39.11 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "36.78 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "40005",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 65536,
@@ -75,7 +260,44 @@
     "trainedCtx": 32768,
     "unsnapped": 32768,
     "sentence": "Fits this machine with 64K context, more than the 32K it was trained for.",
-    "note": "fits (69.28 GiB of 86.40 GiB usable)"
+    "note": "fits (69.28 GiB of 86.40 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "fits (69.28 GiB of 86.40 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "device budget",
+        "value": "96.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "66.96 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "32768",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "32768",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 4096,
@@ -88,7 +310,44 @@
     "trainedCtx": 131072,
     "unsnapped": null,
     "sentence": "Serves at 4K context, of 128K trained; gglib could not fit one to this machine.",
-    "note": "does not fit (64.18 GiB of 43.20 GiB usable)"
+    "note": "does not fit (64.18 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "does not fit (64.18 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "60.00 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "4.18 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "unknown",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 4096,
@@ -101,7 +360,39 @@
     "trainedCtx": 131072,
     "unsnapped": null,
     "sentence": "Serves at 4K context, of 128K trained; gglib could not fit one to this machine: this machine's memory could not be read.",
-    "note": null
+    "note": null,
+    "figures": [
+      {
+        "label": "device budget",
+        "value": "unknown",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "4.18 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "unknown",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 4096,
@@ -114,7 +405,39 @@
     "trainedCtx": 131072,
     "unsnapped": null,
     "sentence": "Serves at 4K context, of 128K trained; gglib could not fit one to this machine: the weights' size is not known.",
-    "note": null
+    "note": null,
+    "figures": [
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "unknown",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "4.18 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "unknown",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 4096,
@@ -127,7 +450,39 @@
     "trainedCtx": 131072,
     "unsnapped": null,
     "sentence": "Serves at 4K context, of 128K trained; gglib could not fit one to this machine: the model does not say what its context costs.",
-    "note": null
+    "note": null,
+    "figures": [
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "unknown",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "unknown",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "unknown",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 4096,
@@ -140,7 +495,44 @@
     "trainedCtx": null,
     "unsnapped": null,
     "sentence": "Serves at 4K context; gglib could not fit one to this machine: the model does not say what it was trained for.",
-    "note": "fits (6.51 GiB of 43.20 GiB usable)"
+    "note": "fits (6.51 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "fits (6.51 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "4.18 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "unknown",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "unknown",
+        "source": null
+      }
+    ]
   },
   {
     "servesAt": 4096,
@@ -153,6 +545,38 @@
     "trainedCtx": null,
     "unsnapped": null,
     "sentence": "Serves at 4K context; gglib could not fit one to this machine: the model does not say what its context costs or what it was trained for.",
-    "note": null
+    "note": null,
+    "figures": [
+      {
+        "label": "device budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "unknown",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "unknown",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "unknown",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "unknown",
+        "source": null
+      }
+    ]
   }
 ]

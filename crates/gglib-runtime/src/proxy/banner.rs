@@ -7,7 +7,7 @@
 
 use std::io::IsTerminal;
 
-use gglib_core::domain::LaunchNarration;
+use gglib_core::domain::{ContextFit, LaunchDecision, LaunchNarration};
 
 const DIM: &str = "\u{1b}[2m";
 /// ANSI bold, for the model identity line.
@@ -53,17 +53,17 @@ fn render_launch_narration(narration: &LaunchNarration, color: bool) -> Vec<Stri
         format!("  {bold}{}{reset}", narration.headline()),
     ];
 
+    // The fit's one row goes under the decisions: what the context row's
+    // rung was snapped from, and from what. An image model has none.
+    let fit = narration.fit.as_ref().map(ContextFit::banner_row);
+    let rows: Vec<&LaunchDecision> = narration.decisions.iter().chain(fit.as_ref()).collect();
+
     // Pad labels to a common width so the values form a column. Computed from
     // the labels actually present rather than a constant, since which
     // decisions appear varies by launch.
-    let width = narration
-        .decisions
-        .iter()
-        .map(|d| d.label.len())
-        .max()
-        .unwrap_or(0);
+    let width = rows.iter().map(|d| d.label.len()).max().unwrap_or(0);
 
-    for decision in &narration.decisions {
+    for decision in rows {
         let label = format!("{:<width$}", decision.label, width = width);
         let line = decision.source.as_ref().map_or_else(
             || format!("    {label}  {}", decision.value),
@@ -79,7 +79,8 @@ fn render_launch_narration(narration: &LaunchNarration, color: bool) -> Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::LaunchDecision;
+    use gglib_core::domain::{FitInputs, KvBytes};
+    use gglib_core::server_config::ContextSizeSource;
 
     fn narration() -> LaunchNarration {
         let mut n =
@@ -143,11 +144,45 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains(BOLD)));
     }
 
-    /// The mission's budget. Two blanks plus a headline plus the decisions.
+    /// The fit a launch was sized by: 48 GiB, 2.5 GB of weights and
+    /// 1,097,000 bytes a token, which fit 40,005 tokens before 32K.
+    fn sized(mut n: LaunchNarration) -> LaunchNarration {
+        n.fit = Some(ContextFit::new(
+            32_768,
+            ContextSizeSource::FittedToHardware,
+            Some(32_768),
+            &FitInputs {
+                budget_bytes: Some(48 << 30),
+                weights_bytes: Some(2_500_000_000),
+                kv: Some(KvBytes::uniform(1_097_000)),
+                trained_ctx: Some(131_072),
+                unsnapped: Some(40_005),
+            },
+        ));
+        n
+    }
+
+    /// The fit is one row under the decisions, in their column, saying
+    /// what the rung was snapped from and the figures it was fitted from.
+    #[test]
+    fn the_fit_is_one_row_under_the_decisions() {
+        let lines = render_launch_narration(&sized(narration()), false);
+        assert_eq!(
+            lines[lines.len() - 2],
+            "    fit    40005 before snapping  (48.00 GiB budget, 2.33 GiB weights, 1097000 bytes/token)"
+        );
+        assert_eq!(
+            lines.len(),
+            render_launch_narration(&narration(), false).len() + 1
+        );
+    }
+
+    /// The mission's budget. Two blanks plus a headline plus the decisions,
+    /// every decision a launch can make, and the fit's row.
     #[test]
     fn the_block_stays_under_twelve_lines() {
-        let mut n = narration();
-        for label in ["backend", "kv", "cache", "mtp", "flags"] {
+        let mut n = sized(narration());
+        for label in ["backend", "runtime", "kv", "mtp", "flags", "sampling"] {
             n.push(LaunchDecision::new(label, "v", "s"));
         }
         let lines = render_launch_narration(&n, false);

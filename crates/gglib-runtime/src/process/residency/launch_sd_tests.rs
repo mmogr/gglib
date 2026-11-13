@@ -335,6 +335,7 @@ async fn a_launch_whose_files_vanished_still_stops_the_displaced_model() {
         evict: None,
         cache_ram: CacheRamSetting::Auto,
         health_deadline_secs: 5,
+        fit: None,
     };
     let refused = set
         .launch(&core, &request, slot, evict)

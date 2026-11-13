@@ -99,38 +99,20 @@ pub(crate) fn context_text(fit: &ContextFit) -> String {
         fit.source.label()
     );
     let _ = writeln!(out, "  {:<22} {}", "fitted to hardware", opt(fit.fitted));
-    if let Some(note) = &fit.note {
-        let _ = writeln!(out, "  {:<22} {note}", "  memory");
+    for figure in &fit.figures {
+        let _ = writeln!(
+            out,
+            "  {:<22} {}",
+            format!("  {}", figure.label),
+            figure.value
+        );
     }
-    let _ = writeln!(out, "  {:<22} {}", "  device budget", gib(fit.budget_bytes));
-    let _ = writeln!(out, "  {:<22} {}", "  weights", gib(fit.weights_bytes));
-    let _ = writeln!(
-        out,
-        "  {:<22} {}",
-        "  kv bytes/token",
-        opt(fit.kv_bytes_per_token)
-    );
-    let _ = writeln!(out, "  {:<22} {}", "  kv cache", gib(fit.kv_bytes));
-    let _ = writeln!(out, "  {:<22} {}", "  trained window", opt(fit.trained_ctx));
-    let _ = writeln!(out, "  {:<22} {}", "  before snapping", opt(fit.unsnapped));
     out
 }
 
 /// `None` reads as a refusal here, not as a zero — see `FitInputs`.
 fn opt(v: Option<u64>) -> String {
     v.map_or_else(|| "unknown".to_owned(), |n| n.to_string())
-}
-
-/// Bytes as GiB, or `unknown` when the value could not be read.
-fn gib(v: Option<u64>) -> String {
-    v.map_or_else(
-        || "unknown".to_owned(),
-        |b| {
-            #[allow(clippy::cast_precision_loss)]
-            let g = b as f64 / (1024.0 * 1024.0 * 1024.0);
-            format!("{g:.2} GiB")
-        },
-    )
 }
 
 #[cfg(test)]
