@@ -52,7 +52,7 @@ fn launch_jinja(options: &ServeOptions) -> Option<bool> {
 /// model resident now, so the first turn does not wait. Only the name and
 /// `--context-size` travel; every other flag configures a proxy on *this*
 /// machine, and there is no proxy of this machine's on that one to
-/// configure.
+/// configure, so the parse refuses each one typed beside `--remote`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute(
     ctx: &CliContext,

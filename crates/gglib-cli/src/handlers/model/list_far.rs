@@ -7,8 +7,8 @@
 //! that answer carries: the model's id there, the name it goes by, the
 //! context it would be served with, whether it reads images, and the
 //! profiles it can be asked for with. The sort and filter flags describe
-//! this machine's catalogue and are not applied; the far list is short and
-//! arrives sorted as that machine sorts it.
+//! this machine's catalogue, so typed beside `--remote` they are refused;
+//! the far list is short and arrives sorted as that machine sorts it.
 //!
 //! Without `--remote`, the local list ends with [`summary`]'s one line about
 //! the paired machine, which asks that machine nothing.

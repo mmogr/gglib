@@ -4,7 +4,7 @@
 //! word can mean there: the model resident before a turn needs it, so the
 //! first turn does not wait. Only the identifier and a numeric
 //! `--context-size` travel; every other flag configures a proxy on *this*
-//! machine. The daemon carries the request through the tunnel, the identifier
+//! machine, and is refused typed beside `--remote`. The daemon carries the request through the tunnel, the identifier
 //! as one encoded path segment, so a name holding `/` reaches that machine
 //! whole.
 

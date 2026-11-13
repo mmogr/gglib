@@ -55,8 +55,8 @@ pub fn dispatch_without_library(command: Option<Commands>) -> Result<Option<Comm
 /// * `remote`  — Whether `--remote` was typed (ADR 0028). Becomes the
 ///   [`Target`] every command that uses a machine is told. A command that
 ///   does not declare the flag was refused it by
-///   [`parse`](crate::remote_flag::parse); one under a parent that declares
-///   it (`gglib chat --remote history`) is refused it here.
+///   [`parse`](crate::remote_flag::parse), and so was one typed on a
+///   parent before its subcommand (`gglib chat --remote history`).
 #[expect(
     clippy::too_many_lines,
     reason = "one arm per command, each a call into its handler; the match is the command table"
@@ -127,7 +127,8 @@ pub async fn dispatch(
             thinking,
             command,
         } => {
-            // Subcommand takes priority (e.g. `gglib chat history`)
+            // A subcommand (`gglib chat history`) receives none of chat's own
+            // flags, and the parse refused any typed before it.
             if let Some(sub) = command {
                 match sub {
                     crate::commands::ChatCommand::History { limit } => {
@@ -215,8 +216,10 @@ pub async fn dispatch(
             access,
             command,
         } => {
-            // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
-            // connects to an already-running proxy rather than starting one.
+            // A subcommand (`gglib proxy dashboard`) connects to an
+            // already-running proxy rather than starting one. It receives
+            // none of the proxy's own flags, and the parse refused any typed
+            // before it.
             if let Some(sub) = command {
                 match sub {
                     crate::commands::ProxyCommand::Dashboard {
