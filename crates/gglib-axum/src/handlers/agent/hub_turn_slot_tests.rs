@@ -73,13 +73,20 @@ fn the_line_waits_two_minutes() {
     assert_eq!(AGENT_SLOT_WAIT, Duration::from_mins(2));
 }
 
-/// The daemon's own line holds sixteen: the seventeenth is refused.
+/// The daemon's own line holds sixteen, each giving up two minutes after
+/// it joined: the seventeenth is refused.
 #[tokio::test]
-async fn the_daemons_line_holds_sixteen() {
+async fn the_daemons_line_holds_sixteen_for_two_minutes_each() {
     assert_eq!(AGENT_SLOT_LINE, 16);
     let (_dir, state) = state().await;
     let _held = take_permit(&state).expect("the one slot");
     let line: Vec<Slot> = (0..16).map(|_| join(&state)).collect();
+    for slot in &line {
+        let Slot::Waiting(place) = slot else {
+            unreachable!("`join` takes a place")
+        };
+        assert_eq!(place.deadline() - place.joined(), AGENT_SLOT_WAIT);
+    }
 
     assert!(state.agent_line.take_or_join().is_none());
     drop(line);
@@ -105,7 +112,12 @@ async fn a_devices_turn_waits_in_line_and_this_machines_is_refused() {
         .unwrap();
     assert!(created.created);
     let wait = frame(&state, &phone, "d1", in_line(1)).await;
-    assert_eq!(wait["said"], "Waiting for a free agent slot, 1 in line…");
+    // Its seconds too, on a machine too slow to say so within the first.
+    let said = wait["said"].as_str().unwrap();
+    assert!(
+        said.starts_with("Waiting for a free agent slot, 1 in line…"),
+        "{said}"
+    );
     let keys: Vec<&String> = wait.as_object().unwrap().keys().collect();
     let named = [
         "elapsed_ms",
@@ -178,6 +190,8 @@ async fn the_second_in_line_moves_up_once_the_first_has_the_slot() {
 
     drop(held);
     frame(&state, &phone, "d2", in_line(1)).await;
+    // The first's reply has begun: it is in progress from its first event.
+    frame(&state, &phone, "d1", |f| f["type"] != "waiting").await;
     assert_eq!(status(&state, &phone, "d1"), RunStatus::InProgress);
     assert_eq!(status(&state, &phone, "d2"), RunStatus::Queued);
 
