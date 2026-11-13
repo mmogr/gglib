@@ -68,7 +68,24 @@ fn parse_inline_error_frame(parsed: &serde_json::Value) -> Option<LlmStreamEvent
     if parsed.get("choices").is_some() {
         return None;
     }
-    let (message, error_type, code) = match err {
+    let (message, error_type, code) = relayed_error(err);
+    Some(LlmStreamEvent::UpstreamError {
+        message,
+        error_type,
+        code,
+    })
+}
+
+/// What gglib relays of an upstream's `error` value: its message, its type
+/// and its code, in that order.
+///
+/// llama-server writes a number as its `code` (the HTTP status), and a client
+/// reads `code` as a string, so only a string is kept: any other is
+/// `upstream_error`. An `error` that is plain text is the message. A streamed
+/// reply and a `stream: false` answer both relay by this.
+#[must_use]
+pub fn relayed_error(err: &serde_json::Value) -> (String, String, String) {
+    match err {
         serde_json::Value::String(s) => (
             s.clone(),
             "server_error".to_owned(),
@@ -88,12 +105,7 @@ fn parse_inline_error_frame(parsed: &serde_json::Value) -> Option<LlmStreamEvent
                 .unwrap_or("upstream_error")
                 .to_owned(),
         ),
-    };
-    Some(LlmStreamEvent::UpstreamError {
-        message,
-        error_type,
-        code,
-    })
+    }
 }
 
 /// One `data:` payload, other than `[DONE]`, parsed as JSON.

@@ -93,7 +93,7 @@ async fn a_streamed_request_the_upstream_refuses_ends_in_its_own_error_and_done(
 
 /// Each field falls back on its own. llama-server writes `code` as a number,
 /// which is not a code a client can match on; a JSON body with no `error` at
-/// all names nothing.
+/// all is quoted whole behind the status, as one that is not JSON is.
 #[test]
 fn an_upstream_error_falls_back_field_by_field_on_what_it_did_not_name() {
     let numbered =
@@ -119,13 +119,13 @@ fn an_upstream_error_falls_back_field_by_field_on_what_it_did_not_name() {
     let (notice, rest) = notice_then_rest(&body);
     assert_eq!(
         notice,
-        "⚠️ [proxy] upstream model server error (500 Internal Server Error): upstream returned an error"
+        "⚠️ [proxy] upstream model server error (500 Internal Server Error): upstream returned 500 Internal Server Error: {\"detail\":\"no\"}"
     );
     assert_eq!(
         rest,
         concat!(
-            r#"data: {"error":{"code":"upstream_error","#,
-            r#""message":"upstream returned an error","type":"server_error"}}"#,
+            r#"data: {"error":{"code":"upstream_error","message":"#,
+            r#""upstream returned 500 Internal Server Error: {\"detail\":\"no\"}","type":"server_error"}}"#,
             "\n\n",
             "data: [DONE]\n\n",
         )

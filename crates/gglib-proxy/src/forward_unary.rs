@@ -41,8 +41,9 @@ use crate::unary_body::{Exchange, answer_with, exchange};
 /// The transport failures are mapped the way the streaming path maps them: a
 /// connect failure or timeout is [`ForwardError::UpstreamDead`], so the caller
 /// can recycle the server and answer a retriable 503; any other send error is
-/// a terminal 502; and a non-2xx upstream status is passed through with its
-/// body, since llama-server's own diagnostic is the useful one. A first answer
+/// a terminal 502; and a non-2xx upstream status is kept, with llama-server's
+/// own error under the code a streamed reply names it by, since its
+/// diagnostic is the useful one. A first answer
 /// that takes longer than `total` is a 504 (see [`exchange`]); a re-issue has
 /// its own bound. The answer names `model_name`, as a streamed one does (see
 /// [`served_as`]).

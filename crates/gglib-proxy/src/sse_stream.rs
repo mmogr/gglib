@@ -17,6 +17,7 @@ use crate::upstream_health::UpstreamHealth;
 use crate::upstream_read::{StreamBounds, first_byte_timeout_frame, upstream_frames};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::sse::SseEncoder;
+use gglib_core::sse::parser::relayed_error;
 
 /// Maximum number of retry attempts for the pre-generation connection phase
 /// (TCP send / first-byte-deadline wait) before falling back to an inline
@@ -337,32 +338,23 @@ pub(crate) fn spawn_and_return(
 /// The frame keeps the upstream error's `type` and `code`, so the LLM Gateway
 /// extension (and VS Code) can identify errors like `context_length_exceeded`
 /// rather than seeing an opaque `server_error` wrapper. It falls back to the
-/// generic envelope, around the raw bytes, only when `body` is not JSON.
+/// generic envelope, around the raw bytes, when `body` holds no `error`, as
+/// a `stream: false` answer does ([`crate::unary_body`]).
 fn upstream_error_body(model: &str, status: StatusCode, body: &[u8]) -> String {
+    let relayed = serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|upstream| upstream.get("error").map(relayed_error));
     #[expect(
-        clippy::option_if_let_else,
         clippy::single_match_else,
         reason = "two arms of several statements each, the JSON envelope and the raw-bytes \
                   fallback, which read more plainly as a match than as two closures"
     )]
-    let (message, error) = match serde_json::from_slice::<serde_json::Value>(body) {
-        Ok(upstream) => {
-            let msg = upstream
-                .pointer("/error/message")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("upstream returned an error");
-            let typ = upstream
-                .pointer("/error/type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("server_error");
-            let code = upstream
-                .pointer("/error/code")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("upstream_error");
-            let error = SseEncoder::upstream_error_frame(msg, typ, code);
-            (msg.to_owned(), error)
+    let (message, error) = match relayed {
+        Some((msg, typ, code)) => {
+            let error = SseEncoder::upstream_error_frame(&msg, &typ, &code);
+            (msg, error)
         }
-        Err(_) => {
+        None => {
             let raw = String::from_utf8_lossy(body);
             let msg = format!("upstream returned {status}: {raw}");
             let error = SseEncoder::upstream_error_frame(&msg, "server_error", "upstream_error");
