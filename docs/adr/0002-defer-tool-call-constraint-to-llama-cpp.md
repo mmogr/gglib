@@ -1,6 +1,6 @@
 # ADR 0002 — Defer tool-call argument constraint to llama.cpp
 
-- **Status:** Accepted
+- **Status:** Accepted; stage 6 and the dialect parser superseded (amended 2026-11-13)
 - **Date:** 2026-08-08 (amended 2026-08-09 with a second dialect family)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md)
 - **Supersedes:** nothing
