@@ -59,16 +59,12 @@ gglib chat
   --no-tools
   --profile
   --remote
-  --repeat-penalty
   --system-prompt -s
-  --temperature
   --thinking
     on
     off
   --tool-timeout-ms
   --tools
-  --top-k
-  --top-p
 gglib chat history
   --limit -n
 gglib completions
@@ -412,13 +408,9 @@ gglib q
   --profile
   --quiet
   --remote
-  --repeat-penalty
   --show-prompt
-  --temperature
   --tool-timeout-ms
   --tools
-  --top-k
-  --top-p
 gglib remote
 gglib remote disable
 gglib remote disconnect

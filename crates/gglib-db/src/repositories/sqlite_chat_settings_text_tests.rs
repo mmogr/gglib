@@ -20,7 +20,7 @@ async fn text_that_is_not_an_object_is_left_alone_by_every_writer() {
             ..ConversationSettingsPatch::default()
         };
         let resumed = ConversationSettings {
-            top_k: Some(40),
+            max_iterations: Some(40),
             ..ConversationSettings::default()
         };
         let default = ConversationSettings::default();

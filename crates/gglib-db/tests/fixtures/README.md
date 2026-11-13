@@ -47,7 +47,8 @@ keys 0.33.0 writes (`tool_calls` with each call's `display_name` and
   `published` on model 2.
 - `model_files`: one row.
 - `chat_conversations`, `chat_messages`, `attachments`,
-  `message_attachments`: a chat with its `settings`, a system, user,
+  `message_attachments`: a chat with its `settings` (step 9 strips its
+  `temperature` and `top_k`), a system, user,
   assistant (tool call), tool and assistant message with their `metadata`, a
   1x1 PNG on the user message, and a branch of it.
 - `benchmark_runs` (one of each type and a failed one, the tune run with its

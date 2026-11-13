@@ -32,12 +32,12 @@ fn thinking_off_alone_makes_a_layer_naming_only_the_budget() {
     assert_eq!(layer.reasoning_budget_tokens, Some(0));
 }
 
-/// A chat's saved sampling makes a layer without a budget, carrying the
-/// saved values as a client's.
+/// A chat's saved token limit makes a layer without a thinking budget,
+/// naming the limit alone.
 #[test]
-fn a_chats_saved_sampling_alone_makes_a_layer() {
+fn a_chats_saved_token_limit_alone_makes_a_layer() {
     let settings = gglib_core::domain::chat::ConversationSettings {
-        temperature: Some(0.3),
+        max_tokens: Some(256),
         ..Default::default()
     };
     let saved = LoopRequest {
@@ -45,8 +45,13 @@ fn a_chats_saved_sampling_alone_makes_a_layer() {
         ..LoopRequest::default()
     };
     let layer = saved.sampling_layer().expect("a layer");
-    assert_eq!(layer.temperature, Some(0.3));
-    assert_eq!(layer.reasoning_budget_tokens, None);
+    let named: Vec<String> = layer
+        .to_openai_json_patch()
+        .into_iter()
+        .map(|(key, _)| key)
+        .collect();
+    assert_eq!(named, ["max_tokens"]);
+    assert_eq!(layer.max_tokens, Some(256));
 }
 
 /// The tool limits Settings › Tools stores reach a turn that names none: a

@@ -73,6 +73,7 @@ This crate is in the **Infrastructure Layer** — it implements the repository p
 - **`setup_remote_grant.rs`** — The one-time copy of the remote tunnel's old list of MCP servers onto each server's own `allow_remote` flag
 - **`setup_unknown_params.rs`** — The one-time change of parameter counts stored as `0.0` to unknown
 - **`setup_format_tags.rs`** — Step 8: every `format:*` tag stripped from `models.tags`, the rest kept in order; text that is not a JSON array is left alone
+- **`setup_chat_sampling.rs`** — Step 9: `temperature`, `top_p`, `top_k` and `repeat_penalty` stripped from every chat's `settings`, the rest kept in order; text that is not a JSON object is left alone
 - **`setup_mcp_servers.rs`** — The `mcp_servers` and `mcp_server_env` tables, and step 6: the stored SSE servers, which gglib never ran, deleted with their variables, `manual` servers made disabled `lazy` ones, and both tables rebuilt without `type` and `url`, keeping ids
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
@@ -208,8 +209,10 @@ guard's fold above, `3` the stored copies of the `reasoning` recipe cleared,
 name exactly one server has), `5` the parameter counts stored as `0.0` made
 unknown, `6` the stored SSE MCP servers and their variables deleted,
 `manual` servers made disabled `lazy` ones, and `mcp_servers` rebuilt without
-its `type` and `url` columns, `7` the loop guard made on or off (above), and
-`8` every `format:*` tag stripped from `models.tags`.
+its `type` and `url` columns, `7` the loop guard made on or off (above),
+`8` every `format:*` tag stripped from `models.tags`, and `9` the four
+sampling keys `gglib chat` no longer saves stripped from each chat's
+`settings`.
 Step 1 runs before the projector link,
 which reads the paths it rewrites; the rest run last, after the `models`
 rebuild. The column set is deliberately not on it. The `template_caps` column post-dates

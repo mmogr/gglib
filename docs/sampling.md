@@ -426,7 +426,7 @@ it, so clearing that model's defaults gives back the `reasoning` recipe for a
 
 All the same flags are available on `gglib serve` and `gglib proxy` as
 per-invocation overrides that sit at the top of the hierarchy. `gglib chat` and
-`gglib q` take five of them, which the chat keeps ([chat](cli/chat.md#sampling)).
+`gglib q` take only `--max-tokens`, which the chat keeps ([chat](cli/chat.md#sampling)).
 
 ## Where a model's defaults came from
 
