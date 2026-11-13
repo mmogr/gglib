@@ -157,7 +157,9 @@ pub trait AgentRunStarter: Send + Sync + std::fmt::Debug {
     ///
     /// A [`TurnRefused`] as the daemon's door would answer: an empty
     /// message, a missing chat, a chat with a live reply (`conflict`), no
-    /// free agent slot, a model that cannot be loaded, and the runs' own.
+    /// free agent slot with the line for one full too (with room in line
+    /// the run is made and waits there), a model that cannot be loaded, and
+    /// the runs' own.
     async fn start(&self, device: &str, id: &str, turn: HubTurn) -> Result<Created, TurnRefused>;
 
     /// Start `device`'s run `id` on a chat the device keeps itself, with
@@ -178,7 +180,8 @@ pub trait AgentRunStarter: Send + Sync + std::fmt::Debug {
     /// cannot be read, an image that cannot be stored, a model that draws
     /// or cannot read the history's images, `draw` where nothing can draw,
     /// an `image_model` without `draw` or one that cannot draw, no free
-    /// agent slot, and the runs' own.
+    /// agent slot with the line for one full too (with room in line the run
+    /// is made and waits there), and the runs' own.
     async fn start_chat(
         &self,
         device: &str,

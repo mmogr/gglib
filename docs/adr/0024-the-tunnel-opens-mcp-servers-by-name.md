@@ -195,5 +195,9 @@ Costs, stated plainly:
   the ticket and the device keys survive.
 - **A device's run waiting for a free agent-loop slot** instead of `429`
   while all four are taken, and a model's tool support in `/v1/models`.
+
+  > **Amended 2026-11-13 — the wait is done.** A device's run now waits
+  > for a slot (the amendment under the costs above). A model's tool
+  > support in `/v1/models` is still out of scope.
 - **The `/mcp` gateway's own posture for local clients**, which ADR 0012
   decision 2 has.

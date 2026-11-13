@@ -103,7 +103,8 @@ tools has no `server` key, and neither does one whose servers could not be
 read. A `waiting` frame says why the reply has not started, in its `said`,
 to show as it is: its `reason` is `model_load` while the model loads, or
 `agent_slot` while a paired device's run waits in line for an agent-loop
-slot, with its `position` (1 is next) ([Remote](remote.md)).
+slot, with its `position` (1 is next) ([Remote](remote.md)). `reason` can
+gain values: for one a reader doesn't know, it shows `said`.
 
 ## Images
 
