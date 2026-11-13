@@ -154,7 +154,7 @@ pub fn plan_launch(
         narration: planned.narration,
         unloads,
         // The same value the narration carries: one fit, read twice.
-        fit: request.fit.clone(),
+        fit: request.fit,
     })
 }
 
