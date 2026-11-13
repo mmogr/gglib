@@ -296,10 +296,7 @@ fn a_linux_app_is_never_run_and_takes_the_version_of_the_gglib_beside_it() {
         ]
     );
     let asked = asked.lock().expect("the record").clone();
-    assert!(
-        asked.iter().all(|bin| *bin == cli),
-        "only the CLI is run: {asked:?}"
-    );
+    assert_eq!(asked, vec![cli], "only the CLI is run, and once");
 }
 
 #[test]

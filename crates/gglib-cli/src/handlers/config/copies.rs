@@ -16,6 +16,7 @@
 //! bundle's `Info.plist`, and on Linux and Windows from the `gglib` CLI
 //! installed beside it.
 
+use std::cell::RefCell;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
@@ -100,15 +101,27 @@ fn apps_here() -> Apps {
 /// once, under the first path that reaches it.
 ///
 /// `version_of` asks another copy its version; the running one is never
-/// asked.
+/// asked, and no file is asked twice, so the `gglib` beside the desktop app
+/// that is also on `PATH` costs one wait.
 pub(crate) fn lines(search: &Search, version_of: &dyn Fn(&Path) -> Option<String>) -> Vec<String> {
     let running = search.running.as_deref().map(canonical);
+    let answers: RefCell<Vec<(PathBuf, Option<String>)>> = RefCell::default();
     let version = |bin: &Path| {
-        if running.as_deref() == Some(&canonical(bin)) {
-            Some(search.running_version.clone())
-        } else {
-            version_of(bin)
+        let real = canonical(bin);
+        if running.as_ref() == Some(&real) {
+            return Some(search.running_version.clone());
         }
+        let heard = answers
+            .borrow()
+            .iter()
+            .find(|(asked, _)| *asked == real)
+            .cloned();
+        if let Some((_, answer)) = heard {
+            return answer;
+        }
+        let answer = version_of(bin);
+        answers.borrow_mut().push((real, answer.clone()));
+        answer
     };
     let mut out = Vec::new();
 
