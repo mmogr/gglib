@@ -152,20 +152,22 @@ export interface AgentToolProgressEvent {
 }
 
 /**
- * Nothing can happen until the model has loaded. Sent again each second.
+ * Nothing can happen until the model has loaded (`model_load`), or until an
+ * agent loop slot is free for a paired device's run (`agent_slot`). Sent
+ * again each second.
  */
 export interface AgentWaitingEvent {
   type: 'waiting';
-  reason: 'model_load';
-  /** Always 0: a load reports no steps. */
+  reason: 'model_load' | 'agent_slot';
+  /** Always 0: neither wait reports steps. */
   step: number;
   /** Always 0. */
   total: number;
-  /** Always 0: a load waits in no line. */
+  /** Place in line for an agent slot, 1 being next; always 0 for a load. */
   position: number;
-  /** The model being loaded, by the catalogue's name. */
+  /** The model being loaded, by the catalogue's name; none for a slot. */
   model?: string;
-  /** How long the load has taken so far, in ms; said again each second. */
+  /** How long the wait has taken so far, in ms; said again each second. */
   elapsed_ms?: number;
   /**
    * The wait as a person reads it, worded by the daemon

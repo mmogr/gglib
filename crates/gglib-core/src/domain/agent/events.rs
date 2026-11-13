@@ -118,25 +118,28 @@ pub enum AgentEvent {
         frame: PreviewFrame,
     },
 
-    /// Nothing can happen until the model has loaded. Sent again each
-    /// second, so a person sees why the reply has not started.
+    /// Nothing can happen until something else is done: the model loaded,
+    /// or an agent slot free. Sent again each second, so a person sees why
+    /// the reply has not started.
     Waiting {
         /// What is being waited for.
         reason: WaitingFor,
-        /// The step the work in the way last reported: always 0 for a load,
-        /// which reports none. Kept on the wire for readers that decode it.
+        /// The step the work in the way last reported: always 0, since
+        /// neither wait reports steps. Kept on the wire for readers that
+        /// decode it.
         step: u32,
-        /// How many steps that work takes: always 0 for a load.
+        /// How many steps that work takes: always 0.
         total: u32,
-        /// This wait's place in line: always 0 for a load, which waits in
-        /// no line.
+        /// This wait's place in line, 1 being next, for an agent slot;
+        /// always 0 for a load, which waits in no line.
         position: u32,
         /// The name of the model being loaded, as the catalogue shows it.
+        /// None for an agent slot.
         #[serde(skip_serializing_if = "Option::is_none")]
         model: Option<String>,
-        /// How long the load has taken so far, in milliseconds. A load's
-        /// wait is sent again each second with this figure, so a client that
-        /// joins part-way can say "Loading Qwen3-4B… 12 s".
+        /// How long the wait has taken so far, in milliseconds. It is sent
+        /// again each second with this figure, so a client that joins
+        /// part-way can say "Loading Qwen3-4B… 12 s".
         #[serde(skip_serializing_if = "Option::is_none")]
         elapsed_ms: Option<u64>,
         /// The wait as a person reads it, worded by
@@ -219,6 +222,9 @@ pub enum AgentEvent {
 pub enum WaitingFor {
     /// The chat's model is being loaded.
     ModelLoad,
+    /// Every agent loop slot is in use, and a paired device's run waits in
+    /// line for one.
+    AgentSlot,
 }
 
 // =============================================================================
