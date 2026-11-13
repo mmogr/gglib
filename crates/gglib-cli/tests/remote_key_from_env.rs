@@ -1,6 +1,9 @@
 //! `GGLIB_API_KEY` beside `--remote`: a key from the environment was not
 //! typed, so the proxy clients do not refuse it as `--api-key`.
 //!
+//! The parent `proxy` takes the variable too, so the same lines show it is
+//! not counted as a `proxy` flag typed before the subcommand either.
+//!
 //! clap reads the process's own environment, so this drives the binary with
 //! the variable set rather than setting it in the test process, where every
 //! parser test would see it. Nothing is paired and no daemon answers on the

@@ -2,7 +2,8 @@
 //!
 //! This module defines the root CLI structure with global options.
 
-use clap::Parser;
+use clap::parser::ValueSource;
+use clap::{ArgMatches, CommandFactory as _, Parser};
 
 use crate::commands::Commands;
 
@@ -59,6 +60,60 @@ pub struct Cli {
     pub command: Option<Commands>,
 }
 
+/// The sentence for a parent's own flags typed before its subcommand
+/// (`gglib proxy --port 8081 dashboard`), which the subcommand never
+/// receives; `None` when there are none. A global flag belongs to every
+/// level, and a value from a default or the environment was not typed.
+pub(crate) fn before_subcommand(matches: &ArgMatches) -> Option<String> {
+    let root = Cli::command();
+    let (mut command, mut here, mut path) = (&root, matches, vec!["gglib"]);
+    while let Some((name, sub)) = here.subcommand() {
+        let typed: Vec<String> = command
+            .get_arguments()
+            .filter(|arg| !arg.is_global_set())
+            .filter(|arg| {
+                here.value_source(arg.get_id().as_str()) == Some(ValueSource::CommandLine)
+            })
+            .map(|arg| {
+                // A positional is named by what was typed for it.
+                let typed_value = || {
+                    here.get_raw(arg.get_id().as_str())
+                        .into_iter()
+                        .flatten()
+                        .map(|value| format!("`{}`", value.to_string_lossy()))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                };
+                arg.get_long()
+                    .map_or_else(typed_value, |long| format!("--{long}"))
+            })
+            .collect();
+        if let Some((named, them)) = named(&typed) {
+            let parent = path.join(" ");
+            return Some(format!(
+                "`{parent} {name}` takes none of `{parent}`'s own arguments, so {named} before \
+                 `{name}` would be dropped; drop {them}, or type {them} after `{name}` if it \
+                 takes {them}"
+            ));
+        }
+        command = command.find_subcommand(name)?;
+        here = sub;
+        path.push(name);
+    }
+    None
+}
+
+/// `names` as a sentence lists them (`a`, `a and b`, `a, b and c`), and the
+/// pronoun for them; `None` when there are none.
+pub(crate) fn named(names: &[String]) -> Option<(String, &'static str)> {
+    let (last, rest) = names.split_last()?;
+    Some(if rest.is_empty() {
+        (last.clone(), "it")
+    } else {
+        (format!("{} and {last}", rest.join(", ")), "them")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +163,54 @@ mod tests {
             err.map(|e| e.kind()),
             Some(clap::error::ErrorKind::InvalidSubcommand)
         );
+    }
+
+    /// A parent's own arguments typed before its subcommand are refused by
+    /// name rather than dropped. The bare forms, flags after the subcommand
+    /// and the global `--verbose` anywhere still parse.
+    #[test]
+    fn a_parents_arguments_before_its_subcommand_are_refused() {
+        use crate::remote_flag::{Refusal, parse_from};
+        let refused = |argv: &[&str]| match parse_from(argv) {
+            Err(Refusal::Sentence(sentence)) => sentence,
+            Err(Refusal::Clap(error)) => panic!("`{}` got clap's error: {error}", argv.join(" ")),
+            Ok(_) => panic!("`{}` parsed", argv.join(" ")),
+        };
+
+        assert_eq!(
+            refused(&["gglib", "proxy", "--port", "8081", "dashboard"]),
+            "`gglib proxy dashboard` takes none of `gglib proxy`'s own arguments, so --port \
+             before `dashboard` would be dropped; drop it, or type it after `dashboard` if it \
+             takes it"
+        );
+        assert!(
+            refused(&["gglib", "chat", "m", "--no-tools", "history"])
+                .contains("so `m` and --no-tools before `history` would be dropped; drop them")
+        );
+        for argv in [
+            &["gglib", "chat", "--no-tools", "history"][..],
+            &["gglib", "chat", "--continue", "3", "history"],
+            &["gglib", "chat", "--remote", "history"],
+            &["gglib", "proxy", "--cache", "stop"],
+            &["gglib", "proxy", "--temperature", "0.5", "cache-clear"],
+        ] {
+            let text = refused(argv);
+            assert!(text.contains("would be dropped"), "{text}");
+        }
+
+        for argv in [
+            &["gglib", "proxy"][..],
+            &["gglib", "proxy", "--port", "9"],
+            &["gglib", "proxy", "dashboard", "--port", "9"],
+            &["gglib", "proxy", "-v", "dashboard"],
+            &["gglib", "chat", "m"],
+            &["gglib", "chat", "history"],
+            &["gglib", "chat", "history", "-n", "3"],
+            &["gglib", "chat", "-v", "history"],
+            &["gglib", "-v", "chat", "history"],
+        ] {
+            assert!(parse_from(argv).is_ok(), "{}", argv.join(" "));
+        }
     }
 
     /// `model check-updates` takes its model as every model command does, or

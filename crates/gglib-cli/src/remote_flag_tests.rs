@@ -15,7 +15,7 @@ fn remote(argv: &[&str]) -> bool {
 
 fn refused(argv: &[&str]) -> String {
     match parse_from(argv) {
-        Err(Refusal::Remote(sentence)) => sentence,
+        Err(Refusal::Sentence(sentence)) => sentence,
         Err(Refusal::Clap(error)) => panic!("`{}` got clap's error: {error}", argv.join(" ")),
         Ok(_) => panic!("`{}` parsed", argv.join(" ")),
     }

@@ -42,12 +42,17 @@ pub(crate) enum Refusal {
     /// clap's own error, which it prints and exits on.
     Clap(clap::Error),
     /// `--remote` on a command that does not take it, or before the command
-    /// that does: one sentence.
-    Remote(String),
+    /// that does; a flag `--remote` does not carry; a parent's flag before
+    /// its subcommand: one sentence.
+    Sentence(String),
 }
 
-/// Parse the command line, or exit as clap does; `--remote` where it does
-/// not belong exits with one sentence instead of clap's error.
+/// Parse the command line, or exit as clap does.
+///
+/// `--remote` where it does not belong, a flag it would not carry, and a
+/// parent's own flag before its subcommand
+/// ([`before_subcommand`](crate::parser::before_subcommand)) exit with one
+/// sentence instead of clap's error, or instead of being dropped.
 ///
 /// Returns the parse and whether the command is for the paired machine.
 #[must_use]
@@ -55,7 +60,7 @@ pub fn parse() -> (Cli, bool) {
     match parse_from(std::env::args_os()) {
         Ok(parsed) => parsed,
         Err(Refusal::Clap(error)) => error.exit(),
-        Err(Refusal::Remote(sentence)) => {
+        Err(Refusal::Sentence(sentence)) => {
             eprintln!("Error: {sentence}");
             std::process::exit(1);
         }
@@ -72,16 +77,19 @@ where
     let mut command = Cli::command();
     match command.try_get_matches_from_mut(&argv) {
         Ok(mut matches) => {
+            if let Some(sentence) = crate::parser::before_subcommand(&matches) {
+                return Err(Refusal::Sentence(sentence));
+            }
             let remote = typed(&matches);
             if remote && let Some(sentence) = not_carried(&matches) {
-                return Err(Refusal::Remote(sentence));
+                return Err(Refusal::Sentence(sentence));
             }
             let cli = Cli::from_arg_matches_mut(&mut matches)
                 .map_err(|error| Refusal::Clap(error.format(&mut command)))?;
             Ok((cli, remote))
         }
         Err(error) if names_remote(&error) => {
-            Err(misplaced(&argv).map_or(Refusal::Clap(error), Refusal::Remote))
+            Err(misplaced(&argv).map_or(Refusal::Clap(error), Refusal::Sentence))
         }
         Err(error) => Err(Refusal::Clap(error)),
     }
@@ -175,13 +183,7 @@ fn not_carried(matches: &ArgMatches) -> Option<String> {
                 .map_or_else(|| arg.get_id().to_string(), |long| format!("--{long}"))
         })
         .collect();
-    let (last, rest) = flags.split_last()?;
-    let named = if rest.is_empty() {
-        last.clone()
-    } else {
-        format!("{} and {last}", rest.join(", "))
-    };
-    let them = if rest.is_empty() { "it" } else { "them" };
+    let (named, them) = crate::parser::named(&flags)?;
     Some(format!("--remote {why}, so {named} {would}; drop {them}"))
 }
 
