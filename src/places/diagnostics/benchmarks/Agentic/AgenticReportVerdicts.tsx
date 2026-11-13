@@ -1,13 +1,6 @@
 import type { FC } from 'react';
 import { Banner } from '../../../../components/ui/Banner';
 import type { AgenticEvalReport, ArmScores, EvalArm } from '../../../../types/benchmark';
-import {
-  EFFECT_NOISE_RATIO,
-  controlVerdict,
-  effectVerdict,
-  passCounts,
-  unstableTasks,
-} from './verdicts';
 
 const fmt = (v: number) => v.toFixed(3);
 
@@ -88,7 +81,7 @@ const UnmeasuredBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
 
 /** The A/A drift check: is the measured effect bigger than the eval's own noise? */
 const NoiseBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
-  const verdict = effectVerdict(report);
+  const verdict = report.effect_verdict;
   if (verdict == null) {
     return (
       <p className="text-xs text-text-muted m-0">
@@ -96,7 +89,7 @@ const NoiseBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
       </p>
     );
   }
-  const exceeded = verdict.kind === 'exceeds_noise';
+  const exceeded = verdict.verdict === 'exceeds_noise';
   return (
     <div className="flex flex-col gap-xs">
       <p className={`text-sm m-0 ${exceeded ? 'text-text' : 'text-warning'}`}>
@@ -104,7 +97,7 @@ const NoiseBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
         <span className="font-mono tabular-nums text-text-secondary">
           {' '}
           — effect {fmt(Math.abs(verdict.effect))}, drift {fmt(verdict.noise)} (bar:{' '}
-          {EFFECT_NOISE_RATIO.toFixed(1)}×)
+          {verdict.bar.toFixed(1)}×)
         </span>
       </p>
       <p className="text-xs text-text-muted m-0">
@@ -145,7 +138,7 @@ const PairedBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
 
 /** What the positive control demonstrated about this run's sensitivity. */
 const ControlBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
-  const verdict = controlVerdict(report);
+  const verdict = report.control_verdict;
   if (verdict == null) {
     return (
       <p className="text-xs text-text-muted m-0">
@@ -164,16 +157,16 @@ const ControlBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
 
   return (
     <div className="flex flex-col gap-xs">
-      {verdict.kind === 'moved' && (
+      {verdict.verdict === 'moved' && (
         <p className="text-sm text-text m-0">Control moved — the eval detects broken sampling{gapText}</p>
       )}
-      {verdict.kind === 'too_small' && (
+      {verdict.verdict === 'too_small' && (
         <Banner variant="danger" title="Control barely moved">
           Deliberately broken sampling scored within {fmt(verdict.gap)} of the real pipeline —
           treat every delta in this report as uninterpretable.
         </Banner>
       )}
-      {verdict.kind === 'wrong_direction' && (
+      {verdict.verdict === 'wrong_direction' && (
         <Banner variant="danger" title="Control moved the wrong way">
           Broken sampling scored above the real pipeline by {fmt(verdict.gap)} — this run cannot
           support any conclusion.
@@ -196,7 +189,7 @@ const ControlBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
 const StabilityBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
   const seedCount = report.seeds?.length ?? 0;
   if (seedCount < 2) return null;
-  const unstable = unstableTasks(report);
+  const unstable = report.tasks.filter((t) => t.unstable);
 
   if (unstable.length === 0) {
     return (
@@ -211,14 +204,11 @@ const StabilityBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
       <p className="text-sm text-warning m-0">
         {unstable.length} task{unstable.length === 1 ? '' : 's'} flipped between seeds:
       </p>
-      {unstable.map((t) => {
-        const [rawPassed, gglibPassed] = passCounts(t);
-        return (
-          <p key={t.task_id} className="text-xs text-text-secondary m-0 font-mono tabular-nums">
-            {t.task_id} — raw {rawPassed}/{t.raw.length}, gglib {gglibPassed}/{t.gglib.length} seeds passed
-          </p>
-        );
-      })}
+      {unstable.map((t) => (
+        <p key={t.task_id} className="text-xs text-text-secondary m-0 font-mono tabular-nums">
+          {t.task_id} — raw {t.raw_passed}/{t.raw.length}, gglib {t.gglib_passed}/{t.gglib.length} seeds passed
+        </p>
+      ))}
     </div>
   );
 };

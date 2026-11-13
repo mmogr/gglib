@@ -11,7 +11,9 @@ use serde::Serialize;
 use gglib_core::domain::{EngineState, RuntimeKind};
 use gglib_core::paths::{LLAMA_INSTALL_COMMAND, SD_INSTALL_COMMAND};
 use gglib_core::ports::ModelRuntimePort;
-use gglib_runtime::engine::{InstallPlan, PinStanding, PinState, pin_state, plan_install};
+use gglib_runtime::engine::{
+    InstallPlan, PinStanding, PinState, pin_state, plan_install, standing_line,
+};
 use gglib_runtime::llama::{LlamaProgressEvent, LlamaStatus, llama_status};
 use gglib_runtime::sd::{SdStatus, sd_status};
 
@@ -45,6 +47,10 @@ pub struct EngineStatus {
     pub reports: Option<String>,
     /// Where the install stands against the pinned release.
     pub pin: PinState,
+    /// That standing in the words `gglib config llama|sd status` prints
+    /// (`standing_line`); null with nothing installed, where the status
+    /// already says so.
+    pub standing: Option<String>,
     /// The download an install takes on this machine (`macOS ARM64 (Metal)`);
     /// null when there is none.
     pub download: Option<String>,
@@ -149,6 +155,7 @@ fn common_status(
         install: None,
         record_error: None,
         reports: None,
+        standing: standing_line(&pin),
         pin,
         download,
         download_unavailable,

@@ -1004,6 +1004,11 @@ async fn an_engine_status_route_returns_json() {
     // Reports whatever is installed on this machine, but the shape is fixed.
     assert!(json["installed"].is_boolean());
     assert!(json["binaryPath"].is_string());
+    assert!(
+        json.get("standing")
+            .is_some_and(|v| v.is_string() || v.is_null()),
+        "{json}"
+    );
 }
 
 // ============================================================================

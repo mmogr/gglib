@@ -2,7 +2,7 @@
 
 use super::*;
 
-use crate::domain::{InferenceConfig, ReasoningEffort};
+use crate::domain::{DefaultsOrigin, InferenceConfig, ReasoningEffort};
 
 /// Fields of [`InferenceConfig`] that deliberately carry no provenance.
 ///
@@ -226,4 +226,53 @@ fn layer_indices_match_the_resolve_with_profile_ladder() {
         Some(SamplingLayer::ModelAutoDetected)
     );
     assert_eq!(SamplingLayer::from_index(5), None);
+}
+
+/// Every source in the words `gglib model explain` prints: the profile rung
+/// by the profile's name, the auto-detected rung by whose recipe it holds.
+#[test]
+fn every_source_has_its_label() {
+    let auto = ParamSource::Layer(4);
+
+    assert_eq!(
+        source_label(ParamSource::Layer(0), None, None),
+        "request parameters"
+    );
+    assert_eq!(source_label(ParamSource::Layer(1), None, None), "profile");
+    assert_eq!(
+        source_label(ParamSource::Layer(1), Some("coding"), None),
+        "profile 'coding'"
+    );
+    assert_eq!(
+        source_label(ParamSource::Layer(2), None, Some(DefaultsOrigin::Published)),
+        "per-model defaults (user-set)"
+    );
+    assert_eq!(
+        source_label(ParamSource::Layer(3), None, None),
+        "global settings"
+    );
+    assert_eq!(
+        source_label(auto, None, None),
+        "per-model defaults (auto-detected: reasoning tag)"
+    );
+    assert_eq!(
+        source_label(auto, None, Some(DefaultsOrigin::Published)),
+        "per-model defaults (published by the model author)"
+    );
+    assert_eq!(
+        source_label(auto, None, Some(DefaultsOrigin::Measured)),
+        "per-model defaults (measured by a tune sweep)"
+    );
+    assert_eq!(
+        source_label(ParamSource::Layer(5), None, None),
+        "an unnamed layer"
+    );
+    assert_eq!(
+        source_label(ParamSource::Coupled, None, None),
+        "unset (coupled to temperature layer)"
+    );
+    assert_eq!(
+        source_label(ParamSource::Unset, None, None),
+        "unset by design"
+    );
 }

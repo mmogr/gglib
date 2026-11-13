@@ -203,12 +203,8 @@ fn displacement(
     if already_resident {
         return None;
     }
-    let unload = |r: &Resident, reason: UnloadReason| {
-        Some(Unload {
-            model: r.model_name.clone(),
-            reason,
-        })
-    };
+    let unload =
+        |r: &Resident, reason: UnloadReason| Some(Unload::new(r.model_name.clone(), reason));
     match runtime {
         RuntimeKind::Llama => match (primary, decision.is_grant()) {
             // Nothing in the primary: the launch takes it, unloading nothing.
