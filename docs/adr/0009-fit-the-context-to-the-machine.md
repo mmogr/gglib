@@ -216,6 +216,13 @@ and not fixed by this change.~~
   anything — so this is now a survey rather than a log to grep. (Amended
   2026-08-28: it was a `debug!` line emitted after a launch and collected by
   nothing, which made this criterion unreadable in practice.)
+
+  > **Amended 2026-11-13 — a launch records its fit.** The running launch's
+  > narration carries the same figures (the banner's `fit` row, `launch.fit`
+  > on `GET /v1/gglib/proxy/status`, the GUI's launch panel), so this
+  > criterion also has readings from real sessions
+  > ([#938](https://github.com/mmogr/gglib/issues/938)).
+
 - If launches fail at the fitted context on real hardware, `BUDGET_UTILISATION`
   is too generous for this duty and wants its own constant.
 - If the reservation's one measured configuration never occurs in practice, the
