@@ -10,6 +10,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use gglib_core::domain::Thinking;
 use gglib_core::domain::chat::{ConversationSettings, NewConversation};
 use gglib_core::domain::hub_chats::HubTurn;
+use gglib_core::ports::RunsPort as _;
 
 use super::hub_turn_tests::{chat, device, refused, turn};
 use super::{begin, plan, start};
@@ -106,8 +107,8 @@ async fn a_turn_that_says_default_forgets_and_names_no_budget() {
     assert_eq!(run(&state, "d2", turn(id, "after")).await, None);
 }
 
-/// An empty turn, a turn while every agent slot is taken (refused after it
-/// was read against the chat), and a turn on a chat with a live reply.
+/// An empty turn, a turn waiting in line while every agent slot is taken,
+/// and a turn on a chat with a live reply.
 #[tokio::test]
 async fn a_refused_turn_remembers_nothing() {
     let (_dir, state) = state().await;
@@ -119,10 +120,16 @@ async fn a_refused_turn_remembers_nothing() {
     let refusal = refused(start(&state, device("phone"), "d1", empty, None).await);
     assert_eq!(refusal, (400, "invalid_request"));
 
+    // With the one slot held, the turn is accepted and waits in line for
+    // it, remembering nothing until it runs.
     let slot = take_permit(&state).expect("the one slot");
     let off = saying(id, Thinking::Off);
-    let refusal = refused(start(&state, device("phone"), "d2", off.clone(), None).await);
-    assert_eq!(refusal, (429, "agent_busy"));
+    let waiting = start(&state, device("phone"), "d2", off.clone(), None).await;
+    assert!(waiting.unwrap().created);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(remembered(&state, id).await, None);
+    state.runs.cancel(&device("phone"), "d2").unwrap();
+    settled(&state).await;
     drop(slot);
 
     hang(&state, "d3", saving(id)).await;

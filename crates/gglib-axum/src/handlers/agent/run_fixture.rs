@@ -14,7 +14,7 @@ use gglib_core::ports::{
     AgentError, AgentLoopPort, AgentRunOutput, Created, RunScope, RunsPort as _,
 };
 use serde_json::{Value, json};
-use tokio::sync::{OwnedSemaphorePermit, mpsc};
+use tokio::sync::mpsc;
 
 use super::compose::Prepared;
 use super::launch::{Transcript, launch_turn, ready};
@@ -267,10 +267,10 @@ pub(super) fn launch(
     scope: RunScope,
     transcript: Transcript,
     p: Prepared,
-    permit: OwnedSemaphorePermit,
+    slot: impl Into<super::slot_line::Slot>,
 ) -> Result<Created, HttpError> {
     let run = (RunKind::Agent, p.made_by.model.clone());
-    launch_turn(state, id, scope, run, transcript, ready(p), permit)
+    launch_turn(state, id, scope, run, transcript, ready(p), slot)
 }
 
 pub(super) async fn start(

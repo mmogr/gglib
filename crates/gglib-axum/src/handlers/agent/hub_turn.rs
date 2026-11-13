@@ -32,6 +32,9 @@
 //!   by `run::settle_folder`, and gglib's file
 //!   tools read there. A device's turn never has one, whatever its chat
 //!   remembers (ADR 0023), and is refused one it says.
+//! - **Slot.** A device's turn that finds every agent slot taken waits in
+//!   line for one (`slot_line`); this machine's own is refused
+//!   `agent_busy` at once.
 //!
 //! Nothing here logs or returns the message, a row or a title: only ids.
 
@@ -52,7 +55,6 @@ use gglib_core::domain::runs::RunKind;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentRunStarter, Created, RunScope, RunsError, TurnRefused};
 use gglib_core::services::ChangeError;
-use tokio::sync::OwnedSemaphorePermit;
 
 use super::chat_sampling::ChatSampling;
 use super::chat_turn::{ChatQuery, Drawing};
@@ -63,6 +65,7 @@ use super::launch::{LatePrepare, Transcript, launch_turn};
 use super::loop_request::{LoopRequest, NamedLimits};
 use super::remote_upstream;
 use super::run::{coded, settle_folder, with_code};
+use super::slot_line::{Slot, agent_busy};
 use crate::bootstrap::AxumContext;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -196,11 +199,15 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// hub cannot draw for, `invalid_request` (400) for an `image_model`
 /// without `draw`, and `model_not_found`, `not_an_image_model` or
 /// `image_model_incomplete` (400) for one that cannot draw;
-/// `agent_busy` (429). A refusal writes nothing.
+/// `agent_busy` (429) when every agent slot is taken, on this machine's own
+/// turn, or, on a device's, when the line for a slot is full too. A refusal
+/// writes nothing.
 ///
 /// The run is reserved before its model is found or loaded, so the `PUT`
 /// answers at once and a cold load is the run's `waiting` event, not a
-/// hanging request. What is refused after that ends the run `failed`,
+/// hanging request. So is a device's wait for a slot: the run waits in line
+/// (`waiting`, `agent_slot`) and ends `failed` `agent_busy` past the line's
+/// bound. What is refused after that ends the run `failed`,
 /// having written nothing: `model_not_found`, naming the model, when this
 /// machine does not hold it; `model_unavailable` when it cannot load it; what
 /// the daemon's own door refuses (`unavailable`, `conflict`); and, on this
@@ -219,13 +226,12 @@ pub(super) async fn start(
         });
     }
     let plan = plan(state, &scope, turn, folder).await?;
-    let permit = take_permit(state).ok_or_else(|| {
-        coded(
-            StatusCode::TOO_MANY_REQUESTS,
-            "agent_busy",
-            "all agent loop slots are in use; try again later",
-        )
-    })?;
+    let slot = if scope.device().is_some() {
+        state.agent_line.take_or_join()
+    } else {
+        take_permit(state).map(Slot::Held)
+    };
+    let slot = slot.ok_or_else(agent_busy)?;
     // The run exists before its model does: found on its port or loaded,
     // and its loop composed, as the run's own work.
     let Plan {
@@ -243,7 +249,7 @@ pub(super) async fn start(
         shown_model(state, &model).await
     };
     let late = late_on(Arc::clone(state), model, chat, asked, folder);
-    begin(state, scope, id, shown, transcript, late, permit)
+    begin(state, scope, id, shown, transcript, late, slot)
 }
 
 /// What a run on `model` does once it exists: find the model on its port
@@ -296,7 +302,8 @@ pub(super) async fn shown_model(state: &AppState, model: &str) -> String {
 }
 
 /// Start the run `id` on `model`, reserved in `scope` before `late` finds
-/// or loads the model and composes the loop. The run is then saved as
+/// or loads the model and composes the loop, after waiting for its agent
+/// slot when `slot` is a place in line. The run is then saved as
 /// `transcript` says: its message and reply to the chat, which then
 /// remembers what the turn said of thinking. What `late` or the first write
 /// refuses ends the run `failed` with that code, with nothing written.
@@ -307,10 +314,10 @@ pub(super) fn begin(
     model: String,
     transcript: Transcript,
     late: LatePrepare,
-    permit: OwnedSemaphorePermit,
+    slot: impl Into<Slot>,
 ) -> Result<Created, HttpError> {
     let run = (RunKind::Agent, model);
-    launch_turn(state, id, scope, run, transcript, late, permit)
+    launch_turn(state, id, scope, run, transcript, late, slot)
 }
 
 /// A turn read against the hub's record: the model it runs on, the
@@ -489,6 +496,9 @@ mod hub_turn_plan_tests;
 #[cfg(test)]
 #[path = "hub_turn_sampling_tests.rs"]
 mod hub_turn_sampling_tests;
+#[cfg(test)]
+#[path = "hub_turn_slot_tests.rs"]
+mod hub_turn_slot_tests;
 #[cfg(test)]
 #[path = "hub_turn_tests.rs"]
 mod hub_turn_tests;

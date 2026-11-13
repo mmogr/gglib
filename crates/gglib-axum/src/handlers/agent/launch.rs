@@ -7,7 +7,9 @@
 //! waits for its `PUT`, so the load happens inside the run, which says it
 //! is waiting. What such a run is refused for after that ends it `failed`
 //! with the code the `PUT` would have answered, and it has written nothing.
-//! A turn's rows are written through [`begin_writes`].
+//! A paired device's run that finds every agent slot taken waits in line
+//! for one the same way, before its model is found or loaded
+//! (`slot_line`). A turn's rows are written through [`begin_writes`].
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,6 +28,7 @@ use gglib_core::ports::{Created, RunScope};
 
 use super::compose::{Prepared, frame};
 use super::run::{with_code, work};
+use super::slot_line::{Place, Slot, agent_busy};
 use super::transcript::{keep_machine, record_model, save_reply, save_user};
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -124,9 +127,9 @@ impl Loading {
     }
 }
 
-/// How often a run waiting for its model to load says so again, with the
-/// time the load has taken: a client that joins part-way can then show
-/// "Loading Qwen3-4B… 12 s" to the second.
+/// How often a run waiting for its model to load, or for an agent slot,
+/// says so again, with the time the wait has taken: a client that joins
+/// part-way can then show "Loading Qwen3-4B… 12 s" to the second.
 pub(super) const LOAD_TICK: Duration = Duration::from_secs(1);
 
 /// What a turn does once its run exists: find or load its model and
@@ -143,13 +146,16 @@ pub(super) fn ready(prepared: Prepared) -> LatePrepare {
 /// Start a turn: reserve `id` in `scope` for a run of `kind` (an agent run
 /// for a turn on a hub chat, a chat run for a chat a device keeps itself;
 /// either logs the agent loop's events) on `model`, and only then, as the
-/// run's own work, load its model and prepare its loop (`late`), write its
-/// rows ([`begin_writes`]) and run it. The caller's `PUT` is answered as
-/// soon as the run is reserved.
+/// run's own work, wait for its agent slot when `slot` is a place in line,
+/// load its model and prepare its loop (`late`), write its rows
+/// ([`begin_writes`]) and run it. The caller's `PUT` is answered as soon as
+/// the run is reserved.
 ///
 /// A refusal after the reservation ends the run `failed` with the
 /// refusal's code and message, having written no row; its end then saves no
-/// reply. A run whose id is already `scope`'s is answered as it stands.
+/// reply. A run that waits past the line's bound ends `failed`
+/// `agent_busy`. A run whose id is already `scope`'s is answered as it
+/// stands.
 ///
 /// # Errors
 ///
@@ -162,7 +168,7 @@ pub(super) fn launch_turn(
     (kind, model): (RunKind, String),
     transcript: Transcript,
     late: LatePrepare,
-    permit: OwnedSemaphorePermit,
+    slot: impl Into<Slot>,
 ) -> Result<Created, HttpError> {
     let spec = RunSpec {
         kind,
@@ -202,7 +208,7 @@ pub(super) fn launch_turn(
         transcript,
         device,
         late,
-        permit,
+        slot: slot.into(),
         times,
         written,
     };
@@ -220,7 +226,7 @@ struct Turn {
     transcript: Transcript,
     device: Option<String>,
     late: LatePrepare,
-    permit: OwnedSemaphorePermit,
+    slot: Slot,
     times: FrameTimes,
     written: Arc<AtomicBool>,
 }
@@ -232,10 +238,14 @@ impl Turn {
             transcript,
             device,
             late,
-            permit,
+            slot,
             times,
             written,
         } = self;
+        let permit = match slot {
+            Slot::Held(permit) => permit,
+            Slot::Waiting(place) => wait_in_line(place, &log, &times).await?,
+        };
         let (loading, mut waits) = mpsc::unbounded_channel();
         let preparing = late(Loading(loading));
         tokio::pin!(preparing);
@@ -274,11 +284,52 @@ impl Turn {
     }
 }
 
-/// Log that the run waits for `model` to load, which began at `since`.
-fn say_waiting(log: &RunLog, times: &FrameTimes, model: &str, since: Instant) {
-    let elapsed = u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX);
-    let waiting = AgentEvent::model_load_wait(model, elapsed);
-    if log.append(frame(&waiting)).is_ok() {
+/// Wait at `place` in the line for an agent slot, saying so each
+/// [`LOAD_TICK`] with the place and the time waited, until the slot is
+/// held; then leave the line. Past the line's bound, counted from joining
+/// it, the run ends `failed` `agent_busy`. Dropped (the run cancelled, its
+/// device forgotten, the daemon stopping), the place leaves the line.
+async fn wait_in_line(
+    place: Place,
+    log: &RunLog,
+    times: &FrameTimes,
+) -> Result<OwnedSemaphorePermit, RunError> {
+    let mut tick = tokio::time::interval(LOAD_TICK);
+    tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let gave_up = tokio::time::sleep_until(place.deadline());
+    let slot = place.slot();
+    tokio::pin!(gave_up, slot);
+    let permit = loop {
+        tokio::select! {
+            biased;
+            permit = &mut slot => break permit,
+            () = &mut gave_up => break None,
+            _ = tick.tick() => {
+                let wait = AgentEvent::agent_slot_wait(place.position(), since(place.joined()));
+                say(log, times, &wait);
+            }
+        }
+    };
+    permit.ok_or_else(|| refused(agent_busy()))
+}
+
+/// The milliseconds since `start`.
+fn since(start: Instant) -> u64 {
+    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
+/// Log that the run waits for `model` to load, which began at `start`.
+fn say_waiting(log: &RunLog, times: &FrameTimes, model: &str, start: Instant) {
+    say(
+        log,
+        times,
+        &AgentEvent::model_load_wait(model, since(start)),
+    );
+}
+
+/// Log a `waiting` event, and when it was logged.
+fn say(log: &RunLog, times: &FrameTimes, waiting: &AgentEvent) {
+    if log.append(frame(waiting)).is_ok() {
         times.logged();
     }
 }

@@ -28,7 +28,8 @@
 //! started with; its query has been read by then, and one the proxy cannot
 //! read is refused there. Nothing is written to any chat: the phone keeps the
 //! conversation, and reads the reply from the run, whose events are the
-//! agent loop's (`frames: agent`).
+//! agent loop's (`frames: agent`). With every agent slot taken, the run
+//! waits in line for one, as a device's hub turn does (`slot_line`).
 //!
 //! Nothing here logs or returns a message: a history that cannot be read
 //! is refused by the index of the message, never its text.
@@ -44,12 +45,13 @@ use gglib_core::domain::agent::{inline_images, into_agent_messages, parse_openai
 use gglib_core::domain::runs::RunKind;
 use gglib_core::ports::{Created, RunScope};
 
-use super::compose::{refuse_unavailable_drawing, take_permit};
+use super::compose::refuse_unavailable_drawing;
 use super::device_tools::Asked;
 use super::hub_turn::{late_on, shown_model};
 use super::launch::{Transcript, launch_turn};
 use super::loop_request::LoopRequest;
 use super::run::coded;
+use super::slot_line::agent_busy;
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -105,8 +107,11 @@ impl From<bool> for ChatQuery {
 ///
 /// # Errors
 ///
-/// What [`read`] refuses; `agent_busy` (429); and the runs' own. What is
-/// refused once the run exists ends it `failed` (`model_not_found` for a
+/// What [`read`] refuses; `agent_busy` (429) when every agent slot is taken
+/// and the line for one is full; and the runs' own. With a slot taken and
+/// room in line, the run is made and waits for one (`waiting`,
+/// `agent_slot`), ending `failed` `agent_busy` past the line's bound. What
+/// is refused once the run exists ends it `failed` (`model_not_found` for a
 /// model this machine does not hold, `model_unavailable` for one it cannot
 /// load), as a hub turn's.
 pub(super) async fn start(
@@ -125,13 +130,7 @@ pub(super) async fn start(
         });
     }
     let (model, chat) = read(state, &body, drawing).await?;
-    let permit = take_permit(state).ok_or_else(|| {
-        coded(
-            StatusCode::TOO_MANY_REQUESTS,
-            "agent_busy",
-            "all agent loop slots are in use; try again later",
-        )
-    })?;
+    let slot = state.agent_line.take_or_join().ok_or_else(agent_busy)?;
     let shown = shown_model(state, &model).await;
     let late = late_on(
         Arc::clone(state),
@@ -149,7 +148,7 @@ pub(super) async fn start(
         remember_folder: None,
     };
     let run = (RunKind::Chat, shown);
-    launch_turn(state, id, scope, run, transcript, late, permit)
+    launch_turn(state, id, scope, run, transcript, late, slot)
 }
 
 /// An `OpenAI` chat request read as the loop's: the catalogue model it runs
