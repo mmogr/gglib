@@ -6,7 +6,7 @@
 
 use super::*;
 use gglib_core::cache_config::KvCacheType;
-use gglib_core::domain::KvElemsPerToken;
+use gglib_core::domain::{ContextFit, KvElemsPerToken, LaunchFit};
 
 /// A refusal is not a zero, and `FitInputs` says which refusal it was. Without
 /// this the only signal is a `None`, which sends a person reading source.
@@ -255,4 +255,103 @@ fn an_image_plan_says_what_it_would_unload() {
         displacement(image, &refusal, Some(&qwen), flux_only, true),
         None
     );
+}
+
+/// A chat model with a trained window, weights and a KV cost, so the fit
+/// has every figure it needs, whatever this machine's budget.
+fn sized_spec() -> ModelLaunchSpec {
+    let mut spec = crate::process::residency::residency_tests::launch_spec(5, "qwen");
+    spec.context_length = Some(131_072);
+    spec.file_size_bytes = 4_000_000_000;
+    spec.kv_shape = Some(KvShape::uniform(KvElemsPerToken { k: 4096, v: 4096 }));
+    spec
+}
+
+/// A launch's narration carries the fit its context was sized by: the
+/// value a plan of it shows, the rung the options resolved with, and the
+/// context and the chain's rung the launch serves at. Equalities, not
+/// figures, since the budget is this machine's.
+#[test]
+fn a_launch_narration_carries_the_fit_its_context_was_sized_by() {
+    let request = super::super::prepare(
+        sized_spec(),
+        &ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        None,
+        None,
+        &LaunchOverrides::default(),
+    );
+    let planned = plan_llama(&[], &request);
+    let fit = planned
+        .narration
+        .fit
+        .expect("a chat model's narration has its fit");
+    assert_eq!(Some(fit.clone()), request.fit.clone().map(LaunchFit::from));
+    assert!(!request.fit_off);
+    assert_eq!(fit.fitted, request.opts.fitted_ctx);
+    assert_eq!((fit.serves_at, fit.source), request.context);
+    assert_eq!(fit.weights_bytes, Some(4_000_000_000));
+}
+
+/// A plan and the launch it describes show one fit, read twice.
+#[test]
+fn a_plan_shows_the_fit_its_narration_carries() {
+    let plan = plan_launch(
+        sized_spec(),
+        &ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        None,
+        None,
+        &LaunchOverrides::default(),
+        Loaded::NOTHING,
+    )
+    .expect("a chat model plans");
+    assert!(plan.fit.is_some());
+    assert_eq!(plan.fit.map(LaunchFit::from), plan.narration.fit);
+}
+
+/// With the fit switched off nothing was fitted. The request keeps the
+/// placeholder a plan shows (what it would serve at, every figure unknown),
+/// and the launch's narration carries no fit: one would say this machine
+/// could not be read.
+#[test]
+fn a_launch_with_the_fit_switched_off_narrates_no_fit() {
+    let request = super::super::prepare_with(
+        false,
+        sized_spec(),
+        &ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        None,
+        None,
+        &LaunchOverrides::default(),
+    );
+    assert!(request.fit_off);
+    let (serves_at, source) = request.context;
+    assert_eq!(
+        request.fit,
+        Some(ContextFit::new(
+            serves_at,
+            source,
+            None,
+            &FitInputs::default()
+        ))
+    );
+    assert_eq!(plan_llama(&[], &request).narration.fit, None);
+}
+
+/// An image model has no context, so its launch carries no fit.
+#[test]
+fn an_image_model_carries_no_fit() {
+    let mut spec = crate::process::residency::residency_tests::launch_spec(6, "flux");
+    spec.image_family = Some(gglib_core::domain::ImageFamily::Flux1);
+    assert_eq!(spec.runtime(), RuntimeKind::StableDiffusion);
+    let request = super::super::prepare(
+        spec,
+        &ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        None,
+        None,
+        &LaunchOverrides::default(),
+    );
+    assert_eq!(request.fit, None);
 }

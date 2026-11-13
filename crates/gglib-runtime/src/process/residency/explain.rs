@@ -2,9 +2,8 @@
 //!
 //! `gglib model explain` answers "what would happen", and ADR 0009's first kill
 //! criterion needs the same answer across a catalog: if the chosen rung is
-//! routinely far below the unsnapped figure, the ladder is too coarse. Until
-//! now the only record of that was a `debug!` line inside `admit`, emitted
-//! after a launch and read by nothing.
+//! routinely far below the unsnapped figure, the ladder is too coarse. A
+//! launch records the same fit on its narration.
 //!
 //! This is the same call `admit` makes — the same reserved budget, the same
 //! fallback to the undivided device — so an explanation cannot describe a fit
@@ -14,15 +13,15 @@
 
 use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
 use gglib_core::domain::{
-    ContextFit, FitInputs, KvShape, LaunchPlan, RuntimeKind, SecondarySlotDecision, SlotFootprint,
-    Unload, UnloadReason, decide_secondary_slot_for, fit_context_explained,
+    FitInputs, KvShape, LaunchPlan, RuntimeKind, SecondarySlotDecision, SlotFootprint, Unload,
+    UnloadReason, decide_secondary_slot_for, fit_context_explained,
 };
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec, ModelRuntimeError};
 use gglib_core::server_config::ServerConfigOptions;
 
 use super::context::fit_or_undivided;
 use super::launch::{LaunchRequest, LlamaResolutions, plan_llama, plan_sd};
-use super::{Prepared, explain_args, prepare, vram};
+use super::{explain_args, prepare, vram};
 use crate::process::SpawnConfig;
 use crate::process::admission::Resident;
 
@@ -121,8 +120,7 @@ pub fn plan_launch(
         others,
         already_resident,
     } = loaded;
-    let Prepared { request, fit } =
-        prepare(spec, template, cache_ram, num_ctx, default_ctx, overrides);
+    let request = prepare(spec, template, cache_ram, num_ctx, default_ctx, overrides);
     let planned = match request.spec.runtime() {
         RuntimeKind::Llama => plan_llama(others, &request),
         RuntimeKind::StableDiffusion => plan_sd(&request)?,
@@ -142,7 +140,6 @@ pub fn plan_launch(
             ));
         }
     };
-    let (serves_at, source) = request.context;
     let decision = second_slot_decision(&request, planned.llama.as_ref());
     let unloads = displacement(
         request.spec.runtime(),
@@ -156,7 +153,8 @@ pub fn plan_launch(
         args,
         narration: planned.narration,
         unloads,
-        fit: fit.map(|(fitted, inputs)| ContextFit::new(serves_at, source, fitted, &inputs)),
+        // The same value the narration carries: one fit, read twice.
+        fit: request.fit,
     })
 }
 

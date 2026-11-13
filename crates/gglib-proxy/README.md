@@ -1086,9 +1086,55 @@ Diagnostics › Live (`src/places/diagnostics/live/`).
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
 | `upstream_health` | `object` | Degradation watchdog counters since proxy start: the current strike streak (`consecutive_strikes`), and totals of empty responses, upstream errors, stream stalls, first-byte timeouts, client aborts, proactive recycles and recycles not carried out |
 | `per_model_defects` | `object` | Per-model defect counts, keyed by the name of the model a request resolved to — see below |
-| `launch` | `object \| null` | What the running model's launch decided, and why: the record the CLI banner prints at startup; `null` until a request has resolved a model |
+| `launch` | `object \| null` | What the running model's launch decided, and why: the record the CLI banner prints at startup, with the fit its context was sized by; `null` until a request has resolved a model — see below |
 | `admission` | `object` | Which models hold VRAM slots, what is queued behind them, and why the second slot is or is not in use; read live from the runtime on every snapshot |
 | `sampling_audit` | `object` | Whether the sampling gglib resolved is what llama-server applied, or that nothing is in a position to know; also the reasoning controls gglib decided and the client field names the trust gate dropped |
+
+#### `launch` (`LaunchNarration`)
+
+`model_name`, `quantization`, `weights_bytes`, and `decisions`: the banner's
+rows in order, each a `label`, a `value` and the `source` it came from.
+
+`fit` is the context fit the launch was sized by, the record `gglib model
+explain` shows for a launch not yet made. It is `null` for an image model and
+for a launch made with the fit switched off (`GGLIB_DISABLE_CONTEXT_FIT`), and
+absent from a hub older than the field. Its keys are `snake_case`, like the
+rest of this document (`plan.fit` on `GET /api/models/{id}/explain` is the
+same record in `camelCase`):
+
+```json
+"fit": {
+  "serves_at": 131072,
+  "source": "fitted_to_hardware",
+  "fitted": 131072,
+  "budget_bytes": 103079215104,
+  "weights_bytes": 4280000000,
+  "kv_bytes_per_token": 78336,
+  "kv_bytes": 10267656192,
+  "trained_ctx": 262144,
+  "unsnapped": 262144,
+  "sentence": "Fits this machine with 128K context, of 256K trained.",
+  "note": "fits (13.55 GiB of 86.40 GiB usable)",
+  "figures": [
+    { "label": "memory", "value": "fits (13.55 GiB of 86.40 GiB usable)", "source": null },
+    { "label": "device budget", "value": "96.00 GiB", "source": null }
+  ]
+}
+```
+
+`budget_bytes`, `weights_bytes`, `kv_bytes_per_token` and `unsnapped` are what
+the fit worked from and reached before snapping to a rung (`fitted`); each is
+`null` when it could not be read. `figures` is the same in words, one row a
+figure (seven when every figure is known; two are shown). The banner prints
+one row of it, and none when the fit reached no figure:
+
+```text
+    fit       262144 unsnapped  (of 96.0 GiB, 4.0 GiB weights, 77 KiB/token)
+```
+
+The fit appears once for each narration in the document: `launch.fit` for the
+model the endpoint last resolved, and `admission.slots[].launch.narration.fit`
+for each resident.
 
 #### `per_model_defects`
 

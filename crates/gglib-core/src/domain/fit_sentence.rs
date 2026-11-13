@@ -8,6 +8,7 @@
 //! [`usable_share`] of the budget), and this only spells it.
 
 use super::context_fit::FitInputs;
+use super::launch_narration::{LaunchDecision, bytes_as_gib};
 use super::launch_plan::ContextFit;
 use super::recommendation::usable_share;
 use crate::download::format::format_size;
@@ -36,10 +37,20 @@ impl ContextFit {
             unsnapped: inputs.unsnapped,
             sentence: String::new(),
             note: None,
+            figures: Vec::new(),
         };
         fit.sentence = fit_sentence(&fit);
         fit.note = fit_note(&fit);
+        fit.figures = fit_figures(&fit);
         fit
+    }
+
+    /// The figures as rows, the ones [`Self::figures`] serves: composed from
+    /// the fields, so a reader of a fit served without them (an older hub)
+    /// still has the rows.
+    #[must_use]
+    pub fn figure_rows(&self) -> Vec<LaunchDecision> {
+        fit_figures(self)
     }
 }
 
@@ -95,6 +106,39 @@ pub(crate) fn fit_note(fit: &ContextFit) -> Option<String> {
         format_size(m.need),
         format_size(m.usable)
     ))
+}
+
+/// The fit's figures as rows: the note as `memory` when there is one, then
+/// each figure, `unknown` when it could not be read (a refusal, never a
+/// zero).
+fn fit_figures(fit: &ContextFit) -> Vec<LaunchDecision> {
+    let mut rows: Vec<LaunchDecision> = fit
+        .note
+        .iter()
+        .map(|note| LaunchDecision::bare("memory", note.clone()))
+        .collect();
+    rows.extend([
+        LaunchDecision::bare("device budget", gib(fit.budget_bytes)),
+        LaunchDecision::bare("weights", gib(fit.weights_bytes)),
+        LaunchDecision::bare("kv bytes/token", count(fit.kv_bytes_per_token)),
+        LaunchDecision::bare("kv cache", gib(fit.kv_bytes)),
+        LaunchDecision::bare("trained window", count(fit.trained_ctx)),
+        LaunchDecision::bare("before snapping", count(fit.unsnapped)),
+    ]);
+    rows
+}
+
+/// A figure as a number, or `unknown`.
+fn count(v: Option<u64>) -> String {
+    v.map_or_else(|| "unknown".to_owned(), |n| n.to_string())
+}
+
+/// Bytes as GiB to two places, or `unknown`.
+fn gib(v: Option<u64>) -> String {
+    v.map_or_else(
+        || "unknown".to_owned(),
+        |b| format!("{:.2} GiB", bytes_as_gib(b)),
+    )
 }
 
 /// The served context's memory against what the runtime spends.

@@ -14,8 +14,8 @@
 
 use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::{
-    LaunchDecision, LaunchNarration, RuntimeCapabilities, RuntimeFlags, RuntimeKind, SlotFootprint,
-    format_gib, format_mib_as_gib,
+    ContextFit, LaunchDecision, LaunchFit, LaunchNarration, RuntimeCapabilities, RuntimeFlags,
+    RuntimeKind, SlotFootprint, format_gib, format_mib_as_gib,
 };
 use gglib_core::ports::{JinjaMode, ModelLaunchSpec};
 use gglib_core::server_config::ContextSizeSource;
@@ -48,6 +48,9 @@ pub(crate) struct NarrationInputs<'a> {
     pub slot_restore: SlotRestoreResolution,
     /// The capability flags `build_server_config` resolved.
     pub capabilities: &'a ResolvedCapabilities,
+    /// The fit the context was sized by, carried as it is; `None` when the
+    /// fit was switched off.
+    pub fit: Option<&'a ContextFit>,
 }
 
 /// Build the narration for one launch.
@@ -82,6 +85,8 @@ pub(crate) fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
         n.push(flags);
     }
     n.push(sampling_decision());
+    // The one conversion: the same figures under the narration's keys.
+    n.fit = inputs.fit.cloned().map(LaunchFit::from);
 
     n
 }
@@ -482,6 +487,7 @@ mod tests {
                 source: SlotRestoreSource::Supported,
             },
             capabilities: caps,
+            fit: None,
         }
     }
 

@@ -63,7 +63,7 @@ This crate is in the **Infrastructure Layer** — it manages external processes 
 - **`health_monitor.rs`** — Continuous health monitoring for processes
 - **`health.rs`** — The loopback HTTP client the health checks in `process/` use
 - **`compose.rs`** — Agent loop composition root (wires LLM adapter + tool executors)
-- **`launch_narration.rs`** — Human-readable account of how a launch was configured
+- **`launch_narration.rs`** — Human-readable account of how a launch was configured, with the fit its context was sized by
 - **`server_config.rs`** / **`unified_server_config.rs`** — Launch argument resolution
 - **`pidfile/`** — PID file writing and cleanup for spawned servers
 - **`binary_install/`** — Installing a server binary from a pinned GitHub release, for any product, and the source checkout a build starts from

@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::{
-    CacheRamHealth, LaunchNarration, RuntimeKind, TemplateCapsState, classify_cache_ram,
+    CacheRamHealth, ContextFit, LaunchNarration, RuntimeKind, TemplateCapsState, classify_cache_ram,
 };
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
@@ -45,6 +45,7 @@ pub(super) mod launch_files;
 /// A struct rather than nine parameters because every field is decided at a
 /// different point in `admit`, and threading them positionally through a
 /// `tokio::spawn` boundary made the ordering easy to get silently wrong.
+#[derive(Clone)]
 pub(super) struct LaunchRequest {
     /// The model to launch, already resolved from the catalog.
     pub spec: ModelLaunchSpec,
@@ -68,6 +69,14 @@ pub(super) struct LaunchRequest {
     /// future dropped mid-await, the cleanup skipped, the child leaked. One
     /// value, read by both, and the relationship cannot drift.
     pub health_deadline_secs: u64,
+    /// The fit `context` was sized by, carried to the narration so the
+    /// running launch shows the figures `gglib model explain` shows. `None`
+    /// for an image model, which has no context.
+    pub fit: Option<ContextFit>,
+    /// `GGLIB_DISABLE_CONTEXT_FIT` was set when this was prepared, so `fit`
+    /// is a plan's placeholder and not a fit that ran: the narration leaves
+    /// it out.
+    pub fit_off: bool,
 }
 
 /// Run one launch and record it in the queue.
@@ -451,6 +460,8 @@ pub(super) fn plan_llama(others: &[Resident], request: &LaunchRequest) -> Planne
         opts,
         context: (resolved_ctx, ctx_source),
         cache_ram: cache_ram_setting,
+        fit,
+        fit_off,
         ..
     } = request;
     let mut opts = opts.clone();
@@ -521,6 +532,7 @@ pub(super) fn plan_llama(others: &[Resident], request: &LaunchRequest) -> Planne
         disk_cache_enabled: slot_save_path.is_some(),
         slot_restore,
         capabilities: &capabilities,
+        fit: fit.as_ref().filter(|_| !fit_off),
     });
 
     Planned {
