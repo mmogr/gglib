@@ -393,8 +393,8 @@ gglib proxy dashboard (not covered)
   --remote (not covered)
 gglib proxy stop
 gglib proxy test
-gglib proxy trips
-  --since
+gglib proxy trips (not covered)
+  --since (not covered)
 gglib q
   --file
   --image

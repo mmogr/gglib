@@ -11,7 +11,7 @@
 //!
 //! A line marked `(not covered)` is one the page lists under "Not covered"
 //! (benchmarks, `model explain`, the proxy dashboard, `llama_base_port`, the
-//! loop guard), so deleting it breaks nothing. Values a flag checks with a
+//! loop guard and its log, `proxy trips`), so deleting it breaks nothing. Values a flag checks with a
 //! function of its own, such as `--reasoning-effort`'s levels, are not clap's
 //! to list and are not here.
 //!
@@ -41,6 +41,7 @@ const NOT_COVERED_COMMANDS: &[&str] = &[
     "gglib benchmark",
     "gglib model explain",
     "gglib proxy dashboard",
+    "gglib proxy trips",
 ];
 const NOT_COVERED_KEYS: &[&str] = &[
     "llama-base-port",
