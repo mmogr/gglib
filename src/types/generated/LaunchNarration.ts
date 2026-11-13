@@ -9,7 +9,9 @@ import type { LaunchDecision } from "./LaunchDecision";
  * status endpoint, and the GUI dashboard. See the [module docs](self) for
  * why the decisions are an ordered list rather than named fields: the three
  * consumers all render the same rows in the same order, and a list keeps
- * adding a decision to a single site instead of four.
+ * adding a decision to a single site instead of four. The fit is a record of
+ * its own: the status route carries all of it, the GUI shows its sentence
+ * and figures, and the banner one row ([`ContextFit::banner_row`]).
  */
 export type LaunchNarration = { 
 /**

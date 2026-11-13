@@ -54,8 +54,9 @@ fn render_launch_narration(narration: &LaunchNarration, color: bool) -> Vec<Stri
     ];
 
     // The fit's one row goes under the decisions: what the context row's
-    // rung was snapped from, and from what. An image model has none.
-    let fit = narration.fit.as_ref().map(ContextFit::banner_row);
+    // rung was snapped from, and from what. An image model has none, and
+    // nor does a fit that reached no figure.
+    let fit = narration.fit.as_ref().and_then(ContextFit::banner_row);
     let rows: Vec<&LaunchDecision> = narration.decisions.iter().chain(fit.as_ref()).collect();
 
     // Pad labels to a common width so the values form a column. Computed from
@@ -169,11 +170,60 @@ mod tests {
         let lines = render_launch_narration(&sized(narration()), false);
         assert_eq!(
             lines[lines.len() - 2],
-            "    fit    40005 before snapping  (48.00 GiB budget, 2.33 GiB weights, 1097000 bytes/token)"
+            "    fit    40005 unsnapped  (of 48.0 GiB, 2.3 GiB weights, 1072 KiB/token)"
         );
         assert_eq!(
             lines.len(),
             render_launch_narration(&narration(), false).len() + 1
+        );
+    }
+
+    /// Under the widest label a launch prints, `sampling`, the fit's row
+    /// keeps to 80 columns with the widest figures a budget under 1000 GiB
+    /// and weights under 100 GiB give it.
+    #[test]
+    fn the_fit_row_fits_eighty_columns() {
+        let mut n = narration();
+        n.push(LaunchDecision::new("sampling", "v", "s"));
+        n.fit = Some(ContextFit::new(
+            524_288,
+            ContextSizeSource::FittedToHardware,
+            Some(524_288),
+            &FitInputs {
+                budget_bytes: Some(999 << 30),
+                weights_bytes: Some(99 << 30),
+                kv: Some(KvBytes::uniform(1023 << 10)),
+                trained_ctx: Some(1_048_576),
+                unsnapped: Some(999_999),
+            },
+        ));
+        let lines = render_launch_narration(&n, false);
+        let fit = lines.iter().find(|l| l.contains("unsnapped")).unwrap();
+        assert_eq!(
+            fit,
+            "    fit       999999 unsnapped  (of 999.0 GiB, 99.0 GiB weights, 1023 KiB/token)"
+        );
+        assert!(
+            fit.chars().count() <= 80,
+            "{} columns: {fit}",
+            fit.chars().count()
+        );
+    }
+
+    /// A fit that reached no figure (switched off, or refused) prints no
+    /// row of unknowns.
+    #[test]
+    fn a_fit_with_no_figure_prints_no_row() {
+        let mut n = narration();
+        n.fit = Some(ContextFit::new(
+            4096,
+            ContextSizeSource::BuiltInDefault,
+            None,
+            &FitInputs::default(),
+        ));
+        assert_eq!(
+            render_launch_narration(&n, false),
+            render_launch_narration(&narration(), false)
         );
     }
 
