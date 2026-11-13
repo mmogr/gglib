@@ -8,7 +8,7 @@
 //! [`usable_share`] of the budget), and this only spells it.
 
 use super::context_fit::FitInputs;
-use super::launch_narration::{LaunchDecision, bytes_as_gib, format_gib};
+use super::launch_narration::{LaunchDecision, bytes_as_gib};
 use super::launch_plan::ContextFit;
 use super::recommendation::usable_share;
 use crate::download::format::format_size;
@@ -51,33 +51,6 @@ impl ContextFit {
     #[must_use]
     pub fn figure_rows(&self) -> Vec<LaunchDecision> {
         fit_figures(self)
-    }
-
-    /// The fit as one row of the launch banner, which has room for one:
-    /// `fit  40005 unsnapped  (of 48.0 GiB, 2.3 GiB weights, 1072
-    /// KiB/token)`. The context row above it says the rung; this says what
-    /// the rung was snapped from, and from what: the budget, the weights and
-    /// the KV cost a token (rounded up to a KiB; the exact figure is in
-    /// [`Self::figures`]). Under the banner's widest label it keeps to 80
-    /// columns for a budget under 1000 GiB and weights under 100 GiB.
-    ///
-    /// `None` when the fit reached no figure (switched off, or refused): the
-    /// banner prints no row of unknowns, and the status route and the GUI
-    /// carry the refusal's sentence.
-    #[must_use]
-    pub fn banner_row(&self) -> Option<LaunchDecision> {
-        let unknown = || "unknown".to_owned();
-        Some(LaunchDecision::new(
-            "fit",
-            format!("{} unsnapped", self.unsnapped?),
-            format!(
-                "of {}, {} weights, {} KiB/token",
-                self.budget_bytes.map_or_else(unknown, format_gib),
-                self.weights_bytes.map_or_else(unknown, format_gib),
-                self.kv_bytes_per_token
-                    .map_or_else(unknown, |b| b.div_ceil(1024).to_string())
-            ),
-        ))
     }
 }
 

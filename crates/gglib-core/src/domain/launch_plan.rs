@@ -131,7 +131,7 @@ pub struct ContextFit {
     /// `unknown` when it could not be read. The GUI shows these rows as they
     /// are; `gglib model explain` composes the same rows from the fields
     /// ([`ContextFit::figure_rows`]), and the launch banner has room for one
-    /// ([`ContextFit::banner_row`]).
+    /// ([`LaunchFit::banner_row`](super::LaunchFit::banner_row)).
     #[serde(default)]
     pub figures: Vec<LaunchDecision>,
 }

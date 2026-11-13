@@ -14,8 +14,8 @@
 
 use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::{
-    ContextFit, LaunchDecision, LaunchNarration, RuntimeCapabilities, RuntimeFlags, RuntimeKind,
-    SlotFootprint, format_gib, format_mib_as_gib,
+    ContextFit, LaunchDecision, LaunchFit, LaunchNarration, RuntimeCapabilities, RuntimeFlags,
+    RuntimeKind, SlotFootprint, format_gib, format_mib_as_gib,
 };
 use gglib_core::ports::{JinjaMode, ModelLaunchSpec};
 use gglib_core::server_config::ContextSizeSource;
@@ -84,7 +84,8 @@ pub(crate) fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
         n.push(flags);
     }
     n.push(sampling_decision());
-    n.fit = inputs.fit.cloned();
+    // The one conversion: the same figures under the narration's keys.
+    n.fit = inputs.fit.cloned().map(LaunchFit::from);
 
     n
 }

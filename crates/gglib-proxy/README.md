@@ -1097,19 +1097,20 @@ rows in order, each a `label`, a `value` and the `source` it came from.
 
 `fit` is the context fit the launch was sized by, the record `gglib model
 explain` shows for a launch not yet made. It is `null` for an image model and
-absent from a hub older than the field. Its keys are camelCase, as `GET
-/api/models/{id}/explain` serves them:
+absent from a hub older than the field. Its keys are snake_case, like the
+rest of this document (`plan.fit` on `GET /api/models/{id}/explain` is the
+same record in camelCase):
 
 ```json
 "fit": {
-  "servesAt": 131072,
+  "serves_at": 131072,
   "source": "fitted_to_hardware",
   "fitted": 131072,
-  "budgetBytes": 103079215104,
-  "weightsBytes": 4280000000,
-  "kvBytesPerToken": 78336,
-  "kvBytes": 10267656192,
-  "trainedCtx": 262144,
+  "budget_bytes": 103079215104,
+  "weights_bytes": 4280000000,
+  "kv_bytes_per_token": 78336,
+  "kv_bytes": 10267656192,
+  "trained_ctx": 262144,
   "unsnapped": 262144,
   "sentence": "Fits this machine with 128K context, of 256K trained.",
   "note": "fits (13.55 GiB of 86.40 GiB usable)",
@@ -1120,8 +1121,8 @@ absent from a hub older than the field. Its keys are camelCase, as `GET
 }
 ```
 
-`budgetBytes`, `weightsBytes`, `kvBytesPerToken` and `unsnapped` are what the
-fit worked from and reached before snapping to a rung (`fitted`); each is
+`budget_bytes`, `weights_bytes`, `kv_bytes_per_token` and `unsnapped` are what
+the fit worked from and reached before snapping to a rung (`fitted`); each is
 `null` when it could not be read. `figures` is the same in words, one row a
 figure (seven when every figure is known; two are shown). The banner prints
 one row of it, and none when the fit reached no figure:

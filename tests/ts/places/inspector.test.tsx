@@ -427,7 +427,6 @@ describe('the inspector, a model on this machine', () => {
           { label: 'kv', value: 'q8_0 -> 9.6 GiB, f16 would be 18.0 GiB', source: 'default' },
           { label: 'flags', value: '--jinja (agent tag)', source: null },
         ],
-        fit: null,
       },
     });
     explain.answer = launchExplanation(samplingExplanation(), plan);
@@ -446,7 +445,7 @@ describe('the inspector, a model on this machine', () => {
 
   it('draws Templates as Auto when gglib sends no flag, and Change saves On with the stored rest', async () => {
     // The narration's flags line names the reasoning flag; it is not Templates' value.
-    const narration = { model_name: 'Gemma-3-4B-It', quantization: null, weights_bytes: 1, decisions: [{ label: 'flags', value: '--reasoning-format deepseek (reasoning tag)', source: null }], fit: null };
+    const narration = { model_name: 'Gemma-3-4B-It', quantization: null, weights_bytes: 1, decisions: [{ label: 'flags', value: '--reasoning-format deepseek (reasoning tag)', source: null }] };
     explain.answer = launchExplanation(samplingExplanation(), { ...noJinja(), narration });
     renderInspector(guiModel({ ...GEMMA, serverDefaults: { contextLength: 16384 } }));
     const user = userEvent.setup();

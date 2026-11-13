@@ -7,7 +7,7 @@
 
 use std::io::IsTerminal;
 
-use gglib_core::domain::{ContextFit, LaunchDecision, LaunchNarration};
+use gglib_core::domain::{LaunchDecision, LaunchFit, LaunchNarration};
 
 const DIM: &str = "\u{1b}[2m";
 /// ANSI bold, for the model identity line.
@@ -56,7 +56,7 @@ fn render_launch_narration(narration: &LaunchNarration, color: bool) -> Vec<Stri
     // The fit's one row goes under the decisions: what the context row's
     // rung was snapped from, and from what. An image model has none, and
     // nor does a fit that reached no figure.
-    let fit = narration.fit.as_ref().and_then(ContextFit::banner_row);
+    let fit = narration.fit.as_ref().and_then(LaunchFit::banner_row);
     let rows: Vec<&LaunchDecision> = narration.decisions.iter().chain(fit.as_ref()).collect();
 
     // Pad labels to a common width so the values form a column. Computed from
@@ -80,7 +80,7 @@ fn render_launch_narration(narration: &LaunchNarration, color: bool) -> Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::{FitInputs, KvBytes};
+    use gglib_core::domain::{ContextFit, FitInputs, KvBytes};
     use gglib_core::server_config::ContextSizeSource;
 
     fn narration() -> LaunchNarration {
@@ -148,7 +148,7 @@ mod tests {
     /// The fit a launch was sized by: 48 GiB, 2.5 GB of weights and
     /// 1,097,000 bytes a token, which fit 40,005 tokens before 32K.
     fn sized(mut n: LaunchNarration) -> LaunchNarration {
-        n.fit = Some(ContextFit::new(
+        n.fit = Some(LaunchFit::from(ContextFit::new(
             32_768,
             ContextSizeSource::FittedToHardware,
             Some(32_768),
@@ -159,7 +159,7 @@ mod tests {
                 trained_ctx: Some(131_072),
                 unsnapped: Some(40_005),
             },
-        ));
+        )));
         n
     }
 
@@ -185,7 +185,7 @@ mod tests {
     fn the_fit_row_fits_eighty_columns() {
         let mut n = narration();
         n.push(LaunchDecision::new("sampling", "v", "s"));
-        n.fit = Some(ContextFit::new(
+        n.fit = Some(LaunchFit::from(ContextFit::new(
             524_288,
             ContextSizeSource::FittedToHardware,
             Some(524_288),
@@ -196,7 +196,7 @@ mod tests {
                 trained_ctx: Some(1_048_576),
                 unsnapped: Some(999_999),
             },
-        ));
+        )));
         let lines = render_launch_narration(&n, false);
         let fit = lines.iter().find(|l| l.contains("unsnapped")).unwrap();
         assert_eq!(
@@ -215,12 +215,12 @@ mod tests {
     #[test]
     fn a_fit_with_no_figure_prints_no_row() {
         let mut n = narration();
-        n.fit = Some(ContextFit::new(
+        n.fit = Some(LaunchFit::from(ContextFit::new(
             4096,
             ContextSizeSource::BuiltInDefault,
             None,
             &FitInputs::default(),
-        ));
+        )));
         assert_eq!(
             render_launch_narration(&n, false),
             render_launch_narration(&narration(), false)

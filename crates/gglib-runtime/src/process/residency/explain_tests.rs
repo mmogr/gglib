@@ -6,7 +6,7 @@
 
 use super::*;
 use gglib_core::cache_config::KvCacheType;
-use gglib_core::domain::KvElemsPerToken;
+use gglib_core::domain::{KvElemsPerToken, LaunchFit};
 
 /// A refusal is not a zero, and `FitInputs` says which refusal it was. Without
 /// this the only signal is a `None`, which sends a person reading source.
@@ -286,7 +286,7 @@ fn a_launch_narration_carries_the_fit_its_context_was_sized_by() {
         .narration
         .fit
         .expect("a chat model's narration has its fit");
-    assert_eq!(Some(&fit), request.fit.as_ref());
+    assert_eq!(Some(fit.clone()), request.fit.clone().map(LaunchFit::from));
     assert_eq!(fit.fitted, request.opts.fitted_ctx);
     assert_eq!((fit.serves_at, fit.source), request.context);
     assert_eq!(fit.weights_bytes, Some(4_000_000_000));
@@ -306,7 +306,7 @@ fn a_plan_shows_the_fit_its_narration_carries() {
     )
     .expect("a chat model plans");
     assert!(plan.fit.is_some());
-    assert_eq!(plan.fit, plan.narration.fit);
+    assert_eq!(plan.fit.map(LaunchFit::from), plan.narration.fit);
 }
 
 /// An image model has no context, so its launch carries no fit.

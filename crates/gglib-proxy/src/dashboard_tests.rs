@@ -389,7 +389,9 @@ fn the_snapshot_reads_the_same_audit_store_the_poller_writes() {
 /// `GET /v1/gglib/proxy/status`, which is this snapshot.
 #[test]
 fn snapshot_surfaces_the_recorded_launch_narration() {
-    use gglib_core::domain::{ContextFit, FitInputs, KvBytes, LaunchDecision, LaunchNarration};
+    use gglib_core::domain::{
+        ContextFit, FitInputs, KvBytes, LaunchDecision, LaunchFit, LaunchNarration,
+    };
     use gglib_core::server_config::ContextSizeSource;
 
     let connections = ActiveConnectionsRegistry::new();
@@ -416,7 +418,7 @@ fn snapshot_surfaces_the_recorded_launch_narration() {
 
     let mut narration = LaunchNarration::new("qwen3", Some("Q4_K_M".to_string()), 0);
     narration.push(LaunchDecision::new("kv", "q8_0", "default"));
-    narration.fit = Some(ContextFit::new(
+    narration.fit = Some(LaunchFit::from(ContextFit::new(
         32_768,
         ContextSizeSource::FittedToHardware,
         Some(32_768),
@@ -427,15 +429,18 @@ fn snapshot_surfaces_the_recorded_launch_narration() {
             trained_ctx: Some(131_072),
             unsnapped: Some(40_005),
         },
-    ));
+    )));
     launch.set(narration.clone());
 
     let snapshot = build(&launch);
     assert_eq!(snapshot.launch, Some(narration));
-    // The fit's figures are on the wire beside the decisions.
+    // The fit's figures are on the wire beside the decisions, under
+    // snake_case keys like the rest of the document.
     let json = serde_json::to_value(&snapshot).expect("the snapshot serialises");
     assert_eq!(json["launch"]["fit"]["unsnapped"], 40_005);
-    assert_eq!(json["launch"]["fit"]["budgetBytes"], 48_u64 << 30);
+    assert_eq!(json["launch"]["fit"]["budget_bytes"], 48_u64 << 30);
+    assert_eq!(json["launch"]["fit"]["kv_bytes_per_token"], 1_097_000);
+    assert!(json["launch"]["fit"].get("budgetBytes").is_none());
     assert_eq!(json["launch"]["fit"]["figures"][0]["label"], "memory");
 }
 

@@ -9,9 +9,25 @@ import { render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ProxyLaunchPanel } from '../../../src/places/diagnostics/live/ProxyLaunchPanel';
 import type { LaunchNarration } from '../../../src/services/transport/types/dashboard';
+import type { LaunchFit } from '../../../src/types/generated/LaunchFit';
 import { chatPlan } from '../fixtures/explain';
 
-const fit = chatPlan().fit!;
+/** The fixtures' fit as a narration carries it: the same figures, snake_case keys. */
+const plan = chatPlan().fit!;
+const fit: LaunchFit = {
+  serves_at: plan.servesAt,
+  source: plan.source,
+  fitted: plan.fitted,
+  budget_bytes: plan.budgetBytes,
+  weights_bytes: plan.weightsBytes,
+  kv_bytes_per_token: plan.kvBytesPerToken,
+  kv_bytes: plan.kvBytes,
+  trained_ctx: plan.trainedCtx,
+  unsnapped: plan.unsnapped,
+  sentence: plan.sentence,
+  note: plan.note,
+  figures: plan.figures,
+};
 
 function launch(overrides: Partial<LaunchNarration> = {}): LaunchNarration {
   return {
@@ -43,7 +59,7 @@ describe('ProxyLaunchPanel', () => {
 
   it('shows no fit from a hub older than the field', () => {
     const { fit: _absent, ...older } = launch();
-    render(<ProxyLaunchPanel launch={older as LaunchNarration} />);
+    render(<ProxyLaunchPanel launch={older} />);
     expect(screen.queryByRole('group', { name: 'Context fit' })).not.toBeInTheDocument();
   });
 });

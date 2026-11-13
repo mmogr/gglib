@@ -35,6 +35,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::launch_plan::ContextFit;
+use crate::server_config::ContextSizeSource;
 
 /// One resolved launch decision, paired with the reason it was chosen.
 ///
@@ -94,8 +95,9 @@ impl LaunchDecision {
 /// why the decisions are an ordered list rather than named fields: the three
 /// consumers all render the same rows in the same order, and a list keeps
 /// adding a decision to a single site instead of four. The fit is a record of
-/// its own: the status route carries all of it, the GUI shows its sentence
-/// and figures, and the banner one row ([`ContextFit::banner_row`]).
+/// its own ([`LaunchFit`]): the status route carries all of it, the GUI shows
+/// its sentence and figures, and the banner one row
+/// ([`LaunchFit::banner_row`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct LaunchNarration {
@@ -114,7 +116,117 @@ pub struct LaunchNarration {
     /// image model, which has no context, and from a hub older than the
     /// field.
     #[serde(default)]
-    pub fit: Option<ContextFit>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    pub fit: Option<LaunchFit>,
+}
+
+/// The context fit a launch was sized by, as its narration carries it: every
+/// field of [`ContextFit`], unchanged, under snake_case keys like the rest
+/// of the narration (a plan's own `fit` keeps `ContextFit`'s camelCase).
+/// Converted from the launch's `ContextFit`, never computed again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct LaunchFit {
+    /// The context size the launch resolved to.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub serves_at: u64,
+    /// Which rung of the chain supplied it.
+    pub source: ContextSizeSource,
+    /// The context fitted to this machine, whatever rung won; `None` is a
+    /// refusal, with the fields below saying what was missing.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub fitted: Option<u64>,
+    /// Device memory the fit was allowed to spend against.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub budget_bytes: Option<u64>,
+    /// The weights, summed across shards, plus the projector when linked.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub weights_bytes: Option<u64>,
+    /// Bytes of KV cache each token of context costs at the launch's types.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub kv_bytes_per_token: Option<u64>,
+    /// The KV cache at the served context.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub kv_bytes: Option<u64>,
+    /// The model's trained ceiling.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub trained_ctx: Option<u64>,
+    /// The context that fit before snapping to a rung.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub unsnapped: Option<u64>,
+    /// The fit said in a sentence:
+    /// `Fits this machine with 32K context, of 128K trained.`
+    pub sentence: String,
+    /// What the served context needs against the share of the budget the
+    /// fit spends, with the verdict; `None` when a figure it needs is.
+    pub note: Option<String>,
+    /// The figures above as a person reads them, one row each, `unknown`
+    /// where one could not be read.
+    pub figures: Vec<LaunchDecision>,
+}
+
+impl From<ContextFit> for LaunchFit {
+    /// Field for field. Destructured in full, so a field added to
+    /// [`ContextFit`] does not compile until it is carried here.
+    fn from(fit: ContextFit) -> Self {
+        let ContextFit {
+            serves_at,
+            source,
+            fitted,
+            budget_bytes,
+            weights_bytes,
+            kv_bytes_per_token,
+            kv_bytes,
+            trained_ctx,
+            unsnapped,
+            sentence,
+            note,
+            figures,
+        } = fit;
+        Self {
+            serves_at,
+            source,
+            fitted,
+            budget_bytes,
+            weights_bytes,
+            kv_bytes_per_token,
+            kv_bytes,
+            trained_ctx,
+            unsnapped,
+            sentence,
+            note,
+            figures,
+        }
+    }
+}
+
+impl LaunchFit {
+    /// The fit as one row of the launch banner, which has room for one:
+    /// `fit  40005 unsnapped  (of 48.0 GiB, 2.3 GiB weights, 1072
+    /// KiB/token)`. The context row above it says the rung; this says what
+    /// the rung was snapped from, and from what: the budget, the weights and
+    /// the KV cost a token (rounded up to a KiB; the exact figure is in
+    /// [`Self::figures`]). Under the banner's widest label it keeps to 80
+    /// columns for a budget under 1000 GiB and weights under 100 GiB.
+    ///
+    /// `None` when the fit reached no figure (switched off, or refused): the
+    /// banner prints no row of unknowns, and the status route and the GUI
+    /// carry the refusal's sentence.
+    #[must_use]
+    pub fn banner_row(&self) -> Option<LaunchDecision> {
+        let unknown = || "unknown".to_owned();
+        Some(LaunchDecision::new(
+            "fit",
+            format!("{} unsnapped", self.unsnapped?),
+            format!(
+                "of {}, {} weights, {} KiB/token",
+                self.budget_bytes.map_or_else(unknown, format_gib),
+                self.weights_bytes.map_or_else(unknown, format_gib),
+                self.kv_bytes_per_token
+                    .map_or_else(unknown, |b| b.div_ceil(1024).to_string())
+            ),
+        ))
+    }
 }
 
 impl LaunchNarration {
@@ -194,6 +306,46 @@ pub fn format_mib_as_gib(mib: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::{FitInputs, KvBytes};
+
+    /// The narration's fit is the launch's `ContextFit`, every field of it,
+    /// under snake_case keys: its JSON is the `ContextFit`'s with each key
+    /// respelled and nothing added, dropped or changed.
+    #[test]
+    fn a_launch_fit_carries_every_field_of_the_context_fit() {
+        let fit = ContextFit::new(
+            32_768,
+            ContextSizeSource::FittedToHardware,
+            Some(32_768),
+            &FitInputs {
+                budget_bytes: Some(48 << 30),
+                weights_bytes: Some(2_500_000_000),
+                kv: Some(KvBytes::uniform(1_097_000)),
+                trained_ctx: Some(131_072),
+                unsnapped: Some(40_005),
+            },
+        );
+        let snake = |key: &str| {
+            key.chars().fold(String::new(), |mut out, c| {
+                if c.is_ascii_uppercase() {
+                    out.push('_');
+                }
+                out.push(c.to_ascii_lowercase());
+                out
+            })
+        };
+        let serde_json::Value::Object(camel) = serde_json::to_value(&fit).unwrap() else {
+            panic!("a fit is an object");
+        };
+        let want: serde_json::Map<String, serde_json::Value> =
+            camel.into_iter().map(|(k, v)| (snake(&k), v)).collect();
+        assert_eq!(want.len(), 12, "a field went missing from the fit itself");
+        assert!(want.contains_key("kv_bytes_per_token"));
+        assert_eq!(
+            serde_json::to_value(LaunchFit::from(fit)).unwrap(),
+            serde_json::Value::Object(want)
+        );
+    }
 
     #[test]
     fn headline_joins_the_three_identity_parts() {
