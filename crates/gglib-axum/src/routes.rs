@@ -236,6 +236,7 @@ fn model_fetch_routes() -> Router<AppState> {
             "/hf/quantizations/{model_id}",
             get(handlers::model::hf::quantizations),
         )
+        .route("/hf/pick/{model_id}", get(handlers::model::hf::pick))
         .route(
             "/hf/tool-support/{model_id}",
             get(handlers::model::hf::tool_support),

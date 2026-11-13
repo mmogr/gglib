@@ -184,8 +184,9 @@ Hugging Face. `search <query>` and `browse` (popular repositories) find a
 model; `download <repo>` fetches it, `-q <QUANT>` picks a quantization, and
 `--list-quants` lists the ones a repository offers, each with whether it
 fits this machine, judged as a download without `-q` picks one, and ★ on
-the one it would take when the listing can tell (a quantized file's type
-often lies past the part the listing reads; the download reads further).
+the one it would take (where a quantized file's type lies past the part the
+listing reads, it asks the download's own pick, which reads further and
+takes a few seconds more).
 The GUI's table shows the same listing.
 
 <!-- snippet: model-search -->
@@ -199,13 +200,13 @@ $ gglib model search "gemma 3 instruct" --limit 5
     Quantizations: F16, Q2_K, Q3_K_L, Q3_K_M, Q3_K_S, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K, Q8_0
 
  2. DavidAU/gemma-4-31B-it-Mystery-Fine-Tune-HERETIC-UNCENSORED-Thinking-Instruct-GGUF (↓2.2K ❤65)
-    Quantizations: INSTRUCT-Q4_K_S, INSTRUCT-Q6_k, Thinking-Q4_K_S, Thinking-Q6_k, mmproj-BF16, mmproj-F16, mmproj-F32
+    Quantizations: INSTRUCT-Q4_K_S, INSTRUCT-Q6_K, Thinking-Q4_K_S, Thinking-Q6_K
 
  3. mradermacher/gemma-3-12b-it-vl-GLM-4.7-Flash-INSTRUCT-Thinking-Hybrid-Heretic-Uncensored-i1-GGUF (↓1.3K ❤3)
-    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_NL, IQ4_XS, Q2_K, Q2_K_S, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K, gemma-3-12b-it-vl-GLM-4.7-Flash-INSTRUCT-Thinking-Hybrid-Heretic-Uncensored.imatrix
+    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_NL, IQ4_XS, Q2_K, Q2_K_S, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K
 
  4. mradermacher/gemma-3-12b-it-vl-Polaris-GLM-4.7-Flash-VAR-Thinking-Instruct-Heretic-Uncensored-i1-GGUF (↓1.3K ❤6)
-    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_NL, IQ4_XS, Q2_K, Q2_K_S, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K, gemma-3-12b-it-vl-Polaris-GLM-4.7-Flash-VAR-Thinking-Instruct-Heretic-Uncensored.imatrix
+    Quantizations: IQ1_M, IQ1_S, IQ2_M, IQ2_S, IQ2_XS, IQ2_XXS, IQ3_M, IQ3_S, IQ3_XS, IQ3_XXS, IQ4_NL, IQ4_XS, Q2_K, Q2_K_S, Q3_K_L, Q3_K_M, Q3_K_S, Q4_0, Q4_1, Q4_K_M, Q4_K_S, Q5_K_M, Q5_K_S, Q6_K
 
  5. lm-kit/gemma-3-12b-instruct-gguf (↓1.2K ❤1)
     Quantizations: F16, Q3_K_M, Q4_K_M, Q6_K, Q8_0
