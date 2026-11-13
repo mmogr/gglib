@@ -197,7 +197,8 @@ The optional `hf_xet` download accelerator: `status`, `enable`, `disable`,
 
 Every location gglib resolved, with its source, then every gglib a user
 might run here: each `gglib` on `PATH` and the desktop app, which all
-share one data folder.
+share one data folder. It never opens the library, so it answers before
+one exists and for one this build refuses.
 
 <!-- snippet: config-paths -->
 ```console
