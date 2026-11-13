@@ -1,6 +1,6 @@
 # ADR 0007 — Ask the server for template capabilities
 
-- **Status:** Accepted
+- **Status:** Accepted; decision 3 superseded (amended 2026-11-12)
 - **Date:** 2026-08-17
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),

@@ -1,6 +1,6 @@
 # ADR 0027 — A stored secret is shown only when asked for
 
-- **Status:** Accepted
+- **Status:** Accepted; the daemon's key in decisions 3 and 4 superseded (amended 2026-11-12)
 - **Date:** 2026-10-27
 - **Depends on:** [ADR 0012](0012-the-remote-tunnel.md)
 - **Supersedes:** two sentences of
