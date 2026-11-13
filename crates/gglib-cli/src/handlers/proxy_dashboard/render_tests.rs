@@ -289,7 +289,7 @@ fn admission_section_names_each_resident_and_its_role() {
                 state: gglib_core::domain::ResidencyState::Working,
                 inflight: 2,
                 is_primary: true,
-                resident_for_secs: 95,
+                resident_for: "1m 35s".to_string(),
                 launch: None,
             },
             ResidentSlotSnapshot {
@@ -297,7 +297,7 @@ fn admission_section_names_each_resident_and_its_role() {
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: false,
-                resident_for_secs: 30,
+                resident_for: "30s".to_string(),
                 launch: None,
             },
         ],
@@ -326,7 +326,7 @@ fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: true,
-                resident_for_secs: 95,
+                resident_for: "1m 35s".to_string(),
                 launch: Some(LaunchLine {
                     flag_line: flag_line.clone(),
                 }),
@@ -336,7 +336,7 @@ fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: false,
-                resident_for_secs: 30,
+                resident_for: "30s".to_string(),
                 launch: None,
             },
         ],
@@ -382,7 +382,7 @@ fn a_long_launch_line_is_clipped_to_the_terminal() {
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: true,
-                resident_for_secs: 1,
+                resident_for: "1s".to_string(),
                 launch: Some(LaunchLine {
                     flag_line: "x".repeat(400),
                 }),
@@ -435,7 +435,7 @@ fn admission_section_reports_queue_depth_and_the_oldest_wait() {
         queued: vec![QueuedModelSnapshot {
             model_name: "nomic-embed".to_string(),
             waiting: 4,
-            oldest_wait_ms: 95_000,
+            oldest_wait: "1m 35s".to_string(),
         }],
         total_swaps: 3,
         ..Default::default()

@@ -183,8 +183,9 @@ pub(super) struct ResidentSlotSnapshot {
     pub(super) inflight: u32,
     #[serde(default)]
     pub(super) is_primary: bool,
+    /// How long it has been resident, as the daemon says it.
     #[serde(default)]
-    pub(super) resident_for_secs: u64,
+    pub(super) resident_for: String,
     /// How the model was launched, as the one line the daemon composed;
     /// absent from a daemon older than the field.
     #[serde(default)]
@@ -206,8 +207,9 @@ pub(super) struct QueuedModelSnapshot {
     pub(super) model_name: String,
     #[serde(default)]
     pub(super) waiting: usize,
+    /// How long the oldest has waited, as the daemon says it.
     #[serde(default)]
-    pub(super) oldest_wait_ms: u64,
+    pub(super) oldest_wait: String,
 }
 
 /// Mirror of `gglib_core::domain::SecondarySlotStatus`.

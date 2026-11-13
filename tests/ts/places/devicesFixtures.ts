@@ -2,7 +2,8 @@
  * What the Devices place tests read: the remote status's pieces as the
  * daemon sends them, every field present, and an offer as `enable` with
  * `invite` or `invite` answers one. A row's `description` is the words
- * `device_line.rs` writes for it.
+ * `device_line.rs` writes for it, and a status's `sharing`, `sharing_note`
+ * `reach_line` and `reach_note` the words `status_lines.rs` writes.
  */
 
 import type { RemoteDevice, RemoteEnableResponse, RemoteStatus } from '../../../src/services/transport/types/remote';
@@ -49,7 +50,13 @@ export function offerAnswer(code: string, overrides: Partial<RemoteEnableRespons
 }
 
 /** This Mac shared, with nothing else said. */
-export const SHARED: RemoteStatus = { ...IDLE_STATUS, enabled: true, remote_enabled: true, ticket_fingerprint: 'aa11bb22cc33' };
+export const SHARED: RemoteStatus = {
+  ...IDLE_STATUS,
+  enabled: true,
+  remote_enabled: true,
+  ticket_fingerprint: 'aa11bb22cc33',
+  sharing: 'Sharing · 0 paired', sharing_note: '', reach_line: '',
+};
 
 /** Joined to `desk`, reached directly. */
 export const DESK: RemoteStatus = {
@@ -59,6 +66,7 @@ export const DESK: RemoteStatus = {
   stored_ticket_fingerprint: FINGERPRINT,
   paired_name: 'desk',
   has_remote_key: true,
+  sharing: 'Not sharing', sharing_note: '', reach_line: 'desk · Connected · direct',
 };
 
 /** Whether the paired machine's fingerprint appears anywhere in the page: text or attribute. */

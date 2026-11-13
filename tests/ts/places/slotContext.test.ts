@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { slotContext, slotContextWords } from '../../../src/places/diagnostics/live/slotContext';
 import type { SlotSnapshot } from '../../../src/services/transport/types/dashboard';
 
-const slot = (over: Partial<SlotSnapshot>): SlotSnapshot => ({ id: 0, n_prompt_tokens: 1024, ...over }) as SlotSnapshot;
+const slot = (over: Partial<SlotSnapshot>): SlotSnapshot => ({ id: 0, tokens_in_use: 1024, ...over }) as SlotSnapshot;
 
 describe('slotContext', () => {
   it('says nothing for a slot of size 0 or of no known size', () => {

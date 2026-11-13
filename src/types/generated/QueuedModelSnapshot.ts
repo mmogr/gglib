@@ -18,4 +18,9 @@ waiting: number,
  * out — see the runtime's `admission` module for why that is bounded by a
  * deadline rather than by preemption.
  */
-oldest_wait_ms: number, };
+oldest_wait_ms: number, 
+/**
+ * [`Self::oldest_wait_ms`] in whole seconds, rounded down, as every
+ * surface says it ([`format_duration_secs`]): `1m 35s`.
+ */
+oldest_wait: string, };

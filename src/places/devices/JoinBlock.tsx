@@ -5,7 +5,10 @@
  * First time, the whole `<ticket>-<code>` string; afterwards Reconnect dials
  * the stored pairing with the stored key, offered only while both are held.
  * Joined, the machine is shown by its name and its reach in the daemon's
- * word, never by its fingerprint (its identity, only compared), with its
+ * line (`status.reach_line`; its name and reach word while an event has
+ * moved past the line, until the read), since when it has been away and
+ * the daemon's note on what becomes of it (`reach_note`),
+ * never by its fingerprint (its identity, only compared), with its
  * address and the command that prints the key a client there needs: the key
  * is terminal-only (#1584), so it is never shown here. Its models are in the
  * library; nothing is picked here.
@@ -91,10 +94,8 @@ export const JoinBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ 
   const failure = error !== null && <p className="m-0 text-xs text-danger">{error}</p>;
 
   if (connected !== null) {
-    const away = status.reach === 'away';
-    const reach = away
-      ? `${REACH_WORDS.away}${connected.away_for_s === null ? '' : ` since ${awaySince(connected.away_for_s)}`} · reconnects on its own`
-      : `${REACH_WORDS[status.reach]} · ${connected.path}`;
+    const reach = status.reach_line || `${name} · ${REACH_WORDS[status.reach]}`;
+    const since = status.reach === 'away' && connected.away_for_s !== null ? ` · since ${awaySince(connected.away_for_s)}` : '';
     return (
       <Group label="Use another machine">
         <div className="flex flex-col gap-sm px-md">
@@ -103,8 +104,9 @@ export const JoinBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({ 
           {connected.ticket_fingerprint === '' ? (
             <p className={LINE}>{REACH_WORDS[status.reach]}. Reading which machine…</p>
           ) : (
-            <StatusMark kind={REACH_MARK[status.reach]} word={`${name} · ${reach}`} className="text-text" />
+            <StatusMark kind={REACH_MARK[status.reach]} word={`${reach}${since}`} className="text-text" />
           )}
+          {status.reach_note && <p className={LINE}>{status.reach_note}</p>}
           <p className={LINE}>
             <code className="font-mono text-xs text-text">{connected.base_url}</code>
             <CopyValue value={connected.base_url} label="Copy the address" />

@@ -183,6 +183,10 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
   // outright: the event is the redemption, whatever `paired` read before.
   const set = (next: RemoteState) =>
     commit(evt.type === 'remote_paired' ? endOffer(next, 'paired') : settle(next, prev.status));
+  // The daemon's lines an event makes wrong, emptied rather than reworded
+  // here: a surface shows the state word until the read brings new ones.
+  const sharingUnsaid = { sharing: '', sharing_note: '' };
+  const reachUnsaid = { reach_line: '', reach_note: '' };
   switch (evt.type) {
     case 'remote_enabled':
       set({
@@ -198,6 +202,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
           // Invite button until the status re-read that follows every event
           // landed, and leave it disabled for good if that read failed.
           paired: false,
+          ...sharingUnsaid,
         },
       });
       break;
@@ -212,6 +217,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
           paired: false,
           path: null,
           peers: [],
+          ...sharingUnsaid,
         },
       });
       break;
@@ -240,13 +246,14 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
           // another machine is the one this join replaced. Like the
           // connection, the name is left to the read that follows.
           paired_name: null,
+          ...reachUnsaid,
         },
       });
       break;
     case 'remote_disconnected':
       set({
         ...prev,
-        status: { ...status, connected: null, reach: 'disconnected' },
+        status: { ...status, connected: null, reach: 'disconnected', ...reachUnsaid },
       });
       break;
     // The port stays bound either way; these only change what is said
@@ -256,7 +263,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       if (status.connected) {
         set({
           ...prev,
-          status: { ...status, connected: { ...status.connected, away_for_s: 0 }, reach: 'away' },
+          status: { ...status, connected: { ...status.connected, away_for_s: 0 }, reach: 'away', ...reachUnsaid },
         });
       }
       break;
@@ -264,7 +271,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       if (status.connected) {
         set({
           ...prev,
-          status: { ...status, connected: { ...status.connected, away_for_s: null }, reach: 'connected' },
+          status: { ...status, connected: { ...status.connected, away_for_s: null }, reach: 'connected', ...reachUnsaid },
         });
       }
       break;

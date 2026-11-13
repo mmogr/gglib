@@ -48,7 +48,8 @@ Words of the panel with no Rust twin: "gglib", "Endpoint", "Off. Clients
 can't connect.", "Key required · Copy key",
 "Copied", "Loaded", "Nothing loaded. A model loads on its first request.",
 "Nothing loaded." (while off),
-"Unload <model>" (×'s name), "Devices", "Sharing", "On · N paired", "Off" (sharing), "gglib
+"Unload <model>" (×'s name), "Devices", "This Mac", "Asking the daemon" (a
+sharing mark with no word yet), "gglib
 isn't running, so nothing can be served." (with " Start it from the tray
 menu." where there is no Start), "Start gglib", "Starting gglib…", "Turn on", "Turn off", "Open gglib", "Copy the endpoint
 address" (⧉'s name, the sidebar's), "Failed" and "No further detail was
@@ -59,7 +60,7 @@ reported.".
 | `TrayPanel.tsx` | The panel: "gglib", the three blocks while the daemon answers, the not-running sentence while it does not, the footer (Turn on or Turn off, Start gglib, Open gglib), and the bridges it starts |
 | `Endpoint.tsx` | `Endpoint ● On` (`endpointSaying`: Starting and Connecting as ◌, Pinned as the daemon's "Pinned to <model>", `pinned_to`), the address with ⧉ and a one-second Copied (`components/CopyValue`, as every copy says it), Key required with Copy key, the dimmed Off line, and a failed turn on or off; the ● blinks once per served request (`components/status/useRequestBlink`) |
 | `Loaded.tsx` | One row per loaded model (`trayLoadedRows`: the dashboard's, else the running servers as Loaded) with its word and ×; the empty sentence once known; a failed unload |
-| `Devices.tsx` | The joined machine with its reach while there is one, and Sharing On · N paired or Off (`devicesLines`); not drawn before the first status |
+| `Devices.tsx` | The joined machine with its reach while there is one, and This Mac with sharing in the daemon's words (`status.sharing`, `devicesLines`); not drawn before the first status |
 | `Failure.tsx` | A failure under its block: ✕, the daemon's words cut to fit (`shownFailure`), never empty |
 
 <!-- module-docs:end -->

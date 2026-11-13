@@ -159,12 +159,15 @@ fn the_status_line_names_the_paired_machine_and_no_fingerprint() {
         path: "direct".to_owned(),
         away_for_s: None,
     };
-    let status = |connected: Option<RemoteConnection>| RemoteStatus {
-        connected,
-        stored_ticket_fingerprint: Some(FINGERPRINT.to_owned()),
-        paired_name: Some("desk".to_owned()),
-        has_remote_key: true,
-        ..RemoteStatus::default()
+    let status = |connected: Option<RemoteConnection>| {
+        RemoteStatus {
+            connected,
+            stored_ticket_fingerprint: Some(FINGERPRINT.to_owned()),
+            paired_name: Some("desk".to_owned()),
+            has_remote_key: true,
+            ..RemoteStatus::default()
+        }
+        .with_lines()
     };
     let away = RemoteConnection {
         away_for_s: Some(120),
@@ -177,12 +180,12 @@ fn the_status_line_names_the_paired_machine_and_no_fingerprint() {
     ];
     assert_eq!(
         lines[0],
-        "  Reach:     Connected to desk  at http://127.0.0.1:8180/v1  (direct)"
+        "  Reach:     desk \u{b7} Connected \u{b7} direct  at http://127.0.0.1:8180/v1"
     );
-    assert!(
-        lines[1].starts_with("  Reach:     Away \u{2014} desk  at "),
-        "{}",
-        lines[1]
+    assert_eq!(
+        lines[1],
+        "  Reach:     desk \u{b7} Away for 2m  at http://127.0.0.1:8180/v1\n             \
+         The address stays, and it reconnects when that machine is back."
     );
     assert_eq!(
         lines[2],
