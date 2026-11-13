@@ -3,8 +3,7 @@
 //!
 //! A `#[path]` sibling of `settings.rs` rather than a section of it. The
 //! struct and the enum are each a flat list that grows by one line per
-//! setting, and `settings.rs` is at its size baseline with `Settings` itself
-//! still to grow; splitting the lists out is the only part of that file that
+//! setting; splitting the lists out is the only part of `settings.rs` that
 //! can move without taking the `Settings` struct the surface checks parse out
 //! of the file they parse.
 
