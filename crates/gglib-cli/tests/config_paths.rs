@@ -1,5 +1,6 @@
 //! `gglib config paths` as the binary prints it, and what `gglib --version`
-//! leaves behind, which is nothing.
+//! leaves behind, which is nothing. With help and `completions`, it opens no
+//! library, so it makes none and answers beside one this build refuses.
 //!
 //! The binary runs with a data root and a home of its own and a `PATH` that
 //! holds only directories the test made, so the only copies it asks for a
@@ -56,6 +57,93 @@ fn version_is_answered_before_anything_is_made() {
         .map(|entry| entry.expect("an entry").path())
         .collect();
     assert!(made.is_empty(), "something was made in the home: {made:?}");
+}
+
+/// The library under the data root `data`.
+fn database(data: &Path) -> std::path::PathBuf {
+    data.join("data").join("gglib.db")
+}
+
+/// The files beside the library `db` that belong to it: the file itself,
+/// its `-wal` and `-shm`, and any backup.
+fn library_files(db: &Path) -> Vec<std::path::PathBuf> {
+    let Ok(entries) = std::fs::read_dir(db.parent().expect("a parent")) else {
+        return Vec::new();
+    };
+    entries
+        .map(|entry| entry.expect("an entry").path())
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("gglib.db"))
+        })
+        .collect()
+}
+
+/// Help, `completions` and `config paths` read nothing from the library,
+/// so on a fresh data root they answer without making one.
+#[test]
+fn commands_that_read_no_library_make_none() {
+    let root = tempfile::tempdir().expect("a directory for it all");
+    let (data, home) = (root.path().join("data"), root.path().join("home"));
+    std::fs::create_dir(&home).expect("a home");
+    let no_path = root.path().join("no-path");
+
+    for args in [&[][..], &["completions", "zsh"], &["config", "paths"]] {
+        let out = gglib(&data, &home, &[&no_path], args);
+
+        assert!(out.status.success(), "gglib {args:?}\n{}", text(&out));
+        assert!(!out.stdout.is_empty(), "gglib {args:?}\n{}", text(&out));
+        let made = library_files(&database(&data));
+        assert!(made.is_empty(), "gglib {args:?} made {made:?}");
+    }
+}
+
+/// `config paths` names a library this build refuses, which is what
+/// `docs/compatibility.md` tells that library's owner to run, and leaves it
+/// as it was.
+#[test]
+fn config_paths_names_a_library_this_build_refuses() {
+    let root = tempfile::tempdir().expect("a directory for it all");
+    let (data, home) = (root.path().join("data"), root.path().join("home"));
+    std::fs::create_dir(&home).expect("a home");
+    let no_path = root.path().join("no-path");
+    let db = database(&data);
+    std::fs::create_dir_all(db.parent().expect("a parent")).expect("the data folder");
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime")
+        .block_on(gglib_db::write_newer_database(&db))
+        .expect("a newer library");
+
+    // A command that does read the library is refused it.
+    let show = gglib(&data, &home, &[&no_path], &["config", "show"]);
+    assert!(!show.status.success(), "{}", text(&show));
+    assert!(
+        String::from_utf8_lossy(&show.stderr).contains("newer gglib"),
+        "{}",
+        text(&show)
+    );
+    let files = library_files(&db);
+    let written = std::fs::read(&db).expect("the library is read");
+
+    let out = gglib(&data, &home, &[&no_path], &["config", "paths"]);
+
+    assert!(out.status.success(), "{}", text(&out));
+    let line = format!("database_path = {}", db.display());
+    assert!(
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .any(|said| said == line),
+        "no `{line}`\n{}",
+        text(&out)
+    );
+    assert_eq!(library_files(&db), files, "beside the library");
+    assert_eq!(
+        std::fs::read(&db).expect("the library is read"),
+        written,
+        "the library changed"
+    );
 }
 
 /// The keys `config paths` printed before it listed copies, in order.

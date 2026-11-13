@@ -83,13 +83,13 @@ async fn a_repaired_unary_turn_records_the_answer_the_client_gets() {
     );
 }
 
-/// A turn the upstream refuses is passed through with its body, and nothing
-/// is recorded from that body, though it carries all four readings.
+/// A turn the upstream refuses is answered with its status, and nothing is
+/// recorded from its body, though that carries all four readings.
 #[tokio::test]
 async fn a_unary_turn_the_upstream_refuses_records_nothing() {
     let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let refusal = refused(&answer(2, "{\"path\":\"a\"}", "résumé", 37));
-    let (port, server) = spawn_ordinal_mock(seen, vec![refusal]).await;
+    let theirs = answer(2, "{\"path\":\"a\"}", "résumé", 37);
+    let (port, server) = spawn_ordinal_mock(seen, vec![refused(&theirs)]).await;
     let metrics = ContextMetricsStore::new();
     let seq = metrics.record(snapshot());
 
@@ -107,11 +107,8 @@ async fn a_unary_turn_the_upstream_refuses_records_nothing() {
     server.abort();
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-    let passed_through = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
     assert_ne!(
-        TurnGeneration::of_unary_body(&passed_through),
+        TurnGeneration::of_unary_body(theirs.to_string().as_bytes()),
         TurnGeneration::default(),
         "the refusal's body has readings to take"
     );

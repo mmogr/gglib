@@ -1,6 +1,6 @@
 # ADR 0011 — Stagnation is about prose, and it forgets
 
-- **Status:** Accepted
+- **Status:** Accepted; the guard's modes superseded (amended 2026-11-12)
 - **Date:** 2026-08-27
 - **Depends on:** [ADR 0006](0006-recover-dont-predict.md),
   [ADR 0010](0010-the-loop-guard-reads-what-came-back.md)

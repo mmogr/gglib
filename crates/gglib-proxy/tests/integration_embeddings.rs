@@ -263,10 +263,12 @@ async fn a_body_that_is_not_json_is_400() {
 }
 
 /// llama-server's own 501 — what a server started without `--embeddings`
-/// returns — has to reach the client verbatim. It names the real cause better
-/// than any status this layer could substitute for it.
+/// returns — has to reach the client with its status, its words and its type.
+/// They name the real cause better than anything this layer could substitute.
+/// Its `code`, a number as llama-server writes it, is named `upstream_error`,
+/// as a streamed reply's is.
 #[tokio::test]
-async fn an_upstream_error_passes_through_verbatim() {
+async fn an_upstream_error_keeps_its_status_and_words_and_names_its_code() {
     let cancel = CancellationToken::new();
     let (upstream, _) = spawn_mock_embeddings_upstream(
         cancel.clone(),
@@ -294,6 +296,8 @@ async fn an_upstream_error_passes_through_verbatim() {
             .contains("--embeddings"),
         "upstream diagnosis must not be swallowed: {body}"
     );
+    assert_eq!(body["error"]["type"], "not_supported_error");
+    assert_eq!(body["error"]["code"], "upstream_error");
 
     proxy_cancel.cancel();
     cancel.cancel();

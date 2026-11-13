@@ -277,7 +277,7 @@ fn a_linux_app_is_never_run_and_takes_the_version_of_the_gglib_beside_it() {
     let (usr, old) = (root.dir("usr/bin"), root.dir("opt/bin"));
     let cli = root.gglib("usr/bin/gglib");
     let app = root.gglib("usr/bin/gglib-gui");
-    let old_app = root.gglib("opt/bin/gg-lib-gui");
+    let old_app = root.gglib("opt/bin/gglib-app");
     let (read, asked) = reader(&[(&cli, "0.35.0")]);
     let mut machine = search(path_of(&[&usr, &old]), None);
     machine.apps = Apps::OnPath(super::LINUX_APP_NAMES);

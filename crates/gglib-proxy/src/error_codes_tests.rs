@@ -31,7 +31,7 @@ const RELAYS: [(&str, &str, &str, &str); 37] = [
     ("gglib-proxy/src/runs/handlers.rs", "refused", "err.code()", "`RunsError::code`"),
     ("gglib-proxy/src/chats/handlers.rs", "refused", "err.code()", "`HubChatsError::code`"),
     ("gglib-proxy/src/runs/turn.rs", "refused", "&refusal.code", "the daemon's `TurnRefused`"),
-    ("gglib-proxy/src/sse_stream.rs", "upstream_error_body", "code", "llama-server's, else `upstream_error`"),
+    ("gglib-proxy/src/sse_stream.rs", "upstream_error_body", "&code", "`relayed_error`'s: llama-server's, else `upstream_error`"),
     ("gglib-core/src/sse/encoder.rs", "upstream_error_frame", "code", "`upstream_error_frame`'s parameter"),
     ("gglib-proxy/src/frame_edit.rs", "name_error_code", "code", "an `UpstreamError` event's: llama-server's, else `upstream_error`"),
     ("gglib-core/src/sse/parser.rs", "parse_inline_error_frame", "code", "llama-server's, else `upstream_error`"),

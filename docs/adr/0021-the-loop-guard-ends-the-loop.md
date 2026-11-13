@@ -1,6 +1,6 @@
 # ADR 0021 — The loop guard ends the loop: under `note` it judges the newest turn, notes a run once, and ends the run if it trips again
 
-- **Status:** Accepted
+- **Status:** Accepted; decision 2 superseded (amended 2026-11-12)
 - **Date:** 2026-10-14
 - **Depends on:** [ADR 0010](0010-the-loop-guard-reads-what-came-back.md),
   [ADR 0011](0011-stagnation-is-about-prose.md)

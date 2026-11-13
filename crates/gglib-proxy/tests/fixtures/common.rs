@@ -576,7 +576,10 @@ pub(crate) async fn spawn_mock_embeddings_upstream(
                         .status(status)
                         .header("content-type", "application/json")
                         .body(Body::from(
-                            json!({ "error": { "message": message } }).to_string(),
+                            json!({ "error": {
+                                "code": status, "message": message, "type": "not_supported_error"
+                            } })
+                            .to_string(),
                         ))
                         .unwrap();
                 }
