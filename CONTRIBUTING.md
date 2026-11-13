@@ -460,11 +460,12 @@ An ADR records a decision and the evidence behind it. Rustdoc says what the code
 - **A kill criterion must name a reading that exists.** Not a counter somebody intends to add, not a number a `debug!` emits into a log nothing collects — a reading a person can actually take, named where it is taken from. A criterion nobody can read is not a criterion; it is a promise that the decision will be revisited, and it will not be. [ADR 0011](docs/adr/0011-stagnation-is-about-prose.md)'s first criterion named `loop_guard_trips` for a question that counter cannot answer, and it took the first live reading, months later, to notice. Where the reading is a survey rather than a tally, name the command that produces it, as [ADR 0009](docs/adr/0009-fit-the-context-to-the-machine.md)'s first criterion names `gglib model explain`.
 - **Record zeros with their denominators.** "0 events across 10 requests, 2026-08-28" is a reading; "none" is not, because it cannot distinguish a mechanism that does not fire from one nobody exercised. This matters most for the criteria that are *satisfied* by zeros — "if it stays at zero, delete it" — where the ambiguity is what turns a small sample into a wrong deletion.
 
-### An accepted ADR is frozen
+### How an accepted ADR changes
 
-An ADR is frozen when it is accepted. After that its header's `Status`, `Superseded by` and `Log` lines are kept current, and otherwise it changes only by a retraction's strike, an erratum, or the one move of the readings and bookkeeping already in its body to its log. Everything else goes elsewhere:
+An accepted ADR keeps the text it was accepted with. After that its header's `Status`, `Superseded by` and `Log` lines are kept current, and otherwise it changes only by a dated amendment, a retraction's strike, an erratum, or the one move of the readings and bookkeeping already in its body to its log. Everything else goes elsewhere:
 
-- **A reversal is a new ADR.** Keep it short, and let its header say exactly what it replaces: `Supersedes: the <part> ADR NNNN chose, and nothing else in it`. The old ADR's `Status` and `Superseded by` lines then name the new one.
+- **A change to part of an ADR is a dated amendment, where it changes.** Under the decision, finding or sentence that no longer holds, add a quoted paragraph that begins `**Amended YYYY-MM-DD.**` and says what is true now. The text above it stays. When the amendment reverses a decision, the `Status` line says which: `Accepted; decision 3 superseded (amended 2026-11-13)`.
+- **A replacement of the whole decision is a new ADR.** Keep it short, and let its header say what it replaces: `Supersedes: ADR NNNN`. The old ADR's `Status` and `Superseded by` lines then name the new one.
 - **Readings and bookkeeping go to the ADR's log**, `docs/adr/log-NNNN.md`: a measurement taken later, a follow-up that landed, a count brought up to date. A log is appended to and never edited, and an entry that cites a line number names the commit it read that line at.
 - **A retraction is a log entry plus a one-line strike.** The entry says what was wrong and why. In the ADR the retracted text is struck through, not deleted, and followed by one line that links the entry. ADR 0002 keeps finding 1 beside the finding 4 that overturned it; leaving both is what stops the same reasoning error recurring.
 - **An erratum is corrected in place**: a typo, a broken link, a name that was wrong when it was written. A correction that changes what the ADR decided or found is a retraction or a reversal instead.
@@ -811,7 +812,7 @@ Before requesting review, confirm each item:
 - [ ] Any new public type or enum has `///` doc comments on all items.
 - [ ] Any architectural change is documented with its module: in the README of a directory module, in the `//!` block of a single-file module. ASCII architecture diagrams belong in crate READMEs; prose API documentation does not.
 - [ ] A new or changed comment says what is true now: the invariant, at most one link, no history ([Comments say what is true now](#comments-say-what-is-true-now)).
-- [ ] An accepted ADR changes only as [An accepted ADR is frozen](#an-accepted-adr-is-frozen) allows: a reading or bookkeeping goes to its `log-NNNN.md`, a reversal to a new ADR.
+- [ ] An accepted ADR changes only as [How an accepted ADR changes](#how-an-accepted-adr-changes) allows: a reading or bookkeeping goes to its `log-NNNN.md`, a change to part of it is a dated amendment, and a replacement of its decision is a new ADR.
 - [ ] Subprocess I/O is captured with `Stdio::piped()` and read on an OS thread, not a Tokio task.
 - [ ] Environment variable merging uses read-then-append, not a bare `.env()` that overwrites.
 - [ ] Any feature gated behind `#[cfg(feature = "...")]` is declared correctly in all consuming `Cargo.toml` files.

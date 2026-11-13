@@ -125,7 +125,7 @@ for dir in ${PATH:-}; do
   set +f
   [ -n "$dir" ] || continue
   if [ -n "$packaged_real" ] && [ "$(real_dir "$dir")" = "$packaged_real" ]; then reached=1; fi
-  for name in gglib gglib-gui gg-lib-gui; do
+  for name in gglib gglib-gui gglib-app; do
     [ -f "$dir/$name" ] && [ -x "$dir/$name" ] || continue
     r="$(real_file "$dir/$name")"
     case "$seen" in *":$r:"*) continue ;; esac

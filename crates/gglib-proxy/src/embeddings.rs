@@ -181,8 +181,8 @@ pub(crate) async fn embeddings(
     }
 
     // Within the same total bound as a chat completion that does not stream.
-    // A non-2xx is passed through verbatim, including llama-server's own 501
-    // for a server that was not started with `--embeddings`.
+    // A non-2xx keeps its status and llama-server's own words, such as the
+    // 501 of a server that was not started with `--embeddings`.
     let request = req_builder.body(body);
     let (bound, cache_metrics) = (state.stream_bounds.unary, &state.dashboard.cache_metrics);
     match exchange(request, bound, cache_metrics, None).await {

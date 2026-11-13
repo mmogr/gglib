@@ -1,6 +1,6 @@
 # ADR 0010 — The loop guard reads what came back
 
-- **Status:** Accepted
+- **Status:** Accepted; the guard's modes superseded (amended 2026-11-12)
 - **Date:** 2026-08-27
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0006](0006-recover-dont-predict.md)

@@ -216,6 +216,29 @@ pub async fn setup_test_database() -> Result<SqlitePool> {
     Ok(pool)
 }
 
+/// Writes at `db_path` a database file stamped one generation past this
+/// build's, so [`setup_database`] refuses it, for a test of what still
+/// works on a library this build cannot open.
+#[cfg(any(test, feature = "test-utils"))]
+pub async fn write_newer_database(db_path: &Path) -> Result<()> {
+    crate::sqlite_init::ensure_initialised().await?;
+    let pool = SqlitePool::connect_with(
+        SqliteConnectOptions::new()
+            .filename(db_path)
+            .create_if_missing(true),
+    )
+    .await?;
+    sqlx::query("CREATE TABLE schema_generation (generation INTEGER NOT NULL)")
+        .execute(&pool)
+        .await?;
+    sqlx::query("INSERT INTO schema_generation (generation) VALUES (?)")
+        .bind(generation::SCHEMA_GENERATION + 1)
+        .execute(&pool)
+        .await?;
+    pool.close().await;
+    Ok(())
+}
+
 /// Mark any benchmark runs that are stuck in `running` status as `failed`.
 ///
 /// Call this **once** at daemon boot, after the schema is ready. It corrects
