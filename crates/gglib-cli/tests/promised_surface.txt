@@ -401,7 +401,7 @@ gglib proxy stop
 gglib proxy test
 gglib proxy trips
   --since
-gglib question (alias q)
+gglib q
   --file
   --image
   --max-parallel-tools

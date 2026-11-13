@@ -72,7 +72,6 @@ gglib q --remote -m <id> "Why is this test flaky?"   # on the paired machine
 - The question is a saved chat from the start, made before it is asked:
   a question that fails keeps what arrived of its reply, marked as stopped.
 - Its file tools read the directory it was asked in.
-- `question` is the long spelling of the same command.
 
 ## `chat`
 

@@ -42,7 +42,7 @@ const IDENTIFIER_COMMANDS: &[&[&str]] = &[
     &["benchmark", "tune", "--model", MISSING],
     &["benchmark", "agentic", "--model", MISSING],
     &["config", "set", "default-model-id", MISSING],
-    &["question", "hi", "--model", MISSING],
+    &["q", "hi", "--model", MISSING],
     &["chat", MISSING],
 ];
 

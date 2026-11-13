@@ -162,7 +162,7 @@ fn chat_and_q_take_only_the_five_sampling_flags_a_chat_keeps() {
         "top-k",
         "top-p",
     ]);
-    for command in ["chat", "question"] {
+    for command in ["chat", "q"] {
         let taken: Vec<String> = long_flags(command)
             .into_iter()
             .filter(|flag| sampling_flags().contains(flag))

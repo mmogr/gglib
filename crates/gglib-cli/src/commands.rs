@@ -168,7 +168,7 @@ pub enum Commands {
     },
 
     /// Ask a question with optional context from stdin or file
-    #[command(display_order = 12, visible_alias = "q", after_help = crate::subcommands::QUESTION_EXAMPLES)]
+    #[command(name = "q", display_order = 12, after_help = crate::subcommands::QUESTION_EXAMPLES)]
     Question {
         /// Question to ask (use {} as placeholder for piped/file input)
         question: String,

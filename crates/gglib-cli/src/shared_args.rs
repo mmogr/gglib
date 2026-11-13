@@ -2,7 +2,7 @@
 //!
 //! Reusable `#[derive(Args)]` structs that are flattened into multiple commands
 //! via `#[command(flatten)]`, eliminating duplicate field definitions across
-//! `Serve`, `Proxy`, `Chat`, and `Question`.
+//! `serve`, `proxy`, `chat` and `q`.
 
 use clap::Args;
 

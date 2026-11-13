@@ -1,4 +1,4 @@
-//! The two flags `chat` and `question` share for bounding tool execution.
+//! The two flags `chat` and `q` share for bounding tool execution.
 
 use clap::Args;
 

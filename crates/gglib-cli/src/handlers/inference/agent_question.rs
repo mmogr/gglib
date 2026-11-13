@@ -32,7 +32,7 @@ You are an expert code analyst. You have access to filesystem tools \
 directory. Use them to explore the codebase and answer the question \
 thoroughly. Be direct and concise.";
 
-/// Arguments for the question command.
+/// Arguments for the `q` command.
 ///
 /// A bag rather than a parameter list, matching how `chat` already passes
 /// [`ChatArgs`](super::chat::ChatArgs): fifteen positional arguments made

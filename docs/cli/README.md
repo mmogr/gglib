@@ -58,7 +58,7 @@ Grouped as `gglib --help` groups them.
 | | [`mcp`](mcp.md) | Tool servers for `chat`, `q` and the chat page |
 | **Inference** | [`serve <model>`](proxy.md#serve) | The endpoint pinned to one model |
 | | [`chat <model>`](chat.md#chat) | An interactive session with tools |
-| | [`q`](chat.md#q) | One question, pipe-friendly (`question` is the long spelling) |
+| | [`q`](chat.md#q) | One question, pipe-friendly |
 | | [`run`](chat.md#run) | A reply the daemon finishes while you do something else |
 | | [`image`](image.md) | Draw a picture with this machine's image model, or with `--remote` the paired machine's |
 | | [`attachment save`](chat.md#attachment-save) | Write an image a chat stored to a file |

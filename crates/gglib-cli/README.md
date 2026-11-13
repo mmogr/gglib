@@ -93,8 +93,8 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
 | `chat <id\|name>`, files | Reads files in the directory it was launched in, read-only, never home or `/`, and says which on one `Files:` stderr line; under `--tools`, name `read_file` to keep the file tools |
-| `question <text>` (alias `q`) | Ask a question, with optional piped or file context; filesystem tools are on unless `--no-tools` |
-| `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
+| `q <text>` | Ask a question, with optional piped or file context; filesystem tools are on unless `--no-tools` |
+| `q --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts, and the chat each branch was made from |
 | `image "<prompt>" [--size WxH] [--count N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
 | `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
@@ -217,7 +217,7 @@ environment switches (`GGLIB_DISABLE_CACHE_AUTOSIZE`, `GGLIB_DISABLE_KV_QUANT`,
 
 ### Question Command
 
-The `question` command (alias: `q`) supports piped input or file context:
+The `q` command supports piped input or file context:
 
 ```bash
 # Simple question (uses default model)

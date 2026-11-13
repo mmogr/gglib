@@ -34,7 +34,7 @@ mcp             Manage MCP (Model Context Protocol) tool servers\n\n\
 Inference:\n  \
 serve           Serve one pinned model behind the OpenAI-compatible proxy\n  \
 chat            Chat with a model interactively\n  \
-question (q)    Ask a question with optional context from stdin or file\n  \
+q               Ask a question with optional context from stdin or file\n  \
 run             Start a reply the daemon finishes, and read it later\n  \
 image           Draw an image with this machine's image model, or the paired one's\n  \
 attachment      Save an image a chat stored, such as one a tool made\n\n\
@@ -92,6 +92,22 @@ mod tests {
             }
             _ => panic!("expected the Up variant"),
         }
+    }
+
+    /// `q` is the command's one name: `question` is no spelling of it.
+    #[test]
+    fn q_is_the_one_name_of_the_question_command() {
+        use clap::Parser;
+        let cli = Cli::parse_from(["gglib", "q", "hi"]);
+        assert!(matches!(
+            cli.command,
+            Some(crate::commands::Commands::Question { .. })
+        ));
+        let err = Cli::try_parse_from(["gglib", "question", "hi"]).err();
+        assert_eq!(
+            err.map(|e| e.kind()),
+            Some(clap::error::ErrorKind::InvalidSubcommand)
+        );
     }
 
     /// No `--port` flag carries a default of its own. A default typed into
