@@ -12,11 +12,14 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
+use serde_json::{Value, json};
 use tracing::{error, warn};
 
 use gglib_core::cache_metrics::CacheMetricsStore;
+use gglib_core::sse::parser::relayed_error;
 
 use crate::forward::FIRST_BYTE_DEADLINE_SECS;
+use crate::frame_edit::name_error_code;
 use crate::metrics::ContextMetricsStore;
 use crate::models::ErrorResponse;
 
@@ -47,7 +50,7 @@ pub(crate) enum Exchange {
     /// llama-server answered 2xx: the content type to answer under, and the
     /// body, read whole.
     Answered(HeaderValue, Bytes),
-    /// The response to send instead: llama-server's own error passed through,
+    /// The response to send instead: llama-server's own error relayed,
     /// a 502 for a body that could not be read, or a 504 for a request that
     /// outlasted its bound.
     Respond(Response),
@@ -76,7 +79,7 @@ pub(crate) async fn exchange(
         };
         let status = response.status();
         if !status.is_success() {
-            return Exchange::Respond(passed_through(status, response).await);
+            return Exchange::Respond(relayed(status, response).await);
         }
         match read_non_streaming_body(response, cache_metrics, residue_sink).await {
             Ok((content_type, body)) => Exchange::Answered(content_type, body),
@@ -88,21 +91,51 @@ pub(crate) async fn exchange(
         .unwrap_or_else(|_| Exchange::Respond(upstream_timed_out(total)))
 }
 
-/// llama-server's own error, its status and body passed through: its
-/// diagnostic, such as the 501 of a server not started with `--embeddings`,
-/// names the cause better than anything this layer could put in its place.
-async fn passed_through(status: reqwest::StatusCode, response: reqwest::Response) -> Response {
+/// llama-server's own error under its own status: its diagnostic, such as the
+/// 501 of a server not started with `--embeddings`, names the cause better
+/// than anything this layer could put in its place. Its body is relayed as
+/// [`relayed_error_body`] gives it.
+async fn relayed(status: reqwest::StatusCode, response: reqwest::Response) -> Response {
     let error_bytes = response.bytes().await.unwrap_or_default();
     warn!(
         status = status.as_u16(),
         body = %String::from_utf8_lossy(&error_bytes),
         "upstream llama-server returned error"
     );
-    Response::builder()
-        .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
-        .header("content-type", "application/json")
-        .body(Body::from(error_bytes))
-        .unwrap_or_else(|e| crate::refusal::internal(format!("the answer could not be built: {e}")))
+    let status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    (status, axum::Json(relayed_error_body(status, &error_bytes))).into_response()
+}
+
+/// The body a client is sent for llama-server's non-2xx `body`: the error
+/// object, `{"error": {"message", "type", "code"}}`, with a string `code`.
+///
+/// llama-server's own object is kept, `n_ctx` and the like with it, and its
+/// `code` is named as a streamed reply's is ([`name_error_code`]): its own
+/// when that is a string, `upstream_error` for the number it writes there. A
+/// `message` or `type` it left out is filled in. A body with no `error` in
+/// it, or one that is not JSON, becomes the object around the bytes that
+/// came.
+fn relayed_error_body(status: StatusCode, body: &[u8]) -> Value {
+    if let Ok(mut answer) = serde_json::from_slice::<Value>(body)
+        && let Some(error) = answer.get("error")
+    {
+        let (message, error_type, code) = relayed_error(error);
+        name_error_code(&mut answer, &message, &error_type, &code);
+        if let Some(Value::Object(fields)) = answer.get_mut("error") {
+            for (key, said) in [("message", message), ("type", error_type)] {
+                if !fields.get(key).is_some_and(Value::is_string) {
+                    fields.insert(key.to_owned(), Value::String(said));
+                }
+            }
+        }
+        return answer;
+    }
+    let raw = String::from_utf8_lossy(body);
+    json!({ "error": {
+        "message": format!("upstream returned {status}: {raw}"),
+        "type": "server_error",
+        "code": "upstream_error",
+    } })
 }
 
 /// The 504 for a request that outlasted `total`.
@@ -225,3 +258,7 @@ fn content_residue(body: &[u8]) -> Option<String> {
                 .and_then(gglib_core::normalize::scan_complete)
         })
 }
+
+#[cfg(test)]
+#[path = "unary_body_tests.rs"]
+mod tests;
