@@ -30,8 +30,8 @@ pub struct ServerConfig {
     /// Maximum concurrent agent loop sessions.
     ///
     /// Each agent run holds one permit until it ends. When all permits are
-    /// taken, a new turn is refused `429 agent_busy` immediately rather than
-    /// queued.
+    /// taken, this machine's own turn is refused `429 agent_busy` at once,
+    /// and a paired device's run waits in line for one (`SlotLine`).
     pub max_concurrent_agent_loops: usize,
     /// Database file to open. `None` resolves through [`database_path`](gglib_core::paths::database_path).
     ///

@@ -145,6 +145,15 @@ mod tests {
     }
 
     #[test]
+    fn a_wait_for_an_agent_slot_is_said_in_cores_words() {
+        let wait = AgentEvent::agent_slot_wait(2, 5_000);
+        assert_eq!(
+            progress_line(&wait).as_deref(),
+            Some("Waiting for a free agent slot, 2 in line… 5 s")
+        );
+    }
+
+    #[test]
     fn a_preview_and_every_other_event_have_no_line() {
         let preview = AgentEvent::ToolPreview {
             tool_call_id: "c1".into(),

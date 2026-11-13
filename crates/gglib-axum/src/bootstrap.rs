@@ -65,11 +65,14 @@ pub struct AxumContext {
     pub http_client: reqwest::Client,
     /// Concurrency limiter for agent runs.
     ///
-    /// Each agent run holds one permit until it ends. When all permits are
-    /// taken a new turn is refused with 429 rather than queued — preventing
-    /// resource exhaustion from parallel loops that each consume LLM
-    /// inference time and tool I/O.
+    /// Each agent run holds one permit until it ends — preventing resource
+    /// exhaustion from parallel loops that each consume LLM inference time
+    /// and tool I/O. Taken through [`agent_line`](Self::agent_line).
     pub agent_semaphore: Arc<tokio::sync::Semaphore>,
+    /// The line a paired device's run waits in for one of
+    /// `agent_semaphore`'s permits when all are taken. This machine's own
+    /// turn is refused 429 instead.
+    pub(crate) agent_line: Arc<crate::handlers::agent::SlotLine>,
     /// Benchmark run repository for compare and perf results.
     ///
     /// Stored directly in `AxumContext` (alongside `benchmark`) so history
@@ -227,6 +230,14 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     .await?;
 
     crate::proxy_watch::spawn(&proxy, &sse);
+    let agent_semaphore = Arc::new(tokio::sync::Semaphore::new(
+        config.max_concurrent_agent_loops,
+    ));
+    let agent_line = Arc::new(crate::handlers::agent::SlotLine::new(
+        Arc::clone(&agent_semaphore),
+        crate::handlers::agent::AGENT_SLOT_LINE,
+        crate::handlers::agent::AGENT_SLOT_WAIT,
+    ));
 
     Ok(AxumContext {
         models,
@@ -243,9 +254,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         hf_client,
         sse,
         http_client: gglib_proxy::loopback::client(),
-        agent_semaphore: Arc::new(tokio::sync::Semaphore::new(
-            config.max_concurrent_agent_loops,
-        )),
+        agent_semaphore,
+        agent_line,
         bench_repo,
         loop_guard_trip_writer,
         loop_guard_trips,

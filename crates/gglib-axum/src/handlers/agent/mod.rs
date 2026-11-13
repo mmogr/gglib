@@ -11,8 +11,10 @@ mod loop_request;
 mod remote_upstream;
 mod retry_notice;
 mod run;
+mod slot_line;
 mod transcript;
 
+pub(crate) use slot_line::{AGENT_SLOT_LINE, AGENT_SLOT_WAIT, SlotLine};
 pub(crate) use transcript::{keep_a_model, keep_machine};
 
 #[cfg(test)]

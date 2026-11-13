@@ -194,6 +194,11 @@ describe('a reply that waits', () => {
     );
   });
 
+  it("says a device's wait for an agent slot in the daemon's words", () => {
+    const slot = { reason: 'agent_slot' as const, step: 0, total: 0, position: 2, said: 'Waiting for a free agent slot, 2 in line… 5 s' };
+    expect(arrivingPhase({ ...none, waiting: slot })).toBe('Waiting for a free agent slot, 2 in line… 5 s');
+  });
+
   it('says only that it waits for a wait from a daemon too old to word it', () => {
     expect(arrivingPhase({ ...none, waiting: { reason: 'model_load', step: 0, total: 0, position: 0 } })).toBe(
       'Waiting for the model',

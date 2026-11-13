@@ -93,3 +93,46 @@ fn a_logged_wait_carries_its_words() {
     let event: AgentEvent = serde_json::from_value(frame).expect("a waiting frame");
     assert_eq!(said_of(&event), Some("Loading Qwen3-4B… 1 s"));
 }
+
+#[test]
+fn a_slot_wait_says_its_place_in_line_and_whole_seconds() {
+    let wait = AgentEvent::agent_slot_wait(2, 5_400);
+    assert_eq!(
+        said_of(&wait),
+        Some("Waiting for a free agent slot, 2 in line… 5 s")
+    );
+    let next = AgentEvent::agent_slot_wait(1, 300);
+    assert_eq!(
+        next.waiting_sentence().as_deref(),
+        Some("Waiting for a free agent slot, 1 in line…")
+    );
+}
+
+/// A slot's wait names no model and has no steps: only its place and time.
+#[test]
+fn a_slot_wait_on_the_wire() {
+    let frame = serde_json::to_value(AgentEvent::agent_slot_wait(1, 2_000)).unwrap();
+    assert_eq!(
+        frame,
+        serde_json::json!({
+            "type": "waiting",
+            "reason": "agent_slot",
+            "step": 0,
+            "total": 0,
+            "position": 1,
+            "elapsed_ms": 2_000,
+            "said": "Waiting for a free agent slot, 1 in line… 2 s",
+        })
+    );
+}
+
+/// A slot's wait without `said` is worded by its reason, never as a load.
+#[test]
+fn a_slot_frame_without_said_is_worded_as_a_slot_wait() {
+    let frame = r#"{"elapsed_ms":3000,"position":2,"reason":"agent_slot","step":0,"total":0,"type":"waiting"}"#;
+    let event: AgentEvent = serde_json::from_str(frame).expect("a waiting frame");
+    assert_eq!(
+        event.waiting_sentence().as_deref(),
+        Some("Waiting for a free agent slot, 2 in line… 3 s")
+    );
+}

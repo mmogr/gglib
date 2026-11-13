@@ -28,6 +28,9 @@ struct Recorded {
     /// in: the model by the catalogue's name, how long it has taken, and
     /// the sentence it is shown as.
     model_load: Value,
+    /// A paired device's run waiting for a free agent loop slot, first in
+    /// line, two seconds in: no model, its place, and its sentence.
+    agent_slot: Value,
     list: RunList,
 }
 
@@ -145,6 +148,7 @@ fn recorded() -> Recorded {
             .map(|event| serde_json::to_value(event).unwrap())
             .collect(),
         model_load: serde_json::to_value(AgentEvent::model_load_wait("Qwen3-4B", 1_000)).unwrap(),
+        agent_slot: serde_json::to_value(AgentEvent::agent_slot_wait(1, 2_000)).unwrap(),
         list,
     }
 }

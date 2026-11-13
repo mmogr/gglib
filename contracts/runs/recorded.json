@@ -106,6 +106,15 @@
     "total": 0,
     "type": "waiting"
   },
+  "agent_slot": {
+    "elapsed_ms": 2000,
+    "position": 1,
+    "reason": "agent_slot",
+    "said": "Waiting for a free agent slot, 1 in line… 2 s",
+    "step": 0,
+    "total": 0,
+    "type": "waiting"
+  },
   "list": {
     "runs": [
       {

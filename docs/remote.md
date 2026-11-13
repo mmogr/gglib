@@ -892,7 +892,8 @@ The `PUT` answers as soon as the run is made, before the chat's model is
 loaded. A model that has to load shows as a `waiting` event in the run,
 whose `said` is the sentence to show for it ("Loading Qwen3-4B… 12 s"),
 worded by the daemon so every client says the same; a frame from an older
-daemon has none. A model that cannot be loaded ends the run
+daemon has none. While every agent-loop slot is taken, the run first waits
+in line for one, as a phone-kept chat run does (below). A model that cannot be loaded ends the run
 `failed` with `model_unavailable` rather than refusing the `PUT`, or with
 `model_not_found`, naming it, when the hub does not hold it; a client
 shows a run's error code as it would the `PUT`'s. Such a run has written
@@ -1032,9 +1033,20 @@ tools are offered to whatever model the request names: the model list says
 nothing yet of which models call tools, so a model that cannot is offered
 them anyway and may answer oddly. Every such run takes one of the
 desktop's four agent-loop slots, which a device's runs share with the
-desktop page's chats and runs, those that draw included: while four run at
-once, a fifth is refused `429 agent_busy` rather than queued, as a run that
-draws is. Without `tools` a chat run is recorded exactly
+desktop page's chats and runs, those that draw included. While four run at once, a
+device's run, this one or a turn on a hub chat, waits in line for a slot:
+the `PUT` answers at once, and the run, still `queued`, says so each second
+as a `waiting` event with `"reason": "agent_slot"`, its `position` (1 is
+next) and a `said` such as "Waiting for a free agent slot, 2 in line… 5 s".
+The line is first come, first served: a slot that frees goes to the run at
+its head. Up to 16 runs wait; one more is refused `429 agent_busy` at once,
+and a run that waits two minutes ends `failed`, `agent_busy`, having
+written nothing. A run leaves the line when it is cancelled, when its
+device is forgotten (a phone-kept chat run only; a turn on a hub chat is
+the chat's and carries on), or when the desktop stops. A run outlives its
+reader, so a client that stops reading does not give up its place. The
+desktop page's own turn is still refused `429 agent_busy` at once while
+every slot is taken. Without `tools` a chat run is recorded exactly
 as before.
 
 Such a turn may also say the chat's Thinking choice, `"thinking": "off"` or

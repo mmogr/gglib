@@ -43,9 +43,10 @@ pub(crate) struct Prepared {
     pub(crate) far_model: Option<ModelRef>,
 }
 
-/// One slot of the agent semaphore, or `None` when every slot is taken.
+/// One slot of the agent semaphore, or `None` when every slot is taken or
+/// a paired device's run waits in line for one (`slot_line`).
 pub(crate) fn take_permit(state: &AppState) -> Option<OwnedSemaphorePermit> {
-    state.agent_semaphore.clone().try_acquire_owned().ok()
+    state.agent_line.take()
 }
 
 /// The image tool, as a tool filter names it: qualified, so it can only ever
