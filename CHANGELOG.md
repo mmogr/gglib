@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.35.0-rc.2](https://github.com/mmogr/gglib/compare/v0.35.0-rc.1...v0.35.0-rc.2) (2026-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **proxy:** the proxy's cache-clear and shutdown refusals, a bad `X-Gglib-Session-Id`, unknown paths and methods, and unreadable path segments, queries and bodies now answer OpenAI's error object `{"error": {"message", "type", "code"}}` with a code, instead of a bare `{"error": "text"}`, plain text or an empty body. axum's 415 and 422 rejections are now 400 `invalid_request`.
+* **proxy:** every gglib-own route moved from `/v1/<x>` to `/v1/gglib/<x>` (chats, attachments, models/{name}/load and /detail, images/drawing, proxy/status, proxy/cache/clear, proxy/shutdown, runs). `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and `/v1/images/generations` don't move. Update the laptop and the phone (ggchat) before the Mac: a device on the old paths can't reach a moved Mac.
+
+### What gglib now does
+
+* **agent:** a paired machine's refusal reaches a run as its code ([#1905](https://github.com/mmogr/gglib/issues/1905)) ([07802ce](https://github.com/mmogr/gglib/commit/07802ce4f5c28291766dfe64403917164da801d8)), closes [#1256](https://github.com/mmogr/gglib/issues/1256)
+* **proxy:** /v1/models/{name} answers the model ([#1908](https://github.com/mmogr/gglib/issues/1908)) ([a659962](https://github.com/mmogr/gglib/commit/a65996279848186babe7ad2c5a44f0bff9b779e0))
+* **proxy:** devices say their gglib version and what they serve ([#1902](https://github.com/mmogr/gglib/issues/1902)) ([46bc17a](https://github.com/mmogr/gglib/commit/46bc17a9bb6133c0ce5613553e145ba6764199fa))
+* **proxy:** gglib's own routes live under /v1/gglib ([#1907](https://github.com/mmogr/gglib/issues/1907)) ([7be248a](https://github.com/mmogr/gglib/commit/7be248a263e5eba612a14bc16589d422cf2995f3))
+
+
+### What it stopped getting wrong
+
+* **cli:** model list and proxy trips size their columns to what they print ([#1903](https://github.com/mmogr/gglib/issues/1903)) ([70d5e26](https://github.com/mmogr/gglib/commit/70d5e26752426bbfa708d01b50945f7094f96bed))
+* **proxy:** every proxy answer is OpenAI's error shape with a code ([#1909](https://github.com/mmogr/gglib/issues/1909)) ([097f60d](https://github.com/mmogr/gglib/commit/097f60d0ae646aa7e395fcde4d1352b2ec94d9a8))
+
+
+### Internal
+
+* **release:** a breaking change after 1.0.0 starts the next major ([#1904](https://github.com/mmogr/gglib/issues/1904)) ([87c48fe](https://github.com/mmogr/gglib/commit/87c48fed8d32b361fccb8587acfa00254122f6f4))
+
 ## [0.35.0-rc.1](https://github.com/mmogr/gglib/compare/v0.34.0-rc.1...v0.35.0-rc.1) (2026-11-12)
 
 
