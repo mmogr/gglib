@@ -229,8 +229,8 @@ pub struct AccessArgs {
     /// unauthenticated and a non-loopback bind generates a key and stores it,
     /// which `gglib config reveal proxy-api-key` prints.
     ///
-    /// Prefer `GGLIB_API_KEY` (e.g. in a `.env` file) over the flag — a key on
-    /// the command line is visible to every process on the machine via the
+    /// Prefer `GGLIB_API_KEY` in the environment over the flag — a key on the
+    /// command line is visible to every process on the machine via the
     /// process list, and lands in shell history.
     #[arg(long, env = "GGLIB_API_KEY")]
     pub api_key: Option<String>,
