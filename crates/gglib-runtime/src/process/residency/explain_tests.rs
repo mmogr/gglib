@@ -6,7 +6,7 @@
 
 use super::*;
 use gglib_core::cache_config::KvCacheType;
-use gglib_core::domain::{KvElemsPerToken, LaunchFit};
+use gglib_core::domain::{ContextFit, KvElemsPerToken, LaunchFit};
 
 /// A refusal is not a zero, and `FitInputs` says which refusal it was. Without
 /// this the only signal is a `None`, which sends a person reading source.
@@ -287,6 +287,7 @@ fn a_launch_narration_carries_the_fit_its_context_was_sized_by() {
         .fit
         .expect("a chat model's narration has its fit");
     assert_eq!(Some(fit.clone()), request.fit.clone().map(LaunchFit::from));
+    assert!(!request.fit_off);
     assert_eq!(fit.fitted, request.opts.fitted_ctx);
     assert_eq!((fit.serves_at, fit.source), request.context);
     assert_eq!(fit.weights_bytes, Some(4_000_000_000));
@@ -307,6 +308,35 @@ fn a_plan_shows_the_fit_its_narration_carries() {
     .expect("a chat model plans");
     assert!(plan.fit.is_some());
     assert_eq!(plan.fit.map(LaunchFit::from), plan.narration.fit);
+}
+
+/// With the fit switched off nothing was fitted. The request keeps the
+/// placeholder a plan shows (what it would serve at, every figure unknown),
+/// and the launch's narration carries no fit: one would say this machine
+/// could not be read.
+#[test]
+fn a_launch_with_the_fit_switched_off_narrates_no_fit() {
+    let request = super::super::prepare_with(
+        false,
+        sized_spec(),
+        &ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        None,
+        None,
+        &LaunchOverrides::default(),
+    );
+    assert!(request.fit_off);
+    let (serves_at, source) = request.context;
+    assert_eq!(
+        request.fit,
+        Some(ContextFit::new(
+            serves_at,
+            source,
+            None,
+            &FitInputs::default()
+        ))
+    );
+    assert_eq!(plan_llama(&[], &request).narration.fit, None);
 }
 
 /// An image model has no context, so its launch carries no fit.

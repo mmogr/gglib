@@ -78,7 +78,8 @@ export const ProxyLaunchPanel: FC<ProxyLaunchPanelProps> = ({ launch }) => {
       {/*
         The fit the context was sized by, in the daemon's words: the
         sentence, then the figures `gglib model explain` prints. Absent for
-        an image model, and from a hub older than the field.
+        an image model, for a launch made with the fit switched off, and
+        from a hub older than the field.
       */}
       {launch.fit && (
         <div role="group" aria-label="Context fit" className="flex flex-col gap-xs p-md rounded-base bg-surface-elevated">

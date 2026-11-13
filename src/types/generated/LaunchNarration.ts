@@ -35,7 +35,8 @@ decisions: Array<LaunchDecision>,
 /**
  * The context fit the launch was sized by, the record
  * `gglib model explain` shows for a launch not yet made. `None` for an
- * image model, which has no context, and from a hub older than the
- * field.
+ * image model, which has no context, and for a launch made with the fit
+ * switched off (`GGLIB_DISABLE_CONTEXT_FIT`); a hub older than the field
+ * leaves it out.
  */
 fit?: LaunchFit | null, };

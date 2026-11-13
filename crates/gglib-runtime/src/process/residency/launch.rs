@@ -73,6 +73,10 @@ pub(super) struct LaunchRequest {
     /// running launch shows the figures `gglib model explain` shows. `None`
     /// for an image model, which has no context.
     pub fit: Option<ContextFit>,
+    /// `GGLIB_DISABLE_CONTEXT_FIT` was set when this was prepared, so `fit`
+    /// is a plan's placeholder and not a fit that ran: the narration leaves
+    /// it out.
+    pub fit_off: bool,
 }
 
 /// Run one launch and record it in the queue.
@@ -457,6 +461,7 @@ pub(super) fn plan_llama(others: &[Resident], request: &LaunchRequest) -> Planne
         context: (resolved_ctx, ctx_source),
         cache_ram: cache_ram_setting,
         fit,
+        fit_off,
         ..
     } = request;
     let mut opts = opts.clone();
@@ -527,7 +532,7 @@ pub(super) fn plan_llama(others: &[Resident], request: &LaunchRequest) -> Planne
         disk_cache_enabled: slot_save_path.is_some(),
         slot_restore,
         capabilities: &capabilities,
-        fit: fit.as_ref(),
+        fit: fit.as_ref().filter(|_| !fit_off),
     });
 
     Planned {

@@ -210,8 +210,7 @@ mod tests {
         );
     }
 
-    /// A fit that reached no figure (switched off, or refused) prints no
-    /// row of unknowns.
+    /// A fit that reached no figure (refused) prints no row of unknowns.
     #[test]
     fn a_fit_with_no_figure_prints_no_row() {
         let mut n = narration();

@@ -662,9 +662,36 @@ impl ResidentSet {
 /// disagree.
 ///
 /// The fit is `None` for an image model, which has no context. With
-/// `GGLIB_DISABLE_CONTEXT_FIT` set nothing was fitted, and its figures say
-/// nothing either.
+/// `GGLIB_DISABLE_CONTEXT_FIT` set nothing was fitted: its figures say
+/// nothing, and the request is marked (`fit_off`) so the launch's narration
+/// carries no fit.
 fn prepare(
+    spec: ModelLaunchSpec,
+    template: &ServerConfigOptions,
+    cache_ram: CacheRamSetting,
+    num_ctx: Option<u64>,
+    default_ctx: Option<u64>,
+    overrides: &LaunchOverrides,
+) -> LaunchRequest {
+    // `enabled`, not "is the variable present": every other switch reads
+    // truthiness through this helper, and `active()` — what the daemon
+    // reports as in effect — filters by the same call.
+    let fit_on = !gglib_core::debug_switches::enabled("GGLIB_DISABLE_CONTEXT_FIT");
+    prepare_with(
+        fit_on,
+        spec,
+        template,
+        cache_ram,
+        num_ctx,
+        default_ctx,
+        overrides,
+    )
+}
+
+/// [`prepare`], told whether the context fit is on rather than reading the
+/// switch, so both answers can be tested.
+fn prepare_with(
+    fit_on: bool,
     spec: ModelLaunchSpec,
     template: &ServerConfigOptions,
     cache_ram: CacheRamSetting,
@@ -689,6 +716,7 @@ fn prepare(
             cache_ram,
             health_deadline_secs,
             fit: None,
+            fit_off: false,
         };
     }
 
@@ -706,10 +734,6 @@ fn prepare(
     let kv_types =
         crate::llama::args::resolve_kv_cache_types(overlaid.cache_type_k, overlaid.cache_type_v);
 
-    // `enabled`, not "is the variable present": every other switch reads
-    // truthiness through this helper, and `active()` — what the daemon
-    // reports as in effect — filters by the same call.
-    //
     // `explain_fit` is the one seam: the reserved budget first, then the
     // undivided device, the same two budgets `gglib model explain` shows.
     // Reserving room for a co-resident is worth a rung, not the whole
@@ -718,7 +742,7 @@ fn prepare(
     // full-ceiling secondary could never have loaded anyway. Known
     // consequence, deliberate: the served context is non-monotonic in
     // device size.
-    let fit = (!gglib_core::debug_switches::enabled("GGLIB_DISABLE_CONTEXT_FIT")).then(|| {
+    let fit = fit_on.then(|| {
         let (fitted, inputs) = explain::explain_fit(
             spec.context_length,
             Some(spec.file_size_bytes),
@@ -756,6 +780,10 @@ fn prepare(
         spec.server_defaults.as_ref(),
     );
 
+    // Switched off, a plan still shows what it would serve at, its figures
+    // unknown. The narration of a launch must not: it would say this
+    // machine could not be read, when nothing tried to read it.
+    let fit_off = fit.is_none();
     let (fitted, inputs) = fit.unwrap_or_default();
     LaunchRequest {
         spec,
@@ -766,6 +794,7 @@ fn prepare(
         cache_ram,
         health_deadline_secs,
         fit: Some(ContextFit::new(resolved_ctx, ctx_source, fitted, &inputs)),
+        fit_off,
     }
 }
 

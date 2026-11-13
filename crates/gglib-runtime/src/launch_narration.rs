@@ -48,7 +48,8 @@ pub(crate) struct NarrationInputs<'a> {
     pub slot_restore: SlotRestoreResolution,
     /// The capability flags `build_server_config` resolved.
     pub capabilities: &'a ResolvedCapabilities,
-    /// The fit the context was sized by, carried as it is.
+    /// The fit the context was sized by, carried as it is; `None` when the
+    /// fit was switched off.
     pub fit: Option<&'a ContextFit>,
 }
 

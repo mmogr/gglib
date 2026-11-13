@@ -113,8 +113,9 @@ pub struct LaunchNarration {
     pub decisions: Vec<LaunchDecision>,
     /// The context fit the launch was sized by, the record
     /// `gglib model explain` shows for a launch not yet made. `None` for an
-    /// image model, which has no context, and from a hub older than the
-    /// field.
+    /// image model, which has no context, and for a launch made with the fit
+    /// switched off (`GGLIB_DISABLE_CONTEXT_FIT`); a hub older than the field
+    /// leaves it out.
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
     pub fit: Option<LaunchFit>,
@@ -209,9 +210,9 @@ impl LaunchFit {
     /// [`Self::figures`]). Under the banner's widest label it keeps to 80
     /// columns for a budget under 1000 GiB and weights under 100 GiB.
     ///
-    /// `None` when the fit reached no figure (switched off, or refused): the
-    /// banner prints no row of unknowns, and the status route and the GUI
-    /// carry the refusal's sentence.
+    /// `None` when the fit reached no figure (refused): the banner prints no
+    /// row of unknowns, and the status route and the GUI carry the
+    /// refusal's sentence.
     #[must_use]
     pub fn banner_row(&self) -> Option<LaunchDecision> {
         let unknown = || "unknown".to_owned();
