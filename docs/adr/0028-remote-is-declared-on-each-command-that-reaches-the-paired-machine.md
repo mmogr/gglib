@@ -72,12 +72,15 @@ answered with the command line to type instead.
 
 The commands `--remote` reaches, as the refusal names them, are the
 subcommands that declare the flag, named and ordered as `gglib --help`
-names and orders them, never by an alias. This gives up the
+names and orders them: `question`, not its alias `q`. This gives up the
 hand-written sentence `target.rs` chose, because a hand-written list
 drifts and this one had. A test holds the parser to ADR 0013's table: each
 command that takes the flag is one `target::reach` marks as using a
 machine, and each `model` subcommand takes it exactly when
 `ModelAction::on_paired()` allows its action there.
+
+> **Amended 2026-11-14.** The command is `q` now and has no alias, so the
+> refusal names it `q`.
 
 ### 4. Every route the tunnel carries is reached or exempted
 
