@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.35.0-rc.3](https://github.com/mmogr/gglib/compare/v0.35.0-rc.2...v0.35.0-rc.3) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **proxy:** a streamed `/v1/chat/completions` reply is llama-server's own chunks.
+    - Every chunk comes through one for one with all its fields: its `id`, a `created` that can change between chunks, `system_fingerprint`, the opening chunk with `delta.role: "assistant"` and `content: null`, and `timings`, `logprobs` and any other key it writes.
+    - A chunk the proxy edits is written with its keys in alphabetical order. `model` still names the served model.
+    - A client that sends `return_progress: true` gets llama-server's progress chunks as written, which carry `choices`. llama-server's `:` keep-alive comments pass through.
+    - A mid-stream llama-server error keeps its whole object (`n_ctx` and the like), with `code` set to `"upstream_error"` unless upstream's code was a string.
+    - A stream cut off without a finish no longer ends with a gglib-made `finish_reason: null` chunk. Tool calls held for repair on such a stream go out unrepaired.
+    - gglib's own frames carry the reply's upstream `id` and its latest `created`.
+    - Forwarded frames are larger, so a run's 8 MB log holds about 18% fewer frames.
+    - gglib-core API: `SseEncoder::with_reading`, `parse_sse_frame` and `SseParseResult` are gone (use `sse::events_of` on the parsed JSON). `SseEncoder::encode` returns `None` for reasoning, prompt-progress, usage and upstream-error events.
+* **proxy:** gglib no longer translates tool-call dialects; llama-server's own parsing is what clients get.
+    - Tool-call markup llama-server doesn't parse (Qwen/Hermes `<tool_call>`, template-derived dialects) now reaches clients as `content`, streamed or not, with no `call_qwen_N`/`call_dialect_N` ids. A malformed call is no longer replaced by the "unparsed tool-call output" notice. Stray `<think>`/`</think>` tags in `content` are no longer removed. A tool-call stream that ends `finish_reason: "stop"` is no longer rewritten to `"tool_calls"`.
+    - `tool_choice: "required"` or a named function is passed to llama-server as sent. It is no longer rewritten to `"none"` under a gglib grammar. Repair no longer judges a turn the client sent as `"required"`.
+    - `GGLIB_DISABLE_GRAMMAR`, `GGLIB_DISABLE_DIALECT_PARSER` and `GGLIB_MAX_GRAMMAR_TOOL_CALLS` are ignored; unset them.
+    - Dashboard: `recent_requests[].grammar_enforced`, the `constrained` intervention and `normalization_errors` are gone. `dialect_residue` scans the built-in markers only.
+    - Agent runs: a reply cut off inside dialect markup is no longer `call_cut`, and the "LLM normalization issue" warning is gone.
+    - Benchmark: the gglib arm no longer includes the grammar or parser, so its results can't be compared with earlier reports.
+    - Library: opening a library with this build strips every `format:*` tag and drops the `dialect_spec` column, and the library becomes schema generation 8, which older gglib builds refuse. The backup taken before the upgrade (`<name>.gen<N>.bak`) is the way back. Detection no longer adds `format:*` tags.
+    - Library API: gglib-core loses `DialectSpec`, `BodyCodec`, `EmissionProfile` and the rest of `domain::dialect`, the `normalize::tags` constants, `is_system_tag`, `Model`/`NewModel.dialect_spec`, `ModelSummary.dialect`, `GgufCapabilities.dialect` and `.extensions`, and `RetagDiff.spec_changed`. The retag response loses `specChanged`.
+    - Output: the launch banner and the GUI's "Tool calls" row no longer name a dialect. `gglib model retag` no longer prints "dialect spec re-derived", and `gglib model add --reimport` says "Replaced: tags, capabilities."
+
+### What gglib now does
+
+* **proxy:** the proxy forwards llama-server's own stream frames ([#1918](https://github.com/mmogr/gglib/issues/1918)) ([2873479](https://github.com/mmogr/gglib/commit/2873479cf635b9742e9beb012f099da4b2c01431))
+
+
+### What it stopped getting wrong
+
+* **hf:** a repository's parameter count is not taken from its draft ([cc3a466](https://github.com/mmogr/gglib/commit/cc3a4660f9709b24b6f05e899ffb6753713e871c)), closes [#1740](https://github.com/mmogr/gglib/issues/1740)
+* **hf:** search and the inspector say what a repository holds ([#1912](https://github.com/mmogr/gglib/issues/1912)) ([cc3a466](https://github.com/mmogr/gglib/commit/cc3a4660f9709b24b6f05e899ffb6753713e871c))
+* **hf:** search lists only quantisations, each spelt one way ([cc3a466](https://github.com/mmogr/gglib/commit/cc3a4660f9709b24b6f05e899ffb6753713e871c)), closes [#1860](https://github.com/mmogr/gglib/issues/1860)
+
+
+### Internal
+
+* **benchmark:** agentic verdicts are served, not re-derived in the GUI ([12ff957](https://github.com/mmogr/gglib/commit/12ff95708b582bf0b11054bc56d47fd7ac31b9ae))
+* **cli:** the promised commands, flags and settings keys are a checked-in list ([#1913](https://github.com/mmogr/gglib/issues/1913)) ([2784d5d](https://github.com/mmogr/gglib/commit/2784d5d022c7e3e98a4285be263454b47ca575e5))
+* **core:** the unload sentence and sampling source labels are served ([12ff957](https://github.com/mmogr/gglib/commit/12ff95708b582bf0b11054bc56d47fd7ac31b9ae))
+* **gui:** engine, verdict and unload sentences are served, not re-derived ([#1914](https://github.com/mmogr/gglib/issues/1914)) ([12ff957](https://github.com/mmogr/gglib/commit/12ff95708b582bf0b11054bc56d47fd7ac31b9ae))
+* **hf:** the daemon always names the picked variant ([cc3a466](https://github.com/mmogr/gglib/commit/cc3a4660f9709b24b6f05e899ffb6753713e871c))
+* **proxy:** gglib stops translating tool-call dialects ([#1916](https://github.com/mmogr/gglib/issues/1916)) ([acdba28](https://github.com/mmogr/gglib/commit/acdba283c35f2512b331cf76b4ca7b9d7d56fe70))
+* **scripts:** remove the file-size check ([#1911](https://github.com/mmogr/gglib/issues/1911)) ([0b42c97](https://github.com/mmogr/gglib/commit/0b42c971a053e5b0918c5b44416a0b5eb8898916))
+* **settings:** an engine's pin sentence is the status command's, served ([12ff957](https://github.com/mmogr/gglib/commit/12ff95708b582bf0b11054bc56d47fd7ac31b9ae))
+* slot, duration, sharing and reach words are served ([#1915](https://github.com/mmogr/gglib/issues/1915)) ([812ac04](https://github.com/mmogr/gglib/commit/812ac04c6dde9931d8e93b0ac4b299c8c9a5e7cc)), closes [#1832](https://github.com/mmogr/gglib/issues/1832) [#1833](https://github.com/mmogr/gglib/issues/1833)
+
 ## [0.35.0-rc.2](https://github.com/mmogr/gglib/compare/v0.35.0-rc.1...v0.35.0-rc.2) (2026-11-12)
 
 
