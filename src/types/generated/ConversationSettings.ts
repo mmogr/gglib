@@ -5,8 +5,9 @@ import type { Thinking } from "./Thinking";
 /**
  * Session parameters captured at conversation creation for resume.
  *
- * Stores sampling, context, and tool configuration so a CLI or GUI session
- * can be faithfully restored. Serialized as a JSON column in the database.
+ * Stores the model, its profile and token limit, context, and tool
+ * configuration so a CLI or GUI session can be faithfully restored.
+ * Serialized as a JSON column in the database.
  */
 export type ConversationSettings = { 
 /**
@@ -23,25 +24,9 @@ model_name?: string,
  */
 model?: ModelRef, 
 /**
- * Sampling temperature (0.0–2.0).
- */
-temperature?: number, 
-/**
- * Nucleus sampling threshold (0.0–1.0).
- */
-top_p?: number, 
-/**
- * Top-K sampling limit.
- */
-top_k?: number, 
-/**
  * Maximum tokens per response.
  */
 max_tokens?: number, 
-/**
- * Repetition penalty.
- */
-repeat_penalty?: number, 
 /**
  * Name of the inference profile the session sampled with, one
  * configured on `model`'s machine. Absent in rows saved before

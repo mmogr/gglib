@@ -150,19 +150,13 @@ fn model_update_can_clear_one_stored_parameter() {
     );
 }
 
-/// A chat keeps five sampling flags and sends them with each turn; `chat`
-/// and `q` take those five and no other, so a flag that would do nothing is
-/// refused where it is typed.
+/// A chat keeps one sampling flag, `--max-tokens`, and sends it with each
+/// turn as a budget; `chat` and `q` take it and no other, so a flag that
+/// would do nothing is refused where it is typed.
 #[test]
-fn chat_and_q_take_only_the_five_sampling_flags_a_chat_keeps() {
-    let kept = owned(&[
-        "max-tokens",
-        "repeat-penalty",
-        "temperature",
-        "top-k",
-        "top-p",
-    ]);
-    for command in ["chat", "question"] {
+fn chat_and_q_take_only_the_one_sampling_flag_a_chat_keeps() {
+    let kept = owned(&["max-tokens"]);
+    for command in ["chat", "q"] {
         let taken: Vec<String> = long_flags(command)
             .into_iter()
             .filter(|flag| sampling_flags().contains(flag))

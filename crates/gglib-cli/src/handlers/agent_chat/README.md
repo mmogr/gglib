@@ -24,8 +24,6 @@ independently readable:
   resume goes back to
 - [`persistence`] — the chat's row: made, its settings and system prompt
   replaced; the daemon saves the turns
-- [`sampling_warning`] — the one line, before the first turn, that says
-  the endpoint uses its own sampling until "Let clients set sampling" is on
 - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output,
   and a reply's figure line ("41 s · 13 t/s · 2,100 tokens reused", core's
   `TurnUsage::figure_line`, the GUI thread's words)

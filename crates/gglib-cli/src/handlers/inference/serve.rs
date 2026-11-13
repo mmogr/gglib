@@ -35,6 +35,17 @@ use serve_far::serve_far;
 
 use super::shared::{log_inference_info, log_mlock_info};
 
+/// `--jinja` as the launch request carries it: `on` is `Some(true)`, `off`
+/// `Some(false)`, and `auto` or no flag `None`, which leaves it to the
+/// model's own default and its tags.
+fn launch_jinja(options: &ServeOptions) -> Option<bool> {
+    options
+        .jinja
+        .as_deref()
+        .map(crate::handlers::model::update::TriState::parse)
+        .and_then(crate::handlers::model::update::TriState::stored)
+}
+
 /// Execute the serve command: here, or on the paired machine.
 ///
 /// On the paired machine "serve" is what the word can mean there: have the
@@ -149,7 +160,7 @@ async fn serve_here(
         &StartServerRequest {
             context_length: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
             port: None,
-            jinja: options.jinja.then_some(true),
+            jinja: launch_jinja(&options),
             reasoning_format: None,
             mtp_draft_n_max: mtp.mtp_draft_n_max,
             mtp_draft_p_min: mtp.mtp_draft_p_min,
@@ -191,8 +202,10 @@ async fn serve_here(
         log_inference_info(stated);
         warn_client_budgets_are_capped(stated);
     }
-    if options.jinja {
-        eprintln!("  Jinja templates: enabled");
+    match launch_jinja(&options) {
+        Some(true) => eprintln!("  Jinja templates: enabled"),
+        Some(false) => eprintln!("  Jinja templates: disabled"),
+        None => {}
     }
     if mtp_args.enabled {
         eprintln!(

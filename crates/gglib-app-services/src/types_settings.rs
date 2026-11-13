@@ -29,7 +29,7 @@ pub struct AppSettings {
     /// names none.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub tool_timeout_ms: Option<u64>,
-    /// Default model ID for quick commands (e.g., `gglib question`).
+    /// Default model ID for quick commands (e.g., `gglib q`).
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub default_model_id: Option<i64>,
     /// The image model a drawing request uses when it names none (see
@@ -156,7 +156,7 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub tool_timeout_ms: Option<Option<u64>>,
-    /// Default model ID for quick commands (e.g., `gglib question`).
+    /// Default model ID for quick commands (e.g., `gglib q`).
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub default_model_id: Option<Option<i64>>,

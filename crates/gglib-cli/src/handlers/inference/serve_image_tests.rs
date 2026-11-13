@@ -110,7 +110,7 @@ fn each_chat_flag_is_named() {
         ["--mlock"]
     );
     assert_eq!(
-        typed(&["gglib", "serve", "flux", "--jinja"], false),
+        typed(&["gglib", "serve", "flux", "--jinja", "on"], false),
         ["--jinja"]
     );
     assert_eq!(

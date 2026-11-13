@@ -59,16 +59,12 @@ gglib chat
   --no-tools
   --profile
   --remote
-  --repeat-penalty
   --system-prompt -s
-  --temperature
   --thinking
     on
     off
   --tool-timeout-ms
   --tools
-  --top-k
-  --top-p
 gglib chat history
   --limit -n
 gglib completions
@@ -212,7 +208,6 @@ gglib daemon stop
   --remote
   --yes -y
 gglib gui
-  --dev
 gglib image
   --count
   --from
@@ -269,7 +264,6 @@ gglib model capabilities
     supports-reasoning
 gglib model check-updates
   --all
-  --identifier
 gglib model download
   --list-quants
   --quantization -q
@@ -401,7 +395,7 @@ gglib proxy stop
 gglib proxy test
 gglib proxy trips
   --since
-gglib question (alias q)
+gglib q
   --file
   --image
   --max-parallel-tools
@@ -412,13 +406,9 @@ gglib question (alias q)
   --profile
   --quiet
   --remote
-  --repeat-penalty
   --show-prompt
-  --temperature
   --tool-timeout-ms
   --tools
-  --top-k
-  --top-p
 gglib remote
 gglib remote disable
 gglib remote disconnect
@@ -459,6 +449,9 @@ gglib serve
   --frequency-penalty
   --host
   --jinja
+    auto
+    on
+    off
   --max-tokens
   --min-p
   --mlock

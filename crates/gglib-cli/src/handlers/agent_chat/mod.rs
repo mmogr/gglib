@@ -12,7 +12,6 @@ pub(crate) mod renderer;
 pub(crate) mod repl;
 mod repl_line;
 pub(crate) mod resume_settings;
-pub(crate) mod sampling_warning;
 mod thinking_dispatch;
 mod tool_format;
 pub(crate) mod turn;
@@ -58,10 +57,6 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         .as_ref()
         .map(|resumed| resumed.held.folder.clone());
     let conversation = save(ctx, &args, plan).await?;
-    let settings = ctx.app.settings().get().await?;
-    for line in sampling_warning::notices(&args.sampling, args.target, &settings) {
-        eprintln!("{line}");
-    }
 
     // The session's Draw switch (`/draw`), and the folder its file tools read.
     let draw = draw::DrawSwitch::for_session(&daemon, args.target);

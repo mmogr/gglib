@@ -269,9 +269,9 @@ pub enum ModelCommand {
     },
 
     /// Check for updates to downloaded models
+    #[command(group(clap::ArgGroup::new("which").required(true).args(["identifier", "all"])))]
     CheckUpdates {
-        /// Check a specific model by name or ID
-        #[arg(long)]
+        /// Name or ID of the model to check
         identifier: Option<String>,
         /// Check all models
         #[arg(long)]

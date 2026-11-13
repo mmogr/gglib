@@ -168,7 +168,7 @@ pub enum Commands {
     },
 
     /// Ask a question with optional context from stdin or file
-    #[command(display_order = 12, visible_alias = "q", after_help = crate::subcommands::QUESTION_EXAMPLES)]
+    #[command(name = "q", display_order = 12, after_help = crate::subcommands::QUESTION_EXAMPLES)]
     Question {
         /// Question to ask (use {} as placeholder for piped/file input)
         question: String,
@@ -223,11 +223,7 @@ pub enum Commands {
     // ── Interfaces ──────────────────────────────────────────────────────
     /// Launch the Tauri desktop GUI
     #[command(display_order = 20)]
-    Gui {
-        /// Run in development mode with hot-reload (requires Node.js and npm)
-        #[arg(long)]
-        dev: bool,
-    },
+    Gui,
 
     /// Open the web dashboard (served by the gglib daemon)
     ///

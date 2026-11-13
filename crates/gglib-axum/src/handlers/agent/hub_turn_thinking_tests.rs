@@ -190,7 +190,7 @@ async fn remembering_keeps_every_other_setting() {
     let model = state.core.models().add(model).await.unwrap().id;
     let settings = ConversationSettings {
         model_name: Some("qwen3-8b".to_owned()),
-        temperature: Some(0.5),
+        max_tokens: Some(500),
         tools: vec!["fs:read_file".to_owned()],
         max_iterations: Some(4),
         no_tools: Some(false),

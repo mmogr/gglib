@@ -157,7 +157,7 @@ fn a_local_command_refuses_remote_with_the_one_sentence() {
         text.starts_with("`gglib model` is about this machine"),
         "{text}"
     );
-    assert!(text.contains("chat, question"), "{text}");
+    assert!(text.contains("chat, q"), "{text}");
     assert!(
         Target::Remote.admit(&parsed(&["gglib", "chat"])).is_ok(),
         "a command that uses a machine is admitted"

@@ -12,7 +12,7 @@ import type { InferenceProfile } from "./InferenceProfile";
  */
 export type UpdateSettingsRequest = { defaultContextSize?: number | null, proxyPort?: number | null, llamaBasePort?: number | null, maxDownloadQueueSize?: number | null, maxToolIterations?: number | null, maxStagnationSteps?: number | null, maxParallelTools?: number | null, toolTimeoutMs?: number | null, 
 /**
- * Default model ID for quick commands (e.g., `gglib question`).
+ * Default model ID for quick commands (e.g., `gglib q`).
  */
 defaultModelId?: number | null, 
 /**

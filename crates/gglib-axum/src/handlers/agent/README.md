@@ -159,10 +159,9 @@ A turn through this machine's endpoint is resolved there, by its pipeline
 (`gglib_core::request_pipeline::apply`, the one place the ladder is
 folded), over what the turn names (`LoopRequest::sampling_layer`): its
 thinking budget (thinking off is `reasoning_budget_tokens: 0`, which the
-endpoint honours from any client) and, on a turn on a saved chat, the five
-sampling settings the chat saved (`gglib chat`'s flags, `ChatSampling`),
-sent as a client's, which the endpoint honours only while it trusts
-clients' sampling. The chat's saved profile goes on the model the turn asks
+endpoint honours from any client) and, on a turn on a saved chat, the
+token limit the chat saved (`gglib chat --max-tokens`, `ChatSampling`), a
+budget the endpoint also honours from any client. The chat's saved profile goes on the model the turn asks
 for, `<id>:<profile>`, which the endpoint, or the paired machine's proxy,
 routes to that profile whatever it trusts. A far turn is handed nothing this
 machine stores; the far proxy resolves it by its own settings.

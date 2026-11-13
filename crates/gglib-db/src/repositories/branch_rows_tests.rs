@@ -39,7 +39,7 @@ async fn a_branch_copies_the_chat_as_far_as_a_message_and_leaves_it_as_it_was() 
     let made = chats.repo.get_conversation(branch).await.unwrap().unwrap();
     assert_eq!(made.title, "Kyoto");
     assert_eq!(made.system_prompt.as_deref(), Some("Be brief."));
-    assert_eq!(made.settings.and_then(|s| s.temperature), Some(0.2));
+    assert_eq!(made.settings.and_then(|s| s.max_tokens), Some(200));
     assert_eq!(
         (made.branch_of, made.lineage_id),
         (Some(source), Some(source))

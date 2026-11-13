@@ -14,9 +14,9 @@ use gglib_core::services::ChatHistoryService;
 use super::SqliteChatHistoryRepository;
 use crate::setup::setup_test_database;
 
-/// Settings a newer build might store: a temperature this build cannot read,
+/// Settings a newer build might store: a token limit this build cannot read,
 /// a key it does not know, and two it reads.
-pub(super) const STORED: &str = r#"{"model_name":"Qwen","temperature":"warm","later":{"a":[1,2.50]},"thinking":"off","max_parallel":4}"#;
+pub(super) const STORED: &str = r#"{"model_name":"Qwen","max_tokens":"many","later":{"a":[1,2.50]},"thinking":"off","max_parallel":4}"#;
 
 pub(super) struct Chat {
     pub(super) repo: Arc<SqliteChatHistoryRepository>,
@@ -83,7 +83,7 @@ async fn a_key_that_cannot_be_read_is_passed_over_and_the_rest_are_read() {
         (held.thinking, held.max_parallel),
         (Some(Thinking::Off), Some(4))
     );
-    assert_eq!(held.temperature, None);
+    assert_eq!(held.max_tokens, None);
 }
 
 #[tokio::test]
@@ -91,7 +91,7 @@ async fn thinking_is_forgotten_and_every_other_key_kept() {
     let chat = chat(Some(STORED)).await;
     chat.service.record_thinking(chat.id, None).await.unwrap();
     let expected =
-        r#"{"model_name":"Qwen","temperature":"warm","later":{"a":[1,2.50]},"max_parallel":4}"#;
+        r#"{"model_name":"Qwen","max_tokens":"many","later":{"a":[1,2.50]},"max_parallel":4}"#;
     assert_eq!(chat.stored().await, (Some(expected.to_owned()), None));
 }
 
@@ -100,7 +100,7 @@ async fn a_folder_is_added_and_every_other_key_kept() {
     let chat = chat(Some(STORED)).await;
     let folder = Some("/work".to_owned());
     chat.service.record_folder(chat.id, folder).await.unwrap();
-    let expected = r#"{"model_name":"Qwen","temperature":"warm","later":{"a":[1,2.50]},"thinking":"off","max_parallel":4,"folder":"/work"}"#;
+    let expected = r#"{"model_name":"Qwen","max_tokens":"many","later":{"a":[1,2.50]},"thinking":"off","max_parallel":4,"folder":"/work"}"#;
     assert_eq!(chat.stored().await, (Some(expected.to_owned()), None));
 }
 
@@ -112,7 +112,7 @@ async fn a_run_names_its_model_and_every_other_key_is_kept() {
         .record_model(chat.id, model, "Llama")
         .await
         .unwrap();
-    let expected = r#"{"model_name":"Llama","temperature":"warm","later":{"a":[1,2.50]},"thinking":"off","max_parallel":4,"model":{"id":7,"machine":{"kind":"local"}}}"#;
+    let expected = r#"{"model_name":"Llama","max_tokens":"many","later":{"a":[1,2.50]},"thinking":"off","max_parallel":4,"model":{"id":7,"machine":{"kind":"local"}}}"#;
     assert_eq!(chat.stored().await, (Some(expected.to_owned()), Some(7)));
 }
 
@@ -129,26 +129,26 @@ async fn a_patch_changes_its_settings_and_every_other_key_is_kept() {
         .service
         .update_conversation(chat.id, title, None, patch, None);
     changed.await.unwrap();
-    let expected = r#"{"model_name":"Qwen","temperature":"warm","later":{"a":[1,2.50]},"thinking":"off","tools":["read_file"]}"#;
+    let expected = r#"{"model_name":"Qwen","max_tokens":"many","later":{"a":[1,2.50]},"thinking":"off","tools":["read_file"]}"#;
     assert_eq!(chat.stored().await, (Some(expected.to_owned()), None));
 }
 
-/// A resume's command line names a temperature, over the one this build
-/// cannot read, and a top-k.
+/// A resume's command line names a token limit, over the one this build
+/// cannot read, and an iteration limit.
 #[tokio::test]
 async fn a_resume_writes_what_it_names_and_every_other_key_is_kept() {
     let chat = chat(Some(STORED)).await;
     let held = chat.held().await;
     let settings = ConversationSettings {
-        temperature: Some(0.7),
-        top_k: Some(40),
+        max_tokens: Some(700),
+        max_iterations: Some(40),
         ..held.clone()
     };
     chat.service
         .record_settings(chat.id, &held, settings)
         .await
         .unwrap();
-    let expected = r#"{"model_name":"Qwen","temperature":0.7,"later":{"a":[1,2.50]},"thinking":"off","max_parallel":4,"top_k":40}"#;
+    let expected = r#"{"model_name":"Qwen","max_tokens":700,"later":{"a":[1,2.50]},"thinking":"off","max_parallel":4,"max_iterations":40}"#;
     assert_eq!(chat.stored().await, (Some(expected.to_owned()), None));
 }
 
@@ -224,13 +224,13 @@ async fn a_writer_with_an_old_read_keeps_what_others_wrote_since() {
     let folder = Some("/work".to_owned());
     chat.service.record_folder(chat.id, folder).await.unwrap();
     let settings = ConversationSettings {
-        top_k: Some(40),
+        max_iterations: Some(40),
         ..held.clone()
     };
     chat.service
         .record_settings(chat.id, &held, settings)
         .await
         .unwrap();
-    let expected = r#"{"model":{"id":7,"machine":{"kind":"local"}},"model_name":"Llama","folder":"/work","top_k":40}"#;
+    let expected = r#"{"model":{"id":7,"machine":{"kind":"local"}},"model_name":"Llama","folder":"/work","max_iterations":40}"#;
     assert_eq!(chat.stored().await, (Some(expected.to_owned()), Some(7)));
 }

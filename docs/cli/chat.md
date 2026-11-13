@@ -72,7 +72,6 @@ gglib q --remote -m <id> "Why is this test flaky?"   # on the paired machine
 - The question is a saved chat from the start, made before it is asked:
   a question that fails keeps what arrived of its reply, marked as stopped.
 - Its file tools read the directory it was asked in.
-- `question` is the long spelling of the same command.
 
 ## `chat`
 
@@ -173,15 +172,12 @@ carries them.
 
 ### Sampling
 
-`chat` and `q` take five sampling flags, `--temperature`, `--top-p`,
-`--top-k`, `--max-tokens` and `--repeat-penalty`, and `--profile`, and the
-chat keeps them. The other sampling flags are `serve`'s and `proxy`'s.
+`chat` and `q` take `--max-tokens` and `--profile`, and the chat keeps
+them. A chat samples as the endpoint does, or as its profile says; the other
+sampling flags are `serve`'s and `proxy`'s.
 
-- Each turn sends the five as a client's sampling. The endpoint takes them
-  only while **Let clients set sampling** is on (`gglib config set
-  trust-client-sampling true`), `--max-tokens` whatever it is; while it is
-  off, a session that names one of the other four says so once, on stderr,
-  before its first turn.
+- Each turn sends `--max-tokens` as a client's budget, which the endpoint
+  takes from any client.
 - Each turn names the chat's profile on its model, `<id>:<profile>`, and the
   endpoint applies it whether or not it trusts clients' sampling. Under
   `--remote` the profile is the paired machine's.

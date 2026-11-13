@@ -72,7 +72,7 @@ impl ConversationSettings {
 const MODEL_KEYS: [&str; 2] = ["model", "model_name"];
 
 /// `settings` as their stored text reads back: parsed from that text, so a
-/// value is the one written (`0.7`, not the `f32`'s widened `f64`).
+/// value is the one written.
 fn stored(settings: &ConversationSettings) -> Map<String, Value> {
     serde_json::to_string(settings)
         .ok()

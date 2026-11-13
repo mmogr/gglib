@@ -2,7 +2,7 @@
 //!
 //! Reusable `#[derive(Args)]` structs that are flattened into multiple commands
 //! via `#[command(flatten)]`, eliminating duplicate field definitions across
-//! `Serve`, `Proxy`, `Chat`, and `Question`.
+//! `serve`, `proxy`, `chat` and `q`.
 
 use clap::Args;
 
@@ -100,25 +100,15 @@ pub struct SamplingArgs {
     pub reasoning_budget_tokens: Option<i32>,
 }
 
-/// The sampling flags a chat keeps (`chat`, `q`): saved with the chat, and
-/// sent by each of its turns as a client's sampling.
+/// The sampling flag a chat keeps (`chat`, `q`): saved with the chat, and
+/// sent by each of its turns as a client's budget, which the endpoint
+/// honours from any client. A chat's other sampling is the endpoint's, or
+/// a profile's (`--profile`).
 #[derive(Args, Debug, Clone, Default)]
 pub struct ChatSamplingArgs {
-    /// Temperature for sampling (0.0-2.0)
-    #[arg(long)]
-    pub temperature: Option<f32>,
-    /// Top-p sampling (0.0-1.0)
-    #[arg(long = "top-p")]
-    pub top_p: Option<f32>,
-    /// Top-k sampling
-    #[arg(long = "top-k")]
-    pub top_k: Option<i32>,
     /// Maximum tokens to generate
     #[arg(long = "max-tokens")]
     pub max_tokens: Option<u32>,
-    /// Repeat penalty
-    #[arg(long = "repeat-penalty")]
-    pub repeat_penalty: Option<f32>,
 }
 
 /// Context-size and memory-lock flags for `serve`.
@@ -259,9 +249,11 @@ pub struct AccessArgs {
 /// Serve-command options that don't belong to another group.
 #[derive(Args, Debug, Clone)]
 pub struct ServeOptions {
-    /// Force-enable Jinja template parsing for chat templates
-    #[arg(long)]
-    pub jinja: bool,
+    /// Jinja templates for this launch: `on` sends --jinja, `off` sends
+    /// --no-jinja, `auto` leaves it to the model's own default and its
+    /// tags, as omitting the flag does.
+    #[arg(long, value_name = "auto|on|off", value_parser = ["auto", "on", "off"])]
+    pub jinja: Option<String>,
     /// Host the OpenAI-compatible endpoint binds to.
     ///
     /// Omit to use the stored `proxy_host` setting, loopback until one is

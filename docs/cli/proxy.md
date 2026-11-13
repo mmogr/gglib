@@ -113,6 +113,9 @@ through `/v1/models` need, VS Code Copilot's BYOK endpoint among them.
 - `--port` is the endpoint; the daemon allocates the upstream llama-server
   port behind it, from `llama_base_port`
   (`gglib config set llama-base-port`).
+- `--jinja auto|on|off` is this launch's choice of chat templates, the
+  values `model update --jinja` takes for the model's own default, which it
+  outranks; `auto`, or no flag, leaves it to that default and the tags.
 - An image model is served by stable-diffusion.cpp's `sd-server` instead.
   `serve` offers to install it if it is missing, or older than its pinned
   release (`gglib config sd install`), prints the model's family and each
@@ -136,13 +139,13 @@ fought.
 
 ## `gui` and `web`
 
-`gglib gui` launches the desktop app (`--dev` for hot reload, for
-contributors). `gglib web` makes sure the daemon is up and prints the web
-page's address; the daemon serves the page and the API from one loopback
-port, and the link carries the daemon's token, so `web` opens your browser
-on it unless `--no-open`. The page is for this machine only: the daemon
-listens on loopback, and another machine reaches models through the proxy
-(`proxy --host`) or a paired tunnel (`gglib remote`).
+`gglib gui` launches the desktop app. `gglib web` makes sure the daemon is
+up and prints the web page's address; the daemon serves the page and the
+API from one loopback port, and the link carries the daemon's token, so
+`web` opens your browser on it unless `--no-open`. The page is for this
+machine only: the daemon listens on loopback, and another machine reaches
+models through the proxy (`proxy --host`) or a paired tunnel
+(`gglib remote`).
 
 ## Flags
 

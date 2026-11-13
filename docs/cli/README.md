@@ -58,7 +58,7 @@ Grouped as `gglib --help` groups them.
 | | [`mcp`](mcp.md) | Tool servers for `chat`, `q` and the chat page |
 | **Inference** | [`serve <model>`](proxy.md#serve) | The endpoint pinned to one model |
 | | [`chat <model>`](chat.md#chat) | An interactive session with tools |
-| | [`q`](chat.md#q) | One question, pipe-friendly (`question` is the long spelling) |
+| | [`q`](chat.md#q) | One question, pipe-friendly |
 | | [`run`](chat.md#run) | A reply the daemon finishes while you do something else |
 | | [`image`](image.md) | Draw a picture with this machine's image model, or with `--remote` the paired machine's |
 | | [`attachment save`](chat.md#attachment-save) | Write an image a chat stored to a file |
@@ -77,7 +77,7 @@ them once; the last column says which commands take each.
 | Group | Flags | What to know | On |
 |---|---|---|---|
 | **Context** | `--context-size` / `-c`, `--mlock` | `--mlock` locks the weights in memory. `--context-size` is a number, or `max` for the model's trained window. Left out, the first of these that is set wins: the model's own default, your global default, the size fitted to the model and this machine, then 4096. [`model explain`](model.md#explain) shows the result. `proxy` takes `--default-context-size` instead, for every model it serves. A chat's context is its model's own setting. | `serve` |
-| **Sampling** | `--temperature`, `--top-p`, `--top-k`, `--min-p`, `--max-tokens`, the penalties, DRY, dynatemp, `--top-n-sigma`, `--reasoning-effort`, `--reasoning-budget-tokens` | One layer of a five-level hierarchy: request → profile → this model → your global default → the model's own recipe. [Sampling resolution](../sampling.md) has the rules; `model explain` shows which layer won. `chat` and `q` take five of them, `--temperature`, `--top-p`, `--top-k`, `--max-tokens` and `--repeat-penalty`, which the chat keeps ([chat](chat.md#sampling)). | `proxy`, `serve`; five on `chat`, `q` |
+| **Sampling** | `--temperature`, `--top-p`, `--top-k`, `--min-p`, `--max-tokens`, the penalties, DRY, dynatemp, `--top-n-sigma`, `--reasoning-effort`, `--reasoning-budget-tokens` | One layer of a five-level hierarchy: request → profile → this model → your global default → the model's own recipe. [Sampling resolution](../sampling.md) has the rules; `model explain` shows which layer won. `chat` and `q` take only `--max-tokens`, which the chat keeps ([chat](chat.md#sampling)). | `proxy`, `serve`; `--max-tokens` on `chat`, `q` |
 | **Profile** | `--profile <name>` | A named sampling profile ([config profile](config.md#profile)) for this run, where one model is named. | `serve`, `chat`, `q` |
 | **Cache** | `--cache`, `--slot-dir`, `--cache-disk-gb` | The on-disk slot cache. KV quantization and the host-RAM prompt cache are sized by the daemon at every launch, not per run: [KV cache tiering](../cache.md). | `proxy`, `serve` |
 | **Access** | `--host`, `--api-key`, `--allowed-host` | A loopback bind with no key given and none stored runs unauthenticated. Binding elsewhere mints a key and stores it, as `gglib remote enable` does among others, and a stored key is demanded on loopback too; `gglib config reveal proxy-api-key` prints it. Every host a client will reach the endpoint by is named with `--allowed-host` (the DNS-rebinding guard). | `proxy`, `serve` |

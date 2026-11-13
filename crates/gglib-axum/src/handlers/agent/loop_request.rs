@@ -80,16 +80,15 @@ pub(crate) struct LoopRequest {
 
 impl LoopRequest {
     /// The turn's own sampling layer — the top rung of the hierarchy: its
-    /// thinking budget, and the five settings the chat saved
-    /// ([`Self::saved`]), sent as a client's are, which the endpoint they go
-    /// through honours only while it trusts clients' sampling. Every field
-    /// neither names resolves from the layers beneath, at the endpoint.
+    /// thinking budget, and the token limit the chat saved
+    /// ([`Self::saved`]), both budgets the endpoint they go through honours
+    /// from any client. Every field neither names resolves from the layers
+    /// beneath, at the endpoint.
     ///
     /// `None` when neither names anything, which keeps the adapter's
     /// "resolve entirely from the layers beneath" path for the common case.
     pub(crate) fn sampling_layer(&self) -> Option<gglib_core::domain::InferenceConfig> {
-        let saved = self.saved.sampling.clone().unwrap_or_default();
-        if self.reasoning_budget_tokens.is_none() && self.saved.sampling.is_none() {
+        if self.reasoning_budget_tokens.is_none() && self.saved.max_tokens.is_none() {
             return None;
         }
         // Written out in full rather than with `..Default::default()`, so a
@@ -99,11 +98,11 @@ impl LoopRequest {
         Some(gglib_core::domain::InferenceConfig {
             reasoning_effort: None,
             reasoning_budget_tokens: self.reasoning_budget_tokens,
-            temperature: saved.temperature,
-            top_p: saved.top_p,
-            top_k: saved.top_k,
-            max_tokens: saved.max_tokens,
-            repeat_penalty: saved.repeat_penalty,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            max_tokens: self.saved.max_tokens,
+            repeat_penalty: None,
             presence_penalty: None,
             min_p: None,
             frequency_penalty: None,

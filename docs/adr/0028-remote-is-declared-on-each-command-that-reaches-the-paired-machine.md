@@ -79,6 +79,9 @@ command that takes the flag is one `target::reach` marks as using a
 machine, and each `model` subcommand takes it exactly when
 `ModelAction::on_paired()` allows its action there.
 
+> **Amended 2026-11-14.** The command is `q` now and has no alias, so the
+> refusal names it `q`.
+
 ### 4. Every route the tunnel carries is reached or exempted
 
 `crates/gglib-cli/src/target_tunnel_tests.rs` maps each route in

@@ -43,17 +43,9 @@ impl Os {
     }
 }
 
-/// Execute the `gui` command.
-///
-/// In development mode, prints instructions for running `cargo tauri dev`.
-/// Otherwise, locates and launches the built application bundle for the
-/// current platform.
-pub(crate) fn execute(dev: bool) -> Result<()> {
-    if dev {
-        println!("Development mode requires running 'cargo tauri dev' directly");
-        return Ok(());
-    }
-
+/// Execute the `gui` command: locate and launch the built application
+/// bundle for the current platform.
+pub(crate) fn execute() -> Result<()> {
     gglib_core::paths::source_checkout()
         .map_or_else(launch_prebuilt, |repo_root| launch_from_repo(&repo_root))
 }

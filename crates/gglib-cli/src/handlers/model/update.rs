@@ -173,7 +173,7 @@ impl TriState {
     }
 
     /// The stored value: `None` for `auto`.
-    const fn stored(self) -> Option<bool> {
+    pub(crate) const fn stored(self) -> Option<bool> {
         match self {
             Self::Auto => None,
             Self::On => Some(true),

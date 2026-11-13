@@ -98,8 +98,7 @@ async fn a_new_chat_saves_the_flags_it_names() {
         max_parallel: Some(2),
         ..chat_args()
     };
-    args.sampling.temperature = Some(0.4);
-    args.sampling.top_k = Some(40);
+    args.sampling.max_tokens = Some(400);
 
     let settings = saved(&ctx, prepared(&ctx, &args).await).await;
 
@@ -109,10 +108,7 @@ async fn a_new_chat_saves_the_flags_it_names() {
     };
     assert_eq!(settings.model, Some(here));
     assert_eq!(settings.model_name.as_deref(), Some("qwen"));
-    assert_eq!(
-        (settings.temperature, settings.top_k),
-        (Some(0.4), Some(40))
-    );
+    assert_eq!(settings.max_tokens, Some(400));
     assert_eq!(settings.profile.as_deref(), Some("coding"));
     assert_eq!(settings.tools, ["read_file"]);
     assert_eq!(
@@ -127,7 +123,7 @@ async fn a_new_chat_saves_the_flags_it_names() {
 }
 
 /// A resume keeps what the chat saved and saves what its command line names
-/// in its place: a sampling flag, `--no-tools` and a profile.
+/// in its place: `--max-tokens`, `--no-tools` and a profile.
 #[tokio::test]
 async fn a_resume_keeps_what_the_chat_saved_with_what_it_names_in_its_place() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -137,8 +133,7 @@ async fn a_resume_keeps_what_the_chat_saved_with_what_it_names_in_its_place() {
         max_iterations: Some(7),
         ..chat_args()
     };
-    started.sampling.temperature = Some(0.4);
-    started.sampling.top_k = Some(40);
+    started.sampling.max_tokens = Some(400);
     let id = prepared(&ctx, &started).await;
 
     let mut again = ChatArgs {
@@ -146,12 +141,11 @@ async fn a_resume_keeps_what_the_chat_saved_with_what_it_names_in_its_place() {
         no_tools: true,
         ..resume(id)
     };
-    again.sampling.temperature = Some(0.9);
+    again.sampling.max_tokens = Some(900);
     prepared(&ctx, &again).await;
 
     let settings = saved(&ctx, id).await;
-    assert_eq!(settings.temperature, Some(0.9), "the flag named");
-    assert_eq!(settings.top_k, Some(40), "kept");
+    assert_eq!(settings.max_tokens, Some(900), "the flag named");
     assert_eq!(settings.max_iterations, Some(7), "kept");
     assert_eq!(settings.profile.as_deref(), Some("chat"));
     assert_eq!(settings.no_tools, Some(true));
@@ -163,7 +157,7 @@ async fn a_resume_that_names_nothing_writes_nothing() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (ctx, _) = context(&dir).await;
     let mut started = chat_args();
-    started.sampling.temperature = Some(0.4);
+    started.sampling.max_tokens = Some(400);
     let id = prepared(&ctx, &started).await;
     let before = ctx.app.chat_history().get_conversation(id).await.unwrap();
 
@@ -177,14 +171,14 @@ async fn a_resume_that_names_nothing_writes_nothing() {
 }
 
 /// The row an older gglib saved names its model only by name, with a
-/// sampling value beside it: it resumes on that model, now saved by id,
+/// token limit beside it: it resumes on that model, now saved by id,
 /// and keeps the value.
 #[tokio::test]
 async fn an_old_row_that_names_its_model_resumes_on_it_by_id() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (ctx, qwen) = context(&dir).await;
     let older: ConversationSettings =
-        serde_json::from_str(r#"{"model_name":"qwen","top_k":40}"#).unwrap();
+        serde_json::from_str(r#"{"model_name":"qwen","max_tokens":40}"#).unwrap();
     let id = ctx
         .app
         .chat_history()
@@ -201,7 +195,7 @@ async fn an_old_row_that_names_its_model_resumes_on_it_by_id() {
 
     assert_eq!(args.identifier, "qwen");
     let settings = saved(&ctx, id).await;
-    assert_eq!(settings.top_k, Some(40));
+    assert_eq!(settings.max_tokens, Some(40));
     assert_eq!(settings.model.map(|m| m.id), Some(qwen));
 }
 

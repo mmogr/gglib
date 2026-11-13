@@ -39,7 +39,7 @@ fn local(id: i64) -> ModelRef {
 }
 
 /// A conversation that ran on `qwen3`, a saved message and its settings:
-/// tools, limits and a temperature; its id.
+/// tools, limits and a token limit; its id.
 async fn ran_on(state: &gglib_axum::AppState, qwen: i64) -> i64 {
     let id = chosen(state, qwen).await;
     let message = NewMessage {
@@ -67,7 +67,7 @@ async fn chosen(state: &gglib_axum::AppState, qwen: i64) -> i64 {
         tools: vec!["files".to_owned()],
         max_parallel: Some(4),
         tool_timeout_ms: Some(5_000),
-        temperature: Some(0.25),
+        max_tokens: Some(250),
         ..ConversationSettings::default()
     };
     made(
@@ -125,7 +125,7 @@ fn held(qwen: i64, changed: Value) -> Value {
         "tools": ["files"],
         "max_parallel": 4,
         "tool_timeout_ms": 5000,
-        "temperature": 0.25,
+        "max_tokens": 250,
     });
     let Value::Object(changed) = changed else {
         panic!("a change is an object");
@@ -421,7 +421,7 @@ async fn a_setting_the_patch_does_not_name_is_refused() {
     let id = ran_on(&state, qwen).await;
     let before = read(&app, id).await;
 
-    let (status, body) = put(&app, id, json!({ "settings": { "temperature": 0.9 } })).await;
+    let (status, body) = put(&app, id, json!({ "settings": { "max_tokens": 900 } })).await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     assert_eq!(body["type"], "invalid_request", "{body}");
@@ -429,7 +429,7 @@ async fn a_setting_the_patch_does_not_name_is_refused() {
         body["error"]
             .as_str()
             .unwrap()
-            .contains("unknown field `temperature`"),
+            .contains("unknown field `max_tokens`"),
         "{body}"
     );
     assert_eq!(read(&app, id).await, before);

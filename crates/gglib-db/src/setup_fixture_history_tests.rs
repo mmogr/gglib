@@ -43,8 +43,6 @@ async fn chats_branches_and_pictures_read_back_whole() {
             machine: Machine::Local,
             id: 1,
         }),
-        temperature: Some(0.6),
-        top_k: Some(20),
         max_tokens: Some(1024),
         profile: Some("fixture".into()),
         ctx_size: Some("16384".into()),
@@ -62,6 +60,20 @@ async fn chats_branches_and_pictures_read_back_whole() {
     );
     assert_eq!((first.branch_of, first.lineage_id), (None, None));
     assert_eq!(branch.settings, Some(settings));
+    // Stored with `temperature` and `top_k` beside `max_tokens`; step 9
+    // strips them from the text itself.
+    let stored: Vec<String> =
+        sqlx::query_scalar("SELECT settings FROM chat_conversations ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    for text in stored {
+        assert!(text.contains(r#""max_tokens":1024"#), "{text}");
+        assert!(
+            !text.contains("temperature") && !text.contains("top_k"),
+            "{text}"
+        );
+    }
     assert_eq!((branch.branch_of, branch.lineage_id), (Some(1), Some(1)));
 
     let messages = chats.get_messages(1).await.unwrap();

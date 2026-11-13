@@ -215,14 +215,14 @@ core was built with, as `search`, `browse` and `upgrade` do.
 
 **Module:** `check_updates.rs`
 
-**Options:**
-- `--identifier <ID|NAME>` - Check specific model
-- `--all` - Check all models
+**Arguments:**
+- `<ID|NAME>` - Check one model
+- `--all` - Check all models, in place of `<ID|NAME>`
 
 **Example:**
 ```bash
 gglib model check-updates --all
-gglib model check-updates --identifier 1
+gglib model check-updates 1
 ```
 
 ### `upgrade`

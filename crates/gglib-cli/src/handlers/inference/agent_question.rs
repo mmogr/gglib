@@ -20,7 +20,6 @@ use crate::handlers::agent_chat::images::TurnImages;
 use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::repl::{Session, run_repl};
 use crate::handlers::agent_chat::resume_settings::require_a_model;
-use crate::handlers::agent_chat::sampling_warning;
 use crate::handlers::agent_chat::turn::Shown;
 use crate::shared_args::ChatSamplingArgs;
 use crate::target::Target;
@@ -32,7 +31,7 @@ You are an expert code analyst. You have access to filesystem tools \
 directory. Use them to explore the codebase and answer the question \
 thoroughly. Be direct and concise.";
 
-/// Arguments for the question command.
+/// Arguments for the `q` command.
 ///
 /// A bag rather than a parameter list, matching how `chat` already passes
 /// [`ChatArgs`](super::chat::ChatArgs): fifteen positional arguments made
@@ -140,11 +139,6 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     require_a_model(ctx, &turn).await?;
     // The daemon answers the question: found, or started, once its model is.
     let daemon = daemon_client::ensure_daemon().await?;
-    if !quiet {
-        for line in sampling_warning::notices(&sampling, target, &settings) {
-            eprintln!("{line}");
-        }
-    }
 
     // The question's chat, made before it is asked: the daemon answers a
     // turn on a saved conversation, and saves the turn to it.

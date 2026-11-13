@@ -23,6 +23,8 @@ mod attachments;
 mod backup;
 #[path = "setup_branches.rs"]
 mod branches;
+#[path = "setup_chat_sampling.rs"]
+mod chat_sampling;
 #[path = "setup_format_tags.rs"]
 mod format_tags;
 #[path = "setup_generation.rs"]

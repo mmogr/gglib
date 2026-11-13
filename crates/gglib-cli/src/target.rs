@@ -76,7 +76,7 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
             ..
         } => ("chat history", Reach::Local),
         Commands::Chat { .. } => ("chat", reach_of(ModelAction::Chat)),
-        Commands::Question { .. } => ("question", reach_of(ModelAction::Chat)),
+        Commands::Question { .. } => ("q", reach_of(ModelAction::Chat)),
         Commands::Serve { .. } => ("serve", reach_of(ModelAction::Load)),
         Commands::Model { command } => {
             let (name, action) = model_action(command);
@@ -111,7 +111,7 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
         Commands::Config { .. } => ("config", Reach::Local),
         Commands::Mcp { .. } => ("mcp", Reach::Local),
         Commands::Benchmark { .. } => ("benchmark", Reach::Local),
-        Commands::Gui { .. } => ("gui", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
+        Commands::Gui => ("gui", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
         Commands::Web { .. } => ("web", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
         Commands::Remote { .. } => ("remote", Reach::Local),
         Commands::Run(_) => ("run", Reach::Local),
