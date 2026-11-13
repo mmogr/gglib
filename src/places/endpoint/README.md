@@ -67,9 +67,9 @@ Mac.", "Every model on this Mac is loaded.", "On <machine>", "Load on
 "<machine>'s models could not be read just now.", "<machine> does not offer
 Load.", "Didn't load: <the daemon's words>" and "⏎ Load · ⌥⏎ Load with
 options…".
-The queue's wait is whole seconds, rounded down, as `gglib proxy dashboard`
-prints it ("4s", "1m 5s"); the inspector's "loaded 4m 10s" is
-`formatDuration`'s.
+The queue's wait ("4s", "1m 5s") and the inspector's "loaded 4m 10s" are
+the daemon's (`oldest_wait`, `resident_for`), as `gglib proxy dashboard`
+prints them.
 
 Connect a client's Model ID starts at the inspected model, else the pinned
 one, else the last loaded, else the default model setting, else the

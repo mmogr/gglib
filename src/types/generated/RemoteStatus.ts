@@ -103,4 +103,26 @@ identity_path: string | null,
  * list with it, and `admitted` cannot disagree with the `enabled`
  * beside it.
  */
-devices: Array<RemoteDevice>, };
+devices: Array<RemoteDevice>, 
+/**
+ * Whether this machine is shared, as every surface says it: "Sharing ·
+ * 2 paired", "Switched on, nothing bound", "Not sharing". This and the
+ * two lines below are said by [`Self::with_lines`] where the status is
+ * assembled and where the CLI reads one, and never read from an answer.
+ */
+sharing: string, 
+/**
+ * The sentence for a switch on with nothing bound; empty otherwise.
+ */
+sharing_note: string, 
+/**
+ * The machine this one has joined and its reach: "desk · Connected ·
+ * direct", "desk · Away" (each surface says how long after it). Empty
+ * while none is joined.
+ */
+reach_line: string, 
+/**
+ * What becomes of a machine that is away, said after how long; empty
+ * otherwise.
+ */
+reach_note: string, };

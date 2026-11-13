@@ -35,6 +35,7 @@ const SLOT: SlotSnapshot = {
   n_prompt_tokens_processed: null,
   n_prompt_tokens_cache: null,
   next_token: null,
+  tokens_in_use: null,
 };
 
 /** An idle slot holding nothing, with `overrides` applied. */
@@ -207,6 +208,7 @@ export function residentSlot(id: number, name: string, overrides: Partial<Reside
     inflight: 0,
     is_primary: true,
     resident_for_secs: 60,
+    resident_for: '1m 0s',
     state: 'loaded',
     runtime: 'llama',
     launch: { state: 'loaded', context_size: 8192, weights_bytes: 1, quantization: null, narration: null, flag_line: '' },

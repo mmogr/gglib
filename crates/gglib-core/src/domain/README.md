@@ -145,7 +145,8 @@ infrastructure concerns (database, filesystem, etc.).
   endpoint is Off, or pinned to another model, which refuses it; a pin is
   matched by the model's id, `NamedModel`), recorded in `contracts/vocabulary/send_line.json`.
 - `admission` - What the admission queue and the VRAM resident set look like
-  right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in
+  right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in,
+  with each residency and wait said by `format_duration_secs`
 - `cache_budget` - Auto-sizing of llama-server's host-RAM prompt cache
   (`--cache-ram`)
 - `slot_eviction` - Which on-disk KV slot files to delete to stay within a byte

@@ -140,9 +140,10 @@ describe('This Mac', () => {
   });
 
   it('says a switch on with nothing bound, and Share is still there to press', () => {
-    applyRemoteStatus({ ...IDLE_STATUS, remote_enabled: true, enabled: false });
+    const note = 'Switched on, but nothing is bound — still arming, or it could not reach a relay.';
+    applyRemoteStatus({ ...IDLE_STATUS, remote_enabled: true, enabled: false, sharing: 'Switched on, nothing bound', sharing_note: note, reach_line: '' });
     renderApp('/devices');
-    expect(screen.getByText(/nothing is bound yet/)).toBeInTheDocument();
+    expect(screen.getByText(`${note} Sharing now waits for it, or arms it again.`)).toBeInTheDocument();
     expect(share()).toBeEnabled();
   });
 
@@ -150,7 +151,7 @@ describe('This Mac', () => {
     applyRemoteStatus(SHARED);
     transport.inviteRemote.mockResolvedValue(offerAnswer('119284'));
     renderApp('/devices');
-    expect(screen.getByText('Shared with your devices')).toBeInTheDocument();
+    expect(screen.getByText('Sharing · 0 paired')).toBeInTheDocument();
     await userEvent.setup().click(invite());
     expect(transport.inviteRemote).toHaveBeenCalledWith();
     expect(await screen.findByText('119 284')).toBeInTheDocument();

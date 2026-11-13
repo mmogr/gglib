@@ -16,7 +16,7 @@
 
 import { latestRate, rateWords } from '../../readings/rate';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
-import { formatCount, formatDuration } from '../../utils/format';
+import { formatCount } from '../../utils/format';
 import { slotContext, slotContextWords } from './live/slotContext';
 
 export interface LogFact {
@@ -28,7 +28,7 @@ export function logFacts(server: { modelId: number; port: number }, snapshot: Da
   const facts: LogFact[] = [{ label: 'Port', value: String(server.port) }];
   const slot = snapshot?.admission.slots.find((s) => s.model_id === server.modelId);
   if (!snapshot || !slot) return facts;
-  facts.push({ label: 'Uptime', value: formatDuration(slot.resident_for_secs) });
+  facts.push({ label: 'Uptime', value: slot.resident_for });
   if (slot.launch) facts.push({ label: 'Context', value: `${formatCount(slot.launch.context_size)} tokens` });
   // Slot by slot, as the CLI prints them, and only for the primary: the
   // proxy polls no other model's slots.

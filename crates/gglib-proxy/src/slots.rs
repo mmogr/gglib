@@ -117,7 +117,7 @@ pub struct SlotSnapshot {
     /// Legacy field (older llama.cpp versions): tokens already resident in
     /// this slot's KV cache. Superseded by `n_prompt_tokens`/`next_token` in
     /// current upstream versions, where it is simply absent — kept only as
-    /// a best-effort fallback, see [`Self::tokens_in_use`].
+    /// a best-effort fallback, see [`Self::tokens_in_use()`].
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_past: Option<u64>,
@@ -138,7 +138,7 @@ pub struct SlotSnapshot {
     /// Preferred over `n_prompt_tokens` itself when present, since it
     /// tracks real progress during an in-flight prefill rather than the
     /// eventual total; must be combined with `n_prompt_tokens_cache` to
-    /// recover the true total prompt usage, see [`Self::tokens_in_use`].
+    /// recover the true total prompt usage, see [`Self::tokens_in_use()`].
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_prompt_tokens_processed: Option<u64>,
@@ -156,13 +156,20 @@ pub struct SlotSnapshot {
     /// Current-schema nested object carrying generation progress. We only
     /// need `n_decoded` out of it — the count of tokens generated so far,
     /// which is additive with `n_prompt_tokens(_processed)` to get total
-    /// context usage, see [`Self::tokens_in_use`].
+    /// context usage, see [`Self::tokens_in_use()`].
     ///
     /// On llama.cpp builds with Multi-Token Prediction ("draft-mtp")
     /// enabled, upstream sends this as a JSON **array** of objects (one per
     /// predicted token) instead of a single object — see [`NextTokenField`].
     #[serde(default)]
     next_token: Option<NextTokenField>,
+    /// The tokens this slot holds, as [`Self::tokens_in_use()`] counts them,
+    /// served so no surface counts them again. Filled where `/slots` is
+    /// parsed ([`Self::with_tokens_in_use`]) and never read from an answer;
+    /// `None` when the answer reported none of the fields it reads.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    #[serde(default, skip_deserializing)]
+    pub tokens_in_use: Option<u64>,
 }
 
 /// The subset of the current schema's `next_token` object we care about.
@@ -210,6 +217,14 @@ impl NextTokenField {
 }
 
 impl SlotSnapshot {
+    /// This slot with its served `tokens_in_use` counted from the fields
+    /// llama-server reported.
+    #[must_use]
+    pub fn with_tokens_in_use(mut self) -> Self {
+        self.tokens_in_use = self.tokens_in_use();
+        self
+    }
+
     /// Best-effort count of tokens currently occupying this slot's context.
     ///
     /// Current-schema builds report prompt usage and generation progress as
@@ -304,7 +319,12 @@ fn parse_slots_response(status: StatusCode, body: &str) -> SlotsPollResult {
         return SlotsPollResult::Unreachable(format!("unexpected HTTP status {status}"));
     }
     match serde_json::from_str::<Vec<SlotSnapshot>>(body) {
-        Ok(slots) => SlotsPollResult::Available(slots),
+        Ok(slots) => SlotsPollResult::Available(
+            slots
+                .into_iter()
+                .map(SlotSnapshot::with_tokens_in_use)
+                .collect(),
+        ),
         Err(e) => SlotsPollResult::Unreachable(format!("failed to parse /slots response: {e}")),
     }
 }
@@ -686,6 +706,51 @@ mod tests {
             Some(42),
             "should use element 0 (accepted stream), not later speculative entries"
         );
+    }
+
+    /// The legacy chain in its order: `n_past`, then `cache_tokens`, then
+    /// `next_token.n_decoded`; an empty MTP array counts nothing.
+    #[test]
+    fn the_legacy_fields_are_read_in_order() {
+        let count = |body: &str| {
+            let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body)
+            else {
+                panic!("expected Available");
+            };
+            slots[0].tokens_in_use
+        };
+        let with = |fields: &str| format!(r#"[{{ "id": 0, "is_processing": true{fields} }}]"#);
+        assert_eq!(
+            count(&with(
+                r#", "n_past": 512, "cache_tokens": 1, "next_token": {"n_decoded": 2}"#
+            )),
+            Some(512)
+        );
+        assert_eq!(
+            count(&with(
+                r#", "cache_tokens": 256, "next_token": {"n_decoded": 2}"#
+            )),
+            Some(256)
+        );
+        assert_eq!(count(&with(r#", "next_token": []"#)), None);
+    }
+
+    /// The count is served from what was parsed: a `tokens_in_use` in the
+    /// answer itself is never read.
+    #[test]
+    fn a_served_count_is_counted_here_not_read_from_the_answer() {
+        let body = r#"[{ "id": 0, "is_processing": true, "n_past": 100, "tokens_in_use": 9 }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body) else {
+            panic!("expected Available");
+        };
+        assert_eq!(slots[0].tokens_in_use, Some(100));
+        let none = r#"[{ "id": 0, "is_processing": false, "tokens_in_use": 9 }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, none) else {
+            panic!("expected Available");
+        };
+        assert_eq!(slots[0].tokens_in_use, None);
+        let json = serde_json::to_value(&slots[0]).expect("serializes");
+        assert!(json["tokens_in_use"].is_null(), "{json}");
     }
 
     #[test]

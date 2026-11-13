@@ -94,6 +94,9 @@ remote/
                       answers the daemon gives
   device_line.rs    — the words a device row is described by, on the
                       daemon's clock
+  status_lines.rs   — the words the status is said in: sharing, its
+                      sentence for a switch on with nothing bound, and the
+                      joined machine's reach
   devices.rs        — the three things a person asks about devices: invite
                       one, forget one, list them
   enrolment.rs      — the two-store write under invite and forget: the key

@@ -10,6 +10,10 @@
  * dead while a code is live. Stop sharing drops the code on offer before it
  * asks, so the event it causes finds nothing to announce.
  *
+ * Sharing is said in the daemon's words: `sharing` ("Sharing · N paired")
+ * while it is on, and `sharing_note`, the sentence for a switch on with
+ * nothing bound, which Share stays live under.
+ *
  * @module places/devices/ShareBlock
  */
 
@@ -37,10 +41,6 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
   const [error, setError] = useBlockError(actions, 'share');
 
   const pairingActive = status.pairing_active;
-  // The switch on with nothing bound: the daemon is putting the tunnel back
-  // after a start, or tried and could not. Share stays live: pressed now it
-  // waits for the first, and arms the tunnel again after the second.
-  const comingBack = status.remote_enabled && !status.enabled;
   // Whether any device has arrived, by the daemon's answer for each row: an
   // invite nobody took leaves a row too. `?? []`: a daemon from before the
   // roster answers status with no `devices`, and the app adopts whatever
@@ -116,7 +116,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
       <div className="flex flex-col gap-sm px-md">
         {status.enabled ? (
           <div className="flex flex-wrap items-center gap-sm">
-            <StatusMark kind="on" word="Shared with your devices" className="flex-1 text-text" />
+            <StatusMark kind="on" word={status.sharing || undefined} label="Asking the daemon" className="flex-1 text-text" />
             <Button
               variant="primary"
               size="sm"
@@ -134,10 +134,12 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
         ) : (
           <>
             <p className="m-0 text-sm text-text-secondary">Let your laptop and phone use this Mac&apos;s models.</p>
-            {comingBack && (
+            {/* The switch on with nothing bound: still arming, or it could
+                not. Share stays live: pressed now it waits for the first, and
+                arms the tunnel again after the second. */}
+            {status.sharing_note && (
               <p className="m-0 text-xs text-text-secondary">
-                Switched on, but nothing is bound yet: gglib may still be putting it back, or could not. Sharing now
-                waits for it, or arms it again.
+                {status.sharing_note} Sharing now waits for it, or arms it again.
               </p>
             )}
             <div>

@@ -1241,9 +1241,10 @@ numbers that are both real.
 | `n_prompt_tokens_processed` | `u64 \| null` | Current-schema field: the prompt tokens run through the model this round, excluding those reused from the cache |
 | `n_prompt_tokens_cache` | `u64 \| null` | Current-schema field: the prompt tokens reused from the KV cache this round |
 | `next_token.n_decoded` | `u64 \| null` | Current-schema generation-progress field; on a build with Multi-Token Prediction, `next_token` is an array and the first entry is read |
+| `tokens_in_use` | `u64 \| null` | The tokens this slot holds, counted by the proxy from the fields above; never read from llama-server's answer |
 
-`/slots`'s JSON shape varies across llama.cpp versions, so consumers should
-compute "tokens in use" the way the proxy itself does
+`/slots`'s JSON shape varies across llama.cpp versions, so the proxy counts
+"tokens in use" once and serves it as `tokens_in_use`
 (`SlotSnapshot::tokens_in_use()`): the prompt side is
 `n_prompt_tokens_processed + n_prompt_tokens_cache` when `_processed` is
 present, else `n_prompt_tokens`, plus `next_token.n_decoded`. Only when

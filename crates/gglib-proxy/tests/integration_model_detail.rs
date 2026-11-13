@@ -56,6 +56,7 @@ impl ModelRuntimePort for Resident {
                     state: gglib_core::domain::ResidencyState::Loaded,
                     is_primary: slot == 0,
                     resident_for_secs: 1,
+                    resident_for: "1s".to_owned(),
                     runtime: gglib_core::domain::RuntimeKind::Llama,
                     launch: None,
                 })

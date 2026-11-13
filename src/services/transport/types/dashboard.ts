@@ -19,9 +19,8 @@
  * here — `Divergence`, `BaselineReport`, `EffortRung` — so the aliases keep
  * the longer spellings the components use.
  *
- * `tokensInUse` used to live here. It is behaviour rather than a declaration
- * and now sits in `../slotTokens`, so that replacing these mirrors with
- * generated types did not have to step around live logic.
+ * A slot's tokens in use are the proxy's (`SlotSnapshot.tokens_in_use`),
+ * counted where `/slots` is parsed; nothing here counts them.
  */
 
 // ============================================================================
