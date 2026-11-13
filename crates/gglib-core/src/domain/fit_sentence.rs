@@ -8,7 +8,7 @@
 //! [`usable_share`] of the budget), and this only spells it.
 
 use super::context_fit::FitInputs;
-use super::launch_narration::{LaunchDecision, format_gib};
+use super::launch_narration::{LaunchDecision, bytes_as_gib, format_gib};
 use super::launch_plan::ContextFit;
 use super::recommendation::usable_share;
 use crate::download::format::format_size;
@@ -164,11 +164,7 @@ fn count(v: Option<u64>) -> String {
 fn gib(v: Option<u64>) -> String {
     v.map_or_else(
         || "unknown".to_owned(),
-        |b| {
-            #[allow(clippy::cast_precision_loss)]
-            let g = b as f64 / (1024.0 * 1024.0 * 1024.0);
-            format!("{g:.2} GiB")
-        },
+        |b| format!("{:.2} GiB", bytes_as_gib(b)),
     )
 }
 

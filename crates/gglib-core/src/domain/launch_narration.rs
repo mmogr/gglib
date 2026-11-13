@@ -172,9 +172,15 @@ impl LaunchNarration {
 /// banner.
 #[must_use]
 pub fn format_gib(bytes: u64) -> String {
-    #[allow(clippy::cast_precision_loss)]
-    let gib = bytes as f64 / 1_073_741_824.0;
-    format!("{gib:.1} GiB")
+    format!("{:.1} GiB", bytes_as_gib(bytes))
+}
+
+/// A byte count in GiB, for a figure a person reads: the one place the
+/// cast is made.
+#[must_use]
+#[allow(clippy::cast_precision_loss)]
+pub(crate) fn bytes_as_gib(bytes: u64) -> f64 {
+    bytes as f64 / 1_073_741_824.0
 }
 
 /// Format a MiB count as GiB with one decimal, for the RAM cache budget.
