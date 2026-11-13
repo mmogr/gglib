@@ -57,6 +57,10 @@ const STATUS: RemoteStatus = {
   remote_enabled: true,
   identity_path: '/home/matt/.gglib/remote_identity',
   devices: [],
+  sharing: 'Sharing · 0 paired',
+  sharing_note: '',
+  reach_line: '',
+  reach_note: '',
 };
 
 describe('initRemoteEvents', () => {

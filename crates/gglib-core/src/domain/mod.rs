@@ -134,7 +134,7 @@ pub use variant_fit::VariantFit;
 // Re-export admission-control telemetry at the domain level for convenience
 pub use admission::{
     AdmissionSnapshot, GenerationSnapshot, QueuedModelSnapshot, RenderSnapshot,
-    ResidentSlotSnapshot, SecondarySlotStatus,
+    ResidentSlotSnapshot, SecondarySlotStatus, format_duration_secs,
 };
 pub use launch_facts::{LaunchFacts, flag_line, format_context};
 

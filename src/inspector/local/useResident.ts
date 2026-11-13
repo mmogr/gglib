@@ -4,7 +4,7 @@
  * loaded ("● Working · 34 t/s · loaded 4m 12s").
  *
  * All three are the dashboard's (`useEndpointDashboard`): the resident
- * slot's state and `resident_for_secs`, and the newest recorded request on
+ * slot's state and `resident_for` (said by the daemon), and the newest recorded request on
  * the model that has a rate, the proxy's (`readings/rate`). Without the dashboard (the endpoint
  * off, its key not yet read) the word is the server list's launch state,
  * else Loaded, and the figures are left out.
@@ -16,7 +16,6 @@ import { RESIDENCY_WORDS } from '../../components/status/words';
 import { useEndpointDashboard } from '../../places/library/useResidency';
 import { latestRate, rateWords } from '../../readings/rate';
 import type { ResidencyState } from '../../types/generated/ResidencyState';
-import { formatDuration } from '../../utils/format';
 
 export interface Resident {
   state: ResidencyState;
@@ -32,7 +31,7 @@ export function useResident(modelId: number, launchState: ResidencyState | undef
   const line = [
     RESIDENCY_WORDS[state],
     rate !== null ? rateWords(rate) : null,
-    slot ? `loaded ${formatDuration(slot.resident_for_secs)}` : null,
+    slot ? `loaded ${slot.resident_for}` : null,
   ]
     .filter(Boolean)
     .join(' · ');

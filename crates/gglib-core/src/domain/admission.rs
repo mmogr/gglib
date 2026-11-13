@@ -46,6 +46,9 @@ pub struct ResidentSlotSnapshot {
     /// Seconds this model has been resident.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub resident_for_secs: u64,
+    /// [`Self::resident_for_secs`] as every surface says it
+    /// ([`format_duration_secs`]): `4m 5s`.
+    pub resident_for: String,
     /// What it is doing there, as the one word every surface uses: `working`
     /// while any request holds the slot, else `loaded`.
     pub state: super::state_words::ResidencyState,
@@ -74,6 +77,9 @@ pub struct QueuedModelSnapshot {
     /// deadline rather than by preemption.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub oldest_wait_ms: u64,
+    /// [`Self::oldest_wait_ms`] in whole seconds, rounded down, as every
+    /// surface says it ([`format_duration_secs`]): `1m 35s`.
+    pub oldest_wait: String,
 }
 
 /// Why the second VRAM slot is or is not in use.
@@ -283,6 +289,17 @@ impl AdmissionSnapshot {
     }
 }
 
+/// A span of seconds as a residency or a wait is said: `Ns`, or `Nm Ss` past
+/// one minute. Minutes do not roll over into hours: an hour is `60m 0s`.
+#[must_use]
+pub fn format_duration_secs(seconds: u64) -> String {
+    if seconds < 60 {
+        format!("{seconds}s")
+    } else {
+        format!("{}m {}s", seconds / 60, seconds % 60)
+    }
+}
+
 /// Render a byte count the way the launch banner does — one decimal, GiB above
 /// a gibibyte and MiB below, so "307 MiB" does not print as "0.3 GiB".
 fn format_bytes(bytes: u64) -> String {
@@ -314,6 +331,7 @@ mod tests {
             state: crate::domain::ResidencyState::of_inflight(inflight),
             is_primary,
             resident_for_secs: 10,
+            resident_for: format_duration_secs(10),
             runtime: RuntimeKind::Llama,
             launch: None,
         }
@@ -358,6 +376,7 @@ mod tests {
                 model_name: "llama-3".to_string(),
                 waiting: 4,
                 oldest_wait_ms: 900,
+                oldest_wait: format_duration_secs(0),
             }],
             total_queued: 12,
             total_swaps: 2,
@@ -425,6 +444,16 @@ mod tests {
             json.contains(r#""generation":{"render":null,"llm_inflight":0,"waiting":0}"#),
             "{json}"
         );
+    }
+
+    /// Under a minute in seconds, then minutes and seconds, with no hours.
+    #[test]
+    fn a_duration_is_seconds_then_minutes_and_seconds() {
+        assert_eq!(format_duration_secs(0), "0s");
+        assert_eq!(format_duration_secs(59), "59s");
+        assert_eq!(format_duration_secs(60), "1m 0s");
+        assert_eq!(format_duration_secs(245), "4m 5s");
+        assert_eq!(format_duration_secs(3_900), "65m 0s");
     }
 
     // ── format_bytes ─────────────────────────────────────────────────────

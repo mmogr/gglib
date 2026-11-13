@@ -4,7 +4,7 @@
  * came; Reconnect only with a remembered pairing and key, and the line for
  * one without a key; joined, the machine by its name and the reach word from
  * the status, never its fingerprint, its address, the command that prints
- * the key (no Show), where its models are; Away since the time it went;
+ * the key (no Show), where its models are; away, since the time it went;
  * Disconnect and the line after it with Reconnect; ⋯ Stop desk's gglib…
  * asking first.
  */
@@ -101,7 +101,7 @@ describe('Use another machine', () => {
     expect(screen.queryByText(/Last joined/)).not.toBeInTheDocument();
   });
 
-  it("joined, shows the machine's name and the status's reach word, never its fingerprint", () => {
+  it("joined, shows the daemon's reach line, never the machine's fingerprint", () => {
     applyRemoteStatus(DESK);
     renderApp('/devices');
     expect(screen.getByText('desk · Connected · direct')).toBeInTheDocument();
@@ -111,16 +111,10 @@ describe('Use another machine', () => {
     expect(fingerprintShown()).toBe(false);
   });
 
-  it('takes the reach word from the status, not from the connection', () => {
-    applyRemoteStatus({ ...DESK, reach: 'disconnected' });
+  it('until a read brings the line, the name and the reach word the status has', () => {
+    applyRemoteStatus({ ...DESK, reach: 'disconnected', paired_name: null, reach_line: '' });
     renderApp('/devices');
-    expect(screen.getByText('desk · Disconnected · direct')).toBeInTheDocument();
-  });
-
-  it('names a machine that gave no name in words', () => {
-    applyRemoteStatus({ ...DESK, paired_name: null });
-    renderApp('/devices');
-    expect(screen.getByText('the paired machine · Connected · direct')).toBeInTheDocument();
+    expect(screen.getByText('the paired machine · Disconnected')).toBeInTheDocument();
   });
 
   it('a connection that has not named its peer yet names nobody', () => {
@@ -138,12 +132,19 @@ describe('Use another machine', () => {
     expect(screen.queryByRole('button', { name: /show/i })).not.toBeInTheDocument();
   });
 
-  it('away, says since when and that it reconnects on its own', () => {
+  it("away, says the daemon's line and since when", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date(2026, 10, 7, 14, 32, 0));
-    applyRemoteStatus({ ...DESK, reach: 'away', connected: { ...DESK.connected!, away_for_s: 30 * 60 } });
+    applyRemoteStatus({
+      ...DESK,
+      reach: 'away',
+      connected: { ...DESK.connected!, away_for_s: 30 * 60 },
+      reach_line: 'desk · Away',
+      reach_note: 'The address stays, and it reconnects when that machine is back.',
+    });
     renderApp('/devices');
-    expect(screen.getByText('desk · Away since 14:02 · reconnects on its own')).toBeInTheDocument();
+    expect(screen.getByText('desk · Away · since 14:02')).toBeInTheDocument();
+    expect(screen.getByText('The address stays, and it reconnects when that machine is back.')).toBeInTheDocument();
   });
 
   it('Disconnect, then says the pairing is remembered with Reconnect', async () => {
@@ -181,9 +182,9 @@ describe('Use another machine', () => {
     applyRemoteStatus(DESK);
     renderApp('/devices');
     act(() => ingestRemoteEvent({ type: 'remote_away', port: 41234 }));
-    expect(screen.getByText(/^desk · Away since \d\d:\d\d · reconnects on its own$/)).toBeInTheDocument();
+    expect(screen.getByText(/^desk · Away · since \d\d:\d\d$/)).toBeInTheDocument();
     act(() => ingestRemoteEvent({ type: 'remote_back', port: 41234 }));
-    expect(screen.getByText('desk · Connected · direct')).toBeInTheDocument();
+    expect(screen.getByText('desk · Connected')).toBeInTheDocument();
   });
 
   it('a refused Disconnect is said in the joined view', async () => {

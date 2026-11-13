@@ -270,8 +270,8 @@ describe('the endpoint place', () => {
             residentSlot(2, 'Gemma-3-4B-It', { state: 'working', launch: { ...residentSlot(2, 'x').launch!, state: 'working' } }),
           ],
           {
-            // 4.9 s: whole seconds, rounded down, as `gglib proxy dashboard` says it.
-            queued: [{ model_name: 'Llama-3.2-3B', waiting: 2, oldest_wait_ms: 4_900 }],
+            // The daemon's words for the wait (`format_duration_secs`).
+            queued: [{ model_name: 'Llama-3.2-3B', waiting: 2, oldest_wait_ms: 4_900, oldest_wait: '4s' }],
             // The daemon's own sentence (`SecondarySlotStatus::available_with`).
             secondary_slot: { state: 'available', detail: 'Room for one more, about 9.0 GiB.', headroom_bytes: 9 * 1024 ** 3 },
           },
@@ -926,7 +926,7 @@ describe('the endpoint place', () => {
       act(() => ingestServerEvent({ type: 'running', modelId: '1', port: 9001, updatedAt: nextStamp(), modelName: 'Qwen3-4B' }));
       renderEndpoint(UP, '/endpoint?inspect=model:1');
       await frame({
-        ...admitted([residentSlot(1, 'Qwen3-4B', { resident_for_secs: 250, launch: { ...residentSlot(1, 'x').launch!, state: 'working' } })]),
+        ...admitted([residentSlot(1, 'Qwen3-4B', { resident_for_secs: 250, resident_for: '4m 10s', launch: { ...residentSlot(1, 'x').launch!, state: 'working' } })]),
         // Oldest first, as the proxy sends them: the newest with a rate is said.
         recent_requests: [
           recentRequest({ model_name: 'Qwen3-4B', completion_tokens: 812, generation_ms: 24_000, tokens_per_second: 33.8 }),

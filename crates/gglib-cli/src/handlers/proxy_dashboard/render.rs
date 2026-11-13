@@ -19,6 +19,7 @@ use super::render_defects::render_defects_section;
 use super::render_reasoning::{render_client_fields_section, render_reasoning_section};
 use super::wire::{AdmissionSnapshot, CacheStatus, CacheUsage, DashboardSnapshot};
 use crate::presentation::truncate_string;
+use gglib_core::domain::format_duration_secs;
 
 /// Render a `[███░░░] NN%` bar. `total == 0` renders an empty bar at 0%
 /// rather than dividing by zero — used for every gauge in this dashboard so
@@ -43,15 +44,6 @@ pub(super) fn progress_bar(filled: u64, total: u64, width: usize) -> String {
         "\u{2591}".repeat(empty_cells),
         (fraction * 100.0).round() as u32
     )
-}
-
-/// A span of seconds as `Ns`, or `Nm Ss` past one minute.
-pub(super) fn format_duration_secs(seconds: u64) -> String {
-    if seconds < 60 {
-        format!("{seconds}s")
-    } else {
-        format!("{}m {}s", seconds / 60, seconds % 60)
-    }
 }
 
 /// Seconds elapsed since a Unix timestamp, formatted as `Ns` (or `Nm Ss` past
@@ -194,7 +186,7 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
             truncate_string(&slot.model_name, 24),
             role,
             activity,
-            format_duration_secs(slot.resident_for_secs),
+            slot.resident_for,
         );
         // The flag line under the row: how the model was launched, in the
         // daemon's words (`LaunchFacts::flag_line`), the same line the GUI's
@@ -226,7 +218,7 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
             "  {:<24} {} waiting, oldest {}",
             truncate_string(&queued.model_name, 24),
             queued.waiting,
-            format_duration_secs(queued.oldest_wait_ms / 1000),
+            queued.oldest_wait,
         );
     }
 
