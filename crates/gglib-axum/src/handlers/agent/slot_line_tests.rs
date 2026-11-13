@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 
 use super::{Place, Slot, SlotLine};
 
@@ -12,7 +12,7 @@ use super::{Place, Slot, SlotLine};
 fn full(cap: usize) -> (Arc<SlotLine>, OwnedSemaphorePermit) {
     let slots = Arc::new(Semaphore::new(1));
     let held = Arc::clone(&slots).try_acquire_owned().unwrap();
-    let line = Arc::new(SlotLine::new(slots, cap, Duration::from_secs(60)));
+    let line = Arc::new(SlotLine::new(slots, cap, Duration::from_mins(1)));
     (line, held)
 }
 
@@ -25,11 +25,16 @@ fn join(line: &Arc<SlotLine>) -> Place {
 }
 
 /// Wait for `place`'s slot on its own task, then leave the line, as a run
-/// does; the slot is handed back.
-fn waiting(place: Place) -> tokio::task::JoinHandle<OwnedSemaphorePermit> {
+/// does, and say `name` on `served`; the slot is handed back.
+fn waiting(
+    place: Place,
+    name: &'static str,
+    served: mpsc::UnboundedSender<&'static str>,
+) -> tokio::task::JoinHandle<OwnedSemaphorePermit> {
     tokio::spawn(async move {
         let permit = place.slot().await.expect("a slot");
         drop(place);
+        let _ = served.send(name);
         permit
     })
 }
@@ -46,7 +51,7 @@ async fn a_free_slot_is_taken_at_once_and_no_one_waits() {
     let line = Arc::new(SlotLine::new(
         Arc::new(Semaphore::new(1)),
         4,
-        Duration::from_secs(60),
+        Duration::from_mins(1),
     ));
     assert!(matches!(line.take_or_join(), Some(Slot::Held(_))));
 }
@@ -74,9 +79,10 @@ async fn the_first_in_line_is_served_first_whoever_asks_first() {
     let (line, held) = full(4);
     let first = join(&line);
     let second = join(&line);
-    let second = waiting(second);
+    let (served, mut order) = mpsc::unbounded_channel();
+    let second = waiting(second, "second", served.clone());
     settle().await;
-    let first = waiting(first);
+    let first = waiting(first, "first", served);
     settle().await;
 
     drop(held);
@@ -85,8 +91,9 @@ async fn the_first_in_line_is_served_first_whoever_asks_first() {
         .expect("the first is served first")
         .unwrap();
     settle().await;
+    assert_eq!(order.try_recv(), Ok("first"));
     assert!(
-        !second.is_finished(),
+        order.try_recv().is_err(),
         "the second waits for the first's slot"
     );
 
@@ -95,6 +102,7 @@ async fn the_first_in_line_is_served_first_whoever_asks_first() {
         .await
         .expect("the second is served once the first's slot frees")
         .unwrap();
+    assert_eq!(order.try_recv(), Ok("second"));
 }
 
 /// No one takes a free slot past the line: while anyone waits, a free slot

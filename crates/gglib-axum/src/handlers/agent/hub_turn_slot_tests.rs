@@ -41,7 +41,7 @@ async fn frame(
     state: &AppState,
     scope: &RunScope,
     id: &str,
-    wanted: impl Fn(&Value) -> bool,
+    wanted: impl Fn(&Value) -> bool + Send + Sync,
 ) -> Value {
     let mut events = state.runs.events(scope, id, 0).unwrap();
     let found = tokio::time::timeout(Duration::from_secs(5), async {
@@ -70,7 +70,7 @@ fn status(state: &AppState, scope: &RunScope, id: &str) -> RunStatus {
 /// The bound is long enough for a run or two ahead to finish.
 #[test]
 fn the_line_waits_two_minutes() {
-    assert_eq!(AGENT_SLOT_WAIT, Duration::from_secs(120));
+    assert_eq!(AGENT_SLOT_WAIT, Duration::from_mins(2));
 }
 
 /// With the one slot held, a device's turn is accepted and waits, first in

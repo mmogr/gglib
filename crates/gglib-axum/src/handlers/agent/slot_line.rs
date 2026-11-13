@@ -23,7 +23,7 @@ use crate::error::HttpError;
 
 /// How long a device's run waits in line before it ends `failed`
 /// `agent_busy`.
-pub(crate) const AGENT_SLOT_WAIT: Duration = Duration::from_secs(120);
+pub(crate) const AGENT_SLOT_WAIT: Duration = Duration::from_mins(2);
 
 /// How many device runs may wait at once. One that comes with the line
 /// full is refused `agent_busy` at once.
@@ -131,9 +131,14 @@ impl SlotLine {
 impl Place {
     /// This waiter's place in line, 1 being next.
     pub(crate) fn position(&self) -> u32 {
-        let queue = self.line.lock();
-        let ahead = queue.waiting.iter().take_while(|t| **t != self.ticket);
-        u32::try_from(ahead.count() + 1).unwrap_or(u32::MAX)
+        let ahead = self
+            .line
+            .lock()
+            .waiting
+            .iter()
+            .take_while(|t| **t != self.ticket)
+            .count();
+        u32::try_from(ahead + 1).unwrap_or(u32::MAX)
     }
 
     /// When this waiter joined the line.
