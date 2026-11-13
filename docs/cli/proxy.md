@@ -136,13 +136,13 @@ fought.
 
 ## `gui` and `web`
 
-`gglib gui` launches the desktop app (`--dev` for hot reload, for
-contributors). `gglib web` makes sure the daemon is up and prints the web
-page's address; the daemon serves the page and the API from one loopback
-port, and the link carries the daemon's token, so `web` opens your browser
-on it unless `--no-open`. The page is for this machine only: the daemon
-listens on loopback, and another machine reaches models through the proxy
-(`proxy --host`) or a paired tunnel (`gglib remote`).
+`gglib gui` launches the desktop app. `gglib web` makes sure the daemon is
+up and prints the web page's address; the daemon serves the page and the
+API from one loopback port, and the link carries the daemon's token, so
+`web` opens your browser on it unless `--no-open`. The page is for this
+machine only: the daemon listens on loopback, and another machine reaches
+models through the proxy (`proxy --host`) or a paired tunnel
+(`gglib remote`).
 
 ## Flags
 

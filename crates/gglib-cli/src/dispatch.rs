@@ -163,8 +163,8 @@ pub async fn dispatch(
         }
 
         // ── GUI / web interfaces ────────────────────────────────────────────
-        Commands::Gui { dev } => {
-            handlers::gui::execute(dev)?;
+        Commands::Gui => {
+            handlers::gui::execute()?;
         }
         Commands::Web { no_open } => {
             handlers::web::execute(no_open).await?;

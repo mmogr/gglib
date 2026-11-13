@@ -107,7 +107,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `benchmark list`, `benchmark show <run-id>`, `benchmark model <model-id>` | List past runs, show one, or show one model's history (compare and perf) |
 | `benchmark tune` | Sweep sampling parameters for one model against an agentic tool-calling task suite |
 | `benchmark agentic` | Run the agentic task suite twice against one model, bypassing the gglib pipeline and through it, and report the difference |
-| `gui [--dev]` | Launch the Tauri desktop app |
+| `gui` | Launch the Tauri desktop app |
 | `web [--no-open]` | Make sure the daemon is running, print the web dashboard's link and open it in the browser (`--no-open` only prints) |
 | `daemon run [--allowed-host HOST]` | Run the daemon, the one process that owns llama-server, in the foreground, on this machine only |
 | `daemon status` | Show whether the daemon is running, and what it is doing |

@@ -111,7 +111,7 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
         Commands::Config { .. } => ("config", Reach::Local),
         Commands::Mcp { .. } => ("mcp", Reach::Local),
         Commands::Benchmark { .. } => ("benchmark", Reach::Local),
-        Commands::Gui { .. } => ("gui", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
+        Commands::Gui => ("gui", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
         Commands::Web { .. } => ("web", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
         Commands::Remote { .. } => ("remote", Reach::Local),
         Commands::Run(_) => ("run", Reach::Local),

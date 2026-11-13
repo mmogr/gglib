@@ -208,7 +208,6 @@ gglib daemon stop
   --remote
   --yes -y
 gglib gui
-  --dev
 gglib image
   --count
   --from
