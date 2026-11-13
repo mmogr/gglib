@@ -14,7 +14,35 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;
+use crate::config_commands::ConfigCommand;
 use crate::handlers;
+
+/// Run a command that reads nothing from the library, before the library is
+/// opened: help (no command), `completions` and `config paths`. Each other
+/// command is handed back for [`dispatch`].
+///
+/// Opening the library creates it on a fresh data folder, upgrades an older
+/// one and refuses a newer one, and none of these three reads it, so they
+/// answer with no library and with one this build refuses. `config paths`
+/// is what `docs/compatibility.md` tells the owner of such a library to run.
+///
+/// # Errors
+///
+/// Whatever the command's handler returns.
+pub fn dispatch_without_library(command: Option<Commands>) -> Result<Option<Commands>> {
+    match command {
+        None => {
+            use clap::CommandFactory as _;
+            crate::parser::Cli::command().print_help()?;
+        }
+        Some(Commands::Completions { shell }) => handlers::completions::execute(shell)?,
+        Some(Commands::Config {
+            command: ConfigCommand::Paths,
+        }) => handlers::config::paths::execute()?,
+        Some(other) => return Ok(Some(other)),
+    }
+    Ok(None)
+}
 
 /// Route a parsed command to its handler.
 ///

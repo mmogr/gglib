@@ -54,7 +54,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 **Module Descriptions:**
 - **`bootstrap.rs`** — Dependency injection and service wiring
 - **`commands.rs`** — The `Commands` enum, the top-level subcommands
-- **`dispatch.rs`** — Routes each parsed command to its handler
+- **`dispatch.rs`** — Routes each parsed command to its handler; help, `completions` and `config paths` before the library is opened, as they read nothing from it
 - **`target.rs`** — Which machine a command is for: this one, or the paired one under `--remote`
 - **`remote_flag.rs`** — `--remote` itself: declared on each command that reaches the paired machine (ADR 0028), and the sentence a command that does not take it answers with
 - **`daemon_client/`** — The CLI's side of the daemon: probe, auto-launch, and typed calls to its management API
