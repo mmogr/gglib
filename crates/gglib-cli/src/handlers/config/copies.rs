@@ -27,7 +27,7 @@ use super::copy_version::version_word;
 const MAC_APP_NAMES: &[&str] = &["gglib", "GGLib GUI"];
 
 /// The desktop app's program on Linux, and its name in releases before.
-const LINUX_APP_NAMES: &[&str] = &["gglib-gui", "gg-lib-gui"];
+const LINUX_APP_NAMES: &[&str] = &["gglib-gui", "gglib-app"];
 
 /// Where the desktop app is looked for, which depends on the platform.
 pub(crate) enum Apps {
