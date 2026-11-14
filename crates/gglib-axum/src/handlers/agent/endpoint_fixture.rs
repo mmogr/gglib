@@ -209,7 +209,6 @@ pub(super) async fn daemon_started(
         core: Arc::clone(&context.core),
         proxy: Arc::clone(&proxy),
         emitter: Arc::clone(&context.sse) as _,
-        tool_detector: Arc::new(gglib_gguf::ToolSupportDetector::new()),
     }));
     context.proxy = proxy;
     context.runtime = runtime;

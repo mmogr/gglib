@@ -1,5 +1,5 @@
 //! The `HuggingFace` browser's DTOs: search, quantization listing and
-//! tool-support detection.
+//! whether a repo calls tools.
 //!
 //! A `#[path]` child of `types.rs`, and everything here is re-exported from
 //! `types`.
@@ -204,23 +204,9 @@ pub struct HfCompanion {
     pub present: bool,
 }
 
-/// Response for tool/function calling support detection.
-///
-/// Used for both `HuggingFace` model metadata and local running server queries.
+/// Whether a `HuggingFace` model calls tools, by its chat template and repo id.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ToolSupportResponse {
     pub supports_tool_calls: bool,
-    pub confidence: f32,
-    pub detected_format: Option<String>,
-}
-
-impl From<gglib_core::ports::ToolSupportDetection> for ToolSupportResponse {
-    fn from(detection: gglib_core::ports::ToolSupportDetection) -> Self {
-        Self {
-            supports_tool_calls: detection.supports_tool_calling,
-            confidence: detection.confidence,
-            detected_format: detection.detected_format.map(|f| f.to_string()),
-        }
-    }
 }

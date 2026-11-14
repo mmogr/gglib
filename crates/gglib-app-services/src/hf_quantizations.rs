@@ -544,12 +544,11 @@ mod tests {
     #[tokio::test]
     async fn the_listing_served_reads_the_repository_projectors() {
         use crate::downloads::{DownloadDeps, DownloadOps};
-        use crate::test_support::{MockDownloadManager, MockHfClient, MockToolSupportDetector};
+        use crate::test_support::{MockDownloadManager, MockHfClient};
 
         let ops = DownloadOps::new(DownloadDeps {
             downloads: Arc::new(MockDownloadManager::new()),
             hf: Arc::new(MockHfClient),
-            tool_detector: Arc::new(MockToolSupportDetector),
             gguf_parser: Arc::new(gglib_core::ports::huggingface::fake_hub::RoleParser),
             models_directory: None,
         });

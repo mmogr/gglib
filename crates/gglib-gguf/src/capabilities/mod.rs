@@ -8,22 +8,24 @@ mod reasoning;
 #[cfg(test)]
 #[path = "loop_guard_note_templates_tests.rs"]
 mod loop_guard_note_templates_tests;
-pub(crate) mod tool_calling;
 
 use std::collections::HashMap;
 
 use gglib_core::GgufCapabilities;
 use gglib_core::domain::gguf::CapabilityFlags;
+use gglib_core::domain::{ModelCapabilities, infer_from_chat_template};
 
 use embedding::detect_embedding_support;
 use mtp::detect_mtp_support;
 use reasoning::detect_reasoning_support;
-use tool_calling::detect_tool_support;
 
 /// Detect all capabilities from metadata.
 ///
 /// This is the main entry point for capability detection, combining
 /// reasoning and tool calling detection into a single `GgufCapabilities`.
+/// Tool calling is core's guess ([`infer_from_chat_template`]), the one the
+/// stored `SUPPORTS_TOOL_CALLS` flag takes at import, so the `agent` tag and
+/// that flag agree.
 #[must_use]
 pub(crate) fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities {
     let mut flags = CapabilityFlags::empty();
@@ -34,8 +36,11 @@ pub(crate) fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities
     }
 
     // Detect tool calling support
-    let tool_calling = detect_tool_support(metadata);
-    if tool_calling.supports_tool_calling {
+    let guess = infer_from_chat_template(
+        metadata.get("tokenizer.chat_template").map(String::as_str),
+        metadata.get("general.name").map(String::as_str),
+    );
+    if guess.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS) {
         flags |= CapabilityFlags::TOOL_CALLING;
     }
 
@@ -88,6 +93,42 @@ mod tests {
         let caps = detect_all(&metadata);
         assert!(caps.has_tool_calling());
         assert!(caps.to_tags().contains(&"agent".to_string()));
+    }
+
+    /// The `agent` tag is core's guess for each template and name: a tool
+    /// template, a tool model's name, and a plain chat model.
+    #[test]
+    fn the_tool_flag_is_cores_guess() {
+        let cases = [
+            (
+                Some("{% if tools %}<tool_call>{{ tool | tojson }}</tool_call>{% endif %}"),
+                None,
+                true,
+            ),
+            (None, Some("NousResearch/Hermes-3-Llama-3.1-8B"), true),
+            (
+                Some("{% for message in messages %}{{ message.content }}{% endfor %}"),
+                Some("Llama-2-7B-Chat"),
+                false,
+            ),
+        ];
+        for (template, name, expected) in cases {
+            let mut metadata = HashMap::new();
+            if let Some(template) = template {
+                metadata.insert("tokenizer.chat_template".to_string(), template.to_string());
+            }
+            if let Some(name) = name {
+                metadata.insert("general.name".to_string(), name.to_string());
+            }
+            let guess = infer_from_chat_template(template, name)
+                .contains(ModelCapabilities::SUPPORTS_TOOL_CALLS);
+            assert_eq!(guess, expected, "core's guess for {template:?}, {name:?}");
+            assert_eq!(
+                detect_all(&metadata).has_tool_calling(),
+                guess,
+                "detect_all for {template:?}, {name:?}"
+            );
+        }
     }
 
     #[test]

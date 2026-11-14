@@ -9,8 +9,9 @@ of information automatically:
 - **Tags** in an auto-generated namespace (`reasoning`, `agent`, `mtp`,
   `embedding`, …) that drive llama-server launch flags.
 
-Detection happens at import time in `gglib-gguf::capabilities::detect_all` and
-is persisted by `ModelService::import_from_file`. Nothing needs re-downloading
+At import, the flags come from `gglib_core::domain::infer_from_chat_template`
+and the architecture, and the tags from `gglib-gguf::capabilities::detect_all`,
+whose `agent` tag is that same tool-call guess. Nothing needs re-downloading
 to re-derive it — see [Retagging](#retagging-an-existing-catalog).
 
 ## Capability flags

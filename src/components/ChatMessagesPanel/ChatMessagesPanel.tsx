@@ -67,8 +67,6 @@ interface ChatMessagesPanelProps {
    * null = unknown (capability status not yet resolved).
    */
   supportsToolCalls?: boolean | null;
-  /** Detected tool-calling format, e.g. "hermes" or "llama3". */
-  toolFormat?: string | null;
   /** The model the next send goes to, by its bare name; empty for a far chat, whose machine picks it. */
   modelName: string;
   /** Its registry id; absent for a chat with another machine. */
@@ -142,7 +140,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   currentStreamingAssistantMessageId,
   endedRun,
   supportsToolCalls,
-  toolFormat,
   modelName,
   modelId,
   onPickModel,
@@ -334,7 +331,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       onUnloadModel={onUnloadModel}
                       quantization={quantization}
                       supportsToolCalls={supportsToolCalls}
-                      toolFormat={toolFormat}
                       thinking={thinking}
                       folder={folder}
                       draw={draw}

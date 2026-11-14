@@ -2,7 +2,7 @@
  * The Hugging Face subject: a repo, at `/get/:owner/:name`, so back,
  * forward and reload keep it. Its `owner/name` ↗ opens it on the Hub; the
  * summary is the Hub's parameter count and whether the daemon read its
- * chat template as calling tools (its confidence on hover); "Pick a size"
+ * chat template as calling tools; "Pick a size"
  * is the daemon's listing of its variants; the projector the selected
  * variant brings and an image model's companions follow; ▸ About this
  * model holds the Hub's description, tags and counts. A repo with no model
@@ -102,10 +102,6 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
     }
   };
 
-  const toolsTitle = tools
-    ? `${Math.round(tools.confidence * 100)}% confident${tools.detected_format ? `, ${tools.detected_format} format` : ''}`
-    : undefined;
-
   return (
     <div className="flex flex-col gap-lg p-md">
       <div className="flex flex-col gap-xs">
@@ -122,7 +118,7 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
         <p className="m-0 text-xs text-text-secondary tabular-nums">
           {model?.parameters_b != null && formatParamCount(model.parameters_b)}
           {model?.parameters_b != null && tools?.supports_tool_calls && ' · '}
-          {tools?.supports_tool_calls && <span title={toolsTitle}>calls tools</span>}
+          {tools?.supports_tool_calls && <span>calls tools</span>}
         </p>
         {summary && 'error' in summary && <p className="m-0 text-xs text-text-secondary">{summary.error}</p>}
       </div>

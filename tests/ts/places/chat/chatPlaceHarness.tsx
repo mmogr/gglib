@@ -12,6 +12,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import type { UserEvent } from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import ChatPlace, { type ChatPlaceProps } from '../../../../src/places/chat/ChatPlace';
+import { CAPABILITY_FLAGS } from '../../../../src/readings/capabilityFlags';
 import { ToastProvider } from '../../../../src/contexts/ToastContext';
 import { ConfirmProvider } from '../../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../../src/contexts/SettingsContext';
@@ -93,8 +94,7 @@ export interface ChatFixture {
 /** A transport over `fixture`, which a test may change as it goes. */
 export function chatTransport(fixture: ChatFixture) {
   return {
-    getServerToolSupport: vi.fn(async () => ({ supports_tool_calls: true, detected_format: null })),
-    getModel: vi.fn(async () => ({ quantization: 'Q8_0' })),
+    getModel: vi.fn(async () => ({ quantization: 'Q8_0', capabilities: CAPABILITY_FLAGS.supportsToolCalls })),
     // The picker reads the endpoint's live dashboard while it is up, for which the key is revealed.
     revealSecret: vi.fn(async () => null),
     // A copy, as a fetch gives: the page must not see the fixture change under it.

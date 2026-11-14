@@ -2,7 +2,7 @@
 
 The library. A model is a GGUF file gglib has read: its architecture,
 quantization, trained context, whether it sees images, and tags for whether
-it reasons and how its chat template writes tool calls. Every other command
+it reasons and calls tools. Every other command
 names a model by the id or name shown here.
 
 <!-- snippet: model-list -->

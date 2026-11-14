@@ -37,7 +37,6 @@ interface ComposerFooterProps {
   quantization?: string | null;
   /** null = capability status not yet resolved. */
   supportsToolCalls?: boolean | null;
-  toolFormat?: string | null;
   /** The chat's Thinking switch; drawn only where it says it is shown. */
   thinking?: ThinkingSwitch;
   /** The chat's folder, where its file tools read. */
@@ -151,7 +150,6 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   onUnloadModel,
   quantization,
   supportsToolCalls,
-  toolFormat,
   thinking,
   folder,
   draw,
@@ -211,7 +209,6 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
             <PlusMenu
               far={far}
               supportsToolCalls={supportsToolCalls}
-              toolFormat={toolFormat}
               folder={folder}
               onTypeFolder={setTypingFolder}
               draw={draw}

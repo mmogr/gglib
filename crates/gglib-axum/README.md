@@ -127,7 +127,6 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `GET` | `/api/servers` | The running model servers |
 | `POST` | `/api/servers/start` | Start llama-server (id in the body) |
 | `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |
-| `GET` | `/api/servers/{id}/tool-support` | Whether a running server's model supports tool calls, and the format its template uses |
 | `GET` | `/api/servers/{port}/logs` | A server's logs so far |
 | `GET` | `/api/servers/{port}/logs/stream` | A server's logs as they come (SSE) |
 | `GET` | `/api/builtin/tools` | The built-in tools a person can switch on |

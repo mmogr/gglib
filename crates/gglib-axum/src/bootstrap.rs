@@ -23,7 +23,6 @@ use gglib_db::{
     LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog, fill_header_facts_once,
     repair_at_daemon_start,
 };
-use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 
 use crate::config::ServerConfig;
@@ -216,7 +215,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         downloads: downloads.clone(),
         hf_client: hf_client.clone(),
         gguf_parser,
-        tool_detector: Arc::new(ToolSupportDetector::new()),
         mcp: mcp.clone(),
         emitter: sse.clone(),
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,

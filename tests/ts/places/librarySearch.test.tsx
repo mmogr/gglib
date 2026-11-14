@@ -24,7 +24,7 @@ const transport = vi.hoisted(() => ({
   listPairedModels: vi.fn(async () => null),
   browseHfModels: vi.fn(async (_r: HfSearchRequest): Promise<HfSearchResponse> => ({ models: [], next_cursor: null, total_count: null })),
   getHfModelSummary: vi.fn(async (_id: string): Promise<HfModelSummary> => hfRepo('owner/x')),
-  getHfToolSupport: vi.fn(async (_id: string) => ({ supports_tool_calls: false, confidence: 0, detected_format: null })),
+  getHfToolSupport: vi.fn(async (_id: string) => ({ supports_tool_calls: false })),
   getHfQuantizations: vi.fn(async () => new Promise(() => {})),
   getHfPick: vi.fn(async () => new Promise(() => {})),
   queueDownload: vi.fn(async (_p: { modelId: string; quantization?: string }) => ({ id: 'q-1' })),
@@ -121,7 +121,7 @@ describe('the one search', () => {
 
   it('searches the Hub on Enter, and draws each repo with its params, tool calling and downloads', async () => {
     transport.browseHfModels.mockResolvedValue({ ...page([]), models: [hfRepo('owner/Qwen3-8B-GGUF', { parameters_b: 8, downloads: 1_200_000 })] });
-    transport.getHfToolSupport.mockResolvedValue({ supports_tool_calls: true, confidence: 1, detected_format: null });
+    transport.getHfToolSupport.mockResolvedValue({ supports_tool_calls: true });
     renderLibrary();
     await userEvent.setup().type(field(), 'qwen{Enter}');
 

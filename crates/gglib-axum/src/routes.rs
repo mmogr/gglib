@@ -58,10 +58,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/servers", get(handlers::servers::list))
         .route("/servers/start", post(handlers::servers::start_body))
         .route("/servers/stop", post(handlers::servers::stop_body))
-        .route(
-            "/servers/{id}/tool-support",
-            get(handlers::servers::tool_support),
-        )
         .route("/servers/{port}/logs", get(handlers::servers::get_logs))
         .route(
             "/servers/{port}/logs/stream",

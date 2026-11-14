@@ -18,7 +18,6 @@ use gglib_app_services::{DownloadDeps, DownloadOps};
 use gglib_core::CorsConfig;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
 use gglib_core::ports::DownloadManagerPort;
-use gglib_gguf::ToolSupportDetector;
 
 /// The id the manager answers a queue request with: a quantization chosen
 /// for a request that named none.
@@ -107,7 +106,6 @@ async fn app_over(manager: Arc<Recording>) -> Router {
     state.downloads = Arc::new(DownloadOps::new(DownloadDeps {
         downloads: manager,
         hf: Arc::clone(&state.hf_client),
-        tool_detector: Arc::new(ToolSupportDetector::new()),
         gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
         models_directory: None,
     }));
