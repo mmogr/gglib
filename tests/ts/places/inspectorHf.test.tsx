@@ -28,7 +28,7 @@ const transport = vi.hoisted(() => ({
   getHfModelSummary: vi.fn(),
   getHfQuantizations: vi.fn(async (id: string) => ({ model_id: id, quantizations: hub.quants, image: hub.image })),
   getHfPick: vi.fn(async (id: string) => ({ model_id: id, label: hub.pick })),
-  getHfToolSupport: vi.fn(async () => ({ supports_tool_calls: true, confidence: 0.9, detected_format: 'hermes' })),
+  getHfToolSupport: vi.fn(async () => ({ supports_tool_calls: true })),
   queueDownload: vi.fn(async () => ({ id: 'q-1' })),
 }));
 
@@ -99,11 +99,11 @@ describe('the inspector, a Hugging Face repo', () => {
     cleanupDownloadEvents();
   });
 
-  it('reads the repo by its address, so a reload keeps it, and sums it up with the confidence on hover', async () => {
+  it('reads the repo by its address, so a reload keeps it, and sums it up', async () => {
     renderHf([quant('Q4_K_M', 4000)]);
     expect(await within(inspector()).findByRole('heading', { name: REPO })).toBeInTheDocument();
     expect(transport.getHfModelSummary).toHaveBeenCalledWith(REPO);
-    expect(await within(inspector()).findByText('calls tools')).toHaveAttribute('title', '90% confident, hermes format');
+    expect(await within(inspector()).findByText('calls tools')).toBeInTheDocument();
     expect(within(inspector()).getByText(/^8\.0B/)).toBeInTheDocument();
   });
 

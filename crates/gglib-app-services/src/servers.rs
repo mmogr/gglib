@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tracing::{debug, warn};
 
 use gglib_core::events::AppEvent;
-use gglib_core::ports::{AppEventEmitter, ModelRuntimeError, ToolSupportDetectorPort};
+use gglib_core::ports::{AppEventEmitter, ModelRuntimeError};
 use gglib_core::services::AppCore;
 
 use crate::error::GuiError;
@@ -29,7 +29,6 @@ pub struct ServerDeps {
     /// (`ResidencyEvents`), whoever caused them, so nothing here says
     /// `server_started` or `server_stopped`.
     pub emitter: Arc<dyn AppEventEmitter>,
-    pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
 }
 
 /// Server operations handler.
@@ -259,7 +258,7 @@ mod tests {
 
     use gglib_core::ports::NoopEmitter;
 
-    use crate::test_support::{MockToolSupportDetector, test_core_and_proxy};
+    use crate::test_support::test_core_and_proxy;
 
     async fn make_server_ops() -> ServerOps {
         let (core, proxy) = test_core_and_proxy().await;
@@ -267,7 +266,6 @@ mod tests {
             core,
             proxy,
             emitter: Arc::new(NoopEmitter::new()),
-            tool_detector: Arc::new(MockToolSupportDetector),
         })
     }
 

@@ -10,7 +10,7 @@ use gglib_core::ports::{
 
 use super::*;
 use crate::error::GuiError;
-use crate::test_support::{MockDownloadManager, MockHfClient, MockToolSupportDetector};
+use crate::test_support::{MockDownloadManager, MockHfClient};
 
 /// A Hub that answers every search with one page of `hits`, and keeps what
 /// each search asked for. A `limited` one refuses every search.
@@ -106,7 +106,6 @@ fn ops_over(hub: Arc<SearchedHub>) -> DownloadOps {
     DownloadOps::new(DownloadDeps {
         downloads: Arc::new(MockDownloadManager::new()),
         hf: hub,
-        tool_detector: Arc::new(MockToolSupportDetector),
         gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
         models_directory: None,
     })

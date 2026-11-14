@@ -37,8 +37,8 @@ TESTS ────────────────────────�
   integration-tests
 
 DEPENDS ON ───────────────────────────────────────────────────────────────────
-  axum               → app-services, bootstrap, db, gguf, mcp, proxy, runtime,
-                       core, broadcast, build-info
+  axum               → app-services, bootstrap, db, mcp, proxy, runtime, core,
+                       broadcast, build-info
   cli                → axum, app-services, bootstrap, db, download, mcp, proxy,
                        runtime, core, build-info
   ffi                → bootstrap, engine-llama, mcp, proxy, core

@@ -7,7 +7,7 @@ back, forward and reload keep it. From the top: `owner/name` ↗ and ×; the
 summary (the parameter count as a search gives it: the Hub's, unless the
 repo's file names contradict it and its largest weights hold theirs; and
 "calls tools" when the daemon read
-the chat template so, its confidence on hover); "Pick a size"; the
+the chat template so); "Pick a size"; the
 projector the selected variant brings; an image model's companions; ▸ About
 this model (the Hub's description, counts and tags), closed.
 
@@ -35,7 +35,7 @@ reading are read once per repo.
 Words with no Rust twin: "Pick a size", "Quant", "Size", "Fit", "gglib's pick" (the CLI prints the same), "not a model
 on its own", "Brings <file> (<size>) for images", "The download queue is
 full; Download waits for room.", "This repo has no GGUF files.", "Reading
-the repo's files…", "About this model", "<N>% confident", and the companion
+the repo's files…", "About this model", and the companion
 note's sentences.
 
 | File | Role |

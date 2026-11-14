@@ -16,7 +16,6 @@ gglib-bootstrap = { workspace = true }
 gglib-build-info.workspace = true
 gglib-core = { workspace = true }
 gglib-db = { workspace = true }
-gglib-gguf = { workspace = true }  # GGUF_BOOTSTRAP_EXCEPTION: ToolSupportDetector
 gglib-mcp = { workspace = true }
 # For `loopback`, the one builder of an HTTP client for a server on this machine (#1085),
 # for `runs::sse`, which frames a run's events for this crate's door and the proxy's alike,

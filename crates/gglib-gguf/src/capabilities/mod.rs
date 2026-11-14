@@ -8,7 +8,6 @@ mod reasoning;
 #[cfg(test)]
 #[path = "loop_guard_note_templates_tests.rs"]
 mod loop_guard_note_templates_tests;
-pub(crate) mod tool_calling;
 
 use std::collections::HashMap;
 

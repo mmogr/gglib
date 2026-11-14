@@ -44,7 +44,6 @@ mod settings_fixture;
 pub(crate) mod settings_repository;
 pub(crate) mod system_probe;
 pub(crate) mod tool_executor_filter;
-pub(crate) mod tool_support;
 pub(crate) mod usage_sink;
 
 use std::sync::Arc;
@@ -115,10 +114,6 @@ pub use server_health::ServerHealthStatus;
 pub use settings_fixture::InMemorySettings;
 pub use settings_repository::{SettingsChange, SettingsRepository, SettingsReset};
 pub use system_probe::SystemProbePort;
-pub use tool_support::{
-    ModelSource, ToolFormat, ToolSupportDetection, ToolSupportDetectionInput,
-    ToolSupportDetectorPort,
-};
 pub use usage_sink::UsageSink;
 
 /// Container for all repository trait objects.

@@ -11,8 +11,7 @@ use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{
     Admission, AppEventEmitter, DownloadManagerPort, LaunchOverrides, ModelRuntimeError,
-    ModelRuntimePort, ProcessHandle, RunningTarget, SystemProbePort, ToolSupportDetection,
-    ToolSupportDetectionInput, ToolSupportDetectorPort,
+    ModelRuntimePort, ProcessHandle, RunningTarget, SystemProbePort,
 };
 use gglib_core::services::AppCore;
 use gglib_core::utils::system::{Dependency, GpuInfo, SystemMemoryInfo};
@@ -162,23 +161,6 @@ impl DownloadManagerPort for MockDownloadManager {
     async fn set_max_queue_size(&self, size: u32) -> Result<(), DownloadError> {
         self.record(format!("set_max_queue_size {size}"));
         Ok(())
-    }
-}
-
-// ---------------------------------------------------------------------------
-// MockToolSupportDetector
-// ---------------------------------------------------------------------------
-
-/// A `ToolSupportDetectorPort` that always reports no tool calling support.
-pub(crate) struct MockToolSupportDetector;
-
-impl ToolSupportDetectorPort for MockToolSupportDetector {
-    fn detect(&self, _input: ToolSupportDetectionInput<'_>) -> ToolSupportDetection {
-        ToolSupportDetection {
-            supports_tool_calling: false,
-            confidence: 0.0,
-            detected_format: None,
-        }
     }
 }
 

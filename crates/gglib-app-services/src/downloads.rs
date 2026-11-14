@@ -3,12 +3,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use gglib_core::domain::{ModelCapabilities, infer_from_chat_template};
 use gglib_core::download::{DownloadId, QueueSnapshot};
 use gglib_core::paths::resolve_models_dir;
 use gglib_core::ports::huggingface::read_heads;
 use gglib_core::ports::{
     DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, HfSearchResult,
-    ToolSupportDetectorPort,
 };
 
 use gglib_download::download_pick;
@@ -26,7 +26,6 @@ use crate::types::{
 pub struct DownloadDeps {
     pub downloads: Arc<dyn DownloadManagerPort>,
     pub hf: Arc<dyn HfClientPort>,
-    pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
     /// Reads the head of a repository's weights, to know an image model
     /// before it is downloaded.
     pub gguf_parser: Arc<dyn GgufParserPort>,
@@ -68,7 +67,6 @@ fn device_or_ram(device: Option<u64>, ram: impl FnOnce() -> Option<u64>) -> Opti
 pub struct DownloadOps {
     downloads: Arc<dyn DownloadManagerPort>,
     hf_client: Arc<dyn HfClientPort>,
-    tool_detector: Arc<dyn ToolSupportDetectorPort>,
     gguf_parser: Arc<dyn GgufParserPort>,
     models_directory: Option<PathBuf>,
 }
@@ -78,7 +76,6 @@ impl DownloadOps {
         Self {
             downloads: deps.downloads,
             hf_client: deps.hf,
-            tool_detector: deps.tool_detector,
             gguf_parser: deps.gguf_parser,
             models_directory: deps.models_directory,
         }
@@ -274,29 +271,26 @@ impl DownloadOps {
         })
     }
 
-    /// Check if a `HuggingFace` model supports tool/function calling.
+    /// Whether a `HuggingFace` model calls tools: core's guess
+    /// ([`infer_from_chat_template`]) from the Hub's chat template and the
+    /// repo id, the one a model's stored flag takes at import.
     pub async fn get_hf_tool_support(
         &self,
         model_id: &str,
     ) -> Result<ToolSupportResponse, GuiError> {
-        use gglib_core::ports::{ModelSource, ToolSupportDetectionInput};
-
-        // Fetch model info from HuggingFace
         let model_info = self
             .hf_client
             .get_model_info(model_id)
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to get model info: {e}")))?;
 
-        // Detect tool support using chat template and tags
-        let detection = self.tool_detector.detect(ToolSupportDetectionInput {
-            model_id: &model_info.model_id,
-            chat_template: model_info.chat_template.as_deref(),
-            tags: &model_info.tags,
-            source: ModelSource::HuggingFace,
-        });
-
-        Ok(ToolSupportResponse::from(detection))
+        let guess = infer_from_chat_template(
+            model_info.chat_template.as_deref(),
+            Some(&model_info.model_id),
+        );
+        Ok(ToolSupportResponse {
+            supports_tool_calls: guess.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS),
+        })
     }
 
     /// Get model summary by exact repo ID (direct API lookup).
