@@ -60,7 +60,8 @@ pub async fn fill_header_facts_once(
         let parser = Arc::clone(&parser);
         let read =
             tokio::task::spawn_blocking(move || read_header_facts(Path::new(&path), &*parser));
-        let Some(facts) = read.await? else {
+        // Only the type and the bits are this pass's to write.
+        let Some(facts) = read.await?.filter(|facts| !facts.is_empty()) else {
             continue;
         };
         let written = sqlx::query(

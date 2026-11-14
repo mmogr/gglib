@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use gglib_core::paths::{DirectoryCreationStrategy, isolate_data_root, set_models_dir};
+use gglib_core::paths::{isolate_data_root, set_models_dir};
 use gglib_core::ports::NoopEmitter;
 
 use super::super::group_registration_tests::RecordingRegistrar;
@@ -71,13 +71,9 @@ fn fresh_root() -> &'static Path {
 }
 
 /// Store `models` as the models directory: what the settings page's save
-/// and `gglib config models-dir set` both run.
+/// and `gglib config set models-dir` both run.
 fn store(models: &Path) {
-    set_models_dir(
-        &models.to_string_lossy(),
-        DirectoryCreationStrategy::AutoCreate,
-    )
-    .expect("stored");
+    set_models_dir(&models.to_string_lossy()).expect("stored");
 }
 
 /// The folder a download of [`REPO`] goes in under `models`.
@@ -158,7 +154,7 @@ async fn download(manager: &Arc<DownloadManagerImpl>, registrar: &RecordingRegis
 ///
 /// The manager is built with one directory stored. The next is stored as the
 /// page's save stores it, and the one after as a terminal's
-/// `gglib config models-dir set` leaves it: in another process, so that the
+/// `gglib config set models-dir` leaves it: in another process, so that the
 /// file changes and nothing in this one is told.
 #[tokio::test]
 async fn a_models_directory_stored_while_the_manager_runs_is_where_its_next_download_goes() {

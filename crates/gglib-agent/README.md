@@ -42,6 +42,15 @@ This crate implements:
   nothing is sent back. A reply cut off in its text is taken as if it had
   stopped, with a `system_warning` that it was cut off. The words after a
   Draw's picture are the exception and are always answered for
+- **Refusals** — a request the endpoint refused with an `UpstreamRefusal` ends
+  the run with `AgentError::Refused`, its `error` event carrying the
+  endpoint's code
+- **Step limit** — a run that uses all its steps without a final answer makes
+  one closing request with no tools, after a `system_warning`, and its reply
+  with text is the run's answer. The run ends with `MaxIterationsReached`
+  as before when the request fails, when the reply is empty or starts with
+  a tool-call marker, and in a run with a demanded first call, which makes
+  no closing request
 - **Context pruning** — drops old tool messages when the conversation exceeds the
   configured character budget
 
@@ -63,8 +72,9 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 |--------|----------------|
 | `agent_loop` | `AgentLoop` struct + `AgentLoopPort` impl (main state machine) |
 | `call_writing` | The `tool_call_writing` reports a reply sends while its tool calls stream: the first piece that names a tool at once, then at most one a second |
+| `closing` | The end of a run that has used all its steps: a `system_warning`, then one request with no tools whose reply with text is the final answer; `MaxIterationsReached` when the reply is no use (the request fails, no text, or text that starts with a tool-call marker) or the run had a demanded first call |
 | `context_pruning` | Budget-aware message trimming, and the count of what it dropped (`Pruned`) |
-| `cut_off` | A reply cut off at its token limit (`finish_reason: "length"`): the `error` event and `TurnTooLong` that end the run on a cut call or a reply with no text (except the words after a Draw's picture, which are answered for), and the `system_warning` for cut text, which is taken as if it had stopped |
+| `cut_off` | A reply cut off at its token limit (`finish_reason: "length"`): the `error` event and `TurnTooLong` that end the run on a cut call or a reply with no text (except the words after a Draw's picture, which are answered for, and the closing reply at the step limit, which ends the run on the limit), and the `system_warning` for cut text, which is taken as if it had stopped |
 | `guards` | The stagnation and loop detectors behind one verdict |
 | `stream_collector` | Consumes `LlmStreamEvent` stream, forwards text live |
 | `tool_execution` | Parallel tool dispatch with semaphore + timeout |

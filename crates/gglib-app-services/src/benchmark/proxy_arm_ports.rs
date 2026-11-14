@@ -4,12 +4,12 @@
 //! `proxy_arm.rs` say why each is what it is.
 
 use async_trait::async_trait;
+use gglib_core::Settings;
 use gglib_core::domain::mcp::{McpServer, NewMcpServer};
 use gglib_core::ports::{
     Admission, LaunchOverrides, McpRepositoryError, McpServerRepository, ModelRuntimeError,
     ModelRuntimePort, PinnedSpec, RepositoryError, RunningTarget, SettingsRepository,
 };
-use gglib_core::{LoopGuardMode, Settings};
 
 /// A runtime port that serves one already-admitted target and nothing else.
 #[derive(Debug)]
@@ -75,15 +75,9 @@ impl FixedSettings {
         Self(Settings {
             trust_client_sampling: Some(true),
             tool_call_repair: Some(true),
-            loop_guard_mode: Some(LoopGuardMode::Note),
+            loop_guard: Some(true),
             ..Settings::default()
         })
-    }
-
-    /// The loop-guard mode the proxy reads from these settings, which the
-    /// report records.
-    pub(super) const fn loop_guard_mode(&self) -> LoopGuardMode {
-        self.0.effective_loop_guard_mode()
     }
 }
 

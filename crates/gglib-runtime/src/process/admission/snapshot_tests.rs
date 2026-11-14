@@ -1,9 +1,8 @@
 //! What the dashboard's projection of the queue says about a resident's
 //! launch and about the room in the second slot.
 //!
-//! Its own module, beside `state_tests.rs`, for the same reason that one is:
-//! `queue_tests.rs` is frozen by the complexity ratchet, and these are about
-//! one projection rather than the scheduling rules.
+//! Its own module, beside `state_tests.rs`, because these are about one
+//! projection rather than the scheduling rules `queue_tests.rs` covers.
 
 use std::sync::Arc;
 

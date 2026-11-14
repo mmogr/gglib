@@ -21,20 +21,12 @@ export function isServerRunning(info: McpServerInfo): boolean {
 }
 
 /**
- * Check if a server is of a kind gglib cannot run. Which kinds those are is
- * the daemon's to say, and it says so in the status.
- */
-export function isServerUnsupported(info: McpServerInfo): boolean {
-  return info.status === 'unsupported';
-}
-
-/**
- * Whether a server can be opened to paired devices: a stdio server, since
- * gglib cannot run an SSE one, and not `builtin`, which is gglib's own tools.
- * The daemon refuses opening the rest; this keeps their box from showing.
+ * Whether a server can be opened to paired devices: any but `builtin`, which
+ * is gglib's own tools. The daemon refuses opening it; this keeps its box
+ * from showing.
  */
 export function canOpenToDevices(server: McpServer): boolean {
-  return server.server_type === 'stdio' && server.name !== 'builtin';
+  return server.name !== 'builtin';
 }
 
 /**

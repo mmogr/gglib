@@ -1,6 +1,4 @@
 //! Tests for [`super::ServerHealthChecker`] and [`super::ServerHealthMonitor`].
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 use futures_util::StreamExt;

@@ -276,7 +276,7 @@ async fn a_proxy_restarted_without_its_key_is_left_open_and_the_tunnel_down() {
         .await
         .map(|s| s.proxy_api_key.is_some());
     let answered = gglib_proxy::loopback::client()
-        .get(format!("http://{address}/v1/proxy/status"))
+        .get(format!("http://{address}/v1/gglib/proxy/status"))
         .send()
         .await
         .map(|response| response.status());

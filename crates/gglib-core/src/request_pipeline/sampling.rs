@@ -68,15 +68,6 @@ pub struct SamplingLayers {
     /// same settings snapshot as [`Self::global`], which is why it lives here
     /// rather than as a separate parameter threaded through every caller.
     pub trust_client_sampling: bool,
-    /// Whether a request carrying tools gets the agentic-turn temperature
-    /// ceiling — see [`InferenceConfig::agentic_temperature_ceiling`].
-    ///
-    /// Set by the caller rather than defaulted on, because callers differ: the
-    /// proxy and a chat on this machine's model hand over the settings' switch
-    /// (`Settings.agentic_sampling`, on unless stored off), and a caller with
-    /// no settings to follow turns it on. `Default` leaves it off so a bare
-    /// `SamplingLayers::default()` applies no adjustment.
-    pub agentic_adjustments: bool,
 }
 
 /// Everything [`resolve_sampling`] decided, and why.
@@ -84,8 +75,7 @@ pub struct SamplingLayers {
 /// # Why this is returned rather than logged
 ///
 /// - **A test can assert on the pipeline's own provenance**, through this
-///   function rather than a hand-built ladder, including what provenance
-///   reports when the agentic ceiling bites.
+///   function rather than a hand-built ladder.
 /// - **A readback has an intent side to compare against.** Verifying that
 ///   what gglib resolved is what llama-server applied needs both halves, and
 ///   this is the resolved half.
@@ -97,15 +87,6 @@ pub struct SamplingDecision {
     pub sources: FieldSources,
     /// The ladder's rung names, highest priority first.
     pub layer_names: [&'static str; LADDER_RUNGS],
-    /// Whether the request was eligible for the agentic-turn ceiling.
-    pub agentic_turn: bool,
-    /// The ceiling value, if it actually capped the temperature.
-    ///
-    /// `Some` does **not** mean `sources.temperature` is wrong: the cap is
-    /// applied after the fold and deliberately leaves the rung that supplied
-    /// the value named, because that rung did supply it — the ceiling capped
-    /// what it supplied.
-    pub agentic_ceiling_applied: Option<f32>,
     /// Client fields that could not be read as sent. See [`FieldIssue`].
     pub client_fields_rejected: Vec<FieldIssue>,
     /// Client fields dropped by the trust gate rather than by a parse
@@ -130,20 +111,6 @@ pub struct SamplingDecision {
 /// Named so [`SamplingDecision::layer_names`] and the tests that check the
 /// ladder's width or index its last rung share one number.
 pub const LADDER_RUNGS: usize = 6;
-
-/// Environment kill switch for the agentic-turn adjustments.
-///
-/// Truthy values (case-insensitive `1`, `true`, `yes`, `on`) disable it for
-/// every caller, whatever their settings say — the same contract as
-/// [`DISABLE_GRAMMAR_ENV`].
-///
-/// [`DISABLE_GRAMMAR_ENV`]: super::constrain::DISABLE_GRAMMAR_ENV
-pub const DISABLE_AGENTIC_SAMPLING_ENV: &str = "GGLIB_DISABLE_AGENTIC_SAMPLING";
-
-/// Whether [`DISABLE_AGENTIC_SAMPLING_ENV`] is set to a truthy value.
-fn agentic_sampling_disabled_via_env() -> bool {
-    crate::debug_switches::enabled(DISABLE_AGENTIC_SAMPLING_ENV)
-}
 
 /// Read the client's own sampling parameters and apply the trust gate.
 ///
@@ -495,22 +462,6 @@ pub fn resolve_sampling(
 
     let model_is_reasoning = crate::domain::capability_tags::is_reasoning(&ctx.tags);
 
-    // Whether an agentic-turn temperature ceiling is eligible to apply. Only
-    // eligibility — whether it actually bites depends on where the resolved
-    // temperature came from, which is not known until after the fold.
-    //
-    // Keyed on tools being present, not on `tool_choice: "required"`: agentic
-    // clients send `"auto"` almost universally, so a `required`-only trigger
-    // would describe nearly no real traffic. See `request_shape::carries_tools`.
-    //
-    // Stage 2b has already removed `tools` for a model that cannot call them,
-    // so this cannot fire on a model that would never emit a tool call —
-    // except on a passthrough context, where nothing is known about the model
-    // and nothing was stripped.
-    let agentic_turn = layers.agentic_adjustments
-        && !agentic_sampling_disabled_via_env()
-        && super::request_shape::carries_tools(body);
-
     // A person's own defaults rank above global settings and the model's
     // recipe below them, so a recipe nobody reviewed can't silently outrank
     // global settings the way a deliberate per-model choice should. See
@@ -536,61 +487,15 @@ pub fn resolve_sampling(
         ordered.iter().map(|(_, config)| *config).collect();
     // Values and provenance come from the same pass over the same ladder, so
     // the log can never name a layer the resolution did not use.
-    let (mut resolved, sources) = InferenceConfig::resolve_layers_with_sources(&layer_configs);
+    let (resolved, sources) = InferenceConfig::resolve_layers_with_sources(&layer_configs);
 
-    // Cap the temperature for an agentic turn — but only over a value nobody
-    // deliberately chose.
-    //
-    // The gate is provenance, not rank. A ladder rung would have been the
-    // obvious way to express "outranks the model's recipe", and it is
-    // wrong: a rung that names a `temperature` *claims the coupled trio* under
-    // `resolve_layers_with_sources`, so `presence_penalty`, `repeat_penalty` and `min_p`
-    // would go unsent behind it. A `reasoning` model would silently
-    // lose the 1.5 presence penalty its own recipe pairs with its temperature
-    // on every agentic turn. Clamping after the fold leaves the trio
-    // untouched.
-    //
-    // The eligible source is the recipe rung. A recipe nobody here reviewed
-    // already ranks below global settings for that reason; a task-aware
-    // ceiling outranking it is consistent with that. Anything a person
-    // actually set — cli, client, profile, per-model, global — stands. A
-    // temperature no rung names is not sent, and the ceiling does not add one
-    // (ADR 0022).
-    //
-    // Reasoning models have no ceiling at all — that is a measured decision,
-    // not an omission; see `agentic_temperature_ceiling` for the experiment
-    // behind that (tune runs #12–#32) and ADR 0004's postscript.
-    let auto_detected_rung = ordered.len() - 1;
-    // A measured recipe is the one below-global origin the ceiling defers
-    // to. The tune sweep resolved its candidates against this model's real
-    // context (#748) precisely so the winner transfers to production —
-    // capping the stored winner here would un-measure it on exactly the
-    // turns it was measured for.
-    let measured_model_rung = matches!(ctx.defaults_origin, Some(DefaultsOrigin::Measured))
-        && sources.temperature == ParamSource::Layer(auto_detected_rung);
-    let temperature_is_unchosen =
-        !sources.temperature.is_deliberate_choice(auto_detected_rung) && !measured_model_rung;
-    let applied_ceiling =
-        InferenceConfig::agentic_temperature_ceiling(model_is_reasoning).filter(|&ceiling| {
-            agentic_turn
-                && temperature_is_unchosen
-                && resolved.temperature.is_some_and(|t| t > ceiling)
-        });
-    if let Some(ceiling) = applied_ceiling {
-        resolved.temperature = Some(ceiling);
-    }
-
-    // Nothing is logged here. The whole decision is rendered once, by
-    // `super::sampling_log`, after stage 5b — which can still delete a resolved
-    // `reasoning_effort` and would leave this line stating that gglib sent one.
-    // See that module for why a second, correcting line is not enough.
+    // Nothing is logged here. `apply` renders the whole decision once, through
+    // `super::sampling_log`.
     let layer_names: [&'static str; LADDER_RUNGS] = ordered.map(|(name, _)| name);
     let decision = |applied| SamplingDecision {
         resolved: resolved.clone(),
         sources,
         layer_names,
-        agentic_turn,
-        agentic_ceiling_applied: applied_ceiling,
         client_fields_rejected: issues.clone(),
         client_fields_discarded: discarded.clone(),
         applied,

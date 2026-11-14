@@ -6,9 +6,8 @@
 //!
 //! The raw and gglib arms open a task that demands a tool call with
 //! `tool_choice: "required"`. The proxy judges a call only on a turn left to
-//! the model (`tool_choice` `"auto"` or absent), or on one gglib's own grammar
-//! constrained, which it installs when a dialect model is asked for
-//! `"required"`. Any other `"required"` turn it forwards unjudged. So the proxy
+//! the model (`tool_choice` `"auto"` or absent); a `"required"` turn it
+//! forwards unjudged. So the proxy
 //! arm opens with `"auto"`, where the proxy judges every call whose schema it
 //! can judge, whatever the model's tool-call format, and so does the arm it is compared with,
 //! [`EvalArm::RawAuto`]: the same requests, sent straight to llama-server.
@@ -32,7 +31,6 @@ use super::super::tune::result::TuneTaskResult;
 use super::EvalArm;
 use super::{AgenticEvalReport, ArmDelta, ArmScores, PairedEffect};
 use crate::domain::defect_counts::ModelDefectCounts;
-use crate::settings::LoopGuardMode;
 
 /// The proxy arm and its raw-auto pair, when the eval ran them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,9 +61,9 @@ pub struct ProxyArms {
     /// judge broke its schema. A call whose schema it cannot judge is forwarded without a
     /// count here.
     pub defects: ModelDefectCounts,
-    /// Two of the settings the proxy ran under. The others it was given are
-    /// fixed and not recorded: client sampling trusted, so each run's seed
-    /// reaches llama-server, and no global sampling defaults.
+    /// One of the settings the proxy ran under. The others it was given are
+    /// fixed and not recorded: the loop guard on, client sampling trusted, so
+    /// each run's seed reaches llama-server, and no global sampling defaults.
     pub settings: ProxyArmSettings,
     /// Per-task drill-down, one entry per suite task, in suite order.
     pub tasks: Vec<ProxyTaskRuns>,
@@ -105,11 +103,11 @@ impl ProxyArms {
     }
 }
 
-/// Two of the settings the in-process proxy ran under.
+/// One of the settings the in-process proxy ran under.
 ///
 /// The eval fixes the proxy's settings rather than reading this machine's, so
-/// a reading means the same on any machine. These two are recorded because
-/// they decide what the pair can show. The rest are fixed and listed at
+/// a reading means the same on any machine. This one is recorded because it
+/// can differ between runs and decides what the pair can show. The rest are fixed and listed at
 /// [`ProxyArms::settings`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -120,8 +118,6 @@ pub struct ProxyArmSettings {
     /// in every proxy that process starts. The proxy reads it again on every
     /// turn, so a change during the arm is not recorded.
     pub tool_call_repair: bool,
-    /// What the loop guard did with a tripped conversation.
-    pub loop_guard_mode: LoopGuardMode,
 }
 
 /// One task's per-seed runs under the two arms, in seed order.

@@ -20,12 +20,12 @@
  *      instead, so a field added there fails this test rather than silently
  *      never being sent.
  *
- *   2. **The body is flat.** `StartServerBody` takes the model id as
- *      `#[serde(alias = "id")]` and the rest through `#[serde(flatten)]`, so
+ *   2. **The body is flat.** `StartServerBody` takes the model id as `id`
+ *      and the rest through `#[serde(flatten)]`, so
  *      `id` sits beside the config keys rather than wrapping them. Both are
  *      pinned, and they fail differently: without `flatten` the body will not
- *      deserialise at all (`missing field 'config'`), while without the alias
- *      it deserialises fine and the handler answers 400 on a missing model
+ *      deserialise at all (`missing field 'config'`), while under another
+ *      name it deserialises fine and the handler answers 400 on a missing
  *      id. Nothing else here would notice either.
  *
  *   3. **No `inferenceParams` key the backend would silently drop.**
@@ -196,16 +196,17 @@ describe('POST /api/servers/start request body', () => {
     });
   });
 
-  it('is read by a StartServerBody that aliases `id` and flattens the rest', () => {
+  it('is read by a StartServerBody that reads `id` and flattens the rest', () => {
     // Scoped to the struct rather than the file: `servers.rs` may grow another
-    // body type, and an alias on that one would satisfy a bare pattern while
+    // body type, and a field on that one would satisfy a bare pattern while
     // this contract quietly broke.
     const body = structBody(SERVERS_RS, 'StartServerBody');
 
-    // Without the alias the body still deserialises; `start_body` then answers
-    // 400 on a missing model id, so every start-server call fails at the
+    // Under another name the body still deserialises; `start_body` then
+    // answers 400 on a missing id, so every start-server call fails at the
     // handler instead of the extractor.
-    expect(body).toMatch(/#\[serde\(alias = "id"\)\]\s*pub model_id:/);
+    expect(body).toMatch(/pub id: Option<i64>/);
+    expect(body).not.toMatch(/alias/);
 
     // Without `flatten`, Rust demands a nested `config` object and the body
     // fails to deserialise — a break no other assertion here would see.

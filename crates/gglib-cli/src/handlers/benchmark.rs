@@ -135,12 +135,11 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
               none spawns it"
 )]
 async fn run_on_daemon(
-    ctx: &CliContext,
     path: &str,
     body: &impl serde::Serialize,
     mut on_event: impl FnMut(&BenchmarkEvent),
 ) -> Result<()> {
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let url = format!("{}{path}", daemon_client::base_url());
     let stream = daemon_client::sse::stream_json::<BenchmarkEvent, _>(
         &handle.client,
@@ -204,7 +203,6 @@ async fn cmd_compare(
     style::print_banner_close();
 
     run_on_daemon(
-        ctx,
         daemon_client::paths::BENCHMARK_COMPARE_PATH,
         &config,
         render_event,
@@ -238,7 +236,6 @@ async fn cmd_perf(
     style::print_banner_close();
 
     run_on_daemon(
-        ctx,
         daemon_client::paths::BENCHMARK_PERF_PATH,
         &config,
         render_event,
@@ -309,7 +306,6 @@ async fn cmd_tune(
 
     let mut completed_run: Option<i64> = None;
     run_on_daemon(
-        ctx,
         daemon_client::paths::BENCHMARK_TUNE_PATH,
         &config,
         |event| {
@@ -323,7 +319,7 @@ async fn cmd_tune(
 
     if apply {
         match completed_run {
-            Some(run_id) => apply_gated(ctx, run_id).await?,
+            Some(run_id) => apply_gated(run_id).await?,
             None => eprintln!(
                 "{}note:{} the run did not complete, so there is nothing to judge",
                 style::WARNING,
@@ -337,11 +333,11 @@ async fn cmd_tune(
 
 /// Ask the daemon to judge the run against the apply gate and render the
 /// verdict — a refusal is an outcome with evidence, not an error.
-async fn apply_gated(ctx: &CliContext, run_id: i64) -> Result<()> {
+async fn apply_gated(run_id: i64) -> Result<()> {
     use gglib_app_services::benchmark::tune::apply_run::ApplyOutcome;
     use gglib_core::domain::benchmark::tune::apply::ApplyVerdict;
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let outcome: ApplyOutcome = handle
         .tune_apply(run_id)
         .send()
@@ -453,12 +449,13 @@ async fn cmd_agentic(
 
     let mut report: Option<AgenticEvalReport> = None;
     run_on_daemon(
-        ctx,
         daemon_client::paths::BENCHMARK_AGENTIC_PATH,
         &config,
         |event| {
+            // The verdicts are not read off the wire: they are judged here,
+            // by this build's rules, so `--json` and `--output` carry them.
             if let BenchmarkEvent::AgenticEvalComplete { report: r } = event {
-                report = Some((**r).clone());
+                report = Some((**r).clone().with_verdicts());
             }
             render_event(event);
         },
@@ -474,7 +471,7 @@ async fn cmd_agentic(
     if json || output.is_some() {
         let export = serde_json::json!({
             "gglib_version": gglib_build_info::SEMVER,
-            "hardware": fetch_hardware_snapshot(ctx).await,
+            "hardware": fetch_hardware_snapshot().await,
             "report": report,
         });
         let pretty = serde_json::to_string_pretty(&export)?;
@@ -495,9 +492,9 @@ async fn cmd_agentic(
 fn render_agentic_report(report: &AgenticEvalReport) {
     eprintln!();
     eprintln!(
-        "  {BOLD}{model} ({params}B{quant}) @ {ctx} ctx{RESET}",
+        "  {BOLD}{model} ({params}{quant}) @ {ctx} ctx{RESET}",
         model = report.model_name,
-        params = report.param_count_b,
+        params = crate::presentation::format_params(report.param_count_b),
         quant = report
             .quantization
             .as_deref()
@@ -1101,9 +1098,8 @@ fn fmt_delta(value: Option<f64>) -> String {
 /// Best-effort hardware snapshot for the JSON export, from the daemon's
 /// setup-status endpoint. `null` when unavailable — the report is still
 /// valid, just unpinned to a machine.
-async fn fetch_hardware_snapshot(ctx: &CliContext) -> serde_json::Value {
-    daemon_client::DaemonHandle::new(ctx, gglib_proxy::loopback::client())
-        .await
+async fn fetch_hardware_snapshot() -> serde_json::Value {
+    daemon_client::DaemonHandle::new(gglib_proxy::loopback::client())
         .setup_status()
         .await
         .unwrap_or(serde_json::Value::Null)
@@ -1493,11 +1489,16 @@ fn compare_complete_line(r: &ModelCompareResult) -> String {
         .prompt_tps
         .map_or_else(|| "—".into(), |t| format!("{t:.1} tok/s prompt"));
     let tokens = fmt_count(r.completion_tokens);
+    let unit = if r.completion_tokens == Some(1) {
+        "token"
+    } else {
+        "tokens"
+    };
     let ms = r
         .generation_ms
         .map_or_else(|| "—".into(), |m| format!("{:.1}s", m / 1000.0));
     format!(
-        "{SUCCESS}✓ {gen_tps}  ·  {pp}  ·  {tokens} tokens  ·  {ms}{RESET}",
+        "{SUCCESS}✓ {gen_tps}  ·  {pp}  ·  {tokens} {unit}  ·  {ms}{RESET}",
         SUCCESS = style::SUCCESS,
         RESET = style::RESET
     )

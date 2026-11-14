@@ -1,10 +1,10 @@
-//! `/v1/attachments` on the real proxy: a paired device sends an image and
+//! `/v1/gglib/attachments` on the real proxy: a paired device sends an image and
 //! reads one back.
 //!
 //! The hub's chats are the stand-in `fixtures::chats`, whose images go
 //! through the real ingest, so what is refused here is refused by the one
 //! rule every surface shares. Who reaches these routes at all is the door
-//! they share with `/v1/chats`, tested once in `integration_chats.rs`.
+//! they share with `/v1/gglib/chats`, tested once in `integration_chats.rs`.
 
 use std::sync::Arc;
 
@@ -25,7 +25,7 @@ fn unknown() -> AttachmentId {
 fn upload(base: &str, bytes: Vec<u8>) -> RequestBuilder {
     from_device(
         Client::new()
-            .post(format!("{base}/v1/attachments"))
+            .post(format!("{base}/v1/gglib/attachments"))
             .body(bytes),
     )
 }
@@ -55,7 +55,7 @@ async fn a_named_device_sends_an_image_and_reads_it_back() {
         })
     );
 
-    let fetch = from_device(Client::new().get(format!("{base}/v1/attachments/{id}")));
+    let fetch = from_device(Client::new().get(format!("{base}/v1/gglib/attachments/{id}")));
     let answer = fetch.send().await.unwrap();
     assert_eq!(answer.status(), StatusCode::OK);
     assert_eq!(answer.headers()["content-type"], "image/png");
@@ -115,7 +115,7 @@ async fn an_unknown_id_is_404_attachment_not_found() {
     let chats = Arc::new(FakeChats::default());
     let (base, cancel) = serve(None, Some(Arc::clone(&chats))).await;
     for id in [unknown().to_string(), "zzq-private-words".to_owned()] {
-        let request = from_device(Client::new().get(format!("{base}/v1/attachments/{id}")));
+        let request = from_device(Client::new().get(format!("{base}/v1/gglib/attachments/{id}")));
         let (status, body) = json(request.send().await.unwrap()).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
         assert_eq!(code(&body), "attachment_not_found", "{body}");

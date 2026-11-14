@@ -6,7 +6,6 @@ use super::tool_call_writing::ToolCallWriting;
 use super::tool_progress::{PreviewFrame, ToolStage};
 use super::tool_types::{ToolCall, ToolResult};
 use super::turn_usage::TurnUsage;
-use crate::normalize::NormalizationErrorKind;
 
 // =============================================================================
 // Agent events (SSE stream units)
@@ -119,26 +118,28 @@ pub enum AgentEvent {
         frame: PreviewFrame,
     },
 
-    /// Nothing can happen until something else finishes: an image render
-    /// holds the GPU, or the model is loading. Sent again whenever what it
-    /// reports changes, so a person sees why the reply has not started.
+    /// Nothing can happen until something else is done: the model loaded,
+    /// or an agent slot free. Sent again each second, so a person sees why
+    /// the reply has not started.
     Waiting {
         /// What is being waited for.
         reason: WaitingFor,
-        /// The step the work in the way last reported; 0 before its first.
+        /// The step the work in the way last reported: always 0, since
+        /// neither wait reports steps. Kept on the wire for readers that
+        /// decode it.
         step: u32,
-        /// How many steps that work takes; 0 when unknown.
+        /// How many steps that work takes: always 0.
         total: u32,
-        /// This wait's place in line, 1 being next; 0 when not in a line.
+        /// This wait's place in line, 1 being next, for an agent slot;
+        /// always 0 for a load, which waits in no line.
         position: u32,
-        /// The name of the model being loaded, as the catalogue shows it;
-        /// absent from a wait for an image render.
+        /// The name of the model being loaded, as the catalogue shows it.
+        /// None for an agent slot.
         #[serde(skip_serializing_if = "Option::is_none")]
         model: Option<String>,
-        /// How long the load has taken so far, in milliseconds. A load's
-        /// wait is sent again each second with this figure, so a client that
-        /// joins part-way can say "Loading Qwen3-4B… 12 s"; absent from a
-        /// wait for an image render.
+        /// How long the wait has taken so far, in milliseconds. It is sent
+        /// again each second with this figure, so a client that joins
+        /// part-way can say "Loading Qwen3-4B… 12 s".
         #[serde(skip_serializing_if = "Option::is_none")]
         elapsed_ms: Option<u64>,
         /// The wait as a person reads it, worded by
@@ -207,6 +208,11 @@ pub enum AgentEvent {
     Error {
         /// Human-readable description of the failure.
         message: String,
+        /// The code the model's endpoint refused the request with, as it
+        /// wrote it, when that is what ended the loop. The run ends with
+        /// the same code when it is one of gglib's own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        code: Option<String>,
     },
 }
 
@@ -214,10 +220,11 @@ pub enum AgentEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WaitingFor {
-    /// An image render has the GPU, or is queued ahead.
-    ImageRender,
     /// The chat's model is being loaded.
     ModelLoad,
+    /// Every agent loop slot is in use, and a paired device's run waits in
+    /// line for one.
+    AgentSlot,
 }
 
 // =============================================================================
@@ -319,8 +326,7 @@ pub enum LlmStreamEvent {
     },
 
     /// How long the model spent writing: from the first generated token's
-    /// arrival to the last, timed on the upstream's own stream, before any
-    /// normalization holds dialect markup back.
+    /// arrival to the last, timed on the upstream's own stream.
     ///
     /// Sent at the stream's end by the agent path's adapter, and only when
     /// two or more tokens arrived; never on the wire.
@@ -357,9 +363,9 @@ pub enum LlmStreamEvent {
     /// "no choices" as an empty keepalive/heartbeat frame.
     ///
     /// `error_type` and `code` default to `"server_error"`/`"upstream_error"`
-    /// respectively when the upstream frame omits them, mirroring the
-    /// existing convention in `gglib_proxy::forward`'s pre-flight upstream
-    /// error handling.
+    /// respectively when the upstream frame omits them or gives no string,
+    /// as the proxy's error before a reply does (`gglib_proxy`'s
+    /// `sse_stream`).
     UpstreamError {
         /// Human-readable error message.
         message: String,
@@ -367,21 +373,6 @@ pub enum LlmStreamEvent {
         error_type: String,
         /// Upstream `error.code` (or `"upstream_error"` if absent).
         code: String,
-    },
-
-    /// A non-fatal normalization issue surfaced by the
-    /// [`crate::normalize`] layer.
-    ///
-    /// Emitted when a dialect-specific parser detects malformed markup
-    /// (e.g. a Qwen `<tool_call>` whose body is not valid JSON, or a tag
-    /// that the stream ended without closing).  The stream is **not**
-    /// aborted; the offending bytes are simply discarded or surfaced via
-    /// this event so consumers can log diagnostics.
-    NormalizationError {
-        /// Structured detail about what went wrong.
-        kind: NormalizationErrorKind,
-        /// Short, human-readable excerpt of the offending input.
-        raw: String,
     },
 }
 

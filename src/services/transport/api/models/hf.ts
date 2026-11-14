@@ -7,6 +7,7 @@ import { get, post } from '../client';
 import type { HfModelId } from '../../types/ids';
 import type {
   HfModelSummary,
+  HfPickResponse,
   HfQuantizationsResponse,
   HfSearchRequest,
   HfSearchResponse,
@@ -42,6 +43,15 @@ export async function getHfQuantizations(modelId: HfModelId): Promise<HfQuantiza
   return get<HfQuantizationsResponse>(
     `/api/models/hf/quantizations/${encodeURIComponent(modelId)}`
   );
+}
+
+/**
+ * The quantization a download of a HuggingFace model takes when none is
+ * asked for, as the download picks it. Slower than the listing: it reads
+ * the headers the listing's heads stop short of.
+ */
+export async function getHfPick(modelId: HfModelId): Promise<HfPickResponse> {
+  return get<HfPickResponse>(`/api/models/hf/pick/${encodeURIComponent(modelId)}`);
 }
 
 /**

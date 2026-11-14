@@ -25,13 +25,12 @@ mod fixture {
         Model {
             components: Vec::new(),
             image_family: None,
-            dialect_spec: None,
             id: 1,
             name: "test-model".to_owned(),
             model_key: String::new(),
             file_path: PathBuf::from("/models/test.gguf"),
             projector_path: None,
-            param_count_b: 7.0,
+            param_count_b: Some(7.0),
             architecture: None,
             variant_label: None,
             file_type: None,
@@ -63,8 +62,7 @@ mod model_detail_template_caps_tests {
     //!
     //! A client gates a UI control on this, and the whole reason it is not a
     //! `bool` is that "nobody has looked" must not render as "not supported" —
-    //! ADR 0007 decision 3's rule, applied one layer out from the server's own
-    //! suppression.
+    //! ADR 0007 decision 3's rule.
 
     use gglib_core::domain::{Model, ModelDetailDto, Support, TemplateCaps};
 
@@ -107,8 +105,7 @@ mod model_detail_template_caps_tests {
         assert_eq!(support_of(m), Support::Yes);
     }
 
-    /// The one arm a surface may act on, and the one the server's own stage 5b
-    /// acts on.
+    /// The one arm a surface may act on.
     #[test]
     fn a_positive_negative_reports_no() {
         let m = Model {

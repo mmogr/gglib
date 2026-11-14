@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::RuntimeKind;
+use gglib_core::domain::{ContextFit, RuntimeKind};
 use gglib_core::ports::{
     Admission, AdmitObserver, CatalogError, GenerationTurn, LaunchOverrides, ModelCatalogPort,
     ModelLaunchSpec, ModelRuntimeError, PinnedSpec, ResidencyObserver, RunningTarget,
@@ -22,8 +22,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::process::admission::{
-    AdmissionDecision, AdmissionQueue, Candidate, PRIMARY_SLOT, Refusal, Resident, Ticket,
-    launch_timeout,
+    AdmissionDecision, AdmissionQueue, Candidate, PRIMARY_SLOT, Resident, Ticket, launch_timeout,
 };
 use crate::process::core::GuiProcessCore;
 use crate::process::health::check_http_health;
@@ -184,7 +183,7 @@ impl ResidentSet {
             .binary(RuntimeKind::StableDiffusion)
             .to_path_buf();
         launch::launch_files::preflight(&spec, &sd_server).await?;
-        let prepared = prepare(
+        let request = prepare(
             spec,
             &self.template_for(spec_id),
             self.cache_ram,
@@ -192,7 +191,7 @@ impl ResidentSet {
             default_ctx,
             &overrides,
         );
-        self.wait_for_slot(core, prepared.request, observer).await
+        self.wait_for_slot(core, request, observer).await
     }
 
     /// The launch gglib would make for `spec` now, without making it: the
@@ -334,21 +333,6 @@ impl ResidentSet {
                         () = tokio::time::sleep(POLL_TICK) => {}
                     }
                 }
-                // Only an image model is refused outright: every slot it
-                // could take is held by a run, which may last as long as the
-                // run does, so waiting would only time out.
-                AdmissionDecision::Refuse(Refusal::HeldSlot {
-                    held_model,
-                    needed_bytes,
-                    free_bytes,
-                }) => {
-                    return Err(ModelRuntimeError::ImageModelDoesNotFit {
-                        model: model_name,
-                        held_model,
-                        needed_bytes,
-                        free_bytes,
-                    });
-                }
                 AdmissionDecision::Expired => {
                     warn!(
                         model = %model_name,
@@ -416,8 +400,7 @@ impl ResidentSet {
     /// Returns `None` when the resident cannot serve this request after all —
     /// it was launched with a different context size or projector, or it has
     /// stopped answering its health check. Each of these evicts it, so the
-    /// caller's next pass launches a fresh instance — unless a run holds it:
-    /// then it is kept, and this request refused.
+    /// caller's next pass launches a fresh instance.
     async fn serve<'a>(
         &self,
         slot: usize,
@@ -434,7 +417,7 @@ impl ResidentSet {
 
         if resident_match::launched_differently(&resident, request) {
             drop(lease);
-            self.recycle(slot, core).await?;
+            self.recycle(slot, core).await;
             return Ok(None);
         }
 
@@ -445,7 +428,7 @@ impl ResidentSet {
                 "resident model failed health check; recycling degraded instance"
             );
             drop(lease);
-            self.recycle(slot, core).await?;
+            self.recycle(slot, core).await;
             return Ok(None);
         }
 
@@ -500,9 +483,6 @@ impl ResidentSet {
         let catalog = Arc::clone(&self.catalog);
         let observer = Arc::clone(&self.observer);
         let launch_request = LaunchRequest {
-            spec: request.spec.clone(),
-            opts: request.opts.clone(),
-            context: request.context,
             slot,
             evict,
             // A co-resident model gets no prompt cache of its own; the primary
@@ -512,9 +492,10 @@ impl ResidentSet {
             } else {
                 vram::secondary_cache_ram()
             },
-            // Carried through, not re-derived: the budget below reads the same
-            // field the launch waits on.
-            health_deadline_secs: request.health_deadline_secs,
+            // The rest is carried through, not re-derived (the budget below
+            // reads the same `health_deadline_secs` the launch waits on), and
+            // by struct update, so a field added later cannot be left behind.
+            ..request.clone()
         };
 
         // Sized to this model, not to a constant, and read from the same field
@@ -553,13 +534,9 @@ impl ResidentSet {
         }
     }
 
-    /// Stop and forget whatever is in `slot`, unless a run holds it.
-    pub(super) async fn recycle(
-        &self,
-        slot: usize,
-        core: &Arc<RwLock<GuiProcessCore>>,
-    ) -> Result<(), ModelRuntimeError> {
-        if let Some(previous) = self.queue.evict_unheld(slot)? {
+    /// Stop and forget whatever is in `slot`.
+    pub(super) async fn recycle(&self, slot: usize, core: &Arc<RwLock<GuiProcessCore>>) {
+        if let Some(previous) = self.queue.evict(slot) {
             // Told before the kill, so a watcher stops looking at the server
             // before it goes.
             self.observer.unloaded(previous.model_id);
@@ -568,7 +545,6 @@ impl ResidentSet {
                 warn!(error = %e, "Failed to stop resident model cleanly, continuing");
             }
         }
-        Ok(())
     }
 
     /// The primary slot's resident, projected as a routing target.
@@ -576,8 +552,8 @@ impl ResidentSet {
         self.queue.primary().map(target_of)
     }
 
-    /// Stop model `model_id` in whichever slot holds it, even one a run
-    /// holds; `false` when no slot does.
+    /// Stop model `model_id` in whichever slot holds it; `false` when no
+    /// slot does.
     ///
     /// An image model a render holds is never emptied under the render: the
     /// render is asked to stop, and this waits, up to
@@ -637,7 +613,7 @@ impl ResidentSet {
         }
     }
 
-    /// Stop the primary resident, if there is one, even one a run holds.
+    /// Stop the primary resident, if there is one.
     ///
     /// By its id, through [`Self::stop_model`]: an image model that swapped
     /// into the primary slot and is drawing is asked to stop and waited for,
@@ -681,18 +657,14 @@ impl ResidentSet {
 /// What a launch of `spec` resolves before it joins the queue, from the
 /// options `template` and this request's overrides: the options, the
 /// context and the rung that chose it, and the fit the context was sized
-/// by. One function for the launch and for the plan of one, so the two
-/// cannot disagree.
-struct Prepared {
-    /// The launch, slot and eviction still the queue's to decide.
-    request: LaunchRequest,
-    /// What this machine would fit, and what the fit worked from: `None`
-    /// for an image model, which has no context. With
-    /// `GGLIB_DISABLE_CONTEXT_FIT` set nothing was fitted, and the inputs
-    /// say nothing either.
-    fit: Option<(Option<u64>, gglib_core::domain::FitInputs)>,
-}
-
+/// by. The slot and the eviction are still the queue's to decide. One
+/// function for the launch and for the plan of one, so the two cannot
+/// disagree.
+///
+/// The fit is `None` for an image model, which has no context. With
+/// `GGLIB_DISABLE_CONTEXT_FIT` set nothing was fitted: its figures say
+/// nothing, and the request is marked (`fit_off`) so the launch's narration
+/// carries no fit.
 fn prepare(
     spec: ModelLaunchSpec,
     template: &ServerConfigOptions,
@@ -700,7 +672,33 @@ fn prepare(
     num_ctx: Option<u64>,
     default_ctx: Option<u64>,
     overrides: &LaunchOverrides,
-) -> Prepared {
+) -> LaunchRequest {
+    // `enabled`, not "is the variable present": every other switch reads
+    // truthiness through this helper, and `active()` — what the daemon
+    // reports as in effect — filters by the same call.
+    let fit_on = !gglib_core::debug_switches::enabled("GGLIB_DISABLE_CONTEXT_FIT");
+    prepare_with(
+        fit_on,
+        spec,
+        template,
+        cache_ram,
+        num_ctx,
+        default_ctx,
+        overrides,
+    )
+}
+
+/// [`prepare`], told whether the context fit is on rather than reading the
+/// switch, so both answers can be tested.
+fn prepare_with(
+    fit_on: bool,
+    spec: ModelLaunchSpec,
+    template: &ServerConfigOptions,
+    cache_ram: CacheRamSetting,
+    num_ctx: Option<u64>,
+    default_ctx: Option<u64>,
+    overrides: &LaunchOverrides,
+) -> LaunchRequest {
     let health_deadline_secs = crate::process::health::launch_deadline_secs(spec.file_size_bytes);
     let cache_ram = overrides.cache_ram.unwrap_or(cache_ram);
 
@@ -709,17 +707,16 @@ fn prepare(
     // and its family's margin (`secondary_verdict`), and launched with
     // the recipe.
     if spec.runtime() == RuntimeKind::StableDiffusion {
-        return Prepared {
-            request: LaunchRequest {
-                spec,
-                opts: ServerConfigOptions::default(),
-                context: (0, ContextSizeSource::BuiltInDefault),
-                slot: PRIMARY_SLOT, // replaced by the queue's decision
-                evict: None,
-                cache_ram,
-                health_deadline_secs,
-            },
+        return LaunchRequest {
+            spec,
+            opts: ServerConfigOptions::default(),
+            context: (0, ContextSizeSource::BuiltInDefault),
+            slot: PRIMARY_SLOT, // replaced by the queue's decision
+            evict: None,
+            cache_ram,
+            health_deadline_secs,
             fit: None,
+            fit_off: false,
         };
     }
 
@@ -737,10 +734,6 @@ fn prepare(
     let kv_types =
         crate::llama::args::resolve_kv_cache_types(overlaid.cache_type_k, overlaid.cache_type_v);
 
-    // `enabled`, not "is the variable present": every other switch reads
-    // truthiness through this helper, and `active()` — what the daemon
-    // reports as in effect — filters by the same call.
-    //
     // `explain_fit` is the one seam: the reserved budget first, then the
     // undivided device, the same two budgets `gglib model explain` shows.
     // Reserving room for a co-resident is worth a rung, not the whole
@@ -749,11 +742,11 @@ fn prepare(
     // full-ceiling secondary could never have loaded anyway. Known
     // consequence, deliberate: the served context is non-monotonic in
     // device size.
-    let fit = (!gglib_core::debug_switches::enabled("GGLIB_DISABLE_CONTEXT_FIT")).then(|| {
+    let fit = fit_on.then(|| {
         let (fitted, inputs) = explain::explain_fit(
             spec.context_length,
             Some(spec.file_size_bytes),
-            spec.kv_elems_per_token,
+            spec.kv_shape,
             kv_types.k,
             kv_types.v,
         );
@@ -764,7 +757,7 @@ fn prepare(
             model = %spec.name,
             budget_bytes = ?inputs.budget_bytes,
             weights_bytes = ?inputs.weights_bytes,
-            kv_bytes_per_token = ?inputs.kv_bytes_per_token,
+            kv = ?inputs.kv,
             trained_ctx = ?inputs.trained_ctx,
             unsnapped = ?inputs.unsnapped,
             fitted = ?fitted,
@@ -787,17 +780,21 @@ fn prepare(
         spec.server_defaults.as_ref(),
     );
 
-    Prepared {
-        request: LaunchRequest {
-            spec,
-            opts,
-            context: (resolved_ctx, ctx_source),
-            slot: PRIMARY_SLOT, // replaced by the queue's decision
-            evict: None,
-            cache_ram,
-            health_deadline_secs,
-        },
-        fit: Some(fit.unwrap_or_else(|| (None, gglib_core::domain::FitInputs::default()))),
+    // Switched off, a plan still shows what it would serve at, its figures
+    // unknown. The narration of a launch must not: it would say this
+    // machine could not be read, when nothing tried to read it.
+    let fit_off = fit.is_none();
+    let (fitted, inputs) = fit.unwrap_or_default();
+    LaunchRequest {
+        spec,
+        opts,
+        context: (resolved_ctx, ctx_source),
+        slot: PRIMARY_SLOT, // replaced by the queue's decision
+        evict: None,
+        cache_ram,
+        health_deadline_secs,
+        fit: Some(ContextFit::new(resolved_ctx, ctx_source, fitted, &inputs)),
+        fit_off,
     }
 }
 
@@ -835,9 +832,6 @@ fn target_of(resident: Resident) -> RunningTarget {
 #[path = "announce_tests.rs"]
 mod announce_tests;
 #[cfg(test)]
-#[path = "hold_tests.rs"]
-mod hold_tests;
-#[cfg(test)]
 #[path = "launch_sd_tests.rs"]
 mod launch_sd_tests;
 #[cfg(test)]
@@ -849,6 +843,9 @@ mod plan_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 pub(in crate::process) mod residency_tests;
+#[cfg(test)]
+#[path = "serve_tests.rs"]
+mod serve_tests;
 #[cfg(test)]
 #[path = "stop_model_tests.rs"]
 mod stop_model_tests;

@@ -9,8 +9,6 @@ use anyhow::{Context, Result, bail};
 
 use gglib_core::daemon_port;
 
-use crate::bootstrap::CliContext;
-
 /// How long one identity probe may take. The daemon answers `/health` from
 /// memory; anything slower than this is not a healthy daemon.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(500);
@@ -131,20 +129,20 @@ pub(crate) struct DaemonHandle {
     /// Client for talking to the daemon. No global timeout — long calls
     /// (model start) set their own.
     pub client: reqwest::Client,
-    /// The bearer token `/api/*` wants, or `None` when this CLI has none to
-    /// present. Resolved by [`auth::daemon_api_key`] and attached by
+    /// The daemon token `/api/*` wants, or `None` when this CLI has none to
+    /// present. Read by [`auth::daemon_token`] and attached by
     /// [`DaemonHandle::request`], so no call site decides this for itself.
     pub api_key: Option<String>,
 }
 
 impl DaemonHandle {
-    /// A handle over `client` carrying the credential this CLI presents
-    /// ([`auth::daemon_api_key`]). It asks the daemon nothing: [`running`]
-    /// and [`ensure_daemon`] are the ones that find out whether it is there.
-    pub(crate) async fn new(ctx: &CliContext, client: reqwest::Client) -> Self {
+    /// A handle over `client` carrying the daemon's token
+    /// ([`auth::daemon_token`]). It asks the daemon nothing: [`running`] and
+    /// [`ensure_daemon`] are the ones that find out whether it is there.
+    pub(crate) fn new(client: reqwest::Client) -> Self {
         Self {
             client,
-            api_key: auth::daemon_api_key(ctx).await,
+            api_key: auth::daemon_token(),
         }
     }
 }
@@ -162,17 +160,17 @@ pub(crate) enum Absent {
 /// reports on the daemon, stops something on it, or asks it what only a
 /// running one knows, asks here and says in its own words what [`Absent`]
 /// means for it.
-pub(crate) async fn running(ctx: &CliContext) -> Result<DaemonHandle, Absent> {
+pub(crate) async fn running() -> Result<DaemonHandle, Absent> {
     let client = gglib_proxy::loopback::client();
     match probe(&client).await {
-        DaemonProbe::Running => Ok(DaemonHandle::new(ctx, client).await),
+        DaemonProbe::Running => Ok(DaemonHandle::new(client)),
         DaemonProbe::NotRunning => Err(Absent::NotRunning),
         DaemonProbe::ForeignServer => Err(Absent::ForeignServer),
     }
 }
 
-/// Find the daemon, launching it if nothing is running, and present this
-/// CLI's credential to it ([`auth::daemon_api_key`]).
+/// Find the daemon, launching it if nothing is running, and present its
+/// token to it ([`auth::daemon_token`]).
 ///
 /// The launch is `current_exe() daemon run`, fully detached: its own process
 /// group (so Ctrl-C on this command never reaches it), stdin closed, output
@@ -184,8 +182,8 @@ pub(crate) async fn running(ctx: &CliContext) -> Result<DaemonHandle, Absent> {
 /// - the daemon binary cannot be spawned,
 /// - the launched daemon does not become healthy within the wait window
 ///   (the log file path is named in the error).
-pub(crate) async fn ensure_daemon(ctx: &CliContext) -> Result<DaemonHandle> {
-    let api_key = auth::daemon_api_key(ctx).await;
+pub(crate) async fn ensure_daemon() -> Result<DaemonHandle> {
+    let api_key = auth::daemon_token();
     let client = gglib_proxy::loopback::client();
 
     match probe(&client).await {
@@ -203,15 +201,14 @@ pub(crate) async fn ensure_daemon(ctx: &CliContext) -> Result<DaemonHandle> {
 
     let prober = client.clone();
     let probe_it = || probe(&prober);
-    wait_for_launch(client, api_key, &auth::Local::here(), &log_path, probe_it).await
+    wait_for_launch(client, &auth::Local::here(), &log_path, probe_it).await
 }
 
 /// Poll `probe` until the daemon this command launched answers, and hand back
-/// a handle carrying the credential `local` gives now: the daemon minted a
-/// new token as it started, after `had` was resolved.
+/// a handle carrying the token `local` holds now: the daemon minted a new one
+/// as it started.
 async fn wait_for_launch<F: Future<Output = DaemonProbe>>(
     client: reqwest::Client,
-    had: Option<String>,
     local: &auth::Local,
     log_path: &std::path::Path,
     mut probe: impl FnMut() -> F,
@@ -221,7 +218,7 @@ async fn wait_for_launch<F: Future<Output = DaemonProbe>>(
         tokio::time::sleep(Duration::from_millis(250)).await;
         match probe().await {
             DaemonProbe::Running => {
-                let api_key = local.credential(async { had }).await;
+                let api_key = local.token();
                 return Ok(DaemonHandle { client, api_key });
             }
             DaemonProbe::ForeignServer => {

@@ -40,7 +40,7 @@ impl ModelRegistrarPort for RecordingRegistrar {
         let mut new = NewModel::new(
             "zeta".to_string(),
             download.primary_path.clone(),
-            7.0,
+            Some(7.0),
             chrono::Utc::now(),
         );
         new.components = download

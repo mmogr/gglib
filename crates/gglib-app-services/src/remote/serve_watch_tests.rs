@@ -2,10 +2,10 @@
 //! enable whose proxy left while the tunnel was binding, and taking the
 //! tunnel down when the proxy goes afterwards.
 //!
-//! Split from `enable_tests.rs`, which is at its size budget. These share
-//! that file's fixture: a real proxy on a free port, and a `modelpipe::serve`
-//! that binds an endpoint without reaching the network, so the whole of
-//! `arm` runs here rather than stopping at the bind.
+//! Split from `enable_tests.rs`. These share that file's fixture: a real
+//! proxy on a free port, and a `modelpipe::serve` that binds an endpoint
+//! without reaching the network, so the whole of `arm` runs here rather than
+//! stopping at the bind.
 //!
 //! The fixture below is shared in turn with `serve_invite_tests.rs`, which
 //! took the tests about what an arm *offers* when this file reached the same

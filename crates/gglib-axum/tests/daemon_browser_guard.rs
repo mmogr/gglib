@@ -135,7 +135,7 @@ async fn ask(app: &Router, rows: &[Row]) {
 
 #[tokio::test]
 async fn each_kind_of_request_gets_its_status_its_cors_headers_and_its_body() {
-    let access = DaemonAccess::new(None, "127.0.0.1", vec![NAMED.to_owned()]);
+    let access = DaemonAccess::new(vec![NAMED.to_owned()]);
     let app = shipped(&shipped_cors(), access).await;
     #[rustfmt::skip]
     let rows = [
@@ -184,7 +184,7 @@ async fn each_kind_of_request_gets_them_under_a_config_that_lets_every_page_read
 /// Another site cannot read it.
 #[tokio::test]
 async fn a_local_page_reads_the_health_answer_and_another_site_does_not() {
-    let access = DaemonAccess::new(None, "127.0.0.1", vec![NAMED.to_owned()]);
+    let access = DaemonAccess::new(vec![NAMED.to_owned()]);
     let app = shipped(&shipped_cors(), access).await;
 
     let local = send(

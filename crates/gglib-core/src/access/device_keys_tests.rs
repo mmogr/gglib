@@ -1,7 +1,6 @@
 //! Tests for the device key store.
 //!
-//! A `#[path]` sibling because the store and its tests together would cross
-//! the 300-line budget, the split `bearer_tests.rs` already makes.
+//! A `#[path]` sibling, the split `bearer_tests.rs` already makes.
 
 use super::*;
 #[cfg(unix)]

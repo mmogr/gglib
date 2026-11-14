@@ -1,8 +1,7 @@
 //! `gglib remote disable`.
 //!
 //! Its own file since it learned to switch remote access off with no daemon
-//! running, which would have put `mod.rs` past its budget. What it prints is
-//! pinned by `disable_tests.rs`.
+//! running. What it prints is pinned by `disable_tests.rs`.
 
 use std::time::Duration;
 
@@ -41,7 +40,7 @@ pub(crate) async fn disable(ctx: &CliContext) -> Result<()> {
         eprintln!("{SWITCHED_OFF}");
         return Ok(());
     }
-    let handle = daemon_client::DaemonHandle::new(ctx, client).await;
+    let handle = daemon_client::DaemonHandle::new(client);
     let status = handle.remote_disable().await?;
     if status.enabled {
         anyhow::bail!("the daemon reported remote access still enabled after disable");

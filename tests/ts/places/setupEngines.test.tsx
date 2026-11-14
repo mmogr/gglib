@@ -249,12 +249,11 @@ describe("setup's engines", () => {
     expect(await within(line(region, 'llama.cpp')).findByRole('alert')).toHaveTextContent('no asset');
   });
 
-  it("names the daemon's update command where llama.cpp was built here before", async () => {
+  it("names the daemon's install command where llama.cpp was built here before", async () => {
     answer('llama', engine('llama', false, {}, { built: true, rebuilds: true, updateDownloads: false }));
     const { region } = await reachEngines();
     const llama = line(region, 'llama.cpp');
-    expect(await within(llama).findByText('gglib config llama update', { selector: 'code' })).toBeInTheDocument();
-    expect(within(llama).queryByText('gglib config llama install', { selector: 'code' })).not.toBeInTheDocument();
+    expect(await within(llama).findByText('gglib config llama install', { selector: 'code' })).toBeInTheDocument();
   });
 
   it("says the CPU build's warning while the install it is about runs", async () => {

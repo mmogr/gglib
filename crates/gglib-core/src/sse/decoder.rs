@@ -1,22 +1,47 @@
 //! Stateful SSE byte-stream decoder.
 //!
 //! [`SseStreamDecoder`] hands raw bytes from an HTTP response to
-//! [`super::frames::Lines`], decodes each complete `data:` line, and delegates
-//! frame parsing to [`super::parser`]. A chunk may end anywhere, inside a
-//! character included: only a whole line is ever decoded. Its explicit state
-//! makes it straightforward to unit-test without standing up an actual HTTP
-//! server or wrapping everything in an `async_stream` macro block.
+//! [`super::frames::Lines`] and reads each complete line. A chunk may end
+//! anywhere, inside a character included: only a whole line is ever read.
+//! [`SseStreamDecoder::feed_frames`] gives each line as an [`SseItem`]: a
+//! comment, a `data:` frame with its JSON and its events (from
+//! [`super::parser`]), or `[DONE]`. [`SseStreamDecoder::feed_bytes`] gives the
+//! events alone. Its explicit state makes it straightforward to unit-test
+//! without standing up an actual HTTP server or wrapping everything in an
+//! `async_stream` macro block.
 
 use anyhow::Result;
+use serde_json::Value;
 use tracing::debug;
 
 use crate::LlmStreamEvent;
 
 use super::frames::Lines;
-use super::parser::{SseParseResult, parse_sse_frame};
+use super::parser::{events_of, frame_json};
+
+/// One line of an SSE stream that says something, as
+/// [`SseStreamDecoder::feed_frames`] reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SseItem {
+    /// A comment line, its leading `:` included, such as llama-server's
+    /// keep-alive `:`.
+    Comment(String),
+    /// A `data:` frame other than `[DONE]`.
+    Data {
+        /// The payload after `data: `, as it arrived.
+        text: String,
+        /// The payload parsed.
+        value: Value,
+        /// The events it carries ([`events_of`]); none for a frame such as
+        /// llama-server's opening role frame.
+        events: Vec<LlmStreamEvent>,
+    },
+    /// The `[DONE]` sentinel.
+    Done,
+}
 
 /// Stateful decoder that turns a sequence of raw SSE byte chunks into a
-/// sequence of [`LlmStreamEvent`] values.
+/// sequence of [`SseItem`]s, or of [`LlmStreamEvent`]s.
 ///
 /// # Usage
 ///
@@ -32,13 +57,72 @@ use super::parser::{SseParseResult, parse_sse_frame};
 #[derive(Default)]
 pub struct SseStreamDecoder {
     lines: Lines,
-    /// Set to `true` once a [`LlmStreamEvent::Done`] has been yielded, so the
-    /// `[DONE]` sentinel doesn't generate a duplicate.
+    /// Set to `true` once [`Self::feed_bytes`] has yielded a
+    /// [`LlmStreamEvent::Done`], so the `[DONE]` sentinel doesn't generate a
+    /// duplicate.
     done_sent: bool,
 }
 
 impl SseStreamDecoder {
-    /// Feed one raw byte chunk into the decoder.
+    /// Feed one raw byte chunk into the decoder, and read every complete line
+    /// it finishes.
+    ///
+    /// Returns `(items, should_stop)`. Blank lines and fields other than
+    /// `data:` give no item. `should_stop` is `true` once the stream has
+    /// ended: at `[DONE]`, after a frame that carries an
+    /// [`LlmStreamEvent::UpstreamError`] (nothing meaningful follows one), or
+    /// at a line that is not UTF-8 or a payload that is not JSON, each of
+    /// which is an `Err` item and is never replaced with a guess. The caller
+    /// must not feed any further chunks once it is `true`.
+    pub fn feed_frames(&mut self, bytes: &[u8]) -> (Vec<Result<SseItem>>, bool) {
+        self.lines.push(bytes);
+        let mut items = Vec::new();
+
+        while let Some(line) = self.lines.next_line() {
+            let line = match String::from_utf8(line) {
+                Ok(line) => line,
+                Err(e) => {
+                    items.push(Err(anyhow::anyhow!("invalid UTF-8 in LLM SSE stream: {e}")));
+                    return (items, true);
+                }
+            };
+            if line.starts_with(':') {
+                items.push(Ok(SseItem::Comment(line)));
+                continue;
+            }
+            let Some(data) = line.strip_prefix("data: ") else {
+                continue;
+            };
+            if data == "[DONE]" {
+                items.push(Ok(SseItem::Done));
+                return (items, true);
+            }
+            let value = match frame_json(data) {
+                Ok(value) => value,
+                Err(e) => {
+                    items.push(Err(e));
+                    return (items, true);
+                }
+            };
+            let events = events_of(&value);
+            let terminal = events
+                .iter()
+                .any(|event| matches!(event, LlmStreamEvent::UpstreamError { .. }));
+            items.push(Ok(SseItem::Data {
+                text: data.to_owned(),
+                value,
+                events,
+            }));
+            if terminal {
+                return (items, true);
+            }
+        }
+
+        (items, false)
+    }
+
+    /// Feed one raw byte chunk into the decoder: [`Self::feed_frames`], with
+    /// only the events kept.
     ///
     /// Returns `(events, should_stop)`.
     ///
@@ -48,28 +132,16 @@ impl SseStreamDecoder {
     ///   (a `[DONE]` sentinel or an unrecoverable parse error).  The caller
     ///   must not feed any further chunks once this flag is `true`.
     ///
-    /// A complete line that is not UTF-8 is such an error: its bytes are
-    /// never replaced with a guess.
+    /// A `[DONE]` with no finish reason before it gives a fallback `Done` that
+    /// carries none.
     pub fn feed_bytes(&mut self, bytes: &[u8]) -> (Vec<Result<LlmStreamEvent>>, bool) {
-        self.lines.push(bytes);
+        let (items, stop) = self.feed_frames(bytes);
         let mut events = Vec::new();
-
-        while let Some(line) = self.lines.next_line() {
-            let line = match String::from_utf8(line) {
-                Ok(line) => line,
-                Err(e) => {
-                    events.push(Err(anyhow::anyhow!("invalid UTF-8 in LLM SSE stream: {e}")));
-                    return (events, true);
-                }
-            };
-
-            // Skip blank lines and SSE comment lines.
-            let Some(data) = line.strip_prefix("data: ") else {
-                continue;
-            };
-
-            match parse_sse_frame(data) {
-                Ok(SseParseResult::Done) => {
+        for item in items {
+            match item {
+                Err(e) => events.push(Err(e)),
+                Ok(SseItem::Comment(_)) => {}
+                Ok(SseItem::Done) => {
                     if !self.done_sent {
                         debug!(
                             "LLM stream ended with [DONE] but no prior finish_reason \
@@ -83,40 +155,23 @@ impl SseStreamDecoder {
                         }));
                     }
                     self.done_sent = true;
-                    return (events, true);
                 }
-                Ok(SseParseResult::Events(parsed_events)) => {
-                    let mut saw_terminal_error = false;
-                    for event in parsed_events {
-                        if matches!(event, LlmStreamEvent::Done { .. }) {
-                            self.done_sent = true;
-                        }
-                        if matches!(event, LlmStreamEvent::UpstreamError { .. }) {
-                            // Terminal condition: the encoder appends its own
-                            // `[DONE]` sentinel right after this event (see
-                            // `SseEncoder::encode`), and nothing meaningful
-                            // is expected to follow an inline upstream
-                            // error. Stop feeding further bytes, same as the
-                            // literal `[DONE]` sentinel case above, so a
-                            // stray fallback `Done` isn't appended by
-                            // `finish()`.
-                            saw_terminal_error = true;
+                Ok(SseItem::Data { events: parsed, .. }) => {
+                    for event in parsed {
+                        // An inline upstream error ends the turn as a `Done`
+                        // does, so `finish()` appends no fallback after it.
+                        if matches!(
+                            event,
+                            LlmStreamEvent::Done { .. } | LlmStreamEvent::UpstreamError { .. }
+                        ) {
                             self.done_sent = true;
                         }
                         events.push(Ok(event));
                     }
-                    if saw_terminal_error {
-                        return (events, true);
-                    }
-                }
-                Err(e) => {
-                    events.push(Err(e));
-                    return (events, true);
                 }
             }
         }
-
-        (events, false)
+        (events, stop)
     }
 
     /// Emit a fallback `Done` event if the byte stream ended without one.
@@ -148,3 +203,7 @@ mod tests;
 #[cfg(test)]
 #[path = "decoder_chunk_tests.rs"]
 mod chunk_tests;
+
+#[cfg(test)]
+#[path = "decoder_frames_tests.rs"]
+mod frames_tests;

@@ -33,7 +33,6 @@ fn shaping_runs_the_pipeline_and_preserves_unknown_fields() {
     let ShapedRequest {
         body: out,
         truncation: report,
-        grammar_enforced,
         ..
     } = shape_request_body(
         body,
@@ -48,42 +47,11 @@ fn shaping_runs_the_pipeline_and_preserves_unknown_fields() {
         None,
     )
     .expect("no budget, so nothing to reject");
-    assert!(!grammar_enforced, "passthrough context never constrains");
 
     let parsed: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
     assert_eq!(parsed["temperature"], 0.5, "the pipeline ran");
     assert_eq!(parsed["totally_made_up"], serde_json::json!({"a": 1}));
     assert_eq!(report, TruncationReport::default(), "unmeasured, no budget");
-}
-
-/// The end-to-end proxy view of the constrain stage: a demanded tool
-/// call on a qwen-xml model reports `grammar_enforced` so the log line
-/// and dashboard snapshot can say so.
-#[test]
-fn shaping_reports_grammar_enforcement_for_a_demanded_dialect_call() {
-    let ctx = ModelContext {
-        tags: vec![gglib_core::normalize::tags::FORMAT_QWEN_XML.to_owned()],
-        dialect: Some(gglib_core::domain::DialectSpec::qwen_xml()),
-        // Tool-capable, or stage 2b strips the tools before stage 6 sees
-        // them — the correct interplay for a model that cannot call tools.
-        capabilities: gglib_core::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS,
-        catalog_resolved: true,
-        ..ModelContext::passthrough()
-    };
-    let body = Bytes::from(
-        r#"{"model":"m","messages":[],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"required"}"#,
-    );
-    let ShapedRequest {
-        body: out,
-        grammar_enforced,
-        ..
-    } = shape_request_body(body, &ctx, &SamplingLayers::default(), None)
-        .expect("nothing to reject");
-
-    assert!(grammar_enforced);
-    let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
-    assert!(parsed["grammar"].is_string());
-    assert_eq!(parsed["tool_choice"], "none");
 }
 
 #[test]

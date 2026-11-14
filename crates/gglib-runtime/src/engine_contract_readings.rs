@@ -6,7 +6,8 @@
 //! the first of them also for the endpoints gglib reads; stories260K again
 //! with debug off, for the `cache_prompt` pair and the `/slots` gglib's
 //! poller sees; and tinygemma3 without its projector, streaming a reply at
-//! temperature 0, then with it (`engine_contract_gemma.rs`). The in-process
+//! temperature 0 and, on llama-server, asked with a tool on its own template,
+//! which calls none, then with it (`engine_contract_gemma.rs`). The in-process
 //! engine is asked the same, less what it refuses or does not serve: tools,
 //! `/slots` (a 501, read as such), a projector, and `--help`.
 

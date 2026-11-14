@@ -1,9 +1,8 @@
 /**
  * One SSE `AgentEvent` → React message state.
  *
- * Split from `streamAgentChat.ts` (now `drawRun.ts`) when that file was at
- * its budget. `drawRun` owns the run's stream; this owns what each event
- * does to the messages.
+ * Split from `streamAgentChat.ts` (now `drawRun.ts`). `drawRun` owns the
+ * run's stream; this owns what each event does to the messages.
  *
  * @module agentEventDispatch
  */

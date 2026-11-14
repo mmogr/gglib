@@ -9,6 +9,7 @@ mod test_support_remote;
 
 mod error;
 mod helpers;
+mod hf_count;
 mod hf_image_preview;
 mod hf_quantizations;
 mod hub_chats;
@@ -45,7 +46,7 @@ pub use error::GuiError;
 
 // Domain ops + their Deps
 pub use benchmark::BenchmarkOps;
-pub use downloads::{DownloadDeps, DownloadOps, download_budget, search_hf_models};
+pub use downloads::{DownloadDeps, DownloadOps, download_budget, search_hf_hits, search_hf_models};
 pub use hub_chats::HubChats;
 pub use launch_explain::LaunchExplanationDto;
 pub use mcp::McpOps;
@@ -64,7 +65,7 @@ pub use remote::{
 pub use runs::{Reservation, Reserved, RunEnded, RunLog, RunRegistry, RunSpec, RunWork, Stopped};
 pub use sampling_explain::{
     ParamProvenanceDto, ProvenanceKindDto, PublishedDefaultDto, PublishedStateDto,
-    SamplingExplanationDto, SamplingLayerDto, SuppressedEffortDto,
+    SamplingExplanationDto, SamplingLayerDto,
 };
 pub use servers::{ServerDeps, ServerOps};
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};

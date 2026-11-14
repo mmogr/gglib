@@ -596,8 +596,6 @@ mod tests {
                 reasoning_budget_tokens: ParamSource::Unset,
             },
             layer_names: ["cli", "client", "profile", "model", "global", "auto"],
-            agentic_turn: false,
-            agentic_ceiling_applied: None,
             client_fields_rejected: Vec::new(),
             client_fields_discarded: Vec::new(),
             applied: true,

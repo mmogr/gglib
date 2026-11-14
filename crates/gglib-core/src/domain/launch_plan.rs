@@ -11,7 +11,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::launch_narration::LaunchNarration;
+use super::launch_narration::{LaunchDecision, LaunchNarration};
 use crate::server_config::ContextSizeSource;
 
 /// Whose choice an argument is.
@@ -102,9 +102,14 @@ pub struct ContextFit {
     /// The weights, summed across shards, plus the projector when linked.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub weights_bytes: Option<u64>,
-    /// Bytes of KV cache each token of context costs at the launch's types.
+    /// Bytes of KV cache each token of context costs at the launch's types,
+    /// over the layers that keep every token.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub kv_bytes_per_token: Option<u64>,
+    /// The KV cache at the served context: every token's cost, and the
+    /// sliding-window layers' fixed block.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub kv_bytes: Option<u64>,
     /// The model's trained ceiling.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub trained_ctx: Option<u64>,
@@ -119,6 +124,16 @@ pub struct ContextFit {
     /// fit spends, with the verdict: `fits (35.81 GiB of 43.20 GiB usable)`;
     /// `None` when the budget, the weights or the KV cost is unknown.
     pub note: Option<String>,
+    /// The figures above as a person reads them (composed by
+    /// [`ContextFit::new`]): the note as `memory` when there is one, then
+    /// the budget, the weights, the KV cost a token and at the served
+    /// context, the trained window and the context before snapping, each
+    /// `unknown` when it could not be read. The GUI shows these rows as they
+    /// are; `gglib model explain` composes the same rows from the fields
+    /// ([`ContextFit::figure_rows`]), and the launch banner has room for one
+    /// ([`LaunchFit::banner_row`](super::LaunchFit::banner_row)).
+    #[serde(default)]
+    pub figures: Vec<LaunchDecision>,
 }
 
 /// Why a launch unloads the model it names first.
@@ -156,6 +171,28 @@ pub struct Unload {
     /// The loaded model, by name.
     pub model: String,
     pub reason: UnloadReason,
+    /// Both in one sentence, composed here ([`Unload::new`]), printed by
+    /// `gglib model explain` and shown by the Load palette:
+    /// `Unloads Qwen3-30B-A3B first: it would not fit beside it.`
+    pub sentence: String,
+}
+
+impl Unload {
+    /// The unload of `model` for `reason`, with its sentence.
+    #[must_use]
+    pub fn new(model: String, reason: UnloadReason) -> Self {
+        let because = match reason {
+            UnloadReason::WouldNotFitBeside => "it would not fit beside it",
+            UnloadReason::SecondSlotFull => "the second slot is taken",
+            UnloadReason::OneImageModel => "one image model is loaded at a time",
+        };
+        let sentence = format!("Unloads {model} first: {because}.");
+        Self {
+            model,
+            reason,
+            sentence,
+        }
+    }
 }
 
 /// The launch gglib would make for a model now, without making it.
@@ -290,6 +327,20 @@ mod tests {
         assert_eq!(
             ChoiceSource::ALL.map(ChoiceSource::word),
             ["model author", "gglib", "you"]
+        );
+    }
+
+    #[test]
+    fn an_unload_says_which_model_goes_and_why() {
+        let sentences = UnloadReason::ALL
+            .map(|reason| Unload::new("Qwen3-30B-A3B".to_owned(), reason).sentence);
+        assert_eq!(
+            sentences,
+            [
+                "Unloads Qwen3-30B-A3B first: it would not fit beside it.",
+                "Unloads Qwen3-30B-A3B first: the second slot is taken.",
+                "Unloads Qwen3-30B-A3B first: one image model is loaded at a time.",
+            ]
         );
     }
 

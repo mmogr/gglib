@@ -83,7 +83,7 @@ fn both_commands_expose_the_flag_in_its_long_form_only() {
     use clap::CommandFactory as _;
     let root = Cli::command();
 
-    for name in ["question", "chat"] {
+    for name in ["q", "chat"] {
         assert!(
             flag_surface::long_flags(name).contains(&"image".to_owned()),
             "`{name}` is missing --image"
@@ -101,9 +101,9 @@ fn both_commands_expose_the_flag_in_its_long_form_only() {
 /// land on both commands.
 #[test]
 fn both_commands_keep_the_tool_limit_flags() {
-    for name in ["question", "chat"] {
+    for name in ["q", "chat"] {
         let flags = flag_surface::long_flags(name);
-        for flag in ["tool-timeout-ms", "max-parallel"] {
+        for flag in ["tool-timeout-ms", "max-parallel-tools"] {
             assert!(
                 flags.contains(&flag.to_owned()),
                 "`{name}` is missing --{flag}"

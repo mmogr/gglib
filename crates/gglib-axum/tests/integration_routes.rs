@@ -383,8 +383,8 @@ async fn settings_endpoint_accepts_patch() {
 async fn servers_start_collection_route_accepts_post() {
     let app = test_app(CorsConfig::AllowAll).await;
 
-    // Request with model_id in body (matches frontend transport contract)
-    let request_body = format!(r#"{{"model_id": 999, "port": {TEST_MODEL_PORT}}}"#);
+    // Request with id in body (matches frontend transport contract)
+    let request_body = format!(r#"{{"id": 999, "port": {TEST_MODEL_PORT}}}"#);
 
     let response = app
         .oneshot(
@@ -701,7 +701,7 @@ async fn a_path_param_route_returns_json_not_html() {
         .oneshot(
             authed()
                 .header("Host", "127.0.0.1:9887")
-                .uri("/api/servers/1/tool-support")
+                .uri("/api/servers/1/logs")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -1004,6 +1004,11 @@ async fn an_engine_status_route_returns_json() {
     // Reports whatever is installed on this machine, but the shape is fixed.
     assert!(json["installed"].is_boolean());
     assert!(json["binaryPath"].is_string());
+    assert!(
+        json.get("standing")
+            .is_some_and(|v| v.is_string() || v.is_null()),
+        "{json}"
+    );
 }
 
 // ============================================================================

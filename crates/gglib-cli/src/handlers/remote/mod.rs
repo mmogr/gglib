@@ -27,54 +27,46 @@ use crate::presentation::style;
 pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result<()> {
     match command {
         RemoteCommand::Enable {
-            allow_mcp,
             relay,
             no_discovery,
             no_qr,
             invite,
         } => {
-            enable::refuse_allow_mcp(&allow_mcp)?;
-            enable(
-                ctx,
-                EnableArgs {
-                    relay,
-                    no_discovery,
-                    no_qr,
-                    invite,
-                },
-            )
+            enable(EnableArgs {
+                relay,
+                no_discovery,
+                no_qr,
+                invite,
+            })
             .await
         }
         RemoteCommand::Disable => disable(ctx).await,
-        RemoteCommand::Status => status(ctx).await,
-        RemoteCommand::Invite { no_qr } => invite(ctx, no_qr).await,
-        RemoteCommand::List => list(ctx).await,
-        RemoteCommand::Forget { device } => forget(ctx, &device).await,
+        RemoteCommand::Status => status().await,
+        RemoteCommand::Invite { no_qr } => invite(no_qr).await,
+        RemoteCommand::List => list().await,
+        RemoteCommand::Forget { device } => forget(&device).await,
         RemoteCommand::Join {
             pairing,
             port,
             relay,
             no_discovery,
         } => {
-            join(
-                ctx,
-                JoinArgs {
-                    pairing,
-                    port,
-                    relay,
-                    no_discovery,
-                },
-            )
+            join(JoinArgs {
+                pairing,
+                port,
+                relay,
+                no_discovery,
+            })
             .await
         }
-        RemoteCommand::Disconnect => disconnect(ctx).await,
+        RemoteCommand::Disconnect => disconnect().await,
     }
 }
 
 /// Execute `gglib remote status`.
-pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
+pub(crate) async fn status() -> Result<()> {
     style::print_info_banner("Remote", "\u{1f517}");
-    let handle = match daemon_client::running(ctx).await {
+    let handle = match daemon_client::running().await {
         Ok(handle) => handle,
         Err(Absent::NotRunning) => {
             eprintln!("  Daemon:  not running \u{2014} nothing is being broadcast");
@@ -97,7 +89,8 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
 fn print_status(status: &RemoteStatus) {
     if status.enabled {
         eprintln!(
-            "  Serving:   on   (ticket {})",
+            "  Serving:   {}   (ticket {})",
+            status.sharing_sentence(),
             status.ticket_fingerprint.as_deref().unwrap_or("?")
         );
         // The ticket lasts now, so where the key lives is operational
@@ -115,11 +108,13 @@ fn print_status(status: &RemoteStatus) {
         eprintln!(
             "  Pairing:   {}",
             match (status.pairing_active, status.paired) {
+                // About the code alone: how many devices are paired is the
+                // Serving line's count, which this must not contradict.
                 (true, _) => "code live, waiting for a device",
-                (false, true) => "paired",
+                (false, true) => "code redeemed",
                 // Not "expired or spent": `forget` and `disable` withdraw a
                 // code too, and the status cannot tell which of them it was.
-                (false, false) => "no code live, nobody paired",
+                (false, false) => "no code live",
             }
         );
         eprintln!("  Path:      {}", status.path.as_deref().unwrap_or("idle"));
@@ -135,19 +130,15 @@ fn print_status(status: &RemoteStatus) {
         } else {
             eprintln!("  MCP:       {}", status.mcp_servers.join(", "));
         }
+    } else if status.sharing_note.is_empty() {
+        eprintln!(
+            "  Serving:   {} \u{2014} `gglib remote enable` to broadcast this machine",
+            status.sharing
+        );
     } else {
-        // The switch being on with nothing bound is worth its own sentence:
-        // it is a machine that failed to arm at boot, or is still arming,
-        // and "off" alone would send someone to `enable` for a thing that
-        // is already enabled.
-        if status.remote_enabled {
-            eprintln!(
-                "  Serving:   switched on, but nothing is bound \u{2014} still arming, or it \
-                 could not reach a relay"
-            );
-        } else {
-            eprintln!("  Serving:   off \u{2014} `gglib remote enable` to broadcast this machine");
-        }
+        // The switch on with nothing bound: the sentence in full, since a
+        // command to switch it on would be wrong here.
+        eprintln!("  Serving:   {}", status.sharing_note);
     }
     join::print_connection(status);
     print_traffic(status);

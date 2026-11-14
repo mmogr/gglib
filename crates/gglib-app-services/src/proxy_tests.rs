@@ -70,7 +70,7 @@ async fn ensure_running_reports_a_clear_conflict_when_the_port_is_taken_by_anoth
     drop(listener);
 }
 
-/// A proxy this starts carries the runs it was handed, so `/v1/runs` is
+/// A proxy this starts carries the runs it was handed, so `/v1/gglib/runs` is
 /// served rather than answered 503.
 #[tokio::test]
 async fn a_started_proxy_serves_the_runs_it_was_handed() {
@@ -85,7 +85,7 @@ async fn a_started_proxy_serves_the_runs_it_was_handed() {
     };
     let addr = proxy.start(config, None).await.expect("the proxy starts");
     let status = gglib_proxy::loopback::client()
-        .get(format!("http://{addr}/v1/runs"))
+        .get(format!("http://{addr}/v1/gglib/runs"))
         .send()
         .await
         .expect("the proxy answers")

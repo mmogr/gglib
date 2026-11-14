@@ -15,7 +15,7 @@ fn model() -> Model {
     let path = PathBuf::from("/models/test.gguf");
     Model::stored(
         1,
-        &NewModel::new("test-model".to_owned(), path, 7.0, Utc::now()),
+        &NewModel::new("test-model".to_owned(), path, Some(7.0), Utc::now()),
     )
 }
 
@@ -63,18 +63,19 @@ fn an_unknown_profile_is_refused_with_the_shared_message() {
 
 #[test]
 fn a_layer_index_resolves_to_its_rung_name() {
-    let entry = provenance("temperature", ParamSource::Layer(2));
+    let entry = provenance("temperature", ParamSource::Layer(2), None, None);
     assert_eq!(entry.kind, ProvenanceKindDto::Layer);
     assert_eq!(entry.layer, Some(SamplingLayerDto::ModelUserSet));
+    assert_eq!(entry.label, "per-model defaults (user-set)");
 }
 
 #[test]
 fn the_unsent_variants_stay_distinguishable_and_carry_no_layer() {
-    let coupled = provenance("min_p", ParamSource::Coupled);
+    let coupled = provenance("min_p", ParamSource::Coupled, None, None);
     assert_eq!(coupled.kind, ProvenanceKindDto::Coupled);
     assert_eq!(coupled.layer, None);
 
-    let unset = provenance("max_tokens", ParamSource::Unset);
+    let unset = provenance("max_tokens", ParamSource::Unset, None, None);
     assert_eq!(unset.kind, ProvenanceKindDto::Unset);
     assert_eq!(unset.layer, None);
 }
@@ -84,9 +85,10 @@ fn the_unsent_variants_stay_distinguishable_and_carry_no_layer() {
 /// read-only view.
 #[test]
 fn an_index_past_the_ladder_is_a_layer_without_a_name() {
-    let entry = provenance("temperature", ParamSource::Layer(9));
+    let entry = provenance("temperature", ParamSource::Layer(9), None, None);
     assert_eq!(entry.kind, ProvenanceKindDto::Layer);
     assert_eq!(entry.layer, None);
+    assert_eq!(entry.label, "an unnamed layer");
 }
 
 /// The client zips `sources[i].param` against `resolved`. If a field on
@@ -164,12 +166,12 @@ fn serializes_camel_case_with_the_layer_omitted_for_unset() {
     assert_eq!(value["profile"], json!(null));
     assert_eq!(
         value["sources"][0],
-        json!({ "param": "temperature", "kind": "unset" })
+        json!({ "param": "temperature", "kind": "unset", "label": "unset by design" })
     );
     // maxTokens is last in the canonical order, after the DRY block.
     assert_eq!(
         value["sources"][14],
-        json!({ "param": "maxTokens", "kind": "unset" })
+        json!({ "param": "maxTokens", "kind": "unset", "label": "unset by design" })
     );
 
     // ADR 0003 and ADR 0022: an untuned model resolves no sampler, and
@@ -256,6 +258,7 @@ fn a_profile_outranks_global_settings_and_is_echoed_back() {
         source_for(&dto, "temperature").layer,
         Some(SamplingLayerDto::Profile)
     );
+    assert_eq!(source_for(&dto, "temperature").label, "profile 'coding'");
     // Untouched by the profile, so the lower rung still fills it.
     assert_eq!(dto.resolved.top_k, Some(15));
     assert_eq!(
@@ -276,7 +279,6 @@ fn an_unreviewed_recipe_ranks_below_global_settings() {
         ..Settings::with_defaults()
     };
     let auto = Model {
-        dialect_spec: None,
         inference_defaults: Some(InferenceConfig {
             temperature: Some(1.0),
             ..Default::default()
@@ -294,7 +296,6 @@ fn an_unreviewed_recipe_ranks_below_global_settings() {
     );
 
     let user = Model {
-        dialect_spec: None,
         defaults_origin: Some(DefaultsOrigin::User),
         ..auto
     };
@@ -304,6 +305,27 @@ fn an_unreviewed_recipe_ranks_below_global_settings() {
     assert_eq!(
         source_for(&dto, "temperature").layer,
         Some(SamplingLayerDto::ModelUserSet)
+    );
+}
+
+/// The auto-detected rung is named by whose recipe it holds, which only the
+/// model's stored origin says.
+#[test]
+fn a_published_recipe_is_labelled_the_model_authors() {
+    let published = Model {
+        inference_defaults: Some(InferenceConfig {
+            temperature: Some(1.0),
+            ..Default::default()
+        }),
+        defaults_origin: Some(DefaultsOrigin::Published),
+        ..model()
+    };
+
+    let dto = explain(&published, &Settings::with_defaults(), None);
+
+    assert_eq!(
+        source_for(&dto, "temperature").label,
+        "per-model defaults (published by the model author)"
     );
 }
 
@@ -334,7 +356,6 @@ fn every_surface_spells_an_origin_the_same_way() {
         DefaultsOrigin::Measured,
     ] {
         let stored = Model {
-            dialect_spec: None,
             defaults_origin: Some(origin),
             ..model()
         };
@@ -374,7 +395,6 @@ fn every_surface_spells_an_origin_the_same_way() {
 #[test]
 fn the_reasoning_tag_supplies_the_reasoning_recipe() {
     let reasoning = Model {
-        dialect_spec: None,
         tags: vec!["Reasoning".to_owned()],
         ..model()
     };
@@ -401,7 +421,6 @@ fn a_claimed_temperature_passes_over_the_trio_beneath_it() {
         },
     );
     let tuned = Model {
-        dialect_spec: None,
         inference_defaults: Some(InferenceConfig {
             presence_penalty: Some(1.5),
             ..Default::default()
@@ -583,7 +602,7 @@ fn a_field_with_no_gguf_key_never_appears() {
 }
 
 // =========================================================================
-// A suppressed reasoning effort (ADR 0007 stage 5b)
+// A template's caps are read, never used to edit the resolution (ADR 0007)
 // =========================================================================
 
 use gglib_core::domain::TemplateCaps;
@@ -599,130 +618,37 @@ fn model_whose_template(supports_reasoning_effort: Option<bool>) -> Model {
     }
 }
 
-fn high_effort_profile() -> InferenceProfile {
-    profile(
+/// A resolved level is sent whatever the template says about it; a template
+/// that does not read it ignores it. So every caps reading, `false` included,
+/// explains the same level from the same rung, and the budget beside it.
+#[test]
+fn every_template_reading_explains_the_same_effort() {
+    let high = profile(
         "high",
         InferenceConfig {
             reasoning_effort: Some(ReasoningEffort::High),
             reasoning_budget_tokens: Some(16384),
             ..InferenceConfig::default()
         },
-    )
-}
-
-/// **The whole point of the field.** With only the table, a client can see
-/// `kind: suppressedByTemplate` and `resolved.reasoningEffort: null` — enough
-/// to say *something* was dropped, and not enough to say what or whose. Both
-/// halves are destroyed by the gate, so they arrive here or nowhere.
-#[test]
-fn a_suppressed_effort_carries_the_level_and_the_rung_that_asked_for_it() {
-    let dto = explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
     );
-
-    let suppressed = dto.effort_suppressed.expect("the suppression is reported");
-    assert_eq!(suppressed.level, ReasoningEffort::High);
-    assert_eq!(suppressed.layer, Some(SamplingLayerDto::Profile));
-}
-
-/// The table and the new field have to tell one story: `resolved` shows what
-/// would be sent (nothing), and the provenance names the suppression rather
-/// than the rung whose value did not survive.
-#[test]
-fn the_table_agrees_with_the_suppression_it_reports() {
-    let dto = explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
-    );
-
-    assert_eq!(dto.resolved.reasoning_effort, None);
-    assert_eq!(
-        source_for(&dto, "reasoningEffort").kind,
-        ProvenanceKindDto::SuppressedByTemplate
-    );
-    assert_eq!(
-        source_for(&dto, "reasoningEffort").layer,
-        None,
-        "the rung is gone from the table by design; it is on effort_suppressed"
-    );
-}
-
-/// The budget is enforced by llama.cpp's own sampler, not by a template, so it
-/// survives on exactly the model where the effort does not. A client that
-/// greyed out both controls on a `no` would be wrong about the half that works.
-#[test]
-fn the_budget_survives_the_template_that_ignores_the_effort() {
-    let dto = explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
-    );
-
-    assert_eq!(dto.resolved.reasoning_budget_tokens, Some(16384));
-    assert_eq!(
-        source_for(&dto, "reasoningBudgetTokens").layer,
-        Some(SamplingLayerDto::Profile)
-    );
-}
-
-/// **Unknown never gates.** Caps are read from `/props` while a model runs, so
-/// a model nobody has launched has none — and reporting a suppression there
-/// would tell an operator their profile is inert on evidence that does not
-/// exist.
-#[test]
-fn a_model_whose_template_was_never_observed_suppresses_nothing() {
     for m in [
         model(),
         model_whose_template(None),
         model_whose_template(Some(true)),
+        model_whose_template(Some(false)),
     ] {
-        let dto = explain(&m, &Settings::with_defaults(), Some(&high_effort_profile()));
+        let dto = explain(&m, &Settings::with_defaults(), Some(&high));
 
-        assert_eq!(dto.effort_suppressed, None, "{:?}", m.template_caps);
-        assert_eq!(dto.resolved.reasoning_effort, Some(ReasoningEffort::High));
+        assert_eq!(
+            dto.resolved.reasoning_effort,
+            Some(ReasoningEffort::High),
+            "{:?}",
+            m.template_caps
+        );
         assert_eq!(
             source_for(&dto, "reasoningEffort").layer,
             Some(SamplingLayerDto::Profile)
         );
+        assert_eq!(dto.resolved.reasoning_budget_tokens, Some(16384));
     }
-}
-
-/// A suppressing model that nothing configured an effort for has nothing to
-/// report — the field must not become a permanent fixture on such rows.
-#[test]
-fn a_suppressing_model_with_no_effort_resolved_reports_nothing() {
-    let dto = explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        None,
-    );
-    assert_eq!(dto.effort_suppressed, None);
-}
-
-/// The wire contract, and the omission that keeps it off every ordinary
-/// payload: a `null` here on every model in the library would be a field a
-/// client has to check before it can learn nothing.
-#[test]
-fn the_suppression_is_absent_from_the_payload_unless_it_happened() {
-    let quiet = serde_json::to_string(&explain(
-        &model(),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
-    ))
-    .expect("serializes");
-    assert!(!quiet.contains("effortSuppressed"), "{quiet}");
-
-    let loud = serde_json::to_string(&explain(
-        &model_whose_template(Some(false)),
-        &Settings::with_defaults(),
-        Some(&high_effort_profile()),
-    ))
-    .expect("serializes");
-    assert!(loud.contains(r#""effortSuppressed":{"#), "{loud}");
-    assert!(loud.contains(r#""level":"high""#), "{loud}");
-    assert!(loud.contains(r#""layer":"profile""#), "{loud}");
-    assert!(loud.contains(r#""kind":"suppressedByTemplate""#), "{loud}");
 }

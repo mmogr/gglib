@@ -39,6 +39,14 @@
     "approved": true,
     "note": "first reading, b11669"
   },
+  "caps.tinygemma3.supports_tool_calls": {
+    "approved": false,
+    "note": "first reading, b12110"
+  },
+  "caps.tinygemma3.supports_tools": {
+    "approved": false,
+    "note": "first reading, b12110"
+  },
   "help_diff.options": {
     "approved": [
       "--adaptive-decay",
@@ -372,6 +380,30 @@
   "sampler_defaults.top_p": {
     "approved": 0.95,
     "note": "first reading, b11669"
+  },
+  "toolless.tinygemma3.auto.status": {
+    "approved": 200,
+    "note": "first reading, b12110"
+  },
+  "toolless.tinygemma3.auto.tool_calls": {
+    "approved": false,
+    "note": "first reading, b12110"
+  },
+  "toolless.tinygemma3.auto.tools_rendered": {
+    "approved": false,
+    "note": "first reading, b12110"
+  },
+  "toolless.tinygemma3.required.status": {
+    "approved": 200,
+    "note": "first reading, b12110"
+  },
+  "toolless.tinygemma3.required.tool_calls": {
+    "approved": false,
+    "note": "first reading, b12110"
+  },
+  "toolless.tinygemma3.required.tools_rendered": {
+    "approved": false,
+    "note": "first reading, b12110"
   },
   "vision_without_mmproj": {
     "approved": false,

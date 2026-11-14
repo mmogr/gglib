@@ -10,9 +10,9 @@
 //! | 2b | Strip unsupported tools | [`super::tools`] | `tools`, capabilities |
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
 //! | 4 | Resolve the sampling hierarchy | [`super::sampling`] | top-level keys |
-//! | 5b | Suppress an unreadable `reasoning_effort` | [`super::effort_gate`] | resolved effort, template caps |
 //! | — | Log the sampling decision | [`super::sampling_log`] | the decision |
-//! | 6 | Constrain dialect tool calls | [`super::constrain`] | `tools`, `tool_choice`, tags |
+//!
+//! Stages 5 and 6 have gone (ADR 0022); their numbers are not reused.
 //!
 //! # The order is load-bearing
 //!
@@ -40,25 +40,6 @@
 //! the difference between measuring the conversation and measuring our own
 //! additions to it.
 //!
-//! **5b after 4.** Stage 5b deletes a `reasoning_effort` the model's observed
-//! template never reads, and the value it has to catch is usually not the
-//! client's. It arrives from the **ladder** — a `:high` profile, a per-model
-//! default, a global setting — which does not exist until stage 4 has folded
-//! it. Placed at 2b beside the tool strip, where the capability shape is
-//! otherwise identical, the gate would delete the client's key and stage 4
-//! would then force-insert gglib's own resolved level straight past it (the
-//! patch is *inserted*, not merged), so the case that matters most would
-//! sail through untouched while the tests still passed on a client-sent
-//! level. The stage runs after 4 for the same reason it takes
-//! `&mut SamplingDecision`: it can only suppress a value once something has
-//! resolved one, and it must correct that decision's own record when it does.
-//! `a_ladder_supplied_effort_is_suppressed_not_just_a_client_one` fails if
-//! this ever moves.
-//!
-//! **6 after 3.** The grammar stage 6 *adds* a top-level key, so it runs
-//! after the measurement for the same reason sampling does: the truncation
-//! budget measures the client's conversation, not our own additions to it.
-//!
 //! # Why the seam is `&mut Value` and not a typed request struct
 //!
 //! The proxy forwards requests from arbitrary external clients — IDE
@@ -81,14 +62,10 @@
 
 use serde_json::Value;
 
-use super::effort_gate::SuppressedEffort;
 use super::measure::ContextBudget;
 use super::sampling::SamplingDecision;
 use super::truncation::{TruncationError, TruncationReport};
-use super::{
-    ModelContext, SamplingLayers, constrain, effort_gate, messages, sampling, sampling_log, tools,
-    truncation,
-};
+use super::{ModelContext, SamplingLayers, messages, sampling, sampling_log, tools, truncation};
 
 /// What the pipeline did, for the caller that has to report or verify it.
 ///
@@ -100,20 +77,6 @@ pub struct PipelineReport {
     pub truncation: TruncationReport,
     /// Stage 4. See [`SamplingDecision`].
     pub sampling: SamplingDecision,
-    /// Stage 5b. `Some` when a resolved `reasoning_effort` was thrown away
-    /// because the model's observed template does not read it.
-    ///
-    /// It lives here rather than on [`SamplingDecision`] because that type is
-    /// *what `resolve_sampling` decided*, and this is what a later stage did
-    /// to it — the same relationship [`truncation`](Self::truncation) has to
-    /// stage 3. The decision is not left lying, though: stage 5b rewrites its
-    /// `resolved` and `sources` in place, so a consumer holding only the
-    /// `SamplingDecision` (the dashboard, the audit) still sees the value gone
-    /// and its provenance reading
-    /// [`SuppressedByTemplate`](crate::domain::ParamSource::SuppressedByTemplate).
-    /// What only this field adds is the level that was dropped and the rung
-    /// that asked for it.
-    pub effort_suppressed: Option<SuppressedEffort>,
 }
 
 /// Apply every request-shaping transform, in order, in place.
@@ -149,31 +112,11 @@ pub fn apply(
         None => TruncationReport::default(),
     };
 
-    let mut sampling = sampling::resolve_sampling(body, ctx, layers);
-
-    // Stage 5b. After the fold, never before it: the level worth catching is
-    // the one gglib itself resolved, and until stage 4 has run there is no
-    // such value to catch. See the ordering rationale in the module docs.
-    let effort_suppressed = effort_gate::suppress_unsupported_effort(body, ctx, &mut sampling);
-
-    // Rendered here, not inside stage 4, so the one line that describes a
-    // request's sampling describes what was *sent*. See `sampling_log`.
+    let sampling = sampling::resolve_sampling(body, ctx, layers);
     sampling_log::log_resolution(&sampling);
-
-    // Stage 6 runs unconditionally, because there is only one kind of trip
-    // through this pipeline: the repair path does not call `apply`, it
-    // mutates the already-resolved body and sends it. It must keep bypassing
-    // this pipeline, because `constrain` fires on `tool_choice: "required"`
-    // for dialect models, installs gglib's own grammar and rewrites
-    // `tool_choice` to `"none"` (llama-server rejects a custom grammar
-    // alongside `tools`), which on a repair would silently convert the
-    // re-issue into a request for no tool call at all. See
-    // `gglib_proxy::repair::repair_body`.
-    constrain::constrain_tool_calls(body, ctx);
     Ok(PipelineReport {
         truncation,
         sampling,
-        effort_suppressed,
     })
 }
 

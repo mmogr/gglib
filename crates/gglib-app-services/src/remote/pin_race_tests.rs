@@ -1,7 +1,6 @@
 //! A `forget` racing the swap that pins a redeemed key, over a real pipe.
 //!
-//! Split from `pin_tests.rs`, whose helpers it shares, to keep that file
-//! under its size budget.
+//! Split from `pin_tests.rs`, whose helpers it shares.
 
 use std::sync::Arc;
 use std::time::Duration;

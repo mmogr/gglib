@@ -16,7 +16,6 @@ use std::sync::Arc;
 use gglib_app_services::types::HfImagePreview;
 use gglib_app_services::{DownloadDeps, DownloadOps};
 use gglib_core::download::format_size;
-use gglib_core::ports::{ToolSupportDetection, ToolSupportDetectionInput, ToolSupportDetectorPort};
 
 use crate::bootstrap::CliContext;
 
@@ -24,20 +23,9 @@ use crate::bootstrap::CliContext;
 /// download manager. `models_directory` is where a companion is looked for;
 /// `None` resolves it as the daemon does when it downloads.
 pub(super) fn listing_ops(ctx: &CliContext, models_directory: Option<PathBuf>) -> DownloadOps {
-    listing_ops_with(ctx, Arc::clone(&ctx.hf_client), models_directory)
-}
-
-/// [`listing_ops`] over the Hub client given: `--list-quants` with a
-/// token talks to the Hub as that token.
-pub(super) fn listing_ops_with(
-    ctx: &CliContext,
-    hf: Arc<dyn gglib_core::ports::huggingface::HfClientPort>,
-    models_directory: Option<PathBuf>,
-) -> DownloadOps {
     DownloadOps::new(DownloadDeps {
         downloads: Arc::clone(&ctx.downloads),
-        hf,
-        tool_detector: Arc::new(NotAsked),
+        hf: Arc::clone(&ctx.hf_client),
         gguf_parser: Arc::clone(&ctx.gguf_parser),
         models_directory,
     })
@@ -96,20 +84,6 @@ pub(super) fn preview_text(preview: &HfImagePreview) -> String {
         );
     }
     text
-}
-
-/// The listing's operations are built with a tool detector, which the
-/// quantization listing never asks.
-struct NotAsked;
-
-impl ToolSupportDetectorPort for NotAsked {
-    fn detect(&self, _input: ToolSupportDetectionInput<'_>) -> ToolSupportDetection {
-        ToolSupportDetection {
-            supports_tool_calling: false,
-            confidence: 0.0,
-            detected_format: None,
-        }
-    }
 }
 
 #[cfg(test)]

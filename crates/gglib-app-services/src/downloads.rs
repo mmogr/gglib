@@ -3,18 +3,22 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use gglib_core::domain::{ModelCapabilities, infer_from_chat_template};
 use gglib_core::download::{DownloadId, QueueSnapshot};
 use gglib_core::paths::resolve_models_dir;
 use gglib_core::ports::huggingface::read_heads;
 use gglib_core::ports::{
-    DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, ToolSupportDetectorPort,
+    DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, HfSearchResult,
 };
 
+use gglib_download::download_pick;
+
 use crate::error::GuiError;
+use crate::hf_count::checked_parameters;
 use crate::hf_image_preview::image_look;
 use crate::hf_quantizations::{listed_pick, quantizations_response};
 use crate::types::{
-    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
+    HfModelSummary, HfPickResponse, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
     QueueDownloadResponse, ToolSupportResponse,
 };
 
@@ -22,7 +26,6 @@ use crate::types::{
 pub struct DownloadDeps {
     pub downloads: Arc<dyn DownloadManagerPort>,
     pub hf: Arc<dyn HfClientPort>,
-    pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
     /// Reads the head of a repository's weights, to know an image model
     /// before it is downloaded.
     pub gguf_parser: Arc<dyn GgufParserPort>,
@@ -64,7 +67,6 @@ fn device_or_ram(device: Option<u64>, ram: impl FnOnce() -> Option<u64>) -> Opti
 pub struct DownloadOps {
     downloads: Arc<dyn DownloadManagerPort>,
     hf_client: Arc<dyn HfClientPort>,
-    tool_detector: Arc<dyn ToolSupportDetectorPort>,
     gguf_parser: Arc<dyn GgufParserPort>,
     models_directory: Option<PathBuf>,
 }
@@ -74,7 +76,6 @@ impl DownloadOps {
         Self {
             downloads: deps.downloads,
             hf_client: deps.hf,
-            tool_detector: deps.tool_detector,
             gguf_parser: deps.gguf_parser,
             models_directory: deps.models_directory,
         }
@@ -198,7 +199,9 @@ impl DownloadOps {
     /// Each variant's role is read from a head of its first file, and the
     /// head of one model's weights for an image model's companions, so a
     /// listing costs a ranged read of `VARIANT_HEAD_BYTES` per variant and
-    /// one of at most `SNIFF_HEAD_BYTES`.
+    /// one of at most `SNIFF_HEAD_BYTES`. The variant a download without a
+    /// quantization takes is marked `picked` when those heads tell it; when
+    /// they cannot, [`Self::get_model_pick`] names it.
     pub async fn get_model_quantizations(
         &self,
         model_id: &str,
@@ -244,29 +247,51 @@ impl DownloadOps {
         Ok(response)
     }
 
-    /// Check if a `HuggingFace` model supports tool/function calling.
+    /// The variant `gglib model download <model_id>` takes when no
+    /// quantization is asked for: the download's own pick
+    /// ([`download_pick`]), against the budget the download picks by, which
+    /// reads the headers it needs as far as the download would. `label` is
+    /// `None` for a repository with no model.
+    ///
+    /// Asked apart from [`Self::get_model_quantizations`], whose heads name
+    /// the pick only when they tell it: this read costs seconds and
+    /// megabytes on a large repository, and a listing shows at once.
+    pub async fn get_model_pick(&self, model_id: &str) -> Result<HfPickResponse, GuiError> {
+        let label = download_pick(
+            Arc::clone(&self.hf_client),
+            Arc::clone(&self.gguf_parser),
+            model_id,
+            download_budget().await,
+        )
+        .await
+        .map_err(|e| GuiError::Internal(format!("Failed to pick a variant: {e}")))?;
+        Ok(HfPickResponse {
+            model_id: model_id.to_owned(),
+            label,
+        })
+    }
+
+    /// Whether a `HuggingFace` model calls tools: core's guess
+    /// ([`infer_from_chat_template`]) from the Hub's chat template and the
+    /// repo id. Import asks the same guess of the file's own template and
+    /// declared name, so the two can differ for a repo named unlike its model.
     pub async fn get_hf_tool_support(
         &self,
         model_id: &str,
     ) -> Result<ToolSupportResponse, GuiError> {
-        use gglib_core::ports::{ModelSource, ToolSupportDetectionInput};
-
-        // Fetch model info from HuggingFace
         let model_info = self
             .hf_client
             .get_model_info(model_id)
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to get model info: {e}")))?;
 
-        // Detect tool support using chat template and tags
-        let detection = self.tool_detector.detect(ToolSupportDetectionInput {
-            model_id: &model_info.model_id,
-            chat_template: model_info.chat_template.as_deref(),
-            tags: &model_info.tags,
-            source: ModelSource::HuggingFace,
-        });
-
-        Ok(ToolSupportResponse::from(detection))
+        let guess = infer_from_chat_template(
+            model_info.chat_template.as_deref(),
+            Some(&model_info.model_id),
+        );
+        Ok(ToolSupportResponse {
+            supports_tool_calls: guess.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS),
+        })
     }
 
     /// Get model summary by exact repo ID (direct API lookup).
@@ -299,7 +324,18 @@ impl DownloadOps {
             )));
         }
 
-        Ok(info.into())
+        let parameters_b = checked_parameters(
+            self.hf_client.as_ref(),
+            self.gguf_parser.as_ref(),
+            model_id,
+            info.parameters_b,
+            &quants,
+        )
+        .await;
+        Ok(HfModelSummary {
+            parameters_b,
+            ..info.into()
+        })
     }
 }
 
@@ -308,11 +344,28 @@ impl DownloadOps {
 ///
 /// The one search every surface runs: the browser's, through
 /// [`DownloadOps::search_hf_models`], and `gglib model search` and `browse`,
-/// which hold the Hub client and no `DownloadOps`.
+/// which hold the Hub client and no `DownloadOps` and print each hit's
+/// variants beside it, read from its files' names ([`search_hf_hits`]).
 pub async fn search_hf_models(
     hf: &dyn HfClientPort,
     request: HfSearchRequest,
 ) -> Result<HfSearchResponse, GuiError> {
+    let response = search_hf_hits(hf, request).await?;
+    Ok(HfSearchResponse {
+        models: response.items.into_iter().map(Into::into).collect(),
+        next_cursor: response.next_cursor,
+        total_count: None,
+    })
+}
+
+/// [`search_hf_models`]' page as the Hub client answers it.
+///
+/// Each hit comes with the paths of the files its answer names, which the
+/// CLI reads its variants from without a listing of its own.
+pub async fn search_hf_hits(
+    hf: &dyn HfClientPort,
+    request: HfSearchRequest,
+) -> Result<HfSearchResult, GuiError> {
     let options = HfSearchOptions {
         query: request.query,
         min_params_b: request.min_params_b,
@@ -324,16 +377,9 @@ pub async fn search_hf_models(
         kind: request.kind,
     };
 
-    let response = hf
-        .search(&options)
+    hf.search(&options)
         .await
-        .map_err(|e| GuiError::Internal(format!("HF search failed: {e}")))?;
-
-    Ok(HfSearchResponse {
-        models: response.items.into_iter().map(Into::into).collect(),
-        next_cursor: response.next_cursor,
-        total_count: None,
-    })
+        .map_err(|e| GuiError::Internal(format!("HF search failed: {e}")))
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-//! Writing time on a paced stream, through the real normaliser.
+//! Writing time on a paced stream.
 //!
 //! The clock is injected and each raw event advances it before it arrives,
 //! so the stream is paced exactly: a prefill, then one token every 40 ms.
@@ -7,10 +7,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use futures_util::StreamExt as _;
-use gglib_core::domain::DialectSpec;
 use gglib_core::domain::agent::LlmStreamEvent;
 
-use super::super::stream::{EventStream, normalize_timed};
+use super::super::stream::EventStream;
 use super::*;
 
 const PREFILL_MS: u64 = 500;
@@ -38,34 +37,13 @@ fn text(content: &str) -> LlmStreamEvent {
     }
 }
 
-/// A turn that only calls a tool, in qwen-xml markup: 24 tokens, the first
-/// after the prefill, then one every 40 ms; then its end and its usage.
+/// A turn that only calls a tool, as llama-server streams one it parsed:
+/// the call's name, then 22 argument tokens, the first after the prefill,
+/// then one every 40 ms; then an empty delta, its end and its usage.
 fn tool_call_turn() -> Vec<(u64, LlmStreamEvent)> {
-    let tokens = [
-        "<tool_call>",
-        "\n",
-        "{\"",
-        "name",
-        "\":",
-        " \"",
-        "read",
-        "_file",
-        "\",",
-        " \"",
-        "arguments",
-        "\":",
-        " {\"",
-        "path",
-        "\":",
-        " \"",
-        "a",
-        ".",
-        "rs",
-        "\"}",
-        "}",
-        "\n",
-        "</tool_call>",
-        "",
+    let arguments = [
+        "{\"", "path", "\":", " \"", "src", "/", "lib", ".", "rs", "\",", " \"", "max", "_lines",
+        "\":", " ", "4", "2", ",", " \"", "x", "\":", "1}",
     ];
     let mut events = vec![(
         0,
@@ -76,12 +54,29 @@ fn tool_call_turn() -> Vec<(u64, LlmStreamEvent)> {
             time_ms: 0,
         },
     )];
-    // The last token is the empty delta a llama-server ends with: no text,
-    // so not counted as written.
-    for (i, token) in tokens.iter().enumerate() {
-        let after = if i == 0 { PREFILL_MS } else { STEP_MS };
-        events.push((after, text(token)));
+    events.push((
+        PREFILL_MS,
+        LlmStreamEvent::ToolCallDelta {
+            index: 0,
+            id: Some("call_1".to_owned()),
+            name: Some("read_file".to_owned()),
+            arguments: Some(String::new()),
+        },
+    ));
+    for token in arguments {
+        events.push((
+            STEP_MS,
+            LlmStreamEvent::ToolCallDelta {
+                index: 0,
+                id: None,
+                name: None,
+                arguments: Some(token.to_owned()),
+            },
+        ));
     }
+    // The empty delta a llama-server ends with: no text, so not counted as
+    // written.
+    events.push((STEP_MS, text("")));
     events.push((
         1,
         LlmStreamEvent::Done {
@@ -100,27 +95,17 @@ fn tool_call_turn() -> Vec<(u64, LlmStreamEvent)> {
     events
 }
 
-async fn normalized(events: Vec<(u64, LlmStreamEvent)>) -> Vec<LlmStreamEvent> {
+async fn timed(events: Vec<(u64, LlmStreamEvent)>) -> Vec<LlmStreamEvent> {
     let now = Arc::new(AtomicU64::new(0));
-    let dialect = DialectSpec::qwen_xml();
-    let stream = normalize_timed(paced(events, &now), Some(&dialect), clock(&now));
+    let stream = time_writing(paced(events, &now), clock(&now));
     stream.map(|item| item.expect("no error")).collect().await
 }
 
-/// The parser releases the whole call as one delta at the close tag, yet
-/// the writing time is the 22 steps between the first token and the last:
-/// the rate it gives is the model's, not one decode step's.
+/// A turn that only calls a tool is timed over its 22 steps, from the first
+/// token to the last: the rate it gives is the model's.
 #[tokio::test]
-async fn a_held_back_tool_call_is_timed_from_its_first_token_to_its_last() {
-    let events = normalized(tool_call_turn()).await;
-    let calls = events
-        .iter()
-        .filter(|e| matches!(e, LlmStreamEvent::ToolCallDelta { name: Some(_), .. }))
-        .count();
-    assert_eq!(
-        calls, 1,
-        "the markup was held back and released as one call"
-    );
+async fn a_tool_call_is_timed_from_its_first_token_to_its_last() {
+    let events = timed(tool_call_turn()).await;
 
     let writing: Vec<u64> = events
         .iter()
@@ -146,7 +131,7 @@ async fn a_held_back_tool_call_is_timed_from_its_first_token_to_its_last() {
 
 #[tokio::test]
 async fn a_single_token_gives_no_writing_time_rather_than_a_guess() {
-    let events = normalized(vec![
+    let events = timed(vec![
         (PREFILL_MS, text("Yes")),
         (
             1,

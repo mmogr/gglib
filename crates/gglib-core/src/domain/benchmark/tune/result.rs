@@ -57,8 +57,8 @@ pub struct GeneratedOutput {
     /// llama-server was launched with `--reasoning-format deepseek` and so
     /// splits thinking into its own `reasoning_content` SSE field. Without that
     /// flag a reasoning model's thinking arrives inline as `<think>…</think>`,
-    /// the normalizer strips the tags, and every one of those characters is
-    /// counted as [`Self::answer_chars`] instead.
+    /// and every one of those characters is counted as [`Self::answer_chars`]
+    /// instead.
     ///
     /// So `reasoning_chars: 0` beside a large `answer_chars` is **ambiguous**:
     /// it means either the model did not think, or it thought and nobody could
@@ -89,10 +89,10 @@ pub struct GeneratedOutput {
     pub llm_calls: usize,
     /// The largest single batch of tool calls any one turn executed.
     ///
-    /// The fingerprint of a constrained-decoding runaway. gglib's generated
-    /// grammar admits `root ::= sp call (sp call)* sp` — unbounded repetition —
-    /// so a model that never emits an end-of-generation token can keep producing
-    /// syntactically valid calls until it hits a token cap or the context limit.
+    /// The fingerprint of a constrained-decoding runaway. A tool-call grammar
+    /// that admits unbounded repetition lets a model that never emits an
+    /// end-of-generation token keep producing syntactically valid calls until
+    /// it hits a token cap or the context limit.
     /// Scoring cannot reveal this: extra unrequested calls cost nothing, so a
     /// batch of hundreds containing the right call still scores `1.0` and the
     /// task still reads as passed.

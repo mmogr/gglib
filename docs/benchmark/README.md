@@ -21,6 +21,10 @@ repeats and the sensitivity check that are dropped, and those are what make the
 full suite slow. Nothing about the arms themselves changes, which is the point:
 a task isolated this way behaves as it did in the full run.
 
+The gglib arm no longer adds a tool-call grammar or parses tool-call markup of
+its own. A raw-versus-gglib delta from a report made before that change is not
+comparable with one made after it.
+
 ## Which seed
 
 `--seeds ""` names no seed. It is the cheapest form and the least faithful one:
@@ -90,8 +94,7 @@ every turn through a real proxy, started in-process in front of the model the
 eval already holds, just before the arm, and stopped just after it. Its
 baseline, raw (auto), goes straight to llama-server and is the raw arm with
 one difference, `tool_choice`. The proxy judges every call whose schema it
-can judge on an `"auto"` turn, but on a `"required"` turn only when gglib's
-own grammar constrained it, which it does for a dialect model. So both open
+can judge on an `"auto"` turn, and none on a `"required"` turn. So both open
 with `"auto"`, where raw and gglib open with `"required"`, and the two are
 compared with each other and not with raw and gglib.
 

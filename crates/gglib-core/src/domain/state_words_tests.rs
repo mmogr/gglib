@@ -60,12 +60,10 @@ fn a_tool_server_that_errored_is_failed_and_one_gglib_cannot_run_is_not_supporte
         of(McpServerStatus::Error("spawn failed".into())),
         McpState::Failed
     );
-    assert_eq!(of(McpServerStatus::Unsupported), McpState::Unsupported);
     assert_eq!(McpState::Running.word(), "Running");
     assert_eq!(McpState::Starting.word(), "Starting");
     assert_eq!(McpState::Stopped.word(), "Stopped");
     assert_eq!(McpState::Failed.to_string(), "Failed");
-    assert_eq!(McpState::Unsupported.word(), "Not supported yet");
 }
 
 #[test]

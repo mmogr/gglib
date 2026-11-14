@@ -26,8 +26,7 @@
 //!
 //! Split out of `daemon_client/mod.rs`, which owns the *connection* — finding
 //! the daemon, launching it, checking its identity. That is a different
-//! concern from the shapes travelling over it, and the file sat on the 300 LOC
-//! ratchet with new fields due.
+//! concern from the shapes travelling over it.
 
 use serde::{Deserialize, Serialize};
 
@@ -170,7 +169,7 @@ pub(crate) struct StartPinnedBody {
 pub(crate) struct QueueDownloadBody {
     pub model_id: String,
     /// `None` leaves the quantization choice to the daemon.
-    pub quant: Option<String>,
+    pub quantization: Option<String>,
 }
 
 /// `POST /api/models/{id}/repair` request body.

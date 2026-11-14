@@ -137,7 +137,7 @@ mod tests {
         let new_model = NewModel::new(
             "Test Model".to_string(),
             PathBuf::from("/tmp/test.gguf"),
-            7.0,
+            Some(7.0),
             Utc::now(),
         );
 

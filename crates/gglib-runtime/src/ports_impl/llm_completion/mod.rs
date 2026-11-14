@@ -67,9 +67,8 @@ pub struct LlmCompletionAdapter {
     /// name it — see [`Door`]. Never logged: the adapter derives no `Debug`,
     /// and the door's own `Debug` leaves the key out.
     ///
-    /// A send through a door is *proxied*: the endpoint shapes it and
-    /// parses the model's dialect, so this side does neither
-    /// ([`Self::shaped_body`], [`Self::send`]).
+    /// A send through a door is *proxied*: the endpoint shapes it, so this
+    /// side does not ([`Self::shaped_body`]).
     door: Option<Door>,
     /// Where the images a message names by id are read from (`images.rs`).
     /// `None` for a caller whose messages carry none.
@@ -83,15 +82,13 @@ pub struct LlmCompletionAdapter {
     /// over (ADR 0022).
     ///
     /// A value a stored layer supplied must never be handed in here: it would
-    /// reach the pipeline as a person's choice, which outranks every layer
-    /// and which the agentic temperature ceiling never lowers.
+    /// reach the pipeline as a person's choice, which outranks every layer.
     sampling: Option<InferenceConfig>,
     /// The stored layers beneath [`Self::sampling`]: the profile the caller
-    /// selected and the settings' global defaults, and with them whether a
-    /// turn with tools gets the agentic temperature ceiling. Handed to
+    /// selected and the settings' global defaults. Handed to
     /// [`request_pipeline::apply()`] unfolded, so the ladder is folded there
     /// and nowhere before it. A caller that hands over none (the default)
-    /// has neither layer, and the ceiling on.
+    /// has neither layer.
     layers: SamplingLayers,
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
@@ -102,9 +99,8 @@ pub struct LlmCompletionAdapter {
     stream_idle_timeout: std::time::Duration,
     /// The resolved per-model facts, from
     /// [`gglib_core::request_pipeline::resolve()`].  Drives request shaping
-    /// (capabilities, inference defaults) and response-parser selection
-    /// (`format:*` tags).  [`ModelContext::passthrough`] — the default —
-    /// makes every transform a no-op and selects the identity parser.
+    /// (capabilities, inference defaults).  [`ModelContext::passthrough`] —
+    /// the default — makes every transform a no-op.
     model_context: ModelContext,
     /// Optional destination for this request's token-usage figures.
     ///
@@ -135,8 +131,8 @@ pub struct LlmCompletionAdapter {
     /// Skip the request-shaping pipeline entirely and send the bare body.
     ///
     /// The control arm of an A/B evaluation: no sampling resolution (the
-    /// upstream's own defaults apply), no capability shaping, no truncation,
-    /// no grammar. Off everywhere else — this exists so "bare llama-server"
+    /// upstream's own defaults apply), no capability shaping, no truncation.
+    /// Off everywhere else — this exists so "bare llama-server"
     /// is measurable against "through the gglib pipeline" on identical
     /// requests, not as a general escape hatch.
     raw_passthrough: bool,
@@ -189,9 +185,8 @@ impl LlmCompletionAdapter {
     /// (`tool_choice: "required"`) where it would leave the choice to the
     /// model: what the loop asks of a run's first reply when its caller
     /// demanded a tool ([`LlmCompletionPort::chat_stream_requiring_call`]).
-    /// It is written before the pipeline runs, which reads it as it reads a
-    /// client's: a dialect model gets a grammar for the call, and any other
-    /// the server's own.
+    /// It is written before the pipeline runs, which passes it on as it does a
+    /// client's: the server holds the reply to a call with its own grammar.
     ///
     /// # Errors
     ///
@@ -230,7 +225,7 @@ impl LlmCompletionAdapter {
 
         // Through a door the endpoint shapes the request, as it shapes any
         // client's: it folds the sampling ladder over what the body names,
-        // trims to the context it serves, and writes the dialect's grammar.
+        // and trims to the context it serves.
         // This side sends what a client sends, and the turn's limit.
         // Only this machine's endpoint is given a limit: a paired machine's
         // proxy resolves its own settings, and a limit from here would outrank
@@ -247,8 +242,7 @@ impl LlmCompletionAdapter {
         // has already written the caller's own parameters into the body, which
         // is exactly where an external client's would be, so `apply` reads
         // them back as the top layer and resolves the caller's stored layers
-        // (`self.layers`) and the model's own beneath them. Whether a turn
-        // with tools is capped is those layers' to say.
+        // (`self.layers`) and the model's own beneath them.
         //
         // `trust_client_sampling: true` unconditionally: `Settings.trust_client_sampling`
         // gates an *external* client's request body against a boilerplate value it
@@ -354,20 +348,9 @@ impl LlmCompletionAdapter {
         )
         .await?;
 
-        // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
-        // Through a door the endpoint has already parsed the model's dialect
-        // into `OpenAI` tool calls.
-        let dialect = self
-            .model_context
-            .dialect
-            .as_ref()
-            .filter(|_| self.door.is_none());
-        let events = stream::normalized_event_stream(
-            response,
-            dialect,
-            self.usage_sink.clone(),
-            self.stream_idle_timeout,
-        );
+        // Decode, time, and (when a sink is set) tap prompt-cache usage.
+        let events =
+            stream::event_stream(response, self.usage_sink.clone(), self.stream_idle_timeout);
         Ok(Box::pin(events))
     }
 }

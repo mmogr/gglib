@@ -1,5 +1,5 @@
 //! Which model a turn on one of this machine's chats runs on, and the port
-//! it is served on: found running, or loaded as `/v1/models/{name}/load`
+//! it is served on: found running, or loaded as `/v1/gglib/models/{name}/load`
 //! loads it.
 //!
 //! A chat that stored its model ([`ConversationSettings::model`]) names it
@@ -178,7 +178,7 @@ pub(super) struct Loaded {
 }
 
 /// The port `model` is served on, loading it first when it is not
-/// running, as `/v1/models/{name}/load` does. A running server is matched by
+/// running, as `/v1/gglib/models/{name}/load` does. A running server is matched by
 /// the id `model` resolves to, and a load is asked for by that id, so a
 /// second model of the same name is neither found nor loaded in its place.
 /// `loading` is told, with the catalogue's name for the model, before a

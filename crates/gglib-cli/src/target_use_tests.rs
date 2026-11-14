@@ -1,6 +1,6 @@
 //! Tests for [`super`]: where `proxy dashboard` and `proxy cache-clear`
-//! connect — the port flag, the stored `proxy_port` behind it, and what
-//! `--remote` refuses.
+//! connect — the port flag, the stored `proxy_port` behind it, and the
+//! paired machine's proxy under `--remote`.
 
 use clap::Parser as _;
 use gglib_core::Settings;
@@ -105,40 +105,12 @@ async fn with_nothing_stored_a_proxy_client_connects_to_the_default_port() {
     }
 }
 
-/// `--remote` refuses a port because one was given, not because of its
-/// value: the default port typed out names a proxy on this machine as surely
-/// as any other.
+/// With no flag typed there is nothing to refuse (the parse refuses a typed
+/// one, `remote_flag_tests`), and a key from `GGLIB_API_KEY` is not one: the
+/// command goes on to the paired machine, and stops here only because no
+/// daemon answers.
 #[tokio::test]
-async fn a_port_given_beside_remote_is_refused_whatever_its_value() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = context(&dir, None).await;
-    let default_port = DEFAULT_PROXY_PORT.to_string();
-    // A port nothing listens on, standing in for the daemon's: if the refusal
-    // ever stops firing, the command goes on to probe a daemon, and it must
-    // not be one running on this machine.
-    let nobody = std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|listener| listener.local_addr())
-        .expect("a loopback port")
-        .port();
-
-    for client in CLIENTS {
-        let (host, port, _) = flags(client, &["--port", &default_port]);
-        let err = STAND_IN_PORT
-            .scope(
-                nobody,
-                Target::Remote.proxy_endpoint(&ctx, host, port, None),
-            )
-            .await
-            .expect_err("a port beside --remote");
-        let text = err.to_string();
-        assert!(text.contains("--port"), "{client}: {text}");
-    }
-}
-
-/// With no flag given there is nothing to refuse: the command goes on to the
-/// paired machine, and stops here only because no daemon answers.
-#[tokio::test]
-async fn remote_with_no_port_flag_is_not_refused_for_one() {
+async fn remote_with_no_flag_typed_is_not_refused_for_one() {
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = context(&dir, Some(9000)).await;
     // A port nothing listens on, standing in for the daemon's, so the probe
@@ -153,12 +125,12 @@ async fn remote_with_no_port_flag_is_not_refused_for_one() {
         let err = STAND_IN_PORT
             .scope(
                 nobody,
-                Target::Remote.proxy_endpoint(&ctx, host, port, None),
+                Target::Remote.proxy_endpoint(&ctx, host, port, Some("from-env".to_owned())),
             )
             .await
             .expect_err("no daemon answers");
         let text = err.to_string();
-        assert!(!text.contains("--port"), "{client}: {text}");
+        assert!(!text.contains("drop"), "{client}: {text}");
         assert!(text.contains("gglib remote join"), "{client}: {text}");
     }
 }

@@ -8,9 +8,9 @@ use axum::http::Uri;
 
 use super::PutQuery;
 
-/// `PUT /v1/runs/p1` with `query`, read as the route reads it.
+/// `PUT /v1/gglib/runs/p1` with `query`, read as the route reads it.
 fn read(query: &str) -> Result<PutQuery, String> {
-    let uri: Uri = format!("/v1/runs/p1?{query}").parse().unwrap();
+    let uri: Uri = format!("/v1/gglib/runs/p1?{query}").parse().unwrap();
     Query::<PutQuery>::try_from_uri(&uri)
         .map(|Query(query)| query)
         .map_err(|e| e.body_text())

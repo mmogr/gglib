@@ -73,7 +73,7 @@ async fn a_chat_names_its_model_when_the_catalogue_has_it() {
     let model = gglib_core::domain::NewModel::new(
         "qwen3-8b".to_owned(),
         std::path::PathBuf::from("/models/qwen.gguf"),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     let model_id = core.models().add(model).await.unwrap().id;
@@ -104,7 +104,7 @@ async fn a_chat_saved_with_its_model_in_its_settings_is_listed_with_it() {
     let model = gglib_core::domain::NewModel::new(
         "qwen3-8b".to_owned(),
         std::path::PathBuf::from("/models/qwen.gguf"),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     let id = core.models().add(model).await.unwrap().id;

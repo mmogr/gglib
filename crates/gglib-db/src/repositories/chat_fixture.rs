@@ -40,7 +40,7 @@ impl Chats {
     /// theirs.
     pub(super) async fn chat(&self, title: &str, rows: &[(MessageRole, &str)]) -> (i64, Vec<i64>) {
         let settings = ConversationSettings {
-            temperature: Some(0.2),
+            max_tokens: Some(200),
             ..ConversationSettings::default()
         };
         let id = self

@@ -301,7 +301,7 @@ async fn a_held_link_is_kept_when_the_model_is_downloaded_again() {
     let mut held = NewModel::new(
         "flux".to_owned(),
         canonical(&download.primary_path),
-        12.0,
+        Some(12.0),
         Utc::now(),
     );
     held.image_family = Some(ImageFamily::Flux1);

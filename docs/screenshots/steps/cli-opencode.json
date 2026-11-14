@@ -18,7 +18,7 @@
   {"keys": "\r"},
   {"sleep": 1},
   {"mark": "speed:4"},
-  {"wait": "dialect", "pane": "gglib", "timeout": 300},
+  {"wait": "sampling", "pane": "gglib", "timeout": 300},
   {"sleep": 0.5},
   {"mark": "speed:1"},
   {"mark": "chapter:gglib loads the model, flags and all"},

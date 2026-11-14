@@ -5,13 +5,13 @@ import type { ImageFamily } from "./ImageFamily";
  * What a retag pass changed. Mirrors `gglib_core::services::RetagDiff`,
  * with `changed` folded in so the wire needs no method call.
  */
-export type RetagResponse = { changed: boolean, added: Array<string>, removed: Array<string>, specChanged: boolean, 
+export type RetagResponse = { changed: boolean, added: Array<string>, removed: Array<string>, 
 /**
  * The image family read from the file for a model that had none.
  */
 familyFound: ImageFamily | null, 
 /**
- * Whether the type or the bits per weight the model lacked were read
- * from its file's header.
+ * Whether the type, the bits per weight or the parameter count the model
+ * lacked were read from its file's header.
  */
 factsRead: boolean, };

@@ -163,7 +163,7 @@ describe('the Load with options sheet', () => {
   it('shows what each field would otherwise use, from the explanation', async () => {
     const fit = chatPlan().fit!;
     explain.answer = launchExplanation(
-      samplingExplanation({ resolved: resolvedConfig({ topK: 64 }), sources: [{ param: 'topK', kind: 'layer', layer: 'modelUserSet' }] }),
+      samplingExplanation({ resolved: resolvedConfig({ topK: 64 }), sources: [{ param: 'topK', kind: 'layer', layer: 'modelUserSet', label: 'per-model defaults (user-set)' }] }),
       chatPlan({ fit: { ...fit, servesAt: 8192 } }),
     );
     renderInspector();
@@ -327,7 +327,7 @@ describe('the Load with options sheet', () => {
   /** An image model, its detail linking `vae`; `missing` names parts the library says are missing. */
   async function openImageSheet(missing: ('clip_l' | 't5xxl')[]) {
     transport.getModelDetail.mockResolvedValue({ id: 4, tags: [], components: [{ role: 'vae', path: '/models/ae.safetensors', present: true }] });
-    explain.answer = launchExplanation(samplingExplanation(), { program: 'sd-server', args: [], narration: { model_name: 'flux', quantization: null, weights_bytes: 1, decisions: [] }, fit: null });
+    explain.answer = launchExplanation(samplingExplanation(), { program: 'sd-server', args: [], narration: { model_name: 'flux', quantization: null, weights_bytes: 1, decisions: [], fit: null }, fit: null });
     renderInspector(guiModel({ id: 4, name: 'flux-schnell', imageFamily: 'flux1', missingComponents: missing }));
     await waitFor(() => expect(transport.getModelDetail).toHaveBeenCalled());
     const opened = await openSheet();

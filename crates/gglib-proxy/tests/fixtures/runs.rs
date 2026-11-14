@@ -1,4 +1,4 @@
-//! A stand-in for the daemon's runs, for the proxy's `/v1/runs` tests.
+//! A stand-in for the daemon's runs, for the proxy's `/v1/gglib/runs` tests.
 //!
 //! Records the scope of every call, so a test can say who the proxy took the
 //! caller for, and answers from a script: an error to refuse with, whether
@@ -150,11 +150,11 @@ pub(crate) fn routes(base: &str) -> Vec<reqwest::RequestBuilder> {
     let client = reqwest::Client::new();
     vec![
         client
-            .put(format!("{base}/v1/runs/r1"))
+            .put(format!("{base}/v1/gglib/runs/r1"))
             .json(&serde_json::json!({})),
-        client.get(format!("{base}/v1/runs")),
-        client.get(format!("{base}/v1/runs/r1")),
-        client.get(format!("{base}/v1/runs/r1/events")),
-        client.post(format!("{base}/v1/runs/r1/cancel")),
+        client.get(format!("{base}/v1/gglib/runs")),
+        client.get(format!("{base}/v1/gglib/runs/r1")),
+        client.get(format!("{base}/v1/gglib/runs/r1/events")),
+        client.post(format!("{base}/v1/gglib/runs/r1/cancel")),
     ]
 }

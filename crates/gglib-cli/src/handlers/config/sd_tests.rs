@@ -4,7 +4,6 @@
 //! loopback port in the daemon's place; the rest read values.
 
 use super::*;
-use crate::bootstrap::test_context;
 use crate::daemon_client::handle_tests::{answering, daemon_health, nobody};
 use crate::daemon_client::library_changes::tests::{TOKEN, beside};
 use crate::daemon_client::paths;
@@ -183,8 +182,6 @@ async fn an_uninstall_is_refused_while_the_daemon_runs_an_image_model() {
     assert!(binary.starts_with(root), "{}", binary.display());
     std::fs::create_dir_all(binary.parent().expect("a bin dir")).expect("created");
     std::fs::write(&binary, b"#!/bin/sh\n").expect("written");
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = test_context(dir.path()).await;
     let listing = servers(&[
         ("qwen", RuntimeKind::Llama),
         ("flux", RuntimeKind::StableDiffusion),
@@ -194,7 +191,7 @@ async fn an_uninstall_is_refused_while_the_daemon_runs_an_image_model() {
     let refused = beside(
         port,
         Some(TOKEN),
-        engine::uninstall(&ctx, RuntimeKind::StableDiffusion, true),
+        engine::uninstall(RuntimeKind::StableDiffusion, true),
     )
     .await;
 
@@ -221,8 +218,7 @@ async fn an_uninstall_is_refused_while_the_daemon_runs_an_image_model() {
 /// and the one on the port is asked nothing even while it draws.
 #[tokio::test]
 async fn nothing_is_drawing_without_this_roots_daemon_or_with_only_chat_models() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = test_context(dir.path()).await;
+    gglib_core::paths::isolate_data_root();
     let another_program = r#"{"service":"something-else"}"#.to_owned();
     let drawing = servers(&[("flux", RuntimeKind::StableDiffusion)]);
     let (elsewhere, asked_elsewhere) = answering(daemon_health(), drawing);
@@ -244,7 +240,7 @@ async fn nothing_is_drawing_without_this_roots_daemon_or_with_only_chat_models()
         let drawing = beside(
             port,
             token,
-            engine::serving_on_the_daemon(&ctx, RuntimeKind::StableDiffusion),
+            engine::serving_on_the_daemon(RuntimeKind::StableDiffusion),
         )
         .await
         .expect("an answer");

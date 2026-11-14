@@ -1,8 +1,7 @@
 //! Tests for the model-key backfill: a row stored under a spelling of its
 //! path that is not the canonical one is re-keyed and repaired at boot.
 //!
-//! Split from `setup_tests.rs` by subject — the two files together are 399
-//! lines, over the 300 a new file may be. Declared as `mod backfill_tests`,
+//! Split from `setup_tests.rs` by subject. Declared as `mod backfill_tests`,
 //! so these two tests moved from `setup::tests::` to
 //! `setup::backfill_tests::`.
 
@@ -60,7 +59,9 @@ async fn backfill_rekeys_a_row_stored_under_a_non_canonical_spelling() {
     .await
     .unwrap();
 
-    backfill_local_model_keys(&pool).await.unwrap();
+    backfill_local_model_keys(&mut pool.acquire().await.unwrap())
+        .await
+        .unwrap();
 
     let key: String = sqlx::query_scalar("SELECT model_key FROM models WHERE name = 'Legacy'")
         .fetch_one(&pool)
@@ -75,7 +76,9 @@ async fn backfill_rekeys_a_row_stored_under_a_non_canonical_spelling() {
     assert_ne!(key, legacy_key, "the key must actually have moved");
 
     // Idempotent: a second pass is a no-op.
-    backfill_local_model_keys(&pool).await.unwrap();
+    backfill_local_model_keys(&mut pool.acquire().await.unwrap())
+        .await
+        .unwrap();
     let again: String = sqlx::query_scalar("SELECT model_key FROM models WHERE name = 'Legacy'")
         .fetch_one(&pool)
         .await
@@ -128,7 +131,9 @@ async fn backfill_repairs_a_row_whose_stored_path_is_not_canonical() {
     .await
     .unwrap();
 
-    backfill_local_model_keys(&pool).await.unwrap();
+    backfill_local_model_keys(&mut pool.acquire().await.unwrap())
+        .await
+        .unwrap();
 
     let (stored_path, stored_key): (String, String) =
         sqlx::query_as("SELECT file_path, model_key FROM models WHERE name = 'Patched'")

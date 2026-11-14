@@ -65,6 +65,7 @@ impl HfClientPort for MockHfClient {
             architecture: None,
             context_length: None,
             tags: vec![],
+            file_paths: Vec::new(),
         })
     }
     /// No head is held: a listing that reads one to know an image model

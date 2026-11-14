@@ -49,7 +49,7 @@ describe('proxyDashboard credentials', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     unsubscribe();
 
-    expect(fetchMock.mock.calls[0][0]).toBe('http://127.0.0.1:8080/v1/proxy/status/stream');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://127.0.0.1:8080/v1/gglib/proxy/status/stream');
     expect(headersOf().get('Authorization')).toBe('Bearer secret123');
   });
 

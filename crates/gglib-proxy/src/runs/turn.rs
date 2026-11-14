@@ -1,4 +1,4 @@
-//! `PUT /v1/runs/{id}?kind=agent`: a paired device adds a turn to one of the
+//! `PUT /v1/gglib/runs/{id}?kind=agent`: a paired device adds a turn to one of the
 //! hub's chats, and the hub runs the reply as an agent run in the device's
 //! scope, saved to the chat.
 //!
@@ -28,7 +28,8 @@ use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::{RunScope, TurnRefused};
 use serde_json::Value;
 
-use super::handlers::{Answer, error, invalid, unavailable};
+use super::handlers::{Answer, unavailable};
+use crate::refusal::{error, invalid};
 use crate::server::AppState;
 
 /// A turn from anything but a named device.
@@ -71,7 +72,7 @@ pub(super) async fn put(state: &AppState, scope: RunScope, id: &str, body: Value
     started.map(made).map_err(refused)
 }
 
-/// `PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat the
+/// `PUT /v1/gglib/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat the
 /// device keeps itself, run through the agent loop with the tools of the
 /// MCP servers open to paired devices whose ids `servers` holds, and the image
 /// tool with `draw`. With `tools=none` (no server), none of those servers'

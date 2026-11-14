@@ -15,6 +15,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ChatMessage, McpTool } from '../../../../src/services/transport';
+import { CAPABILITY_FLAGS } from '../../../../src/readings/capabilityFlags';
 import {
   agentRun,
   chatTransport,
@@ -103,7 +104,7 @@ describe('ChatPlace, the composer', () => {
 
   it('has one [+] menu: Add image…, Use a folder…, Draw a picture and Tools, each greyed with its reason where it cannot be used', async () => {
     const user = userEvent.setup();
-    (transport.current as { getModel: () => Promise<unknown> }).getModel = async () => ({ quantization: 'Q8_0', imageInput: false });
+    (transport.current as { getModel: () => Promise<unknown> }).getModel = async () => ({ quantization: 'Q8_0', imageInput: false, capabilities: CAPABILITY_FLAGS.supportsToolCalls });
     renderLocal();
     await screen.findByText('It restarts the job whenever it exits.');
     await user.click(plusButton());
@@ -128,10 +129,7 @@ describe('ChatPlace, the composer', () => {
 
   it('greys Use a folder… for a model that cannot call tools, and Tools ▸ says it cannot', async () => {
     const user = userEvent.setup();
-    (transport.current as { getServerToolSupport: () => Promise<unknown> }).getServerToolSupport = async () => ({
-      supports_tool_calls: false,
-      detected_format: null,
-    });
+    (transport.current as { getModel: () => Promise<unknown> }).getModel = async () => ({ quantization: 'Q8_0', capabilities: 0 });
     await syncWith([tool('get_current_time')]);
     renderLocal();
     await screen.findByText('It restarts the job whenever it exits.');

@@ -20,7 +20,7 @@ use crate as gglib_core;
 /// - CLI: `gglib model inspect` (human-readable or `--json`)
 /// - Axum: `GET /api/models/:id/detail`
 /// - GUI frontend: model detail panel
-/// - Proxy: `GET /v1/models/{name}/detail`, inside a [`ModelLookup`], with
+/// - Proxy: `GET /v1/gglib/models/{name}/detail`, inside a [`ModelLookup`], with
 ///   [`Self::file_path`] and [`Self::port`] left out
 ///
 /// # Not a superset of `GuiModel`
@@ -65,8 +65,10 @@ pub struct ModelDetailDto {
     /// recipe's order. Empty for a model that chats.
     #[serde(default)]
     pub missing_components: Vec<ComponentRole>,
-    /// Parameter count in billions.
-    pub param_count_b: f64,
+    /// Parameter count in billions, when it is known.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub param_count_b: Option<f64>,
     /// Model architecture (e.g. `"llama"`, `"mistral"`).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -159,9 +161,8 @@ pub struct ModelDetailDto {
     /// A `bool` would collapse `unknown` into `false`, and a client would then
     /// grey out the reasoning control on every unlaunched model — the
     /// unknown-gates mistake ADR 0007 decision 3 forbids the server to make,
-    /// reproduced one layer out. The server's own suppression acts only on
-    /// [`Support::No`]; a surface should offer the control on `yes` and
-    /// `unknown` alike, and explain itself on `no`.
+    /// reproduced one layer out. A surface should offer the control on `yes`
+    /// and `unknown` alike, and explain itself on `no`.
     ///
     /// # Why the one field and not the whole caps object
     ///
@@ -175,7 +176,6 @@ pub struct ModelDetailDto {
     /// should get its own endpoint rather than a `serde` alias on this one.
     ///
     /// [`Support`]: gglib_core::domain::Support
-    /// [`Support::No`]: gglib_core::domain::Support::No
     #[serde(default)]
     pub reasoning_effort_support: gglib_core::domain::Support,
     // ── Timestamps ────────────────────────────────────────────────────────────
@@ -284,7 +284,7 @@ impl ComponentLinkDto {
     }
 }
 
-/// One model as `GET /v1/models/{name}/detail` answers it: what the
+/// One model as `GET /v1/gglib/models/{name}/detail` answers it: what the
 /// identifier resolved to, and the profile it named.
 ///
 /// The identifier is resolved as a chat request's is — catalogue id first,

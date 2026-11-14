@@ -8,7 +8,7 @@ use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
 use gglib_core::secret::held;
 use gglib_core::{
     McpEnvEntry, McpLifecycle, McpRepositoryError, McpServer, McpServerRepository, McpServerStatus,
-    McpServerType, McpServiceError, McpTool, McpToolResult, NewMcpServer,
+    McpServiceError, McpTool, McpToolResult, NewMcpServer,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -52,21 +52,6 @@ impl McpService {
         }
     }
 
-    /// Refuse a kind of server gglib cannot run: an SSE one, for which it has
-    /// no client yet.
-    ///
-    /// Every caller is answered from here. Adding a server, changing one and
-    /// running one all ask, as do the start-up passes and the listing, which
-    /// leave such a server alone instead of failing on it. A stored one is
-    /// still read and removed: a database written while SSE servers were
-    /// accepted can hold some.
-    pub(crate) fn refuse_unsupported(server_type: McpServerType) -> Result<(), McpServiceError> {
-        match server_type {
-            McpServerType::Stdio => Ok(()),
-            McpServerType::Sse => Err(McpServiceError::SseNotSupported),
-        }
-    }
-
     /// Refuse a variable whose value is blank ([`held`]): a blank is no
     /// secret, and storing one would delete the value an emptied field stood
     /// for (ADR 0027).
@@ -82,14 +67,6 @@ impl McpService {
         Ok(())
     }
 
-    /// The stored servers of a kind gglib can run: the ones a start-up pass
-    /// may start.
-    async fn runnable_servers(&self) -> Result<Vec<McpServer>, McpServiceError> {
-        let mut servers = self.repository.list().await?;
-        servers.retain(|server| Self::refuse_unsupported(server.server_type).is_ok());
-        Ok(servers)
-    }
-
     /// Initialize the MCP service: validates all servers and starts `Eager` ones.
     ///
     /// `Lazy` servers start on first tool use (see `ensure_started_for_call`).
@@ -100,7 +77,7 @@ impl McpService {
         self.validate_all_servers().await?;
 
         // Start only Eager servers (Lazy: on-demand).
-        let servers = self.runnable_servers().await?;
+        let servers = self.repository.list().await?;
         for server in servers {
             if server.lifecycle == McpLifecycle::Eager && server.enabled && server.is_valid {
                 if let Err(e) = self.start_server(server.id).await {
@@ -134,7 +111,7 @@ impl McpService {
     /// configuration is invalid is named with its `last_error`. A failure to
     /// list the servers is logged and names none.
     pub async fn prewarm_lazy(&self) -> Vec<(String, String)> {
-        let servers = match self.runnable_servers().await {
+        let servers = match self.repository.list().await {
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(error = %e, "Failed to list servers for lazy prewarm");
@@ -154,7 +131,7 @@ impl McpService {
                 failed.push((server.name, why));
                 continue;
             }
-            // Debug, not warn: the caller says it, and `-Q` keeps it silent.
+            // Debug, not warn: the caller says it, and `--quiet` keeps it silent.
             if let Err(e) = self.start_server(server.id).await {
                 tracing::debug!(
                     server_name = %server.name,
@@ -170,7 +147,7 @@ impl McpService {
     /// Validate all MCP servers and update their `is_valid/last_error` status.
     ///
     /// This checks:
-    /// - Configuration validity (`exe_path/url` present based on type)
+    /// - Configuration validity (a command present)
     /// - `exe_path` and `working_dir` are absolute paths
     /// - `exe_path` exists and is executable
     /// - `working_dir` exists if specified
@@ -219,26 +196,23 @@ impl McpService {
     /// Validate a single MCP server configuration and paths.
     fn validate_server(server: &McpServer) -> Result<(), String> {
         // Validate config structure
-        server.config.validate(server.server_type)?;
+        server.config.validate()?;
 
-        // For stdio servers, validate command and working directory
-        if server.server_type == gglib_core::McpServerType::Stdio {
-            // Ensure command has no whitespace (flags/args should be in args array)
-            if let Some(ref cmd) = server.config.command {
-                if cmd.contains(char::is_whitespace) {
-                    return Err(
-                        "Command must be an executable name/path only (e.g., 'npx'). \
-                         Put flags and arguments in the 'args' field."
-                            .to_string(),
-                    );
-                }
+        // Ensure command has no whitespace (flags/args should be in args array)
+        if let Some(ref cmd) = server.config.command {
+            if cmd.contains(char::is_whitespace) {
+                return Err(
+                    "Command must be an executable name/path only (e.g., 'npx'). \
+                     Put flags and arguments in the 'args' field."
+                        .to_string(),
+                );
             }
+        }
 
-            // Validate working directory if specified
-            if let Some(ref cwd) = server.config.working_dir {
-                if !cwd.is_empty() {
-                    crate::path::validate_working_dir(cwd)?;
-                }
+        // Validate working directory if specified
+        if let Some(ref cwd) = server.config.working_dir {
+            if !cwd.is_empty() {
+                crate::path::validate_working_dir(cwd)?;
             }
         }
 
@@ -267,11 +241,6 @@ impl McpService {
     ) -> Result<ResolutionStatus, McpServiceError> {
         let mut server = self.repository.get_by_id(server_id).await?;
 
-        // Only applicable to stdio servers
-        if server.server_type != gglib_core::McpServerType::Stdio {
-            return Ok(Self::stdio_only_error());
-        }
-
         let command = match &server.config.command {
             Some(cmd) => cmd.clone(),
             None => return Ok(Self::no_command_error()),
@@ -294,17 +263,6 @@ impl McpService {
                 self.handle_resolution_failure(&mut server, &command, e)
                     .await
             }
-        }
-    }
-
-    fn stdio_only_error() -> ResolutionStatus {
-        ResolutionStatus {
-            success: false,
-            resolved_path: None,
-            attempts: vec![],
-            warnings: vec![],
-            error_message: Some("Path resolution only applies to stdio servers".to_string()),
-            suggested_fix: None,
         }
     }
 
@@ -505,13 +463,11 @@ impl McpService {
 
     /// Add a new MCP server configuration.
     ///
-    /// Refused with [`McpServiceError::SseNotSupported`] when it is an SSE
-    /// server, with [`McpServiceError::NameReserved`] when it is named
+    /// Refused with [`McpServiceError::NameReserved`] when it is named
     /// `builtin`, with [`McpServiceError::BlankEnvValue`] when a variable's
     /// value is blank, and with [`McpServiceError::NameTaken`] when a server
     /// already has the name.
     pub async fn add_server(&self, new_server: NewMcpServer) -> Result<McpServer, McpServiceError> {
-        Self::refuse_unsupported(new_server.server_type)?;
         Self::refuse_reserved_name(&new_server.name)?;
         new_server.env.iter().try_for_each(Self::refuse_blank_env)?;
 
@@ -558,16 +514,12 @@ impl McpService {
 
     /// Update a server configuration.
     ///
-    /// An SSE server is refused with [`McpServiceError::SseNotSupported`],
-    /// one that is stored as SSE as much as one being changed to it. A rename
-    /// to a name another server has is refused with
+    /// A rename to a name another server has is refused with
     /// [`McpServiceError::NameTaken`], and one to `builtin` with
     /// [`McpServiceError::NameReserved`]. All refuse before anything is
     /// stopped or written. A server keeps the name it has, even one it
     /// shares, and even `builtin` when it was stored before that was kept.
     pub async fn update_server(&self, mut server: McpServer) -> Result<(), McpServiceError> {
-        Self::refuse_unsupported(server.server_type)?;
-
         let id = server.id;
 
         let _naming = self.naming.lock().await;
@@ -618,33 +570,30 @@ impl McpService {
     /// Start an MCP server.
     pub async fn start_server(&self, id: i64) -> Result<Vec<McpTool>, McpServiceError> {
         let mut server = self.repository.get_by_id(id).await?;
-        Self::refuse_unsupported(server.server_type)?;
 
-        // For stdio servers, ensure command is resolved before starting
-        if server.server_type == gglib_core::McpServerType::Stdio {
-            let status = self.ensure_resolved(id).await?;
+        // Ensure the command is resolved before starting
+        let status = self.ensure_resolved(id).await?;
 
-            if !status.success {
-                let error_msg = status.error_message_with_suggestions();
-                tracing::error!(
-                    server_id = id,
-                    server_name = %server.name,
-                    "Failed to resolve command before starting: {}",
-                    error_msg
-                );
-                return Err(McpServiceError::InvalidConfig(error_msg));
-            }
+        if !status.success {
+            let error_msg = status.error_message_with_suggestions();
+            tracing::error!(
+                server_id = id,
+                server_name = %server.name,
+                "Failed to resolve command before starting: {}",
+                error_msg
+            );
+            return Err(McpServiceError::InvalidConfig(error_msg));
+        }
 
-            // Update server with resolved path (already a String)
-            if let Some(resolved_path) = status.resolved_path {
-                server.config.resolved_path_cache = Some(resolved_path.clone());
-                tracing::debug!(
-                    server_id = id,
-                    server_name = %server.name,
-                    resolved_path = %resolved_path,
-                    "Resolved path before starting server"
-                );
-            }
+        // Update server with resolved path (already a String)
+        if let Some(resolved_path) = status.resolved_path {
+            server.config.resolved_path_cache = Some(resolved_path.clone());
+            tracing::debug!(
+                server_id = id,
+                server_name = %server.name,
+                resolved_path = %resolved_path,
+                "Resolved path before starting server"
+            );
         }
 
         let tools = self
@@ -674,13 +623,9 @@ impl McpService {
         self.manager.get_status(id).await
     }
 
-    /// A server with its runtime status, and its tools while it runs. One of
-    /// a kind gglib cannot run is [`McpServerStatus::Unsupported`].
+    /// A server with its runtime status, and its tools while it runs.
     async fn info_for(&self, server: McpServer) -> McpServerInfo {
-        let status = match Self::refuse_unsupported(server.server_type) {
-            Ok(()) => self.manager.get_status(server.id).await,
-            Err(_) => McpServerStatus::Unsupported,
-        };
+        let status = self.manager.get_status(server.id).await;
         let tools = if status == McpServerStatus::Running {
             self.manager.get_tools(server.id).await.unwrap_or_default()
         } else {
@@ -774,7 +719,6 @@ impl McpService {
         }
 
         let server = self.repository.get_by_id(id).await?;
-        Self::refuse_unsupported(server.server_type)?;
         if !server.enabled {
             return Err(McpServiceError::NotRunning(format!(
                 "Server '{}' is disabled; enable it to use its tools",
@@ -819,7 +763,6 @@ impl McpService {
         let _ = self.ensure_resolved(id).await;
 
         let mut test_server = self.repository.get_by_id(id).await?;
-        Self::refuse_unsupported(test_server.server_type)?;
         let test_id = NEXT_TEST_ID.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         test_server.id = test_id;
 

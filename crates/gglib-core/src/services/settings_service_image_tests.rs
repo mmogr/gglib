@@ -22,7 +22,7 @@ impl Library {
             let mut new = NewModel::new(
                 name.to_owned(),
                 PathBuf::from(format!("/models/{name}.gguf")),
-                8.0,
+                Some(8.0),
                 Utc::now(),
             );
             new.image_family = family;

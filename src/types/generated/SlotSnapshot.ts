@@ -41,7 +41,7 @@ params: SlotParams | null,
  * Legacy field (older llama.cpp versions): tokens already resident in
  * this slot's KV cache. Superseded by `n_prompt_tokens`/`next_token` in
  * current upstream versions, where it is simply absent — kept only as
- * a best-effort fallback, see [`Self::tokens_in_use`].
+ * a best-effort fallback, see [`Self::tokens_in_use()`].
  */
 n_past: number | null, 
 /**
@@ -62,7 +62,7 @@ n_prompt_tokens: number | null,
  * Preferred over `n_prompt_tokens` itself when present, since it
  * tracks real progress during an in-flight prefill rather than the
  * eventual total; must be combined with `n_prompt_tokens_cache` to
- * recover the true total prompt usage, see [`Self::tokens_in_use`].
+ * recover the true total prompt usage, see [`Self::tokens_in_use()`].
  */
 n_prompt_tokens_processed: number | null, 
 /**
@@ -80,10 +80,17 @@ n_prompt_tokens_cache: number | null,
  * Current-schema nested object carrying generation progress. We only
  * need `n_decoded` out of it — the count of tokens generated so far,
  * which is additive with `n_prompt_tokens(_processed)` to get total
- * context usage, see [`Self::tokens_in_use`].
+ * context usage, see [`Self::tokens_in_use()`].
  *
  * On llama.cpp builds with Multi-Token Prediction ("draft-mtp")
  * enabled, upstream sends this as a JSON **array** of objects (one per
  * predicted token) instead of a single object — see [`NextTokenField`].
  */
-next_token: NextTokenField | null, };
+next_token: NextTokenField | null, 
+/**
+ * The tokens this slot holds, as [`Self::tokens_in_use()`] counts them,
+ * served so no surface counts them again. Filled where `/slots` is
+ * parsed ([`Self::with_tokens_in_use`]) and never read from an answer;
+ * `None` when the answer reported none of the fields it reads.
+ */
+tokens_in_use: number | null, };

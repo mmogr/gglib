@@ -19,7 +19,8 @@ use crate::target::Target;
 /// A model of this machine's catalogue named `name`: its id.
 async fn registered(ctx: &CliContext, dir: &tempfile::TempDir, name: &str) -> i64 {
     let path = dir.path().join(format!("{name}.gguf"));
-    let model = gglib_core::domain::NewModel::new(name.to_owned(), path, 8.0, chrono::Utc::now());
+    let model =
+        gglib_core::domain::NewModel::new(name.to_owned(), path, Some(8.0), chrono::Utc::now());
     ctx.app.models().add(model).await.expect("registered").id
 }
 

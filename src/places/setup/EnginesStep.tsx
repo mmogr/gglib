@@ -27,14 +27,14 @@ import { Button } from '../../components/ui/Button';
 import { ENGINE_PRODUCT } from '../../types/setup';
 import type { EngineStatus } from '../../types/setup';
 import { Item, Problem, Step } from './Step';
-import { buildCommand, installable, needsBuild, type EngineView, type SetupEngines } from './useEngines';
+import { installable, needsBuild, type EngineView, type SetupEngines } from './useEngines';
 import type { FastDownloads } from './useFastDownloads';
 
 const SKIPPED = 'skipped — chat works without it';
 
 /** The command a terminal builds `status`'s engine with, with ⧉. */
 const Command: FC<{ status: EngineStatus }> = ({ status }) => {
-  const command = buildCommand(status);
+  const command = status.installCommand;
   return (
     <span className="inline-flex items-center gap-xs">
       <code className="font-mono text-text">{command}</code>

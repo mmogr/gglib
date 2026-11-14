@@ -1,4 +1,4 @@
-//! `POST /v1/attachments` and `GET /v1/attachments/{id}`: an image a paired
+//! `POST /v1/gglib/attachments` and `GET /v1/gglib/attachments/{id}`: an image a paired
 //! device sends ahead of the turn that names it, and one it reads back for
 //! a chat it has opened.
 //!
@@ -12,7 +12,7 @@
 
 use axum::Json;
 use axum::extract::rejection::BytesRejection;
-use axum::extract::{DefaultBodyLimit, Path, State};
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
@@ -25,6 +25,7 @@ use gglib_core::request_pipeline::MAX_IMAGE_BYTES;
 
 use super::handlers::{Answer, chats, unavailable};
 use crate::models::ErrorResponse;
+use crate::refusal::Segment;
 use crate::server::AppState;
 
 /// The most an upload's body may be: one image.
@@ -50,7 +51,7 @@ fn refused(err: &AttachmentError, status: u16) -> Response {
     (status, Json(body)).into_response()
 }
 
-/// `POST /v1/attachments`: store the body as an image, and answer its id,
+/// `POST /v1/gglib/attachments`: store the body as an image, and answer its id,
 /// its type and size, and the tokens it is estimated to cost.
 pub(crate) async fn upload_attachment(
     State(state): State<AppState>,
@@ -62,7 +63,7 @@ pub(crate) async fn upload_attachment(
             let too_large = AttachmentError::TooLarge;
             refused(&too_large, too_large.http_status())
         } else {
-            rejection.into_response()
+            crate::refusal::unreadable(rejection.status(), rejection.body_text())
         }
     })?;
     let stored = chats
@@ -72,12 +73,12 @@ pub(crate) async fn upload_attachment(
     Ok(Json(stored).into_response())
 }
 
-/// `GET /v1/attachments/{id}`: the image's bytes, as they were sent, with
+/// `GET /v1/gglib/attachments/{id}`: the image's bytes, as they were sent, with
 /// the type its first bytes gave it, and not to be stored. A path that is
 /// not an id names no image.
 pub(crate) async fn fetch_attachment(
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Segment(id): Segment,
 ) -> Answer {
     let chats = chats(&state).ok_or_else(unavailable)?;
     let id = AttachmentId::parse(&id).map_err(|_| {

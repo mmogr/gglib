@@ -15,8 +15,8 @@ decided the answer.
 They are here because the loop guard's note (#1052) is delivered by appending
 its text to the last message's content rather than as a trailing `system`
 message, and these five are why. `loop_guard_note_templates_tests.rs` renders
-each one through the same minijinja environment `template_probe` uses, so a
-template update or a change to the delivery cannot quietly undo the finding.
+each one through a lenient minijinja environment, so a template update or a
+change to the delivery cannot quietly undo the finding.
 
 - `Qwen3.5-4B.jinja` — raises `System message must be at the beginning.` on a
   trailing `system` message, which would be an HTTP 500 from llama-server

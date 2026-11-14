@@ -53,11 +53,11 @@ fn a_model_file_name_is_not_the_projector_that_holds_it() {
     let variants = variants_of(files.iter().map(|path| (*path, 1)));
     let labels: Vec<&str> = variants.iter().map(|v| v.label.as_str()).collect();
     assert!(
-        labels.contains(&"mmproj-Qwen2-VL-7B-Instruct-f16"),
+        labels.contains(&"mmproj-Qwen2-VL-7B-Instruct-F16"),
         "{labels:?}"
     );
 
-    assert_eq!(named(&files, "Qwen2-VL-7B-Instruct-f16").unwrap(), "f16");
+    assert_eq!(named(&files, "Qwen2-VL-7B-Instruct-f16").unwrap(), "F16");
 }
 
 /// An MTP draft's file named after a model's holds the model's name, as a

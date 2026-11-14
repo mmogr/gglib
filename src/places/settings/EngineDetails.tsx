@@ -2,8 +2,9 @@
  * An engine row's ▸ Details: how the install got there, as its record says
  * (the release or the commit it was built from, the download or the
  * acceleration, the date), the binary and what it reports, the model
- * running on it, and where it stands against its pin. Only what the
- * engine's status has: a line it leaves empty is not drawn.
+ * running on it, and where it stands against its pin (`standing`, the
+ * words `gglib config llama|sd status` prints). Only what the engine's
+ * status has: a line it leaves empty is not drawn.
  *
  * @module places/settings/EngineDetails
  */
@@ -33,12 +34,12 @@ const Recorded: FC<{ status: EngineStatus }> = ({ status }) => {
   );
 };
 
-export const EngineDetails: FC<{ status: EngineStatus; standing: string | null }> = ({ status, standing }) => (
+export const EngineDetails: FC<{ status: EngineStatus }> = ({ status }) => (
   <div className="flex flex-col gap-xs">
     <Recorded status={status} />
     <LabelledValue label="Binary" value={status.binaryPath} />
     {status.reports && <LabelledValue label="Binary reports" value={status.reports} />}
     {status.serving && <LabelledValue label="Serving" value={status.serving} mono={false} />}
-    {standing && <p className="m-0 text-xs text-text-secondary">{standing}</p>}
+    {status.standing && <p className="m-0 text-xs text-text-secondary">{status.standing}</p>}
   </div>
 );

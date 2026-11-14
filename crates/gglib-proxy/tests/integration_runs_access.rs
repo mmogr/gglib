@@ -1,4 +1,4 @@
-//! `/v1/runs/*` sits where the proxy's other routes a credential reaches do:
+//! `/v1/gglib/runs/*` sits where the proxy's other routes a credential reaches do:
 //! inside the bearer guard and the device gate. A run route added beside
 //! `/health` fails here.
 

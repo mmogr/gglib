@@ -1,4 +1,4 @@
-//! The flag `chat` and `question` share for attaching images to a turn.
+//! The flag `chat` and `q` share for attaching images to a turn.
 
 use std::path::PathBuf;
 

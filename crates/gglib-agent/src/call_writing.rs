@@ -7,11 +7,8 @@
 //! most one report a second, which a run's log can carry for as long as a
 //! turn lasts.
 //!
-//! The pieces are the stream's `ToolCallDelta`s. Where llama-server streams
-//! the call itself, that is about one a token. A model whose calls come as
-//! text markup (a dialect spec) has the markup held back by the parser and
-//! released as one delta once the call is complete, so its call is reported
-//! once, at the end, with a small count.
+//! The pieces are the stream's `ToolCallDelta`s: llama-server streams the
+//! call itself, about one a token.
 
 use std::time::Duration;
 

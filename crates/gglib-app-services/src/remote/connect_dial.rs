@@ -15,6 +15,7 @@ use tracing::info;
 
 use super::super::RemoteOps;
 use super::super::connect_watch::watch;
+use super::super::far_proxy::Said;
 use super::super::stored_pairing::settle;
 use super::super::types::{JoinRequest, Joined};
 use super::{DRAIN, LiveConnect, cancelled};
@@ -99,6 +100,7 @@ impl RemoteOps {
             generation,
             watcher: watcher.clone(),
             away_since: Arc::clone(&away_since),
+            said: Said::default(),
         };
         if !self.live_connect.lock().await.install(generation, live) {
             // A `disconnect` took the slot while this was dialling. The

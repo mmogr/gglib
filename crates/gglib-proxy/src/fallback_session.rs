@@ -1,7 +1,7 @@
 //! The session id of a request that names none: a hash of what its
 //! conversation starts with.
 //!
-//! Split out of [`crate::canonicalization`], which is at its file budget.
+//! Split out of [`crate::canonicalization`].
 
 use std::fmt::Write as _;
 use std::sync::LazyLock;

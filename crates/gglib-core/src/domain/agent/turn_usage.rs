@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize, Serializer};
 
-use crate::domain::figures::{count_words, rate_words, seconds_words, tokens_per_second};
+use crate::domain::figures::{rate_words, seconds_words, tokens_per_second, tokens_words};
 
 /// How large the context of the server that answered was, and how many
 /// earlier messages were missing from the request it answered.
@@ -72,7 +72,7 @@ pub struct TurnUsage {
     /// From the stream's start to its end, in ms.
     pub duration_ms: u64,
     /// From the first generated token's arrival to the last, in ms, timed on
-    /// the upstream's stream before normalization; absent when it could not
+    /// the upstream's stream; absent when it could not
     /// be (fewer than two tokens, or an adapter that does not time it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub writing_ms: Option<u64>,
@@ -110,7 +110,7 @@ impl TurnUsage {
             Some(seconds_words(seconds)),
             self.tokens_per_second().map(rate_words),
             self.cached_tokens
-                .map(|cached| format!("{} tokens reused", count_words(u64::from(cached)))),
+                .map(|cached| format!("{} reused", tokens_words(u64::from(cached)))),
         ]
         .into_iter()
         .flatten()

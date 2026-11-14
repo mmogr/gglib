@@ -1,11 +1,9 @@
 /**
  * What the remote registry holds, and what an empty tunnel looks like.
  *
- * Split out of `remoteRegistry.ts` when the shape and the reducer together
- * crossed the 300-line budget `scripts/check_file_size.sh` allows.
- * The state is a description and the registry is behaviour, so the seam was
- * already there; a component that only needs the shape now imports the
- * shape.
+ * Split out of `remoteRegistry.ts`: the state is a description and the
+ * registry is behaviour, so the seam was already there; a component that only
+ * needs the shape now imports the shape.
  */
 
 import type { RemoteStatus } from './transport/types/remote';
@@ -20,7 +18,10 @@ export interface RemoteState {
   ended: { reason: OfferEnd; device?: string; seq: number } | null;
 }
 
-/** A status with nothing on: what a fresh daemon reports. */
+/**
+ * A status with nothing on: what a fresh daemon reports, its lines unsaid
+ * until a read brings the daemon's.
+ */
 export const IDLE_STATUS: RemoteStatus = {
   enabled: false,
   ticket_fingerprint: null,
@@ -40,6 +41,11 @@ export const IDLE_STATUS: RemoteStatus = {
   remote_enabled: false,
   identity_path: null,
   devices: [],
+  sharing: '',
+  paired_line: '',
+  sharing_note: '',
+  reach_line: '',
+  reach_note: '',
 };
 
 /**
@@ -52,6 +58,15 @@ export const UNNAMED_PAIRED = 'the paired machine';
 /** The name the paired machine is shown by, from the stored pairing. */
 export function pairedName(status: RemoteStatus | null): string {
   return status?.paired_name || UNNAMED_PAIRED;
+}
+
+/**
+ * Sharing and the paired count on one line, "Sharing · 2 paired", for a
+ * surface with one line for both; the word alone when there is no count.
+ * The daemon's `sharing_sentence` joins them the same way for the CLI.
+ */
+export function sharingSentence(status: RemoteStatus): string {
+  return status.paired_line ? `${status.sharing} · ${status.paired_line}` : status.sharing;
 }
 
 export const INITIAL: RemoteState = { status: null, offer: null, ended: null };

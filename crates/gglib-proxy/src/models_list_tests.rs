@@ -19,7 +19,7 @@ fn models_response_from_summaries_maps_fields() {
     let summaries = vec![
         ModelSummary {
             tags: vec!["chat".into()],
-            param_count: "8B".into(),
+            param_count: Some("8B".into()),
             quantization: Some("Q4_K_M".into()),
             architecture: Some("llama".into()),
             created_at: 1_700_000_000,
@@ -67,7 +67,7 @@ fn models_response_serializes_to_openai_format() {
 fn summary_with_tags(name: &str, tags: &[&str]) -> ModelSummary {
     ModelSummary {
         tags: tags.iter().map(|t| (*t).to_string()).collect(),
-        param_count: "1B".into(),
+        param_count: Some("1B".into()),
         ..ModelSummary::bare(1, name)
     }
 }

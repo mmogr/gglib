@@ -35,7 +35,7 @@ async fn registered_at(state: &AppState, name: &str, path: &str) -> i64 {
     let model = gglib_core::domain::NewModel::new(
         name.to_owned(),
         std::path::PathBuf::from(path),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     state.core.models().add(model).await.unwrap().id

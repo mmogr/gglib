@@ -63,9 +63,13 @@ model is offered has no such argument, and nothing sent to the chat model
 holds the id. Nothing is remembered here: the surface that keeps the choice
 says it on each run that draws.
 
-Inline `<think>` reclassification is handled upstream by
-[`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
-handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
+A run whose request the model's endpoint refused, this machine's or a
+paired machine's, ends `failed` with the refusal's code when it is one of
+gglib's own (`gglib_proxy::error_codes::is_gglib_code`), and `agent_error`
+otherwise (`run::run_error`).
+
+llama-server splits reasoning from the answer upstream, so this handler
+only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
 
 An agent run stamps each turn's `turn_usage` event with the model it drove
 (`gglib_app_services::transcript::MadeBy`: locally the catalogue's name and
@@ -155,14 +159,12 @@ A turn through this machine's endpoint is resolved there, by its pipeline
 (`gglib_core::request_pipeline::apply`, the one place the ladder is
 folded), over what the turn names (`LoopRequest::sampling_layer`): its
 thinking budget (thinking off is `reasoning_budget_tokens: 0`, which the
-endpoint honours from any client) and, on a turn on a saved chat, the five
-sampling settings the chat saved (`gglib chat`'s flags, `ChatSampling`),
-sent as a client's, which the endpoint honours only while it trusts
-clients' sampling. The chat's saved profile goes on the model the turn asks
+endpoint honours from any client) and, on a turn on a saved chat, the
+token limit the chat saved (`gglib chat --max-tokens`, `ChatSampling`), a
+budget the endpoint also honours from any client. The chat's saved profile goes on the model the turn asks
 for, `<id>:<profile>`, which the endpoint, or the paired machine's proxy,
 routes to that profile whatever it trusts. A far turn is handed nothing this
-machine stores, its agentic switch included: its turn with tools is capped
-as it leaves here, and the far proxy resolves it by its own settings.
+machine stores; the far proxy resolves it by its own settings.
 
 # Cancellation
 
@@ -240,7 +242,7 @@ key of a device's turn names a path.
 # A paired device's turn
 
 `hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
-starts: `PUT /v1/runs/{id}?kind=agent` on the proxy's door carries only a
+starts: `PUT /v1/gglib/runs/{id}?kind=agent` on the proxy's door carries only a
 chat's id and the device's message, with any image named by the id its
 upload answered, and the chat's Thinking choice on the turn that changes it;
 a turn may be its images alone. An image the turn or the
@@ -333,7 +335,7 @@ device's in three things only:
   with `400 invalid_request`.
 
 `chat_turn` is the starter's other door, the proxy's
-`PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired
+`PUT /v1/gglib/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired
 phone keeps itself, sent whole as an `OpenAI` request and run through the
 loop so that it can use the servers it names and draw, its query read as a
 `ChatQuery`. `tools=none` is such a chat with no server: offered no MCP
@@ -348,7 +350,14 @@ Thinking off, runs it with a thinking budget of 0, and no row written anywhere. 
 the device's scope whose `frames` say `agent`.
 
 The run exists before its model does (`launch::launch_turn`). The `PUT`
-reads the turn, takes a slot, reserves the run and answers; finding or
+reads the turn, takes a slot, reserves the run and answers. A device's run
+(either door) that finds every slot taken takes a place in line instead
+(`slot_line`), and waits there as its run's first work, saying so each
+second (`waiting`, `agent_slot`, its place, 1 being next): first come,
+first served, at most `AGENT_SLOT_LINE` (16) waiting, one more refused
+`429 agent_busy`, and a wait past `AGENT_SLOT_WAIT` (two minutes) ending the
+run `failed` `agent_busy`. While anyone waits, no one takes a free slot past
+the line. This machine's own turn is refused `agent_busy` at once. Finding or
 loading the model, opening the endpoint's door, composing the loop and
 writing the turn's rows (`launch::begin_writes`) are the run's own work. A cold load, or a load queued behind an
 image render, is then a `waiting` event (`model_load`, naming the model and,

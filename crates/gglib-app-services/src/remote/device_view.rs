@@ -1,9 +1,9 @@
 //! Device rows as the surfaces see them: the roster, the key file and the
 //! edge, joined.
 //!
-//! Its own file rather than more of `devices.rs`, which is at its size budget,
-//! and along a seam: `devices.rs` is the three verbs, and this is the one
-//! answer `list` and `status` both give, from three stores that can disagree.
+//! Its own file rather than more of `devices.rs`, along a seam: `devices.rs`
+//! is the three verbs, and this is the one answer `list` and `status` both
+//! give, from three stores that can disagree.
 
 use gglib_core::Device;
 

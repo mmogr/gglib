@@ -317,7 +317,8 @@ describe('the sidebar chats', () => {
     expect(chats()).toHaveClass('min-h-0', 'flex-1');
     const settings = screen.getByRole('button', { name: 'Settings' });
     expect(scroller).not.toContainElement(settings);
-    expect(settings.parentElement).toHaveClass('shrink-0');
+    // The foot that holds it does not shrink, so the list scrolls instead.
+    expect(settings.closest('.shrink-0')).toHaveClass('border-t');
   });
 
   it('reads the list again when a reply ends, so a new title and order show', async () => {

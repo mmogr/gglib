@@ -30,7 +30,7 @@ mod placement;
 mod snapshot;
 
 pub(super) use gate::{GateTicket, GateVerdict};
-pub use placement::{Candidate, Refusal};
+pub use placement::Candidate;
 
 /// How many models may be resident in VRAM at once.
 ///
@@ -245,9 +245,6 @@ pub enum AdmissionDecision {
     Wait,
     /// The request outlasted [`ADMISSION_DEADLINE`].
     Expired,
-    /// The request cannot be placed while things stay as they are, and
-    /// waiting would not change them; its ticket is already forgotten.
-    Refuse(Refusal),
 }
 
 /// Running totals, reported on the dashboard.
@@ -274,9 +271,6 @@ pub(super) struct QueueState {
     /// Waiters compare against it to tell a queue that is working through
     /// its backlog from one that has stalled — see [`ADMISSION_DEADLINE`].
     progress_epoch: u64,
-    /// Holds on residents, by port and model id (`hold.rs`): a held resident
-    /// is never evictable, whatever its in-flight count.
-    holds: HashMap<(u16, u32), u32>,
     /// The generation gate: whose turn it is to generate (`state_gate.rs`).
     gate: gate::GateState,
 }
@@ -291,7 +285,6 @@ impl Default for QueueState {
             stats: Stats::default(),
             secondary_slot: SecondarySlotStatus::default(),
             progress_epoch: 0,
-            holds: HashMap::new(),
             gate: gate::GateState::default(),
         }
     }
@@ -385,12 +378,6 @@ impl QueueState {
         if self.is_expired(ticket, now) {
             self.forget(ticket);
             return AdmissionDecision::Expired;
-        }
-
-        // An image model that only a held slot could take is refused now:
-        // the hold ends with its run, not with anything this queue does.
-        if let Some(refusal) = self.refuse_held(ticket, candidate) {
-            return refusal;
         }
 
         // Global FIFO: the oldest waiter across all models decides which model
@@ -520,11 +507,6 @@ impl QueueState {
     /// slot, in which case granting now would re-pin a slot that is one release
     /// away from changing hands.
     ///
-    /// A run's hold counts as one request against the capacity: the run talks
-    /// to llama-server directly, so a request forwarded beside it would queue
-    /// inside llama-server. Read from `holds` alone, it takes no lease, so the
-    /// gate does not count it and a run's own render never waits on it.
-    ///
     /// A llama-server resident also answers to the generation gate: it serves
     /// the request arriving as `seq` only while no render holds the GPU or
     /// waits ahead of it. An `sd-server` resident does not, so a render never
@@ -534,7 +516,7 @@ impl QueueState {
             return false;
         };
         let gated = resident.runtime == RuntimeKind::Llama;
-        resident.inflight + u32::from(self.is_held(slot)) < SERVER_PARALLEL
+        resident.inflight < SERVER_PARALLEL
             && !self.owes_slot_to_rival(slot, now)
             && (!gated || self.gate_admits_llm(seq))
     }
@@ -607,38 +589,9 @@ impl QueueState {
         self.evictable(PRIMARY_SLOT).then_some(PRIMARY_SLOT)
     }
 
-    /// Whether `slot` could be handed to a different model now: its state
-    /// allows it and no run holds its resident.
+    /// Whether `slot` could be handed to a different model now.
     fn evictable(&self, slot: usize) -> bool {
-        self.slots[slot].is_evictable() && !self.is_held(slot)
-    }
-
-    /// Whether a run holds the resident in `slot`.
-    pub(super) fn is_held(&self, slot: usize) -> bool {
-        self.slot(slot)
-            .is_some_and(|r| self.holds.contains_key(&(r.port, r.model_id)))
-    }
-
-    /// Hold the resident listening on `port`, if it is `model_id`: its slot.
-    pub(super) fn hold(&mut self, port: u16, model_id: u32) -> Option<usize> {
-        let (slot, _) = self
-            .residents()
-            .find(|(_, r)| r.port == port && r.model_id == model_id)?;
-        *self.holds.entry((port, model_id)).or_default() += 1;
-        Some(slot)
-    }
-
-    /// Release one hold on the resident at `port` with `model_id`.
-    pub(super) fn unhold(&mut self, port: u16, model_id: u32) {
-        let key = (port, model_id);
-        if let Some(count) = self.holds.get_mut(&key) {
-            *count -= 1;
-            if *count == 0 {
-                self.holds.remove(&key);
-            }
-        }
-        // A swap waiting on this model may now go ahead.
-        self.record_progress();
+        self.slots[slot].is_evictable()
     }
 
     /// Every slot that is not the primary.
@@ -686,9 +639,9 @@ impl QueueState {
     /// Models that are already resident are skipped: their waiters are served
     /// on their very next poll without the scheduler being consulted at all, so
     /// letting one hold the front of the line would block a model that does
-    /// need a decision behind a request that never wanted one. So is a model
-    /// that only a held slot could take ([`Self::may_lead`]): it cannot go
-    /// until a run ends, and the line must not wait on that with it.
+    /// need a decision behind a request that never wanted one. So is an image
+    /// model too large for its place ([`Self::may_lead`]): it cannot go until
+    /// what is loaded changes, and the line must not wait on that with it.
     ///
     /// Ordered by arrival sequence rather than elapsed time: the two agree, and
     /// a monotonic counter cannot be perturbed by a clock the tests pause.

@@ -23,7 +23,7 @@ async fn an_upload_reaches_the_far_store_with_the_key_and_its_answer_comes_back(
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("POST", "/v1/attachments")
+        ("POST", "/v1/gglib/attachments")
     );
     assert!(carries_key(&seen), "{seen:?}");
     assert_eq!(
@@ -72,7 +72,7 @@ async fn a_fetch_reaches_the_image_by_its_id_and_is_not_kept() {
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("GET", format!("/v1/attachments/{id}").as_str())
+        ("GET", format!("/v1/gglib/attachments/{id}").as_str())
     );
     assert!(carries_key(&seen), "{seen:?}");
 }

@@ -6,7 +6,12 @@ use chrono::Utc;
 use std::path::Path;
 
 fn model(weights: &Path, projector: Option<&Path>) -> Model {
-    let mut new = NewModel::new("qwen3".to_owned(), weights.to_path_buf(), 7.0, Utc::now());
+    let mut new = NewModel::new(
+        "qwen3".to_owned(),
+        weights.to_path_buf(),
+        Some(7.0),
+        Utc::now(),
+    );
     new.projector_path = projector.map(Path::to_path_buf);
     Model::stored(7, &new)
 }

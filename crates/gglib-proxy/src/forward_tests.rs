@@ -206,8 +206,7 @@ use serde_json::json;
 /// differently, and records what it was asked.
 ///
 /// Dispatching on `tool_choice` is the point: it asserts the repair
-/// request really arrived carrying `"required"`, which is the property
-/// stage-6 suppression exists to protect and the one a unit test over
+/// request really arrived carrying `"required"`, which a unit test over
 /// bytes cannot observe.
 async fn spawn_repair_mock(
     seen: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
@@ -323,13 +322,12 @@ async fn a_bad_streamed_tool_call_is_repaired_before_the_client_sees_it() {
     let outcome = stream_response_to_channel(
         resp,
         "m".to_owned(),
-        TurnDialect::parsed(None),
         tx,
         &connection,
         Some(RepairContext {
             req_builder: client.post(&url),
             request_body: body,
-            turn: RepairTurn::ON,
+            enabled: true,
         }),
         false,
     )
@@ -469,13 +467,12 @@ async fn a_stream_that_dies_mid_turn_still_releases_its_held_tool_call() {
     let outcome = stream_response_to_channel(
         resp,
         "m".to_owned(),
-        TurnDialect::parsed(None),
         tx,
         &connection,
         Some(RepairContext {
             req_builder: client.post(&url),
             request_body: body,
-            turn: RepairTurn::ON,
+            enabled: true,
         }),
         false,
     )
@@ -539,13 +536,12 @@ async fn a_conformant_streamed_tool_call_is_not_reissued() {
     let outcome = stream_response_to_channel(
         resp,
         "m".to_owned(),
-        TurnDialect::parsed(None),
         tx,
         &connection,
         Some(RepairContext {
             req_builder: client.post(&url),
             request_body: body,
-            turn: RepairTurn::ON,
+            enabled: true,
         }),
         false,
     )

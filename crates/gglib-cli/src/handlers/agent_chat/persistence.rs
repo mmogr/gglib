@@ -97,18 +97,23 @@ impl<'a> Conversation<'a> {
         self.service
     }
 
-    /// Replace the conversation's settings with `settings`, when there are
-    /// new ones, before the session's first turn reads them.
+    /// Make the conversation's settings `settings`, when there are new ones,
+    /// before the session's first turn reads them: only the keys in which
+    /// they differ from `held`, the settings they were made from, are
+    /// written, so a key this build cannot read stays.
     ///
     /// # Errors
     ///
     /// The write failed: the turn would run on what the chat saved before.
     pub(crate) async fn record_settings(
         &self,
+        held: &ConversationSettings,
         settings: Option<ConversationSettings>,
     ) -> Result<()> {
         if let Some(settings) = settings {
-            self.service.record_settings(self.id, settings).await?;
+            self.service
+                .record_settings(self.id, held, settings)
+                .await?;
         }
         Ok(())
     }

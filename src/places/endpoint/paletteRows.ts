@@ -6,8 +6,8 @@
  * the filter as the library's search matches (`matchesModel`). Each says its
  * fit as `GET /api/models/:id/explain` answers: the fit sentence the daemon
  * serves on `plan.fit` and, when the launch would unload a model first, the
- * CLI's unload sentence (`readings/launchFit`); an image model has no fit, so only
- * the unload sentence when there is one. A read that failed, or a daemon
+ * unload sentence it serves on `plan.unloads`; an image model has no fit, so
+ * only the unload sentence when there is one. A read that failed, or a daemon
  * without the route, is "fit unknown".
  *
  * The paired machine's rows are the library's far group (`usePairedModels`,
@@ -20,7 +20,6 @@
  */
 
 import type { PairedModelsState } from '../../hooks/usePairedModels';
-import { unloadSentence } from '../../readings/launchFit';
 import type { GgufModel, LaunchExplanation } from '../../types';
 import type { ModelInfo } from '../../types/generated/ModelInfo';
 import { formatSize } from '../../utils/format';
@@ -50,7 +49,7 @@ export function fitLine(read: FitRead): string | null {
   if (read === undefined) return null;
   if (read === 'failed') return FIT_UNKNOWN;
   const unloads = read.plan.unloads;
-  return [unloads && unloadSentence(unloads), read.plan.fit?.sentence].filter(Boolean).join(' ') || null;
+  return [unloads?.sentence, read.plan.fit?.sentence].filter(Boolean).join(' ') || null;
 }
 
 /** The paired machine's rows, and why none of them loads there now (`null` when they do). */

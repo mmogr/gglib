@@ -86,8 +86,8 @@ async fn a_page_on_another_site_can_run_load_or_clear_nothing() {
     let requests = [
         ("/v1/chat/completions", Some(turn)),
         ("/v1/embeddings", Some(embed)),
-        ("/v1/models/m/load", None),
-        ("/v1/proxy/cache/clear", None),
+        ("/v1/gglib/models/m/load", None),
+        ("/v1/gglib/proxy/cache/clear", None),
     ];
     for (path, body) in requests {
         let mut request = client
@@ -147,7 +147,7 @@ async fn the_tool_gateway_refuses_another_site_even_when_every_page_may_read() {
     let client = Client::new();
 
     let clear = client
-        .post(format!("{base}/v1/proxy/cache/clear"))
+        .post(format!("{base}/v1/gglib/proxy/cache/clear"))
         .header("origin", ELSEWHERE);
     let (status, code) = refusal_code(clear).await;
     assert_ne!(code.as_deref(), Some("origin_not_allowed"));
@@ -171,7 +171,7 @@ async fn the_tool_gateway_refuses_another_site_even_when_every_page_may_read() {
 async fn a_cross_site_request_without_an_origin_is_refused_by_its_fetch_metadata() {
     let (base, runtime, cancel) = proxy().await;
     let request = Client::new()
-        .post(format!("{base}/v1/proxy/cache/clear"))
+        .post(format!("{base}/v1/gglib/proxy/cache/clear"))
         .header("sec-fetch-site", "cross-site");
     let (status, code) = refusal_code(request).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -187,7 +187,7 @@ async fn an_origin_that_is_not_text_is_refused_not_read_as_absent() {
     let (base, runtime, cancel) = proxy().await;
     let origin = HeaderValue::from_bytes(b"http://\xffevil.example").unwrap();
     let request = Client::new()
-        .post(format!("{base}/v1/proxy/cache/clear"))
+        .post(format!("{base}/v1/gglib/proxy/cache/clear"))
         .header("origin", origin);
     let (status, code) = refusal_code(request).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -207,14 +207,14 @@ async fn the_proxys_own_origin_passes_only_under_the_host_it_names() {
     let own = format!("http://127.0.0.2:{port}");
 
     let under_its_name = Client::new()
-        .post(format!("{base}/v1/proxy/cache/clear"))
+        .post(format!("{base}/v1/gglib/proxy/cache/clear"))
         .header("host", format!("127.0.0.2:{port}"))
         .header("origin", &own);
     let status = under_its_name.send().await.unwrap().status();
     assert_eq!(status, StatusCode::OK);
 
     let under_another_name = Client::new()
-        .post(format!("{base}/v1/proxy/cache/clear"))
+        .post(format!("{base}/v1/gglib/proxy/cache/clear"))
         .header("origin", &own);
     let (status, code) = refusal_code(under_another_name).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -234,7 +234,7 @@ async fn the_desktop_app_local_pages_and_programs_still_change_things() {
         None,
     ];
     for origin in origins {
-        let mut request = Client::new().post(format!("{base}/v1/proxy/cache/clear"));
+        let mut request = Client::new().post(format!("{base}/v1/gglib/proxy/cache/clear"));
         if let Some(origin) = origin {
             request = request
                 .header("origin", origin)

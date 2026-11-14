@@ -2,14 +2,14 @@
 import type { InferenceConfig } from "./InferenceConfig";
 
 /**
- * Request body for starting a server via collection route.
- * Maps frontend's `id` field to backend's `model_id`.
+ * Request body for starting a server via collection route: the model's
+ * `id` beside its launch options.
  */
 export type StartServerBody = { 
 /**
- * Model ID - frontend sends as `id`
+ * The model's id.
  */
-model_id: number | null, contextLength: number | null, port: number | null, jinja: boolean | null, reasoningFormat: string | null, 
+id: number | null, contextLength: number | null, port: number | null, jinja: boolean | null, reasoningFormat: string | null, 
 /**
  * Number of MTP draft tokens (`--spec-draft-n-max`).
  *

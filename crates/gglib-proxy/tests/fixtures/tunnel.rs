@@ -55,7 +55,7 @@ pub(crate) async fn spawn_proxy_demanding(
     spawn_proxy_serving(key, None).await
 }
 
-/// The same, holding `runs` for `/v1/runs`.
+/// The same, holding `runs` for `/v1/gglib/runs`.
 pub(crate) async fn spawn_proxy_serving(
     key: &str,
     runs: Option<Arc<dyn RunsPort>>,
@@ -63,7 +63,7 @@ pub(crate) async fn spawn_proxy_serving(
     spawn_proxy_holding(key, runs, None).await
 }
 
-/// The same, holding `chats` for `/v1/chats` as well.
+/// The same, holding `chats` for `/v1/gglib/chats` as well.
 pub(crate) async fn spawn_proxy_holding(
     key: &str,
     runs: Option<Arc<dyn RunsPort>>,

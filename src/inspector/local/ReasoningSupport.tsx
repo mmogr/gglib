@@ -52,9 +52,9 @@ function describeSupport(support: TemplateSupport | undefined): string {
     case 'yes':
       return 'Reads reasoning effort — observed from the template when this model was last served.';
     case 'no':
-      return 'Does not read reasoning effort — observed from the template when this model was last served. A level resolved for this model is removed before the request is sent, and gglib says so rather than letting it vanish.';
+      return 'Does not read reasoning effort — observed from the template when this model was last served. A level set for this model is still sent, and the template ignores it.';
     default:
-      return 'Not yet observed: known after its first load here. Until then a level set for this model is sent as given, because an unmeasured template is not a template that refuses.';
+      return 'Not yet observed: known after its first load here. A level set for this model is sent either way.';
   }
 }
 

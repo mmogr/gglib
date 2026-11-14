@@ -21,7 +21,7 @@ mod resume_machine;
 pub(crate) use resume_machine::{follow_stored_machine, resumed_settings};
 
 /// The settings a new session saves: the model as its machine resolved it,
-/// the sampling and tool flags, and the profile the session samples with —
+/// `--max-tokens` and the tool flags, and the profile the session samples with —
 /// one configured here, or the one the paired machine routed its suffix to.
 pub(crate) fn session_settings(
     args: &ChatArgs,
@@ -37,8 +37,8 @@ pub(crate) fn session_settings(
         .build()
 }
 
-/// `saved`, with each setting this command line names in its place: a
-/// sampling flag, `--tools`, `--no-tools`, a limit, and a profile it
+/// `saved`, with each setting this command line names in its place:
+/// `--max-tokens`, `--tools`, `--no-tools`, a limit, and a profile it
 /// selected. What it does not name stays as the conversation saved it.
 pub(crate) fn named_over(
     mut saved: ConversationSettings,
@@ -47,11 +47,7 @@ pub(crate) fn named_over(
     turn: &TurnModel,
 ) -> ConversationSettings {
     let flags = session_settings(args, profile, turn);
-    keep(flags.temperature, &mut saved.temperature);
-    keep(flags.top_p, &mut saved.top_p);
-    keep(flags.top_k, &mut saved.top_k);
     keep(flags.max_tokens, &mut saved.max_tokens);
-    keep(flags.repeat_penalty, &mut saved.repeat_penalty);
     keep(flags.profile, &mut saved.profile);
     keep(flags.no_tools, &mut saved.no_tools);
     keep(flags.max_iterations, &mut saved.max_iterations);

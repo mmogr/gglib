@@ -33,6 +33,8 @@
 //! calls both together, because it reads a transcript that already has them.
 //!
 //! When a final answer is reached: `AgentEvent::FinalAnswer` → `Ok(content)`.
+//! When the iterations run out, one closing request with no tools asks for
+//! the answer ([`crate::closing`]).
 //! On any guard or limit failure: `AgentEvent::Error` is emitted first, then
 //! `Err(AgentError::…)` is returned — the SSE client always sees the reason
 //! before the stream closes.
@@ -44,7 +46,7 @@ use async_trait::async_trait;
 use gglib_core::domain::agent::{FirstCall, LlmStreamEvent};
 use gglib_core::ports::{
     AgentError, AgentGuardReporter, AgentLoopPort, AgentRunOutput, EmptyToolExecutor,
-    FilteredToolExecutor, LlmCompletionPort, ToolExecutorPort,
+    FilteredToolExecutor, LlmCompletionPort, ToolExecutorPort, UpstreamRefusal,
 };
 use gglib_core::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult,
@@ -84,6 +86,28 @@ use gglib_core::domain::agent::{batch_results_hash, hash_result_text};
 async fn fail_loop<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T, AgentError> {
     emit_error_event(tx, &msg).await;
     Err(AgentError::Internal(msg))
+}
+
+/// End the loop on a reply that could not be started: with
+/// [`AgentError::Refused`], and the endpoint's code on the `error` event,
+/// when the endpoint refused it with an [`UpstreamRefusal`]; otherwise as
+/// [`fail_loop`].
+async fn fail_start<T>(
+    tx: &mpsc::Sender<AgentEvent>,
+    error: &anyhow::Error,
+) -> Result<T, AgentError> {
+    let message = format!("LLM stream error: {error:#}");
+    let Some(refusal) = error.downcast_ref::<UpstreamRefusal>() else {
+        return fail_loop(tx, message).await;
+    };
+    let code = refusal.code.clone();
+    let _ = tx
+        .send(AgentEvent::Error {
+            message: message.clone(),
+            code: Some(code.clone()),
+        })
+        .await;
+    Err(AgentError::Refused { code, message })
 }
 
 /// Surface a runaway tool-call stream, when the collector had to drop deltas.
@@ -179,7 +203,7 @@ impl AgentLoop {
     /// [`CollectedResponse`].
     ///
     /// Both the LLM call and stream-collection errors are translated into
-    /// [`AgentError::Internal`] after emitting an [`AgentEvent::Error`] on `tx`
+    /// [`AgentError::Internal`] (or [`AgentError::Refused`]) after emitting an [`AgentEvent::Error`] on `tx`
     /// so that SSE consumers always see the failure reason before the stream
     /// closes.
     async fn call_and_collect(
@@ -250,8 +274,8 @@ impl AgentLoop {
     /// first is refused by some chat templates, and this loop's own pruning
     /// keeps every `system` message at the front.
     ///
-    /// A tool call in this reply all the same (a dialect model's markup, or
-    /// an upstream that calls a tool it was not offered) is not run: `run`
+    /// A tool call in this reply all the same (an upstream that calls a tool
+    /// it was not offered) is not run: `run`
     /// ends with this reply's text and never looks at its calls. A reply
     /// with no text is answered with `first.if_wordless`, never with an
     /// empty answer, and so is one cut off at its token limit before it
@@ -305,7 +329,7 @@ impl AgentLoop {
         // an idle timeout against a mid-stream reset — differ only there.
         let stream = match stream {
             Ok(s) => s,
-            Err(e) => return fail_loop(tx, format!("LLM stream error: {e:#}")).await,
+            Err(e) => return fail_start(tx, &e).await,
         };
         match collect_stream(measure_turn(stream, tx.clone(), messages.dropped()), tx).await {
             Ok(r) => usable(r, if_wordless, tx).await,
@@ -367,7 +391,7 @@ impl AgentLoop {
 
     /// Emit a `FinalAnswer` event, append the assistant reply to `messages`,
     /// and return `Ok(AgentRunOutput)`.
-    async fn finalize_answer(
+    pub(crate) async fn finalize_answer(
         messages: &mut Vec<AgentMessage>,
         content: String,
         iteration: usize,
@@ -468,9 +492,13 @@ impl AgentLoopPort for AgentLoop {
     ///
     /// - `Ok(AgentRunOutput)` — the model produced a response without
     ///   requesting further tool calls, or, in a run with
-    ///   `config.first_call`, gave the reply that follows that call.
+    ///   `config.first_call`, gave the reply that follows that call, or, having
+    ///   used all `config.max_iterations` steps, gave a reply with text to the
+    ///   closing request with no tools (the `closing` module), after a
+    ///   `SystemWarning`.
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
-    ///   without a final answer.
+    ///   and the closing request gave no reply of use, or the run had a
+    ///   `config.first_call` and made none.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated
     ///   back to back, with the same answer each time, more than
     ///   `config.max_repeated_batch_steps` times.
@@ -611,10 +639,14 @@ impl AgentLoopPort for AgentLoop {
             succeeded = all_succeeded;
         }
 
-        warn!(max = config.max_iterations, "agent loop hit max iterations");
-        let error = AgentError::MaxIterationsReached(config.max_iterations);
-        emit_error_event(&tx, &error.to_string()).await;
-        Err(error)
+        crate::closing::end_at_limit(
+            self.llm.as_ref(),
+            &mut messages,
+            &config,
+            total_completion_tokens,
+            &tx,
+        )
+        .await
     }
 }
 
@@ -653,7 +685,7 @@ async fn recover_from_parallel_overflow(
 
     let suggested_action = format!(
         "To permanently raise this limit, run: \
-         `gglib config settings set --max-parallel-tools <N>` \
+         `gglib config set max-parallel-tools <N>` \
          (current: {limit}, ceiling: {ceiling})",
         ceiling = gglib_core::MAX_PARALLEL_TOOLS_CEILING,
     );

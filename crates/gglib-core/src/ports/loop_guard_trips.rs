@@ -12,7 +12,6 @@
 //! What the log holds and why is [`crate::domain::loop_guard_log`].
 
 use crate::domain::loop_guard_log::LoopGuardTripEvent;
-use crate::settings::LoopGuardMode;
 
 /// Where the loop guard's step records what it did.
 ///
@@ -25,8 +24,7 @@ pub trait LoopGuardTripSink: Send + Sync {
     /// Record one decision the guard took.
     fn record_trip(&self, event: LoopGuardTripEvent);
 
-    /// Count one request the guard scanned under `mode`, on the day `at_secs`
-    /// falls on. Called for every scanned request, trip or not — it is the
+    /// Count one request the guard scanned, on the day `at_secs` falls on. Called for every scanned request, trip or not — it is the
     /// denominator every trip is read against.
-    fn record_scan(&self, model_name: &str, mode: LoopGuardMode, at_secs: u64);
+    fn record_scan(&self, model_name: &str, at_secs: u64);
 }

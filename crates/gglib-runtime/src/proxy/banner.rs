@@ -7,7 +7,7 @@
 
 use std::io::IsTerminal;
 
-use gglib_core::domain::LaunchNarration;
+use gglib_core::domain::{LaunchDecision, LaunchFit, LaunchNarration};
 
 const DIM: &str = "\u{1b}[2m";
 /// ANSI bold, for the model identity line.
@@ -27,9 +27,9 @@ fn use_color() -> bool {
 /// Print what the runtime decided for a launch, and why.
 ///
 /// The visible counterpart to [`crate::launch_narration::narrate`]: gglib
-/// auto-sizes the RAM cache, quantizes the KV cache, enables MTP, picks a
-/// dialect parser and resolves the context through a five-level chain, and
-/// before this existed it did all of that in silence.
+/// auto-sizes the RAM cache, quantizes the KV cache, enables MTP and resolves
+/// the context through a five-level chain, and before this existed it did all
+/// of that in silence.
 pub(crate) fn print_launch_narration(narration: &LaunchNarration) {
     for line in render_launch_narration(narration, use_color()) {
         println!("{line}");
@@ -53,17 +53,18 @@ fn render_launch_narration(narration: &LaunchNarration, color: bool) -> Vec<Stri
         format!("  {bold}{}{reset}", narration.headline()),
     ];
 
+    // The fit's one row goes under the decisions: what the context row's
+    // rung was snapped from, and from what. An image model has none, and
+    // nor does a fit that reached no figure.
+    let fit = narration.fit.as_ref().and_then(LaunchFit::banner_row);
+    let rows: Vec<&LaunchDecision> = narration.decisions.iter().chain(fit.as_ref()).collect();
+
     // Pad labels to a common width so the values form a column. Computed from
     // the labels actually present rather than a constant, since which
     // decisions appear varies by launch.
-    let width = narration
-        .decisions
-        .iter()
-        .map(|d| d.label.len())
-        .max()
-        .unwrap_or(0);
+    let width = rows.iter().map(|d| d.label.len()).max().unwrap_or(0);
 
-    for decision in &narration.decisions {
+    for decision in rows {
         let label = format!("{:<width$}", decision.label, width = width);
         let line = decision.source.as_ref().map_or_else(
             || format!("    {label}  {}", decision.value),
@@ -79,16 +80,17 @@ fn render_launch_narration(narration: &LaunchNarration, color: bool) -> Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::LaunchDecision;
+    use gglib_core::domain::{ContextFit, FitInputs, KvBytes};
+    use gglib_core::server_config::ContextSizeSource;
 
     fn narration() -> LaunchNarration {
         let mut n =
             LaunchNarration::new("qwen3-30b-a3b", Some("Q4_K_M".to_string()), 18_476_297_420);
         n.push(LaunchDecision::new("ctx", "32768", "model server_defaults"));
         n.push(LaunchDecision::new(
-            "dialect",
-            "qwen-xml -> OpenAI tool_calls",
-            "format:qwen-xml tag",
+            "cache",
+            "6.0 GiB",
+            "auto from free RAM",
         ));
         n
     }
@@ -103,7 +105,7 @@ mod tests {
                 .iter()
                 .any(|l| l.contains("32768") && l.contains("(model server_defaults)"))
         );
-        assert!(lines.iter().any(|l| l.contains("(format:qwen-xml tag)")));
+        assert!(lines.iter().any(|l| l.contains("(auto from free RAM)")));
     }
 
     #[test]
@@ -120,10 +122,10 @@ mod tests {
     fn labels_are_padded_to_a_common_column() {
         let lines = render_launch_narration(&narration(), false);
         let ctx = lines.iter().find(|l| l.contains("32768")).unwrap();
-        let dialect = lines.iter().find(|l| l.contains("qwen-xml")).unwrap();
+        let cache = lines.iter().find(|l| l.contains("6.0 GiB")).unwrap();
         let ctx_value = ctx.find("32768").unwrap();
-        let dialect_value = dialect.find("qwen-xml").unwrap();
-        assert_eq!(ctx_value, dialect_value);
+        let cache_value = cache.find("6.0 GiB").unwrap();
+        assert_eq!(ctx_value, cache_value);
     }
 
     /// Piped or captured output must carry no escape sequences at all.
@@ -143,11 +145,93 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains(BOLD)));
     }
 
-    /// The mission's budget. Two blanks plus a headline plus the decisions.
+    /// The fit a launch was sized by: 48 GiB, 2.5 GB of weights and
+    /// 1,097,000 bytes a token, which fit 40,005 tokens before 32K.
+    fn sized(mut n: LaunchNarration) -> LaunchNarration {
+        n.fit = Some(LaunchFit::from(ContextFit::new(
+            32_768,
+            ContextSizeSource::FittedToHardware,
+            Some(32_768),
+            &FitInputs {
+                budget_bytes: Some(48 << 30),
+                weights_bytes: Some(2_500_000_000),
+                kv: Some(KvBytes::uniform(1_097_000)),
+                trained_ctx: Some(131_072),
+                unsnapped: Some(40_005),
+            },
+        )));
+        n
+    }
+
+    /// The fit is one row under the decisions, in their column, saying
+    /// what the rung was snapped from and the figures it was fitted from.
+    #[test]
+    fn the_fit_is_one_row_under_the_decisions() {
+        let lines = render_launch_narration(&sized(narration()), false);
+        assert_eq!(
+            lines[lines.len() - 2],
+            "    fit    40005 unsnapped  (of 48.0 GiB, 2.3 GiB weights, 1072 KiB/token)"
+        );
+        assert_eq!(
+            lines.len(),
+            render_launch_narration(&narration(), false).len() + 1
+        );
+    }
+
+    /// Under the widest label a launch prints, `sampling`, the fit's row
+    /// keeps to 80 columns with the widest figures a budget under 1000 GiB
+    /// and weights under 100 GiB give it.
+    #[test]
+    fn the_fit_row_fits_eighty_columns() {
+        let mut n = narration();
+        n.push(LaunchDecision::new("sampling", "v", "s"));
+        n.fit = Some(LaunchFit::from(ContextFit::new(
+            524_288,
+            ContextSizeSource::FittedToHardware,
+            Some(524_288),
+            &FitInputs {
+                budget_bytes: Some(999 << 30),
+                weights_bytes: Some(99 << 30),
+                kv: Some(KvBytes::uniform(1023 << 10)),
+                trained_ctx: Some(1_048_576),
+                unsnapped: Some(999_999),
+            },
+        )));
+        let lines = render_launch_narration(&n, false);
+        let fit = lines.iter().find(|l| l.contains("unsnapped")).unwrap();
+        assert_eq!(
+            fit,
+            "    fit       999999 unsnapped  (of 999.0 GiB, 99.0 GiB weights, 1023 KiB/token)"
+        );
+        assert!(
+            fit.chars().count() <= 80,
+            "{} columns: {fit}",
+            fit.chars().count()
+        );
+    }
+
+    /// A fit that reached no figure (refused) prints no row of unknowns.
+    #[test]
+    fn a_fit_with_no_figure_prints_no_row() {
+        let mut n = narration();
+        n.fit = Some(LaunchFit::from(ContextFit::new(
+            4096,
+            ContextSizeSource::BuiltInDefault,
+            None,
+            &FitInputs::default(),
+        )));
+        assert_eq!(
+            render_launch_narration(&n, false),
+            render_launch_narration(&narration(), false)
+        );
+    }
+
+    /// The mission's budget. Two blanks plus a headline plus the decisions,
+    /// every decision a launch can make, and the fit's row.
     #[test]
     fn the_block_stays_under_twelve_lines() {
-        let mut n = narration();
-        for label in ["backend", "kv", "cache", "mtp", "flags"] {
+        let mut n = sized(narration());
+        for label in ["backend", "runtime", "kv", "mtp", "flags", "sampling"] {
             n.push(LaunchDecision::new(label, "v", "s"));
         }
         let lines = render_launch_narration(&n, false);

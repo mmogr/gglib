@@ -178,6 +178,7 @@ pub(crate) async fn get_conversation(
 /// 400; a model of another machine than the one the conversation ran on is
 /// refused as a run on it is. A body that cannot be read, a setting the
 /// patch does not name among them, is a 400 coded `invalid_request`. A
+/// change to settings stored as text that is not a JSON object is a 409. A
 /// refused update changes nothing.
 /// PUT /api/conversations/:id
 pub(crate) async fn update_conversation(

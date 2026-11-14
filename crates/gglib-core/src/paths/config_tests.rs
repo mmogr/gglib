@@ -215,3 +215,30 @@ fn a_hand_written_value_reads_as_the_loader_reads_it() {
         assert_eq!(persisted_models_dir().as_deref(), stored, "{file:?}");
     }
 }
+
+/// Forgetting the models directory removes every line that assigns it,
+/// however it was written, and keeps the others; with no file there is
+/// nothing to do.
+#[test]
+fn forgetting_the_models_directory_removes_its_lines_and_keeps_the_rest() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let temp = tempdir().unwrap();
+    let _env_guard = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
+    let file = temp.path().join(".env");
+
+    forget_models_dir().expect("no file is nothing to do");
+    assert!(!file.exists());
+
+    fs::write(
+        &file,
+        "BEFORE=1\nGGLIB_MODELS_DIR=/old dir\nexport GGLIB_MODELS_DIR=/older\nGGLIB_MODELS_DIR_OLD=/b\n",
+    )
+    .unwrap();
+    forget_models_dir().unwrap();
+
+    assert_eq!(
+        loaded(&file),
+        owned(&[("BEFORE", "1"), ("GGLIB_MODELS_DIR_OLD", "/b")])
+    );
+    assert_eq!(persisted_models_dir(), None);
+}

@@ -14,7 +14,7 @@
    "sleep": 0.5
   },
   {
-   "type": "gglib benchmark compare -p \"Write a haiku about a lighthouse, and nothing else.\" -m Qwen3-4B-Instruct-2507 -m Qwen3.8-27B --max-tokens 400"
+   "type": "gglib benchmark compare --prompt \"Write a haiku about a lighthouse, and nothing else.\" -m Qwen3-4B-Instruct-2507 -m Qwen3.8-27B --max-tokens 400"
   },
   {
    "keys": "\r"

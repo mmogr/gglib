@@ -29,7 +29,7 @@ async fn repos_are_isolated_between_separate_builds() {
     let model = NewModel::new(
         "IsolationTest".to_string(),
         dir1.path().join("model.gguf"),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     build1.repos.models.insert(&model).await.unwrap();

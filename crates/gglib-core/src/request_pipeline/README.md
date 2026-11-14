@@ -32,15 +32,12 @@ does either.
 **Resolution — what the model is**
 
 - [`model_context`] — [`ModelContext`], the resolved per-model facts
-  (capabilities, `format:*` tags, inference defaults, context length) that the
+  (capabilities, tags, inference defaults, context length) that the
   request and response stages are built from, plus the inert
   [`ModelContext::passthrough`] fallback.
 - [`mod@resolve`] — [`resolve()`], the single catalog round-trip that produces one,
   and [`resolve_summary()`], the same lookup for a caller that refuses a model
   the catalog does not hold rather than degrade it.
-- [`request_shape`] — [`carries_tools()`], the one thing the stages need to know
-  about the *request* rather than the model: whether it is asking for a tool
-  call. Read by two stages for different purposes, so it lives in neither.
 - [`content`] — [`text_len()`] and [`for_each_text_mut()`], the two shapes a
   message's `content` takes (a string, or an array of parts), read and
   rewritten in one place for every stage that handles message text; and
@@ -87,23 +84,16 @@ does either.
   and oversized assistant turns to fit the model's context budget, and
   rejecting the request when it cannot be made to fit.
 - [`truncation_parts`] — `elide()`, the elision of one message in either
-  content shape; kept beside `truncation`, which is at its file budget.
+  content shape; kept beside `truncation`.
 - [`measure`] — [`ContextBudget`], the characters a request may measure and
   the context in tokens they stand for, and the measurement stage 3 takes: a
   request's serialized length, with each image counted at its estimated
   tokens in place of the length of its URL.
 - [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stage 4: the
-  sampling hierarchy and the agentic temperature ceiling. Everything that
+  sampling hierarchy. Everything that
   touches top-level sampling keys.
-- [`effort_gate`] — stage 5b: deleting a resolved `reasoning_effort` the
-  model's observed template does not read, and writing down what was deleted so
-  a surface can say whose setting went nowhere.
 - [`sampling_log`] — no stage of its own; the single `sampling resolved` debug
-  line, rendered after 5b so it describes what was *sent* rather than what
-  stage 4 folded. Its module docs carry the argument for that placement.
-- [`constrain`] — [`constrain_tool_calls()`], stage 6: gglib's own
-  decode-time grammar for a dialect model's tool calls. It runs after
-  stage 3 because the grammar adds a top-level key.
+  line, rendered once stage 4 has resolved the request.
 
 **Checking and explaining — no stage**
 
@@ -112,8 +102,8 @@ does either.
   proxy's tool-call repair reads it; the re-issue lives there.
 - [`explain`] — [`explain_stored()`]: a model's stored sampling
   configuration resolved with no request in hand, each value with the rung
-  that supplied it, and the stage-5b effort gate applied. `gglib model
-  explain` and the GUI's sampling panel both draw it.
+  that supplied it. `gglib model explain` and the GUI's sampling panel both
+  draw it.
 
 Outside tests, three paths call [`apply()`]: the proxy's forwarding path
 (`gglib-proxy`'s `forward.rs`), the runtime's completion adapter

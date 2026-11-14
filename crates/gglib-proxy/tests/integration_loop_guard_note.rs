@@ -1,15 +1,12 @@
-//! End to end: under `note`, a tripped request reaches the model with a note.
+//! End to end: a run's first trip reaches the model with a note.
 //!
 //! The half of #1052 that cannot be seen from a unit test is what the
 //! *upstream* receives. These drive the real proxy over HTTP against an
 //! upstream that keeps the body it was sent, so every claim about the note is
 //! read off the bytes llama-server would have parsed: that the request was
-//! forwarded at all, that the note is the last thing in the last message, that
-//! it names what repeated, and that nothing else about the request moved.
-//!
-//! Their own file because `integration_loop_guard.rs` is frozen at its size by
-//! the complexity ratchet, and because these are about a different answer:
-//! that file's cases now ask for `refuse` explicitly.
+//! forwarded at all, that the note is the last thing in the last message,
+//! that it names what repeated, and that nothing else about the request
+//! moved.
 
 use std::sync::Arc;
 
@@ -17,18 +14,19 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::LoopGuardMode;
 use gglib_core::ports::ModelRuntimePort;
 
 mod fixtures;
 use fixtures::common::FixedUpstream;
 use fixtures::loop_guard::{
-    chat_body, looping_history, spawn_proxy_in_mode, spawn_recording_upstream, stagnating_history,
+    chat_body, looping_history, spawn_proxy_with_guard, spawn_recording_upstream,
+    stagnating_history,
 };
 
-/// Send `history` to a proxy in `mode` and return what the upstream received,
+/// Send `history` to a proxy with its guard on or off and return what the
+/// upstream received,
 /// the proxy's status code, and what the dashboard then says about the model.
-async fn forward_under(mode: LoopGuardMode, history: Vec<Value>) -> (u16, Option<Value>, Value) {
+async fn forward_under(guard: bool, history: Vec<Value>) -> (u16, Option<Value>, Value) {
     let upstream_cancel = CancellationToken::new();
     let (upstream_port, seen) = spawn_recording_upstream(upstream_cancel.clone()).await;
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
@@ -37,7 +35,7 @@ async fn forward_under(mode: LoopGuardMode, history: Vec<Value>) -> (u16, Option
         slot_restore_supported: true,
         pinned: false,
     });
-    let (proxy_url, proxy_cancel) = spawn_proxy_in_mode(runtime, "test-model", mode).await;
+    let (proxy_url, proxy_cancel) = spawn_proxy_with_guard(runtime, "test-model", guard).await;
 
     let mut body = chat_body("test-model", history);
     body["stream"] = json!(true);
@@ -52,7 +50,7 @@ async fn forward_under(mode: LoopGuardMode, history: Vec<Value>) -> (u16, Option
     let _ = resp.bytes().await;
 
     let status_json: Value = Client::new()
-        .get(format!("{proxy_url}/v1/proxy/status"))
+        .get(format!("{proxy_url}/v1/gglib/proxy/status"))
         .send()
         .await
         .expect("status request")
@@ -75,8 +73,7 @@ async fn forward_under(mode: LoopGuardMode, history: Vec<Value>) -> (u16, Option
 /// a 400 now reaches the model, carrying a note that says what repeated.
 #[tokio::test]
 async fn a_repeated_batch_is_forwarded_with_a_note_naming_it() {
-    let (status, forwarded, dashboard) =
-        forward_under(LoopGuardMode::Note, looping_history(3)).await;
+    let (status, forwarded, dashboard) = forward_under(true, looping_history(3)).await;
 
     assert_eq!(status, 200, "a noted request is forwarded, not refused");
     let forwarded = forwarded.expect("the upstream was reached");
@@ -131,8 +128,7 @@ async fn a_repeated_batch_is_forwarded_with_a_note_naming_it() {
 /// when the guard notes rather than refuses.
 #[tokio::test]
 async fn a_repeated_reply_is_forwarded_with_a_note_and_counted_as_stagnation() {
-    let (status, forwarded, dashboard) =
-        forward_under(LoopGuardMode::Note, stagnating_history(6)).await;
+    let (status, forwarded, dashboard) = forward_under(true, stagnating_history(6)).await;
 
     assert_eq!(status, 200);
     let forwarded = forwarded.expect("the upstream was reached");
@@ -165,12 +161,11 @@ async fn a_repeated_reply_is_forwarded_with_a_note_and_counted_as_stagnation() {
     );
 }
 
-/// `off` is today's off: the same history reaches the model untouched, and
+/// With the guard off the same history reaches the model untouched, and
 /// nothing is counted, because nothing is scanned.
 #[tokio::test]
 async fn an_off_guard_forwards_the_same_history_untouched() {
-    let (status, forwarded, dashboard) =
-        forward_under(LoopGuardMode::Off, looping_history(3)).await;
+    let (status, forwarded, dashboard) = forward_under(false, looping_history(3)).await;
 
     assert_eq!(status, 200);
     let forwarded = forwarded.expect("the upstream was reached");
@@ -179,11 +174,11 @@ async fn an_off_guard_forwards_the_same_history_untouched() {
         .and_then(|m| m.last())
         .and_then(|m| m["content"].as_str())
         .expect("string content");
-    assert_eq!(content, "continue", "no note is added under `off`");
+    assert_eq!(content, "continue", "no note is added with the guard off");
 
     let counts = &dashboard["per_model_defects"]["test-model"];
     assert_eq!(counts["loop_guard_trips"].as_u64(), Some(0), "{dashboard}");
-    // All three diagnostic readings: `off` means the scan does not run, so
+    // All three diagnostic readings: off means the scan does not run, so
     // none of them can be taken. One would pass for a guard that scanned and
     // merely declined to act.
     for reading in [
@@ -194,7 +189,7 @@ async fn an_off_guard_forwards_the_same_history_untouched() {
         assert_eq!(
             counts[reading].as_u64(),
             Some(0),
-            "`off` scans nothing, so {reading} cannot be taken: {dashboard}"
+            "an off guard scans nothing, so {reading} cannot be taken: {dashboard}"
         );
     }
 }
@@ -204,7 +199,7 @@ async fn an_off_guard_forwards_the_same_history_untouched() {
 #[tokio::test]
 async fn a_benign_history_reaches_the_model_unchanged() {
     let history = vec![json!({ "role": "assistant", "content": "both files look fine" })];
-    let (status, forwarded, dashboard) = forward_under(LoopGuardMode::Note, history).await;
+    let (status, forwarded, dashboard) = forward_under(true, history).await;
 
     assert_eq!(status, 200);
     let forwarded = forwarded.expect("the upstream was reached");

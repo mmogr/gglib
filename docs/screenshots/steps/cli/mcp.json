@@ -14,7 +14,7 @@
    "sleep": 0.5
   },
   {
-   "type": "gglib mcp add --name filesystem --type stdio --command npx --args=\"-y,@modelcontextprotocol/server-filesystem,.\""
+   "type": "gglib mcp add --name filesystem --command npx --args=\"-y,@modelcontextprotocol/server-filesystem,.\""
   },
   {
    "keys": "\r"

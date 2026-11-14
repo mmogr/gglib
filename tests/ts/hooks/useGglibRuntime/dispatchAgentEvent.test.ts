@@ -494,10 +494,17 @@ describe('dispatchAgentEvent — waiting', () => {
     const cleanup = vi.fn();
     const deps = makeDeps(store.setMessages, { cleanup });
 
-    expect(dispatchAgentEvent({ type: 'waiting', reason: 'image_render', step: 3, total: 20, position: 1 }, state, deps)).toBe(false);
-    dispatchAgentEvent({ type: 'waiting', reason: 'image_render', step: 4, total: 20, position: 1 }, state, deps);
+    const load = { type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'Qwen3-4B' } as const;
+    expect(dispatchAgentEvent({ ...load, elapsed_ms: 3_000, said: 'Loading Qwen3-4B… 3 s' }, state, deps)).toBe(false);
+    dispatchAgentEvent({ ...load, elapsed_ms: 4_000, said: 'Loading Qwen3-4B… 4 s' }, state, deps);
 
-    expect(custom(store.messages()[0])?.waiting).toEqual({ reason: 'image_render', step: 4, total: 20, position: 1 });
+    expect(custom(store.messages()[0])?.waiting).toEqual({
+      reason: 'model_load',
+      step: 0,
+      total: 0,
+      position: 0,
+      said: 'Loading Qwen3-4B… 4 s',
+    });
     expect(custom(store.messages()[1])?.waiting).toBeUndefined();
     expect(partsOf(store.messages()[0])).toHaveLength(0);
     expect(cleanup).not.toHaveBeenCalled();

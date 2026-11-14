@@ -7,7 +7,7 @@
 //! pinned, is treated as such. Each is listed under an id of its own,
 //! `qwen@Q6_K` or `qwen@2`, and a chat that sends one back is admitted as
 //! that model. The list also names this machine, when the serve's
-//! `HostFacts` can, which `/health` never does.
+//! `HostFacts` can, which `/health` never does, and says which gglib it is.
 
 mod fixtures;
 
@@ -402,4 +402,24 @@ async fn the_name_is_read_on_every_listing() {
 
     assert_eq!(first["machine_name"], "desk-0", "{first}");
     assert_eq!(second["machine_name"], "desk-1", "{second}");
+}
+
+/// The list says which gglib this is. A proxy given none of the daemon's
+/// ports serves none of gglib's own features but its status.
+#[tokio::test]
+async fn the_list_says_its_version_and_what_it_serves() {
+    let proxy = spawn_with_host(HostFacts::none()).await;
+    let list = get_json(&proxy.base, "/v1/models").await;
+    proxy.cancel.cancel();
+
+    assert_eq!(
+        list["gglib"]["version"],
+        gglib_proxy::models::THIS_VERSION,
+        "{list}"
+    );
+    assert_eq!(
+        list["gglib"]["features"],
+        serde_json::json!(["status"]),
+        "{list}"
+    );
 }

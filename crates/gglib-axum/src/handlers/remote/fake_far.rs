@@ -1,6 +1,8 @@
 //! A fake far proxy on a loopback port, and a `FarProxy` at it: what each
 //! request it saw carried, and the answer it was told to give. Shared by the
-//! chats', the models' and a far agent turn's tests.
+//! chats', the models' and a far agent turn's tests. The `FarProxy` is told
+//! that machine serves every feature, so each call is the one request it
+//! makes; [`far_untold`] is one that asks first.
 
 use std::sync::{Arc, Mutex};
 
@@ -10,6 +12,7 @@ use axum::extract::{Request, State};
 use axum::http::{StatusCode, header};
 use axum::response::Response;
 use gglib_app_services::{FarCredentials, FarProxy};
+use gglib_proxy::models::{Feature, GglibInfo};
 use tokio::sync::{Notify, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -79,8 +82,16 @@ async fn answer(State(fake): State<Arc<Fake>>, request: Request) -> Response {
 /// The fingerprint of the machine the fake far proxy stands in for.
 pub(crate) const FINGERPRINT: &str = "0a1b2c3d4e5f";
 
-/// A fake far proxy answering `status` with `body`, and a `FarProxy` at it.
+/// A fake far proxy answering `status` with `body`, and a `FarProxy` at it
+/// told that machine serves every feature.
 pub(crate) async fn far(status: u16, body: &str) -> (Arc<Fake>, FarProxy) {
+    let (fake, client) = far_untold(status, body).await;
+    (fake, client.knowing(GglibInfo::this_build(Feature::ALL)))
+}
+
+/// [`far`], with a `FarProxy` told nothing: it reads that machine's model
+/// list before each of gglib's own calls.
+pub(crate) async fn far_untold(status: u16, body: &str) -> (Arc<Fake>, FarProxy) {
     let fake = Arc::new(Fake {
         seen: Mutex::new(Vec::new()),
         status: Mutex::new(status),

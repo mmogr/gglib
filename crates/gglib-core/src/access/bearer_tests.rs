@@ -239,6 +239,18 @@ mod policy {
         assert!(policy.admits(Some("Bearer bound-with")).await);
     }
 
+    /// A key stored with whitespace around it is demanded trimmed, the key
+    /// the tunnel and every client present (#1826).
+    #[tokio::test]
+    async fn a_padded_stored_key_admits_the_trimmed_key() {
+        let repo = Rotatable::new(Some(" padded-key \n"));
+        let policy = BearerPolicy::tracking(None, live(Arc::clone(&repo)));
+
+        assert_eq!(policy.current().await.as_deref(), Some("padded-key"));
+        assert!(policy.admits(Some("Bearer padded-key")).await);
+        assert!(!policy.admits(None).await);
+    }
+
     /// `--api-key` and `GGLIB_API_KEY` outrank the stored setting, so a
     /// settings write must not replace one — that would both invert the
     /// documented precedence and lock out the operator who passed it.

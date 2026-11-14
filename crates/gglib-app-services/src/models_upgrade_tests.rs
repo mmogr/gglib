@@ -36,7 +36,7 @@ async fn library_asking_as(token: Option<&str>) -> (Arc<AppCore>, ModelOps, i64)
     let mut model = NewModel::new(
         "zeta".to_string(),
         PathBuf::from("/models/old/zeta.Q8_0.gguf"),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     model.hf_repo_id = Some(REPO.to_string());
@@ -189,7 +189,7 @@ async fn an_upgrade_asks_the_hub_with_the_cores_token() {
 /// A second model of [`REPO`], recorded at [`RECORDED`], as `edit` leaves it.
 async fn another_model(core: &AppCore, edit: impl FnOnce(&mut NewModel)) -> i64 {
     let path = PathBuf::from("/models/other/other.gguf");
-    let mut model = NewModel::new("other".to_string(), path, 8.0, chrono::Utc::now());
+    let mut model = NewModel::new("other".to_string(), path, Some(8.0), chrono::Utc::now());
     model.hf_repo_id = Some(REPO.to_string());
     model.hf_commit_sha = Some(RECORDED.to_string());
     edit(&mut model);

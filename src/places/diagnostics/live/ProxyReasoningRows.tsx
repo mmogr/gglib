@@ -23,11 +23,8 @@
  *    conclusions: the second says every effort setting on this model is inert,
  *    the first says nobody has managed to ask. So the unknown state is a
  *    warning with its cause, and the negative one is neutral information — not
- *    a failure, since suppressing a level a template ignores is the system
- *    working.
- * 3. **A suppressed level is shown, marked.** Hiding it would lose the only
- *    record there is; showing it unmarked would report a control that went
- *    nowhere as though it had worked.
+ *    a failure, since a template that ignores the level is a fact about the
+ *    model.
  *
  * @module places/diagnostics/live/ProxyReasoningRows
  */
@@ -87,8 +84,8 @@ const TemplateSupport: FC<{ support: SamplingEffortSupport }> = ({ support }) =>
     case 'not_supported':
       return (
         <Banner variant="info" title="This model's template never reads reasoning_effort">
-          A resolved level is suppressed before the request is sent, so setting one
-          for this model changes nothing.
+          A resolved level is still sent, and the template ignores it, so setting
+          one for this model changes nothing.
         </Banner>
       );
     case 'not_yet_observed':
@@ -127,15 +124,7 @@ const LatestRows: FC<{ reasoning: SamplingReasoningReadback }> = ({ reasoning })
 
   return (
     <div className="flex flex-col gap-xs">
-      {effort && !effort.suppressed && (
-        <Row label="Effort" value={`${effort.level} (${effort.source})`} />
-      )}
-      {effort && effort.suppressed && (
-        <Banner variant="warning" title="A resolved effort level was never sent">
-          {effort.level}, from {effort.source} — deleted before sending because
-          the observed template never reads the variable.
-        </Banner>
-      )}
+      {effort && <Row label="Effort" value={`${effort.level} (${effort.source})`} />}
       {budget && (
         <Row
           label="Budget"

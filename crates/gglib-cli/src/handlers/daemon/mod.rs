@@ -1,53 +1,18 @@
 #![doc = include_str!("README.md")]
 
-mod mdns;
-
 use std::io::{IsTerminal as _, Write as _};
 
 use anyhow::Result;
 
-use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, Absent, DaemonProbe, ProxyStatusDto};
 use crate::presentation::style;
 use crate::target::Target;
 use gglib_axum::{DaemonLock, DaemonOptions, SHUTDOWN_WATCHDOG, run_daemon};
-use gglib_core::{CorsConfig, daemon_port};
+use gglib_core::daemon_port;
 
 /// Execute `gglib daemon run`: host the daemon in the foreground.
-pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<()> {
-    let opts = if share_lan {
-        print_share_lan_warning();
-        // The mDNS name is advertised below, so it is plainly a name this
-        // daemon answers to — nobody should have to repeat it as a flag.
-        let mut allowed_hosts = allowed_hosts;
-        allowed_hosts.push(mdns::LAN_HOSTNAME.into());
-        DaemonOptions {
-            host: "0.0.0.0".into(),
-            cors: CorsConfig::AllowAll,
-            allowed_hosts,
-        }
-    } else {
-        DaemonOptions {
-            allowed_hosts,
-            ..DaemonOptions::default()
-        }
-    };
-
-    // Registered just before the daemon binds; every mDNS failure is
-    // non-fatal (the server is reachable by IP either way).
-    let advertiser = share_lan
-        .then(|| mdns::MdnsAdvertiser::start(&opts.host, daemon_port()))
-        .flatten();
-
-    let outcome = run_daemon(opts).await;
-
-    // Withdraw the record before propagating any error, so a crash does not
-    // leave a stale `gglib.local` cached across the network.
-    if let Some(advertiser) = advertiser {
-        advertiser.shutdown().await;
-    }
-
-    outcome
+pub(crate) async fn run(allowed_hosts: Vec<String>) -> Result<()> {
+    run_daemon(DaemonOptions { allowed_hosts }).await
 }
 
 /// The report's lines for the proxy: its state (a pinned one with its model,
@@ -69,9 +34,9 @@ fn proxy_lines(proxy: &ProxyStatusDto) -> Vec<String> {
 }
 
 /// Execute `gglib daemon status`.
-pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
+pub(crate) async fn status() -> Result<()> {
     style::print_info_banner("Daemon", "\u{2139}\u{fe0f}");
-    match daemon_client::running(ctx).await {
+    match daemon_client::running().await {
         Ok(handle) => {
             eprintln!("  Status:  running at {}", daemon_client::base_url());
             if let Ok(dir) = gglib_core::paths::data_root()
@@ -105,18 +70,15 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
 
 /// Execute `gglib daemon stop`: this machine's daemon, or with `--remote`
 /// the paired machine's, through the tunnel.
-pub(crate) async fn stop(ctx: &CliContext, target: Target, yes: bool) -> Result<()> {
+pub(crate) async fn stop(target: Target, yes: bool) -> Result<()> {
     target
-        .run(
-            async || stop_here(ctx).await,
-            async || stop_far(ctx, yes).await,
-        )
+        .run(async || stop_here().await, async || stop_far(yes).await)
         .await
 }
 
 /// Request shutdown from the daemon on this machine and wait for it to land.
-async fn stop_here(ctx: &CliContext) -> Result<()> {
-    let handle = match daemon_client::running(ctx).await {
+async fn stop_here() -> Result<()> {
+    let handle = match daemon_client::running().await {
         Ok(handle) => handle,
         Err(Absent::NotRunning) => {
             eprintln!("  Daemon is not running.");
@@ -162,20 +124,6 @@ async fn stop_here(ctx: &CliContext) -> Result<()> {
     )
 }
 
-/// The LAN-exposure warning, printed before a `--share-lan` daemon binds.
-fn print_share_lan_warning() {
-    eprintln!();
-    eprintln!("  \u{26a0}\u{fe0f}  LAN SHARING ENABLED (--share-lan)");
-    eprintln!("     The daemon is reachable by every device on your network.");
-    eprintln!("     Its management API requires the proxy's API key \u{2014} anyone holding");
-    eprintln!("     it can download models and start or stop inference on this machine.");
-    eprintln!(
-        "     `{}` prints it. Only use this on networks you trust.",
-        gglib_core::secret::SettingSecret::ProxyApiKey.reveal_command()
-    );
-    eprintln!();
-}
-
 /// Stop the paired machine's daemon through the tunnel, then disconnect.
 ///
 /// Asks first, because the far side cannot be restarted from here. `--yes`
@@ -184,8 +132,8 @@ fn print_share_lan_warning() {
 /// is this machine's daemon's to carry out: it owns the tunnel, it already
 /// does this for the desktop app, and the request it sends asks the far
 /// proxy to type the same word.
-async fn stop_far(ctx: &CliContext, yes: bool) -> Result<()> {
-    let Ok(handle) = daemon_client::running(ctx).await else {
+async fn stop_far(yes: bool) -> Result<()> {
+    let Ok(handle) = daemon_client::running().await else {
         anyhow::bail!("the daemon is not running, so nothing is connected to a remote")
     };
     let status = handle.remote_status().await?;

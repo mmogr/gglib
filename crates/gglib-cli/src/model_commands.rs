@@ -33,11 +33,13 @@ pub enum ModelCommand {
         /// Re-import a file already in the library, re-deriving its detected
         /// metadata from the file
         ///
-        /// Replaces tags, capabilities and the dialect spec — including with
-        /// nothing, so these can be cleared. Updates quantization, context
+        /// Replaces tags and capabilities — including with nothing, so these
+        /// can be cleared. Updates quantization, context
         /// length and the expert counts only where a value is newly detected;
-        /// a stored one is never emptied. `gglib model retag` rebuilds only
-        /// tags and the dialect spec, so this is the wider of the two.
+        /// a stored one is never emptied. Re-reads each key of the file's
+        /// header, keeping keys added with `model update --metadata`.
+        /// `gglib model retag` rebuilds only tags, so this is the wider of the
+        /// two.
         ///
         /// The model keeps its id, and its name, parameter count and
         /// architecture are left exactly as stored — those columns are not
@@ -66,22 +68,23 @@ pub enum ModelCommand {
         /// Name or ID of the model to update
         identifier: String,
         /// New name for the model
-        #[arg(short, long)]
+        #[arg(long)]
         name: Option<String>,
         /// Update parameter count (in billions)
-        #[arg(short, long)]
+        #[arg(long)]
         param_count: Option<f64>,
         /// Update architecture
-        #[arg(short, long)]
+        #[arg(long)]
         architecture: Option<String>,
         /// Update quantization type
-        #[arg(short, long)]
+        #[arg(long)]
         quantization: Option<String>,
-        /// Update context length
-        #[arg(short, long)]
+        /// Overwrite the stored trained context length (the model's window,
+        /// not the size it is served at)
+        #[arg(long)]
         context_length: Option<u64>,
         /// Add or update metadata (format: key=value)
-        #[arg(short, long, action = clap::ArgAction::Append)]
+        #[arg(long, action = clap::ArgAction::Append)]
         metadata: Vec<String>,
         /// Remove specific metadata keys (comma-separated)
         #[arg(long)]
@@ -138,8 +141,8 @@ pub enum ModelCommand {
         /// Set the default reasoning effort: minimal, low, medium, high, xhigh, max.
         ///
         /// Applies only to models whose chat template declares that it reads
-        /// the variable; elsewhere the level is dropped before the request is
-        /// sent. There is no `none` — pass `--reasoning-budget-tokens 0` to
+        /// the variable; on any other model it is still sent and the template
+        /// ignores it. There is no `none` — pass `--reasoning-budget-tokens 0` to
         /// stop thinking.
         #[arg(long = "reasoning-effort", value_parser = crate::reasoning_args::parse_effort)]
         reasoning_effort: Option<gglib_core::domain::ReasoningEffort>,
@@ -188,15 +191,14 @@ pub enum ModelCommand {
 
     /// Re-derive auto-tags for installed models from their persisted GGUF metadata.
     ///
-    /// Use this after upgrading gglib to backfill new auto-tags (e.g. the
-    /// `format:*` dialect tags introduced for the universal normalization
-    /// pipeline) on models that were imported under an older release.
+    /// Use this after upgrading gglib to backfill auto-tags a newer release
+    /// detects on models that were imported under an older one.
     ///
     /// By default the operation is **additive**: new tags are appended,
     /// nothing is ever removed, and user-curated tags are left alone.
     /// Pass `--full` to drop and re-derive every tag in the auto-generated
-    /// namespace (capability flags + `format:*` tags) — user tags outside
-    /// that namespace are still preserved.
+    /// namespace (the capability tags) — user tags outside that namespace are
+    /// still preserved.
     Retag {
         /// Retag a single model by id, name, or HF identifier. Omit with
         /// `--all` to retag every model in the catalog.
@@ -204,8 +206,8 @@ pub enum ModelCommand {
         /// Retag every model in the catalog.
         #[arg(long)]
         all: bool,
-        /// Drop and re-derive every auto-generated tag (capability flags +
-        /// `format:*`) instead of merely appending missing ones.
+        /// Drop and re-derive every auto-generated tag instead of merely
+        /// appending missing ones.
         #[arg(long)]
         full: bool,
     },
@@ -224,7 +226,7 @@ pub enum ModelCommand {
         /// Name or ID of the model to repair
         identifier: String,
         /// Specific file indices to repair, as verify lists them (comma-separated, e.g., "0,2,5")
-        #[arg(short, long)]
+        #[arg(long)]
         shards: Option<String>,
         /// Answer yes to the confirmation, so nothing is asked
         #[arg(short = 'y', long)]
@@ -257,27 +259,19 @@ pub enum ModelCommand {
         /// Unsloth Dynamic quant like "UD-Q4_K_M")
         #[arg(short, long)]
         quantization: Option<String>,
-        /// List available quantizations for the model
+        /// List available quantizations for the model, and download nothing.
+        ///
+        /// A private repository needs `HF_TOKEN` set in this shell. A download
+        /// runs on the daemon, which reads `HF_TOKEN` where it started, once,
+        /// as it starts.
         #[arg(long)]
         list_quants: bool,
-        /// Not currently honoured: the daemon owns the download and registers
-        /// the model when it completes. Downloads still run; use
-        /// `gglib model remove <id>` afterwards to drop the row and keep the file.
-        #[arg(long)]
-        skip_db: bool,
-        /// `HuggingFace` token for private models (for `--list-quants` only).
-        ///
-        /// For downloads, set the `HF_TOKEN` environment variable instead, where
-        /// the gglib daemon starts: the daemon runs the download, and reads the
-        /// variable once, as it starts.
-        #[arg(long)]
-        token: Option<String>,
     },
 
     /// Check for updates to downloaded models
+    #[command(group(clap::ArgGroup::new("which").required(true).args(["identifier", "all"])))]
     CheckUpdates {
-        /// Check a specific model by name or ID
-        #[arg(long)]
+        /// Name or ID of the model to check
         identifier: Option<String>,
         /// Check all models
         #[arg(long)]
@@ -298,10 +292,10 @@ pub enum ModelCommand {
         /// Search query (model name, author, or keywords)
         query: String,
         /// Limit number of results
-        #[arg(short, long, default_value = "10")]
+        #[arg(short = 'n', long, default_value = "10")]
         limit: u32,
         /// What to sort the results by
-        #[arg(short, long, value_enum, default_value_t)]
+        #[arg(long, value_enum, default_value_t)]
         sort: CliHubSort,
         /// Search for image models (text-to-image GGUF repositories) in
         /// place of models that chat
@@ -315,7 +309,7 @@ pub enum ModelCommand {
         #[arg(value_enum, default_value_t)]
         category: CliBrowseCategory,
         /// Limit number of results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short = 'n', long, default_value = "20")]
         limit: u32,
         /// Filter by model size (e.g., "7B", "13B", "70B")
         #[arg(long)]
@@ -330,9 +324,12 @@ pub enum ModelCommand {
     ///
     /// Capabilities control how gglib preprocesses requests before they reach
     /// the model (strict-turn coalescing, system-role conversion, etc.).  They
-    /// are detected automatically at import time from the GGUF's chat template
-    /// and `general.architecture` field.  Use this command when auto-detection
-    /// produces the wrong result for a specific build.
+    /// are guessed at import time from the GGUF's chat template and
+    /// `general.architecture` field.  When llama-server launches a model on
+    /// this machine, its own answer becomes the tool flag (the first time, and
+    /// whenever it changes) until you set it, and a model whose tool flag is
+    /// off is sent no tools by any client.  Use this command when
+    /// auto-detection produces the wrong result for a specific build.
     ///
     /// Without any flag arguments the command prints the current capabilities.
     ///
@@ -421,14 +418,14 @@ pub enum ModelCommand {
     /// # Examples
     ///
     ///   gglib model load 3
-    ///   gglib model load "Qwen3-30B" --context 32768
+    ///   gglib model load "Qwen3-30B" --context-size 32768
     ///   gglib model load 3 --pin          # and pin the endpoint to it
     Load {
         /// Name or ID of the model to load
         identifier: String,
         /// Context size to serve at: a number of tokens, or `max` for the
         /// model's trained window. Omitted, the daemon fits it.
-        #[arg(long, alias = "ctx-size", value_name = "N|max")]
+        #[arg(short = 'c', long = "context-size", value_name = "N|max")]
         context: Option<String>,
         /// Pin the endpoint to this model first: every request for another
         /// model is refused while the pin holds.

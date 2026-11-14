@@ -2,11 +2,10 @@
 //!
 //! `chat`, `proxy`, `daemon` and `attachment` each carry a second level of
 //! subcommands (`gglib chat history`, `gglib proxy stop`, `gglib daemon run`,
-//! `gglib attachment save`). They live
-//! here rather than beside [`Commands`](crate::commands::Commands) because
-//! that enum sits on the 300 LOC ratchet, and a nested enum is the part of it
-//! with no coupling to the top level — nothing here names a flag group, so the
-//! split costs no shared context.
+//! `gglib attachment save`). They live here rather than beside
+//! [`Commands`](crate::commands::Commands) because a nested enum has no
+//! coupling to the top level — nothing here names a flag group, so the split
+//! costs no shared context.
 //!
 //! Re-exported from [`crate::commands`], so callers keep naming them
 //! `crate::commands::ChatCommand` and the move is invisible to dispatch.
@@ -51,7 +50,7 @@ pub enum AttachmentCommand {
 pub enum ProxyCommand {
     /// Show a live terminal dashboard for an already-running proxy
     ///
-    /// Connects to `GET /v1/proxy/status/stream` on the target proxy and
+    /// Connects to `GET /v1/gglib/proxy/status/stream` on the target proxy and
     /// redraws active connections, llama.cpp `/slots` context usage, and
     /// the running request count in place until Ctrl+C is pressed.
     Dashboard {
@@ -137,24 +136,15 @@ pub enum DaemonCommand {
     /// The daemon is the one process on this machine that spawns and owns
     /// llama-server. Other commands start it automatically when they need it;
     /// run it manually for a foreground session or a service manager unit.
+    /// It listens on this machine only (127.0.0.1).
     Run {
-        /// Expose the daemon on all LAN interfaces (0.0.0.0) and advertise
-        /// it over mDNS
-        ///
-        /// The management API then requires a bearer token: the stored API
-        /// key, minted and stored at startup if none exists, which
-        /// `gglib config settings reveal proxy-api-key` prints. It can
-        /// still start and stop inference on this machine — only use on
-        /// networks you trust.
-        #[arg(long)]
-        share_lan: bool,
-
-        /// Accept this Host header value in addition to loopback and IP
-        /// literals (repeatable)
+        /// Accept this Host header value in addition to loopback
+        /// (repeatable)
         ///
         /// The daemon refuses requests whose Host names a hostname it was
         /// never told about — the DNS-rebinding guard. Name your DNS alias
-        /// here if you reach a shared daemon through one.
+        /// for this machine's loopback here if you reach the daemon through
+        /// one.
         #[arg(long = "allowed-host", value_name = "HOST")]
         allowed_host: Vec<String>,
     },
@@ -193,11 +183,6 @@ pub enum RemoteCommand {
     /// puts the API key on the local proxy, and disabling does not take
     /// that away.
     Enable {
-        /// Gone: `gglib mcp allow-remote <server>` opens a server to paired
-        /// devices. Kept hidden only to say so, before the daemon is asked
-        /// anything.
-        #[arg(long = "allow-mcp", value_name = "SERVER", hide = true)]
-        allow_mcp: Vec<String>,
         /// Self-hosted relay URL (default: iroh's public relays)
         #[arg(long)]
         relay: Option<String>,

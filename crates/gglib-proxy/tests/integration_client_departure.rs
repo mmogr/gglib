@@ -194,7 +194,7 @@ async fn freed_after(held: oneshot::Receiver<()>, left: Instant) -> Duration {
 
 /// The proxy's dashboard.
 async fn status(base: &str) -> Value {
-    reqwest::get(format!("{base}/v1/proxy/status"))
+    reqwest::get(format!("{base}/v1/gglib/proxy/status"))
         .await
         .expect("status answers")
         .json()

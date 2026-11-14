@@ -26,7 +26,6 @@ impl McpServerRepository for OneServer {
         Ok(McpServer {
             id,
             name: new.name,
-            server_type: new.server_type,
             config: new.config,
             enabled: true,
             allow_remote: false,

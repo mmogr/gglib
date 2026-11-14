@@ -464,3 +464,30 @@ async fn a_paired_machine_that_does_not_answer_is_named() {
     };
     assert!(message.starts_with("could not reach desk:"), "{message}");
 }
+
+/// A paired machine that runs a gglib too old to say what it serves cannot
+/// draw, in the sentence that asks for it to be updated, and is asked
+/// nothing past its model list.
+#[tokio::test]
+async fn a_paired_machine_too_old_to_say_cannot_draw_and_says_to_update_it() {
+    let (port, seen) = stand_in(
+        200,
+        "application/json",
+        r#"{"object":"list","data":[]}"#.to_owned(),
+    );
+
+    let answer = far_generator(port).drawing(None).await;
+
+    assert_eq!(answer.code.as_deref(), Some("drawing_unavailable"));
+    assert_eq!(
+        answer.reason.as_deref(),
+        Some(
+            format!(
+                "desk runs a gglib older than this machine's {} — update gglib on desk",
+                gglib_proxy::models::THIS_VERSION
+            )
+            .as_str()
+        )
+    );
+    assert_eq!(seen.lock().unwrap()[0], "GET /v1/models HTTP/1.1");
+}

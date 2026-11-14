@@ -1,8 +1,7 @@
 //! Tests for what happens once following a connection is over.
 //!
-//! A sibling of `connect_watch_tests.rs`, which is within a dozen lines of
-//! the file-size budget, and because these are the other half of the
-//! subject: that file asks *when* a connection is finished,
+//! A sibling of `connect_watch_tests.rs` because these are the other half of
+//! the subject: that file asks *when* a connection is finished,
 //! [`super::conclude`] is *what is then done about it* — the slot cleared,
 //! the port dropped, the disconnection announced.
 //!

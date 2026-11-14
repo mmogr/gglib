@@ -397,7 +397,7 @@ async fn an_invoke_with_the_switch_off_is_refused_and_draws_nothing() {
         assert_eq!(
             frames[0]["error"]["message"],
             "Unknown tool: 'builtin__generate_image'. drawing through /mcp is switched off; \
-             turn it on in Settings, or run `gglib config settings set --mcp-drawing true`"
+             turn it on in Settings, or run `gglib config set mcp-drawing true`"
         );
         assert!(frames[0].get("result").is_none());
         assert_eq!(port.renders(), 0, "{off:?}");

@@ -111,7 +111,7 @@ impl Target {
                 Ok(TurnModel::here(identifier, model))
             }
             Self::Remote => {
-                let paired = self.paired(ctx).await?;
+                let paired = self.paired().await?;
                 let lookup = async |id: &str| paired.handle.paired_model(id).await;
                 let turn = resolve_far(
                     &identifier,

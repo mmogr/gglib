@@ -1,24 +1,50 @@
 //! Tests for [`super`] — the `gglib model explain` table.
 
-use gglib_app_services::{ParamProvenanceDto, SuppressedEffortDto};
-use gglib_core::domain::InferenceConfig;
+use gglib_app_services::{ParamProvenanceDto, ProvenanceKindDto, SamplingLayerDto};
+use gglib_core::domain::{InferenceConfig, ParamSource, source_label};
 
 use super::*;
-use ProvenanceKindDto::{Coupled, Layer, SuppressedByTemplate, Unset};
-use SamplingLayerDto::{Global, ModelAutoDetected, ModelUserSet, Profile};
+use ProvenanceKindDto::{Coupled, Layer, Unset};
+use SamplingLayerDto::{Global, ModelAutoDetected, ModelUserSet, Profile, Request};
 
 /// `resolved`, explained by [`auto_detected_sources`] for a model that
 /// publishes nothing.
 fn explained(resolved: InferenceConfig) -> SamplingExplanationDto {
-    SamplingExplanationDto {
+    labelled(SamplingExplanationDto {
         resolved,
         sources: auto_detected_sources(),
         profile: None,
         trust_client_sampling: false,
         published: Vec::new(),
         defaults_origin: None,
-        effort_suppressed: None,
+    })
+}
+
+/// The source a row's `kind` and `layer` stand for.
+const fn source_of(kind: ProvenanceKindDto, layer: Option<SamplingLayerDto>) -> ParamSource {
+    match (kind, layer) {
+        (Coupled, _) => ParamSource::Coupled,
+        (Unset, _) => ParamSource::Unset,
+        (Layer, layer) => ParamSource::Layer(match layer {
+            Some(Request) => 0,
+            Some(Profile) => 1,
+            Some(ModelUserSet) => 2,
+            Some(Global) => 3,
+            Some(ModelAutoDetected) => 4,
+            None => 5,
+        }),
     }
+}
+
+/// `explanation` with each row labelled as the daemon labels it, for its
+/// source, the profile applied and the origin of the model's defaults.
+fn labelled(mut explanation: SamplingExplanationDto) -> SamplingExplanationDto {
+    let profile = explanation.profile.clone();
+    for row in &mut explanation.sources {
+        let source = source_of(row.kind, row.layer);
+        row.label = source_label(source, profile.as_deref(), explanation.defaults_origin);
+    }
+    explanation
 }
 
 /// Nothing resolved, under [`auto_detected_sources`].
@@ -36,7 +62,7 @@ fn sourced(
     let rows = &mut explanation.sources;
     let row = rows.iter_mut().find(|row| row.param == param).unwrap();
     (row.kind, row.layer) = (kind, layer);
-    explanation
+    labelled(explanation)
 }
 
 /// `explanation`, for a model whose GGUF publishes `key` for `param`, with
@@ -51,22 +77,6 @@ fn publishing(
         param: param.to_owned(),
         key: key.to_owned(),
         state,
-    });
-    explanation
-}
-
-/// `explanation`, on a model whose template ignores the `level` that `layer`
-/// asked for: what the gate leaves is no value, and the marker for a rung.
-fn suppressing(
-    explanation: SamplingExplanationDto,
-    level: ReasoningEffort,
-    layer: SamplingLayerDto,
-) -> SamplingExplanationDto {
-    let mut explanation = sourced(explanation, "reasoningEffort", SuppressedByTemplate, None);
-    explanation.resolved.reasoning_effort = None;
-    explanation.effort_suppressed = Some(SuppressedEffortDto {
-        level,
-        layer: Some(layer),
     });
     explanation
 }
@@ -109,6 +119,7 @@ fn auto_detected_sources() -> Vec<ParamProvenanceDto> {
         param: param.to_owned(),
         kind,
         layer,
+        label: String::new(),
     };
     sources.into_iter().map(row).collect()
 }
@@ -165,32 +176,6 @@ fn every_parameter_gets_exactly_one_line() {
     }
 }
 
-/// The two ranks of per-model defaults must read differently — telling
-/// them apart is the whole point of the #685 distinction.
-#[test]
-fn user_set_and_auto_detected_defaults_are_worded_differently() {
-    let user = describe(Layer, Some(ModelUserSet), &plain());
-    let auto = describe(Layer, Some(ModelAutoDetected), &plain());
-
-    assert!(user.contains("user-set"), "{user}");
-    assert!(auto.contains("auto-detected"), "{auto}");
-    assert_ne!(user, auto);
-}
-
-/// A value the coupling rule passed over must not look like one nobody ever
-/// set.
-#[test]
-fn a_coupled_absence_says_why_nothing_is_sent() {
-    let unset = describe(Unset, None, &plain());
-    let coupled = describe(Coupled, None, &plain());
-
-    assert!(!unset.contains("coupled"), "{unset}");
-    assert!(
-        coupled.contains("coupled to temperature layer"),
-        "{coupled}"
-    );
-}
-
 /// `max_tokens` is unset on purpose; it must read as a decision
 /// rather than as a missing number.
 #[test]
@@ -207,17 +192,19 @@ fn an_absent_max_tokens_reads_as_deliberate() {
     assert!(line.contains("unset by design"), "{line}");
 }
 
-/// The profile rung is named after the profile the user actually asked
-/// for, not the generic word.
+/// A row's source is the label the daemon serves for it, printed as it
+/// comes: the words are `source_label`'s, pinned in gglib-core.
 #[test]
-fn the_profile_rung_carries_the_selected_name() {
-    let with_profile = SamplingExplanationDto {
-        profile: Some("coding".to_owned()),
-        ..plain()
-    };
-    assert_eq!(
-        describe(Layer, Some(Profile), &with_profile),
-        "profile 'coding'"
+fn a_row_prints_the_served_label() {
+    let mut served = plain();
+    served.sources[0].label = "the label as served".to_owned();
+
+    let lines = explanation_lines(&served);
+
+    assert!(
+        lines[0].ends_with("\u{2190} the label as served"),
+        "{}",
+        lines[0]
     );
 }
 
@@ -530,10 +517,10 @@ fn reasoning() -> SamplingExplanationDto {
         ..InferenceConfig::default()
     };
     let named = sourced(explained(resolved), "reasoningEffort", Layer, Some(Profile));
-    SamplingExplanationDto {
+    labelled(SamplingExplanationDto {
         profile: Some("high".to_owned()),
         ..sourced(named, "reasoningBudgetTokens", Layer, Some(Profile))
-    }
+    })
 }
 
 /// The row that could not be drawn before this table's name column grew.
@@ -579,80 +566,10 @@ fn the_defer_sentinel_is_a_value_not_an_absence() {
     assert!(!line.contains(ABSENT), "{line}");
 }
 
-/// **The headline case, and the one a bare `unset` would have hidden.** A
-/// `:high` profile on a model whose template ignores the variable is inert, and
-/// the value alone cannot say so — the row would read exactly like a model
-/// nobody configured.
+/// The effort row carries no note: no reasoning control has a GGUF key, so
+/// the published comparison never reaches it.
 #[test]
-fn a_suppressed_effort_reads_differently_from_one_nobody_set() {
-    let suppressed = suppressing(reasoning(), ReasoningEffort::High, Profile);
-
-    let lines = explanation_lines(&suppressed);
-    let row = lines
-        .iter()
-        .find(|l| l.starts_with("reasoning_effort"))
-        .expect("rendered");
-
-    assert!(row.contains("suppressed"), "{row}");
-    assert!(row.contains("template"), "{row}");
-
-    let unset = explanation_lines(&plain());
-    let never_set = unset
-        .iter()
-        .find(|l| l.starts_with("reasoning_effort"))
-        .expect("rendered");
-    assert!(never_set.contains("unset by design"), "{never_set}");
-    assert!(!never_set.contains("suppressed"), "{never_set}");
-}
-
-/// **The actionable half.** Knowing a level was suppressed does not tell an
-/// operator what to change; knowing it was *the `:high` profile's* level does.
-/// Both facts are destroyed by the gate — it clears the value and overwrites
-/// the rung — so they reach the table on the explanation or not at all.
-#[test]
-fn the_suppression_note_names_the_level_and_the_rung() {
-    let suppressed = suppressing(reasoning(), ReasoningEffort::High, Profile);
-    let lines = explanation_lines(&suppressed);
-
-    let note = note_for(&lines, "reasoning_effort").expect("carries a note");
-    assert_eq!(note, "! 'high' from profile 'high'; not sent");
-}
-
-/// This command explains stored configuration and has sent nothing, so nothing
-/// it prints may report a request. The row's wording is a standing property of
-/// the model — true of every request against it — and the note is a label, not
-/// a claim about one that ran.
-#[test]
-fn nothing_in_the_suppression_claims_a_request_happened() {
-    let suppressed = suppressing(plain(), ReasoningEffort::Max, Global);
-    let row = describe(SuppressedByTemplate, None, &suppressed);
-    let note = suppression_note("reasoning_effort", &suppressed).expect("a note");
-
-    assert!(
-        row.contains("this model's template"),
-        "the row states a property of the model: {row}"
-    );
-    for claim in ["was ", "did not", "we sent", "gglib sent"] {
-        assert!(!row.contains(claim), "{claim} in {row}");
-        assert!(!note.contains(claim), "{claim} in {note}");
-    }
-    assert!(note.contains("not sent"), "{note}");
-}
-
-/// The note belongs to one row. Hanging it under `max_tokens` would attach a
-/// reasoning fact to a budget nobody suppressed.
-#[test]
-fn only_the_effort_row_carries_the_suppression_note() {
-    let suppressed = suppressing(reasoning(), ReasoningEffort::High, Profile);
-    for field in ["temperature", "max_tokens", "reasoning_budget_tokens"] {
-        assert_eq!(suppression_note(field, &suppressed), None, "{field}");
-    }
-}
-
-/// A model whose template *does* read the variable, or has never been probed,
-/// must gain no note at all — the overwhelming majority of rows.
-#[test]
-fn an_unsuppressed_effort_gains_no_note() {
+fn the_effort_row_gains_no_note() {
     let lines = explanation_lines(&reasoning());
     assert_eq!(note_for(&lines, "reasoning_effort"), None, "{lines:#?}");
 }
@@ -661,8 +578,9 @@ fn an_unsuppressed_effort_gains_no_note() {
 /// auto-detected label is the longest source string and `reasoning_budget_tokens`
 /// the longest name, so this is the corner both constants were sized for.
 #[test]
-fn the_reasoning_rows_and_their_note_fit_the_table_width() {
+fn the_reasoning_rows_fit_the_table_width() {
     let resolved = InferenceConfig {
+        reasoning_effort: Some(ReasoningEffort::Minimal),
         reasoning_budget_tokens: Some(32768),
         ..InferenceConfig::default()
     };
@@ -670,13 +588,9 @@ fn the_reasoning_rows_and_their_note_fit_the_table_width() {
     // reasoning tag)".
     let longest = Some(ModelAutoDetected);
     let budgeted = sourced(explained(resolved), "reasoningBudgetTokens", Layer, longest);
-    let lines = explanation_lines(&suppressing(
-        budgeted,
-        ReasoningEffort::Minimal,
-        ModelAutoDetected,
-    ));
+    let lines = explanation_lines(&sourced(budgeted, "reasoningEffort", Layer, longest));
 
-    assert_eq!(lines.len(), 18, "seventeen rows and the note: {lines:#?}");
+    assert_eq!(lines.len(), 17, "seventeen rows: {lines:#?}");
     for line in &lines {
         assert!(
             line.chars().count() + 2 <= SEP_WIDTH,

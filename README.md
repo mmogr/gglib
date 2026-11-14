@@ -16,8 +16,8 @@ over an encrypted link.
 Switching models on demand is the easy part. gglib reads each model and
 launches it the way you would have, with no preset to write, and keeps going
 from there: your sampling wins over the client's, a broken tool call is
-repaired and a looping agent is stopped before you see it, and the endpoint
-on your phone is the same one your editor uses.
+repaired, an agent that repeats the exact same call is stopped, and the
+endpoint on your phone is the same one your editor uses.
 
 It is still llama.cpp, and it shows its work. Every sampling value gglib
 resolves is shown with the layer that set it, and you can override any of
@@ -82,7 +82,7 @@ source are under [Install](#install).
 
 Every GGUF you own in one place, with what gglib read from it: size,
 architecture, quantization, trained context, whether it sees images, and
-tags for whether it reasons and how its chat template writes tool calls.
+tags for whether it reasons and calls tools.
 Download from Hugging Face by repository name
 (`gglib model download unsloth/Qwen3-4B-GGUF`, pick a quant with `-q`),
 search and browse the hub, verify hashes, and upgrade a model when its
@@ -105,11 +105,11 @@ order of how often it matters:
   machine, `q8_0` KV cache, Jinja templating, speculative decoding where the
   GGUF carries an MTP head, the projector when the model has one. No
   per-model config file. [Details →](docs/tags.md)
-- **Capability detection.** At import, gglib renders the chat template
-  against probe conversations to learn whether the model reasons, how it
-  writes tool calls, and whether it reads `reasoning_effort`. Clients get
-  strict OpenAI-format events whatever dialect the model speaks (Qwen XML
-  tool calls, bare `<think>` tags). [Details →](docs/tags.md#format-dialect-tags)
+- **Capability detection.** At import, gglib reads the chat template to
+  learn whether the model reasons and calls tools, and at launch asks
+  llama-server whether the template reads `reasoning_effort`. Tool calls and
+  reasoning are llama-server's to parse; gglib does not translate them.
+  [Details →](docs/tags.md)
 - **Sampling authority.** Request → profile → per-model → global → the
   model's own recipe. Client values are untrusted by default, so no request
   silently overrides your configuration. Append `:coding` to a model name
@@ -178,8 +178,8 @@ On an iPhone or iPad, [ggchat](https://github.com/mmogr/ggchat) scans the
 same QR code and talks to the same endpoint; it is a native iPhone and Mac
 app.
 
-The desktop app doubles as an always-on host: `--proxy-autostart`,
-`--close-to-tray` and `--start-at-login` (Settings › General in the app) keep
+The desktop app doubles as an always-on host: `proxy-autostart`,
+`close-to-tray` and `start-at-login` (Settings › General in the app) keep
 the endpoint up without a terminal window, and the tray shows the endpoint,
 what is loaded, and your devices.
 
@@ -207,8 +207,9 @@ gglib proxy dashboard                  # live connections, slots, cache, in the 
 Settings are optional and persist:
 
 ```bash
-gglib config settings set --default-context-size 131072
-gglib config settings set --proxy-autostart true --close-to-tray true
+gglib config set default-context-size 131072
+gglib config set proxy-autostart true
+gglib config set close-to-tray true
 ```
 
 `gglib benchmark` compares models on one prompt, measures throughput, and
@@ -260,7 +261,10 @@ curl -fsSL https://mmogr.github.io/gglib/install.sh | sh -s -- --cli  # the CLI 
 [`install.sh`](packaging/install.sh) adds gglib's signed repository and key
 for apt, pacman or dnf, then installs from it. From then on `apt upgrade`,
 `pacman -Syu` or `dnf upgrade` keeps gglib up to date with the rest of the
-system. The script is short: read it first, or run its steps by hand.
+system. Before it installs anything it lists each gglib already on `PATH`,
+and the desktop app, and says which one `gglib` will run afterwards. It only
+tells you: it never asks or stops. `gglib config paths` lists every copy at
+any time. Read the script first, or run its steps by hand.
 
 The repositories carry stable releases for x86_64; release candidates are on
 the [Releases page](https://github.com/mmogr/gglib/releases) as prereleases.
@@ -276,7 +280,7 @@ and run `./gglib up`. The binaries are not code-signed yet:
 - **macOS** refuses a file a browser downloaded. Clear the flag with
   `xattr -d com.apple.quarantine ./gglib`, or for the desktop app, after
   dragging it to Applications,
-  `xattr -dr com.apple.quarantine "/Applications/GGLib GUI.app"`. The
+  `xattr -dr com.apple.quarantine /Applications/gglib.app`. The
   desktop app's tar.gz includes `macos-install.command`, which does this,
   and Homebrew does it for you.
 - **Windows** SmartScreen stops the desktop app's installer with "Windows
@@ -337,6 +341,7 @@ diagram and the catalog of crates, each with its own README,
 
 ## Documentation
 
+- [What a version promises](docs/compatibility.md)
 - [CLI command reference](docs/cli/)
 - [Client configuration and images](docs/clients.md)
 - [Sampling resolution](docs/sampling.md)

@@ -2,8 +2,7 @@
 //! daemon and the CLI hold them: two processes opening one old library at
 //! once, a rebuild that fails, and the model repository on a rebuilt table.
 //!
-//! Split from `setup_models_tests.rs`, whose fixtures these share, to keep
-//! each file under the 300 lines a new file may be.
+//! Split from `setup_models_tests.rs`, whose fixtures these share.
 
 use std::path::Path;
 use std::time::Duration;
@@ -94,7 +93,7 @@ async fn a_rebuild_that_fails_changes_nothing_and_keeps_foreign_keys_on() {
         "{};
          INSERT INTO models (id, param_count_b, file_path, added_at, model_key)
              VALUES (4, 7.0, '/m/nameless.gguf', 'then', 'hf:nameless');
-         PRAGMA user_version = {CANONICAL_PATH_SCHEMA_VERSION};",
+         PRAGMA user_version = 1;",
         legacy_ddl("models").replace("name TEXT NOT NULL", "name TEXT"),
     ))
     .execute(&pool)
@@ -127,7 +126,7 @@ fn model(key: &str) -> NewModel {
     NewModel::new(
         key.to_string(),
         format!("/m/{key}.gguf").into(),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     )
 }

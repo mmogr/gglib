@@ -1,17 +1,18 @@
 //! The generation gate: whose turn it is to generate on the GPU.
 //!
 //! An image render on `sd-server` and an LLM generation on `llama-server`
-//! share one GPU, and the admission queue alone cannot order them: it decides
-//! which models are resident, not which resident is generating. A render
-//! needs the GPU to itself for minutes; LLM generations may run together. The
-//! gate orders them as turns, first come first served. A render waits for the
-//! LLM turns in flight to drain, and new LLM turns queue behind a waiting
-//! render, so a stream of short chats cannot starve it.
+//! share one GPU, and residency alone cannot order them: it decides which
+//! models are resident, not which resident is generating. A render needs the
+//! GPU to itself for minutes; LLM generations may run together. A render
+//! waits for its turn here, first come first served among renders, and for
+//! the LLM requests in flight to drain; a chat request is served by the
+//! admission queue only while no render holds the GPU or waits ahead of it,
+//! so a stream of short chats cannot starve a render.
 //!
-//! Only leases on llama-server residents count as LLM turns. A render takes
-//! its `sd-server` lease first and hands it to [`GenerationGate::render_turn`],
-//! so the turn owns the lease and the two end together; the lease never
-//! counts against the render it belongs to.
+//! The LLM requests in flight are the leases on llama-server residents. A
+//! render takes its `sd-server` lease first and hands it to
+//! [`GenerationGate::render_turn`], so the turn owns the lease and the two
+//! end together; the lease never counts against the render it belongs to.
 //!
 //! `gglib-runtime`'s admission queue implements it, under the queue's own
 //! lock, with no caller code run under that lock.
@@ -25,15 +26,6 @@ use thiserror::Error;
 
 use crate::ports::AdmissionLease;
 
-/// What a turn is for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TurnKind {
-    /// An LLM generation. Any number may run together.
-    Llm,
-    /// An image render, which runs alone.
-    Render,
-}
-
 /// Why a turn is being waited for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WaitReason {
@@ -41,7 +33,7 @@ pub enum WaitReason {
     ImageRender,
 }
 
-/// One report to a [`GateWaitObserver`] while a turn is waited for.
+/// One report to a [`GateWaitObserver`] while a render waits for its turn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GateWait {
     /// What is being waited on.
@@ -83,22 +75,22 @@ pub enum GateError {
     Unavailable(String),
 }
 
-/// The gate side of a [`GenerationTurn`]: what to call as the turn makes
-/// progress and when it ends.
+/// The gate side of a [`GenerationTurn`]: what to call as the render makes
+/// progress and when its turn ends.
 ///
 /// Called from the turn's `Drop` and from inside a render's progress loop, so
 /// neither method may block, panic or await.
 pub trait GateRelease: Send + Sync + fmt::Debug {
-    /// Turn `id`, a render, has reached `step` of `total`.
+    /// Turn `id` has reached `step` of `total`.
     fn progress(&self, id: u64, step: u32, total: u32);
 
     /// Turn `id` has ended.
     fn end(&self, id: u64);
 }
 
-/// A granted turn on the gate. Dropping it ends the turn.
+/// A render's granted turn on the gate. Dropping it ends the turn.
 ///
-/// A render turn owns the `sd-server` lease it was granted on, so a task that
+/// The turn owns the `sd-server` lease it was granted on, so a task that
 /// keeps the turn (a render the user cancelled but `sd-server` cannot stop)
 /// keeps the model resident by keeping one value. On drop the turn ends
 /// first, then the lease is released.
@@ -108,7 +100,6 @@ pub trait GateRelease: Send + Sync + fmt::Debug {
 pub struct GenerationTurn {
     owner: Option<Arc<dyn GateRelease>>,
     id: u64,
-    kind: TurnKind,
     // Declared last so it drops after `Drop::drop` has ended the turn.
     lease: Option<AdmissionLease>,
 }
@@ -116,17 +107,11 @@ pub struct GenerationTurn {
 impl GenerationTurn {
     /// A turn that ends on `owner` when dropped, holding `lease` until then.
     #[must_use]
-    pub fn new(
-        owner: Arc<dyn GateRelease>,
-        id: u64,
-        kind: TurnKind,
-        lease: Option<AdmissionLease>,
-    ) -> Self {
+    pub fn new(owner: Arc<dyn GateRelease>, id: u64, lease: AdmissionLease) -> Self {
         Self {
             owner: Some(owner),
             id,
-            kind,
-            lease,
+            lease: Some(lease),
         }
     }
 
@@ -136,13 +121,7 @@ impl GenerationTurn {
         self.id
     }
 
-    /// What this turn is for.
-    #[must_use]
-    pub const fn kind(&self) -> TurnKind {
-        self.kind
-    }
-
-    /// The lease this turn holds, if it still holds one.
+    /// The lease this turn holds, until [`Self::take_lease`] takes it.
     #[must_use]
     pub const fn lease(&self) -> Option<&AdmissionLease> {
         self.lease.as_ref()
@@ -178,19 +157,9 @@ impl Drop for GenerationTurn {
 /// The daemon-wide generation gate (see the [module docs](self)).
 #[async_trait]
 pub trait GenerationGate: Send + Sync + fmt::Debug {
-    /// Wait for an LLM turn.
-    ///
-    /// # Errors
-    ///
-    /// [`GateError::Stalled`] when nothing moves for the admission deadline.
-    async fn llm_turn(
-        &self,
-        observer: Option<Arc<dyn GateWaitObserver>>,
-    ) -> Result<GenerationTurn, GateError>;
-
     /// Wait for a render turn on the `sd-server` resident `lease` holds. The
     /// lease is taken first, so the model is resident and cannot be swapped
-    /// out while the render waits; it never counts as an LLM turn.
+    /// out while the render waits; it never counts as an LLM request.
     ///
     /// # Errors
     ///

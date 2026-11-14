@@ -1,6 +1,4 @@
 //! Tests for [`super::translate`].
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 use crate::unified_server_config::{GlobalDefaults, UnifiedServerConfig};

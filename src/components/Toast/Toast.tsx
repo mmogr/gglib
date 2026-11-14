@@ -49,7 +49,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
   return (
     <div
       className={cn(
-        'flex items-center gap-sm px-md py-sm rounded-md bg-surface-elevated shadow-lg text-sm pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
+        'flex items-start gap-sm px-md py-sm rounded-md bg-surface-elevated shadow-lg text-sm pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
         toast.type === 'success' && 'bg-success-subtle',
         toast.type === 'error' && 'bg-danger-subtle',
         toast.type === 'info' && 'bg-primary-subtle',
@@ -73,7 +73,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
       )}>
         <Icon icon={icon} size={16} />
       </span>
-      <span className="flex-1 text-text leading-[1.4]">{toast.message}</span>
+      <span className="flex-1 min-w-0 [overflow-wrap:anywhere] text-text leading-[1.4]">{toast.message}</span>
       <IconButton
         label="Dismiss notification"
         size="sm"

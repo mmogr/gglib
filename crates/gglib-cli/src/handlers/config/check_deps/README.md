@@ -109,7 +109,7 @@ use gglib_core::ports::SystemProbePort;
 pub async fn handle_check_deps_command(
     probe: &dyn SystemProbePort
 ) -> Result<()> {
-    check_deps::execute(probe).await
+    check_deps::execute(probe)
 }
 ```
 
@@ -135,7 +135,7 @@ async fn test_all_deps_installed() {
             },
         ]);
     
-    let result = check_deps::execute(&mock_probe).await;
+    let result = check_deps::execute(&mock_probe);
     assert!(result.is_ok());
 }
 ```

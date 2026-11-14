@@ -3,7 +3,6 @@
 use anyhow::Result;
 use gglib_app_services::RemoteDevice;
 
-use crate::bootstrap::CliContext;
 use crate::daemon_client;
 use crate::presentation::style;
 
@@ -14,8 +13,8 @@ use crate::presentation::style;
 /// that case `admitted` is unknown rather than false, because nothing is
 /// admitted then and saying "no" of one row would read as that device having
 /// been singled out.
-pub(crate) async fn list(ctx: &CliContext) -> Result<()> {
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+pub(crate) async fn list() -> Result<()> {
+    let handle = daemon_client::ensure_daemon().await?;
     let devices = handle.remote_devices().await?;
 
     style::print_info_banner("Devices", "\u{1f4f1}");
@@ -38,7 +37,7 @@ pub(crate) async fn list(ctx: &CliContext) -> Result<()> {
 }
 
 /// Execute `gglib remote forget`.
-pub(crate) async fn forget(ctx: &CliContext, device: &str) -> Result<()> {
+pub(crate) async fn forget(device: &str) -> Result<()> {
     // Checked here because this is the only place the id is not already a
     // device id: everywhere else it came from the roster, and here it came
     // from a person's shell. It is interpolated into a request path, and
@@ -60,7 +59,7 @@ pub(crate) async fn forget(ctx: &CliContext, device: &str) -> Result<()> {
         );
     }
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let answer = handle.remote_forget(device).await?;
 
     if !answer.forgotten {

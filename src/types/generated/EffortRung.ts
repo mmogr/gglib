@@ -12,11 +12,4 @@ level: ReasoningEffort,
 /**
  * The rung that supplied it — `profile`, `model`, `global`, `cli`.
  */
-source: string, 
-/**
- * Whether stage 5b then deleted it because the observed template never
- * reads the variable. `true` means llama-server never saw this level, and
- * a surface that renders the level without the marker is reporting a
- * control that did nothing as though it had worked.
- */
-suppressed: boolean, };
+source: string, };

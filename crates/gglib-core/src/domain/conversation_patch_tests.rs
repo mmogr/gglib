@@ -18,7 +18,7 @@ fn held() -> ConversationSettings {
         tools: vec!["files".to_owned()],
         max_parallel: Some(4),
         tool_timeout_ms: Some(5_000),
-        temperature: Some(0.2),
+        max_tokens: Some(512),
         ..ConversationSettings::default()
     }
 }

@@ -1,9 +1,7 @@
 //! What eviction does to a slot that is not a plain resident.
 //!
-//! Its own module because `queue_tests.rs` is frozen at its current size by the
-//! complexity ratchet, and because these are about one method rather than about
-//! the scheduling rules that file covers. Helpers are duplicated for the same
-//! reason.
+//! Its own module because these are about one method rather than about the
+//! scheduling rules `queue_tests.rs` covers. Helpers are duplicated from it.
 
 use std::sync::Arc;
 

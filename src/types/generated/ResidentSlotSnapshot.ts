@@ -40,6 +40,11 @@ is_primary: boolean,
  */
 resident_for_secs: number, 
 /**
+ * [`Self::resident_for_secs`] as every surface says it
+ * ([`format_duration_secs`]): `4m 5s`.
+ */
+resident_for: string, 
+/**
  * What it is doing there, as the one word every surface uses: `working`
  * while any request holds the slot, else `loaded`.
  */

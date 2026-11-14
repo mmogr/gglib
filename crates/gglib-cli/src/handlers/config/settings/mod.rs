@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod models_dir;
 mod profiles;
 mod queue_size;
 mod reset;
@@ -6,24 +7,28 @@ mod reveal;
 mod set;
 mod settings_display;
 mod unset;
+mod wire;
 
 #[cfg(test)]
 #[path = "models_dir_tests.rs"]
 mod models_dir_tests;
 
+#[cfg(test)]
+#[path = "keys_tests.rs"]
+mod keys_tests;
+
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::config_commands::{ModelsDirCommand, SettingsCommand};
-use crate::handlers::model::resolver;
-use crate::utils::input::prompt_string_with_default;
-use gglib_app_services::types::ModelsDirectoryInfo;
-use gglib_core::paths::{DirectoryCreationStrategy, default_models_dir, set_models_dir};
-use gglib_core::{Settings, SettingsUpdate};
+use gglib_core::Settings;
 
 use settings_display::{print_sections, settings_display_rows, settings_to_sections};
 
 pub(crate) use profiles::handle_profile;
+pub(crate) use reset::handle_reset;
+pub(crate) use reveal::handle_reveal;
+pub(crate) use set::handle_set;
+pub(crate) use unset::handle_unset;
 
 /// The display strings for `default-model-id` and `default-image-model-id`,
 /// in that order, each looked up in the library when set.
@@ -48,131 +53,28 @@ async fn model_display(ctx: &CliContext, id: Option<i64>) -> Result<Option<Strin
     }
 }
 
-/// Handle the `config default` command for managing the default model.
-///
-/// - No args: show current default
-/// - With identifier: set as default
-/// - With --clear: remove default
-pub(crate) async fn handle_default_model(
-    ctx: &CliContext,
-    identifier: Option<String>,
-    clear: bool,
-) -> Result<()> {
-    if clear {
-        // Clear the default model
-        let update = SettingsUpdate {
-            default_model_id: Some(None),
-            ..Default::default()
-        };
-        ctx.app.settings().update(update).await?;
-        println!("✓ Default model cleared.");
-        return Ok(());
-    }
+/// The rows `gglib config show` prints: every setting, and the models
+/// directory, which is a line in the data root's `.env` rather than a
+/// setting.
+async fn shown_rows(ctx: &CliContext) -> Result<Vec<(String, String)>> {
+    let settings = ctx.app.settings().get().await?;
+    let (model_display, image_display) = resolve_model_display(ctx, &settings).await?;
+    let mut rows = settings_display_rows(
+        &settings,
+        model_display.as_deref(),
+        image_display.as_deref(),
+    );
+    rows.push(models_dir::row(
+        &gglib_app_services::models_directory_info()?
+    ));
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(rows)
+}
 
-    if let Some(id) = identifier {
-        // Set the default model
-        let model = resolver::resolve_model_identifier(ctx, &id).await?;
-        let update = SettingsUpdate {
-            default_model_id: Some(Some(model.id)),
-            ..Default::default()
-        };
-        ctx.app.settings().update(update).await?;
-        println!("✓ Default model set to: {} (ID: {})", model.name, model.id);
-    } else {
-        // Show current default
-        let settings = ctx.app.settings().get().await?;
-        if let Some(model_id) = settings.default_model_id {
-            match ctx.app.models().get_by_id(model_id).await? {
-                Some(model) => {
-                    println!("Default model: {} (ID: {})", model.name, model.id);
-                }
-                None => {
-                    println!("Default model ID: {model_id} (warning: model not found)");
-                }
-            }
-        } else {
-            println!("No default model set.");
-            println!("Use 'gglib config default <id-or-name>' to set one.");
-        }
-    }
+/// Execute `gglib config show`.
+pub(crate) async fn handle_show(ctx: &CliContext) -> Result<()> {
+    let rows = shown_rows(ctx).await?;
+    println!("Current application settings:");
+    print_sections(&settings_to_sections(&rows));
     Ok(())
-}
-
-/// What `gglib config models-dir show` prints for `info`, the folder the
-/// settings page shows: where it is and how it was chosen, then its state in
-/// the word every surface uses.
-fn models_dir_lines(info: &ModelsDirectoryInfo) -> [String; 2] {
-    [
-        format!(
-            "Current models directory: {} (source: {})",
-            info.path, info.source
-        ),
-        format!("Status: {}", info.state),
-    ]
-}
-
-pub(crate) fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
-    match command {
-        ModelsDirCommand::Show => {
-            for line in models_dir_lines(&gglib_app_services::models_directory_info()?) {
-                println!("{line}");
-            }
-            Ok(())
-        }
-        ModelsDirCommand::Prompt => {
-            let default_path = default_models_dir()?.to_string_lossy().to_string();
-            let answer = prompt_string_with_default(
-                "Where should gglib store downloaded models?",
-                Some(&default_path),
-            )?;
-            let resolved = set_models_dir(&answer, DirectoryCreationStrategy::AutoCreate)?;
-            println!(
-                "✓ Models directory updated to {} (interactive)",
-                resolved.path.display()
-            );
-            Ok(())
-        }
-        ModelsDirCommand::Set { path, no_create } => {
-            let strategy = if no_create {
-                DirectoryCreationStrategy::Disallow
-            } else {
-                DirectoryCreationStrategy::AutoCreate
-            };
-            let resolved = set_models_dir(&path, strategy)?;
-            println!(
-                "✓ Models directory updated to {} (non-interactive)",
-                resolved.path.display()
-            );
-            Ok(())
-        }
-    }
-}
-
-pub(crate) async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<()> {
-    match command {
-        SettingsCommand::Show => {
-            let settings = ctx.app.settings().get().await?;
-            let (model_display, image_display) = resolve_model_display(ctx, &settings).await?;
-            let rows = settings_display_rows(
-                &settings,
-                model_display.as_deref(),
-                image_display.as_deref(),
-            );
-            println!("Current application settings:");
-            print_sections(&settings_to_sections(&rows));
-            Ok(())
-        }
-        SettingsCommand::Set(args) => set::handle_set(ctx, *args).await,
-        SettingsCommand::Unset { key } => unset::handle_unset(ctx, &key).await,
-        SettingsCommand::Reset { yes } => reset::handle_reset(ctx, yes).await,
-        SettingsCommand::Reveal { key } => reveal::handle_reveal(ctx, key.0).await,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_config_handler_exists() {
-        // Placeholder test — substantive tests live in settings_display.rs.
-    }
 }

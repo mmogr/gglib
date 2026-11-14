@@ -3,7 +3,6 @@ import type { AuditState } from "./AuditState";
 import type { BaselineState } from "./BaselineState";
 import type { ClientFieldNames } from "./ClientFieldNames";
 import type { Divergence } from "./Divergence";
-import type { EffortSuppressions } from "./EffortSuppressions";
 import type { PublishedOverrides } from "./PublishedOverrides";
 import type { ReasoningReadback } from "./ReasoningReadback";
 
@@ -52,13 +51,6 @@ baseline: BaselineState,
  * sampler defaults.
  */
 published: PublishedOverrides, 
-/**
- * Resolved `reasoning_effort` levels stage 5b deleted before sending.
- *
- * The one thing on this snapshot that no wire observation could ever
- * corroborate — see [`EffortSuppressions`].
- */
-effort_suppressed: EffortSuppressions, 
 /**
  * The two reasoning controls: what the template says about them, what the
  * last request resolved, and why none of it is an observation.

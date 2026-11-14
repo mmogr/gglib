@@ -57,11 +57,14 @@ pointed there supplies the key itself — the port does not inject it.
 Every line here names the far machine by the name the daemon reports for it
 (`RemoteJoinResponse.name`, `RemoteStatus.paired_name`), and by "the paired
 machine" when it has given none: `join` for the machine joined and the one it
-replaced, `status` for the connect side. Its ticket fingerprint is its
-identity and is never printed. The serving side's own ticket and the peers
+replaced, `status` for the connect side. `status` prints the daemon's lines
+(`sharing`, `sharing_note`, `reach_line`, said again on every read) for sharing and for the
+machine joined, and adds what only it has: the commands, the address and
+how long a machine has been away. Its ticket fingerprint is its identity
+and is never printed. The serving side's own ticket and the peers
 connected to it are this machine's, and are still shown by fingerprint.
 
-`gglib config settings reveal remote-pairing.api-key` is where such a client
+`gglib config reveal remote-pairing.api-key` is where such a client
 gets it. Stdout carries the key and nothing else, so its `$(…)` is exactly the
 key; the warning that it is a secret goes to stderr, which never carries the
 key, and with no pairing stored it fails.

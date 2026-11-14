@@ -31,10 +31,12 @@ const FIELDS: Record<keyof ContextFit, true> = {
   budgetBytes: true,
   weightsBytes: true,
   kvBytesPerToken: true,
+  kvBytes: true,
   trainedCtx: true,
   unsnapped: true,
   sentence: true,
   note: true,
+  figures: true,
 };
 
 describe('the fit sentence is the one Rust records', () => {

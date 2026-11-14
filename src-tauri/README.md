@@ -1,14 +1,14 @@
-# GGLib Desktop GUI (Tauri)
+# gglib desktop app (Tauri)
 
 <!-- crate-header:start -->
 Layer: **adapter** · [workspace diagram](../crates/README.md#architecture-overview)
 <!-- crate-header:end -->
 
-This directory contains the Tauri-based desktop application for GGLib.
+This directory contains the Tauri-based desktop application for gglib. The app is called gglib; its program file is `gglib-gui`, built from the package `gglib-app`.
 
 ## Overview
 
-The GGLib Desktop GUI is a client of the daemon that owns the runtime — a place to watch the proxy and manage the model library, not the thing serving requests. It launches or connects to a daemon and can run it as a background service from the tray, so the endpoint keeps serving after the window closes. The CLI and Web UI are clients of the same daemon, sharing one backend and one database.
+The desktop app is a client of the daemon that owns the runtime — a place to watch the proxy and manage the model library, not the thing serving requests. It launches or connects to a daemon and can run it as a background service from the tray, so the endpoint keeps serving after the window closes. The CLI and Web UI are clients of the same daemon, sharing one backend and one database.
 
 For a complete overview of all interfaces and the shared architecture, see the main [README.md](../README.md#interfaces).
 
@@ -26,7 +26,7 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
 
 1. **Backend (Rust)**: The Tauri backend in `src-tauri/src/main.rs` owns no runtime of its own. `src/daemon/` connects to the gglib daemon, launching `gglib daemon run` detached when nothing answers, and hosting the daemon composition in-process only as a bundle-only fallback. A daemon that will not start is a state, not a crash: the app comes up disconnected, and the tray says so.
 
-2. **The daemon's API**: Everything backend-shaped goes to `127.0.0.1:{daemon_port()}` — 9887, deliberately not a setting, so every client can find the one daemon without configuration. Only the `GGLIB_DAEMON_PORT` environment variable moves it, for a development build given a data folder of its own with `GGLIB_DATA_DIR`. Every request carries the daemon's token, which the daemon mints in a `0600` file at every start and the app reads for each request; a LAN-shared daemon (`gglib daemon run --share-lan`) also takes the stored API key.
+2. **The daemon's API**: Everything backend-shaped goes to `127.0.0.1:{daemon_port()}` — 9887, deliberately not a setting, so every client can find the one daemon without configuration. Only the `GGLIB_DAEMON_PORT` environment variable moves it, for a development build given a data folder of its own with `GGLIB_DATA_DIR`. Every request carries the daemon's token, which the daemon mints in a `0600` file at every start and the app reads for each request, and nothing else.
 
 3. **Frontend (React)**: The React application in `src/` communicates **exclusively via HTTP** to the daemon:
    - `/api/models` - List and manage models
@@ -144,6 +144,8 @@ For more details on the architecture and how all interfaces work together, see:
   - `src/dock.rs`: macOS Dock icon visibility (activation policy)
   - `src/commands/`: Tauri command handlers (organized by domain)
   - `tauri.conf.json`: Tauri configuration
+  - `tauri.linux.conf.json`: on Linux, names the deb and rpm `gglib-gui` (the CLI's package is `gglib`), retires the old `gg-lib-gui` package, and keeps the menu entry named gglib through `linux/gglib.desktop`
+  - `tauri.windows.conf.json`: on Windows, names the app `gglib-gui`, so the per-user install goes to `%LOCALAPPDATA%\gglib-gui` and not into gglib's data folder `%LOCALAPPDATA%\gglib`
 
 ## Backend Module Architecture
 

@@ -87,17 +87,11 @@ export function residentRows(snapshot: DashboardSnapshot | null, servers: Server
   }));
 }
 
-/** A wait in whole seconds as `gglib proxy dashboard` says it: "4s", "1m 5s". */
-function waitWords(ms: number): string {
-  const secs = Math.floor(ms / 1000);
-  return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
-}
-
 /** One line per model with requests queued for a slot: who, how many, how long the oldest has waited. */
 export function queuedLines(snapshot: DashboardSnapshot | null): string[] {
   return (snapshot?.admission.queued ?? []).map(
     (q) =>
-      `${q.model_name} ${RESIDENCY_WORDS.waiting.toLowerCase()} for a slot · ${q.waiting} ${q.waiting === 1 ? 'request' : 'requests'} · ${waitWords(q.oldest_wait_ms)}`,
+      `${q.model_name} ${RESIDENCY_WORDS.waiting.toLowerCase()} for a slot · ${q.waiting} ${q.waiting === 1 ? 'request' : 'requests'} · ${q.oldest_wait}`,
   );
 }
 

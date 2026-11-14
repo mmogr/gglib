@@ -35,6 +35,7 @@ const NOT_IMPORTED = [
   'DisableFastDownloadsResponse',
   'ErrorBody',
   'ExplainQueryParams',
+  'GglibInfo',
   'GgufFileRole',
   'ListRunsQuery',
   'ModelAgenticHistoryQuery',

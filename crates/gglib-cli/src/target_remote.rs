@@ -1,14 +1,13 @@
 //! The paired machine, as this machine reaches it.
 //!
-//! A `#[path]` child of `target.rs`, split off when the decisions there
-//! brought the file to the size budget. Everything here talks to the daemon
-//! and reads the pairing. [`Paired`] is the daemon and its connection, which
-//! a command that asks the daemon about the paired machine needs; [`Far`] is
+//! A `#[path]` child of `target.rs`. Everything here talks to the daemon and
+//! reads the pairing. [`Paired`] is the daemon and its connection, which a
+//! command that asks the daemon about the paired machine needs; [`Far`] is
 //! the far proxy itself, as the `FarProxy` the daemon's own `/api/remote`
 //! routes use, for a turn or a proxy client that talks to it directly. Each
-//! is established once, so "connected" and "holding a key"
-//! are refused with one set of sentences. Nothing here decides anything —
-//! which commands get either at all is the parent's table.
+//! is established once, so "connected" and "holding a key" are refused with
+//! one set of sentences. Nothing here decides anything — which commands get
+//! either at all is the parent's table.
 
 use anyhow::{Result, anyhow, bail};
 use gglib_app_services::{FarProxy, GuiError, RemoteConnection, far_credentials};
@@ -44,11 +43,11 @@ impl super::Target {
     ///
     /// A daemon that is not running or not connected, each in the sentence
     /// that names the command to run.
-    pub(crate) async fn paired(self, ctx: &CliContext) -> Result<Paired> {
+    pub(crate) async fn paired(self) -> Result<Paired> {
         if self == Self::Local {
             bail!("internal: the local target has no far machine");
         }
-        let Ok(handle) = daemon_client::running(ctx).await else {
+        let Ok(handle) = daemon_client::running().await else {
             bail!(
                 "reaching the paired machine needs the daemon running and connected to it: \
                  `gglib remote join` first"
@@ -76,7 +75,7 @@ impl super::Target {
     /// As [`paired`](Self::paired), and a pairing this machine holds no key
     /// for — in the sentence that names the command to run.
     pub(crate) async fn far(self, ctx: &CliContext) -> Result<Far> {
-        let Paired { connection, .. } = self.paired(ctx).await?;
+        let Paired { connection, .. } = self.paired().await?;
         let stored = ctx
             .app
             .settings()

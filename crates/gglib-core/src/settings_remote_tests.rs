@@ -1,7 +1,6 @@
 //! Tests for the remote tunnel's settings (ADR 0012) and what a reset keeps.
 //!
-//! Split out via `#[path]`, like `settings_tests.rs`, and separately from it
-//! because that file is at its budget.
+//! Split out via `#[path]`, like `settings_tests.rs`.
 
 use super::*;
 
@@ -185,10 +184,9 @@ fn a_remote_machine() -> Settings {
         proxy_cache_on_disk: Some(true),
         proxy_cache_disk_gb: Some(4),
         trust_client_sampling: Some(true),
-        loop_guard_mode: Some(LoopGuardMode::Refuse),
+        loop_guard: Some(false),
         tool_call_repair: Some(false),
         mcp_drawing: Some(true),
-        agentic_sampling: Some(true),
         proxy_autostart: Some(true),
         close_to_tray: Some(true),
         start_at_login: Some(true),

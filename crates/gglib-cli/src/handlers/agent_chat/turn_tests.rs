@@ -65,7 +65,7 @@ fn every_logged_frame_reads_back_as_the_event_it_was_logged_from() {
         json!({"type": "prompt_progress", "processed": 2048, "total": 8192, "cached": 1024,
                "time_ms": 900}),
         json!({"type": "system_warning", "message": "Too many tool calls at once.",
-               "suggested_action": "gglib config settings set --max-parallel 8"}),
+               "suggested_action": "gglib config set max-parallel-tools 8"}),
         json!({"type": "error", "message": "The model stopped answering."}),
     ]);
     let kinds: std::collections::BTreeSet<&str> =

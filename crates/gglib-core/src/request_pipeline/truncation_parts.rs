@@ -1,11 +1,11 @@
 //! The elision of one message, in either content shape.
 //!
-//! Split out of [`super::truncation`], which is at its file budget, and kept
-//! beside it because the rule is the same for both shapes: when a message's
-//! text is over the threshold, every piece of it becomes its role's
-//! placeholder and the shape stays. A multi-part message keeps the parts that are not text
-//! (an `image_url` beside the tool output) where they were, and stays
-//! readable by the client that sent it in that shape.
+//! Split out of [`super::truncation`] and kept beside it because the rule is
+//! the same for both shapes: when a message's text is over the threshold,
+//! every piece of it becomes its role's placeholder and the shape stays. A
+//! multi-part message keeps the parts that are not text (an `image_url`
+//! beside the tool output) where they were, and stays readable by the client
+//! that sent it in that shape.
 //!
 //! Until this existed only the string form was elided and the array form was
 //! skipped, so a long array-form history was refused as over budget while

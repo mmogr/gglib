@@ -140,11 +140,6 @@ impl ModelDefectLedger {
         self.with(model, |c| c.unvalidatable_schemas += 1);
     }
 
-    /// Count one turn whose normalization discarded a malformed tool call.
-    pub fn record_normalization_error(&self, model: &str) {
-        self.with(model, |c| c.normalization_errors += 1);
-    }
-
     /// Count one turn that repeated the call before it and got an equal
     /// result back.
     pub fn record_identical_result_repeat(&self, model: &str) {
@@ -260,7 +255,6 @@ mod tests {
         ledger.record_empty_response("a", false);
         ledger.record_dialect_residue("a");
         ledger.record_unvalidatable_schema("a");
-        ledger.record_normalization_error("a");
         ledger.record_stream_error("a");
 
         let snap = ledger.snapshot()["a"];
@@ -268,6 +262,5 @@ mod tests {
         assert_eq!(snap.truncated_generations, 1);
         assert_eq!(snap.dialect_residue, 1);
         assert_eq!(snap.unvalidatable_schemas, 1);
-        assert_eq!(snap.normalization_errors, 1);
     }
 }

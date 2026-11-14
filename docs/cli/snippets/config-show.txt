@@ -1,0 +1,38 @@
+$ gglib config show
+Current application settings:
+
+  General
+  ────────────────────────────────────────
+  close-to-tray            None
+  default-context-size     None (sized per launch)
+  default-image-model-id   None
+  default-model-id         2 (Qwen3-4B-Instruct-2507)
+  inference-profiles       None
+  llama-base-port          9300
+  loop-guard               None
+  max-download-queue-size  None
+  max-parallel-tools       None
+  max-stagnation-steps     None
+  max-tool-iterations      None
+  mcp-drawing              None (off)
+  models-dir               /Users/mmogr/.local/share/gglib-demo/models (environment, Writable)
+  proxy-allowed-hosts      None
+  proxy-api-key            None
+  proxy-autostart          None
+  proxy-cache-disk-gb      None
+  proxy-cache-on-disk      None
+  proxy-host               None
+  proxy-port               8080
+  remote-devices           None
+  remote-enabled           None
+  remote-pairing           None
+  remote-serve             None
+  start-at-login           None
+  title-generation-prompt  None
+  tool-call-repair         None
+  tool-timeout-ms          None
+  trust-client-sampling    None
+
+  Inference Defaults
+  ────────────────────────────────────────
+  (none configured)

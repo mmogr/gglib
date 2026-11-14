@@ -307,18 +307,13 @@ const MAX_CANDIDATES: usize = 256;
 ///
 /// Shared with the raw-vs-gglib agentic eval, which needs exactly the same
 /// thing for its `gglib` arm. Without it a candidate resolves against
-/// [`ModelContext::passthrough`], which quietly changes three things: a
+/// [`ModelContext::passthrough`], which quietly changes two things: a
 /// `reasoning`-tagged model is tuned without the `reasoning` recipe beneath
-/// it, the agentic temperature ceiling is the non-reasoning
-/// 0.3 where a reasoning model has none, and no dialect or capability
-/// shaping applies. Values tuned that way do not transfer to production,
-/// which is the whole point of tuning them.
+/// it, and no capability shaping applies. Values tuned that way
+/// do not transfer to production, which is the whole point of tuning them.
 pub(super) fn model_context_for(model: &Model) -> ModelContext {
     ModelContext {
         capabilities: model.capabilities,
-        // Same tag fallback the catalog resolution path applies in
-        // `From<&ModelSummary> for ModelContext`.
-        dialect: gglib_core::normalize::registry::dialect_for_tags(&model.tags),
         tags: model.tags.clone(),
         inference_defaults: model.inference_defaults.clone(),
         defaults_origin: model.defaults_origin,
@@ -815,8 +810,9 @@ where
     // Every guard and budget below is a real observation: a loop, a stagnated
     // answer, an over-wide parallel batch and an exhausted iteration budget are
     // all things the model *did*, and they score honestly as failures.
-    // `Internal` is the odd one out — it is the loop reporting that it could
-    // not talk to the upstream at all, or could not start — and a run that
+    // `Internal` and `Refused` are the odd ones out — the loop reporting that
+    // it could not talk to the upstream at all, that the upstream refused the
+    // request, or that it could not start — and a run that
     // never reached the model has no score to give, only a zero that looks
     // exactly like a bad one.
     let (loop_detected, stagnation_detected, error_detail, unmeasured) = match &run_result {
@@ -825,9 +821,10 @@ where
         Ok(Err(gglib_core::ports::AgentError::StagnationDetected { .. })) => {
             (false, true, None, None)
         }
-        Ok(Err(e @ gglib_core::ports::AgentError::Internal(_))) => {
-            (false, false, Some(e.to_string()), Some(e.to_string()))
-        }
+        Ok(Err(
+            e @ (gglib_core::ports::AgentError::Internal(_)
+            | gglib_core::ports::AgentError::Refused { .. }),
+        )) => (false, false, Some(e.to_string()), Some(e.to_string())),
         Ok(Err(e)) => (false, false, Some(e.to_string()), None),
         // A panicked task produced nothing either, and its zeros are just as
         // empty as an unreachable upstream's.
@@ -866,9 +863,12 @@ where
 
 /// Whether `event` counts into [`GeneratedOutput::system_warnings`]: a
 /// `SystemWarning` other than the one for an answer cut off at its token
-/// limit, which is no runaway, only an answer that ran long.
+/// limit, which is no runaway, only an answer that ran long, and the one for
+/// a run that used all its steps, which is told by how the run ends.
 fn counts_as_a_warning(event: &AgentEvent) -> bool {
-    matches!(event, AgentEvent::SystemWarning { .. }) && !gglib_agent::is_cut_off_warning(event)
+    matches!(event, AgentEvent::SystemWarning { .. })
+        && !gglib_agent::is_cut_off_warning(event)
+        && !gglib_agent::is_step_limit_warning(event)
 }
 
 /// Completion-token throughput across a result set: total completion tokens
@@ -1016,14 +1016,15 @@ mod tests {
 
     // ── What the warning count counts ────────────────────────────────────────
 
-    /// An answer cut off at its token limit is not a runaway warning; the
-    /// loop's other warnings still are.
+    /// An answer cut off at its token limit is not a runaway warning, nor is
+    /// a run that used all its steps; the loop's other warnings still are.
     #[test]
-    fn a_cut_off_answer_is_not_counted_as_a_warning() {
+    fn a_cut_off_answer_or_a_step_limit_is_not_counted_as_a_warning() {
         assert!(!counts_as_a_warning(&gglib_agent::cut_off_warning(Some(
             512
         ))));
         assert!(!counts_as_a_warning(&gglib_agent::cut_off_warning(None)));
+        assert!(!counts_as_a_warning(&gglib_agent::step_limit_warning(30)));
         assert!(counts_as_a_warning(&AgentEvent::SystemWarning {
             message: "Agent attempted 80 parallel tool calls (limit is 5).".to_owned(),
             suggested_action: None,
@@ -1380,7 +1381,7 @@ mod tests {
         let path = std::path::PathBuf::from("/tmp/model.gguf");
         Model::stored(
             1,
-            &gglib_core::NewModel::new(name.to_string(), path, 7.0, chrono::Utc::now()),
+            &gglib_core::NewModel::new(name.to_string(), path, Some(7.0), chrono::Utc::now()),
         )
     }
 }

@@ -43,12 +43,10 @@ fn set(key: &str, value: &str) -> McpEnvUpdateDto {
 fn create(env: Vec<McpEnvEntryDto>) -> CreateMcpServerRequest {
     CreateMcpServerRequest {
         name: "files".to_owned(),
-        server_type: "stdio".to_owned(),
         command: Some("echo".to_owned()),
         args: vec![],
         working_dir: None,
         path_extra: None,
-        url: None,
         env,
         lifecycle: McpLifecycle::Lazy,
     }

@@ -1,7 +1,7 @@
 //! What `repeats_rescued` counts, and what it must not.
 //!
-//! A fourth test module because `loop_guard_tests.rs` is frozen at its current
-//! size by the complexity ratchet. Helpers are duplicated for the same reason.
+//! A fourth test module beside `loop_guard_tests.rs`. Helpers are duplicated
+//! from it.
 
 use super::*;
 use serde_json::{Value, json};

@@ -19,13 +19,11 @@
 //! # Why not [`LoopGuardTripSink`](super::LoopGuardTripSink)
 //!
 //! That port is the proxy's persisted log, and it takes a
-//! [`LoopGuardTripEvent`](crate::domain::loop_guard_log::LoopGuardTripEvent)
-//! keyed by the guard's [`LoopGuardMode`](crate::settings::LoopGuardMode) —
-//! `note` or `refuse`, the proxy setting that decides what happens to a
-//! tripped request. The agent path has no such mode: its guard comes from
-//! `AgentConfig`, and a trip there always ends the run. Writing agent
-//! decisions through that port would file them under a mode they were never
-//! taken under.
+//! [`LoopGuardTripEvent`](crate::domain::loop_guard_log::LoopGuardTripEvent):
+//! a decision to note a tripped request or end its run. The agent path takes
+//! neither: its guard comes from `AgentConfig`, and a trip there always ends
+//! the run at once. Writing agent decisions through that port would mix two
+//! populations the log reads as one.
 //!
 //! The two ports may meet later — the log is where ADR 0011's kill criterion
 //! reads, and giving it a path column is the sequel to this work — but that

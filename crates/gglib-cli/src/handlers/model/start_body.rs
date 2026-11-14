@@ -8,10 +8,10 @@ use gglib_core::server_config::parse_ctx_size_flag;
 
 use crate::daemon_client::StartServerBody;
 
-/// What the daemon is asked to start for `model`, at the context `--context`
+/// What the daemon is asked to start for `model`, at the context `--context-size`
 /// names.
 ///
-/// Only that tier is resolved here, which is what makes `--context max` work:
+/// Only that tier is resolved here, which is what makes `--context-size max` work:
 /// it needs the model's own context length. The daemon applies the per-model
 /// and global tiers itself, as it does for every other start request.
 pub(super) fn start_body(model: &Model, ctx_size: Option<&str>) -> Result<StartServerBody> {

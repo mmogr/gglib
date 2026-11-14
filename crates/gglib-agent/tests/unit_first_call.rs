@@ -437,7 +437,7 @@ async fn a_first_reply_with_no_call_ends_the_run_with_the_composers_words() {
     let errors: Vec<&str> = events
         .iter()
         .filter_map(|event| match event {
-            AgentEvent::Error { message } => Some(message.as_str()),
+            AgentEvent::Error { message, .. } => Some(message.as_str()),
             _ => None,
         })
         .collect();
@@ -475,8 +475,7 @@ async fn a_first_reply_that_calls_another_tool_ends_the_run_with_the_composers_w
     }
     assert_eq!(llm.asked().await.len(), 1);
     assert!(ran.is_empty(), "{ran:?}");
-    let said =
-        |event: &AgentEvent| matches!(event, AgentEvent::Error { message } if message == NOT_ASKED);
+    let said = |event: &AgentEvent| matches!(event, AgentEvent::Error { message, .. } if message == NOT_ASKED);
     assert!(events.iter().any(said), "{events:?}");
 }
 

@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use gglib_core::domain::device_budget::DeviceReading;
-use gglib_core::domain::{KvElemsPerToken, ModelSamplingDefaults};
+use gglib_core::domain::{KvElemsPerToken, KvShape, ModelSamplingDefaults};
 use gglib_core::ports::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSummary};
 use tempfile::TempDir;
 use tokio::sync::watch;
@@ -25,7 +25,7 @@ pub(super) const BUDGET: u64 = 2 * GIB;
 
 /// K and V elements per token of the tests' models: at `Q8_0`, 69,632 bytes
 /// of cache a token.
-const KV: KvElemsPerToken = KvElemsPerToken {
+pub(super) const KV: KvElemsPerToken = KvElemsPerToken {
     k: 32_768,
     v: 32_768,
 };
@@ -60,7 +60,7 @@ pub(super) fn model(id: u32, name: &str, weights: u64) -> ModelLaunchSpec {
         context_length: Some(32_768),
         server_defaults: None,
         file_size_bytes: weights,
-        kv_elems_per_token: Some(KV),
+        kv_shape: Some(KvShape::uniform(KV)),
         kv_memory_is_partial: false,
         model_sampling: ModelSamplingDefaults::default(),
     }

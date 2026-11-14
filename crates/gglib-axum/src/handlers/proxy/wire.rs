@@ -172,9 +172,9 @@ pub(super) fn to_runtime_config(cfg: &StartProxyConfig, settings: &Settings) -> 
     // config `ProxyOps::ensure_running` and `gglib proxy` with no flags get.
     let stored = gglib_app_services::proxy_config_from_settings(settings);
     let cache_enabled = cfg.cache.unwrap_or(stored.cache_enabled);
-    // Resolved here rather than left `None`: the Axum proxy path errors
-    // requests with "slot_dir not configured" when cache_enabled is true and
-    // slot_dir is absent (see gglib-proxy's server.rs), unlike the CLI's
+    // Resolved here rather than left `None`: the Axum proxy path refuses a
+    // cache clear with `internal_error` when cache_enabled is true and
+    // slot_dir is absent (see gglib-proxy's admin.rs), unlike the CLI's
     // standalone path, which auto-defaults it. Applying the same default
     // here keeps `cache: true` alone sufficient, matching the CLI.
     let slot_dir = cache_enabled.then(|| {

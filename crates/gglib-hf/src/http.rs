@@ -345,6 +345,8 @@ pub(crate) mod testing {
         default_response: Option<CannedResponse>,
         bodies: HashMap<String, Vec<u8>>,
         asked: Mutex<Vec<Asked>>,
+        /// Each URL a JSON answer was asked of, oldest first.
+        got: Mutex<Vec<String>>,
     }
 
     impl FakeBackend {
@@ -355,6 +357,7 @@ pub(crate) mod testing {
                 default_response: None,
                 bodies: HashMap::new(),
                 asked: Mutex::new(Vec::new()),
+                got: Mutex::new(Vec::new()),
             }
         }
 
@@ -367,6 +370,12 @@ pub(crate) mod testing {
         /// The ranged reads and posted forms asked of it, oldest first.
         pub(crate) fn asked(&self) -> Vec<Asked> {
             self.asked.lock().unwrap().clone()
+        }
+
+        /// The URLs a JSON answer was asked of, a page of a search's
+        /// excepted, oldest first.
+        pub(crate) fn got(&self) -> Vec<String> {
+            self.got.lock().unwrap().clone()
         }
 
         /// Add a canned response for a URL pattern.
@@ -406,6 +415,7 @@ pub(crate) mod testing {
     #[async_trait]
     impl HttpBackend for FakeBackend {
         async fn get_json<T: DeserializeOwned + Send>(&self, url: &Url) -> HfResult<T> {
+            self.got.lock().unwrap().push(url.to_string());
             let response =
                 self.find_response(url.as_str())
                     .ok_or_else(|| HfError::ApiRequestFailed {

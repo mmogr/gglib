@@ -1,7 +1,6 @@
 //! Tests for the A/B eval in `agentic.rs`.
 //!
-//! Split from `agentic.rs` so the module stays inside the complexity
-//! ratchet's budget — the repo's `*_tests.rs` sibling pattern.
+//! A sibling of `agentic.rs`, the repo's `*_tests.rs` layout.
 
 use super::*;
 use gglib_core::domain::benchmark::tune::result::GeneratedOutput;

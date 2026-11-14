@@ -54,8 +54,7 @@ export function takeDaemonToken(): string | undefined {
 }
 
 /**
- * Whether `response` is the daemon asking for its token, which no API key
- * opens, so asking the person for a key would not help. Reads a clone,
+ * Whether `response` is the daemon asking for its token. Reads a clone,
  * leaving the body, which says how to get the token, for the error shown.
  */
 export async function isDaemonTokenRefusal(response: Response): Promise<boolean> {

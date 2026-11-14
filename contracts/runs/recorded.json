@@ -106,12 +106,13 @@
     "total": 0,
     "type": "waiting"
   },
-  "image_render": {
-    "position": 2,
-    "reason": "image_render",
-    "said": "Waiting for an image render, step 3 of 20, 2 in line",
-    "step": 3,
-    "total": 20,
+  "agent_slot": {
+    "elapsed_ms": 2000,
+    "position": 1,
+    "reason": "agent_slot",
+    "said": "Waiting for a free agent slot, 1 in line… 2 s",
+    "step": 0,
+    "total": 0,
     "type": "waiting"
   },
   "list": {

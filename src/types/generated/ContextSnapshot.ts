@@ -30,20 +30,15 @@ messages_truncated: number,
  */
 was_clamped: boolean, 
 /**
- * `true` when the request pipeline originated a decode-time tool-call
- * grammar for this request (see `request_pipeline::constrain`).
- */
-grammar_enforced: boolean, 
-/**
- * `true` when dialect residue — tool-call markup that survived
- * normalization — reached this request's client-visible output (see
+ * `true` when dialect residue — tool-call markup llama-server left
+ * unparsed — reached this request's client-visible output (see
  * `gglib_core::normalize::residue`). Back-patched after the response
  * streams via [`ContextMetricsStore::flag_dialect_residue`].
  */
 dialect_residue: boolean, 
 /**
  * `true` when this turn's tool call failed schema validation and a
- * re-issue, under `required` or gglib's own grammar, produced a conformant one.
+ * re-issue under `required` produced a conformant one.
  * Back-patched after the response streams via
  * [`ContextMetricsStore::flag_tool_repair`].
  */
@@ -72,7 +67,7 @@ completion_tokens: number | null,
 /**
  * Characters of reasoning, counted as Unicode scalar values, not bytes.
  *
- * Streamed: summed over every reasoning delta read out of normalization,
+ * Streamed: summed over every reasoning delta read from the upstream,
  * the first generation's only on a re-issued turn. Non-streaming: the
  * length of the first choice's `message.reasoning_content` in the body
  * the client is answered with. Zero when there was none.
@@ -102,11 +97,8 @@ tool_calls: number,
 finish_reason: string | null, 
 /**
  * Milliseconds between the first and the last generated token the
- * upstream streamed, whatever the normalizer later made of them. A
- * token is a text, reasoning or tool-call delta, timed as its event is
- * read from the upstream and before normalization, so a call a model writes
- * as text is timed over all of its markup, though the normalizer makes
- * one event of it.
+ * upstream streamed. A token is a text, reasoning or tool-call delta,
+ * timed as its event is read from the upstream.
  *
  * Prefill progress, the usage frame, the turn's finish and an error
  * frame are not tokens. The wait before the first token is not in the
@@ -125,13 +117,13 @@ generation_ms: number | null,
 tokens_per_second: number | null, 
 /**
  * The detector that made the pre-dispatch loop guard act on this request
- * — forward it with a note, end the run, or refuse it with an HTTP 400
- * (see `loop_guard`) — or `None`.
+ * — forward it with a note, or end the run (see `loop_guard`) — or
+ * `None`.
  */
 loop_guard_trip: LoopGuardTrip | null, 
 /**
- * `true` when the loop guard ended this request's run itself: under
- * `note`, the same run tripped again after its note, so the proxy
+ * `true` when the loop guard ended this request's run itself: the same
+ * run tripped again after its note, so the proxy
  * answered with a finished assistant message instead of forwarding it
  * (ADR 0021). `loop_guard_trip` names the detector.
  */

@@ -209,7 +209,6 @@ pub(super) async fn daemon_started(
         core: Arc::clone(&context.core),
         proxy: Arc::clone(&proxy),
         emitter: Arc::clone(&context.sse) as _,
-        tool_detector: Arc::new(gglib_gguf::ToolSupportDetector::new()),
     }));
     context.proxy = proxy;
     context.runtime = runtime;
@@ -268,7 +267,7 @@ impl Daemon {
     /// The endpoint's dashboard, read with `key`.
     pub(super) async fn dashboard(&self, key: Option<&str>) -> Value {
         let mut request =
-            gglib_proxy::loopback::client().get(format!("{}/v1/proxy/status", self.root));
+            gglib_proxy::loopback::client().get(format!("{}/v1/gglib/proxy/status", self.root));
         if let Some(key) = key {
             request = request.bearer_auth(key);
         }

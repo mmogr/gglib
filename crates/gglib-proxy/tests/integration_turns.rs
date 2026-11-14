@@ -1,4 +1,4 @@
-//! `PUT /v1/runs/{id}?kind=agent` on the real proxy: a paired device adds a
+//! `PUT /v1/gglib/runs/{id}?kind=agent` on the real proxy: a paired device adds a
 //! turn to one of the hub's chats, and nothing else may.
 //!
 //! The starter is a stand-in (`fixtures::turns`) that records what it is
@@ -8,20 +8,25 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use gglib_core::DevicePorts;
 use gglib_core::domain::hub_chats::HubTurn;
-use gglib_core::ports::TurnRefused;
+use gglib_core::ports::{
+    AgentRunStarter, HubChatsPort, ImageBatch, ImageError, ImageGenerationPort, ImageProgress,
+    ImageRequest, RunsPort, TurnRefused,
+};
 use reqwest::{Client, RequestBuilder, StatusCode};
 use serde_json::json;
 
 mod fixtures;
+use fixtures::chats::FakeChats;
 use fixtures::remote::from_device;
 use fixtures::runs::{FakeRuns, code, json};
 use fixtures::tunnel::DEVICE;
-use fixtures::turns::{FakeTurns, serve};
+use fixtures::turns::{FakeTurns, serve, serve_holding};
 
 fn put(base: &str, body: &serde_json::Value) -> RequestBuilder {
     Client::new()
-        .put(format!("{base}/v1/runs/d1?kind=agent"))
+        .put(format!("{base}/v1/gglib/runs/d1?kind=agent"))
         .json(body)
 }
 
@@ -182,7 +187,7 @@ async fn a_proxy_without_a_starter_answers_503() {
 async fn an_unknown_kind_is_400() {
     let (base, cancel) = serve(None, Arc::default()).await;
     let request = Client::new()
-        .put(format!("{base}/v1/runs/d1?kind=zzq"))
+        .put(format!("{base}/v1/gglib/runs/d1?kind=zzq"))
         .json(&body());
     let (status, answer) = json(from_device(request).send().await.unwrap()).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
@@ -193,7 +198,7 @@ async fn an_unknown_kind_is_400() {
 
 fn put_chat(base: &str, query: &str, body: &serde_json::Value) -> RequestBuilder {
     Client::new()
-        .put(format!("{base}/v1/runs/p1{query}"))
+        .put(format!("{base}/v1/gglib/runs/p1{query}"))
         .json(body)
 }
 
@@ -460,4 +465,65 @@ async fn a_chat_run_with_builtins_is_refused_as_a_turn_is() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
     assert_eq!(code(&answer), "drawing_unavailable");
     cancel.cancel();
+}
+
+/// An image driver that never draws: what is under test is that one is held.
+#[derive(Debug)]
+struct NoDrawing;
+
+#[async_trait::async_trait]
+impl ImageGenerationPort for NoDrawing {
+    async fn generate(
+        &self,
+        _request: ImageRequest,
+        _progress: tokio::sync::mpsc::Sender<ImageProgress>,
+    ) -> Result<ImageBatch, ImageError> {
+        Err(ImageError::Unavailable {
+            reason: "a stand-in".to_owned(),
+        })
+    }
+}
+
+/// The list names a feature exactly where its routes answer: chats need the
+/// hub's chats and the turns that add to them, runs the runs, drawing an
+/// image driver; status is always served.
+#[tokio::test]
+async fn the_list_names_only_the_features_this_proxy_holds() {
+    let chats = || Some(Arc::new(FakeChats::default()) as Arc<dyn HubChatsPort>);
+    let turns = || Some(Arc::new(FakeTurns::default()) as Arc<dyn AgentRunStarter>);
+    let runs = || Some(Arc::new(FakeRuns::default()) as Arc<dyn RunsPort>);
+    let cases = [
+        (
+            DevicePorts {
+                runs: runs(),
+                chats: chats(),
+                turns: turns(),
+                images: Some(Arc::new(NoDrawing) as Arc<dyn ImageGenerationPort>),
+            },
+            json!(["chats", "runs", "drawing", "status"]),
+        ),
+        (
+            DevicePorts {
+                runs: runs(),
+                turns: turns(),
+                ..DevicePorts::default()
+            },
+            json!(["runs", "status"]),
+        ),
+        (
+            DevicePorts {
+                chats: chats(),
+                ..DevicePorts::default()
+            },
+            json!(["status"]),
+        ),
+    ];
+    for (devices, features) in cases {
+        let (base, cancel) = serve_holding(devices).await;
+        let answer = Client::new().get(format!("{base}/v1/models")).send().await;
+        let (status, list) = json(answer.unwrap()).await;
+        cancel.cancel();
+        assert_eq!(status, StatusCode::OK, "{list}");
+        assert_eq!(list["gglib"]["features"], features, "{list}");
+    }
 }

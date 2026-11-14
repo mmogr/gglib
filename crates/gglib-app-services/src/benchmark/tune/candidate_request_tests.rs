@@ -27,7 +27,7 @@ fn temperature(value: f32) -> InferenceConfig {
 /// origin says, tagged `reasoning` when `reasoning` is set.
 fn model(defaults: Option<(InferenceConfig, DefaultsOrigin)>, reasoning: bool) -> Model {
     let path = std::path::PathBuf::from("/tmp/model.gguf");
-    let new = gglib_core::NewModel::new(MODEL.to_owned(), path, 7.0, chrono::Utc::now());
+    let new = gglib_core::NewModel::new(MODEL.to_owned(), path, Some(7.0), chrono::Utc::now());
     let (inference_defaults, defaults_origin) = defaults.unzip();
     Model {
         capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS
@@ -136,7 +136,6 @@ fn shaped_by_the_pipeline(candidate: &InferenceConfig, model: &Model) -> Inferen
     body["tools"] = json!([{"type": "function", "function": {"name": TOOL}}]);
     let layers = SamplingLayers {
         trust_client_sampling: true,
-        agentic_adjustments: true,
         ..SamplingLayers::default()
     };
     request_pipeline::apply(&mut body, &model_context_for(model), &layers, None)

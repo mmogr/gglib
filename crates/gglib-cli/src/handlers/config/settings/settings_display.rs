@@ -7,14 +7,12 @@
 use gglib_core::Settings;
 use gglib_core::secret::{SHOWN_AS, SettingSecret, held, held_line};
 
-/// Keys that are purely internal bookkeeping and must not appear in
-/// user-facing output.
-const HIDDEN_KEYS: &[&str] = &["setup-completed"];
+use crate::config_commands::KEYS;
 
 /// The secret a row's key names, when it names one. Such a row says whether
 /// the secret is held and which command prints it, never what it is
 /// (ADR 0027): this output is what people paste into bug reports, and
-/// `gglib config settings reveal` is the one place a stored secret is
+/// `gglib config reveal` is the one place a stored secret is
 /// printed.
 ///
 /// Matched on the full dotted key, so a leaf inside a nested value can be
@@ -57,9 +55,9 @@ pub(super) fn camel_to_kebab(s: &str) -> String {
 
 /// `default-context-size` → `defaultContextSize`.
 ///
-/// The inverse of [`camel_to_kebab`], which `settings show` prints with, so
-/// the key a person reads out of that output is the key `settings unset`
-/// accepts.
+/// The inverse of [`camel_to_kebab`], which `config show` prints with, so
+/// the key a person reads out of that output is the key `config set` and
+/// `config unset` write.
 pub(super) fn kebab_to_camel(key: &str) -> String {
     let mut out = String::with_capacity(key.len());
     let mut upper_next = false;
@@ -143,8 +141,8 @@ fn mask_or_show(key: &str, leaf: serde_json::Value) -> String {
 /// Build display rows for a [`Settings`] value as `(key, value)` pairs.
 ///
 /// Keys are kebab-case. Nested structs are expanded into dot-notation sub-rows
-/// (e.g. `inference-defaults.temperature`). Rows for [`HIDDEN_KEYS`] are
-/// silently dropped.
+/// (e.g. `inference-defaults.temperature`). Rows for keys the table
+/// marks hidden are dropped.
 ///
 /// `default-model-id` and `default-image-model-id` are substituted with the
 /// pre-resolved `model_display` and `image_display` strings (or `"None"`) to
@@ -163,7 +161,7 @@ pub(super) fn settings_display_rows(
     for (snake_key, val) in obj {
         let kebab_key = snake_key.replace('_', "-");
 
-        if HIDDEN_KEYS.contains(&kebab_key.as_str()) {
+        if KEYS.iter().any(|key| key.name == kebab_key && key.hidden()) {
             continue;
         }
         let val = if kebab_key == "remote-devices" {
@@ -265,17 +263,6 @@ pub(super) fn print_sections(sections: &[DisplaySection]) {
                 println!("  {key:<max_key_len$}  {val}");
             }
         }
-    }
-}
-
-/// Print flat rows with dynamic column alignment.
-///
-/// Used by the `settings set` confirmation to show only the changed rows
-/// without section headers (sectioning one or two rows would be noisy).
-pub(super) fn print_display_rows(rows: &[(String, String)]) {
-    let max_key_len = rows.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
-    for (key, val) in rows {
-        println!("  {key:<max_key_len$}  {val}");
     }
 }
 

@@ -12,7 +12,6 @@ pub(crate) mod renderer;
 pub(crate) mod repl;
 mod repl_line;
 pub(crate) mod resume_settings;
-pub(crate) mod sampling_warning;
 mod thinking_dispatch;
 mod tool_format;
 pub(crate) mod turn;
@@ -42,7 +41,7 @@ use crate::target::TurnModel;
 pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // Before anything is stored: an image, a setting, a row.
     if let Some(id) = args.continue_id {
-        refuse_running_elsewhere(ctx, id).await?;
+        refuse_running_elsewhere(id).await?;
     }
     // A file that cannot be attached ends the command before a conversation
     // is made or a model asked for.
@@ -52,13 +51,12 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // The daemon runs the turns: found, or started, once the model is known
     // and before anything is written, so a chat is never made for a turn
     // nothing can answer.
-    let daemon = daemon_client::ensure_daemon(ctx).await?;
-    let kept = plan.resumed.as_ref().map(|resumed| resumed.folder.clone());
+    let daemon = daemon_client::ensure_daemon().await?;
+    let kept = plan
+        .resumed
+        .as_ref()
+        .map(|resumed| resumed.held.folder.clone());
     let conversation = save(ctx, &args, plan).await?;
-    let settings = ctx.app.settings().get().await?;
-    for line in sampling_warning::notices(&args.sampling, args.target, &settings) {
-        eprintln!("{line}");
-    }
 
     // The session's Draw switch (`/draw`), and the folder its file tools read.
     let draw = draw::DrawSwitch::for_session(&daemon, args.target);
@@ -93,8 +91,8 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
 /// running no daemon run is replying, and none is started to ask; one that
 /// does not list its runs for this data root's token, as another data
 /// root's does not, has said nothing of this chat.
-async fn refuse_running_elsewhere(ctx: &CliContext, id: i64) -> Result<()> {
-    if let Ok(daemon) = daemon_client::running(ctx).await
+async fn refuse_running_elsewhere(id: i64) -> Result<()> {
+    if let Ok(daemon) = daemon_client::running().await
         && let Ok(listed) = daemon.run_list().await
         && let Some(run) = listed.runs.iter().find(|run| run.holds(id))
     {
@@ -121,10 +119,11 @@ struct Plan {
 /// A chat a session resumes.
 struct Resumed {
     id: i64,
-    /// The settings it saves in place of the chat's; `None` changes none.
+    /// The settings the chat saved, as this build reads them, with the
+    /// folder the chat remembers, which the session keeps.
+    held: ConversationSettings,
+    /// The settings it saves in place of `held`; `None` changes none.
     kept: Option<ConversationSettings>,
-    /// The folder the chat remembers, which the session keeps.
-    folder: Option<String>,
 }
 
 /// [`plan`], then [`save`]: what [`run`] does before its first turn, but
@@ -146,13 +145,13 @@ async fn save<'a>(ctx: &'a CliContext, args: &ChatArgs, plan: Plan) -> Result<Co
         resumed,
     } = plan;
     let history = ctx.app.chat_history();
-    let Some(Resumed { id, kept, .. }) = resumed else {
+    let Some(Resumed { id, held, kept }) = resumed else {
         let settings = resume_settings::session_settings(args, profile.as_ref(), &turn);
         let prompt = args.system_prompt.clone();
         return Conversation::create(history, prompt, settings, turn.machine).await;
     };
     let conv = Conversation::resume(history, id, turn.machine);
-    conv.record_settings(kept).await?;
+    conv.record_settings(&held, kept).await?;
     if let Some(prompt) = &args.system_prompt {
         conv.record_system_prompt(prompt).await?;
     }
@@ -236,10 +235,10 @@ async fn plan(ctx: &CliContext, args: &ChatArgs) -> Result<(ChatArgs, Plan)> {
     let profile = selected_profile.as_ref();
     let resumed = if let Some((id, saved)) = resumed {
         let typed = typed_this_invocation;
-        let folder = saved.as_ref().and_then(|s| s.folder.clone());
+        let held = saved.unwrap_or_default();
         let kept =
-            resume_settings::resumed_settings(ctx, saved, &args, typed, profile, &turn).await?;
-        Some(Resumed { id, kept, folder })
+            resume_settings::resumed_settings(ctx, &held, &args, typed, profile, &turn).await?;
+        Some(Resumed { id, held, kept })
     } else {
         resume_settings::require_a_model(ctx, &turn).await?;
         None

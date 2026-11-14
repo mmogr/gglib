@@ -28,7 +28,9 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     for line in image_model_lines(dto) {
         println!("{line}");
     }
-    println!("  Parameters     : {:.1}B", dto.param_count_b);
+    if let Some(params) = dto.param_count_b {
+        println!("  Parameters     : {params:.1}B");
+    }
     if let Some(arch) = &dto.architecture {
         println!("  Architecture   : {arch}");
     }
@@ -151,7 +153,7 @@ fn inference_default_lines(dto: &ModelDetailDto) -> Vec<String> {
             " (published by the model author — ranks below global settings)"
         }
         // Also below global — an automated apply is not a person — but the
-        // strongest evidence there is, and the agentic ceiling defers to it.
+        // strongest evidence there is.
         Some(DefaultsOrigin::Measured) => {
             " (measured by a tune sweep — ranks below global settings)"
         }

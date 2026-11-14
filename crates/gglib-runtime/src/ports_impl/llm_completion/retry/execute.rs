@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use chrono::Utc;
-use gglib_core::ports::RetryObserver;
+use gglib_core::ports::{RetryObserver, UpstreamRefusal};
 use gglib_core::retry::{RetryDecision, RetryPolicy, decide, jitter_unit};
 use reqwest::{Client, Response};
 use serde_json::Value;
@@ -105,11 +105,12 @@ pub(crate) async fn send_with_retry(
                 if let Some(observer) = observer {
                     observer.on_exhausted(attempt, elapsed, reason);
                 }
-                return Err(anyhow!(
-                    "{reason} (gave up after {attempt} attempts, {}: {})",
-                    format_args!("{:.1}s", elapsed.as_secs_f64()),
+                let reason = format!(
+                    "{reason} (gave up after {attempt} attempts, {:.1}s: {})",
+                    elapsed.as_secs_f64(),
                     give_up.as_str()
-                ));
+                );
+                return Err(refused(&failure, door, reason));
             }
         }
     }
@@ -122,33 +123,57 @@ pub(crate) async fn send_with_retry(
 /// knows both halves: the classifier has the upstream's `code` but not who
 /// sent it, and the surface that chose the upstream knows who but is long
 /// past the request by the time an answer comes back. The classifier's own
-/// rendering is the fallback, so every failure this cannot improve on reads
-/// exactly as it did before.
+/// rendering is the fallback, after the far machine's name on a paired
+/// machine's door, so its advice (`gglib model update …`) reads as advice for
+/// that machine.
 ///
-/// Two conditions gate the swap and both are load-bearing. `invalid_api_key`
-/// means a key was refused, and which sentence is right depends on whose
-/// endpoint refused it, so the sentence may only win where a door was dialled
-/// at all — that is the `Option`; a paired machine's door names the machine,
-/// this machine's names none. And an endpoint can fail for reasons its key is
-/// innocent of, so the code has to agree as well — that is
+/// A failure whose body wrote a `code` comes back as an [`UpstreamRefusal`]
+/// carrying it and the status, so the agent loop can end the run with the
+/// code rather than leave it in the sentence. The door's own sentence carries
+/// none: the code it explains is about the key this side sent, not about the
+/// run.
+///
+/// Two conditions gate the door's sentence and both are load-bearing.
+/// `invalid_api_key` means a key was refused, and which sentence is right
+/// depends on whose endpoint refused it, so the sentence may only win where a
+/// door was dialled at all — that is the `Option`; a paired machine's door
+/// names the machine, this machine's names none. And an endpoint can fail for
+/// reasons its key is innocent of, so the code has to agree as well — that is
 /// [`Door::refusal`]. The sentence carries no status and no upstream wording,
 /// so the rendered reason is written to the log here rather than left to the
 /// caller, which would otherwise never see what the upstream actually said.
 fn terminal(failure: &Failure, door: Option<&Door>) -> anyhow::Error {
-    let explained = door.and_then(|door| Some((door, door.refusal(failure.code())?)));
-    match explained {
-        Some((door, message)) => {
-            // The name is not a credential — `gglib remote status` prints
-            // it — so a log reader gets the
-            // same name the user is being shown.
-            tracing::warn!(
-                machine = door.name.as_deref().unwrap_or("this machine"),
-                reason = %failure.reason(),
-                "the endpoint refused the key it was dialled with"
-            );
-            anyhow!(message)
+    if let Some((door, message)) = door.and_then(|door| Some((door, door.refusal(failure.code())?)))
+    {
+        // The name is not a credential — `gglib remote status` prints
+        // it — so a log reader gets the
+        // same name the user is being shown.
+        tracing::warn!(
+            machine = door.name.as_deref().unwrap_or("this machine"),
+            reason = %failure.reason(),
+            "the endpoint refused the key it was dialled with"
+        );
+        return anyhow!(message);
+    }
+    refused(failure, door, failure.reason().to_owned())
+}
+
+/// `reason` for `failure` as the caller reports it: after the paired
+/// machine's name on its door, and an [`UpstreamRefusal`] carrying the
+/// status and the code when the body wrote one. A terminal failure and one
+/// retried until the policy gave up both end here.
+fn refused(failure: &Failure, door: Option<&Door>, mut reason: String) -> anyhow::Error {
+    if let Some(name) = door.and_then(|door| door.name.as_deref()) {
+        reason = format!("{name} answered {reason}");
+    }
+    match failure.code() {
+        Some(code) => UpstreamRefusal {
+            status: failure.status(),
+            code: code.to_owned(),
+            reason,
         }
-        None => anyhow!("{}", failure.reason()),
+        .into(),
+        None => anyhow!(reason),
     }
 }
 

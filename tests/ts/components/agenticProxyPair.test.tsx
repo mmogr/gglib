@@ -41,7 +41,6 @@ const counts = (overrides: Partial<ModelDefectCounts> = {}): ModelDefectCounts =
   reasoning_only: 0,
   dialect_residue: 0,
   unvalidatable_schemas: 0,
-  normalization_errors: 0,
   identical_result_repeats: 0,
   repeats_not_evaluated: 0,
   repeats_rescued: 0,
@@ -64,7 +63,7 @@ const report = (proxy?: Partial<ProxyArms>): AgenticEvalReport =>
             delta: armDelta({ tool_accuracy: 0.5, task_completion: 0.5, composite: 0.5 }),
             paired: { pairs: 18, unmeasured_pairs: 0, wins: 9, losses: 1, ties: 8, mean_delta: 0.4, p_value: 0.004 },
             defects: counts(),
-            settings: { tool_call_repair: true, loop_guard_mode: 'note' },
+            settings: { tool_call_repair: true },
             tasks: [],
             ...proxy,
           },
@@ -94,7 +93,7 @@ describe('AgenticProxyPair', () => {
   it('says so when repair was switched off', () => {
     render(
       <AgenticProxyPair
-        report={report({ settings: { tool_call_repair: false, loop_guard_mode: 'note' } })}
+        report={report({ settings: { tool_call_repair: false } })}
       />,
     );
     expect(screen.getByText(/Repair was off/)).toBeInTheDocument();

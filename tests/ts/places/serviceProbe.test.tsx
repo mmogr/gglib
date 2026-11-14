@@ -4,8 +4,8 @@
  * pinned is what each answer makes the window say. A daemon that refuses
  * the tab's token (it started again since the tab took its link) is there,
  * and the window says the daemon's own sentence, not that gglib was lost; a
- * daemon that wants an API key is there too, and the probe never asks for
- * the key, however many polls; no answer at `/health` is gglib gone, and the
+ * 401 that is not the token refusal is a daemon there too, however many
+ * polls; no answer at `/health` is gglib gone, and the
  * window comes back when it answers; another program answering on the port
  * is no daemon, as Rust's probes say. The probe goes to `/health` with no
  * credential, and counts only an answer that says it is gglib's. In the
@@ -35,7 +35,6 @@ const daemon = {
 };
 
 let fetchMock: ReturnType<typeof vi.fn>;
-let prompt: ReturnType<typeof vi.spyOn>;
 
 const calls = (path: string) =>
   (fetchMock.mock.calls as [string, RequestInit | undefined][]).filter(([url]) => String(url).endsWith(path));
@@ -69,7 +68,6 @@ beforeEach(() => {
     return daemon.api();
   });
   vi.stubGlobal('fetch', fetchMock);
-  prompt = vi.spyOn(window, 'prompt').mockReturnValue(null);
 });
 
 afterEach(() => {
@@ -91,12 +89,10 @@ describe("the window's gate in a browser", () => {
     await nextProbe();
     expect(screen.queryByText(LOST)).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(SENTENCE);
-    expect(prompt).not.toHaveBeenCalled();
   });
 
-  it('shows the window for a daemon that wants an API key, and never asks for the key itself', async () => {
-    daemon.api = () =>
-      json({ error: "Missing or invalid API key. Send it as 'Authorization: Bearer <key>'.", status: 401, type: 'INVALID_API_KEY' }, 401);
+  it('shows the window for a 401 that is not the token refusal', async () => {
+    daemon.api = () => json({ error: 'Unauthorized.', status: 401, type: 'SOMETHING_ELSE' }, 401);
     await renderGate();
 
     expect(await screen.findByText('the window')).toBeInTheDocument();
@@ -104,7 +100,6 @@ describe("the window's gate in a browser", () => {
 
     expect(screen.getByText('the window')).toBeInTheDocument();
     expect(screen.queryByText(LOST)).not.toBeInTheDocument();
-    expect(prompt).not.toHaveBeenCalled();
     expect(calls('/health').length).toBeGreaterThanOrEqual(6);
     // The token is asked about once, when the daemon is first heard, never per poll.
     expect(calls('/api/version')).toHaveLength(1);

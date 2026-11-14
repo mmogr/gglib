@@ -14,7 +14,7 @@ import {
   type ImageAttachment,
   type SentImage,
 } from '../../../../src/hooks/useGglibRuntime/imageAttachments';
-import { FAR_CANNOT_TAKE_IMAGES, NOT_IN_THIS_STORE } from '../../../../src/hooks/useGglibRuntime/imageRefusals';
+import { NOT_IN_THIS_STORE } from '../../../../src/hooks/useGglibRuntime/imageRefusals';
 import { MAX_IMAGE_EDGE, type Downscale } from '../../../../src/hooks/useGglibRuntime/imagePrep';
 import { TransportError } from '../../../../src/services/transport/errors';
 import type { AttachmentUpload } from '../../../../src/types/generated/AttachmentUpload';
@@ -201,17 +201,6 @@ describe('the image adapter', () => {
 
     expect(downscale).not.toHaveBeenCalled();
     expect(upload).toHaveBeenCalledWith(file);
-  });
-
-  it('an older far gglib, with no store, is named as that', async () => {
-    const upload = vi.fn(async () => {
-      throw new TransportError('NOT_FOUND', 'no route', { status: 404, type: 'not_found' });
-    });
-    const { images, onRefused } = adapter({ source: 'far', upload });
-
-    await added(images, pngFile(640, 480));
-
-    expect(onRefused).toHaveBeenCalledWith(FAR_CANNOT_TAKE_IMAGES);
   });
 
   it('a send of an image another adapter added for this store is sent by that upload, never uploaded again', async () => {

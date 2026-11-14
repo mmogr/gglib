@@ -1,7 +1,7 @@
 //! What a user turn resets, on both detectors.
 //!
-//! A third test module because `loop_guard_tests.rs` is frozen at its current
-//! size by the complexity ratchet. Helpers are duplicated for the same reason.
+//! A third test module beside `loop_guard_tests.rs`. Helpers are duplicated
+//! from it.
 
 use super::*;
 use serde_json::{Value, json};
@@ -127,7 +127,7 @@ fn prose_repeats_on_either_side_of_a_user_turn_do_not_accumulate() {
 }
 
 /// The control, and where the user turn's reach ends. Six in a row with nobody
-/// interrupting stagnates. Under `note` a person speaking and the model then
+/// interrupting stagnates. A person speaking and the model then
 /// saying something new clears it, because the verdict is about the newest
 /// prose turn (ADR 0021); before that change the scan returned on the first
 /// trip and this conversation stagnated on every later request.

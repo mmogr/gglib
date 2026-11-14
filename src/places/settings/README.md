@@ -30,8 +30,7 @@ read. Numbers take their defaults and ranges from
 the default in the box and as "Default: N" under it, announced with the
 field (ST-2). The drawing reading is `readings/drawingValues`.
 
-The loop guard is a checkbox: on writes `note`, off writes `off`; `refuse`
-is the terminal's and shows as on with a line saying so. The image model
+The loop guard is a checkbox, on unless stored off. The image model
 choice lists only models that draw, keeping a stored id that is not one.
 
 Tools' tool servers are `tools/` (its own README): a row each and one
@@ -46,7 +45,7 @@ and budget are Models › Sampling defaults'.
 |------|------|
 | `SettingsPlace.tsx` | The route: the section list (the open one raised, `aria-current`), the section's name over its content in the one scrolling area, a turning mark until the settings have loaded, a segment that names none sent to General; reads the settings again on opening |
 | `GeneralSection.tsx` | Start the endpoint when gglib launches; in the desktop app only, Start gglib at login and Keep running in the menu bar when the window closes |
-| `EndpointSection.tsx` | Port, the API key, Bind address (the endpoint's), Allowed hosts (`hostsText`/`hostsFrom`), the prompt cache on disk and its budget, Model servers start at; What gglib does to requests: Repair broken tool calls, Stop runaway loops (with its trips), Cap sampling on agent runs, Let clients set sampling |
+| `EndpointSection.tsx` | Port, the API key, Bind address (the endpoint's), Allowed hosts (`hostsText`/`hostsFrom`), the prompt cache on disk and its budget, Model servers start at; What gglib does to requests: Repair broken tool calls, Stop repeated calls, Let clients set sampling |
 | `ModelsSection.tsx` | The models folder, Download queue size, Context for models without their own, Model for gglib q, Image model for drawing (`imageChoices`), Sampling defaults, Profiles |
 | `ToolsSection.tsx` | The tool servers (`tools/`, over the one `useMcpServers`), Let MCP clients draw, Agent limits (Max tool rounds, Max stuck steps, Parallel tool calls, Tool timeout (ms)), Title prompt with Reset, the "Learn more about MCP" footnote |
 | `tools/` | The tool server rows and their add and edit sheet: its own README |
@@ -64,9 +63,8 @@ and budget are Models › Sampling defaults'.
 | `Disclosure.tsx` | A ▸ line opening what it holds in place, closed when the section opens unless told open; never submits a form it sits in |
 | `notes.ts` | When a change takes effect, for the fields read when the endpoint turns on, when gglib starts, or when the desktop app starts, and the key's own |
 | `EngineRow.tsx` | One engine's row: the release, the download or acceleration, prebuilt or built from source, and its state in one line; Install, Update to the pin… (asked first), ⋯ Reinstall (over a download only) and Remove… (asked first), every one disabled while a model runs on it with which to stop (ST-11); the CPU build's warning where an install is offered, a source build's command, the install's progress and how it ended; ▸ Details |
-| `EngineDetails.tsx` | An engine row's Details: the install record (release or built from, download or acceleration, date), the binary and what it reports, the model serving on it, where it stands against its pin; only what the status has |
+| `EngineDetails.tsx` | An engine row's Details: the install record (release or built from, download or acceleration, date), the binary and what it reports, the model serving on it, where it stands against its pin (the daemon's `standing`, the words `gglib config <engine> status` prints); only what the status has |
 | `FasterDownloads.tsx` | `gglib config fast-downloads`: Off with Set up, On with ⋯ Turn off, each read back from the setup status; with no Python, the command that builds it with ⧉ and no Set up; a failure in the daemon's words |
-| `pinStanding.ts` | Where an engine's install stands against its pinned release, in the row's words, and whether to offer the update or send a source build to the terminal |
 | `BuildInfo.tsx` | The daemon's own build, read from `/api/version`: "gglib <display>", and "Working tree modified since this build" when its fingerprint is dirty |
 | `LabelledValue.tsx` | A label and its value, for an engine's Details |
 
@@ -80,8 +78,7 @@ key stops being required when the endpoint next turns on."; "Saved." / "Undo"; "
 settings: <the daemon's words>"; "What gglib does to requests", "Agent
 limits", "Parallel tool calls", "Tool timeout (ms)", "How many tool calls an
 agent run makes at once.", "How long one tool call may take before it is
-stopped.", "Learn more about MCP"; the loop guard's "Refusing, as … set it: a looping
-request is answered with a 400."; the API key's "Set", "Replace", "Clear",
+stopped.", "Learn more about MCP"; the API key's "Set", "Replace", "Clear",
 "Cancel", "The new key", "none", the Show/Hide/Copy labels, "Copied" beside
 Copy (`components/CopyValue`) and the copy's failures, "Replace the API key?" with "Clients that send the
 old key are refused within a few seconds.", and "The key in use
@@ -102,7 +99,8 @@ first.", "<product> <release> is installed.", "Removed <paths>." / "Nothing
 to remove: …", "Reading <product>…", "Details", the Details labels
 (Install record, "none, installed outside gglib", Release / Built from,
 Download / Acceleration, Downloaded / Built, Binary, Binary reports,
-Serving), `pinStanding`'s sentences, the source build's two sentences;
+Serving), "The update is a source build, run from a terminal: <command>.", the
+source build's two sentences;
 "Faster downloads", its sentence (its state is `FAST_DOWNLOADS_WORDS`),
 "Set up", "Setting up. This can take a minute.", "More for Faster
 downloads", "Turn off", "It needs Python 3.10 or newer. Once that is

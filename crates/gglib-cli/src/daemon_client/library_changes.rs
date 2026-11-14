@@ -16,7 +16,6 @@ use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 
 use super::{DaemonHandle, auth, paths, running};
-use crate::bootstrap::CliContext;
 
 /// The events a command's `ModelOps` emitted, kept until the daemon is told
 /// them.
@@ -41,12 +40,12 @@ impl LibraryChanges {
     /// daemon could be told, until it is refreshed. What the probe says of
     /// the daemon it found, a build or a switch that differs, it says here
     /// as it does for any command.
-    pub(crate) async fn tell_daemon(&self, ctx: &CliContext) {
+    pub(crate) async fn tell_daemon(&self) {
         let made = std::mem::take(&mut *self.0.lock().unwrap_or_else(PoisonError::into_inner));
         if made.is_empty() || auth::daemon_token().is_none() {
             return;
         }
-        let Ok(daemon) = running(ctx).await else {
+        let Ok(daemon) = running().await else {
             return;
         };
         for event in &made {

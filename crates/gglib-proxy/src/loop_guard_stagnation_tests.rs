@@ -1,8 +1,7 @@
 //! Stagnation cases for [`super::scan_history`].
 //!
-//! A second test module rather than more of `loop_guard_tests.rs`, which is
-//! frozen at its current size by the complexity ratchet. The few helpers below
-//! are duplicated from it for the same reason.
+//! A second test module beside `loop_guard_tests.rs`. The few helpers below
+//! are duplicated from it.
 
 use super::*;
 use serde_json::{Value, json};

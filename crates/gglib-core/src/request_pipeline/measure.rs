@@ -1,9 +1,9 @@
 //! The budget a request is measured against, and the measurement.
 //!
-//! Split out of [`super::truncation`], which is at its file budget. The
-//! budget is in characters because the request is; a model's context is in
-//! tokens, so a budget is always some token count taken at some
-//! chars-per-token ratio, and [`ContextBudget`] keeps both numbers.
+//! Split out of [`super::truncation`]. The budget is in characters because
+//! the request is; a model's context is in tokens, so a budget is always some
+//! token count taken at some chars-per-token ratio, and [`ContextBudget`]
+//! keeps both numbers.
 //!
 //! The ratio is needed again for the one part of a request whose length says
 //! nothing about its cost: an image. A screenshot is a megabyte of base64 and

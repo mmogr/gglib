@@ -9,7 +9,11 @@ import type { ServerConfig } from "./ServerConfig";
 /**
  * Frontend-friendly model structure.
  */
-export type GuiModel = { id: number, name: string, filePath: string, paramCountB: number, architecture: string | null, 
+export type GuiModel = { id: number, name: string, filePath: string, 
+/**
+ * The parameters, in billions; omitted when they are unknown.
+ */
+paramCountB?: number, architecture: string | null, 
 /**
  * The label the model's type is shown by: see `Model::quant_label`.
  */

@@ -172,14 +172,14 @@ fn the_rows_a_reset_could_not_read_are_named() {
     assert!(super::unreadable_lines(&SettingsReset::default()).is_empty());
 
     let lines = super::unreadable_lines(&SettingsReset {
-        dropped: vec!["loop_guard_mode".to_owned(), "proxy_port".to_owned()],
+        dropped: vec!["loop_guard".to_owned(), "proxy_port".to_owned()],
         kept_unreadable: vec!["remote_devices".to_owned()],
     });
 
     assert_eq!(lines.len(), 2);
     assert_eq!(
         lines[0],
-        "Dropped, because this build cannot read them: loop_guard_mode, proxy_port."
+        "Dropped, because this build cannot read them: loop_guard, proxy_port."
     );
     assert!(
         lines[1].starts_with("⚠ Kept, although this build cannot read them: remote_devices."),

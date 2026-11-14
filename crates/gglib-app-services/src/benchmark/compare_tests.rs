@@ -208,7 +208,12 @@ fn usage_wins_over_timings() {
 /// A streamed chat completion carries `usage` only when the request asks.
 #[test]
 fn the_request_asks_for_usage() {
-    let new = NewModel::new("one".into(), PathBuf::from("/one.gguf"), 1.0, Utc::now());
+    let new = NewModel::new(
+        "one".into(),
+        PathBuf::from("/one.gguf"),
+        Some(1.0),
+        Utc::now(),
+    );
     let body = build_compare_request_body(&config(), &Model::stored(1, &new), None);
 
     assert_eq!(body["stream"], json!(true));

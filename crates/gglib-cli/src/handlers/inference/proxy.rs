@@ -40,10 +40,10 @@ fn resolve_default_context(
     let trimmed = raw.trim();
     let invalid = || {
         format!(
-            "Invalid --default-context '{trimmed}'. Use a number from {} to {}; 'max' is not \
+            "Invalid --default-context-size '{trimmed}'. Use a number from {} to {}; 'max' is not \
              supported here because `gglib proxy` serves every model, so no single trained \
-             context is in scope. Omit the flag to fall back to the app settings \
-             `default_context_size`, or, with that unset too, to per-launch sizing.",
+             context is in scope. Omit the flag to fall back to the \
+             `default-context-size` setting, or, with that unset too, to per-launch sizing.",
             CONTEXT_SIZE_RANGE.start(),
             CONTEXT_SIZE_RANGE.end(),
         )
@@ -51,7 +51,7 @@ fn resolve_default_context(
     let parsed = trimmed.parse::<u64>().with_context(invalid)?;
     // Bounded here rather than left to the daemon. This is the same value
     // `validate_settings` holds to `CONTEXT_SIZE_RANGE` and the same one
-    // `--default-context-size` documents with that range, so accepting `1` on
+    // `config set default-context-size` documents with that range, so accepting `1` on
     // this surface alone would make three descriptions of one number disagree.
     if !CONTEXT_SIZE_RANGE.contains(&parsed) {
         anyhow::bail!(invalid());
@@ -142,7 +142,7 @@ pub(crate) async fn execute(
     let reach = reached(host.as_deref(), &settings);
     let body = start_body(host, port, default_context, sampling, &cache, &access);
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let started = start_on(&handle, &body, &settings).await?;
     attach_dashboard(ctx, reach, started.port, access.api_key).await
 }
@@ -200,8 +200,8 @@ pub(in crate::handlers) async fn attach_dashboard(
 }
 
 /// Execute `gglib proxy stop`.
-pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
-    let Ok(handle) = daemon_client::running(ctx).await else {
+pub(crate) async fn stop() -> Result<()> {
+    let Ok(handle) = daemon_client::running().await else {
         eprintln!("  Daemon is not running \u{2014} no proxy to stop.");
         return Ok(());
     };

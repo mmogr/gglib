@@ -18,28 +18,17 @@ the same endpoints and the report follows the CLI renderer's block order.
 | `AgenticConfigForm.tsx` | Model select, task-suite picker, context size, seeds, the control/replicate toggles, and the proxy-pair toggle. Mirrors the server's `DEFAULT_SEEDS` so an untouched form shows what the run will actually use. |
 | `AgenticLiveProgress.tsx` | Per-arm progress and a scrolling pass/fail log. Arm names are kept identical to the CLI banner's so the two surfaces agree. |
 | `AgenticReport.tsx` | The finished report — identity block, axis table, efficiency table, and JSON export in the CLI's `--output` shape. |
-| `AgenticReportVerdicts.tsx` | Renders the derived verdicts: sample-size warning, A/A drift, three-way control, per-seed stability. |
+| `AgenticReportVerdicts.tsx` | Renders the served verdicts: sample-size warning, A/A drift, three-way control, per-seed stability. |
 | `AgenticProxyPair.tsx` | The proxy arm beside its raw-auto baseline, and the proxy's repair and loop-guard counts — the CLI's "through gglib-proxy" block. Renders nothing for a report without the pair. |
 | `AgenticTaskDrilldown.tsx` | Per-task expansion of a completed run — no CLI equivalent. |
 | `AgenticHistoryList.tsx` | Past reports for a model, via the agentic-history endpoint. |
-| `verdicts.ts` | Client-side mirror of the Rust verdict methods. See below. |
 
-## Verdict Parity
+## Verdicts
 
-`AgenticEvalReport`'s verdicts are **methods** on the Rust type
-(`gglib_core::domain::benchmark::agentic`), not serialized fields, so they do
-not arrive on the wire and the GUI re-derives them in `verdicts.ts`. The two
-implementations must agree exactly: the composite-gap and noise-ratio
-thresholds, the boundary inclusivity on both control branches, the
-zero-effect guard, and the per-seed instability predicate. Both sides compute
-in f64, so there is no floating-point divergence to account for.
-
-The unit tests pin the TypeScript against dyadic fixtures, but note what that
-does and does not buy: each side is pinned to its own copy of the constants.
-Changing a threshold in the Rust leaves both suites green while the CLI and
-the GUI render contradictory verdicts for the same stored report. Treat the
-thresholds as a shared contract and change them in both places, or have the
-Rust tests record them in a file both sides read, in the style of
-`contracts/settings/bounds.json` and `tests/ts/contracts/settingsBounds.test.ts`.
+The verdicts are the daemon's: `AgenticEvalReport` carries `control_verdict`
+and `effect_verdict`, and each task its `raw_passed`, `gglib_passed` and
+`unstable`, judged by today's rules wherever a report is assembled or read
+back (`with_verdicts` in `gglib_core::domain::benchmark::agentic`), the
+same ones `gglib benchmark agentic` prints. This folder only words them.
 
 <!-- module-docs:end -->

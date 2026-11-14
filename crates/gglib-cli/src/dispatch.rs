@@ -14,7 +14,35 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;
+use crate::config_commands::ConfigCommand;
 use crate::handlers;
+
+/// Run a command that reads nothing from the library, before the library is
+/// opened: help (no command), `completions` and `config paths`. Each other
+/// command is handed back for [`dispatch`].
+///
+/// Opening the library creates it on a fresh data folder, upgrades an older
+/// one and refuses a newer one, and none of these three reads it, so they
+/// answer with no library and with one this build refuses. `config paths`
+/// is what `docs/compatibility.md` tells the owner of such a library to run.
+///
+/// # Errors
+///
+/// Whatever the command's handler returns.
+pub fn dispatch_without_library(command: Option<Commands>) -> Result<Option<Commands>> {
+    match command {
+        None => {
+            use clap::CommandFactory as _;
+            crate::parser::Cli::command().print_help()?;
+        }
+        Some(Commands::Completions { shell }) => handlers::completions::execute(shell)?,
+        Some(Commands::Config {
+            command: ConfigCommand::Paths,
+        }) => handlers::config::paths::execute()?,
+        Some(other) => return Ok(Some(other)),
+    }
+    Ok(None)
+}
 
 /// Route a parsed command to its handler.
 ///
@@ -27,8 +55,8 @@ use crate::handlers;
 /// * `remote`  — Whether `--remote` was typed (ADR 0028). Becomes the
 ///   [`Target`] every command that uses a machine is told. A command that
 ///   does not declare the flag was refused it by
-///   [`parse`](crate::remote_flag::parse); one under a parent that declares
-///   it (`gglib chat --remote history`) is refused it here.
+///   [`parse`](crate::remote_flag::parse), and so was one typed on a
+///   parent before its subcommand (`gglib chat --remote history`).
 #[expect(
     clippy::too_many_lines,
     reason = "one arm per command, each a call into its handler; the match is the command table"
@@ -99,7 +127,8 @@ pub async fn dispatch(
             thinking,
             command,
         } => {
-            // Subcommand takes priority (e.g. `gglib chat history`)
+            // A subcommand (`gglib chat history`) receives none of chat's own
+            // flags, and the parse refused any typed before it.
             if let Some(sub) = command {
                 match sub {
                     crate::commands::ChatCommand::History { limit } => {
@@ -163,24 +192,21 @@ pub async fn dispatch(
         }
 
         // ── GUI / web interfaces ────────────────────────────────────────────
-        Commands::Gui { dev } => {
-            handlers::gui::execute(dev)?;
+        Commands::Gui => {
+            handlers::gui::execute()?;
         }
-        Commands::Web { share_lan, no_open } => {
-            handlers::web::execute(ctx, share_lan, no_open).await?;
+        Commands::Web { no_open } => {
+            handlers::web::execute(no_open).await?;
         }
         Commands::Daemon { command } => match command {
-            crate::commands::DaemonCommand::Run {
-                share_lan,
-                allowed_host,
-            } => {
-                handlers::daemon::run(share_lan, allowed_host).await?;
+            crate::commands::DaemonCommand::Run { allowed_host } => {
+                handlers::daemon::run(allowed_host).await?;
             }
             crate::commands::DaemonCommand::Status => {
-                handlers::daemon::status(ctx).await?;
+                handlers::daemon::status().await?;
             }
             crate::commands::DaemonCommand::Stop { yes, remote: _ } => {
-                handlers::daemon::stop(ctx, target, yes).await?;
+                handlers::daemon::stop(target, yes).await?;
             }
         },
         Commands::Proxy {
@@ -190,8 +216,10 @@ pub async fn dispatch(
             access,
             command,
         } => {
-            // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
-            // connects to an already-running proxy rather than starting one.
+            // A subcommand (`gglib proxy dashboard`) connects to an
+            // already-running proxy rather than starting one. It receives
+            // none of the proxy's own flags, and the parse refused any typed
+            // before it.
             if let Some(sub) = command {
                 match sub {
                     crate::commands::ProxyCommand::Dashboard {
@@ -225,7 +253,7 @@ pub async fn dispatch(
                         .await?;
                     }
                     crate::commands::ProxyCommand::Stop => {
-                        handlers::inference::proxy::stop(ctx).await?;
+                        handlers::inference::proxy::stop().await?;
                     }
                     crate::commands::ProxyCommand::Test { model } => {
                         handlers::proxy_test::execute(ctx, model.as_deref()).await?;
@@ -252,7 +280,7 @@ pub async fn dispatch(
         // ── Remote tunnel (ADR 0012) ────────────────────────────────────────
         Commands::Remote { command } => handlers::remote::dispatch(ctx, command).await?,
         // ── Runs: replies the daemon owns ───────────────────────────────────
-        Commands::Run(args) => handlers::run::dispatch(ctx, args).await?,
+        Commands::Run(args) => handlers::run::dispatch(args).await?,
         // ── Drawing, through this machine's daemon or the paired one's ──────
         Commands::Image(args) => handlers::image::execute(ctx, target, args).await?,
         // ── Stored images ───────────────────────────────────────────────────

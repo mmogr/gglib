@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use gglib_core::domain::figures::{count_words, rate_words};
+use gglib_core::domain::figures::{rate_words, tokens_words};
 
 use super::render::format_elapsed_secs;
 use super::wire_recent::RecentRequest;
@@ -20,10 +20,9 @@ pub(super) const SHOWN: usize = 5;
 /// when the proxy has it; empty when it has neither.
 fn figures(request: &RecentRequest) -> String {
     [
-        request.completion_tokens.map(|tokens| {
-            let unit = if tokens == 1 { "token" } else { "tokens" };
-            format!("{} {unit}", count_words(u64::from(tokens)))
-        }),
+        request
+            .completion_tokens
+            .map(|tokens| tokens_words(u64::from(tokens))),
         request.tokens_per_second.map(rate_words),
     ]
     .into_iter()

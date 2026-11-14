@@ -111,17 +111,17 @@ async fn an_image_model_is_not_asked_for_a_parameter_count() {
     let added = ctx.app.models().find_by_path(&weights).await.unwrap();
     let added = added.expect("the file has a row");
     assert_eq!(added.image_family, Some(ImageFamily::Flux1));
-    assert!(
-        added.param_count_b.abs() < f64::EPSILON,
-        "the typed 12 was never asked for: {}",
-        added.param_count_b
+    assert_eq!(
+        added.param_count_b, None,
+        "the typed 12 was never asked for"
     );
 }
 
-/// The summary `model add` prints of an image model has no `Parameters`
-/// line, where the same row without its family would say `0.0B`.
+/// The summary `model add` prints has no `Parameters` line for a model
+/// whose count is unknown, here an image model whose tensors gave none, and
+/// one for the same row once a count is known.
 #[tokio::test]
-async fn the_summary_of_an_added_image_model_has_no_parameters_line() {
+async fn the_summary_has_a_parameters_line_only_for_a_known_count() {
     use crate::presentation::ModelSummaryOpts;
     use crate::presentation::model_display::summary_lines;
 
@@ -140,11 +140,11 @@ async fn the_summary_of_an_added_image_model_has_no_parameters_line() {
     let counts = |lines: &[String]| lines.iter().any(|line| line.contains("Parameters"));
     assert!(!counts(&printed), "{printed:?}");
     assert!(printed.iter().any(|line| line.starts_with("  Name: ")));
-    let mut chat = added;
-    chat.image_family = None;
-    let printed = summary_lines(&chat, &opts);
+    let mut counted = added;
+    counted.param_count_b = Some(11.9);
+    let printed = summary_lines(&counted, &opts);
     assert!(
-        printed.contains(&"  Parameters: 0.0B".to_owned()),
+        printed.contains(&"  Parameters: 11.9B".to_owned()),
         "{printed:?}"
     );
 }

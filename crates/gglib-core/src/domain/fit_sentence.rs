@@ -8,6 +8,7 @@
 //! [`usable_share`] of the budget), and this only spells it.
 
 use super::context_fit::FitInputs;
+use super::launch_narration::{LaunchDecision, bytes_as_gib};
 use super::launch_plan::ContextFit;
 use super::recommendation::usable_share;
 use crate::download::format::format_size;
@@ -30,15 +31,26 @@ impl ContextFit {
             fitted,
             budget_bytes: inputs.budget_bytes,
             weights_bytes: inputs.weights_bytes,
-            kv_bytes_per_token: inputs.kv_bytes_per_token,
+            kv_bytes_per_token: inputs.kv.map(|kv| kv.per_token),
+            kv_bytes: inputs.kv.map(|kv| kv.at(serves_at)),
             trained_ctx: inputs.trained_ctx,
             unsnapped: inputs.unsnapped,
             sentence: String::new(),
             note: None,
+            figures: Vec::new(),
         };
         fit.sentence = fit_sentence(&fit);
         fit.note = fit_note(&fit);
+        fit.figures = fit_figures(&fit);
         fit
+    }
+
+    /// The figures as rows, the ones [`Self::figures`] serves: composed from
+    /// the fields, so a reader of a fit served without them (an older hub)
+    /// still has the rows.
+    #[must_use]
+    pub fn figure_rows(&self) -> Vec<LaunchDecision> {
+        fit_figures(self)
     }
 }
 
@@ -96,6 +108,39 @@ pub(crate) fn fit_note(fit: &ContextFit) -> Option<String> {
     ))
 }
 
+/// The fit's figures as rows: the note as `memory` when there is one, then
+/// each figure, `unknown` when it could not be read (a refusal, never a
+/// zero).
+fn fit_figures(fit: &ContextFit) -> Vec<LaunchDecision> {
+    let mut rows: Vec<LaunchDecision> = fit
+        .note
+        .iter()
+        .map(|note| LaunchDecision::bare("memory", note.clone()))
+        .collect();
+    rows.extend([
+        LaunchDecision::bare("device budget", gib(fit.budget_bytes)),
+        LaunchDecision::bare("weights", gib(fit.weights_bytes)),
+        LaunchDecision::bare("kv bytes/token", count(fit.kv_bytes_per_token)),
+        LaunchDecision::bare("kv cache", gib(fit.kv_bytes)),
+        LaunchDecision::bare("trained window", count(fit.trained_ctx)),
+        LaunchDecision::bare("before snapping", count(fit.unsnapped)),
+    ]);
+    rows
+}
+
+/// A figure as a number, or `unknown`.
+fn count(v: Option<u64>) -> String {
+    v.map_or_else(|| "unknown".to_owned(), |n| n.to_string())
+}
+
+/// Bytes as GiB to two places, or `unknown`.
+fn gib(v: Option<u64>) -> String {
+    v.map_or_else(
+        || "unknown".to_owned(),
+        |b| format!("{:.2} GiB", bytes_as_gib(b)),
+    )
+}
+
 /// The served context's memory against what the runtime spends.
 #[derive(Debug, Clone, Copy)]
 struct Memory {
@@ -114,11 +159,8 @@ impl Memory {
 /// What the served context needs and what the runtime spends, when the
 /// budget, the weights and the KV cost are known.
 fn memory(fit: &ContextFit) -> Option<Memory> {
-    let per_token = fit.kv_bytes_per_token?;
     Some(Memory {
-        need: fit
-            .weights_bytes?
-            .saturating_add(per_token.saturating_mul(fit.serves_at)),
+        need: fit.weights_bytes?.saturating_add(fit.kv_bytes?),
         usable: usable_share(fit.budget_bytes?),
     })
 }
@@ -131,7 +173,7 @@ fn memory(fit: &ContextFit) -> Option<Memory> {
 /// or what it was trained for".
 fn missing(fit: &ContextFit) -> String {
     let unsaid: Vec<&str> = [
-        (fit.kv_bytes_per_token.is_none(), "what its context costs"),
+        (fit.kv_bytes.is_none(), "what its context costs"),
         (fit.trained_ctx.is_none(), "what it was trained for"),
     ]
     .into_iter()

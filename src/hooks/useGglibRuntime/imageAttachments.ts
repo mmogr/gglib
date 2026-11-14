@@ -100,7 +100,7 @@ export function createImageAttachmentAdapter(options: ImageAttachmentOptions): I
       if (!done) {
         const size = await pixelSizeOf(file);
         if (!size) {
-          options.onRefused(uploadRefusal(new ImageRefusal('unsupported_image', 'not an image'), source));
+          options.onRefused(uploadRefusal(new ImageRefusal('unsupported_image', 'not an image')));
           return;
         }
         done = upload(file, prepareImage(file, size, downscale));
@@ -121,7 +121,7 @@ export function createImageAttachmentAdapter(options: ImageAttachmentOptions): I
           status: { type: 'requires-action', reason: 'composer-send' },
         };
       } catch (error) {
-        if (!entry.sent) options.onRefused(uploadRefusal(error, source));
+        if (!entry.sent) options.onRefused(uploadRefusal(error));
         ready = { ...base, status: { type: 'incomplete', reason: 'error' } };
       }
       // Sent or removed while it uploaded: it is no longer the composer's.
@@ -146,7 +146,7 @@ export function createImageAttachmentAdapter(options: ImageAttachmentOptions): I
         const { file, upload: stored } = await done;
         return { ...sent, id: stored.id, file, contentType: stored.mime, stored };
       } catch (error) {
-        return { ...sent, refused: uploadRefusal(error, source) };
+        return { ...sent, refused: uploadRefusal(error) };
       }
     },
 

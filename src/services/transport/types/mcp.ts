@@ -5,11 +5,6 @@
 
 
 /**
- * MCP server type.
- */
-export type McpServerType = 'stdio' | 'sse';
-
-/**
  * MCP server status.
  */
 import type { McpServerStatusDto as McpServerStatus } from '../../../types/generated/McpServerStatusDto';
@@ -38,22 +33,16 @@ import type { McpLifecycle } from '../../../types/generated/McpLifecycle';
 export type { McpLifecycle };
 
 /**
- * MCP server entity.
- *
- * `server_type` is narrowed back by intersection: Rust stores it as a plain
- * `String`, but the two values it can hold are the two transports the config
- * union already models, and the editor switches on them. `string & Union`
- * collapses to the union.
+ * MCP server entity: a process gglib starts.
  */
-import type { McpServerDto } from '../../../types/generated/McpServerDto';
-export type McpServer = McpServerDto & { server_type: McpServerType };
+import type { McpServerDto as McpServer } from '../../../types/generated/McpServerDto';
+export type { McpServer };
 
 /**
  * Parameters for creating a new MCP server.
  */
 export interface NewMcpServer {
   name: string;
-  server_type: McpServerType;
   config: McpServerConfig;
   enabled: boolean;
   lifecycle: McpLifecycle;
@@ -71,7 +60,6 @@ export interface NewMcpServer {
  */
 export interface UpdateMcpServer {
   name?: string;
-  server_type?: McpServerType;
   config?: McpServerConfig;
   enabled?: boolean;
   lifecycle?: McpLifecycle;

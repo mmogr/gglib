@@ -8,10 +8,10 @@ Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overv
 
 **OpenAI-compatible proxy** — the front door to your local models, with an integrated MCP Streamable HTTP gateway.
 
-Everything between the `OpenAI` request and llama-server happens here: dialect
-normalization (with a drift alarm that logs, counts, and flags any dialect
-markup that survives into client-visible output), context defense, sampling
-authority, and admission. This is the crate that makes a local model behave
+Everything between the `OpenAI` request and llama-server happens here: a
+drift alarm that logs, counts, and flags any tool-call markup llama-server
+left in client-visible output, context defense, sampling authority, and
+admission. This is the crate that makes a local model behave
 like an API provider.
 
 ## Architecture
@@ -27,8 +27,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
-6. **Acts on looping conversations** — by default it forwards them with a note telling the model what it has repeated, and ends the run if the model repeats again after that; set to refuse, it aborts them before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
-7. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the GUI's Endpoint place and Diagnostics › Live (see [Proxy Dashboard](#proxy-dashboard))
+6. **Acts on conversations that repeat the exact same call** — it forwards them with a note telling the model what it has repeated, and ends the run if the model repeats again after that (see [Loop & Stagnation Defence](#loop--stagnation-defence))
+7. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/gglib/proxy/status` (JSON) and `GET /v1/gglib/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the GUI's Endpoint place and Diagnostics › Live (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
 
@@ -70,19 +70,20 @@ This crate provides an OpenAI-compatible HTTP server that:
 │                                  │ each path to its handler                          │
 │                                  ▼                                                   │
 │  ┌──────────────────────────────────────────────────────────────────────────────┐    │
-│  │ /v1/chat/completions      server.rs ─▶ forward.rs                            │    │
-│  │ /v1/embeddings            embeddings.rs                                      │    │
-│  │ /v1/models                models_endpoint.rs                                 │    │
-│  │ /v1/models/{name}/detail  model_detail_endpoint.rs                           │    │
-│  │ /v1/models/{name}/load    load_endpoint.rs                                   │    │
-│  │ /v1/images/*              images.rs                                          │    │
-│  │ /v1/proxy/status(/stream) server.rs, reading dashboard.rs                    │    │
-│  │ /v1/proxy/cache/clear     admin.rs                                           │    │
-│  │ /v1/proxy/shutdown        admin.rs                                           │    │
-│  │ /v1/runs/*                runs/                                              │    │
-│  │ /v1/chats/*               chats/                                             │    │
-│  │ /v1/attachments/*         chats/                                             │    │
-│  │ /mcp                      mcp/                                               │    │
+│  │ /v1/chat/completions            server.rs ─▶ forward.rs                      │    │
+│  │ /v1/embeddings                  embeddings.rs                                │    │
+│  │ /v1/models(/{name})             models_endpoint.rs                           │    │
+│  │ /v1/gglib/models/{name}/detail  model_detail_endpoint.rs                     │    │
+│  │ /v1/gglib/models/{name}/load    load_endpoint.rs                             │    │
+│  │ /v1/images/generations          images.rs                                    │    │
+│  │ /v1/gglib/images/drawing        images.rs                                    │    │
+│  │ /v1/gglib/proxy/status(/stream) server.rs, reading dashboard.rs              │    │
+│  │ /v1/gglib/proxy/cache/clear     admin.rs                                     │    │
+│  │ /v1/gglib/proxy/shutdown        admin.rs                                     │    │
+│  │ /v1/gglib/runs/*                runs/                                        │    │
+│  │ /v1/gglib/chats/*               chats/                                       │    │
+│  │ /v1/gglib/attachments/*         chats/                                       │    │
+│  │ /mcp                            mcp/                                         │    │
 │  └──────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                      │
 │  ┌─────────────────────────────────────────────┐                                     │
@@ -105,34 +106,36 @@ This crate provides an OpenAI-compatible HTTP server that:
 ```
 
 **Module Descriptions:**
-- **`server.rs`** — The composition root: `AppState`, and `serve()`, which builds the state and the router; also the `/health`, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
+- **`server.rs`** — The composition root: `AppState`, and `serve()`, which builds the state and the router; also the `/health`, `/v1/chat/completions`, `/v1/gglib/proxy/status`, and `/v1/gglib/proxy/status/stream` handlers
 - **`router.rs`** — Which routes exist, and which guards wrap which, in what order (see the [`access`](src/access/) module)
 - **`tunnel_routes.rs`** — `TUNNEL_REACHABLE`, every route a paired machine reaches through the tunnel; test builds only, held to `router.rs` by `router_tests.rs`
-- **`admin.rs`** — `POST /v1/proxy/cache/clear` and `POST /v1/proxy/shutdown`: clearing the caches, and stopping the daemon
+- **`refusal.rs`** — The error envelope's shared writer, and the answers no handler writes: an unknown path, a wrong method, a request an extractor could not read
+- **`admin.rs`** — `POST /v1/gglib/proxy/cache/clear` and `POST /v1/gglib/proxy/shutdown`: clearing the caches, and stopping the daemon
 - **`observers.rs`** — `ProxyObservers`: what a proxy run reports to that outlives the run, owned by the supervisor so a restarted proxy keeps counting into the same place
 - **`serve_config.rs`** — `ServeConfig`: everything `serve()` is started with, one named field each
 - **`host_facts.rs`** — `HostFacts`: the readers a caller hands in for this machine's name and the free space on a disk, each optional; `HostFacts::none()` has neither
 - **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
-- **`models_endpoint.rs`** — `GET /v1/models`: each model's advertised context window, which has to describe what a launch would serve, less a safety margin
+- **`models_endpoint.rs`** — `GET /v1/models`: each model's advertised context window, which has to describe what a launch would serve, less a safety margin; and `GET /v1/models/{name}`, one entry of that list
 - **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
+- **`models_gglib.rs`** — `GglibInfo`, the list's `gglib` object: this build's version and the features (`Feature`) this process serves, which `models_endpoint.rs` reads off the ports it was handed
 - **`profiles.rs`** — Which `{model}:{profile}` variants `/v1/models` lists
-- **`model_detail_endpoint.rs`** — `GET /v1/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
-- **`load_endpoint.rs`** — `POST /v1/models/{name}/load`: admits a model as a chat completion would and drops the lease at once, so the model is resident before a turn needs it; answers a `LoadResponse`
-- **`forward.rs`** — HTTP forwarding to llama-server: the request shaped by core's `request_pipeline::apply`, and the streamed reply parsed, normalized and re-encoded
-- **`turn_dialect.rs`** — The dialect a turn's answer is read in, and whether the dialect parser reads it, for both chat paths
+- **`model_detail_endpoint.rs`** — `GET /v1/gglib/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
+- **`load_endpoint.rs`** — `POST /v1/gglib/models/{name}/load`: admits a model as a chat completion would and drops the lease at once, so the model is resident before a turn needs it; answers a `LoadResponse`
+- **`forward.rs`** — HTTP forwarding to llama-server: the request shaped by core's `request_pipeline::apply`, and the streamed reply forwarded frame for frame, its tool calls held for repair
+- **`frame_edit.rs`** — The only edits a forwarded frame takes: `model` named as served, the usage reading for a client that asked, an error frame's `code` as a string, and a finish frame's tool calls dropped once a repair has replaced them
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
-- **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
+- **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, and scanned by the drift alarm; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
-- **`images.rs`** — `POST /v1/images/generations`, `OpenAI`'s Images API over the daemon's image driver; its handler body is public because the daemon mounts it at `POST /api/images/generations` too. `GET /v1/images/drawing` answers whether a turn sent with Draw pressed can draw here, lists this machine's image models, and judges the one `?image_model=<id>` chooses, by core's `drawing_availability`
+- **`images.rs`** — `POST /v1/images/generations`, `OpenAI`'s Images API over the daemon's image driver; its handler body is public because the daemon mounts it at `POST /api/images/generations` too. `GET /v1/gglib/images/drawing` answers whether a turn sent with Draw pressed can draw here, lists this machine's image models, and judges the one `?image_model=<id>` chooses, by core's `drawing_availability`
 - **`images_stream.rs`** — The streamed form: `image_generation.progress` at every stage and step, `image_generation.partial_image` at most `partial_images` times, evenly spread, and one `image_generation.completed` per image, last; a failure partway is an `error` event
 - **`image_refusal.rs`** — The pre-swap refusal of a chat completion that carries an image for a model with no projector (`model_cannot_read_images`); the rule and the words are `gglib_core::request_pipeline`'s — see [Images](#images)
-- **`body_limit.rs`** — The 32 MiB body limit of `POST /v1/chat/completions` and `PUT /v1/runs/{id}`, and the coded 413 (`request_too_large`) a larger body gets
+- **`body_limit.rs`** — The 32 MiB body limit of `POST /v1/chat/completions` and `PUT /v1/gglib/runs/{id}`, and the coded 413 (`request_too_large`) a larger body gets
 - **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget; a request that carried an image teaches it nothing
 - **`upstream_health.rs`** — Consecutive-failure watchdog that recycles a degraded (empty-response / first-byte-timeout / stalled) llama-server; feeds `DashboardSnapshot.upstream_health`
 - **`loopback.rs`** — The one builder of an HTTP client for a server on this machine: `no_proxy()` applied, so a request to `127.0.0.1` never goes through `HTTP_PROXY` or the system proxy (#1085); used by this crate's upstream client and by every other crate that talks to the daemon or llama-server
 - **`metrics.rs`** — `ContextMetricsStore` ring buffer feeding `DashboardSnapshot.recent_requests`
 - **`generation.rs`** — What one turn generated (completion tokens, reasoning characters, tool calls queued for the client, finish reason, time between the first and last generated token the upstream streamed): metered as a streamed turn drains, read from the body of one that is not, and written onto the turn's `recent_requests` entry once it is over
-- **`repair.rs`** — Tool-call repair: validates emitted `tool_calls` against the advertised schema and, when they do not conform, re-issues the turn: with `tool_choice: "required"`, so llama.cpp's own schema-derived grammar does the correcting, or, on a turn gglib's own grammar constrained, as a second draw under that same grammar. gglib originates no grammar of its own here — see [Tool-call repair](../../docs/tool-call-repair.md) and [ADR 0002](../../docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
+- **`repair.rs`** — Tool-call repair: validates emitted `tool_calls` against the advertised schema and, when they do not conform, re-issues the turn: with `tool_choice: "required"`, so llama.cpp's own schema-derived grammar does the correcting. gglib originates no grammar of its own here — see [Tool-call repair](../../docs/tool-call-repair.md) and [ADR 0002](../../docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
 - **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
 - **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`; also provides slot I/O primitives (`save_slot`, `restore_slot`, `clear_slot_files`, `sanitize_session_id`)
 - **`slot_eviction.rs`** — Disk-aware byte-budget LRU eviction of the slot files, over core's pure selection, and the reaping of orphaned `.tmp` files
@@ -143,17 +146,17 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
 - **`usage_reading.rs`** — What a streamed reply's usage frame also says of its context (the answering server's launched context and how many messages were shortened to fit), and that only a client whose own body set `return_progress` is told (see [The context reading](#the-context-reading))
 - **`client_send.rs`** — Each send of a streamed reply to its client waits at most the send bound, so a client that stopped reading is let go (see [When the upstream stops talking](#when-the-upstream-stops-talking))
-- **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, each read under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
+- **`upstream_read.rs`** — llama-server's streamed reply read into frames (each with its JSON and events) and comments for the drain, under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
-- **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
+- **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/gglib/proxy/status/stream` subscribers
 - **`sampling_audit.rs`** — Whether the sampling gglib resolved reached llama-server intact, compared against what a slot reports for the request; feeds `DashboardSnapshot.sampling_audit`
 - **`audit_records.rs`** — The two records the sampling readback keeps because nothing on the wire confirms them: the reasoning controls gglib decided, and the names of the client fields the trust gate dropped
 - **`props.rs`** — llama-server's `GET /props` read: the sampler table a request falls back to when gglib names nothing
 - **`template_caps_read.rs`** — The template-capability half of a `GET /props` read, kept apart from the sampler table so one missing half does not discard the other
 - **`access/`** — The Host, origin and bearer guards and the CORS layer; the daemon installs the Host and origin guards and the CORS layer in its own router too
 - **`remote/`** — The proxy's side of the remote tunnel: `remote_marker` reads the tunnel's markers, `device_gate` refuses a tunnelled request no device token admitted, `mcp_tunnel_guard` refuses every tunnelled `/mcp` request, and the MCP servers a paired device's run is offered
-- **`chats/`** — `/v1/chats` and `/v1/chats/{id}`: a paired device lists and opens the hub's chats, each with what the hub says of its branches, and changes one at `/v1/chats/{id}/changes` as the hub's page does (ADR 0017), and keeps a picture it had drawn again beside the one a tool drew at `/v1/chats/{id}/pictures` (ADR 0018); `POST /v1/attachments` and `GET /v1/attachments/{id}`: it stores an image a turn will name by id, and reads one back; any request not tunnelled from a named device is refused `device_not_named`
-- **`runs/`** — `/v1/runs/*`: a paired device starts, reads and cancels its own runs through the tunnel, adds a turn to a hub chat with `?kind=agent`, and runs a chat it keeps itself through the agent loop with `?kind=chat&tools=3,7`, the ids of the open servers it may use, or `?kind=chat&tools=none` with none (and `&draw=true` to draw); the SSE framing is shared with the daemon's `/api/runs`
+- **`chats/`** — `/v1/gglib/chats` and `/v1/gglib/chats/{id}`: a paired device lists and opens the hub's chats, each with what the hub says of its branches, and changes one at `/v1/gglib/chats/{id}/changes` as the hub's page does (ADR 0017), and keeps a picture it had drawn again beside the one a tool drew at `/v1/gglib/chats/{id}/pictures` (ADR 0018); `POST /v1/gglib/attachments` and `GET /v1/gglib/attachments/{id}`: it stores an image a turn will name by id, and reads one back; any request not tunnelled from a named device is refused `device_not_named`
+- **`runs/`** — `/v1/gglib/runs/*`: a paired device starts, reads and cancels its own runs through the tunnel, adds a turn to a hub chat with `?kind=agent`, and runs a chat it keeps itself through the agent loop with `?kind=chat&tools=3,7`, the ids of the open servers it may use, or `?kind=chat&tools=none` with none (and `&draw=true` to draw); the SSE framing is shared with the daemon's `/api/runs`
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
   - **`mcp/handlers.rs`** — `POST /mcp` JSON-RPC dispatch, `GET /mcp` (405), `DELETE /mcp` (terminate session)
   - **`mcp/meta_tools.rs`** — The three meta-tools `tools/list` returns (`search_tools`, `get_tool_schema`, `invoke_tool`), over an index of every running server's tools
@@ -185,7 +188,7 @@ resume from prior context without re-computation.
   server instance), restore is skipped. The start is recorded wherever an
   admission reports a freshly started server: a chat completion's first
   attempt, its retry after it found the upstream dead, and
-  `POST /v1/models/{name}/load` (not for an image model on `sd-server`,
+  `POST /v1/gglib/models/{name}/load` (not for an image model on `sd-server`,
   which has no slots; its load answers context 0).
 - **Partial-KV models bypass the layer entirely:** sliding-window, hybrid, and
   recurrent/SSM architectures keep only part of the token history in KV memory.
@@ -207,7 +210,7 @@ resume from prior context without re-computation.
   budget is a quarter of the cache's own footprint, and with no reader there
   is no default budget and no slot file is evicted. The same sweep also reaps
   orphaned `.tmp` files left behind by an interrupted save.
-- **Clear endpoint:** `POST /v1/proxy/cache/clear` (with optional `X-Gglib-Session-Id`
+- **Clear endpoint:** `POST /v1/gglib/proxy/cache/clear` (with optional `X-Gglib-Session-Id`
   header) clears cached slot files for a session or all sessions.
 
 CLI usage:
@@ -236,30 +239,31 @@ with `403 device_not_named`.
 |----------|--------|------|-------------|
 | `/health` | GET | open | Health check (always 200, `{"status":"ok"}` and nothing else) |
 | `/v1/models` | GET | bearer | List available models, each with its catalog id, and this machine's name — see [The model list](#the-model-list) |
-| `/v1/models/{name}/detail` | GET | bearer | One model in full, by id, name or `name:profile` — see [The model list](#the-model-list) |
-| `/v1/models/{name}/load` | POST | bearer | Have a model resident before a turn needs it, admitted as a chat completion would be; optional `num_ctx` in the body; answers `{model, started, context}` |
+| `/v1/models/{name}` | GET | bearer | The entry `/v1/models` lists with that `id`, exactly as listed; any other id is `404 model_not_found` |
+| `/v1/gglib/models/{name}/detail` | GET | bearer | One model in full, by id, name or `name:profile` — see [The model list](#the-model-list) |
+| `/v1/gglib/models/{name}/load` | POST | bearer | Have a model resident before a turn needs it, admitted as a chat completion would be; optional `num_ctx` in the body; answers `{model, started, context}` |
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
 | `/v1/embeddings` | POST | bearer | Embeddings — see [Embeddings](#embeddings) |
 | `/v1/images/generations` | POST | bearer | Draw with the daemon's image driver, `OpenAI`'s Images API; `stream: true` for progress, partial images and one completed event per image; gglib's `image`, `mask` and `strength` draw from a picture, all of it or where the mask is white |
-| `/v1/images/drawing` | GET | bearer | Whether a turn sent with Draw pressed can draw here, and the image models to choose from: `{available, code?, reason?, model?, model_id?, models}`; `?image_model=<id>` judges that one |
+| `/v1/gglib/images/drawing` | GET | bearer | Whether a turn sent with Draw pressed can draw here, and the image models to choose from: `{available, code?, reason?, model?, model_id?, models}`; `?image_model=<id>` judges that one |
 | `/mcp` | POST | bearer | MCP Streamable HTTP — JSON-RPC dispatch |
 | `/mcp` | GET | bearer | Returns 405 (server-push not yet supported) |
 | `/mcp` | DELETE | bearer | Terminate MCP session by `Mcp-Session-Id` |
-| `/v1/proxy/status` | GET | bearer | Proxy dashboard snapshot (JSON) — see [Proxy Dashboard](#proxy-dashboard) |
-| `/v1/proxy/status/stream` | GET | bearer | Proxy dashboard live updates (SSE, hydrate-then-stream) |
-| `/v1/proxy/cache/clear` | POST | bearer | Clear KV cache for a session or all sessions (optional `X-Gglib-Session-Id` header) |
-| `/v1/proxy/shutdown` | POST | bearer | Stop the whole daemon; the body must be `{"confirm":"shutdown"}` |
-| `/v1/runs` | GET | bearer | The runs the caller may see, newest first; a paired device sees only its own |
-| `/v1/runs/{id}` | PUT | bearer | Start a run with the body as its request, or answer with the caller's run that has the id (201 new, 200 existing); `?kind=agent` and `?kind=chat&tools=…` as in [`runs/`](src/runs/) |
-| `/v1/runs/{id}` | GET | bearer | One run |
-| `/v1/runs/{id}/events` | GET | bearer | A run's events (SSE), from `?after=N` |
-| `/v1/runs/{id}/cancel` | POST | bearer | Cancel a run; idempotent |
-| `/v1/chats` | GET | bearer + named device | The hub's chats, newest first |
-| `/v1/chats/{id}` | GET | bearer + named device | One chat and its rows |
-| `/v1/chats/{id}/changes` | POST | bearer + named device | An edit, a regenerate or a branch of one chat (ADR 0017) |
-| `/v1/chats/{id}/pictures` | POST | bearer + named device | Keep a picture beside the one it was made from (ADR 0018) |
-| `/v1/attachments` | POST | bearer + named device | Store an image, the raw body (at most 8 MiB), and answer its id, type, size and estimated prompt tokens |
-| `/v1/attachments/{id}` | GET | bearer + named device | A stored image's bytes, as they were sent |
+| `/v1/gglib/proxy/status` | GET | bearer | Proxy dashboard snapshot (JSON) — see [Proxy Dashboard](#proxy-dashboard) |
+| `/v1/gglib/proxy/status/stream` | GET | bearer | Proxy dashboard live updates (SSE, hydrate-then-stream) |
+| `/v1/gglib/proxy/cache/clear` | POST | bearer | Clear KV cache for a session or all sessions (optional `X-Gglib-Session-Id` header) |
+| `/v1/gglib/proxy/shutdown` | POST | bearer | Stop the whole daemon; the body must be `{"confirm":"shutdown"}` |
+| `/v1/gglib/runs` | GET | bearer | The runs the caller may see, newest first; a paired device sees only its own |
+| `/v1/gglib/runs/{id}` | PUT | bearer | Start a run with the body as its request, or answer with the caller's run that has the id (201 new, 200 existing); `?kind=agent` and `?kind=chat&tools=…` as in [`runs/`](src/runs/) |
+| `/v1/gglib/runs/{id}` | GET | bearer | One run |
+| `/v1/gglib/runs/{id}/events` | GET | bearer | A run's events (SSE), from `?after=N` |
+| `/v1/gglib/runs/{id}/cancel` | POST | bearer | Cancel a run; idempotent |
+| `/v1/gglib/chats` | GET | bearer + named device | The hub's chats, newest first |
+| `/v1/gglib/chats/{id}` | GET | bearer + named device | One chat and its rows |
+| `/v1/gglib/chats/{id}/changes` | POST | bearer + named device | An edit, a regenerate or a branch of one chat (ADR 0017) |
+| `/v1/gglib/chats/{id}/pictures` | POST | bearer + named device | Keep a picture beside the one it was made from (ADR 0018) |
+| `/v1/gglib/attachments` | POST | bearer + named device | Store an image, the raw body (at most 8 MiB), and answer its id, type, size and estimated prompt tokens |
+| `/v1/gglib/attachments/{id}` | GET | bearer + named device | A stored image's bytes, as they were sent |
 
 ### Model Resolution
 
@@ -301,7 +305,12 @@ the reader `ServeConfig.host` carries, and it is absent when there is no
 reader or the host name is unreadable or is not a plain label. `/health`
 never carries it: it answers without credentials.
 
-`GET /v1/models/{name}/detail` answers one model as a `ModelLookup`:
+`GET /v1/models/{name}` is `OpenAI`'s read of one model: the entry the list
+holds under that `id`, picked from the same list, so the two never disagree.
+Only a listed `id` is answered (a `/` in it sent as `%2F`); anything else,
+a catalogue id or an unlisted profile included, is `404 model_not_found`.
+
+`GET /v1/gglib/models/{name}/detail` answers one model as a `ModelLookup`:
 `detail` is the `ModelDetailDto` the inspector reads, without `filePath` or
 `port`, with `isServing` true when the model is resident in either slot; and
 `profile` is the profile the identifier named. `{name}` is resolved as a chat
@@ -445,11 +454,11 @@ to llama-server as the client sent them. Three things are the proxy's own:
   message, so the same words about two screenshots are two sessions.
 
 Both routes that take images, `POST /v1/chat/completions` and
-`PUT /v1/runs/{id}`, take a body of up to 32 MiB; a larger one is refused with
+`PUT /v1/gglib/runs/{id}`, take a body of up to 32 MiB; a larger one is refused with
 413 (`request_too_large`).
 
 A paired device's turn on a hub chat does not carry its images in that body.
-It sends each one first, to `POST /v1/attachments` (one PNG or JPEG, at most
+It sends each one first, to `POST /v1/gglib/attachments` (one PNG or JPEG, at most
 8 MiB, 413 `image_too_large`), and names it in the turn by the id that
 answers; see [`src/chats/`](src/chats/README.md).
 
@@ -490,22 +499,9 @@ The proxy adds no `cache_prompt` key either. llama-server defaults it to `true`,
 and a client's own `cache_prompt` passes through as any key gglib does not model
 does (ADR 0022).
 
-A request carrying a non-empty `tools` array has its temperature **capped to
-`0.3`** — but only when the value that won came from a model's recipe nobody
-here reviewed. Anything a person set stands, and a request whose temperature
-nothing names is sent none.
-
-A `reasoning`-tagged model is **not capped at all**. It used to be, at `0.6`;
-[ADR 0004](../../docs/adr/0004-observe-the-sampling-boundary.md)'s addendum named the evidence that would change that, the experiment
-ran, and the cap lost on every count — the uncapped recipe temperature beat it
-on paired composite (p = 0.0099), tool-call formatting passed 100% uncapped
-against 98.6% under the cap, and cooling the model *increased* the
-loop/stagnation triggers the cap was supposed to avoid. A reasoning model
-decodes its `<think>` block and its tool call under one sampler configuration,
-so a cap imposed for structured output lands on the thinking too. DRY is not
-touched. Disable with `gglib config settings set --agentic-sampling false` or
-`GGLIB_DISABLE_AGENTIC_SAMPLING=1`; see
-[Sampling resolution](../../docs/sampling.md#the-agentic-turn-temperature-ceiling).
+A request carrying a non-empty `tools` array is sampled like any other: its
+temperature is the one the ladder resolved, and none is sent when nothing
+names one.
 
 Resolution runs through `InferenceConfig::resolve_with_profile`, the single
 source of truth for the merge order.  The resolved values are aggressively
@@ -638,8 +634,8 @@ beside the upstream's counts:
 A client asks by setting `return_progress: true` in its own body, the key
 that also gets it `prompt_progress` frames. The proxy forces that key
 upstream for every streamed request, so what decides is what the client
-sent, read before the override. A client that did not send it gets the usage
-frame with the upstream's counts alone, byte for byte as before; chat runs
+sent, read before the override. A client that did not send it gets
+llama-server's usage frame with nothing added; chat runs
 set the key for every client, so a chat run's usage frame carries the reading.
 A reply that is not streamed carries none. The two names are `ContextReading`'s
 (`gglib_core::domain::agent`), which an agent run's `turn_usage` event
@@ -654,7 +650,7 @@ configurable.
 | Bound | Value | What it times | What the client gets |
 |-------|-------|---------------|----------------------|
 | First byte | 300 s a cycle | The wait for llama-server's response headers, that is, for a slot. Extended while another request is being served; otherwise retried twice, or not at all while a recycle is pending | A notice, `upstream_timeout`, `[DONE]` |
-| Idle | 300 s | Each read of the reply once it has begun. Time spent waiting on the client, or on a repair re-issue, does not count | The answer so far, a notice, `upstream_timeout`, `[DONE]`; only `[DONE]` if the answer had already finished |
+| Idle | 300 s | Each read of the reply once it has begun. Time spent waiting on the client, or on a repair re-issue, does not count, and nor does llama-server's `:` keep-alive comment once tokens flow (it is passed on to the client) | The answer so far, a notice, `upstream_timeout`, `[DONE]`; only `[DONE]` if the answer had already finished |
 | Repair re-issue | 60 s | The second request of a tool-call repair | The original tool call |
 
 A stall after the first generated token (content, reasoning or a tool call)
@@ -711,7 +707,7 @@ Tool names are qualified as `{server_name}__{tool_name}` so tools from different
 
 ### Drawing
 
-`builtin` is not a server: it is where the gateway lists gglib's own tools, and no MCP server can be given that name. There is one, `builtin__generate_image`, and it is off unless switched on: Settings, or `gglib config settings set --mcp-drawing true`. While the switch is off, or nothing here can draw (a proxy outside the daemon, no image runtime, no image model to choose), `search_tools` and `get_tool_schema` do not know the tool, and an `invoke_tool` that names it anyway is refused with the reason before anything is drawn.
+`builtin` is not a server: it is where the gateway lists gglib's own tools, and no MCP server can be given that name. There is one, `builtin__generate_image`, and it is off unless switched on: Settings, or `gglib config set mcp-drawing true`. While the switch is off, or nothing here can draw (a proxy outside the daemon, no image runtime, no image model to choose), `search_tools` and `get_tool_schema` do not know the tool, and an `invoke_tool` that names it anyway is refused with the reason before anything is drawn.
 
 Its arguments are `prompt` (required), `size` as `WIDTHxHEIGHT`, `n` from 1 to 4 and `seed`; the image model is this machine's own choice. The result is one `image` item per image, base64 PNG, then one text item saying what was drawn. gglib stores none of it. A render takes minutes, so a `tools/call` that carries `_meta.progressToken` gets `notifications/progress` messages on the same SSE response before the result: `progress` rises with each wait the render reports before its first step, then with each new step and stage (a wait once steps have begun, and a step reported twice, send nothing), `total` appears once the first step has said how many there are, and `message` says where it has got to ("sampling step 3 of 20, image 1 of 1"). A call with no token gets only the result. A client that disconnects abandons the render.
 
@@ -746,16 +742,23 @@ curl -X POST http://localhost:8080/mcp \
 |--------|-----------|
 | 503 | Model is loading (retry after) |
 | 502 | Failed to connect to llama-server |
-| 404 | Model not found |
-| 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit, in any mode) |
-| 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
+| 404 | Model not found (`model_not_found`), or no route serves the path (`unknown_route`) |
+| 405 | The route does not take the method (`method_not_allowed`); `Allow` lists the ones it does |
+| 409 | A shutdown asked of a proxy that runs outside the daemon (`no_daemon_to_stop`) |
+| 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit) |
 | 400 | A message carries an image and the model has no projector linked (`model_cannot_read_images`) — see [Images](#images) |
-| 413 | The body of a chat completion or a run is over 32 MiB (`request_too_large`) |
+| 400 | A body, query or path segment that does not read, or a bad `X-Gglib-Session-Id` (`invalid_request`) |
+| 413 | The body of a chat completion, an image request or a run is over 32 MiB, or an embeddings request's, a load's or a shutdown's over 2 MiB (`request_too_large`) |
 | 504 | A chat completion that does not stream, or an embeddings request, outlasted its total bound (`upstream_timeout`) — see [When the upstream stops talking](#when-the-upstream-stops-talking) |
 | 401 | A key is configured and the request does not present it, or presents another (`invalid_api_key`) |
 | 403 | Refused by a guard: `host_not_allowed`, `origin_not_allowed`, `device_not_paired`, `device_not_named` or `mcp_not_allowed_over_tunnel` |
-| 500 | Internal error |
+| 500 | Internal error (`internal_error`) |
 | 507 | A chat model's weights and its smallest context need more memory than this device gives a model (`model_does_not_fit`) |
+
+Every one of these answers is `{"error": {"message", "type", "code"}}`, whatever
+refused (a route, a guard, an extractor, the router's fallback); `src/refusal.rs`
+writes the ones no handler does. Past its guards, the MCP gateway at `/mcp`
+answers in JSON-RPC, or with a bare status as MCP's transport does.
 
 Every `code` this proxy writes, its runs' included, is listed with its type,
 status and meaning in [`docs/error-codes.json`](../../docs/error-codes.json).
@@ -876,17 +879,16 @@ same failing build was refused on the third, while the identical conversation
 through `gglib-agent` was not. See
 [ADR 0011](../../docs/adr/0011-stagnation-is-about-prose.md).
 
-**Under `note`, the verdict is about the newest turn.** A trip counts only
+**The verdict is about the newest turn.** A trip counts only
 while the newest turn the detector judged belongs to the run that tripped: a
 different batch, or a person speaking and the model answering, clears it, and
 a turn that calls a tool clears a stagnation trip. A
 user turn with nothing after it does not, so a client that appends one to every
-request cannot clear a trip by doing so. Under `refuse` the first trip anywhere
-in the transcript still stands, as it always has. See
+request cannot clear a trip by doing so. See
 [ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md).
 
-What a tripped guard does is one setting, `--loop-guard-mode`, with three
-values. The default, `note`, **forwards** the request with a fixed note
+The guard is one switch, `loop-guard`, on unless set to `false`. A run's
+first trip **forwards** the request with a fixed note
 appended to the last message's content behind a `[gglib loop guard]` marker,
 saying what repeated and how often: the request therefore pays the admission
 and model-swap cost it used to be refused ahead of, and a client with
@@ -897,11 +899,12 @@ with a finished assistant message (status 200, `finish_reason: "stop"`, no
 tool call) saying the run was stopped by gglib's loop guard. Every agentic
 client seen so far ends its loop on a turn with no tool call. A request that
 ends with a user turn after the trip is noted rather than ended: a person may
-have spoken. `refuse` is the old
-behaviour — HTTP 400 before any of that cost, `type` and `code` being
-`loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
-shape), and the message naming `--loop-guard-mode note`. `off` does not scan at
-all.
+have spoken. Switched off, the guard does not scan at all.
+
+It catches only the exact same tool calls answered the same way, or the
+same reply. A loop whose calls vary — the same search with a different query
+each time — is not caught, and the guard and its thresholds are outside the
+[v1 promise](../../docs/compatibility.md).
 
 The note is delivered inside the last message rather than as a trailing
 `system` message because a `system` message at the tail raises on Qwen3.5,
@@ -915,7 +918,7 @@ table is not re-derivable from this tree. The one limit: a template with no
 branch for the `tool` role drops the whole last message on an agentic tail,
 and the note with it.
 
-The escape hatch — `--loop-guard-mode off` — remains for a client that
+The escape hatch — `loop-guard false` — is for a client that
 legitimately repeats identical batches with nothing in between.
 (Replaying identical batches across a history no longer trips it — the count
 is back to back, and a repeat whose answer changed is not counted at all. A
@@ -923,9 +926,8 @@ batch that went unanswered, or was answered only in part, cannot be compared
 and is counted as a repeat: an answer nobody can read is not evidence of
 progress. See [ADR 0010](../../docs/adr/0010-the-loop-guard-reads-what-came-back.md).) Detection lags the agent
 path's per-iteration check by one turn (the history at turn N shows responses
-1..N-1). Under `refuse` that caps a runaway session at threshold+1 turns;
-under the default, `note`, at threshold+2 — one generation with the note, then
-the ending. The lap a client can fall into while re-asking for the same
+1..N-1), so a runaway session is capped at threshold+2 turns — one
+generation with the note, then the ending. The lap a client can fall into while re-asking for the same
 result, with varying prose and small tool calls in between, trips neither
 detector, so nothing caps it ([ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md)).
 
@@ -934,15 +936,14 @@ trimmed into the context budget is noted — the note is built and appended
 first — and then refused as `context_length_exceeded` inside the forward, so
 nothing is sent and the client sees a terminal 400 with no note at all. That
 is by construction the shape most likely to trip the guard, long and
-repetitive, and it is the one case where the new default buys nothing. The
+repetitive, and it is the one case where the note buys nothing. The
 trip is still counted.
 
 Because the note is appended *before* the budget is measured, its own
 characters count against that budget: a loop note adds 245–486 characters and
 a stagnation note about 206. A tripped conversation sitting inside that band of
-the ceiling is forwarded under `off` and refused under the default. Narrow, and
-the same shape was already one turn from the ceiling — but it is a 400 the old
-default would not have returned.
+the ceiling is forwarded with the guard off and refused with it on. Narrow,
+and the same shape was already one turn from the ceiling.
 
 **Fail-open:** an unparseable body passes (request routing already validated
 the JSON), and a tool call whose `arguments` string is malformed is hashed as
@@ -955,17 +956,16 @@ that is the point of the field since #1052. A request the guard *ended* also
 sets `loop_guard_ended`.
 
 Every decision is also written to the loop guard's log in gglib's database,
-which outlives the daemon: a row per request the guard noted, ended or
-refused (an ended request's row reads as a noted one: the log has no column
-that tells them apart), and,
-per UTC day, model, gglib version and mode, a count of the requests it scanned
-(nothing is scanned under `off`). Read it with `gglib proxy trips`,
+which outlives the daemon: a row per request the guard noted or ended (an
+ended request's row reads as a noted one: the log has no column that tells
+them apart), and, per UTC day, model and gglib version, a count of the
+requests it scanned (nothing is scanned with the guard off). Read it with `gglib proxy trips`,
 `GET /api/proxy/loop-guard-trips`, or the panel under the setting. A row is the
 guard's decision, not a delivery — a noted request can still reach the model
 without its note (a template with no `tool` branch), or not at all (the
 context budget, an embedding model, a failed admission, a failed retry). The
 dashboard counts those too, except the embedding model and the failed
-admission, so under `note` the log can count more
+admission, so the log can count more
 than the dashboard's `loop_guard_trips`. It can also count fewer: a decision the
 writer could not queue is lost while its scan is kept, which reads as fewer
 trips over the same scans, and only a warning in the daemon's log says so. No
@@ -982,8 +982,8 @@ alone ([#1091](https://github.com/mmogr/gglib/issues/1091)).
 ## Proxy Dashboard
 
 ```text
-GET /v1/proxy/status         (JSON snapshot)
-GET /v1/proxy/status/stream  (SSE, hydrate-then-stream)
+GET /v1/gglib/proxy/status         (JSON snapshot)
+GET /v1/gglib/proxy/status/stream  (SSE, hydrate-then-stream)
 ```
 
 Both endpoints return the same [`DashboardSnapshot`](src/dashboard.rs) shape
@@ -991,8 +991,8 @@ Both endpoints return the same [`DashboardSnapshot`](src/dashboard.rs) shape
 (CLI, `crates/gglib-cli/src/handlers/proxy_dashboard/`) and the web GUI's
 Diagnostics › Live (`src/places/diagnostics/live/`).
 
-- `GET /v1/proxy/status` returns one snapshot, computed on demand.
-- `GET /v1/proxy/status/stream` is a Server-Sent Events stream: the first
+- `GET /v1/gglib/proxy/status` returns one snapshot, computed on demand.
+- `GET /v1/gglib/proxy/status/stream` is a Server-Sent Events stream: the first
   event is always the current snapshot (hydration), followed by a fresh
   snapshot roughly once per second for as long as the client stays
   connected (via [`gglib_broadcast::Broadcaster::subscribe_with_hydration_until`],
@@ -1081,14 +1081,60 @@ Diagnostics › Live (`src/places/diagnostics/live/`).
 | `recent_requests` | array | Last ≤ 20 requests processed by the truncation pipeline, oldest-first |
 | `total_requests` | `u64` | All requests since proxy start, including evicted ones |
 | `cache` | `object \| null` | Prompt-cache configuration for the running model; `null` until the first request resolves one |
-| `dialect_residue_total` | `u64` | Requests whose client-visible output carried dialect markup that survived normalization; eviction-safe |
-| `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued, with `tool_choice: "required"` or as a second draw under gglib's own grammar on a turn it constrained, counted whether or not the re-issue worked |
+| `dialect_residue_total` | `u64` | Requests whose client-visible output carried tool-call markup llama-server left unparsed; eviction-safe |
+| `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued with `tool_choice: "required"`, counted whether or not the re-issue worked |
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
 | `upstream_health` | `object` | Degradation watchdog counters since proxy start: the current strike streak (`consecutive_strikes`), and totals of empty responses, upstream errors, stream stalls, first-byte timeouts, client aborts, proactive recycles and recycles not carried out |
 | `per_model_defects` | `object` | Per-model defect counts, keyed by the name of the model a request resolved to — see below |
-| `launch` | `object \| null` | What the running model's launch decided, and why: the record the CLI banner prints at startup; `null` until a request has resolved a model |
+| `launch` | `object \| null` | What the running model's launch decided, and why: the record the CLI banner prints at startup, with the fit its context was sized by; `null` until a request has resolved a model — see below |
 | `admission` | `object` | Which models hold VRAM slots, what is queued behind them, and why the second slot is or is not in use; read live from the runtime on every snapshot |
 | `sampling_audit` | `object` | Whether the sampling gglib resolved is what llama-server applied, or that nothing is in a position to know; also the reasoning controls gglib decided and the client field names the trust gate dropped |
+
+#### `launch` (`LaunchNarration`)
+
+`model_name`, `quantization`, `weights_bytes`, and `decisions`: the banner's
+rows in order, each a `label`, a `value` and the `source` it came from.
+
+`fit` is the context fit the launch was sized by, the record `gglib model
+explain` shows for a launch not yet made. It is `null` for an image model and
+for a launch made with the fit switched off (`GGLIB_DISABLE_CONTEXT_FIT`), and
+absent from a hub older than the field. Its keys are `snake_case`, like the
+rest of this document (`plan.fit` on `GET /api/models/{id}/explain` is the
+same record in `camelCase`):
+
+```json
+"fit": {
+  "serves_at": 131072,
+  "source": "fitted_to_hardware",
+  "fitted": 131072,
+  "budget_bytes": 103079215104,
+  "weights_bytes": 4280000000,
+  "kv_bytes_per_token": 78336,
+  "kv_bytes": 10267656192,
+  "trained_ctx": 262144,
+  "unsnapped": 262144,
+  "sentence": "Fits this machine with 128K context, of 256K trained.",
+  "note": "fits (13.55 GiB of 86.40 GiB usable)",
+  "figures": [
+    { "label": "memory", "value": "fits (13.55 GiB of 86.40 GiB usable)", "source": null },
+    { "label": "device budget", "value": "96.00 GiB", "source": null }
+  ]
+}
+```
+
+`budget_bytes`, `weights_bytes`, `kv_bytes_per_token` and `unsnapped` are what
+the fit worked from and reached before snapping to a rung (`fitted`); each is
+`null` when it could not be read. `figures` is the same in words, one row a
+figure (seven when every figure is known; two are shown). The banner prints
+one row of it, and none when the fit reached no figure:
+
+```text
+    fit       262144 unsnapped  (of 96.0 GiB, 4.0 GiB weights, 77 KiB/token)
+```
+
+The fit appears once for each narration in the document: `launch.fit` for the
+model the endpoint last resolved, and `admission.slots[].launch.narration.fit`
+for each resident.
 
 #### `per_model_defects`
 
@@ -1101,7 +1147,7 @@ model"*, which is the only form the answer is actionable in. Each value carries
 `repairs_attempted`,
 `repairs_succeeded`, `stream_errors`, `truncated_generations`,
 `empty_responses`, `reasoning_only`, `dialect_residue`,
-`unvalidatable_schemas`, `normalization_errors`,
+`unvalidatable_schemas`,
 `identical_result_repeats`, `repeats_not_evaluated` and `repeats_rescued`.
 
 Five shapes worth knowing before reading them:
@@ -1110,8 +1156,8 @@ Five shapes worth knowing before reading them:
   The turn was empty from the client's point of view either way; the
   distinction is *why*. Adding them double-counts.
 - **Only a loop-guard trip bumps `requests`.** A trip is the one signal that
-  has to count its own denominator: under `refuse` nothing is forwarded, and
-  under `note` the forward's snapshot carries the trip rather than a plain
+  has to count its own denominator: an ended run is not forwarded, and a
+  noted request's forward snapshot carries the trip rather than a plain
   request. Every other *defect* counter describes a turn that was already
   counted when it was forwarded. One
   trip bumps two counters besides: `loop_guard_trips`, and whichever of
@@ -1121,8 +1167,8 @@ Five shapes worth knowing before reading them:
   field the count lands in. These four are this proxy's pre-dispatch scan.
   Since [#1091](https://github.com/mmogr/gglib/issues/1091) the agent loop's
   own detectors are counted too, in `agent_guard_trips` and its three
-  companions, and they are deliberately not folded in here: a proxy trip
-  under `note` is an intervention the conversation survives, and an agent
+  companions, and they are deliberately not folded in here: a noted proxy
+  trip is an intervention the conversation survives, and an agent
   trip ends the run. `agent_guard_scanned` is their denominator, and
   `requests` is not — an agent turn is not a proxy request.
 - **`identical_result_repeats` is not a defect, and does not bump
@@ -1156,7 +1202,7 @@ Process-lifetime and reset on restart, deliberately — see
 decisions alone are also kept across restarts, in a log of their own (see
 [Loop & Stagnation Defence](#loop--stagnation-defence)): `loop_guard_trips`
 here counts one run's snapshots, the log counts decisions across runs, and
-under `note` the two can differ. Nothing acts on them
+the two can differ. Nothing acts on them
 automatically; they are diagnosis. `gglib proxy dashboard` renders them, listing
 only models with something to report. A model with no faults can still earn a
 line on the two observational counters alone, printed under an `observed`
@@ -1242,9 +1288,10 @@ numbers that are both real.
 | `n_prompt_tokens_processed` | `u64 \| null` | Current-schema field: the prompt tokens run through the model this round, excluding those reused from the cache |
 | `n_prompt_tokens_cache` | `u64 \| null` | Current-schema field: the prompt tokens reused from the KV cache this round |
 | `next_token.n_decoded` | `u64 \| null` | Current-schema generation-progress field; on a build with Multi-Token Prediction, `next_token` is an array and the first entry is read |
+| `tokens_in_use` | `u64 \| null` | The tokens this slot holds, counted by the proxy from the fields above; never read from llama-server's answer |
 
-`/slots`'s JSON shape varies across llama.cpp versions, so consumers should
-compute "tokens in use" the way the proxy itself does
+`/slots`'s JSON shape varies across llama.cpp versions, so the proxy counts
+"tokens in use" once and serves it as `tokens_in_use`
 (`SlotSnapshot::tokens_in_use()`): the prompt side is
 `n_prompt_tokens_processed + n_prompt_tokens_cache` when `_processed` is
 present, else `n_prompt_tokens`, plus `next_token.n_decoded`. Only when
@@ -1262,17 +1309,16 @@ neither prompt field is present does it fall back to `n_past` →
 | `messages_truncated` | `usize` | Number of messages whose content was replaced |
 | `was_clamped` | `bool` | `true` when HTTP 400 was returned to the client |
 | `recorded_at_secs` | `u64` | Unix timestamp of the observation |
-| `grammar_enforced` | `bool` | The pipeline originated a decode-time GBNF grammar for this request (`request_pipeline::constrain`) |
-| `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched once the turn's outcome is known |
+| `dialect_residue` | `bool` | Tool-call markup llama-server left unparsed reached client-visible output. Back-patched once the turn's outcome is known |
 | `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
-| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard act on this request — forward it with a note, end the run, or refuse it before dispatch — or `null` when it did not |
-| `loop_guard_ended` | `bool` | The loop guard ended this request's run: under `note`, the same run tripped again after its note, so the proxy answered with a finished assistant message instead of forwarding ([ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md)) |
+| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard act on this request — forward it with a note, or end the run — or `null` when it did not |
+| `loop_guard_ended` | `bool` | The loop guard ended this request's run: the same run tripped again after its note, so the proxy answered with a finished assistant message instead of forwarding ([ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md)) |
 | `completion_tokens` | `u32` \| `null` | `usage.completion_tokens` as the upstream reported it; `null` when the turn carried no usage |
 | `reasoning_chars` | `usize` | Characters of reasoning the turn generated, `0` when none |
-| `interventions` | `[{ what: { kind, … }, word }]` | What gglib did to the request, in the order it was done, each with the word every surface shows: `repaired_tool_call`, `trimmed { messages }`, `constrained`, `noted_loop { detector }`, `stopped_loop { detector }`, `refused { reason: { kind: longer_than_context \| loop { detector } } }`. A repaired tool call is added when the repair lands |
+| `interventions` | `[{ what: { kind, … }, word }]` | What gglib did to the request, in the order it was done, each with the word every surface shows: `repaired_tool_call`, `trimmed { messages }`, `noted_loop { detector }`, `stopped_loop { detector }`, `refused { reason: { kind: longer_than_context } }`. A repaired tool call is added when the repair lands |
 | `tool_calls` | `u32` | Tool calls queued for the client, each counted once however many fragments it streamed in |
 | `finish_reason` | `string` \| `null` | The `finish_reason` the turn ended with; `null` when it ended without one |
-| `generation_ms` | `u64` \| `null` | Milliseconds between the first and the last generated token (a reasoning, text or tool-call delta) the upstream streamed, timed before normalization, whatever the normalizer later made of them; `null` when it streamed none, and on every non-streaming turn |
+| `generation_ms` | `u64` \| `null` | Milliseconds between the first and the last generated token (a reasoning, text or tool-call delta) the upstream streamed, timed as each event is read; `null` when it streamed none, and on every non-streaming turn |
 
 The last five are what the turn generated. They are written once the turn is
 over, so an entry read while its turn is still streaming shows `null` and `0`.
@@ -1283,11 +1329,8 @@ status, or one whose upstream could not be reached or did not answer in time.
 A streamed turn's readings are taken as its events are read. When the client
 hangs up they stop where the proxy finds it gone, which after the first
 generated token is a send that fails, and `tool_calls` counts only the calls
-that were queued for it. `generation_ms` is timed before normalization: a
-model that writes a tool call as text generates it over many tokens, and the
-figure spans all of them though the normalizer makes one event of the call. A
-non-streaming turn is read from the body the client is answered with, which
-carries no tokens to time.
+that were queued for it. A non-streaming turn is read from the body the
+client is answered with, which carries no tokens to time.
 
 A turn whose tool call was re-issued ([Tool-call repair](../../docs/tool-call-repair.md))
 generated twice. Streamed, `completion_tokens`, `reasoning_chars`,
@@ -1303,7 +1346,7 @@ regardless of evictions.
 ### Consuming the stream
 
 ```bash
-curl -N http://localhost:8080/v1/proxy/status/stream
+curl -N http://localhost:8080/v1/gglib/proxy/status/stream
 ```
 
 - **CLI**: `gglib proxy dashboard [--host HOST] [--port PORT]` — see

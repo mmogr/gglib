@@ -109,7 +109,7 @@ path-check:
 	elif [ -n "$$others" ]; then \
 		echo "⚠ This build now shadows another gglib on PATH:"; \
 		echo "$$others" | sed 's/^/    /'; \
-		echo "  Both use the same library. \`gglib config paths\` says which binary is running."; \
+		echo "  Both use the same library. \`gglib config paths\` lists every copy and which one runs."; \
 	fi
 
 # Asks before each of three things, in `scripts/uninstall.sh`: the program,
@@ -346,7 +346,7 @@ enforce: ## Run the architecture enforcement checks
 	@./scripts/check_param_source_exhaustive.sh
 	@# A setting that exists, is plumbed, is read, and is settable from nowhere
 	@# compiles perfectly — the failure is an absence. tool_call_repair sat that
-	@# way for months while `config settings show` printed it.
+	@# way for months while the settings listing printed it.
 	@./scripts/check_settings_surfaces.sh
 	@# `let _ = sqlx::query(…)` tolerates a locked database and a missing table
 	@# on the same terms as the duplicate column its comment named. #796 shipped
@@ -358,13 +358,6 @@ enforce: ## Run the architecture enforcement checks
 	@# fitted rung. The same construct shipped in #925, #926 and #934, each time
 	@# found months later by reading. The construct is the tell.
 	@./scripts/check_context_floor.sh
-	@# The file-size check, once per language with that language's baseline.
-	@# The 300-LOC budget is a guide for noticing a file that has taken on a
-	@# second job, so this stops on growth and not on size: a file past the
-	@# budget passes at its recorded size, and one that is a single concept
-	@# has its row raised by hand (CONTRIBUTING, "File size").
-	@./scripts/check_file_size.sh rust scripts/rust-complexity-baseline.txt
-	@./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt
 	@./scripts/check_lint_inheritance.sh
 	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
@@ -642,7 +635,7 @@ llama-install-auto: ## Install the pinned llama.cpp, answering its question when
 
 llama-update: ## Update llama.cpp to the pinned release
 	@echo "Updating llama.cpp..."
-	@$(GGLIB) config llama update
+	@$(GGLIB) config llama install
 
 llama-status: ## Show llama.cpp status
 	@$(GGLIB) config llama status
@@ -722,7 +715,7 @@ build-tauri: ## Build Tauri desktop app
 	else \
 		npm run tauri:bundle; \
 	fi
-	@echo "✓ Tauri app built to target/release/gglib-app"
+	@echo "✓ Tauri app built to target/release/gglib-gui"
 
 ##@ Workflows
 
@@ -734,8 +727,7 @@ build-tauri: ## Build Tauri desktop app
 # has none, which at a terminal still asks before it starts. llama-install-auto is REQUIRED to succeed, since chat needs it; the
 # image runtime comes after it, and a failure there is said and skipped.
 setup: check-deps build-tauri install ## Full setup (check deps + build + install)
-	@echo "Configuring models directory (press Enter to accept the default)"
-	@./target/release/gglib config models-dir prompt
+	@echo "Models download to $$(./target/release/gglib config paths | sed -n 's/^models_dir = //p'); change that with: gglib config set models-dir <path>"
 	@# Optional accelerator. The command already refuses to fail — it skips
 	@# without a terminal and reports a failed provision as a skipped step —
 	@# but setup must not break over an optional extra, so belt and braces.

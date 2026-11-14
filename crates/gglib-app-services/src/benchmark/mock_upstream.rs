@@ -81,9 +81,9 @@ impl Drop for MockUpstream {
 
 /// A catalog holding the one model the arm is pinned to: id 1, by this name.
 ///
-/// It can call tools and has no dialect, so the proxy neither strips a
-/// request's tools nor installs a grammar: what reaches the mock is what the
-/// arm sent, plus whatever the proxy itself adds.
+/// It can call tools, so the proxy does not strip a request's tools: what
+/// reaches the mock is what the arm sent, plus whatever the proxy itself
+/// adds.
 #[derive(Debug)]
 pub(crate) struct OneModelCatalog(pub(crate) &'static str);
 
@@ -96,7 +96,7 @@ impl ModelCatalogPort for OneModelCatalog {
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
         Ok((name == "1" || name == self.0).then(|| ModelSummary {
             capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
-            param_count: String::new(),
+            param_count: None,
             ..ModelSummary::bare(1, self.0)
         }))
     }

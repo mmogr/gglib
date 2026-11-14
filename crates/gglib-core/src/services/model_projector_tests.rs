@@ -75,7 +75,7 @@ fn service(projector: Option<&str>) -> (ModelService, Arc<OneModelRepo>) {
     let mut new = NewModel::new(
         "qwen".to_owned(),
         PathBuf::from("/models/qwen.Q8_0.gguf"),
-        27.0,
+        Some(27.0),
         Utc::now(),
     );
     new.projector_path = projector.map(PathBuf::from);

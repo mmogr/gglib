@@ -11,16 +11,11 @@ chat. While the model loads, the reply waits on one line on stderr,
 
 <!-- snippet: q -->
 ```console
-$ gglib q "In one sentence, what is a GGUF file?"
-
-  ╭─ ℹ️ Info ─────────────────────────────╮
-  Starting llama-server for 'Qwen3-4B-Instruct-2507' via the gglib daemon (this may take a moment) …
-  llama-server ready on port 9300
-
-  ╰───────────────────────────────────────╯
-A GGUF file is a general-purpose, flexible format for storing models in the LLM (Large 
-Language Model) ecosystem, specifically designed to support various model architectures 
-and hardware types.
+$ gglib q "Write a haiku about a cold start"
+The system begins,  
+Cold wake of servers awaiting—  
+Silent, steady light.
+  0.7 s · 94 t/s · 0 tokens reused
 
 Continue chatting? (Y/n): 
 n
@@ -30,31 +25,39 @@ n
 ## `q`
 
 One-shot. `{}` in the question is replaced by piped or `--file` input, and
-`-Q` / `--quiet` strips tool progress and reasoning tokens for a script.
-Without `-m` it asks the default model ([config default](config.md#default));
+`--quiet` strips tool progress and reasoning tokens for a script.
+Without `-m` it asks the default model (`default-model-id`, [config set](config.md#set-unset-show));
 under `--remote`, the model last asked of that machine.
 
 <!-- snippet: q-pipe -->
 ```console
-$ grep -E "WARN|ERROR" server.log | gglib q -Q "What went wrong here?"
-The logs indicate that the application is experiencing a database connection issue. Specifically:
+$ grep -E "WARN|ERROR" server.log | gglib q --quiet "What went wrong here?"
+The logs indicate that the application is experiencing a **database connection pool exhaustion** issue. Here's what went wrong:
 
-- The database connection pool has reached its maximum capacity of 10 connections.
-- Each time a request arrives (e.g., `/orders/export`, `/orders`), the system tries to allocate a new connection, but all 10 slots are already in use.
-- As a result, requests are being queued and eventually timeout after 5 seconds.
-- When the timeout occurs, the server returns a 500 Internal Server Error.
+1. **Database Pool at Capacity**:
+   - The log shows "pool at 10/10 connections", meaning the database connection pool has reached its maximum limit of 10 connections.
+   - Every request that requires a database connection (like `/orders` or `/orders/export`) is being queued because no additional connections are available.
 
-### Root Cause:
-The database pool is saturated. This suggests either:
-1. Too many concurrent requests are hitting the system (e.g., due to high traffic or misconfigured load).
-2. The application is not properly closing database connections after use (leak).
-3. The pool size (10) is too small for current demand.
+2. **Connection Timeout Errors**:
+   - The error "timed out after 5s waiting for a connection" means the application waited up to 5 seconds for a connection but couldn't get one, resulting in a **500 Internal Server Error**.
 
-### Recommendations:
-- Increase the database connection pool size (configurable in the DB setup).
-- Ensure all database connections are properly closed in the code.
-- Add logging or monitoring to track request volume and connection usage.
-- Implement circuit breakers or rate limiting to prevent overloading.
+3. **Request Failures**:
+   - The failed requests (`GET /orders`, `GET /orders/export`) result in HTTP 500 errors, indicating the server could not fulfill these requests due to the database being unresponsive from the connection pool perspective.
+
+### Root Cause
+The database connection pool has been filled up with active connections (possibly due to:
+- Too many concurrent requests,
+- Long-running database queries,
+- Inefficient query handling or lack of proper connection reuse,
+- No connection timeout or auto-recovery mechanisms).
+
+### Recommended Actions
+1. **Increase the connection pool size** in the configuration if possible.
+2. **Optimize queries** to reduce execution time and avoid holding connections for long durations.
+3. **Implement connection pooling recovery** or circuit breakers to handle failures gracefully.
+4. **Add logging** to identify which requests are causing the most connections.
+
+Without additional context (e.g., code, configuration), this is the best interpretation of the problem.
 ```
 <!-- /snippet -->
 
@@ -65,11 +68,10 @@ gglib q --remote -m <id> "Why is this test flaky?"   # on the paired machine
 ```
 
 - At a terminal, once the answer is in, `q` offers to go on as a chat
-  (`Continue chatting?`); `-Q`, or input from a pipe, skips the offer.
+  (`Continue chatting?`); `--quiet`, or input from a pipe, skips the offer.
 - The question is a saved chat from the start, made before it is asked:
   a question that fails keeps what arrived of its reply, marked as stopped.
 - Its file tools read the directory it was asked in.
-- `question` is the long spelling of the same command.
 
 ## `chat`
 
@@ -79,28 +81,18 @@ An interactive session with tool access: gglib's own file tools plus any
 <!-- snippet: chat -->
 ```console
 $ gglib chat Qwen3-4B-Instruct-2507
-
-  ╭─ ℹ️ Info ─────────────────────────────╮
-  Starting llama-server for 'Qwen3-4B-Instruct-2507' via the gglib daemon (this may take a moment) …
-  llama-server ready on port 9300
-
-  ╰───────────────────────────────────────╯
 Files: /Users/mmogr/Library/Application Support/gglib/home/orders-api (read-only)
 Agentic chat ready. Type /help for help, /quit to exit.
-Session #10 — resume later with: gglib chat --continue 10
+Session #20 — resume later with: gglib chat --continue 20
 You: Read app.py and say in one sentence what it serves.
 
-  ⚙  Read Text File  app.py …
-  ✓  Read Text File  3ms  import io
-
-from flask import Flask, Response
-
-from db import pool
-from export i…
-The app.py file serves a Flask application that provides an API endpoint to retrieve the
-most recent 50 order records and another endpoint to export orders in CSV format.
+  ⚙  Read File  app.py …
+  ✓  Read File  0ms  22 lines  import io
+The app.py file serves a Flask application that provides an endpoint to retrieve the 
+latest 50 orders in JSON format and another endpoint to export orders in CSV format.
+  0.5 s · 89 t/s · 728 tokens reused
 You: /exit
-Session #10 saved. Resume with: gglib chat --continue 10
+Session #20 saved. Resume with: gglib chat --continue 20
 ```
 <!-- /snippet -->
 
@@ -114,7 +106,7 @@ Session #10 saved. Resume with: gglib chat --continue 10
   keeps what had arrived of its reply, marked as stopped.
 - The flags a session names are saved with the chat, and the daemon reads
   them on every turn, the chat page's included: the model, `--tools`,
-  `--no-tools`, the tool limits, `--max-iterations`, `--profile` and five
+  `--no-tools`, the tool limits, `--max-tool-iterations`, `--profile` and five
   sampling flags. `--continue` keeps what the chat saved, with what its
   command line names in its place; `-s` replaces the chat's system prompt.
 - `/retry`, `/edit` and `/branch` are made by the daemon, as the chat page
@@ -170,7 +162,7 @@ explains the budget.
 Local models need guardrails to finish a tool-calling task, so the loop
 carries them.
 
-- `--max-iterations` caps the loop; without it, the limit a resumed chat
+- `--max-tool-iterations` caps the loop; without it, the limit a resumed chat
   saved, then the `max-tool-iterations` setting, which is the order the chat
   page and a paired device's turn follow too.
 - `--tools` is an allowlist, saved with the chat; parallelism and timeout
@@ -180,20 +172,17 @@ carries them.
 
 ### Sampling
 
-A chat keeps five sampling flags, `--temperature`, `--top-p`, `--top-k`,
-`--max-tokens` and `--repeat-penalty`, and `--profile`. Any other sampling
-flag does not take effect, and the session says so on stderr.
+`chat` and `q` take `--max-tokens` and `--profile`, and the chat keeps
+them. A chat samples as the endpoint does, or as its profile says; the other
+sampling flags are `serve`'s and `proxy`'s.
 
-- Each turn sends the five as a client's sampling. The endpoint takes them
-  only while **Let clients set sampling** is on (`gglib config settings set
-  --trust-client-sampling true`), `--max-tokens` whatever it is; while it is
-  off, a session that names one of the other four says so once, on stderr,
-  before its first turn.
+- Each turn sends `--max-tokens` as a client's budget, which the endpoint
+  takes from any client.
 - Each turn names the chat's profile on its model, `<id>:<profile>`, and the
   endpoint applies it whether or not it trusts clients' sampling. Under
   `--remote` the profile is the paired machine's.
-- `--reasoning-budget-tokens` is not kept: `--thinking off` stops a chat's
-  thinking.
+- There is no `--reasoning-budget-tokens` here: `--thinking off` stops a
+  chat's thinking.
 
 ### `/draw`
 
@@ -226,16 +215,16 @@ newest first; `cancel` stops one.
 <!-- snippet: run-start -->
 ```console
 $ gglib run start -m Qwen3-4B-Instruct-2507 "Summarise the builder pattern in two sentences"
-run-d28875f6b650
-  Started. Read it with `gglib run show run-d28875f6b650`.
+run-4cdda1b431fe
+  Started. Read it with `gglib run show run-4cdda1b431fe`.
 ```
 <!-- /snippet -->
 
 <!-- snippet: run-show -->
 ```console
-$ gglib run show run-d28875f6b650
-The builder pattern is a creational design pattern that separates the construction of a complex object from its representation, allowing the same construction process to create different representations. It is especially useful when an object has many optional components, as it provides a clean and readable way to build the object step by step.
-  run run-d28875f6b650 completed
+$ gglib run show run-4cdda1b431fe
+The Builder pattern is a creational design pattern that separates the construction of a complex object from its representation, allowing the same construction process to create different representations. It is particularly useful when dealing with objects that have many optional components or when you need to create objects with complex configurations.
+  run run-4cdda1b431fe completed
 ```
 <!-- /snippet -->
 

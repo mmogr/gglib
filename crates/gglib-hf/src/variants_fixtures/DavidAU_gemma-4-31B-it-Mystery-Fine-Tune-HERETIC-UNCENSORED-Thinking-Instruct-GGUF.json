@@ -1,0 +1,13 @@
+[
+{"type": "file", "path": ".gitattributes", "size": 2096},
+{"type": "file", "path": "README.md", "size": 43178},
+{"type": "file", "path": "chat_template-instruct.jinja", "size": 16448},
+{"type": "file", "path": "chat_template.jinja", "size": 16483},
+{"type": "file", "path": "gemma-4-31B-Mystery-Fine-Tune-HERETIC-UNCENSORED-INSTRUCT-Q4_K_S.gguf", "size": 17763159392},
+{"type": "file", "path": "gemma-4-31B-Mystery-Fine-Tune-HERETIC-UNCENSORED-INSTRUCT-Q6_k.gguf", "size": 25201479008},
+{"type": "file", "path": "gemma-4-31B-Mystery-Fine-Tune-HERETIC-UNCENSORED-Thinking-Q4_K_S.gguf", "size": 17763159424},
+{"type": "file", "path": "gemma-4-31B-Mystery-Fine-Tune-HERETIC-UNCENSORED-Thinking-Q6_k.gguf", "size": 25201479040},
+{"type": "file", "path": "mmproj-BF16.gguf", "size": 1200726624},
+{"type": "file", "path": "mmproj-F16.gguf", "size": 1198957152},
+{"type": "file", "path": "mmproj-F32.gguf", "size": 2302997088}
+]

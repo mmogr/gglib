@@ -1,12 +1,10 @@
 //! The remote tunnel's settings (ADR 0012): the connect side's stored
 //! pairing as one value, and the remote half of merging and validating.
 //!
-//! Split out via `#[path]`, the way `settings_validate.rs` is, and for the
-//! same reason: `settings.rs` sits exactly on its ratchet baseline, so a type
-//! that carries its own doc comment cannot live in it — and neither can the
-//! arms that grow with it. `merge` and `validate_settings` each call into
-//! here once, so a remote field added later touches `settings.rs` by one
-//! line for its declaration and nothing else.
+//! Split out via `#[path]`, the way `settings_validate.rs` is, so the remote
+//! half grows here and not in `settings.rs`. `merge` and `validate_settings`
+//! each call into here once, so a remote field added later touches
+//! `settings.rs` by one line for its declaration and nothing else.
 
 use serde::{Deserialize, Serialize};
 
@@ -27,8 +25,8 @@ use super::{Settings, SettingsError, SettingsUpdate};
 ///
 /// What it holds comes from `join`, which `gglib remote join` and the
 /// GUI's pairing-string field both reach, and from a `--remote` turn, which
-/// sets `default_model` and no other field. `gglib config settings set` has
-/// no flag for it and the settings form no field, and `gglib config settings
+/// sets `default_model` and no other field. `gglib config set` refuses
+/// it, the settings form has no field, and `gglib config
 /// show` reports the key as held-or-not rather than printing it.
 /// Persisted as one `settings_kv` row holding a JSON object, the way
 /// `inference_defaults` is — camelCase inside, to match it and so that the
@@ -236,7 +234,7 @@ impl Settings {
     /// Every field back to [`Settings::with_defaults`], except
     /// `proxy_api_key` and the four remote fields, which keep their values.
     ///
-    /// What `gglib config settings reset` applies. The five it keeps are not
+    /// What `gglib config reset` applies. The five it keeps are not
     /// preferences: the machine this one joined, the roster of devices it
     /// admits, whether and how it serves remote access, and the proxy's API
     /// key. [`KEPT_ON_RESET`] names them as the stored record does.

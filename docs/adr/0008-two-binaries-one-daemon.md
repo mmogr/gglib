@@ -15,6 +15,11 @@ The recurring question is whether they should be one, and the recurring answer
 has been a shrug. This records the measurements so the question stops being
 re-litigated from intuition.
 
+> **Amended 2026-11-12.** The desktop app is now called gglib, and its
+> program file is `gglib-gui`, in `gglib.app` on macOS. The package that
+> builds it is still `gglib-app`: where the text below means the program,
+> read `gglib-gui`; where it means the crate, `gglib-app` still holds.
+
 The split is not what it looks like from the outside. It is not "GUI versus
 CLI": both are clients of a single daemon, and the daemon is the product.
 
@@ -97,6 +102,9 @@ bundle-relative. Nothing is signed either: the `macOS` bundle block carries only
 `scripts/macos-install.command` exists precisely to strip the quarantine
 attribute from an unsigned app.
 
+> **Amended 2026-11-12.** The program file is `Contents/MacOS/gglib-gui` now,
+> inside `gglib.app`.
+
 What does break is narrower: no `Info.plist` identity, so a generic icon and no
 bundle-keyed TCC state. Note also that the release already ships the bare
 binary alongside the `.app`, which contradicts the premise that the bundle is
@@ -125,6 +133,10 @@ transitively the proxy and agent crates. The CLI-exclusive dependencies are
 
 > **Amended 2026-10-31.** `gglib-sse` is now `gglib-broadcast`, renamed after
 > its `Broadcaster<T>` so it is not taken for `gglib_core::sse` (#1122).
+
+> **Amended 2026-11-12.** `mdns-sd` is gone with `--share-lan`: the daemon
+> listens on loopback only and advertises nothing
+> ([ADR 0027, decision 3's amendment](0027-a-stored-secret-is-shown-only-when-asked-for.md#3-one-reveal)).
 
 So the size argument runs opposite to the intuition: merging would cost the
 *CLI* a large GTK/WebKit closure, and cost the *desktop app* almost nothing.

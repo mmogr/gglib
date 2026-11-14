@@ -49,9 +49,6 @@ export const installable = (status: EngineStatus | null): boolean =>
 export const needsBuild = (status: EngineStatus | null): boolean =>
   status !== null && !status.installed && !status.pin.updateDownloads;
 
-/** The command that builds it: again where it was built before, else from scratch. */
-export const buildCommand = (status: EngineStatus): string =>
-  status.download !== null ? status.updateCommand : status.installCommand;
 
 const IDLE: EngineView = { status: null, installing: null, error: null };
 

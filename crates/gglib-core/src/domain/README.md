@@ -42,6 +42,9 @@ infrastructure concerns (database, filesystem, etc.).
 - `conversation_patch` - A change to some of a conversation's settings
   (`ConversationSettingsPatch`): its model, tools and tool limits, each
   field sent replacing its setting, a limit outside a run's bounds refused
+- `settings_edit` - A conversation's stored settings read and changed key by
+  key (`SettingsEdit`): a key this build cannot read is passed over, and a
+  write keeps it
 - `branching` - When a change to a saved chat branches it into a new chat
   (`plan`), and the options its family holds at each turn (`points`): a
   saved reply is never discarded or altered (ADR 0017)
@@ -74,8 +77,6 @@ infrastructure concerns (database, filesystem, etc.).
 - `capabilities` - Model capability detection and inference
 - `capability_tags` - The capability tags stored on a model and the
   predicates that read them (`capabilities_of`, `is_reasoning`, `is_embedding`)
-- `dialect` - How a model wraps tool calls, as data (`DialectSpec`), which
-  drives both the delimited parser and the decode-time grammar
 - `template_caps` - llama-server's report of what a loaded chat template
   supports (`TemplateCaps`), held as read, unreadable or not yet read
   (`TemplateCapsState`)
@@ -100,7 +101,7 @@ infrastructure concerns (database, filesystem, etc.).
 - `reasoning_effort` - The `reasoning_effort` level a request asks for
   (`ReasoningEffort`)
 - `sampling_provenance` - Which rung supplied each resolved sampling value
-  (`FieldSources`, `ParamSource`)
+  (`FieldSources`, `ParamSource`), and its words (`source_label`)
 - `sampling_discards` - Which values a caller named and the ladder then passed
   over (`discarded_from_rung`)
 - `server_config` - Per-model server launch defaults (`ServerConfig`)
@@ -120,13 +121,14 @@ infrastructure concerns (database, filesystem, etc.).
   listing says it (`VariantFit`, with its words), the picker's verdict on
   the wire
 - `figures` - How fast a model wrote (`tokens_per_second`), and a rate,
-  seconds and a count in the words every surface says them (`rate_words`,
-  `seconds_words`, `count_words`)
+  seconds, a count and a count of tokens in the words every surface says
+  them (`rate_words`, `seconds_words`, `count_words`, `tokens_words`: "1
+  token", "2,100 tokens")
 - `context_fit` - How large a context this machine can serve (`fit_context`),
   the launch-time half of `gglib up`'s fit arithmetic
 - `fit_sentence` - A context fit in words (`ContextFit::new` composes them):
-  the fit sentence and the Context note, served on `ContextFit` and
-  printed by `gglib model explain`
+  the fit sentence, the Context note and the figures' rows, served on
+  `ContextFit` and printed by `gglib model explain`
 - `revision` - The revision a model's files came from, a commit sha or a
   ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine
@@ -143,17 +145,21 @@ infrastructure concerns (database, filesystem, etc.).
   endpoint is Off, or pinned to another model, which refuses it; a pin is
   matched by the model's id, `NamedModel`), recorded in `contracts/vocabulary/send_line.json`.
 - `admission` - What the admission queue and the VRAM resident set look like
-  right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in
+  right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in,
+  with each residency and wait said by `format_duration_secs`
 - `cache_budget` - Auto-sizing of llama-server's host-RAM prompt cache
   (`--cache-ram`)
 - `slot_eviction` - Which on-disk KV slot files to delete to stay within a byte
   budget (`select_evictions`); the scanning and deleting live in `gglib-proxy`
 - `launch_narration` - What the runtime decided for one llama-server launch,
-  and why (`LaunchNarration`, `LaunchDecision`)
+  and why (`LaunchNarration`, `LaunchDecision`), with the fit its context
+  was sized by (`LaunchFit`, a `ContextFit` under `snake_case` keys) and the
+  banner's one row of it (`LaunchFit::banner_row`)
 - `launch_plan` - The launch gglib would make for a model, said flag by flag
   (`LaunchPlan`, `LaunchArg`, `ChoiceSource`, `ContextFit`): what `gglib
   model explain` prints and `GET /api/models/{id}/explain` serves, and what
-  it would unload first, and why (`unloads`)
+  it would unload first, and why (`unloads`, with the sentence
+  `Unload::new` composes)
 - `launch_facts` - How a loaded model was launched and what it is doing
   (`LaunchFacts`): the context, the weights, the quant, the narration and
   the one flag line, carried on the admission snapshot's rows and the server

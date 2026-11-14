@@ -90,6 +90,8 @@ export interface AgentFinalAnswerEvent {
 export interface AgentErrorEvent {
   type: 'error';
   message: string;
+  /** The code the model's endpoint refused the request with, when that ended the loop. */
+  code?: string;
 }
 
 /**
@@ -150,22 +152,22 @@ export interface AgentToolProgressEvent {
 }
 
 /**
- * Nothing can happen until something else finishes: an image render holds
- * the GPU, or the model is loading. Sent again whenever what it reports
- * changes.
+ * Nothing can happen until the model has loaded (`model_load`), or until an
+ * agent loop slot is free for a paired device's run (`agent_slot`). Sent
+ * again each second.
  */
 export interface AgentWaitingEvent {
   type: 'waiting';
-  reason: 'image_render' | 'model_load';
-  /** The step the work in the way last reported; 0 before its first. */
+  reason: 'model_load' | 'agent_slot';
+  /** Always 0: neither wait reports steps. */
   step: number;
-  /** How many steps that work takes; 0 when unknown. */
+  /** Always 0. */
   total: number;
-  /** This wait's place in line, 1 being next; 0 when not in a line. */
+  /** Place in line for an agent slot, 1 being next; always 0 for a load. */
   position: number;
-  /** The model being loaded, by the catalogue's name; absent from a render's wait. */
+  /** The model being loaded, by the catalogue's name; none for a slot. */
   model?: string;
-  /** How long the load has taken so far, in ms; said again each second. Absent from a render's wait. */
+  /** How long the wait has taken so far, in ms; said again each second. */
   elapsed_ms?: number;
   /**
    * The wait as a person reads it, worded by the daemon

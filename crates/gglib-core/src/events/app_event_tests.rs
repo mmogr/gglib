@@ -1,7 +1,6 @@
 //! Tests for [`AppEvent`](super::AppEvent) — serialization shape.
 //!
-//! Split out of `mod.rs` when the remote-tunnel variants arrived and the
-//! file reached its budget.
+//! Split out of `mod.rs` when the remote-tunnel variants arrived.
 
 use super::*;
 

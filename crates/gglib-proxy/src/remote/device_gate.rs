@@ -12,7 +12,7 @@
 //! every request it admits under `TokenPolicy::Named` names a device. This
 //! gate is the one check that could refuse a credential an edge admits
 //! without a name — a one-time pairing grant forwarded at any path, say,
-//! which would let a guessed code reach `POST /v1/proxy/shutdown`.
+//! which would let a guessed code reach `POST /v1/gglib/proxy/shutdown`.
 //!
 //! The discriminator is the device header, which the edge writes when a
 //! *named* token admitted, so under `Named` every legitimate tunnelled

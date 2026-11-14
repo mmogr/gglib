@@ -41,12 +41,7 @@ impl GateRelease for Log {
 
 fn render(log: &Arc<Log>) -> GenerationTurn {
     let lease = AdmissionLease::new(Arc::clone(log) as Arc<dyn AdmissionRelease>, 1);
-    GenerationTurn::new(
-        Arc::clone(log) as Arc<dyn GateRelease>,
-        7,
-        TurnKind::Render,
-        Some(lease),
-    )
+    GenerationTurn::new(Arc::clone(log) as Arc<dyn GateRelease>, 7, lease)
 }
 
 /// A step is kept for waiters first, then counted as queue progress through
@@ -67,14 +62,13 @@ fn a_dropped_turn_ends_then_releases_its_lease() {
     let log = Arc::new(Log::default());
     let turn = render(&log);
     assert_eq!(turn.id(), 7);
-    assert_eq!(turn.kind(), TurnKind::Render);
     assert_eq!(turn.lease().map(AdmissionLease::slot), Some(1));
     drop(turn);
     assert_eq!(log.take(), ["end 7", "release 1"]);
 }
 
 /// A teardown that takes the lease and disarms it still ends the turn, and
-/// releases nothing.
+/// releases nothing; a step after the lease was taken reaches only the gate.
 #[test]
 fn a_disarmed_lease_releases_nothing() {
     let log = Arc::new(Log::default());
@@ -82,23 +76,9 @@ fn a_disarmed_lease_releases_nothing() {
     let lease = turn.take_lease().expect("a render turn owns its lease");
     assert!(turn.lease().is_none());
     lease.disarm();
-    drop(turn);
-    assert_eq!(log.take(), ["end 7"]);
-}
-
-/// An LLM turn has no lease: a step reaches only the gate.
-#[test]
-fn an_llm_turn_has_no_lease_to_report_to() {
-    let log = Arc::new(Log::default());
-    let turn = GenerationTurn::new(
-        Arc::clone(&log) as Arc<dyn GateRelease>,
-        2,
-        TurnKind::Llm,
-        None,
-    );
     turn.progress(1, 1);
     drop(turn);
-    assert_eq!(log.take(), ["turn 2 step 1/1", "end 2"]);
+    assert_eq!(log.take(), ["turn 7 step 1/1", "end 7"]);
 }
 
 /// A lease's progress goes to its owner with its slot; a detached lease has

@@ -19,7 +19,7 @@ impl ModelCatalogPort for OneModelCatalog {
 
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
         Ok((name == MODEL).then(|| ModelSummary {
-            param_count: String::new(),
+            param_count: Some(String::new()),
             ..ModelSummary::bare(1, MODEL)
         }))
     }
@@ -41,7 +41,7 @@ impl gglib_core::ports::LoopGuardTripSink for CountingSink {
         self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
-    fn record_scan(&self, _model_name: &str, _mode: gglib_core::LoopGuardMode, _at_secs: u64) {}
+    fn record_scan(&self, _model_name: &str, _at_secs: u64) {}
 }
 
 /// Post a history that trips the loop guard — three identical batches of a

@@ -280,7 +280,6 @@ describe('what a typed request body sends', () => {
   it('adding an MCP server flattens its config, leaves an empty string out and sends each variable as `{key, value}`', async () => {
     const server = {
       name: 'files',
-      server_type: 'stdio' as const,
       config: { command: 'npx', args: ['-y', 'server-files'], working_dir: '', path_extra: '/opt/bin' },
       enabled: true,
       lifecycle: 'lazy' as const,
@@ -291,7 +290,6 @@ describe('what a typed request body sends', () => {
       path: '/api/mcp/servers',
       body: {
         name: 'files',
-        server_type: 'stdio',
         command: 'npx',
         args: ['-y', 'server-files'],
         path_extra: '/opt/bin',
@@ -304,17 +302,15 @@ describe('what a typed request body sends', () => {
   it('adding an MCP server with no arguments sends an empty list', async () => {
     const server = {
       name: 'events',
-      server_type: 'sse' as const,
-      config: { url: 'http://127.0.0.1:9000/sse' },
+      config: { command: 'events-mcp' },
       enabled: true,
       lifecycle: 'eager' as const,
       env: [],
     };
     expect((await sent(() => addMcpServer(server))).body).toStrictEqual({
       name: 'events',
-      server_type: 'sse',
+      command: 'events-mcp',
       args: [],
-      url: 'http://127.0.0.1:9000/sse',
       env: [],
       lifecycle: 'eager',
     });

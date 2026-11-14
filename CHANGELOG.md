@@ -1,5 +1,265 @@
 # Changelog
 
+## [0.37.0-rc.1](https://github.com/mmogr/gglib/compare/v0.36.0-rc.3...v0.37.0-rc.1) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gui:** `/api/remote/status` `sharing` no longer carries the paired count; read `paired_line` for it.
+
+### What gglib now does
+
+* **agent:** a run that reaches its step limit gives its answer or asks for more steps ([#1951](https://github.com/mmogr/gglib/issues/1951)) ([ae13659](https://github.com/mmogr/gglib/commit/ae1365902c512bcf289212d905865a947615b640)), closes [#1944](https://github.com/mmogr/gglib/issues/1944)
+* **gui:** the library's suggestion can be dismissed ([#1953](https://github.com/mmogr/gglib/issues/1953)) ([3234552](https://github.com/mmogr/gglib/commit/3234552d55ec76378ca56b5a50d0045f6bf28cc0))
+* **gui:** the sidebar's places share one row, with an icon and a badge ([#1955](https://github.com/mmogr/gglib/issues/1955)) ([2b860d7](https://github.com/mmogr/gglib/commit/2b860d7a71f231c4645ebda2f9d99470ebe69a4d))
+
+
+### What it stopped getting wrong
+
+* **agent:** a run's history is pruned at its model's window, not at 180,000 characters ([#1949](https://github.com/mmogr/gglib/issues/1949)) ([3f03031](https://github.com/mmogr/gglib/commit/3f03031b6e54f0acc1610f6b4430c80b7515af5f)), closes [#1945](https://github.com/mmogr/gglib/issues/1945)
+* **cli:** a question asked with --no-tools is told of no tool and no folder ([#1947](https://github.com/mmogr/gglib/issues/1947)) ([b339561](https://github.com/mmogr/gglib/commit/b33956172236e5c16b2268e5670705a5b1f2e8b6)), closes [#1942](https://github.com/mmogr/gglib/issues/1942)
+* **web:** a toast with a long path wraps inside its box ([#1954](https://github.com/mmogr/gglib/issues/1954)) ([2638798](https://github.com/mmogr/gglib/commit/263879831b2c8d5a9bea8e90fb78c263fd8cd610))
+
+## [0.36.0-rc.3](https://github.com/mmogr/gglib/compare/v0.36.0-rc.2...v0.36.0-rc.3) (2026-11-14)
+
+
+### What gglib now does
+
+* **core:** a model's tool flag is llama-server's own answer once it has launched ([#1941](https://github.com/mmogr/gglib/issues/1941)) ([fa464d9](https://github.com/mmogr/gglib/commit/fa464d998abe8592c3d84bce5d004aa608430510))
+
+
+### Internal
+
+* **core:** one guess says whether a model calls tools, and the tool-call format name goes ([#1939](https://github.com/mmogr/gglib/issues/1939)) ([1e97083](https://github.com/mmogr/gglib/commit/1e970837d5bb11d8da0fc844b4e64788b6f569a3))
+
+## [0.36.0-rc.2](https://github.com/mmogr/gglib/compare/v0.36.0-rc.1...v0.36.0-rc.2) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** the promised list promises what it means ([#1937](https://github.com/mmogr/gglib/issues/1937))
+* **cli:** a flag that would be dropped is refused by name ([#1936](https://github.com/mmogr/gglib/issues/1936))
+* **cli:** q is the one name, chat keeps no sampling flags, and gui --dev, check-updates and serve --jinja take their settled shape ([#1935](https://github.com/mmogr/gglib/issues/1935))
+* **proxy:** a non-streamed upstream error names its code as a streamed one does ([#1932](https://github.com/mmogr/gglib/issues/1932))
+
+### What gglib now does
+
+* **cli:** q is the one name, chat keeps no sampling flags, and gui --dev, check-updates and serve --jinja take their settled shape ([#1935](https://github.com/mmogr/gglib/issues/1935)) ([2e50328](https://github.com/mmogr/gglib/commit/2e503285f5ffdcd230020550ab4521feb2c0bea4))
+
+
+### What it stopped getting wrong
+
+* **cli:** a flag that would be dropped is refused by name ([#1936](https://github.com/mmogr/gglib/issues/1936)) ([92140d4](https://github.com/mmogr/gglib/commit/92140d4ac12af59b4fb248b49c950bb837b00229))
+* **cli:** config paths and install.sh find the desktop app Linux releases called gglib-app ([#1933](https://github.com/mmogr/gglib/issues/1933)) ([93f589c](https://github.com/mmogr/gglib/commit/93f589cbca2e4b1afa245d63fdca94eab4edb769))
+* **cli:** help, completions and config paths run without opening the library ([#1934](https://github.com/mmogr/gglib/issues/1934)) ([9bd2db0](https://github.com/mmogr/gglib/commit/9bd2db09588dde60edf310306756c92335eb586e))
+* **cli:** the promised list promises what it means ([#1937](https://github.com/mmogr/gglib/issues/1937)) ([0305921](https://github.com/mmogr/gglib/commit/030592126af473539e7a43a86f2927057e5bd4fb))
+* **proxy:** a non-streamed upstream error names its code as a streamed one does ([#1932](https://github.com/mmogr/gglib/issues/1932)) ([38b4e50](https://github.com/mmogr/gglib/commit/38b4e50c569795dff8992e2b1c382735f3e073d9))
+
+
+### Documentation
+
+* **adr:** a change to part of an ADR is a dated amendment, and the status lines say what the v1 arc reversed ([#1931](https://github.com/mmogr/gglib/issues/1931)) ([a50465b](https://github.com/mmogr/gglib/commit/a50465b8d3eb8626b285930038a251545ac9be2c))
+
+## [0.36.0-rc.1](https://github.com/mmogr/gglib/compare/v0.35.0-rc.3...v0.36.0-rc.1) (2026-11-13)
+
+
+### What gglib now does
+
+* **agent:** a device's run waits for an agent slot instead of a 429 ([#1922](https://github.com/mmogr/gglib/issues/1922)) ([7c909ea](https://github.com/mmogr/gglib/commit/7c909ea0cfb0fa59de249355b93e0d825f7c9cc6)), closes [#1528](https://github.com/mmogr/gglib/issues/1528)
+* **cli:** config paths and install.sh report every gglib on PATH and the desktop app ([#1923](https://github.com/mmogr/gglib/issues/1923)) ([9f3e501](https://github.com/mmogr/gglib/commit/9f3e5010135197856ee9b2c87bafbad423e18dd9))
+* **runtime:** a launch's narration carries the fit its context was sized by ([#1924](https://github.com/mmogr/gglib/issues/1924)) ([6d1ad6b](https://github.com/mmogr/gglib/commit/6d1ad6bba40804eea5d67afdc678a635329273d0))
+
+
+### Documentation
+
+* **compat:** the promise names its CLI and settings list and its oldest library ([#1920](https://github.com/mmogr/gglib/issues/1920)) ([2609c74](https://github.com/mmogr/gglib/commit/2609c748aae95d915ec9a22a38b22d535830f02f))
+
+
+### Internal
+
+* **deps:** bump taiki-e/install-action ([#1917](https://github.com/mmogr/gglib/issues/1917)) ([0ea9ba1](https://github.com/mmogr/gglib/commit/0ea9ba1a3d829e735c3a1da45f95179c686148ee))
+
+## [0.35.0-rc.3](https://github.com/mmogr/gglib/compare/v0.35.0-rc.2...v0.35.0-rc.3) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **proxy:** a streamed `/v1/chat/completions` reply is llama-server's own chunks.
+    - Every chunk comes through one for one with all its fields: its `id`, a `created` that can change between chunks, `system_fingerprint`, the opening chunk with `delta.role: "assistant"` and `content: null`, and `timings`, `logprobs` and any other key it writes.
+    - A chunk the proxy edits is written with its keys in alphabetical order. `model` still names the served model.
+    - A client that sends `return_progress: true` gets llama-server's progress chunks as written, which carry `choices`. llama-server's `:` keep-alive comments pass through.
+    - A mid-stream llama-server error keeps its whole object (`n_ctx` and the like), with `code` set to `"upstream_error"` unless upstream's code was a string.
+    - A stream cut off without a finish no longer ends with a gglib-made `finish_reason: null` chunk. Tool calls held for repair on such a stream go out unrepaired.
+    - gglib's own frames carry the reply's upstream `id` and its latest `created`.
+    - Forwarded frames are larger, so a run's 8 MB log holds about 18% fewer frames.
+    - gglib-core API: `SseEncoder::with_reading`, `parse_sse_frame` and `SseParseResult` are gone (use `sse::events_of` on the parsed JSON). `SseEncoder::encode` returns `None` for reasoning, prompt-progress, usage and upstream-error events.
+* **proxy:** gglib no longer translates tool-call dialects; llama-server's own parsing is what clients get.
+    - Tool-call markup llama-server doesn't parse (Qwen/Hermes `<tool_call>`, template-derived dialects) now reaches clients as `content`, streamed or not, with no `call_qwen_N`/`call_dialect_N` ids. A malformed call is no longer replaced by the "unparsed tool-call output" notice. Stray `<think>`/`</think>` tags in `content` are no longer removed. A tool-call stream that ends `finish_reason: "stop"` is no longer rewritten to `"tool_calls"`.
+    - `tool_choice: "required"` or a named function is passed to llama-server as sent. It is no longer rewritten to `"none"` under a gglib grammar. Repair no longer judges a turn the client sent as `"required"`.
+    - `GGLIB_DISABLE_GRAMMAR`, `GGLIB_DISABLE_DIALECT_PARSER` and `GGLIB_MAX_GRAMMAR_TOOL_CALLS` are ignored; unset them.
+    - Dashboard: `recent_requests[].grammar_enforced`, the `constrained` intervention and `normalization_errors` are gone. `dialect_residue` scans the built-in markers only.
+    - Agent runs: a reply cut off inside dialect markup is no longer `call_cut`, and the "LLM normalization issue" warning is gone.
+    - Benchmark: the gglib arm no longer includes the grammar or parser, so its results can't be compared with earlier reports.
+    - Library: opening a library with this build strips every `format:*` tag and drops the `dialect_spec` column, and the library becomes schema generation 8, which older gglib builds refuse. The backup taken before the upgrade (`<name>.gen<N>.bak`) is the way back. Detection no longer adds `format:*` tags.
+    - Library API: gglib-core loses `DialectSpec`, `BodyCodec`, `EmissionProfile` and the rest of `domain::dialect`, the `normalize::tags` constants, `is_system_tag`, `Model`/`NewModel.dialect_spec`, `ModelSummary.dialect`, `GgufCapabilities.dialect` and `.extensions`, and `RetagDiff.spec_changed`. The retag response loses `specChanged`.
+    - Output: the launch banner and the GUI's "Tool calls" row no longer name a dialect. `gglib model retag` no longer prints "dialect spec re-derived", and `gglib model add --reimport` says "Replaced: tags, capabilities."
+
+### What gglib now does
+
+* **proxy:** the proxy forwards llama-server's own stream frames ([#1918](https://github.com/mmogr/gglib/issues/1918)) ([2873479](https://github.com/mmogr/gglib/commit/2873479cf635b9742e9beb012f099da4b2c01431))
+
+
+### What it stopped getting wrong
+
+* **hf:** a repository's parameter count is not taken from its draft ([cc3a466](https://github.com/mmogr/gglib/commit/cc3a4660f9709b24b6f05e899ffb6753713e871c)), closes [#1740](https://github.com/mmogr/gglib/issues/1740)
+* **hf:** search and the inspector say what a repository holds ([#1912](https://github.com/mmogr/gglib/issues/1912)) ([cc3a466](https://github.com/mmogr/gglib/commit/cc3a4660f9709b24b6f05e899ffb6753713e871c))
+* **hf:** search lists only quantisations, each spelt one way ([cc3a466](https://github.com/mmogr/gglib/commit/cc3a4660f9709b24b6f05e899ffb6753713e871c)), closes [#1860](https://github.com/mmogr/gglib/issues/1860)
+
+
+### Internal
+
+* **benchmark:** agentic verdicts are served, not re-derived in the GUI ([12ff957](https://github.com/mmogr/gglib/commit/12ff95708b582bf0b11054bc56d47fd7ac31b9ae))
+* **cli:** the promised commands, flags and settings keys are a checked-in list ([#1913](https://github.com/mmogr/gglib/issues/1913)) ([2784d5d](https://github.com/mmogr/gglib/commit/2784d5d022c7e3e98a4285be263454b47ca575e5))
+* **core:** the unload sentence and sampling source labels are served ([12ff957](https://github.com/mmogr/gglib/commit/12ff95708b582bf0b11054bc56d47fd7ac31b9ae))
+* **gui:** engine, verdict and unload sentences are served, not re-derived ([#1914](https://github.com/mmogr/gglib/issues/1914)) ([12ff957](https://github.com/mmogr/gglib/commit/12ff95708b582bf0b11054bc56d47fd7ac31b9ae))
+* **hf:** the daemon always names the picked variant ([cc3a466](https://github.com/mmogr/gglib/commit/cc3a4660f9709b24b6f05e899ffb6753713e871c))
+* **proxy:** gglib stops translating tool-call dialects ([#1916](https://github.com/mmogr/gglib/issues/1916)) ([acdba28](https://github.com/mmogr/gglib/commit/acdba283c35f2512b331cf76b4ca7b9d7d56fe70))
+* **scripts:** remove the file-size check ([#1911](https://github.com/mmogr/gglib/issues/1911)) ([0b42c97](https://github.com/mmogr/gglib/commit/0b42c971a053e5b0918c5b44416a0b5eb8898916))
+* **settings:** an engine's pin sentence is the status command's, served ([12ff957](https://github.com/mmogr/gglib/commit/12ff95708b582bf0b11054bc56d47fd7ac31b9ae))
+* slot, duration, sharing and reach words are served ([#1915](https://github.com/mmogr/gglib/issues/1915)) ([812ac04](https://github.com/mmogr/gglib/commit/812ac04c6dde9931d8e93b0ac4b299c8c9a5e7cc)), closes [#1832](https://github.com/mmogr/gglib/issues/1832) [#1833](https://github.com/mmogr/gglib/issues/1833)
+
+## [0.35.0-rc.2](https://github.com/mmogr/gglib/compare/v0.35.0-rc.1...v0.35.0-rc.2) (2026-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **proxy:** the proxy's cache-clear and shutdown refusals, a bad `X-Gglib-Session-Id`, unknown paths and methods, and unreadable path segments, queries and bodies now answer OpenAI's error object `{"error": {"message", "type", "code"}}` with a code, instead of a bare `{"error": "text"}`, plain text or an empty body. axum's 415 and 422 rejections are now 400 `invalid_request`.
+* **proxy:** every gglib-own route moved from `/v1/<x>` to `/v1/gglib/<x>` (chats, attachments, models/{name}/load and /detail, images/drawing, proxy/status, proxy/cache/clear, proxy/shutdown, runs). `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and `/v1/images/generations` don't move. Update the laptop and the phone (ggchat) before the Mac: a device on the old paths can't reach a moved Mac.
+
+### What gglib now does
+
+* **agent:** a paired machine's refusal reaches a run as its code ([#1905](https://github.com/mmogr/gglib/issues/1905)) ([07802ce](https://github.com/mmogr/gglib/commit/07802ce4f5c28291766dfe64403917164da801d8)), closes [#1256](https://github.com/mmogr/gglib/issues/1256)
+* **proxy:** /v1/models/{name} answers the model ([#1908](https://github.com/mmogr/gglib/issues/1908)) ([a659962](https://github.com/mmogr/gglib/commit/a65996279848186babe7ad2c5a44f0bff9b779e0))
+* **proxy:** devices say their gglib version and what they serve ([#1902](https://github.com/mmogr/gglib/issues/1902)) ([46bc17a](https://github.com/mmogr/gglib/commit/46bc17a9bb6133c0ce5613553e145ba6764199fa))
+* **proxy:** gglib's own routes live under /v1/gglib ([#1907](https://github.com/mmogr/gglib/issues/1907)) ([7be248a](https://github.com/mmogr/gglib/commit/7be248a263e5eba612a14bc16589d422cf2995f3))
+
+
+### What it stopped getting wrong
+
+* **cli:** model list and proxy trips size their columns to what they print ([#1903](https://github.com/mmogr/gglib/issues/1903)) ([70d5e26](https://github.com/mmogr/gglib/commit/70d5e26752426bbfa708d01b50945f7094f96bed))
+* **proxy:** every proxy answer is OpenAI's error shape with a code ([#1909](https://github.com/mmogr/gglib/issues/1909)) ([097f60d](https://github.com/mmogr/gglib/commit/097f60d0ae646aa7e395fcde4d1352b2ec94d9a8))
+
+
+### Internal
+
+* **release:** a breaking change after 1.0.0 starts the next major ([#1904](https://github.com/mmogr/gglib/issues/1904)) ([87c48fe](https://github.com/mmogr/gglib/commit/87c48fed8d32b361fccb8587acfa00254122f6f4))
+
+## [0.35.0-rc.1](https://github.com/mmogr/gglib/compare/v0.34.0-rc.1...v0.35.0-rc.1) (2026-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **proxy:** `gglib config set loop-guard-mode off|note|refuse` is now `gglib config set loop-guard true|false` (loopGuard on the wire). refuse is gone: a library that stored it is upgraded to the guard on. The trip log's mode column and LoopGuardTripDay.mode are gone.
+* **cli:** flags are renamed or removed, and each short letter means one thing (`-c -f -m -n -o -p -q -s -v -y`). `--ctx-size` and `--context` are `--context-size`; `proxy --default-context` is `--default-context-size`; chat/q `--max-iterations` and `--max-parallel` are `--max-tool-iterations` and `--max-parallel-tools`. Removed: chat/q's twelve ignored sampling flags, `model download --skip-db` and `--token` (set `HF_TOKEN` for `--list-quants`), `config check-deps --setup-fast-downloads` (use `config fast-downloads enable`), `remote enable --allow-mcp` (use `mcp allow-remote`), `benchmark tune --apply-best` (use `--apply`), `model search --sort modified`, and install's `update` alias. Other short flags are long-only now (for example `q -Q` is `--quiet`, `model search -l` is `-n`). `mcp add` takes no `--type` or `--url`; stored SSE MCP servers are deleted on upgrade, and an MCP server's lifecycle is `eager` or `lazy`. `/api`: the download queue takes `quantization` only, start-server takes `id` only.
+* **sampling:** the `agentic-sampling` settings key and the `GGLIB_DISABLE_AGENTIC_SAMPLING` switch are gone; drop them from scripts and environments. Tool turns are no longer capped at 0.3. To keep a lower temperature on them, set it in a profile, on the model or globally.
+* **gui:** the desktop app is now gglib (gglib.app, program file gglib-gui). A manual macOS install leaves the old GGLib GUI.app behind: delete it. On Windows the app installs as gglib-gui (its install folder must not be gglib's data folder), beside the old GGLib GUI rather than over it: uninstall GGLib GUI. With Start at login on, the new app registers a login item of its own and the old one stays behind: remove the GGLib GUI entry once (macOS: ~/Library/LaunchAgents/GGLib GUI.plist; Linux: ~/.config/autostart/GGLib GUI.desktop; Windows: Startup apps), or the old app starts too. apt users run `sudo apt install gglib-gui` once, which replaces gg-lib-gui; dnf swaps it on upgrade. Data folders are keyed by com.gglib.gui and are untouched.
+* **cli:** `gglib config settings <cmd>` is now `gglib config <cmd>`, and each `--flag value` of `settings set` is `set flag value` (`--default-image-model` is `set default-image-model-id`). `config default <model>` is `config set default-model-id <model>`, `--clear` is `config unset default-model-id`. `config models-dir set <path>` is `config set models-dir <path>`, `show` is `config show`, `prompt` and `--no-create` are gone. `config profile rm` is `config profile remove`.
+* **daemon:** `gglib daemon run --share-lan` and `gglib web --share-lan` are removed, and the daemon no longer accepts the proxy's API key. Open the web page on the machine the daemon runs on, from the link `gglib web` prints. Other machines reach the models through the proxy (`gglib proxy --host 0.0.0.0`, which asks its key) or `gglib remote`. A client that sent the proxy key to `/api` must run as the owner on this machine, where it can read the daemon token.
+
+### What gglib now does
+
+* **cli:** every flag has one name, every short letter one meaning ([eeb66a9](https://github.com/mmogr/gglib/commit/eeb66a9a3584b823c847fbabb8d5e89c496a43ca))
+* **cli:** settings are set by key with gglib config set ([#1893](https://github.com/mmogr/gglib/issues/1893)) ([ee24078](https://github.com/mmogr/gglib/commit/ee240782c4c46c7e5e433d0abedbc3a8edb3bd8d))
+* **daemon:** the daemon listens on this machine only ([#1892](https://github.com/mmogr/gglib/issues/1892)) ([b083440](https://github.com/mmogr/gglib/commit/b083440dd4c0c385650ca45b2d252f9e8aef34b7))
+* **gui:** the desktop app is called gglib ([#1894](https://github.com/mmogr/gglib/issues/1894)) ([19f44df](https://github.com/mmogr/gglib/commit/19f44df2df1f5f7149f975b06df5d3e3a939f52c))
+* **proxy:** the loop guard is on or off ([#1901](https://github.com/mmogr/gglib/issues/1901)) ([66524d8](https://github.com/mmogr/gglib/commit/66524d8e649b616b7da0df9aeffd5993d8767f2a))
+* **sampling:** tool turns keep the temperature the ladder resolved ([#1896](https://github.com/mmogr/gglib/issues/1896)) ([0f15fa8](https://github.com/mmogr/gglib/commit/0f15fa8c591f2c6755ae17d18a62a84c02dfda09))
+
+
+### What it stopped getting wrong
+
+* **core:** a chat keeps settings it can't read when one is changed ([#1900](https://github.com/mmogr/gglib/issues/1900)) ([f291be1](https://github.com/mmogr/gglib/commit/f291be1a67788d3944769078ae0c7df8329fe584))
+
+
+### Internal
+
+* **sampling:** a template's capabilities are read, never used to edit the request ([#1897](https://github.com/mmogr/gglib/issues/1897)) ([54842d7](https://github.com/mmogr/gglib/commit/54842d7e52476d27110f1bb156f7bb22d7aa6251))
+
+## [0.34.0-rc.1](https://github.com/mmogr/gglib/compare/v0.33.1-rc.1...v0.34.0-rc.1) (2026-11-12)
+
+
+### What gglib now does
+
+* **db:** back up the library before an upgrade changes it ([#1887](https://github.com/mmogr/gglib/issues/1887)) ([fff6174](https://github.com/mmogr/gglib/commit/fff6174bcbb5e5ebf4d89c60164a91707e000f99))
+
+
+### What it stopped getting wrong
+
+* **db:** an edit keeps a stored model setting this build cannot read ([#1885](https://github.com/mmogr/gglib/issues/1885)) ([06c209e](https://github.com/mmogr/gglib/commit/06c209ef56313b0bf49ef6d305582e5321ce33f0))
+* **paths:** the daemon stores the models folder the first time it starts ([#1886](https://github.com/mmogr/gglib/issues/1886)) ([efcdd3c](https://github.com/mmogr/gglib/commit/efcdd3c950b7616a2a7c223f1f9237ed82e5c8f5))
+
+
+### Internal
+
+* **db:** a library made by gglib 0.33.0 opens and reads back whole ([#1890](https://github.com/mmogr/gglib/issues/1890)) ([22c8f4c](https://github.com/mmogr/gglib/commit/22c8f4ca69b2e8b488cf832b28725b3f86aa36d7))
+* **db:** one numbered list of migrations ([#1888](https://github.com/mmogr/gglib/issues/1888)) ([b2cd138](https://github.com/mmogr/gglib/commit/b2cd13889ea672a917cae8b91f73a0b88cb5649a))
+* **frontend:** the library search tests wait for the pick to render ([#1891](https://github.com/mmogr/gglib/issues/1891)) ([4799a0d](https://github.com/mmogr/gglib/commit/4799a0dd1a7d3f9c64f7867837afe136254d2914))
+
+## [0.33.1-rc.1](https://github.com/mmogr/gglib/compare/v0.33.0-rc.1...v0.33.1-rc.1) (2026-11-12)
+
+
+### What it stopped getting wrong
+
+* **fit:** size the KV cache per layer, so Gemma 4 fits 128K, not 16K ([#1882](https://github.com/mmogr/gglib/issues/1882)) ([e329c54](https://github.com/mmogr/gglib/commit/e329c543c39ff8f4ddbb49ab88bc3551035d0ac7))
+* **gguf:** a stored header keeps per-layer lists, and a reimport refreshes it ([#1881](https://github.com/mmogr/gglib/issues/1881)) ([0d025a6](https://github.com/mmogr/gglib/commit/0d025a6fc3bf67abe19f0af9b0a4bf43fcd2a53e))
+* **proxy:** a reply names the served model, and keep-alives don't hold a stalled reply open ([#1880](https://github.com/mmogr/gglib/issues/1880)) ([f5373e5](https://github.com/mmogr/gglib/commit/f5373e5c8167704e0a528431ce73f1893f9c4ecb))
+* **proxy:** every reader of a stored key trims it, so a padded key admits ([#1879](https://github.com/mmogr/gglib/issues/1879)) ([9a0ac7e](https://github.com/mmogr/gglib/commit/9a0ac7e8e3a3e8ce8e6100f50e1a16eb02a3a3a0))
+
+
+### Documentation
+
+* say what a version promises ([#1878](https://github.com/mmogr/gglib/issues/1878)) ([0039a8d](https://github.com/mmogr/gglib/commit/0039a8d0476e64eed2b55ef62568e30dd8f0632f))
+
+## [0.33.0-rc.1](https://github.com/mmogr/gglib/compare/v0.32.1-rc.1...v0.33.0-rc.1) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **models:** an unknown parameter count is stored and shown as unknown, not as 0.0B ([#1875](https://github.com/mmogr/gglib/issues/1875))
+* **gguf:** a model's parameter count is its tensors', so a 177B MoE is no longer listed as 28672B ([#1873](https://github.com/mmogr/gglib/issues/1873))
+* **models:** a one-file repository's download shows the header's type as its quantization ([#1874](https://github.com/mmogr/gglib/issues/1874))
+
+### What it stopped getting wrong
+
+* **gguf:** a model's parameter count is its tensors', so a 177B MoE is no longer listed as 28672B ([#1873](https://github.com/mmogr/gglib/issues/1873)) ([70aff41](https://github.com/mmogr/gglib/commit/70aff4123fc5000bf05fd1e3b2570819ce8228a5)), closes [#1870](https://github.com/mmogr/gglib/issues/1870)
+* **models:** a one-file repository's download shows the header's type as its quantization ([#1874](https://github.com/mmogr/gglib/issues/1874)) ([4ffb065](https://github.com/mmogr/gglib/commit/4ffb0659e730a32cde883db2fe18961111fdab8e))
+* **models:** an unknown parameter count is stored and shown as unknown, not as 0.0B ([#1875](https://github.com/mmogr/gglib/issues/1875)) ([563b19f](https://github.com/mmogr/gglib/commit/563b19f9bfa16edbbc0e64bf2854b8858c12693f)), closes [#1872](https://github.com/mmogr/gglib/issues/1872)
+
+## [0.32.1-rc.1](https://github.com/mmogr/gglib/compare/v0.32.0-rc.1...v0.32.1-rc.1) (2026-11-10)
+
+
+### Internal
+
+* **deps:** bump the cargo and npm dependencies to the newest versions their ranges allow ([#1869](https://github.com/mmogr/gglib/issues/1869)) ([7ec1f1b](https://github.com/mmogr/gglib/commit/7ec1f1b35a3e9fc4df95ce91a1cb94eadf09bf48))
+* **deps:** bump the cargo-compatible group across 1 directory with 13 updates ([#1867](https://github.com/mmogr/gglib/issues/1867)) ([2d2b11d](https://github.com/mmogr/gglib/commit/2d2b11db7a983edf9fdd0d269bc7dbbc602a05d7))
+* **deps:** move llama.cpp's pin from b11960 to b12110 ([#1844](https://github.com/mmogr/gglib/issues/1844)) ([1f75dfe](https://github.com/mmogr/gglib/commit/1f75dfe3b91b7f96adb84297e160524da719f88a))
+
+## [0.32.0-rc.1](https://github.com/mmogr/gglib/compare/v0.31.0-rc.9...v0.32.0-rc.1) (2026-11-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **runtime:** the admission paths no chat turn uses are gone, and one token is singular ([#1865](https://github.com/mmogr/gglib/issues/1865))
+
+### Documentation
+
+* **cli:** every snippet is recorded again from the code as it is ([#1862](https://github.com/mmogr/gglib/issues/1862)) ([49e970d](https://github.com/mmogr/gglib/commit/49e970d0c3b91aedf40c41d8204d41515a652a78))
+
+
+### Internal
+
+* **runtime:** the admission paths no chat turn uses are gone, and one token is singular ([#1865](https://github.com/mmogr/gglib/issues/1865)) ([97b5c27](https://github.com/mmogr/gglib/commit/97b5c27f667e2576467d5c9e0d751c9c629d9a6d))
+
 ## [0.31.0-rc.9](https://github.com/mmogr/gglib/compare/v0.31.0-rc.8...v0.31.0-rc.9) (2026-11-09)
 
 

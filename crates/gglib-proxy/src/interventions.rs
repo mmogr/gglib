@@ -2,20 +2,19 @@
 //! interventions, in the order the work was done.
 //!
 //! The words are core's ([`InterventionKind::word`]); these three functions
-//! map what the proxy knows at each site (a trip, a trim count, a grammar,
-//! an ended run) onto the kinds. The order matters: the loop guard's note is
-//! appended to the body before the pipeline trims and constrains it, and a
-//! clamp refuses after the note was given.
+//! map what the proxy knows at each site (a trip, a trim count, an ended
+//! run) onto the kinds. The order matters: the loop guard's note is appended
+//! to the body before the pipeline trims it, and a clamp refuses after the
+//! note was given.
 
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::domain::{Intervention, InterventionKind, Refusal};
 
 /// What a forwarded request had done to it before it was sent on, in order:
-/// a loop noted, old messages trimmed, the output constrained to a tool call.
+/// a loop noted, then old messages trimmed.
 #[must_use]
 pub(crate) fn forwarded_interventions(
     messages_truncated: usize,
-    grammar_enforced: bool,
     trip: Option<LoopGuardTrip>,
 ) -> Vec<Intervention> {
     let mut done = Vec::new();
@@ -27,24 +26,15 @@ pub(crate) fn forwarded_interventions(
             messages: messages_truncated,
         }));
     }
-    if grammar_enforced {
-        done.push(Intervention::new(InterventionKind::Constrained));
-    }
     done
 }
 
-/// What the loop guard did to a request it answered itself: ended the run,
-/// or refused the request.
+/// What the loop guard did to a request it answered itself: ended the run.
 #[must_use]
-pub(crate) fn unforwarded_interventions(trip: LoopGuardTrip, ended: bool) -> Vec<Intervention> {
-    let what = if ended {
-        InterventionKind::StoppedLoop { detector: trip }
-    } else {
-        InterventionKind::Refused {
-            reason: Refusal::Loop { detector: trip },
-        }
-    };
-    vec![Intervention::new(what)]
+pub(crate) fn ended_interventions(trip: LoopGuardTrip) -> Vec<Intervention> {
+    vec![Intervention::new(InterventionKind::StoppedLoop {
+        detector: trip,
+    })]
 }
 
 /// What was done to a request the context budget refused: the loop note it

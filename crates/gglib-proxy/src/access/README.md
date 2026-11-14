@@ -35,7 +35,7 @@ CorsLayer              outermost — answers OPTIONS preflight and returns
           bearer_guard   the protected group; asks a token only when one is set
             device_gate  the protected group: tunnelled ⇒ names a device
               mcp_tunnel_guard   /mcp only: tunnelled ⇒ refused, always
-              named_device_only  /v1/chats and /v1/attachments: a named
+              named_device_only  /v1/gglib/chats and /v1/gglib/attachments: a named
                                  device, never local
                 handler
 ```

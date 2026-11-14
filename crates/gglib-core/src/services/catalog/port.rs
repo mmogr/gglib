@@ -39,7 +39,6 @@ fn model_to_summary(m: &Model) -> ModelSummary {
     let file_size = m.file_path.metadata().map_or(0, |md| md.len());
 
     ModelSummary {
-        dialect: m.dialect_spec.clone(),
         template_caps: m.template_caps.clone(),
         id: m.id as u32,
         name: m.name.clone(),
@@ -47,7 +46,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         capabilities: m.capabilities,
         image_input: m.image_input(),
         image_output: m.generates_images(),
-        param_count: format_param_count(m.param_count_b),
+        param_count: m.param_count_b.map(format_param_count),
         quantization: m.quant_label().map(str::to_owned),
         architecture: m.architecture.clone(),
         created_at: m.added_at.timestamp(),
@@ -68,8 +67,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
 )]
 pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     let file_size_bytes = resident_bytes(&m);
-    let kv_elems_per_token =
-        crate::domain::estimate_kv_elems_per_token(&m.metadata, m.architecture.as_deref());
+    let kv_shape = crate::domain::estimate_kv_shape(&m.metadata, m.architecture.as_deref());
     let kv_memory_is_partial =
         crate::domain::kv_memory_is_partial(&m.metadata, m.architecture.as_deref());
     // Third fact derived from the same stored GGUF map. See
@@ -90,7 +88,7 @@ pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         context_length: m.context_length,
         server_defaults: m.server_defaults,
         file_size_bytes,
-        kv_elems_per_token,
+        kv_shape,
         kv_memory_is_partial,
         model_sampling,
     }
@@ -168,6 +166,14 @@ impl ModelCatalogPort for CatalogPortImpl {
     /// (ADR 0007), so every launch of an unchanged pair re-observes the same
     /// value, and echoing it into the database each time would be churn with
     /// no information in it.
+    ///
+    /// The caps' `supports_tool_calls` becomes the stored
+    /// [`ModelCapabilities::SUPPORTS_TOOL_CALLS`] when it is first read and
+    /// when it changes. An unknown answer leaves the flag, and so does the
+    /// same answer again, so an owner's own setting stands until the engine's
+    /// answer changes.
+    ///
+    /// [`ModelCapabilities::SUPPORTS_TOOL_CALLS`]: crate::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS
     async fn record_template_caps(
         &self,
         id: u32,
@@ -180,6 +186,14 @@ impl ModelCatalogPort for CatalogPortImpl {
             .map_err(|e| CatalogError::QueryFailed(e.to_string()))?;
         if model.template_caps.as_ref() == Some(&caps) {
             return Ok(());
+        }
+        let before = model.engine_tool_answer();
+        if let Some(calls) = caps.supports_tool_calls
+            && before != Some(calls)
+        {
+            model
+                .capabilities
+                .set(crate::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS, calls);
         }
         model.template_caps = Some(caps);
         self.repo
@@ -195,3 +209,6 @@ mod port_tests;
 #[cfg(test)]
 #[path = "port_projector_tests.rs"]
 mod projector_tests;
+#[cfg(test)]
+#[path = "port_tool_flag_tests.rs"]
+mod tool_flag_tests;

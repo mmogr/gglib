@@ -146,8 +146,8 @@ pub(crate) fn with_test_token(access: DaemonAccess) -> DaemonAccess {
     access.with_daemon_token(Some(test_token()))
 }
 
-/// The access policy most tests here run under: loopback, no API key, and
-/// [`test_token`] on every `/api` route.
+/// The access policy most tests here run under: loopback, and [`test_token`]
+/// on every `/api` route.
 pub(crate) fn test_access() -> Arc<DaemonAccess> {
     Arc::new(with_test_token(DaemonAccess::loopback()))
 }

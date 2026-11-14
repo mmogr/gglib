@@ -3,7 +3,7 @@
 //!
 //! Recording happens on the request path, so nothing here waits for the
 //! database there. A decision goes onto a bounded queue with `try_send`; a
-//! scanned request bumps an in-memory count for its day, model and mode. A
+//! scanned request bumps an in-memory count for its day and model. A
 //! background task drains both into one transaction — when a batch fills, on a
 //! timer, and once more when it is asked to stop — and prunes what the log no
 //! longer keeps in the same transaction.
@@ -40,7 +40,6 @@ use tokio::task::JoinHandle;
 use tokio::time::{Instant, interval_at};
 use tracing::warn;
 
-use gglib_core::LoopGuardMode;
 use gglib_core::domain::loop_guard_log::{
     GGLIB_VERSION, LOOP_GUARD_LOG_RETENTION_DAYS, LoopGuardTripEvent, bounded_model_name, epoch_day,
 };
@@ -195,8 +194,8 @@ impl LoopGuardTripSink for LoopGuardTripWriter {
         }
     }
 
-    fn record_scan(&self, model_name: &str, mode: LoopGuardMode, at_secs: u64) {
-        let key = (epoch_day(at_secs), bounded_model_name(model_name), mode);
+    fn record_scan(&self, model_name: &str, at_secs: u64) {
+        let key = (epoch_day(at_secs), bounded_model_name(model_name));
         let mut scans = lock(&self.shared.scans);
         // Once the task has stopped, nothing will flush the counts again: a
         // scan kept here would be lost without being counted as lost. Checked

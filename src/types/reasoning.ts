@@ -8,11 +8,10 @@
 // variable — a fact gglib can measure but not assume (ADR 0007).
 //
 // Kept out of `./index` rather than added to it: these describe one mechanism
-// and are read together, and `index.ts` is a hub that is over the file-size
-// budget even after this migration cut it by a third. Re-exported from there
-// so callers keep importing from `../types`. This file and `./index` have a
-// type-only mutual import, which TypeScript permits and erases at compile
-// time — the same arrangement `./benchmark` documents.
+// and are read together. Re-exported from there so callers keep importing
+// from `../types`. This file and `./index` have a type-only mutual import,
+// which TypeScript permits and erases at compile time — the same arrangement
+// `./benchmark` documents.
 //
 // @module types/reasoning
 
@@ -25,9 +24,9 @@ import type { SamplingParamKey } from './index';
  * Mirrors the backend `gglib_core::domain::Support`. Three states, never two:
  * the caps are read from `GET /props` while the model runs, so every model
  * nobody has launched on this installation answers `unknown` — and collapsing
- * that into `no` would hide the control on most of the library. The server's
- * own suppression acts only on `no` (ADR 0007 decision 3), so a surface offers
- * the control on `yes` and `unknown` alike and explains itself on `no`.
+ * that into `no` would hide the control on most of the library (ADR 0007
+ * decision 3), so a surface offers the control on `yes` and `unknown` alike
+ * and explains itself on `no`.
  */
 // Aliased rather than renamed, to keep this commit free of consumer edits.
 // `ProxyReasoningRows.tsx` declares a *component* named `TemplateSupport`;

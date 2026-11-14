@@ -3,8 +3,7 @@
 //!
 //! A `#[path]` sibling of `settings.rs` rather than a section of it. The
 //! struct and the enum are each a flat list that grows by one line per
-//! setting, and `settings.rs` is at its size baseline with `Settings` itself
-//! still to grow; splitting the lists out is the only part of that file that
+//! setting; splitting the lists out is the only part of `settings.rs` that
 //! can move without taking the `Settings` struct the surface checks parse out
 //! of the file they parse.
 
@@ -15,7 +14,7 @@ use crate::domain::{InferenceConfig, InferenceProfile};
 use super::settings_bounds::{
     CONTEXT_SIZE_RANGE, DOWNLOAD_QUEUE_RANGE, MAX_DEVICE_ID_LEN, MIN_PORT,
 };
-use super::{Device, LoopGuardMode, RemotePairing, RemoteServe};
+use super::{Device, RemotePairing, RemoteServe};
 
 /// Partial settings update.
 ///
@@ -46,13 +45,11 @@ pub struct SettingsUpdate {
     pub proxy_cache_disk_gb: Option<Option<u64>>,
     pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
-    /// See [`Settings::loop_guard_mode`](super::Settings::loop_guard_mode).
-    pub loop_guard_mode: Option<Option<LoopGuardMode>>,
+    /// See [`Settings::loop_guard`](super::Settings::loop_guard).
+    pub loop_guard: Option<Option<bool>>,
     pub tool_call_repair: Option<Option<bool>>,
     /// See [`Settings::mcp_drawing`](super::Settings::mcp_drawing).
     pub mcp_drawing: Option<Option<bool>>,
-    /// See [`Settings::agentic_sampling`](super::Settings::agentic_sampling).
-    pub agentic_sampling: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,

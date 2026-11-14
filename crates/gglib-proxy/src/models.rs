@@ -254,6 +254,10 @@ pub struct Usage {
 mod models_list;
 pub use models_list::{IMAGE_GENERATION_CAPABILITY, ModelInfo, ModelsResponse, VISION_CAPABILITY};
 
+#[path = "models_gglib.rs"]
+mod models_gglib;
+pub use models_gglib::{Feature, GglibInfo, THIS_VERSION};
+
 // =============================================================================
 // Error Response Types
 // =============================================================================
@@ -449,46 +453,6 @@ impl ErrorResponse {
         )
     }
 
-    /// Create an error response for a detected agentic tool-call loop.
-    ///
-    /// Returned as HTTP 400 by the pre-dispatch loop guard under
-    /// `--loop-guard-mode refuse`, when the request's replayed history repeats
-    /// the same tool-call batch **back to back and gets the same answer back
-    /// each time** beyond the shared agent-path threshold (see `loop_guard`).
-    /// A repeat whose answer changed is not counted, and the default mode,
-    /// `note`, forwards the request with a note instead. `type` and `code` are
-    /// both `loop_detected`, mirroring [`Self::context_length_exceeded`].
-    pub fn loop_detected(signature: &str) -> Self {
-        Self::with_code(
-            format!(
-                "Agentic loop detected: this conversation repeats the same tool-call batch \
-                 with nothing in between (signature: {signature}). Aborting before another \
-                 identical turn. Start a new conversation or change approach; to warn the model \
-                 instead of refusing, run `gglib config settings set --loop-guard-mode note`."
-            ),
-            "loop_detected",
-            "loop_detected",
-        )
-    }
-
-    /// Create an error response for detected response stagnation.
-    ///
-    /// Returned as HTTP 400 by the pre-dispatch loop guard under
-    /// `--loop-guard-mode refuse`, when the replayed history contains the same
-    /// assistant response `count` times against a limit of `max_steps`.
-    pub fn stagnation_detected(count: usize, max_steps: usize) -> Self {
-        Self::with_code(
-            format!(
-                "Stagnation detected: the assistant has produced the same response {count} \
-                 times (limit {max_steps}). Aborting before another identical turn. Start a \
-                 new conversation or change approach; to warn the model instead of refusing, \
-                 run `gglib config settings set --loop-guard-mode note`."
-            ),
-            "stagnation_detected",
-            "stagnation_detected",
-        )
-    }
-
     /// Create an error response for a malformed or invalid request.
     pub fn invalid_request(msg: &str) -> Self {
         Self::with_code(msg, "invalid_request_error", "invalid_request")
@@ -539,11 +503,6 @@ impl From<ModelRuntimeError> for ErrorResponse {
                 err.to_string(),
                 "invalid_request_error",
                 "image_model_incomplete",
-            ),
-            ModelRuntimeError::ImageModelDoesNotFit { .. } => Self::with_code(
-                err.to_string(),
-                "service_unavailable",
-                "image_model_does_not_fit",
             ),
             // The runtime's words, which give both sizes.
             ModelRuntimeError::ChatModelDoesNotFit { .. } => {

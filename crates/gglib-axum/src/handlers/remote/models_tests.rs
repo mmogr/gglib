@@ -4,12 +4,13 @@
 
 use axum::http::StatusCode;
 
-use super::super::fake_far::{FINGERPRINT, carries_key, far, json, only, read};
+use super::super::fake_far::{FINGERPRINT, carries_key, far, far_untold, json, only, read};
 use super::{list_models_via, load_model_via, model_detail_via};
 
 /// A far list as a gglib proxy writes it: a base entry and its profile
-/// variant, which shares its `gglib_id`.
-const LISTED: &str = r#"{"object":"list","machine_name":"desk","data":[
+/// variant, which shares its `gglib_id`, and who answered.
+const LISTED: &str = r#"{"object":"list","machine_name":"desk",
+    "gglib":{"version":"9.9.9","features":["chats","runs","drawing","status"]},"data":[
     {"id":"qwen3","gglib_id":3,"object":"model","created":1,"owned_by":"gglib","context_window":30000},
     {"id":"qwen3:coding","gglib_id":3,"profile":"coding","object":"model","created":1,"owned_by":"gglib"},
     {"id":"llama","gglib_id":1000,"object":"model","created":1,"owned_by":"gglib"}]}"#;
@@ -18,8 +19,9 @@ const LISTED: &str = r#"{"object":"list","machine_name":"desk","data":[
 const LOOKUP: &str = r#"{"profile":"coding","detail":{"id":3,"name":"org/qwen3",
     "paramCountB":8.0,"addedAt":"2026-10-01 09:00:00","isServing":true,"metadata":{}}}"#;
 
-/// What a far machine on an older build is asked to do.
-const UPDATE: &str = "runs an older gglib that publishes no model ids — update it";
+/// What a far machine on a gglib from before devices said their version is
+/// asked to do.
+const UPDATE: &str = "the paired machine runs a gglib older than this machine's";
 
 #[tokio::test]
 async fn the_list_is_every_far_entry_with_its_machine_and_what_may_be_done_there() {
@@ -57,10 +59,11 @@ async fn the_list_is_every_far_entry_with_its_machine_and_what_may_be_done_there
     assert!(carries_key(&seen), "{seen:?}");
 }
 
-/// A far build from before models carried ids is told to update, not shown
-/// a list it cannot be asked about by id.
+/// A far gglib from before devices said their version is told to update,
+/// not shown a list it may not be asked about, even one from before models
+/// carried ids, which this build could not read.
 #[tokio::test]
-async fn a_far_list_without_ids_asks_that_machine_to_update() {
+async fn a_far_list_that_does_not_say_its_version_asks_that_machine_to_update() {
     let older = r#"{"object":"list","data":[{"id":"qwen3","object":"model","created":1,"owned_by":"gglib"}]}"#;
     let (_, far) = far(200, older).await;
 
@@ -99,7 +102,7 @@ async fn a_model_is_read_by_its_identifier_as_one_segment() {
     assert_eq!(body["detail"]["id"], 3);
     assert_eq!(body["detail"]["isServing"], true);
     let seen = only(&fake);
-    assert_eq!(seen.uri, "/v1/models/org%2Fqwen3%3Acoding/detail");
+    assert_eq!(seen.uri, "/v1/gglib/models/org%2Fqwen3%3Acoding/detail");
     assert!(carries_key(&seen), "{seen:?}");
 }
 
@@ -118,11 +121,11 @@ async fn a_far_404_that_names_its_code_is_relayed() {
     );
 }
 
-/// A `404` with no code is a far proxy with no detail route at all: a build
-/// from before models carried ids, not a missing model.
+/// A model asked of a far gglib too old to say its version asks that machine
+/// to update, before the detail route is asked.
 #[tokio::test]
-async fn a_bare_far_404_on_a_model_asks_that_machine_to_update() {
-    let (_, far) = far(404, "").await;
+async fn a_model_asked_of_a_far_machine_too_old_to_say_asks_it_to_update() {
+    let (fake, far) = far_untold(200, r#"{"object":"list","data":[]}"#).await;
 
     let err = model_detail_via(&far, "3").await.unwrap_err();
 
@@ -132,6 +135,7 @@ async fn a_bare_far_404_on_a_model_asks_that_machine_to_update() {
         json(&body)["error"].as_str().unwrap().contains(UPDATE),
         "{body}"
     );
+    assert_eq!(only(&fake).uri, "/v1/models");
 }
 
 #[tokio::test]
@@ -146,7 +150,7 @@ async fn a_load_posts_with_the_key_and_its_context() {
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
-        ("POST", "/v1/models/org%2Fqwen3/load")
+        ("POST", "/v1/gglib/models/org%2Fqwen3/load")
     );
     assert!(carries_key(&seen), "{seen:?}");
     assert_eq!(json(&seen.body), serde_json::json!({ "num_ctx": 8192 }));

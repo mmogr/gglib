@@ -134,7 +134,12 @@ async fn test_find_model_by_id() {
     write_string_gguf(&file_path, &[]);
 
     // Add a model
-    let new_model = NewModel::new("Test Model".to_string(), file_path.clone(), 7.0, Utc::now());
+    let new_model = NewModel::new(
+        "Test Model".to_string(),
+        file_path.clone(),
+        Some(7.0),
+        Utc::now(),
+    );
     let inserted = model_repo.insert(&new_model).await.unwrap();
     let id = inserted.id;
 
@@ -158,7 +163,7 @@ async fn test_find_model_by_name() {
     let new_model = NewModel::new(
         "Named Model".to_string(),
         file_path.clone(),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     model_repo.insert(&new_model).await.unwrap();

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::retry::{GiveUpReason, RetryDecision, decide};
+use crate::retry::{RetryDecision, decide};
 
 /// A stand-in for `std::env::var` over a fixed set of variables.
 fn fixture(pairs: &[(&str, &str)]) -> impl Fn(&'static str) -> Result<String, ()> {
@@ -104,17 +104,6 @@ fn a_shortened_deadline_pulls_the_backoff_ceiling_down_with_it() {
 fn a_lengthened_deadline_leaves_the_ceiling_alone() {
     let policy = overridden(&[(DEADLINE_ENV_VAR, "600")]);
     assert_eq!(policy.max_backoff, RetryPolicy::default().max_backoff);
-}
-
-#[test]
-fn disabled_makes_exactly_one_attempt() {
-    let policy = RetryPolicy::disabled();
-    assert_eq!(policy.max_attempts, 1);
-    assert_eq!(
-        decide(&policy, 1, None, Duration::ZERO, 0.0),
-        RetryDecision::GiveUp(GiveUpReason::AttemptsExhausted),
-        "--no-retry must not back off even once"
-    );
 }
 
 #[test]

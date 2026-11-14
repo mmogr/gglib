@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::body::Bytes;
-use axum::extract::rejection::BytesRejection;
+use axum::extract::rejection::{BytesRejection, QueryRejection};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -48,18 +48,25 @@ use crate::models::ErrorResponse;
 use crate::remote::DeviceDrawing;
 use crate::server::{AppState, handle_runtime_error};
 
-/// `GET /v1/images/drawing`: whether a turn sent with Draw pressed can draw
+/// `GET /v1/gglib/images/drawing`: whether a turn sent with Draw pressed can draw
 /// here, and why not, by the same rule as the daemon's
 /// `GET /api/images/drawing`. A paired device asks before it sends `draw`.
 /// Beside it, `mcp_servers`: the servers a device's run may use, by id.
 ///
-/// Always 200. When it cannot, `code` is `drawing_unavailable`: not an
-/// error of this request, but the code a request to draw would be refused
-/// with (400), beside the reason.
+/// 200 to any query that reads (one that does not is 400 `invalid_request`).
+/// When it cannot draw, `code` is `drawing_unavailable`: not an error of
+/// this request, but the code a request to draw would be refused with (400),
+/// beside the reason.
 pub(crate) async fn drawing_route(
     State(state): State<AppState>,
-    Query(query): Query<DrawingQuery>,
-) -> Json<DeviceDrawing> {
+    query: Result<Query<DrawingQuery>, QueryRejection>,
+) -> Response {
+    let Query(query) = match query {
+        Ok(query) => query,
+        Err(rejection) => {
+            return crate::refusal::unreadable(rejection.status(), rejection.body_text());
+        }
+    };
     let answer = drawing_availability(
         state.images.as_deref(),
         query.far,
@@ -67,7 +74,7 @@ pub(crate) async fn drawing_route(
         query.image_model,
     )
     .await;
-    Json(DeviceDrawing::of(&state, answer).await)
+    Json(DeviceDrawing::of(&state, answer).await).into_response()
 }
 
 /// The proxy's door: the driver the daemon handed this proxy, if any.
@@ -86,7 +93,7 @@ pub async fn generations_read(
 ) -> Response {
     match body {
         Ok(body) => generations(images, body).await,
-        Err(rejection) => crate::body_limit::rejected(rejection),
+        Err(rejection) => crate::body_limit::rejected(&rejection),
     }
 }
 

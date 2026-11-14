@@ -3,7 +3,7 @@
 //! its work in.
 //!
 //! A `#[path]` sibling of `devices.rs` rather than more of the serve side's
-//! own test files, which are at their size budget.
+//! own test files.
 
 use futures_util::FutureExt as _;
 use gglib_core::SettingsUpdate;

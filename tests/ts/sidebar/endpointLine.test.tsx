@@ -71,7 +71,9 @@ describe('the endpoint line', () => {
     applyProxyStatus({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null });
     render(<EndpointLine />, { wrapper: Wrapper });
     expect(line()).toHaveAccessibleName('Endpoint, Off');
-    expect(screen.getByText('Off · click to turn on')).toBeInTheDocument();
+    expect(screen.getByText('click to turn on')).toBeInTheDocument();
+    // The state's shape is the badge on the icon, hollow while off.
+    expect(within(line()).getByRole('img', { name: 'Off' })).toHaveAttribute('data-kind', 'off');
     expect(screen.queryByRole('button', { name: /copy the endpoint address/i })).not.toBeInTheDocument();
   });
 
@@ -217,7 +219,7 @@ describe('the words of the endpoint line', () => {
 
   it('second line: off, starting, the pin, none, a count', () => {
     const facts = { state: 'on' as const, baseUrl: 'http://127.0.0.1:8080/v1', key: null, pinned: null, pinnedTo: null };
-    expect(secondLine({ ...facts, state: 'off' }, 3)).toBe('Off · click to turn on');
+    expect(secondLine({ ...facts, state: 'off' }, 3)).toBe('click to turn on');
     expect(secondLine({ ...facts, state: 'starting' }, 3)).toBe('Starting');
     expect(secondLine({ ...facts, state: 'pinned', pinned: { id: 8, name: 'qwen3-8b' }, pinnedTo: 'Pinned to qwen3-8b' }, 1)).toBe('qwen3-8b');
     expect(secondLine(facts, 0)).toBe('nothing loaded yet');

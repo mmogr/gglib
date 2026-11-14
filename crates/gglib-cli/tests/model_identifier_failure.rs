@@ -4,7 +4,7 @@
 //! through one door, so all of them fail the same way. Two of them used to
 //! exit 0 — `inspect` after printing to stderr, `remove` after printing to
 //! stdout — which made a missing model invisible to a script checking the
-//! exit code. `benchmark` and `config default` used to ask the library
+//! exit code. `benchmark` and the old `config default` used to ask the library
 //! themselves, and worded the miss as `model not found: x` and `Validation
 //! error: Model not found: x`.
 //!
@@ -23,8 +23,8 @@ const MISSING: &str = "__no_such_model__";
 
 /// Every command tested here, as typed after `gglib`.
 ///
-/// `model retag` also accepts `--all`, and `model check-updates` spells its
-/// identifier as a flag; both still route through the same resolver.
+/// `model retag` and `model check-updates` also accept `--all`; given an
+/// identifier, both route through the same resolver.
 const IDENTIFIER_COMMANDS: &[&[&str]] = &[
     &["model", "inspect", MISSING],
     &["model", "inspect", MISSING, "--json"],
@@ -36,13 +36,13 @@ const IDENTIFIER_COMMANDS: &[&[&str]] = &[
     &["model", "upgrade", MISSING],
     &["model", "capabilities", MISSING],
     &["model", "explain", MISSING],
-    &["model", "check-updates", "--identifier", MISSING],
+    &["model", "check-updates", MISSING],
     &["benchmark", "compare", "--prompt", "hi", "--model", MISSING],
     &["benchmark", "perf", "--model", MISSING],
     &["benchmark", "tune", "--model", MISSING],
     &["benchmark", "agentic", "--model", MISSING],
-    &["config", "default", MISSING],
-    &["question", "hi", "--model", MISSING],
+    &["config", "set", "default-model-id", MISSING],
+    &["q", "hi", "--model", MISSING],
     &["chat", MISSING],
 ];
 

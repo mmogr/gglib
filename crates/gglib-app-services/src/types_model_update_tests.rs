@@ -18,7 +18,7 @@ fn row() -> Model {
     let mut new = NewModel::new(
         "qwen".to_owned(),
         PathBuf::from("/models/qwen.gguf"),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     new.architecture = Some("qwen3".to_owned());
@@ -77,7 +77,7 @@ fn each_field_a_request_names_is_written() {
     assert_eq!(model.name, "renamed");
     assert_eq!(model.quant_label(), Some("Q4_K_M"));
     assert_eq!(model.file_path, PathBuf::from("/models/moved.gguf"));
-    assert!((model.param_count_b - 13.0).abs() < f64::EPSILON);
+    assert_eq!(model.param_count_b, Some(13.0));
     assert_eq!(model.architecture.as_deref(), Some("mistral"));
     assert_eq!(model.context_length, Some(8192));
     assert_eq!(model.metadata, metadata, "the map is replaced whole");
@@ -186,7 +186,7 @@ async fn the_inspectors_empty_defaults_are_stored_as_inherit() {
             let mut new = NewModel::new(
                 "qwen".to_owned(),
                 PathBuf::from("/models/qwen.gguf"),
-                7.0,
+                Some(7.0),
                 chrono::Utc::now(),
             );
             new.inference_defaults = Some(sampling(0.2, Some(40)));

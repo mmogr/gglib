@@ -20,7 +20,7 @@ $ gglib daemon status
 
   ╭─ ℹ️ Daemon ───────────────────────────╮
   Status:  running at http://127.0.0.1:9907
-  PID:     29672
+  PID:     11834
   Proxy:   On at http://127.0.0.1:8080/v1
   API key: None needed
 
@@ -31,7 +31,7 @@ $ gglib daemon status
 ## `proxy`
 
 Serves `/v1/chat/completions`, `/v1/embeddings`, `/v1/models`,
-`/v1/images/generations` and `/mcp` (MCP Streamable HTTP) from one port. When a request names a model that is
+`/v1/models/{name}`, `/v1/images/generations` and `/mcp` (MCP Streamable HTTP) from one port. When a request names a model that is
 not resident, the proxy queues it, launches the model, and applies flags
 derived from its capability tags: `mtp` → speculative decoding, `reasoning`
 → `--reasoning-format`, `agent` → `--jinja`. Every surface uses the same
@@ -40,7 +40,7 @@ config builder, so a model behaves identically however it was started.
 - Sampling flags given here are proxy-wide defaults; per-request and
   per-model values still win ([Sampling resolution](../sampling.md)).
 - Without `--port`, `proxy`, `serve` and `up` start the endpoint on the
-  stored `proxy_port` (`gglib config settings set --proxy-port`), where the
+  stored `proxy_port` (`gglib config set proxy-port`), where the
   desktop app starts it, and `proxy dashboard` and `proxy cache-clear` look
   for it there.
 - The endpoint runs on the daemon, so it outlives the terminal that started
@@ -65,8 +65,8 @@ when the proof fails, so a script can tell; the block is printed first.
 
 A live terminal view of an already-running proxy, with its connections,
 slots, cache and requests, and the last five requests with what gglib did
-to each, in words: a tool call repaired, old messages trimmed, tool calls
-constrained, a loop noted or stopped, a request refused. Each loaded model's
+to each, in words: a tool call repaired, old messages trimmed, a loop
+noted or stopped, a request refused. Each loaded model's
 row says what it is doing and, under it, how it was launched in one line
 (quant, context, KV cache types, speculative decoding, size); the second
 slot says how much room a second model has, or why the last one was
@@ -87,9 +87,15 @@ on, by day.
 ```console
 $ gglib proxy trips
 The loop guard's log, the last 30 day(s):
-DAY (UTC)   MODEL                         VERSION    MODE    SCANNED  TRIPS  LOOPS  STAGN.  SESSIONS
-2026-10-31  Qwen3-30B-A3B                 0.29.0-rc.1  note          1      0      0       0         0
-2026-10-31  Qwen3.8-27B                   0.29.0-rc.1  note         10      0      0       0         0
+DAY (UTC)   MODEL                   VERSION      SCANNED  TRIPS  LOOPS  STAGN.  SESSIONS
+2026-11-09  Qwen3-4B-Instruct-2507  0.31.0-rc.8        9      0      0       0         0
+2026-11-07  Qwen3-4B-Instruct-2507  0.31.0-rc.3        1      0      0       0         0
+2026-11-07  Qwen3-4B-Instruct-2507  0.31.0-rc.5        1      0      0       0         0
+2026-11-07  Qwen3.8-27B             0.31.0-rc.3        1      0      0       0         0
+2026-10-31  Qwen3-30B-A3B           0.29.0-rc.1        1      0      0       0         0
+2026-10-31  Qwen3-4B-Instruct-2507  0.29.0-rc.4        2      0      0       0         0
+2026-10-31  Qwen3.8-27B             0.29.0-rc.1       10      0      0       0         0
+2026-10-31  Qwen3.8-27B             0.29.0-rc.4        1      0      0       0         0
 
 A trip is the guard's decision, not a delivery: a noted request can still fail to reach the model.
 ```
@@ -106,14 +112,17 @@ through `/v1/models` need, VS Code Copilot's BYOK endpoint among them.
 
 - `--port` is the endpoint; the daemon allocates the upstream llama-server
   port behind it, from `llama_base_port`
-  (`gglib config settings set --llama-base-port`).
+  (`gglib config set llama-base-port`).
+- `--jinja auto|on|off` is this launch's choice of chat templates, the
+  values `model update --jinja` takes for the model's own default, which it
+  outranks; `auto`, or no flag, leaves it to that default and the tags.
 - An image model is served by stable-diffusion.cpp's `sd-server` instead.
   `serve` offers to install it if it is missing, or older than its pinned
   release (`gglib config sd install`), prints the model's family and each
   component linked or missing, starts the same pinned proxy, and loads the
-  model once (`POST /v1/models/{name}/load`), so a refusal, the runtime not
+  model once (`POST /v1/gglib/models/{name}/load`), so a refusal, the runtime not
   installed, a component missing or no room beside a held model, is printed
-  in words before the dashboard attaches. The chat-only flags (`--ctx-size`,
+  in words before the dashboard attaches. The chat-only flags (`--context-size`,
   `--mlock`, `--jinja`, MTP, sampling, a profile) are refused by name.
 
 ## `daemon`
@@ -124,21 +133,19 @@ it start one when none is up; a foreign process on its port is reported, not
 fought.
 
 - `status` says whether it runs, its pid, and whether the proxy is up.
-- `run` runs it in the foreground. `--share-lan` binds it on every
-  interface and advertises it over mDNS, and the management API then demands
-  its bearer token; `--allowed-host` accepts one more Host header value,
-  beside loopback and IP literals.
+- `run` runs it in the foreground. It listens on `127.0.0.1` only;
+  `--allowed-host` accepts one more Host header value beside loopback.
 - `stop` stops the daemon, and with it every llama-server it owns.
 
 ## `gui` and `web`
 
-`gglib gui` launches the desktop app (`--dev` for hot reload, for
-contributors). `gglib web` makes sure the daemon is up and prints the web
-page's address; the daemon serves the page and the API from one loopback
-port, and the link carries the daemon's token, so `web` opens your browser
-on it unless `--no-open`. To reach the page from another machine on your
-network, `gglib web --share-lan` runs the daemon in the foreground with the
-page on the network: it is shorthand for `gglib daemon run --share-lan`.
+`gglib gui` launches the desktop app. `gglib web` makes sure the daemon is
+up and prints the web page's address; the daemon serves the page and the
+API from one loopback port, and the link carries the daemon's token, so
+`web` opens your browser on it unless `--no-open`. The page is for this
+machine only: the daemon listens on loopback, and another machine reaches
+models through the proxy (`proxy --host`) or a paired tunnel
+(`gglib remote`).
 
 ## Flags
 

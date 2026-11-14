@@ -72,12 +72,12 @@ export function engine(kind: RuntimeKind, installed = false, overrides: Partial<
       updateDownloads: !installed,
       ...pin,
     },
+    standing: installed ? `Pinned release: ${RELEASE[kind]}, which is the one installed.` : null,
     download: 'macOS ARM64 (Metal)',
     downloadUnavailable: null,
     warning: null,
     serving: null,
     installCommand: `gglib config ${WORD[kind]} install`,
-    updateCommand: `gglib config ${WORD[kind]} update`,
     ...overrides,
   };
 }

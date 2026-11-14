@@ -137,11 +137,10 @@ pub(super) fn extract_text(content: &Value) -> String {
 ///
 /// `rest` is the history *after* that assistant message; the answers are the
 /// contiguous run of result messages at its head, which bounds the join to
-/// this turn and makes repeated synthetic ids harmless. gglib mints those ids
-/// itself for dialect models (`DelimitedToolCallParser` restarts at zero on
-/// every response), so `call_qwen_0` recurs on every turn of a replayed
-/// conversation and a global index would resolve every occurrence of a batch
-/// to the same result.
+/// this turn and makes repeated synthetic ids harmless. Ids can repeat across
+/// turns (gglib's own dialect parser minted `call_qwen_0` afresh on every
+/// response, and histories written then are still replayed), and a global
+/// index would resolve every occurrence of a batch to the same result.
 ///
 /// The windowing is all that lives here. Pairing each call with its own
 /// answer, and hashing the pairs, is

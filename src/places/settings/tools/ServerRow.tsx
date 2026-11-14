@@ -2,8 +2,8 @@
  * One tool server as a row: its name, its state as a shape and a word, and
  * how many tools it offers while it runs. A hover (or focus) shows Test,
  * Start or Stop, Edit and ⋯ Remove…, each greyed with why where it cannot
- * act. A server gglib cannot run (an SSE one) offers only Remove…. A stdio
- * server whose command no longer resolves says "Needs relink" with Fix.
+ * act. A server whose command no longer resolves says "Needs relink" with
+ * Fix.
  *
  * The name opens the row: the command it runs, its tools, and Devices may
  * use it where the server can be opened to paired devices. How the row's
@@ -21,7 +21,7 @@ import { Chip } from '../../../components/ui/Chip';
 import { Icon } from '../../../components/ui/Icon';
 import type { UseMcpServersResult } from '../../../hooks/useMcpServers';
 import type { McpServerInfo, McpTool } from '../../../services/transport';
-import { canOpenToDevices, isServerRunning, isServerUnsupported } from '../../../utils/mcp';
+import { canOpenToDevices, isServerRunning } from '../../../utils/mcp';
 import { Menu } from '../../../components/ui/Menu';
 import { AllowRemoteCheckbox } from './AllowRemoteCheckbox';
 import { serverState } from './serverState';
@@ -72,9 +72,8 @@ export const ServerRow: FC<ServerRowProps> = ({ info, actions, setAllowRemote, o
   const { server } = info;
   const state = serverState(info);
   const running = isServerRunning(info);
-  const runnable = !isServerUnsupported(info);
   const busy = actions.busy.has(server.id);
-  const relink = !server.is_valid && server.server_type === 'stdio';
+  const relink = !server.is_valid;
   const outcome = actions.outcome(server.id);
   const command = [server.config.command, ...(server.config.args ?? [])].filter(Boolean).join(' ');
 
@@ -96,37 +95,33 @@ export const ServerRow: FC<ServerRowProps> = ({ info, actions, setAllowRemote, o
           <StatusMark kind={state.kind} word={state.word} />
         </span>
         <span className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-xs opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
-          {runnable && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy || actions.testing}
-                title={actions.testing && !busy ? ONE_TEST : 'Start a throwaway instance, list its tools, then stop it'}
-                onClick={() => void actions.test(info)}
-              >
-                Test
-              </Button>
-              {running ? (
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void actions.stop(info)}>
-                  Stop
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy || !server.enabled}
-                  title={server.enabled ? undefined : NOT_IN_CHATS}
-                  onClick={() => void actions.start(info)}
-                >
-                  Start
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => onEdit(info)}>
-                Edit
-              </Button>
-            </>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy || actions.testing}
+            title={actions.testing && !busy ? ONE_TEST : 'Start a throwaway instance, list its tools, then stop it'}
+            onClick={() => void actions.test(info)}
+          >
+            Test
+          </Button>
+          {running ? (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => void actions.stop(info)}>
+              Stop
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy || !server.enabled}
+              title={server.enabled ? undefined : NOT_IN_CHATS}
+              onClick={() => void actions.start(info)}
+            >
+              Start
+            </Button>
           )}
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => onEdit(info)}>
+            Edit
+          </Button>
           <Menu
             iconOnly
             name={`More for ${server.name}`}
@@ -165,7 +160,6 @@ export const ServerRow: FC<ServerRowProps> = ({ info, actions, setAllowRemote, o
       {open && (
         <div className="flex flex-col gap-sm pl-lg">
           {command && <code className="break-all font-mono text-xs text-text-secondary">{command}</code>}
-          {server.config.url && <code className="break-all font-mono text-xs text-text-secondary">{server.config.url}</code>}
           {running && info.tools.length > 0 && <Tools tools={info.tools} />}
           {canOpenToDevices(server) && (
             <AllowRemoteCheckbox server={server} label="Devices may use it" onToggle={setAllowRemote} />

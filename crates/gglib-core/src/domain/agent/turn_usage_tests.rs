@@ -62,3 +62,14 @@ fn the_figure_line_leaves_out_what_the_turn_lacks() {
     };
     assert_eq!(none_reused.figure_line(), "41 s \u{b7} 0 tokens reused");
 }
+
+/// One token is said in the singular.
+#[test]
+fn one_token_reused_is_said_in_the_singular() {
+    let usage = TurnUsage {
+        duration_ms: 500,
+        cached_tokens: Some(1),
+        ..TurnUsage::default()
+    };
+    assert_eq!(usage.figure_line(), "0.5 s \u{b7} 1 token reused");
+}

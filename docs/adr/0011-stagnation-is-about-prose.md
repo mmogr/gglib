@@ -1,6 +1,6 @@
 # ADR 0011 — Stagnation is about prose, and it forgets
 
-- **Status:** Accepted
+- **Status:** Accepted; the guard's modes superseded (amended 2026-11-12)
 - **Date:** 2026-08-27
 - **Depends on:** [ADR 0006](0006-recover-dont-predict.md),
   [ADR 0010](0010-the-loop-guard-reads-what-came-back.md)
@@ -373,6 +373,15 @@ property of judging a whole transcript rather than the turn in front of you.
   > A zero read from `agent_guard_stagnations` is therefore evidence about
   > the instrument, not about the model, and the field's own documentation
   > says so first, before anything a reader might do with the number.
+
+  > **Amended 2026-11-12 — there is one mode now.** The "three values" of the
+  > first 2026-09-18 note are gone: the guard is on or off (`loop-guard`), and
+  > on is what `note` did. `refuse` was deleted, and a library that stored it
+  > is upgraded to on. The log lost its `mode` column, so "within one mode"
+  > above now means "within one version": a library's older scans of `refuse`
+  > and `note` were added together where they shared a day, model and version.
+  > The question the 2026-09-20 note leaves open — rows keyed by a mode the
+  > agent path does not have — is gone with the key.
 - If cycling sessions become a reported complaint, the gap above is the cause,
   and it wants a mechanism sized by a measurement rather than this ADR's
   reasoning.

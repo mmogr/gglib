@@ -1959,9 +1959,20 @@ public struct InstalledModel: Equatable, Hashable {
     public var listedId: String
     /**
      * The label its type is shown by (`Q4_K_M`, `UD-Q4_K_XL`), when it has
-     * one: its download's label, else the type its header states.
+     * one: its download's label, unless that is only its file's name, else
+     * the type its header states. For showing, never for matching a
+     * repository's variant: [`Self::variant_label`] is that.
      */
     public var quantization: String?
+    /**
+     * The label its download asked the Hub for, as the repository's
+     * variant list calls it (`UD-Q4_K_XL`, or a one-file repository's
+     * whole file name), when it came from one. An offer of [`Self::repo`]
+     * is this model when its label is this. `None` too for a download
+     * added before gglib kept labels: an app matching the Hub's offers
+     * then falls back to [`Self::quantization`], the header's type.
+     */
+    public var variantLabel: String?
     /**
      * The Hugging Face repository it was downloaded from
      * (`unsloth/Qwen3-8B-GGUF`), when it came from one.
@@ -2003,8 +2014,18 @@ public struct InstalledModel: Equatable, Hashable {
          */listedId: String, 
         /**
          * The label its type is shown by (`Q4_K_M`, `UD-Q4_K_XL`), when it has
-         * one: its download's label, else the type its header states.
+         * one: its download's label, unless that is only its file's name, else
+         * the type its header states. For showing, never for matching a
+         * repository's variant: [`Self::variant_label`] is that.
          */quantization: String?, 
+        /**
+         * The label its download asked the Hub for, as the repository's
+         * variant list calls it (`UD-Q4_K_XL`, or a one-file repository's
+         * whole file name), when it came from one. An offer of [`Self::repo`]
+         * is this model when its label is this. `None` too for a download
+         * added before gglib kept labels: an app matching the Hub's offers
+         * then falls back to [`Self::quantization`], the header's type.
+         */variantLabel: String?, 
         /**
          * The Hugging Face repository it was downloaded from
          * (`unsloth/Qwen3-8B-GGUF`), when it came from one.
@@ -2027,6 +2048,7 @@ public struct InstalledModel: Equatable, Hashable {
         self.name = name
         self.listedId = listedId
         self.quantization = quantization
+        self.variantLabel = variantLabel
         self.repo = repo
         self.bytes = bytes
         self.trainedCtx = trainedCtx
@@ -2054,6 +2076,7 @@ public struct FfiConverterTypeInstalledModel: FfiConverterRustBuffer {
                 name: FfiConverterString.read(from: &buf), 
                 listedId: FfiConverterString.read(from: &buf), 
                 quantization: FfiConverterOptionString.read(from: &buf), 
+                variantLabel: FfiConverterOptionString.read(from: &buf), 
                 repo: FfiConverterOptionString.read(from: &buf), 
                 bytes: FfiConverterUInt64.read(from: &buf), 
                 trainedCtx: FfiConverterOptionUInt64.read(from: &buf), 
@@ -2067,6 +2090,7 @@ public struct FfiConverterTypeInstalledModel: FfiConverterRustBuffer {
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterString.write(value.listedId, into: &buf)
         FfiConverterOptionString.write(value.quantization, into: &buf)
+        FfiConverterOptionString.write(value.variantLabel, into: &buf)
         FfiConverterOptionString.write(value.repo, into: &buf)
         FfiConverterUInt64.write(value.bytes, into: &buf)
         FfiConverterOptionUInt64.write(value.trainedCtx, into: &buf)

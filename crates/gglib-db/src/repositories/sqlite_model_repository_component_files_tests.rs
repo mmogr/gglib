@@ -43,7 +43,7 @@ async fn library(
     let dir = models.join("owner_zeta-GGUF");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join(WEIGHTS), "weights").unwrap();
-    let mut new = NewModel::new("flux".to_owned(), dir.join(WEIGHTS), 12.0, Utc::now());
+    let mut new = NewModel::new("flux".to_owned(), dir.join(WEIGHTS), Some(12.0), Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
     new.variant_label = Some("Q8_0".to_owned());
     new.image_family = Some(ImageFamily::Flux1);

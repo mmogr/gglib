@@ -25,8 +25,8 @@ import { TransportError } from '../../../../src/services/transport/errors';
  * There were three ways to build a raw `fetch` to the daemon, and they
  * disagreed: one read the token before the client had it, one asked Tauri for
  * the port on every call, and for a while one sent no credential at all, so
- * against a `--share-lan` daemon agent chat and the benchmark answered 401
- * once the key was entered while every other call succeeded. There is now
+ * against a daemon that wanted a key, agent chat and the benchmark answered
+ * 401 once it was entered while every other call succeeded. There is now
  * one, `apiFetch`, and this is the list of what goes through it.
  */
 
@@ -71,8 +71,8 @@ const DAEMON_FETCHES: [name: string, path: string, start: (signal: AbortSignal) 
 
 /** Each raw fetch that is not to the daemon: its URL, and what starts it. */
 const OTHER_FETCHES: [name: string, url: string, start: () => unknown][] = [
-  ['the proxy dashboard stream', 'http://127.0.0.1:8080/v1/proxy/status/stream', () => subscribeProxyDashboard('127.0.0.1', 8080, null, noop)],
-  ['the proxy cache clear', 'http://127.0.0.1:8080/v1/proxy/cache/clear', () => clearProxyCache('127.0.0.1', 8080, null).catch(noop)],
+  ['the proxy dashboard stream', 'http://127.0.0.1:8080/v1/gglib/proxy/status/stream', () => subscribeProxyDashboard('127.0.0.1', 8080, null, noop)],
+  ['the proxy cache clear', 'http://127.0.0.1:8080/v1/gglib/proxy/cache/clear', () => clearProxyCache('127.0.0.1', 8080, null).catch(noop)],
 ];
 
 describe('API auth headers', () => {

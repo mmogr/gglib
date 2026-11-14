@@ -112,6 +112,27 @@ fn persist_env_value(key: &str, value: &str) -> Result<(), PathError> {
     Ok(())
 }
 
+/// Remove every line of the `.env` file that assigns `key`, keeping the
+/// rest as written. Nothing to do when the file is absent.
+fn remove_env_value(key: &str) -> Result<(), PathError> {
+    let env_path = env_file_path()?;
+    let failed = |e: std::io::Error| PathError::EnvFileError {
+        path: env_path.clone(),
+        reason: e.to_string(),
+    };
+    let contents = match fs::read_to_string(&env_path) {
+        Ok(contents) => contents,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(failed(e)),
+    };
+    let kept: String = contents
+        .lines()
+        .filter(|line| !assigns(line, key))
+        .flat_map(|line| [line, "\n"])
+        .collect();
+    fs::write(&env_path, kept).map_err(failed)
+}
+
 /// The value the `.env` file holds for `key`: the first one the loader's own
 /// parser reads for it, so a value means the same here as when the file is
 /// loaded into a process's environment.
@@ -126,6 +147,21 @@ fn read_env_value(key: &str) -> Option<String> {
         .find_map(|(name, value)| (name == key).then_some(value))
 }
 
+/// Whether a line of the `.env` file assigns `key`, whether or not the
+/// loader can read its value.
+fn env_file_assigns(key: &str) -> bool {
+    env_file_path()
+        .ok()
+        .and_then(|path| fs::read_to_string(path).ok())
+        .is_some_and(|contents| contents.lines().any(|line| assigns(line, key)))
+}
+
+/// Whether the `.env` file has a line for the models directory, even one the
+/// loader refuses, such as a bare path with a space an older build wrote.
+pub(super) fn models_dir_line_stored() -> bool {
+    env_file_assigns(MODELS_DIR_KEY)
+}
+
 /// The key the models directory is stored under, in the environment and in
 /// the `.env` file alike.
 pub(super) const MODELS_DIR_KEY: &str = "GGLIB_MODELS_DIR";
@@ -134,6 +170,12 @@ pub(super) const MODELS_DIR_KEY: &str = "GGLIB_MODELS_DIR";
 pub(super) fn persist_models_dir(path: &Path) -> Result<(), PathError> {
     let serialized = path.to_string_lossy().to_string();
     persist_env_value(MODELS_DIR_KEY, &serialized)
+}
+
+/// Remove the models directory [`persist_models_dir`] stored, every line
+/// of it, so the next resolution falls through to the default.
+pub(super) fn forget_models_dir() -> Result<(), PathError> {
+    remove_env_value(MODELS_DIR_KEY)
 }
 
 /// The models directory [`persist_models_dir`] stored, if `.env` holds one.

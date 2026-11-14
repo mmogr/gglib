@@ -1,4 +1,4 @@
-//! End to end: what a turn generated is read back off `/v1/proxy/status`,
+//! End to end: what a turn generated is read back off `/v1/gglib/proxy/status`,
 //! on the turn's own entry in `recent_requests`.
 //!
 //! The unit tests prove the drain's count and the store's write. These prove
@@ -75,7 +75,7 @@ async fn entry_after_a_turn(
     let mut entry = Value::Null;
     for _ in 0..50 {
         let status: Value = client
-            .get(format!("{proxy_url}/v1/proxy/status"))
+            .get(format!("{proxy_url}/v1/gglib/proxy/status"))
             .send()
             .await
             .expect("status request")
@@ -229,7 +229,7 @@ async fn reply_past_its_reasoning(
 
 /// The one entry in `base`'s `recent_requests`.
 async fn the_entry(base: &str) -> Value {
-    let status: Value = reqwest::get(format!("{base}/v1/proxy/status"))
+    let status: Value = reqwest::get(format!("{base}/v1/gglib/proxy/status"))
         .await
         .expect("status request")
         .json()

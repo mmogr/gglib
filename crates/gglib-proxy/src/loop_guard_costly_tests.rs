@@ -1,7 +1,7 @@
 //! Observation tools that are read-only *here* but not free to repeat.
 //!
-//! A fifth test module because `loop_guard_tests.rs` is frozen at its current
-//! size by the complexity ratchet. Helpers are duplicated for the same reason.
+//! A fifth test module beside `loop_guard_tests.rs`. Helpers are duplicated
+//! from it.
 //!
 //! These are the probes from [#944](https://github.com/mmogr/gglib/issues/944),
 //! turned into regressions. Before the costly split they all read `Pass` at 60

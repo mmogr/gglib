@@ -628,14 +628,16 @@ mod tests {
     /// it has to be safe on hardware it knows nothing about. `None` is a real
     /// answer here — it means gglib keeps one model resident, which is always
     /// correct — and a panic or a hang would take the request path with it.
+    /// So is 0: a GPU another program has filled has nothing free, and a
+    /// co-load refused then is the right answer.
     #[test]
     fn free_gpu_memory_is_answerable_on_any_machine() {
         let first = free_gpu_memory_bytes();
 
-        // A reading, if there is one, must be a plausible figure rather than a
-        // wrapped or zeroed one.
-        if let Some(bytes) = first {
-            assert!(bytes > 0, "a zero reading would refuse every co-load");
+        // A reading, if there is one, is of the device the total describes:
+        // never more than it holds, as a wrapped figure would be.
+        if let (Some(free), Some(total)) = (first, total_device_memory_bytes()) {
+            assert!(free <= total, "{free} free of a {total}-byte device");
         }
 
         // Cached for `FREE_VRAM_TTL`, so a burst of admissions costs one probe.

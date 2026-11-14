@@ -2,7 +2,7 @@
 //!
 //! Inputs come from the raw GGUF key/value map that `gglib-gguf` copies
 //! verbatim into [`crate::domain::Model::metadata`] — the same pattern as
-//! [`crate::domain::estimate_kv_elems_per_token`] and
+//! [`crate::domain::estimate_kv_shape`] and
 //! [`crate::domain::kv_memory_is_partial`], and this module sits beside them
 //! for that reason.
 //!

@@ -80,6 +80,10 @@ its own module docs; this list is the index, not the source of truth.
 one lands it is Tier A, and the tag is noted here so that classification is
 decided before the code exists rather than after.
 
+> **Amended 2026-11-13.** Tier A is empty: `delimited`, `oneshot`,
+> `constrain` and `format:think-tag` are deleted (ADR 0002 and ADR 0022, same
+> date). Tier C keeps `normalize::residue`; `grammar_enforced` is gone.
+
 ### Tier B — Policy
 
 llama.cpp will never do this, structurally. **Permanently gglib's.**
@@ -142,6 +146,13 @@ separate, evidence-backed, and reversible.
 > self-report used as a policy input** — and carries its rules: snapshotted
 > once per launch, provenance whenever it changes an outcome, and unknown
 > never gates.
+
+> **Amended 2026-11-12.** The example has gone: gglib no longer suppresses a
+> resolved `reasoning_effort`, and sends it whatever the caps say (ADR 0007,
+> decision 3's amendment). The same self-report still gates one thing, stage
+> 1's strip of prior reasoning, which keeps that reasoning only where the caps
+> say `supports_preserve_reasoning`
+> ([ADR 0020](0020-prior-reasoning-is-kept-where-the-template-keeps-it.md)).
 
 ### Arbitration is static, resolved once per run
 

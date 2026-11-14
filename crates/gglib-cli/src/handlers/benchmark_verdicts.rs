@@ -1,9 +1,8 @@
 //! The agentic report's three verdict blocks: what the A/A arm says about the
 //! delta, the paired comparison, and whether the positive control moved.
 //!
-//! Split from `benchmark.rs` so the handler stays inside the complexity
-//! ratchet's budget. Each block reads the report and prints; none of them
-//! changes what the report says.
+//! Split from the `benchmark.rs` handler. Each block reads the report and
+//! prints; none of them changes what the report says.
 
 use gglib_core::domain::benchmark::{
     AgenticEvalReport, CONTROL_MIN_COMPOSITE_GAP, ControlVerdict, EFFECT_NOISE_RATIO,

@@ -11,7 +11,7 @@ fn model(id: i64, family: Option<ImageFamily>, links: &[(ComponentRole, &str)]) 
     let mut new = NewModel::new(
         format!("m{id}"),
         PathBuf::from(format!("/models/m{id}.gguf")),
-        12.0,
+        Some(12.0),
         Utc::now(),
     );
     new.image_family = family;

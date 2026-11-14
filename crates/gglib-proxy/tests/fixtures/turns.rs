@@ -1,5 +1,5 @@
 //! A stand-in for the daemon's agent-run starter, for the proxy's
-//! `PUT /v1/runs/{id}?kind=agent` tests. Records every turn it is handed and
+//! `PUT /v1/gglib/runs/{id}?kind=agent` tests. Records every turn it is handed and
 //! answers from a script.
 
 use std::collections::BTreeSet;
@@ -84,12 +84,20 @@ pub(crate) async fn serve(
     turns: Option<Arc<FakeTurns>>,
     runs: Arc<FakeRuns>,
 ) -> (String, tokio_util::sync::CancellationToken) {
+    serve_holding(DevicePorts {
+        runs: Some(runs as Arc<dyn RunsPort>),
+        turns: turns.map(|t| t as Arc<dyn AgentRunStarter>),
+        ..DevicePorts::default()
+    })
+    .await
+}
+
+/// The real proxy holding `devices`, demanding no key.
+pub(crate) async fn serve_holding(
+    devices: DevicePorts,
+) -> (String, tokio_util::sync::CancellationToken) {
     let access = ProxyAccessConfig::new(CorsConfig::LocalOnly, None, "127.0.0.1", vec![])
-        .with_devices(DevicePorts {
-            runs: Some(runs as Arc<dyn RunsPort>),
-            turns: turns.map(|t| t as Arc<dyn AgentRunStarter>),
-            ..DevicePorts::default()
-        });
+        .with_devices(devices);
     let (base, _, cancel) = super::access::spawn_proxy(access).await;
     (base, cancel)
 }

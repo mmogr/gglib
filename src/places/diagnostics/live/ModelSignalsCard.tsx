@@ -24,7 +24,6 @@ export const hasSignal = (c: ModelDefectCounts): boolean =>
     c.empty_responses,
     c.dialect_residue,
     c.unvalidatable_schemas,
-    c.normalization_errors,
     c.identical_result_repeats,
     c.repeats_not_evaluated,
     c.repeats_rescued,
@@ -118,7 +117,6 @@ export const ModelSignalsCard: FC<{ model: string; counts: ModelDefectCounts }> 
         ['Truncated at ceiling', c.truncated_generations],
         ['Dialect residue', c.dialect_residue],
         ['Unvalidatable schemas', c.unvalidatable_schemas],
-        ['Normalization errors', c.normalization_errors],
       ])}
       {c.empty_responses > 0 && (
         <Row

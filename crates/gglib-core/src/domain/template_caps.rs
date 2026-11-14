@@ -160,8 +160,9 @@ pub enum Support {
 ///
 /// [`Support::Unknown`] both when no caps were ever recorded (`None` — the
 /// tri-state's "never observed") and when the recorded caps did not carry the
-/// field. Only an explicit `false` answers [`Support::No`] — the arm ADR
-/// 0007's suppression (a later PR) is allowed to act on.
+/// field. Only an explicit `false` answers [`Support::No`]. Nothing edits a
+/// request on it: a resolved level is sent either way, and a template that
+/// does not read it ignores it. Surfaces read it to hide the control.
 #[must_use]
 pub fn reasoning_effort_support(caps: &Option<TemplateCaps>) -> Support {
     match caps.as_ref().and_then(|c| c.supports_reasoning_effort) {

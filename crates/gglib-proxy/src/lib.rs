@@ -31,15 +31,19 @@ pub(crate) mod connections;
 pub mod dashboard;
 pub(crate) mod embeddings;
 pub(crate) mod fallback_session;
-// Test-only: the published error codes' table and the checks that hold it to
-// the source and to docs/error-codes.json.
-#[cfg(test)]
-mod error_codes;
+// The published error codes' table, and in test builds the checks that hold
+// it to the source and to docs/error-codes.json.
+pub mod error_codes;
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
+// The edits a streamed frame takes on its way to the client.
+pub(crate) mod frame_edit;
 pub(crate) mod generation;
 pub(crate) mod host_facts;
 pub(crate) mod image_refusal;
+// llama-server's frames, as the drain tests feed them.
+#[cfg(test)]
+pub(crate) mod llama_frame_fixtures;
 // Public: the daemon mounts the same handler at `/api/images/generations`.
 pub mod images;
 pub(crate) mod images_stream;
@@ -58,6 +62,7 @@ pub(crate) mod models_endpoint;
 pub(crate) mod observers;
 pub(crate) mod profiles;
 pub mod props;
+pub(crate) mod refusal;
 pub(crate) mod remote;
 pub mod repair;
 pub(crate) mod router;
@@ -77,11 +82,10 @@ pub(crate) mod slots_poller;
 pub(crate) mod sse_stream;
 pub mod template_caps_read;
 pub(crate) mod token_calibration;
-// Test builds only, like `error_codes` above, but public under
+// Test builds only, but public under
 // `test-support`: `gglib-cli`'s tests read the list as well as this crate's.
 #[cfg(any(test, feature = "test-support"))]
 pub mod tunnel_routes;
-pub(crate) mod turn_dialect;
 pub(crate) mod unary_body;
 
 pub(crate) mod upstream_health;
@@ -92,7 +96,7 @@ pub(crate) mod upstream_read;
 mod upstream_shape_tests;
 pub(crate) mod usage_reading;
 
-// What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
+// What `POST /v1/gglib/models/{name}/load` answers, for a paired machine that reads it.
 pub use host_facts::{FreeDiskReader, HostFacts, MachineNameReader};
 pub use load_endpoint::LoadResponse;
 pub use observers::ProxyObservers;

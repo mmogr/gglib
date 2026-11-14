@@ -9,7 +9,7 @@ use crate::daemon_client::STAND_IN_PORT;
 use crate::handlers::agent_chat::turn::turn_stand_in::{Answer, stand_in};
 use gglib_core::domain::runs::RunStatus;
 
-/// `gglib q -Q -m qwen [--no-tools] --file <notes> "what is this?"`: a
+/// `gglib q --quiet -m qwen [--no-tools] --file <notes> "what is this?"`: a
 /// file, so that nothing is read from the test's stdin.
 fn question(no_tools: bool, notes: &std::path::Path) -> QuestionArgs {
     QuestionArgs {
@@ -26,7 +26,7 @@ fn question(no_tools: bool, notes: &std::path::Path) -> QuestionArgs {
         show_prompt: false,
         verbose: false,
         quiet: true,
-        sampling: SamplingArgs::default(),
+        sampling: ChatSamplingArgs::default(),
         profile: None,
     }
 }
@@ -41,7 +41,8 @@ async fn asked(no_tools: bool) -> (gglib_core::domain::chat::Conversation, Value
     let args = question(no_tools, &notes);
     let ctx = test_context(dir.path()).await;
     let path = dir.path().join("qwen.gguf");
-    let model = gglib_core::domain::NewModel::new("qwen".to_owned(), path, 8.0, chrono::Utc::now());
+    let model =
+        gglib_core::domain::NewModel::new("qwen".to_owned(), path, Some(8.0), chrono::Utc::now());
     ctx.app.models().add(model).await.expect("registered");
     let (port, taken) = stand_in(Answer::Runs {
         frames: vec![json!({"type": "final_answer", "content": "A cat."}).to_string()],
@@ -95,4 +96,29 @@ async fn the_questions_turn_says_the_folder_it_was_asked_in() {
     assert!(content.contains("what is this?"), "{content}");
     assert!(content.contains("a cat on a mat"), "{content}");
     assert_eq!(body["folder"], json!(here));
+}
+
+/// A question asked with `--no-tools` is told of no tool and no folder, and
+/// one asked with its tools is told of both.
+#[tokio::test]
+async fn a_question_without_tools_is_not_told_it_has_them() {
+    let here = std::env::current_dir().unwrap().display().to_string();
+    let (plain, _) = asked(false).await;
+    let (toolless, _) = asked(true).await;
+
+    let told = plain.system_prompt.unwrap_or_default();
+    assert!(told.contains("read_file"), "{told}");
+    assert!(told.contains(&here), "{told}");
+
+    let told = toolless.system_prompt.unwrap_or_default();
+    for named in [
+        "read_file",
+        "list_directory",
+        "grep_search",
+        "codebase",
+        &here,
+    ] {
+        assert!(!told.contains(named), "{named} in: {told}");
+    }
+    assert!(told.contains("no tools"), "{told}");
 }

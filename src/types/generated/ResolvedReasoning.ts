@@ -13,7 +13,7 @@ import type { EffortRung } from "./EffortRung";
  */
 export type ResolvedReasoning = { 
 /**
- * The resolved level, suppressed or not.
+ * The resolved level.
  */
 effort: EffortRung | null, 
 /**

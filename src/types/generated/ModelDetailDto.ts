@@ -17,7 +17,7 @@ import type { Support } from "./Support";
  * - CLI: `gglib model inspect` (human-readable or `--json`)
  * - Axum: `GET /api/models/:id/detail`
  * - GUI frontend: model detail panel
- * - Proxy: `GET /v1/models/{name}/detail`, inside a [`ModelLookup`], with
+ * - Proxy: `GET /v1/gglib/models/{name}/detail`, inside a [`ModelLookup`], with
  *   [`Self::file_path`] and [`Self::port`] left out
  *
  * # Not a superset of `GuiModel`
@@ -66,9 +66,9 @@ components: Array<ComponentLinkDto>,
  */
 missingComponents: Array<ComponentRole>, 
 /**
- * Parameter count in billions.
+ * Parameter count in billions, when it is known.
  */
-paramCountB: number, 
+paramCountB?: number, 
 /**
  * Model architecture (e.g. `"llama"`, `"mistral"`).
  */
@@ -159,9 +159,8 @@ defaultsOrigin?: DefaultsOrigin,
  * A `bool` would collapse `unknown` into `false`, and a client would then
  * grey out the reasoning control on every unlaunched model — the
  * unknown-gates mistake ADR 0007 decision 3 forbids the server to make,
- * reproduced one layer out. The server's own suppression acts only on
- * [`Support::No`]; a surface should offer the control on `yes` and
- * `unknown` alike, and explain itself on `no`.
+ * reproduced one layer out. A surface should offer the control on `yes`
+ * and `unknown` alike, and explain itself on `no`.
  *
  * # Why the one field and not the whole caps object
  *
@@ -175,7 +174,6 @@ defaultsOrigin?: DefaultsOrigin,
  * should get its own endpoint rather than a `serde` alias on this one.
  *
  * [`Support`]: gglib_core::domain::Support
- * [`Support::No`]: gglib_core::domain::Support::No
  */
 reasoningEffortSupport: Support, 
 /**

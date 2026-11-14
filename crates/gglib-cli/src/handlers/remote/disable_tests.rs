@@ -1,9 +1,8 @@
 //! Tests for what `gglib remote disable` prints, and for the switch it clears
 //! with no daemon running.
 //!
-//! A `#[path]` sibling of `disable.rs` rather than an inline `mod tests`,
-//! because the two together would cross the 300-line budget — the same split
-//! `wire_tests.rs` and `serve_switch.rs` were made along.
+//! A `#[path]` sibling of `disable.rs` rather than an inline `mod tests`, the
+//! house layout.
 
 use gglib_core::SettingsUpdate;
 use gglib_core::secret::SettingSecret;

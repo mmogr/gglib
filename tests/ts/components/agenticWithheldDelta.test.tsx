@@ -11,7 +11,6 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { AgenticReportVerdicts } from '../../../src/places/diagnostics/benchmarks/Agentic/AgenticReportVerdicts';
-import { effectVerdict } from '../../../src/places/diagnostics/benchmarks/Agentic/verdicts';
 import type { AgenticEvalReport, ArmDelta, ArmScores } from '../../../src/types/benchmark';
 import { agenticReport, armDelta, armScores } from '../fixtures/agentic';
 
@@ -69,17 +68,22 @@ describe('AgenticReportVerdicts — withheld delta', () => {
    * The drift ratio is built on the composite delta. Computing it from a
    * diluted effect yields a confident number about two things that are not the
    * same — which is how a contaminated -0.058 was reported as "8.3x the drift".
+   * The daemon serves no verdict then (`effect_verdict` is null, its rule's
+   * guard), and the page says none.
    */
-  it('withholds the drift verdict along with the delta it is built on', () => {
+  it('shows no drift verdict where the daemon serves none', () => {
     const contaminated = report(withheldDelta, arm(0.889, { unmeasured_runs: 5 }));
-    expect(effectVerdict(contaminated)).toBeNull();
+    const { unmount } = render(<AgenticReportVerdicts report={contaminated} />);
+    expect(screen.queryByText(/Effect (exceeds|is within)/)).not.toBeInTheDocument();
+    unmount();
 
-    // Same arms, same drift, delta present: the verdict is computable again,
-    // which is what proves the guard above is doing the work.
-    const measurable = report(
-      { ...withheldDelta, composite: -0.058, withheld: null },
-      arm(0.889),
-    );
-    expect(effectVerdict(measurable)).not.toBeNull();
+    // Same arms, delta present: the daemon's verdict is shown as served.
+    const measurable: AgenticEvalReport = {
+      ...report({ ...withheldDelta, composite: -0.058, withheld: null }, arm(0.889)),
+      effect_verdict: { verdict: 'exceeds_noise', effect: -0.058, noise: 0.007, pairs: 1, bar: 2 },
+    };
+    render(<AgenticReportVerdicts report={measurable} />);
+    expect(screen.getByText(/Effect exceeds the eval’s own drift/)).toBeInTheDocument();
+    expect(screen.getByText(/effect 0\.058, drift 0\.007 \(bar: 2\.0×\)/)).toBeInTheDocument();
   });
 });

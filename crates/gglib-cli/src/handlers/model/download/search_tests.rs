@@ -100,6 +100,35 @@ async fn a_search_lists_every_hit_the_hub_gives() {
     );
 }
 
+/// A hit's quantisations leave out its projector and importance matrix,
+/// and spell each quant one way.
+#[tokio::test]
+async fn a_hits_quantizations_are_its_quants_alone() {
+    let printed = found_text(
+        &Hub::vision(),
+        "vision",
+        10,
+        HfSortField::Downloads,
+        HfModelKind::Chat,
+    )
+    .await
+    .expect("a listing");
+
+    assert_eq!(
+        printed,
+        text(&[
+            "",
+            "📋 Found 1 models:",
+            RULE,
+            " 1. owner/vision-GGUF (↓5 ❤1)",
+            "    Quantizations: Q4_K_M, Q6_K",
+            "",
+            TIPS[0],
+            TIPS[1],
+        ])
+    );
+}
+
 /// A hit's number is led by one space, however many digits it has.
 #[tokio::test]
 async fn a_tenth_hit_is_numbered_as_the_first_is() {
@@ -160,7 +189,6 @@ async fn every_sort_value_is_asked_of_the_hub_as_its_own_order() {
         ("likes", HfSortField::Likes),
         ("created", HfSortField::Created),
         ("updated", HfSortField::Modified),
-        ("modified", HfSortField::Modified),
     ];
     // Every value clap offers is in the table above, so a new one is too.
     let offered: Vec<String> = CliHubSort::value_variants()
@@ -202,6 +230,7 @@ async fn a_sort_value_search_does_not_offer_is_refused_before_the_hub_is_asked()
 
     for value in [
         "trending",
+        "modified",
         "id",
         "alphabetical",
         "lastModified",

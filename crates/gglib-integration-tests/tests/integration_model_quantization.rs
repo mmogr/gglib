@@ -9,6 +9,7 @@ use std::sync::Arc;
 use common::setup_test_pool;
 
 use gglib_core::domain::gguf::GgufValue;
+use gglib_core::ports::huggingface::variants_of;
 use gglib_core::services::{ImportMode, ModelService};
 use gglib_db::SqliteModelRepository;
 use gglib_gguf::{GgufParser, write_gguf};
@@ -151,4 +152,35 @@ async fn a_retag_reads_the_facts_of_a_model_that_has_none() {
     assert_eq!(read.bits_per_weight, Some(8.0));
     let again = service.retag_model(model.id, &parser, false).await.unwrap();
     assert_eq!(again, None, "nothing is left to read");
+}
+
+/// A repository that holds one file labels its variant by the whole file
+/// name, which names no type: the label is kept for the Hub, and the
+/// header's type is what the model shows.
+#[tokio::test]
+async fn a_one_file_repositorys_label_shows_the_headers_type() {
+    let pool = setup_test_pool().await.unwrap();
+    let repo = Arc::new(SqliteModelRepository::new(pool));
+    let service = ModelService::new(repo);
+    let dir = tempfile::tempdir().unwrap();
+
+    let path = dir.path().join("z_image_nsfw_v2-Q8_0.gguf");
+    write_gguf(&path, &[("general.file_type", GgufValue::U32(7))], &[], 0);
+    let variants = variants_of([("z_image_nsfw_v2-Q8_0.gguf", 1)]);
+    let label = variants[0].label.clone();
+    assert_eq!(
+        label, "z_image_nsfw_v2-Q8_0",
+        "the whole name, as the Hub lists it"
+    );
+
+    let mut model = service
+        .import_from_file(&path, &GgufParser::new(), None, ImportMode::Fresh)
+        .await
+        .unwrap();
+    model.variant_label = Some(label.clone());
+    service.update(&model).await.unwrap();
+
+    let read = service.get_by_id(model.id).await.unwrap().unwrap();
+    assert_eq!(read.quant_label(), Some("Q8_0"));
+    assert_eq!(read.variant_label, Some(label), "the Hub's label is kept");
 }

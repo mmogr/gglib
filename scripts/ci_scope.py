@@ -97,7 +97,8 @@ INERT = [
     "eslint.config.js",
     "knip.jsonc",
     # The Homebrew and AUR templates, which release.yml renders after the
-    # builds.
+    # builds, and install.sh. gglib-cli's install_script test reads that
+    # when it runs, and only Linux's `test` runs it.
     "packaging/**",
     # Repository checks and release helpers, run on Linux. gglib-cli's
     # setup_scripts test reads three of them when it runs, and only Linux's

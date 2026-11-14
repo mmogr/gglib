@@ -15,4 +15,9 @@ already linked; an update replaces the set in the transaction that updates
 the row, and drops the `model_files` row of any link it removes or points
 elsewhere (the registrar's record of a companion, by its absolute path).
 
+`SqliteChatHistoryRepository` changes a conversation's settings key by key
+(`conversation_rows`), with `json_set` and `json_remove` on the stored text,
+so a key this build does not know or cannot read stays as it is; text that
+is not a JSON object is left alone and the change refused.
+
 <!-- module-docs:end -->

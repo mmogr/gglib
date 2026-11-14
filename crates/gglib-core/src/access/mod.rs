@@ -47,9 +47,8 @@ pub enum ApiKeySource {
     /// supplied one, and stored in settings.
     Generated,
     /// Minted as [`Self::Generated`] is, but not stored: the settings could
-    /// not be read or written. The daemon's banner prints a key from this
-    /// source and no other, since it is then the only copy; a proxy prints
-    /// none (ADR 0027).
+    /// not be read or written. Nothing prints it (ADR 0027), so its clients
+    /// need a key set by hand.
     GeneratedUnsaved,
     /// No token configured; the endpoint is unauthenticated.
     #[default]

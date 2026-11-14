@@ -71,7 +71,6 @@ pub enum CliHubSort {
     /// Newest first.
     Created,
     /// Most recently changed first.
-    #[value(alias = "modified")]
     Updated,
 }
 

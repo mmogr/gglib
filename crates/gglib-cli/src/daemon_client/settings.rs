@@ -1,6 +1,6 @@
 //! The download queue size, told to the daemon on a [`DaemonHandle`].
 //!
-//! A `gglib config settings` command stores settings in its own process.
+//! A `gglib config set`, `unset` or `reset` stores settings in its own process.
 //! The daemon reads most of them from the store as it uses them, but its
 //! download manager holds the queue size it was given, so a command that
 //! changed the size sends it the size now stored.

@@ -11,10 +11,10 @@
 //!    `--verbose` this way, which left both with no route to debug logging at
 //!    all — not a naming wart, a missing capability.
 //!
-//! 2. **A short flag that means two things among siblings.** Clap rejects two
-//!    `-f`s inside one command and has no opinion whatever about `-f` being
-//!    `--force` under one subcommand and `--file` under the next. Nothing else
-//!    was looking either.
+//! 2. **A short flag that means two things.** Clap rejects two `-f`s inside
+//!    one command and has no opinion whatever about `-f` being `--force` under
+//!    one subcommand and `--file` under the next. Nothing else was looking
+//!    either, so every short is now read across the whole tree.
 //!
 //! Like the other suites here these read the parsed clap model rather than
 //! `--help` text: the flag set is the contract, the rendered help is
@@ -31,15 +31,20 @@ use gglib_cli::Cli;
 
 use flag_surface::descendants;
 
-/// The one short flag that already meant two things among its siblings: `-s`
-/// is `--shards` on `gglib model repair` and `--sort` on `gglib model search`.
-///
-/// Transcribed rather than tolerated in silence, so that the *next* one fails.
-/// It is grandfathered instead of renamed because neither spelling shadows
-/// anything — no global claims `-s`, and no workflow runs both commands in one
-/// breath. The value of the list is that growing it takes a deliberate edit
-/// with a reviewer attached.
-const GRANDFATHERED_SHORT_REUSE: &[(&str, char)] = &[("gglib model", 's')];
+/// Every short flag gglib has, and the one long flag each stands for. Any
+/// other flag is long only.
+const SHORTS: &[(char, &str)] = &[
+    ('c', "context-size"),
+    ('f', "follow"),
+    ('m', "model"),
+    ('n', "limit"),
+    ('o', "output"),
+    ('p', "port"),
+    ('q', "quantization"),
+    ('s', "system-prompt"),
+    ('v', "verbose"),
+    ('y', "yes"),
+];
 
 /// A local flag whose id matches a global's suppresses that global on its
 /// command, silently and completely.
@@ -85,62 +90,60 @@ fn no_subcommand_redeclares_a_global_arg_id() {
 
 /// `-s` should not be `--shards` here and `--sort` there.
 ///
-/// Clap enforces this inside a single command and cannot see across siblings,
-/// which is where the confusion actually lands: a user learns a short form
-/// from one subcommand and carries it to the next one in the same group.
+/// Clap enforces one meaning inside a single command and cannot see across
+/// commands, which is where the confusion lands: a user learns a short form
+/// from one command and carries it to the next. So the whole tree is read,
+/// and each letter must stand for the one long flag [`SHORTS`] gives it.
+/// A letter not in the table is refused too: a new short is a decision for
+/// the table, not for one command.
 #[test]
-fn a_short_flag_means_one_thing_within_a_command_group() {
+fn a_short_flag_means_one_thing_everywhere() {
     let root = Cli::command();
-    let mut groups: Vec<(String, &Command)> = vec![(root.get_name().to_owned(), &root)];
-    groups.extend(
-        descendants(&root)
-            .into_iter()
-            .filter(|(_, cmd)| cmd.has_subcommands()),
-    );
+    let mut commands: Vec<(String, &Command)> = vec![(root.get_name().to_owned(), &root)];
+    commands.extend(descendants(&root));
 
-    let mut divergent = Vec::new();
-    for (path, parent) in groups {
-        for (short, meanings) in shorts_by_meaning(parent) {
-            if meanings.len() < 2 || GRANDFATHERED_SHORT_REUSE.contains(&(path.as_str(), short)) {
-                continue;
-            }
-            let spelled: Vec<String> = meanings
-                .iter()
-                .map(|(long, subs)| format!("--{long} on `{}`", subs.join("`, `")))
-                .collect();
-            divergent.push(format!(
-                "`{path} …`: -{short} is {}",
-                spelled.join(", and ")
-            ));
-        }
-    }
-
-    assert!(
-        divergent.is_empty(),
-        "these short flags mean more than one thing inside a single command \
-         group:\n  {}\n\
-         Give the newcomer its own letter, or none — or, if the clash is \
-         genuinely harmless, name it in GRANDFATHERED_SHORT_REUSE and say why.",
-        divergent.join("\n  ")
-    );
-}
-
-/// For one parent: every short its immediate children declare, mapped to the
-/// long names it stands for and the subcommands that spell it that way.
-fn shorts_by_meaning(parent: &Command) -> BTreeMap<char, BTreeMap<String, Vec<String>>> {
-    let mut by_short: BTreeMap<char, BTreeMap<String, Vec<String>>> = BTreeMap::new();
-    for sub in parent.get_subcommands() {
-        for arg in sub.get_arguments() {
+    let mut found: BTreeMap<char, BTreeMap<String, Vec<String>>> = BTreeMap::new();
+    for (path, cmd) in commands {
+        for arg in cmd.get_arguments() {
             let Some(short) = arg.get_short() else {
                 continue;
             };
-            by_short
+            found
                 .entry(short)
                 .or_default()
                 .entry(arg.get_long().unwrap_or("<positional>").to_owned())
                 .or_default()
-                .push(sub.get_name().to_owned());
+                .push(path.clone());
         }
     }
-    by_short
+
+    let wrong: Vec<String> = found
+        .iter()
+        .flat_map(|(short, meanings)| {
+            let meant = SHORTS
+                .iter()
+                .find(|(s, _)| s == short)
+                .map(|(_, long)| *long);
+            meanings
+                .iter()
+                .filter(move |(long, _)| Some(long.as_str()) != meant)
+                .map(move |(long, paths)| {
+                    format!("-{short} is --{long} on `{}`", paths.join("`, `"))
+                })
+        })
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "these short flags are not the ones the table gives:\n  {}\n\
+         A short flag means one long flag everywhere. Drop the short, or \
+         give the long the table's name; a new letter goes in SHORTS.",
+        wrong.join("\n  ")
+    );
+
+    let unused: Vec<String> = SHORTS
+        .iter()
+        .filter(|(short, _)| !found.contains_key(short))
+        .map(|(short, long)| format!("-{short} (--{long})"))
+        .collect();
+    assert!(unused.is_empty(), "no command has {}", unused.join(", "));
 }

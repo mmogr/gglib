@@ -13,9 +13,9 @@
 # The branch's CHANGELOG.md gets no heading for the stable version: the
 # tag's copy has it, and so does the release page.
 #
-# A candidate comes from main, the next minor's, or from a maintenance line
-# release/X.Y.x, that version's next patch (CONTRIBUTING, "Maintenance
-# lines"); a promotion is the same either way, and it is tag-driven, so
+# A candidate comes from main, the next minor's or major's, or from a
+# maintenance line release/X.Y.x, that version's next patch (CONTRIBUTING,
+# "Maintenance lines"); a promotion is the same either way, and it is tag-driven, so
 # nothing here asks which. Two things do change with two lines out, and
 # scripts/release_lines.py decides both. A blank candidate is refused when
 # more than one version has candidates waiting, since "the newest" would be
@@ -28,9 +28,10 @@
 # opens no pull request. And once a stable version has shipped this way,
 # release-please would next propose rc.N+1 of that same version;
 # release-please.yml sees that and makes the release PR propose the next
-# cycle's rc.1 instead: on main the next minor's after a feat or a breaking
-# change and the next patch's otherwise (the next minor's once the version
-# has a line of its own), on a line its next patch's.
+# cycle's rc.1 instead: on main the next major's after a breaking change
+# once 1.0.0 has shipped, the next minor's after a feat (or a breaking change
+# before 1.0.0) and the next patch's otherwise (the next minor's once the
+# version has a line of its own), on a line its next patch's.
 #
 # The push uses the GitHub App token, as release-tag.yml's tag does:
 # GITHUB_TOKEN may create a ref only at the run's own commit. The release and

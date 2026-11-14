@@ -3,12 +3,9 @@
 //! pairing that did not work ends in, and what a pasted pairing string is
 //! forgiven.
 //!
-//! Beside the module rather than inside it, as most of `remote/` is
-//! written — fourteen of the sixteen other tested files here declare a
-//! sibling, and `connect_dial.rs` and `teardown.rs` do not.
-//! `connect_open.rs` sat at the 300-line budget
-//! `scripts/check_file_size.sh` enforces, with its tests taking a
-//! quarter of it.
+//! Beside the module rather than inside it, as most of `remote/` is written —
+//! fourteen of the sixteen other tested files here declare a sibling, and
+//! `connect_dial.rs` and `teardown.rs` do not.
 
 use super::*;
 use crate::test_support_remote::TICKET_A;

@@ -13,7 +13,7 @@
 //! | History truncation, token calibration | No message history to size a budget against |
 //! | `SamplingLayers` / inference defaults | Nothing is sampled |
 //! | Session ids, KV slot save/restore | An embeddings request is stateless |
-//! | SSE decode/normalize/encode | The endpoint does not stream |
+//! | SSE decode/encode | The endpoint does not stream |
 //! | `{model}:{profile}` routing | Profiles only carry sampling parameters |
 //! | Transparent restart-and-retry | That exists because the VS Code LLM Gateway treats 503 as terminal; an embeddings client has no such constraint, and a retry that re-embeds is the caller's to decide |
 //!
@@ -33,6 +33,7 @@
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::State;
+use axum::extract::rejection::BytesRejection;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use tracing::{debug, error, info};
@@ -41,7 +42,6 @@ use crate::dashboard::CacheStatus;
 use crate::forward::should_forward_header;
 use crate::models::{EmbeddingsRoutingEnvelope, ErrorResponse};
 use crate::server::{AppState, handle_runtime_error, refuse_unresolved};
-use crate::turn_dialect::TurnDialect;
 use crate::unary_body::{Exchange, answer_with, exchange};
 use gglib_core::domain::capability_tags;
 
@@ -54,9 +54,15 @@ use gglib_core::domain::capability_tags;
 pub(crate) async fn embeddings(
     State(state): State<AppState>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<Bytes, BytesRejection>,
 ) -> Response {
     debug!("POST /v1/embeddings");
+    let body = match body {
+        Ok(body) => body,
+        Err(rejection) => {
+            return crate::refusal::unreadable(rejection.status(), rejection.body_text());
+        }
+    };
 
     // Only `model` is parsed. Both `input` shapes — a bare string and an array
     // of strings — plus `encoding_format` and anything llama-server grows
@@ -140,7 +146,7 @@ pub(crate) async fn embeddings(
         state.dashboard.launch.set(narration);
     }
 
-    // Registered so embeddings traffic appears in `/v1/proxy/status` rather
+    // Registered so embeddings traffic appears in `/v1/gglib/proxy/status` rather
     // than looking like an idle proxy that is mysteriously busy. The guard
     // unregisters on drop, including on every early return below — and, since
     // it carries the admission lease, releases the model's VRAM slot with it.
@@ -175,20 +181,11 @@ pub(crate) async fn embeddings(
     }
 
     // Within the same total bound as a chat completion that does not stream.
-    // A non-2xx is passed through verbatim, including llama-server's own 501
-    // for a server that was not started with `--embeddings`. No dialect: an
-    // embeddings body has no `choices`, so normalization is a no-op.
+    // A non-2xx keeps its status and llama-server's own words, such as the
+    // 501 of a server that was not started with `--embeddings`.
     let request = req_builder.body(body);
     let (bound, cache_metrics) = (state.stream_bounds.unary, &state.dashboard.cache_metrics);
-    match exchange(
-        request,
-        bound,
-        cache_metrics,
-        &TurnDialect::parsed(None),
-        None,
-    )
-    .await
-    {
+    match exchange(request, bound, cache_metrics, None).await {
         Exchange::Answered(content_type, body) => answer_with(content_type, body),
         Exchange::Respond(response) => response,
         Exchange::SendFailed(e) => {

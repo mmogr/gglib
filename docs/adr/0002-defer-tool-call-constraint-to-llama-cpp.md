@@ -1,6 +1,6 @@
 # ADR 0002 — Defer tool-call argument constraint to llama.cpp
 
-- **Status:** Accepted
+- **Status:** Accepted; stage 6 and the dialect parser superseded (amended 2026-11-13)
 - **Date:** 2026-08-08 (amended 2026-08-09 with a second dialect family)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md)
 - **Supersedes:** nothing
@@ -13,6 +13,16 @@
 > **Amended 2026-10-31.** The follow-ups are settled. The inert module goes
 > quiet and is watched, as ADR 0022 decided; nothing more is filed upstream;
 > no third dialect is measured for its own sake. See Follow-ups.
+
+> **Amended 2026-11-13.** `constrain.rs` (stage 6) and gglib's dialect parser
+> are deleted. A `"required"` or named `tool_choice` reaches llama-server as
+> the client sent it: llama-server writes the grammar for `"required"` and
+> parses the calls, and a named function is no longer enforced by gglib.
+> Markup llama-server leaves in content reaches the client as text, where the
+> residue scanner counts it. `GGLIB_DISABLE_GRAMMAR`,
+> `GGLIB_DISABLE_DIALECT_PARSER` and `GGLIB_MAX_GRAMMAR_TOOL_CALLS` are gone.
+> Validation and repair (decision 3) stay. The criterion quoted under Context
+> is kept as written, for the readings that cite it.
 
 ## Context
 

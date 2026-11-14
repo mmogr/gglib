@@ -1,9 +1,6 @@
-//! Tests for the pairing screen's painting: nothing painted scrolls or
-//! erases the display, a tick rewrites only what changed, and leaving gives
-//! the terminal back.
-//!
-//! Beside `pairing_layout_tests.rs` rather than in it, for the 300-line
-//! budget.
+//! Tests for the pairing screen's painting: nothing painted scrolls or erases
+//! the display, a tick rewrites only what changed, and leaving gives the
+//! terminal back.
 
 use super::super::pairing_tui::qr;
 use super::pairing_layout_tests::{frame, offer, painted, pairing};

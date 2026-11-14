@@ -6,10 +6,10 @@
  *
  * [`TemplateCapsState`]'s discipline carried one level up, and the reason it
  * is a type rather than an `Option<bool>`: "the template does not read it" and
- * "nobody has looked yet" license opposite actions. The first is what the
- * suppression gate acts on; the second must never be, and a surface that
- * renders them the same way has re-introduced exactly the collapse ADR 0007
- * decision 3 forbids.
+ * "nobody has looked yet" license opposite readings. The first lets a
+ * surface say the template ignores the level; the second must never, and a
+ * surface that renders them the same way has re-introduced exactly the
+ * collapse ADR 0007 decision 3 forbids.
  *
  * Three distinct causes fold into [`Self::NotYetObserved`] — no read yet, a
  * read that failed, and a caps object that did not carry the field — so each

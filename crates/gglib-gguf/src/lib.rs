@@ -25,9 +25,6 @@ pub use parser::GgufParser;
 pub use gglib_core::domain::gguf::GgufValue;
 pub use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort};
 
-// Re-export tool support detector
-pub use capabilities::tool_calling::ToolSupportDetector;
-
 // A chat rendered through its template as the pinned llama-server renders it.
 pub use render::{ChatKwargs, ChatMessage, ChatTemplate, RenderError, VocabTokens, render_chat};
 

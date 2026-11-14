@@ -16,6 +16,6 @@ import type { SettingSecret } from '../types/generated/SettingSecret';
 export const PROXY_API_KEY: SecretRef = { kind: 'setting', secret: 'proxy_api_key' };
 
 export const REVEAL_COMMAND: Record<SettingSecret, string> = {
-  proxy_api_key: 'gglib config settings reveal proxy-api-key',
-  remote_pairing_key: 'gglib config settings reveal remote-pairing.api-key',
+  proxy_api_key: 'gglib config reveal proxy-api-key',
+  remote_pairing_key: 'gglib config reveal remote-pairing.api-key',
 };

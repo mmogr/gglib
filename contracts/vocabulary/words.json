@@ -111,10 +111,6 @@
     {
       "state": "failed",
       "word": "Failed"
-    },
-    {
-      "state": "unsupported",
-      "word": "Not supported yet"
     }
   ],
   "fast_downloads": [

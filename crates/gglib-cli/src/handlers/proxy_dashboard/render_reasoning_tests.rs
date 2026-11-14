@@ -1,7 +1,7 @@
 //! Tests for [`super`] — the reasoning-control section.
 //!
 //! Nearly every assertion here is about a *distinction* rather than a value:
-//! unknown against no, suppressed against sent, a bound that fired against one
+//! unknown against no, a bound that fired against one
 //! that never did. That is what the section is for.
 
 use super::super::DEFAULT_TERM_WIDTH;
@@ -33,10 +33,7 @@ fn a_template_nobody_has_asked_about_is_not_rendered_as_unsupported() {
 
     assert!(rendered.contains("not observed"), "{rendered}");
     assert!(rendered.contains("/props"), "{rendered}");
-    assert!(
-        !rendered.contains("suppressed before sending"),
-        "{rendered}"
-    );
+    assert!(!rendered.contains("ignores it"), "{rendered}");
 }
 
 /// A state this build cannot read is another way of not having observed one.
@@ -55,11 +52,10 @@ fn a_state_this_build_does_not_recognise_reads_as_unobserved() {
     assert!(rendered.contains("not observed"), "{rendered}");
 }
 
-/// The suppressed marker is what keeps the line honest: without it the
-/// dashboard reports a level that was deleted before sending as though
-/// llama-server had received it, and no readback can contradict that.
+/// A template that does not read the level still has it sent: the line says
+/// the template ignores it, and prints the level and its rung as resolved.
 #[test]
-fn a_suppressed_level_is_printed_with_its_rung_and_its_marker() {
+fn a_level_the_template_ignores_is_printed_with_its_rung() {
     let rendered = render_reasoning_section(
         Some(&audit(Reasoning {
             effort_support: EffortSupport::NotSupported,
@@ -67,7 +63,6 @@ fn a_suppressed_level_is_printed_with_its_rung_and_its_marker() {
                 effort: Some(EffortRung {
                     level: "high".to_string(),
                     source: "profile".to_string(),
-                    suppressed: true,
                 }),
                 budget: None,
             }),
@@ -77,7 +72,7 @@ fn a_suppressed_level_is_printed_with_its_rung_and_its_marker() {
     );
 
     assert!(rendered.contains("high (profile)"), "{rendered}");
-    assert!(rendered.contains("suppressed"), "{rendered}");
+    assert!(rendered.contains("ignores it"), "{rendered}");
     // The blindness is printed beside the value it qualifies.
     assert!(rendered.contains("echoes neither"), "{rendered}");
 }

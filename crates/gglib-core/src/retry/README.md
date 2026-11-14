@@ -56,9 +56,6 @@ standard behaviour rather than disabling retry. Shortening the deadline pulls
 overrun the budget and silently turn retrying off for someone who thought they
 were only tightening it.
 
-`RetryPolicy::disabled()` is the one-attempt policy, asked for by name rather
-than by knowing that `max_attempts: 1` means "off".
-
 # Who uses this, and who deliberately does not
 
 gglib is periodically observed to have "five retry implementations with only
@@ -83,8 +80,7 @@ about them.
   model, then issues one attempt against a **fresh admission, lease and
   settings snapshot**.
 - `gglib-proxy` `forward.rs`, the tool-call repair: one attempt with a
-  **re-issued request body** (`tool_choice: "required"`, or the same body again
-  under gglib's own grammar), bounded by its own
+  **re-issued request body** (`tool_choice: "required"`), bounded by its own
   timeout because it runs while the client is receiving nothing.
 
 Unifying either of those under a backoff policy would be a category error:

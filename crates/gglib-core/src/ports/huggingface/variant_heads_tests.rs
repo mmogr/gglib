@@ -126,7 +126,7 @@ async fn a_known_role_is_not_read_again() {
 }
 
 fn stored(variant_label: Option<&str>, hf_filename: Option<&str>, path: &str) -> Model {
-    let mut new = NewModel::new("m".to_owned(), PathBuf::from(path), 7.0, Utc::now());
+    let mut new = NewModel::new("m".to_owned(), PathBuf::from(path), Some(7.0), Utc::now());
     new.variant_label = variant_label.map(str::to_owned);
     new.hf_filename = hf_filename.map(str::to_owned);
     Model::stored(1, &new)

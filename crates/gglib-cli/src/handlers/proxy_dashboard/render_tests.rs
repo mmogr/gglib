@@ -72,7 +72,7 @@ fn render_frame_shows_placeholder_when_no_connections() {
         recent_requests: vec![],
     };
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         DEFAULT_TERM_WIDTH,
     );
@@ -110,7 +110,7 @@ fn render_frame_shows_connection_and_slot_bars() {
         recent_requests: vec![],
     };
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         DEFAULT_TERM_WIDTH,
     );
@@ -147,7 +147,7 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
     };
     let width = 80u16;
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         width,
     );
@@ -208,7 +208,7 @@ fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
     };
     let term_width = 40u16;
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         term_width,
     );
@@ -289,7 +289,7 @@ fn admission_section_names_each_resident_and_its_role() {
                 state: gglib_core::domain::ResidencyState::Working,
                 inflight: 2,
                 is_primary: true,
-                resident_for_secs: 95,
+                resident_for: "1m 35s".to_string(),
                 launch: None,
             },
             ResidentSlotSnapshot {
@@ -297,7 +297,7 @@ fn admission_section_names_each_resident_and_its_role() {
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: false,
-                resident_for_secs: 30,
+                resident_for: "30s".to_string(),
                 launch: None,
             },
         ],
@@ -326,7 +326,7 @@ fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: true,
-                resident_for_secs: 95,
+                resident_for: "1m 35s".to_string(),
                 launch: Some(LaunchLine {
                     flag_line: flag_line.clone(),
                 }),
@@ -336,7 +336,7 @@ fn admission_section_prints_the_launch_line_under_a_resident_that_has_one() {
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: false,
-                resident_for_secs: 30,
+                resident_for: "30s".to_string(),
                 launch: None,
             },
         ],
@@ -382,7 +382,7 @@ fn a_long_launch_line_is_clipped_to_the_terminal() {
                 state: gglib_core::domain::ResidencyState::Loaded,
                 inflight: 0,
                 is_primary: true,
-                resident_for_secs: 1,
+                resident_for: "1s".to_string(),
                 launch: Some(LaunchLine {
                     flag_line: "x".repeat(400),
                 }),
@@ -435,7 +435,7 @@ fn admission_section_reports_queue_depth_and_the_oldest_wait() {
         queued: vec![QueuedModelSnapshot {
             model_name: "nomic-embed".to_string(),
             waiting: 4,
-            oldest_wait_ms: 95_000,
+            oldest_wait: "1m 35s".to_string(),
         }],
         total_swaps: 3,
         ..Default::default()
@@ -517,7 +517,10 @@ fn cache_section_shows_reuse_totals_with_separators() {
         last_cached_tokens: Some(9_500),
         ..CacheUsage::default()
     })));
-    assert!(frame.contains("29,450 of 30,342 prompt tokens"), "{frame}");
+    assert!(
+        frame.contains("29,450 of 30,342 prompt tokens in 3 requests"),
+        "{frame}"
+    );
     assert!(
         frame.contains("9,500 of 10,000 tokens from cache"),
         "{frame}"
@@ -550,7 +553,7 @@ fn cache_section_distinguishes_no_activity_from_a_measured_zero() {
         "{measured_zero}"
     );
     assert!(
-        measured_zero.contains("0 of 5,000 prompt tokens"),
+        measured_zero.contains("0 of 5,000 prompt tokens in 1 request\n"),
         "{measured_zero}"
     );
 }
@@ -660,7 +663,7 @@ fn the_recent_requests_sit_before_the_total() {
         }],
     };
     let frame = render_frame(
-        "http://127.0.0.1:8123/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/gglib/proxy/status/stream",
         &snapshot,
         DEFAULT_TERM_WIDTH,
     );

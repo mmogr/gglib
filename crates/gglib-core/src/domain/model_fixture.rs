@@ -35,7 +35,6 @@ impl Model {
             inference_defaults: new.inference_defaults.clone(),
             defaults_origin: new.defaults_origin,
             server_defaults: new.server_defaults.clone(),
-            dialect_spec: new.dialect_spec.clone(),
             template_caps: None,
             benchmark_summary: None,
             image_family: new.image_family,

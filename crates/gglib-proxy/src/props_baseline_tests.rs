@@ -1,6 +1,4 @@
 //! Tests for [`super::BaselineReport`]: coverage, drift, and per-field verdicts.
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 use gglib_core::domain::InferenceConfig;

@@ -5,9 +5,8 @@
 //! (`super::turn`), and renders each event through the
 //! [`super::renderer`] and [`super::thinking_dispatch`] modules.
 //!
-//! Inline `<think>` reclassification is handled upstream by
-//! [`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
-//! drain only consumes already-typed [`AgentEvent::ReasoningDelta`] /
+//! llama-server splits reasoning from the answer upstream, so this drain
+//! only consumes already-typed [`AgentEvent::ReasoningDelta`] /
 //! [`AgentEvent::TextDelta`] events.
 
 use std::io::{self, IsTerminal, Write as _};

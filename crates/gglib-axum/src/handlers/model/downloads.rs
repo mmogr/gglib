@@ -10,14 +10,15 @@ use gglib_app_services::types::QueueDownloadResponse;
 use gglib_core::download::QueueSnapshot;
 
 /// Request to queue a download.
+///
+/// An unknown field is refused, not ignored: a client still sending the
+/// old `quant` would otherwise queue whatever quantization is chosen.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct QueueDownloadRequest {
     pub model_id: String,
-    /// Quantization to download; left out, one is chosen. The page sends it
-    /// as "quantization" and the CLI as "quant", so both field names are
-    /// accepted.
-    #[serde(alias = "quant")]
+    /// Quantization to download; left out or `null`, one is chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub quantization: Option<String>,
@@ -118,8 +119,7 @@ pub(crate) async fn reorder_full(
 mod tests {
     use super::*;
 
-    /// Contract test: the HTTP API accepts both "quantization", which the
-    /// page sends, and "quant", which the CLI sends.
+    /// The page and the CLI both send "quantization".
     #[test]
     fn queue_request_accepts_quantization_field() {
         let json = serde_json::json!({
@@ -132,25 +132,13 @@ mod tests {
         assert_eq!(req.quantization.as_deref(), Some("Q8_0"));
     }
 
-    #[test]
-    fn queue_request_accepts_quant_field() {
-        let json = serde_json::json!({
-            "model_id": "test/model",
-            "quant": "Q4_K_M"
-        });
-
-        let req: QueueDownloadRequest = serde_json::from_value(json).unwrap();
-        assert_eq!(req.model_id, "test/model");
-        assert_eq!(req.quantization.as_deref(), Some("Q4_K_M"));
-    }
-
     /// The page names no quantization by leaving the key out, and the CLI
     /// by sending its own as `null`.
     #[test]
-    fn queue_request_allows_missing_quant() {
+    fn queue_request_allows_missing_quantization() {
         for json in [
             serde_json::json!({ "model_id": "test/model" }),
-            serde_json::json!({ "model_id": "test/model", "quant": null }),
+            serde_json::json!({ "model_id": "test/model", "quantization": null }),
         ] {
             let req: QueueDownloadRequest = serde_json::from_value(json).unwrap();
             assert_eq!(req.model_id, "test/model");
@@ -158,18 +146,16 @@ mod tests {
         }
     }
 
-    /// When both fields are present, serde rejects the request as a duplicate field error.
-    /// This is the correct behavior - clients should use only one field name.
+    /// `quant` was the CLI's name for it. It is refused by name, rather than
+    /// ignored and the download queued at a quantization nobody asked for.
     #[test]
-    fn queue_request_rejects_both_quant_and_quantization() {
-        let json = serde_json::json!({
-            "model_id": "test/model",
-            "quant": "Q4_K_M",
-            "quantization": "Q8_0"
-        });
+    fn queue_request_refuses_quant() {
+        let json = serde_json::json!({ "model_id": "test/model", "quant": "Q4_K_M" });
 
-        let result: Result<QueueDownloadRequest, _> = serde_json::from_value(json);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("duplicate field"));
+        let refused = serde_json::from_value::<QueueDownloadRequest>(json).unwrap_err();
+        assert!(
+            refused.to_string().contains("unknown field `quant`"),
+            "{refused}"
+        );
     }
 }

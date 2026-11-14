@@ -113,7 +113,7 @@ pub const EVENTS_PATH: &str = "/api/events";
 /// The settings, as the app writes them.
 ///
 /// `PUT` stores the fields its body names and hands what the daemon holds
-/// live the values now stored. A `gglib config settings` command that
+/// live the values now stored. A `gglib config set`, `unset` or `reset` that
 /// stored the download queue size in its own process sends that one field,
 /// so the daemon's queue takes it.
 pub const SETTINGS_PATH: &str = "/api/config/settings";
@@ -187,7 +187,7 @@ pub fn remote_run_cancel_path(id: &str) -> String {
 }
 
 /// Whether the paired machine can draw, read through the tunnel for a far
-/// chat's Draw button: `GET` answers its `/v1/images/drawing`.
+/// chat's Draw button: `GET` answers its `/v1/gglib/images/drawing`.
 pub const REMOTE_IMAGES_DRAWING_PATH: &str = "/api/remote/images/drawing";
 
 /// The paired machine's models, read through the tunnel: `GET` lists every
@@ -385,8 +385,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
 ];
 
 /// The `type` of the daemon's 401 when it wanted its token, so a client can
-/// tell it from the API key's `INVALID_API_KEY` and show
-/// [`DAEMON_TOKEN_REQUIRED_MESSAGE`] rather than ask for a key.
+/// tell it from another program's and show [`DAEMON_TOKEN_REQUIRED_MESSAGE`].
 pub const DAEMON_TOKEN_REQUIRED_TYPE: &str = "DAEMON_TOKEN_REQUIRED";
 
 /// The `error` of that 401: what it wants and how to get it.

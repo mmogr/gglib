@@ -285,7 +285,7 @@ async fn the_chats_model_is_its_id_whatever_it_is_named() {
     let model = gglib_core::domain::NewModel::new(
         "catalogued".to_owned(),
         std::path::PathBuf::from("/models/c.gguf"),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     let model_id = models.add(model).await.unwrap().id;

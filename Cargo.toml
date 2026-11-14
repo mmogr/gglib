@@ -23,13 +23,13 @@ members = [
     "crates/gglib-axum",
     "crates/gglib-ffi",
     "crates/gglib-integration-tests",
-    # Tauri desktop app (gglib-app binary)
+    # Tauri desktop app (package gglib-app, binary gglib-gui)
     "src-tauri",
 ]
 
 # Shared package metadata for all workspace crates
 [workspace.package]
-version = "0.31.0-rc.9"
+version = "0.37.0-rc.1"
 edition = "2024"
 license = "AGPL-3.0-only"
 repository = "https://github.com/mmogr/gglib"

@@ -14,7 +14,6 @@ pub mod defect_counts;
 pub mod defects;
 mod defects_agent;
 pub mod device_budget;
-pub mod dialect;
 pub mod engine_pins;
 pub mod figures;
 mod file_type;
@@ -57,6 +56,8 @@ pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
 pub mod send_line;
 mod server_config;
+pub mod settings_edit;
+pub(crate) mod shard_name;
 pub mod slot_eviction;
 pub mod state_words;
 pub(crate) mod template_caps;
@@ -92,7 +93,7 @@ pub use reasoning_effort::ReasoningEffort;
 
 // Re-export sampling provenance types at the domain level for convenience
 pub use sampling_discards::discarded_from_rung;
-pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
+pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer, source_label};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};
@@ -108,9 +109,7 @@ pub use template_caps::{
 };
 
 // Re-export KV estimation helpers at the domain level for convenience
-pub use kv_estimate::{
-    KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
-};
+pub use kv_estimate::{KvBytes, KvElemsPerToken, KvShape, SlidingWindow, estimate_kv_shape};
 
 // Re-export KV memory-shape detection at the domain level for convenience
 pub use kv_memory::{kv_cache_layer_count, kv_memory_is_partial};
@@ -119,7 +118,9 @@ pub use model_sampling::{
 };
 
 // Re-export launch narration types at the domain level for convenience
-pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};
+pub use launch_narration::{
+    LaunchDecision, LaunchFit, LaunchNarration, format_gib, format_mib_as_gib,
+};
 pub use launch_plan::{ChoiceSource, ContextFit, LaunchArg, LaunchPlan, Unload, UnloadReason};
 
 // Re-export the first-run model recommendation at the domain level.
@@ -135,7 +136,7 @@ pub use variant_fit::VariantFit;
 // Re-export admission-control telemetry at the domain level for convenience
 pub use admission::{
     AdmissionSnapshot, GenerationSnapshot, QueuedModelSnapshot, RenderSnapshot,
-    ResidentSlotSnapshot, SecondarySlotStatus,
+    ResidentSlotSnapshot, SecondarySlotStatus, format_duration_secs,
 };
 pub use launch_facts::{LaunchFacts, flag_line, format_context};
 
@@ -157,8 +158,8 @@ pub use slot_eviction::{SlotFileMeta, compute_auto_disk_budget_bytes, select_evi
 
 // Re-export MCP types at the domain level for convenience
 pub use mcp::{
-    DeviceServers, McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus,
-    McpServerType, McpTool, McpToolResult, NewMcpServer, ToolIndex,
+    DeviceServers, McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpTool,
+    McpToolResult, NewMcpServer, ToolIndex,
 };
 
 // Re-export attachment types at the domain level for convenience
@@ -171,6 +172,7 @@ pub use chat::{
     Conversation, ConversationUpdate, Message, MessageRole, NewConversation, NewMessage,
 };
 pub use conversation_patch::ConversationSettingsPatch;
+pub use settings_edit::SettingsEdit;
 pub use thinking::Thinking;
 
 // Re-export GGUF types at the domain level for convenience
@@ -187,9 +189,6 @@ pub use image_family::{
 };
 pub use intervention::{Intervention, InterventionKind, Refusal};
 pub use runtime_kind::RuntimeKind;
-
-// Re-export dialect types at the domain level for convenience
-pub use dialect::{BodyCodec, DialectSpec, EmissionProfile};
 
 // Re-export model-naming types at the domain level for convenience
 pub use model_naming::{
@@ -215,6 +214,5 @@ pub(crate) use context_fit::SECOND_RUNG;
 pub use context_fit::{FitInputs, fit_context, fit_context_explained};
 pub use generation_config::generation_config_candidates;
 pub use generation_config::parse_generation_config;
-pub use model::is_system_tag;
 pub(crate) use model::missing_roles;
 pub use model_naming::declared_name;

@@ -1,9 +1,7 @@
 //! Tests for [`super::SettingsOps`].
 //!
 //! A `#[path]` sibling rather than an inline `mod tests`, following the split
-//! #860 made across the workspace: the tests outweigh the code they cover and
-//! every line of them counted against the module's size ratchet, which this
-//! module is at.
+//! #860 made across the workspace: the tests outweigh the code they cover.
 //!
 //! Declared as `mod tests`, not `mod settings_tests`, so every test keeps the
 //! path it already had — `settings::tests::…` — and the inventory before and
@@ -169,10 +167,9 @@ fn profiles_use_camel_case_on_the_wire() {
         proxy_cache_disk_gb: None,
         has_proxy_api_key: false,
         trust_client_sampling: None,
-        loop_guard_mode: None,
+        loop_guard: None,
         tool_call_repair: None,
         mcp_drawing: None,
-        agentic_sampling: Some(false),
         proxy_autostart: None,
         close_to_tray: None,
         start_at_login: None,
@@ -186,9 +183,6 @@ fn profiles_use_camel_case_on_the_wire() {
     // to `f64` in JSON, so an exact float compare tests the widening, not
     // the contract.
     assert!(entry["config"]["temperature"].is_number());
-    // Wire visibility is the point of adding agentic_sampling to the
-    // response DTO — a toggle that saves but cannot read back resets.
-    assert_eq!(json["agenticSampling"], false);
 
     // And the update request accepts the same shape back.
     let request: UpdateSettingsRequest = serde_json::from_value(serde_json::json!({
@@ -203,41 +197,6 @@ fn profiles_use_camel_case_on_the_wire() {
     let parsed = request.inference_profiles.flatten().expect("present");
     assert_eq!(parsed[0].name, "chat");
     assert!(!parsed[0].list_in_models);
-}
-
-/// `proxyLoopDetection` was the loop guard's switch before `loopGuardMode`,
-/// and is a key of the request no longer. A client that still sends it, in
-/// either spelling, gets what any key the request does not carry gets: the
-/// key is passed over, the rest of the request is applied, and the loop guard
-/// is left as stored. So `false` no longer switches the guard off;
-/// `loopGuardMode: "off"` does.
-#[tokio::test]
-async fn the_retired_loop_detection_key_is_passed_over_and_the_guard_left_as_stored() {
-    use gglib_core::LoopGuardMode;
-    let still_sent =
-        r#"{"proxyLoopDetection": false, "proxy_loop_detection": false, "proxyPort": 9191}"#;
-    let core = test_core().await;
-    let ops = make_ops(Arc::clone(&core), MockSystemProbePort::default());
-
-    let request: UpdateSettingsRequest = serde_json::from_str(still_sent).expect("accepted");
-    let answered = ops.update(request).await.expect("update should succeed");
-
-    assert_eq!(answered.proxy_port, Some(9191));
-    assert_eq!(answered.loop_guard_mode, None);
-    let stored = core.settings().get().await.expect("settings");
-    assert_eq!(stored.effective_loop_guard_mode(), LoopGuardMode::Note);
-    let wire = serde_json::to_value(&answered).expect("serializes");
-    assert!(wire.get("proxyLoopDetection").is_none(), "nor is it sent");
-
-    ops.update(UpdateSettingsRequest {
-        loop_guard_mode: Some(Some(LoopGuardMode::Refuse)),
-        ..Default::default()
-    })
-    .await
-    .expect("a stored mode");
-    let request: UpdateSettingsRequest = serde_json::from_str(still_sent).expect("accepted");
-    let answered = ops.update(request).await.expect("update should succeed");
-    assert_eq!(answered.loop_guard_mode, Some(LoopGuardMode::Refuse));
 }
 
 #[tokio::test]

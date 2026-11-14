@@ -45,10 +45,6 @@ pub enum McpServiceError {
     #[error("'{0}' is a name gglib keeps for its own tools; choose another name")]
     NameReserved(String),
 
-    /// An SSE server was to be added, changed or run. gglib has no SSE client.
-    #[error("SSE servers are not supported yet; only stdio servers can be run")]
-    SseNotSupported,
-
     /// An environment variable was to be stored with a blank value. A blank
     /// is no secret, and storing one would delete the value an emptied field
     /// stood for (ADR 0027).

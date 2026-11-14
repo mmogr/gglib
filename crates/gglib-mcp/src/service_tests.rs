@@ -41,7 +41,6 @@ impl McpServerRepository for MockMcpRepository {
         let server = McpServer {
             id,
             name: new_server.name,
-            server_type: new_server.server_type,
             config: new_server.config,
             enabled: new_server.enabled,
             allow_remote: false,
@@ -143,13 +142,6 @@ pub(crate) fn stdio(name: &str, command: &str) -> NewMcpServer {
     NewMcpServer::new_stdio(name, command, vec![], None)
 }
 
-fn sse(name: &str) -> NewMcpServer {
-    NewMcpServer::new_sse(name, "http://localhost:3001/sse")
-}
-
-/// What an SSE server is refused with, wherever it is refused.
-const SSE_NOT_SUPPORTED: &str = "SSE servers are not supported yet; only stdio servers can be run";
-
 /// An MCP server for `sh -c`: it answers `initialize` and `tools/list` with
 /// the id it was asked under, and offers one tool.
 #[cfg(unix)]
@@ -216,81 +208,16 @@ async fn adding_a_server_under_a_taken_name_is_refused_and_stores_nothing() {
     assert_eq!(servers[0].config.command, Some("one".to_string()));
 }
 
-#[tokio::test]
-async fn adding_an_sse_server_is_refused_and_stores_nothing() {
-    let (service, _) = service();
-
-    let refused = service.add_server(sse("remote")).await.unwrap_err();
-
-    assert!(matches!(refused, McpServiceError::SseNotSupported));
-    assert_eq!(refused.to_string(), SSE_NOT_SUPPORTED);
-    assert!(service.list_servers().await.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn changing_a_server_to_sse_is_refused_and_changes_nothing() {
-    let (service, repo) = service();
-    let mut server = service.add_server(stdio("files", "one")).await.unwrap();
-    let written = *repo.updates.lock().unwrap();
-
-    server.server_type = McpServerType::Sse;
-    server.config = gglib_core::McpServerConfig::sse("http://localhost:3001/sse");
-    let refused = service.update_server(server.clone()).await.unwrap_err();
-
-    assert_eq!(refused.to_string(), SSE_NOT_SUPPORTED);
-    let stored = service.get_server(server.id).await.unwrap();
-    assert_eq!(stored.server_type, McpServerType::Stdio);
-    assert_eq!(stored.config.command, Some("one".to_string()));
-    assert_eq!(*repo.updates.lock().unwrap(), written);
-}
-
-/// The row is stored by hand, as a database written while SSE servers were
-/// accepted holds one. Whatever would run it or write it says the one
-/// sentence, and none of them is the manager's refusal passed along.
-#[tokio::test]
-async fn a_stored_sse_server_is_listed_as_unsupported_refused_a_run_and_an_edit_and_still_removed()
-{
-    let (service, repo) = service();
-    let mut stored = repo.insert(sse("remote")).await.unwrap();
-    let id = stored.id;
-
-    let listed = service.list_servers_with_status().await.unwrap();
-    assert_eq!(listed.len(), 1);
-    assert_eq!(listed[0].status, McpServerStatus::Unsupported);
-    let info = service.get_server_info(id).await.unwrap();
-    assert_eq!(info.status, McpServerStatus::Unsupported);
-
-    let started = service.start_server(id).await.unwrap_err();
-    assert_eq!(started.to_string(), SSE_NOT_SUPPORTED);
-    let tested = service.test_server(id).await.unwrap_err();
-    assert_eq!(tested.to_string(), SSE_NOT_SUPPORTED);
-    let called = service.call_tool(id, "echo", HashMap::new()).await;
-    assert_eq!(called.unwrap_err().to_string(), SSE_NOT_SUPPORTED);
-
-    stored.enabled = false;
-    let edited = service.update_server(stored).await.unwrap_err();
-    assert_eq!(edited.to_string(), SSE_NOT_SUPPORTED);
-    assert!(service.get_server(id).await.unwrap().enabled);
-    assert_eq!(*repo.updates.lock().unwrap(), 0);
-
-    service.remove_server(id).await.unwrap();
-    assert!(service.list_servers().await.unwrap().is_empty());
-}
-
 /// A start reads the server it is to start by its id before anything else,
-/// and again to resolve its command. Start-up reads the eager stdio server
-/// and the prewarm the lazy one, each to fail on a command that is not
-/// there; neither reads an SSE server, so none is asked for, refused and
-/// warned of.
+/// and again to resolve its command. Start-up reads the eager server and the
+/// prewarm the lazy one, each to fail on a command that is not there.
 #[tokio::test]
-async fn starting_up_and_prewarming_try_each_stdio_server_and_leave_a_stored_sse_server_alone() {
+async fn starting_up_and_prewarming_try_each_server() {
     use gglib_core::McpLifecycle::{Eager, Lazy};
 
     let (service, repo) = service();
     let mut ghosts = Vec::new();
     for lifecycle in [Eager, Lazy] {
-        let remote = sse(&format!("remote-{lifecycle}")).with_lifecycle(lifecycle);
-        repo.insert(remote).await.unwrap();
         let ghost = stdio(&format!("ghost-{lifecycle}"), "gglib-no-such-command");
         let ghost = repo.insert(ghost.with_lifecycle(lifecycle)).await.unwrap();
         ghosts.push(ghost.id);

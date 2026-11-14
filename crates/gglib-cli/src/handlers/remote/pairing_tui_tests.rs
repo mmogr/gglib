@@ -1,8 +1,7 @@
 //! Tests for the pairing screen: what a status read means, and what the
 //! screen says when a withdrawal ends it.
 //!
-//! A `#[path]` sibling because the screen and its tests together would come
-//! too close to the 300-line budget.
+//! A `#[path]` sibling, the house layout.
 
 use std::time::Duration;
 

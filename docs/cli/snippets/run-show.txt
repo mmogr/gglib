@@ -1,3 +1,3 @@
-$ gglib run show run-d28875f6b650
-The builder pattern is a creational design pattern that separates the construction of a complex object from its representation, allowing the same construction process to create different representations. It is especially useful when an object has many optional components, as it provides a clean and readable way to build the object step by step.
-  run run-d28875f6b650 completed
+$ gglib run show run-4cdda1b431fe
+The Builder pattern is a creational design pattern that separates the construction of a complex object from its representation, allowing the same construction process to create different representations. It is particularly useful when dealing with objects that have many optional components or when you need to create objects with complex configurations.
+  run run-4cdda1b431fe completed

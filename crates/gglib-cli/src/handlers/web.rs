@@ -3,9 +3,7 @@
 //! The web UI is served by the daemon itself (one process, one port), so
 //! this command reduces to: make sure the daemon is up, print the URL and
 //! hand it to the system's launcher, which opens it in the browser.
-//! `--no-open` only prints. `--share-lan` is the exception — LAN exposure is
-//! an explicit foreground decision, so it forwards to the same code path as
-//! `gglib daemon run --share-lan`.
+//! `--no-open` only prints.
 //!
 //! The URL carries the daemon's token as a fragment, `#token=…`, which the
 //! page keeps for its own calls and strips from the address bar. A fragment
@@ -17,18 +15,12 @@ use std::io::Write;
 
 use anyhow::Result;
 
-use crate::bootstrap::CliContext;
 use crate::daemon_client;
 use crate::presentation::style;
 
 /// Execute the `web` command.
-pub(crate) async fn execute(ctx: &CliContext, share_lan: bool, no_open: bool) -> Result<()> {
-    if share_lan {
-        // Foreground, eyes-open LAN mode — identical to `daemon run --share-lan`.
-        return super::daemon::run(true, Vec::new()).await;
-    }
-
-    daemon_client::ensure_daemon(ctx).await?;
+pub(crate) async fn execute(no_open: bool) -> Result<()> {
+    daemon_client::ensure_daemon().await?;
 
     let token = daemon_client::auth::daemon_token();
     let url = dashboard_url(&daemon_client::base_url(), token.as_deref());

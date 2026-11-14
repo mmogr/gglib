@@ -31,18 +31,6 @@ impl RetryPolicy {
         *RESOLVED.get_or_init(|| Self::default().with_env_overrides(&std::env::var))
     }
 
-    /// A policy that makes one attempt and never retries.
-    ///
-    /// What a caller wanting strictly one-shot behaviour should ask for by
-    /// name rather than by knowing that `max_attempts: 1` means "off".
-    #[must_use]
-    pub fn disabled() -> Self {
-        Self {
-            max_attempts: 1,
-            ..Self::default()
-        }
-    }
-
     /// Apply overrides read through `lookup`, which is the process environment
     /// in production and a fixture in tests.
     fn with_env_overrides<F, E>(mut self, lookup: &F) -> Self

@@ -12,12 +12,12 @@ use crate::ports::{AgentRunStarter, HubChatsPort, ImageGenerationPort, RunsPort}
 /// none.
 #[derive(Debug, Clone, Default)]
 pub struct DevicePorts {
-    /// The daemon's runs, at `/v1/runs`.
+    /// The daemon's runs, at `/v1/gglib/runs`.
     pub runs: Option<Arc<dyn RunsPort>>,
-    /// The hub's chats, at `/v1/chats`.
+    /// The hub's chats, at `/v1/gglib/chats`.
     pub chats: Option<Arc<dyn HubChatsPort>>,
     /// What starts a device's turn on a hub chat, at
-    /// `PUT /v1/runs/{id}?kind=agent`.
+    /// `PUT /v1/gglib/runs/{id}?kind=agent`.
     pub turns: Option<Arc<dyn AgentRunStarter>>,
     /// The daemon's image driver, at `POST /v1/images/generations` for every
     /// client the proxy serves, local or paired.

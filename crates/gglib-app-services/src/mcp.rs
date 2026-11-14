@@ -3,9 +3,7 @@
 use std::sync::Arc;
 
 use gglib_core::{McpRepositoryError, McpServiceError};
-use gglib_mcp::{
-    McpEnvEntry, McpServerConfig, McpServerStatus, McpServerType, McpService, McpTool, NewMcpServer,
-};
+use gglib_mcp::{McpEnvEntry, McpServerConfig, McpServerStatus, McpService, McpTool, NewMcpServer};
 
 use crate::error::GuiError;
 use crate::types::{
@@ -43,14 +41,12 @@ impl McpOps {
         McpServerDto {
             id: server.id,
             name: server.name.clone(),
-            server_type: server.server_type.to_string(),
             config: McpServerConfigDto {
                 command: server.config.command.clone(),
                 resolved_path_cache: server.config.resolved_path_cache.clone(),
                 args: server.config.args.clone(),
                 working_dir: server.config.working_dir.clone(),
                 path_extra: server.config.path_extra.clone(),
-                url: server.config.url.clone(),
             },
             enabled: server.enabled,
             allow_remote: server.allow_remote,
@@ -87,23 +83,16 @@ impl McpOps {
 
     /// Add a new MCP server configuration.
     pub async fn add(&self, req: CreateMcpServerRequest) -> Result<McpServerInfo, GuiError> {
-        let server_type = req
-            .server_type
-            .parse::<McpServerType>()
-            .map_err(GuiError::ValidationFailed)?;
-
         let config = McpServerConfig {
             command: req.command,
             resolved_path_cache: None, // Will be populated by resolver
             args: Some(req.args),
             working_dir: req.working_dir,
             path_extra: req.path_extra,
-            url: req.url,
         };
 
         let new_server = NewMcpServer {
             name: req.name,
-            server_type,
             config,
             // A blank value is the service's to refuse, for every add.
             env: req
@@ -156,9 +145,6 @@ impl McpOps {
         }
         if let Some(path_extra) = req.path_extra {
             server.config.path_extra = Some(path_extra);
-        }
-        if let Some(url) = req.url {
-            server.config.url = Some(url);
         }
         if let Some(env) = req.env {
             server.env = updated_env(&server.env, env)?;
@@ -248,8 +234,8 @@ impl McpOps {
     /// server as it now stands. The flag's own write: a running server keeps
     /// running, and a device's next run reads it.
     ///
-    /// An unknown `id` is not found, as for [`Self::test_connection`]; an
-    /// SSE server or `builtin` opened is the caller's to fix.
+    /// An unknown `id` is not found, as for [`Self::test_connection`];
+    /// `builtin` opened is the caller's to fix.
     pub async fn set_allow_remote(&self, id: i64, allow: bool) -> Result<McpServerDto, GuiError> {
         match self.mcp.set_allow_remote(id, allow).await {
             Ok(server) => Ok(Self::server_to_dto(&server)),

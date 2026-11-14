@@ -80,7 +80,7 @@ pub(super) fn spec(id: u32, name: &str, family: Option<ImageFamily>) -> ModelLau
         context_length: None,
         server_defaults: None,
         file_size_bytes: 0,
-        kv_elems_per_token: None,
+        kv_shape: None,
         kv_memory_is_partial: false,
     }
 }
@@ -251,7 +251,10 @@ async fn row_3_none_or_several_is_refused_with_what_would_fix_it() {
 
     let several = unavailable(refusal(&library(), None, None).await);
     assert!(several.contains("sdxl, sdxl-turbo"), "{several}");
-    assert!(several.contains("--default-image-model"), "{several}");
+    assert!(
+        several.contains("gglib config set default-image-model-id"),
+        "{several}"
+    );
 }
 
 /// A catalogue that cannot be read is its own failure, never "no image

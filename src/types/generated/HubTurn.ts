@@ -4,10 +4,10 @@ import type { Thinking } from "./Thinking";
 /**
  * A turn a paired device adds to one of the hub's chats.
  *
- * The body of `PUT /v1/runs/{id}?kind=agent` on the proxy's door. No
+ * The body of `PUT /v1/gglib/runs/{id}?kind=agent` on the proxy's door. No
  * history travels: the hub rebuilds it from its own record. No image
  * travels either: the device uploads each one first, at
- * `POST /v1/attachments`, and names it here by its id. A turn that says
+ * `POST /v1/gglib/attachments`, and names it here by its id. A turn that says
  * `answer_saved` adds no message: it answers the question the chat already
  * ends in, as an edit or a regenerate leaves it. Any other key is refused,
  * so a client sending `model` or `messages` learns none is honoured.
@@ -45,12 +45,12 @@ answer_saved?: boolean,
  * image tool for this turn, and only then. Left out of the body when
  * `false`, so a hub too old to know the key is never sent it by a
  * client that did not press Draw; a client asks
- * `GET /v1/images/drawing` before it offers the button.
+ * `GET /v1/gglib/images/drawing` before it offers the button.
  */
 draw?: boolean, 
 /**
  * The image model the person chose for this turn's picture, by the
- * `id` of its row in the hub's `GET /v1/images/drawing` answer. Only
+ * `id` of its row in the hub's `GET /v1/gglib/images/drawing` answer. Only
  * with `draw`; left out, the hub's default rule draws. Nothing of it
  * is remembered by the hub: a client that keeps the choice says it on
  * every turn that draws. Left out of the body when unsaid, so only a

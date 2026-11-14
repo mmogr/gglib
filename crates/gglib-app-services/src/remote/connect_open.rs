@@ -1,10 +1,10 @@
 //! Reaching the far machine for a `join`: pairing when the string carries a
 //! code, waiting when it does not, and what each refusal says.
 //!
-//! A child of `connect_dial.rs`, which would cross its size budget with this
-//! in it, and a subject of its own: `dial` is the reserved span and what the
-//! record and the slot are owed once a pipe exists; this is how the pipe comes
-//! to exist, and what `disconnect` may end while it does.
+//! A child of `connect_dial.rs`, and a subject of its own: `dial` is the
+//! reserved span and what the record and the slot are owed once a pipe
+//! exists; this is how the pipe comes to exist, and what `disconnect` may end
+//! while it does.
 
 use std::error::Error as _;
 use std::net::{Ipv4Addr, SocketAddr};

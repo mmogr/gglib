@@ -31,6 +31,24 @@ use futures_core::Stream;
 
 use crate::domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition};
 
+/// The endpoint refused the request with a code of its own, and asking
+/// again would be refused the same way.
+///
+/// Returned by [`LlmCompletionPort::chat_stream`] inside its `anyhow::Error`,
+/// so the agent loop can carry `code` to the run's end rather than leave it
+/// in the sentence. Its text is `reason` alone.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{reason}")]
+pub struct UpstreamRefusal {
+    /// The HTTP status the endpoint answered with.
+    pub status: u16,
+    /// The `error.code` the endpoint's body wrote, as it wrote it: gglib's
+    /// own, or one relayed from llama-server or the tunnel.
+    pub code: String,
+    /// What a person reads: the endpoint's status, type, code and message.
+    pub reason: String,
+}
+
 // =============================================================================
 // LlmCompletionPort
 // =============================================================================
@@ -47,6 +65,8 @@ use crate::domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition};
 /// - Text and tool-call delta events may interleave freely before `Done`.
 /// - An `Err` item in the stream signals an unrecoverable infrastructure error;
 ///   the agent loop will surface it as [`super::agent::AgentError::Internal`].
+/// - An `Err` from starting the request may be an [`UpstreamRefusal`], which
+///   the agent loop surfaces as [`super::agent::AgentError::Refused`].
 #[async_trait]
 pub trait LlmCompletionPort: Send + Sync {
     /// Begin a chat-completion request and return a live event stream.

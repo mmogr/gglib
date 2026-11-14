@@ -1,13 +1,12 @@
 //! A reply that goes silent mid-answer ends, within one idle bound, in a
 //! notice, `upstream_timeout` and one `[DONE]`, with any tool call held back
-//! from the client sent ahead of them; and the three things that look like
+//! from the client sent ahead of them; and the two things that look like
 //! silence from the drain's side and are not. A reply whose connection breaks
 //! is the other way a turn dies upstream: it ends in `upstream_error`.
 //!
-//! The bound times reads of the upstream, so three things that look like
+//! The bound times reads of the upstream, so two things that look like
 //! silence from elsewhere are not stalls: an upstream that is slow but still
-//! talking, a client slower to read than the bound, and a tool call whose
-//! markup the normalizer holds back from the client until it is whole.
+//! talking, and a client slower to read than the bound.
 
 use std::time::Duration;
 
@@ -18,7 +17,6 @@ use super::forward_stall_fixtures::{
     text, upstream,
 };
 use super::*;
-use gglib_core::domain::DialectSpec;
 
 /// An upstream that answers "Hello" and then never says another word.
 fn silent_after_hello()
@@ -28,7 +26,7 @@ fn silent_after_hello()
 
 #[tokio::test]
 async fn a_reply_that_goes_silent_mid_answer_ends_in_a_notice_upstream_timeout_and_one_done() {
-    let turn = run_turn(silent_after_hello(), None, Reader::default()).await;
+    let turn = run_turn(silent_after_hello(), Reader::default()).await;
 
     let stall = turn
         .outcome
@@ -120,7 +118,7 @@ async fn a_held_back_tool_call_cut_off_by_a_stall_goes_out_before_the_notice_and
 #[tokio::test]
 async fn a_reply_whose_connection_breaks_ends_in_upstream_error_byte_for_byte_and_one_done() {
     let broken = upstream(at_once(vec![text("Hel")]), Then::Break);
-    let turn = run_turn(broken, None, Reader::default()).await;
+    let turn = run_turn(broken, Reader::default()).await;
 
     assert_eq!(turn.outcome.upstream_stalled, None);
     assert!(turn.outcome.upstream_errored, "a break is a death upstream");
@@ -146,7 +144,7 @@ async fn an_upstream_that_is_slow_but_still_talking_is_never_cut() {
     chunks.push((IDLE / 2, finish()));
     chunks.push((Duration::ZERO, done()));
 
-    let turn = run_turn(upstream(chunks, Then::Close), None, Reader::default()).await;
+    let turn = run_turn(upstream(chunks, Then::Close), Reader::default()).await;
 
     assert!(
         turn.took > IDLE * 3,
@@ -173,7 +171,7 @@ async fn a_client_slower_than_the_bound_is_not_mistaken_for_a_silent_upstream() 
         ..Reader::default()
     };
 
-    let turn = run_turn(upstream(chunks, Then::Close), None, slow).await;
+    let turn = run_turn(upstream(chunks, Then::Close), slow).await;
 
     // The drain waited on the client longer than the bound, more than once,
     // and each chunk came more than a bound after the one before: the
@@ -183,48 +181,5 @@ async fn a_client_slower_than_the_bound_is_not_mistaken_for_a_silent_upstream() 
     assert!(!turn.outcome.client_aborted);
     assert_eq!(turn.outcome.health_verdict(), StreamVerdict::Healthy);
     assert_eq!(turn.text(), "Hello");
-    assert_eq!(turn.dones(), 1);
-}
-
-#[tokio::test]
-async fn a_tool_call_still_assembling_is_not_cut_while_its_markup_keeps_arriving() {
-    // A Qwen model writes its call as text, which the normalizer holds back
-    // until it is whole: the client gets no frame for the whole of this.
-    let markup = [
-        "<tool_call>\n",
-        "<function=read_file>\n",
-        "<parameter=path>\n",
-        "src/lib.rs\n",
-        "</parameter>\n",
-        "</function>\n",
-        "</tool_call>",
-    ];
-    let mut chunks: Vec<_> = markup
-        .iter()
-        .map(|m| (IDLE / 2, frame(&json!({ "content": m }), None)))
-        .collect();
-    chunks.push((Duration::ZERO, finish()));
-    chunks.push((Duration::ZERO, done()));
-
-    let turn = run_turn(
-        upstream(chunks, Then::Close),
-        Some(DialectSpec::qwen_xml()),
-        Reader::default(),
-    )
-    .await;
-
-    assert!(turn.took > IDLE * 3, "took {:?}", turn.took);
-    assert_eq!(turn.outcome.upstream_stalled, None);
-    assert!(turn.error_codes().is_empty(), "{}", turn.wire);
-    let called: Vec<_> = turn
-        .frames()
-        .iter()
-        .filter_map(|f| {
-            f.pointer("/choices/0/delta/tool_calls/0/function/name")?
-                .as_str()
-        })
-        .map(str::to_owned)
-        .collect();
-    assert_eq!(called, ["read_file"], "{}", turn.wire);
     assert_eq!(turn.dones(), 1);
 }

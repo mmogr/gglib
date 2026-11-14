@@ -8,7 +8,7 @@ use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 #[test]
 fn model_info_description_includes_arch_and_quant() {
     let summary = ModelSummary {
-        param_count: "13B".into(),
+        param_count: Some("13B".into()),
         quantization: Some("Q5_K_S".into()),
         architecture: Some("llama".into()),
         ..ModelSummary::bare(1, "test")
@@ -24,7 +24,7 @@ fn model_info_description_includes_arch_and_quant() {
 #[test]
 fn model_info_handles_missing_arch_and_quant() {
     let summary = ModelSummary {
-        param_count: "1B".into(),
+        param_count: Some("1B".into()),
         ..ModelSummary::bare(1, "bare-model")
     };
     let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE), true);
@@ -149,7 +149,7 @@ fn an_unconfigured_model_advertises_its_trained_window() {
     let resp = ModelsResponse::from_summaries(
         vec![ModelSummary {
             tags: vec!["chat".into()],
-            param_count: "8B".into(),
+            param_count: Some("8B".into()),
             quantization: Some("Q4_K_M".into()),
             architecture: Some("qwen".into()),
             created_at: 1_700_000_000,
@@ -169,7 +169,7 @@ fn a_configured_default_still_caps_the_advertised_window() {
     let resp = ModelsResponse::from_summaries(
         vec![ModelSummary {
             tags: vec!["chat".into()],
-            param_count: "8B".into(),
+            param_count: Some("8B".into()),
             quantization: Some("Q4_K_M".into()),
             architecture: Some("qwen".into()),
             created_at: 1_700_000_000,

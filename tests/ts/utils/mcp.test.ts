@@ -15,7 +15,6 @@ const serverInfo = (status: McpServerInfo['status']): McpServerInfo => ({
   server: {
     id: 1,
     name: 'Test',
-    server_type: 'stdio',
     config: {},
     enabled: true,
     allow_remote: false,

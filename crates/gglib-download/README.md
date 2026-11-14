@@ -49,6 +49,10 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
 
 **Module Descriptions:**
 - **`quant_selector.rs`** — Quantization selection logic for model downloads
+- **`picked.rs`** — `download_pick`: the variant a download takes with none
+  asked, listed and picked as the download does, for a listing to mark (★)
+  before anything is fetched; asked apart from the listing, since its header
+  reads take seconds
 - **`queue/`** — The queue's state: what waits, in what order, and how the
   latest downloads ended
 - **`resolver/`** — Which files a quantization is, and whether its weights

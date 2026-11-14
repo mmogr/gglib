@@ -1,9 +1,8 @@
 //! The paired statistic behind [`PairedEffect`]: matched `(task, seed)` cells,
 //! their win/loss/tie counts, and a one-sided Wilcoxon signed-rank *p*.
 //!
-//! Split from `agentic.rs` so the report module stays inside the complexity
-//! ratchet's budget. It depends on the report types only through the pairs it
-//! is handed.
+//! Split from `agentic.rs`, the report module. It depends on the report types
+//! only through the pairs it is handed.
 
 use serde::{Deserialize, Serialize};
 

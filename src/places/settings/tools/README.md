@@ -14,14 +14,13 @@ A row is the server's name, its state as a shape and a word, and "N tools"
 while it runs. Hover or focus shows Test, Start or Stop, Edit and ⋯ Remove…
 (asked first); Start is greyed with why for a server not used in chats,
 Remove… while it runs, and Test while another row's test runs. A server
-gglib cannot run (SSE) offers only Remove…. A stdio server whose command no
-longer resolves says "Needs relink" with Fix. The name opens the row: the
+whose command no longer resolves says "Needs relink" with Fix. The name opens the row: the
 command, its tools while running, and Devices may use it where the server
 can be opened to paired devices (ADR 0025). How the row's last action went
 is said under it, never in a toast.
 
-The sheet offers only a stdio server, which is all the daemon runs: no
-connection type and no URL until SSE can be chosen (ST-10). Its quick starts
+A server is a process gglib starts, so the sheet has no connection type and
+no URL. Its quick starts
 each need an API key; none reads files, which a chat's folder does (ADR
 0023). A stored variable arrives as its key alone and an edit sends it back
 without its value (ADR 0027).

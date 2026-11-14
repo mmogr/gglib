@@ -1,4 +1,4 @@
-//! `gglib config <engine> install` and `update` over an install that needs
+//! `gglib config <engine> install` over an install that needs
 //! nothing: the pin, or a later release. Each runs over a data root the test
 //! laid out, with nothing on its `PATH` and every proxy variable pointing at
 //! a port nobody listens on, so a command that went ahead would find no git
@@ -81,22 +81,20 @@ fn the_pin_installed_is_nothing_to_install() {
         downloaded(empty.path(), dir, server, record, "b1");
         let pin = pinned_in(&gglib(empty.path(), &["config", engine, "status"]));
 
-        for verb in ["install", "update"] {
-            let root = tempfile::tempdir().unwrap();
-            downloaded(root.path(), dir, server, record, &pin);
+        let root = tempfile::tempdir().unwrap();
+        downloaded(root.path(), dir, server, record, &pin);
 
-            let out = gglib(root.path(), &["config", engine, verb]);
+        let out = gglib(root.path(), &["config", engine, "install"]);
 
-            assert!(out.status.success(), "{engine} {verb}: {}", text(&out));
-            assert_eq!(
-                String::from_utf8_lossy(&out.stdout),
-                format!(
-                    "Pinned release: {pin}, which is the one installed.\nUse --force to reinstall it.\n"
-                ),
-                "{engine} {verb}: {}",
-                text(&out)
-            );
-        }
+        assert!(out.status.success(), "{engine}: {}", text(&out));
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            format!(
+                "Pinned release: {pin}, which is the one installed.\nUse --force to reinstall it.\n"
+            ),
+            "{engine}: {}",
+            text(&out)
+        );
     }
 }
 
@@ -113,7 +111,7 @@ fn a_later_release_is_kept() {
         "b99999999",
     );
 
-    let out = gglib(root.path(), &["config", "llama", "update"]);
+    let out = gglib(root.path(), &["config", "llama", "install"]);
 
     assert!(out.status.success(), "{}", text(&out));
     let stdout = String::from_utf8_lossy(&out.stdout);

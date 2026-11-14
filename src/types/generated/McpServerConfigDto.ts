@@ -19,8 +19,4 @@ working_dir?: string,
 /**
  * Additional PATH entries for child process
  */
-path_extra?: string, 
-/**
- * URL for SSE connection (required for sse)
- */
-url?: string, };
+path_extra?: string, };

@@ -1,14 +1,13 @@
-//! Tests for the step's ending (ADR 0021): under `note`, a run's second trip
-//! is answered in the model's place, and what that records.
+//! Tests for the step's ending (ADR 0021): a run's second trip is answered in
+//! the model's place, and what that records.
 
+use gglib_core::Settings;
 use gglib_core::domain::defects::LoopGuardTrip;
-use gglib_core::{LoopGuardMode, Settings};
 use serde_json::Value;
 
-use super::fixtures::{
-    MODEL, agentic_body, counts, in_mode, looping, observing, stagnating, store,
-};
+use super::fixtures::{MODEL, agentic_body, counts, looping, observing, stagnating, store};
 use super::{GuardStep, run};
+use crate::generation::TurnGeneration;
 
 #[test]
 fn a_runs_first_trip_is_noted_and_its_second_is_ended() {
@@ -44,6 +43,13 @@ fn a_runs_first_trip_is_noted_and_its_second_is_ended() {
         assert_eq!(recent.len(), 1);
         assert!(recent[0].loop_guard_ended, "{:?}", recent[0]);
         assert_eq!(recent[0].loop_guard_trip, Some(detector));
+        assert_eq!(recent[0].model_name, MODEL);
+        // Nothing was generated, and the snapshot says so by its defaults.
+        assert_eq!(
+            TurnGeneration::on(&recent[0]),
+            TurnGeneration::default(),
+            "an ended request has no readings, which is not readings of zero"
+        );
         // The row says what the step did, in the proxy's words.
         let words: Vec<&str> = recent[0]
             .interventions
@@ -57,23 +63,6 @@ fn a_runs_first_trip_is_noted_and_its_second_is_ended() {
         );
         assert_eq!(counts(&ledger).loop_guard_trips, 1, "counted once");
     }
-}
-
-/// `refuse` has no second trip to see: it acts on the first, every time.
-#[test]
-fn refuse_still_refuses_a_run_that_would_have_ended() {
-    let (metrics, _ledger) = store();
-    let step = run(
-        &in_mode(LoopGuardMode::Refuse),
-        &agentic_body(looping(4)),
-        MODEL,
-        &observing(&metrics),
-    );
-    assert!(matches!(step, GuardStep::Refuse(_)));
-    let row = &metrics.recent(1)[0];
-    assert!(!row.loop_guard_ended);
-    let words: Vec<&str> = row.interventions.iter().map(|i| i.word.as_str()).collect();
-    assert_eq!(words, ["Refused: a loop"], "the row says the step refused");
 }
 
 /// What a detector's trip is called in the words, as core spells it.

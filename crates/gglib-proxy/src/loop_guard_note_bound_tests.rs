@@ -3,8 +3,7 @@
 //! Their own file, apart from the note's shape tests: this is about the one
 //! part of the note a client controls. The batch signature carries each tool
 //! *name* verbatim off the wire — the arguments are hashed, the name is not —
-//! and under `note` that string goes into the model's prompt rather than into
-//! an error body the client reads back.
+//! and that string goes into the model's prompt.
 
 use super::{LoopGuardNote, SIGNATURE_LIMIT};
 use crate::loop_guard::LoopGuardVerdict;
@@ -12,8 +11,7 @@ use crate::loop_guard::LoopGuardVerdict;
 #[test]
 fn a_long_tool_name_is_bounded_before_it_reaches_the_prompt() {
     // The signature carries the client's own tool names verbatim, so it is the
-    // one part of the note a client controls. Under `refuse` it went into an
-    // error body; under `note` it goes into the prompt.
+    // one part of the note a client controls, and it goes into the prompt.
     let long = "z".repeat(SIGNATURE_LIMIT * 20);
     let note = LoopGuardNote::for_verdict(&LoopGuardVerdict::LoopDetected {
         signature: format!("{long}:00000000deadbeef"),

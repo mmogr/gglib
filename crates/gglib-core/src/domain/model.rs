@@ -14,25 +14,7 @@ use super::image_family::{ComponentRole, ImageFamily};
 use super::inference::{DefaultsOrigin, InferenceConfig};
 use super::runtime_kind::RuntimeKind;
 use super::server_config::ServerConfig;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// System tags
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Prefix marking a tag as runtime-load-bearing.
-///
-/// Tags with this prefix (e.g. `format:qwen-xml`) drive the universal
-/// normalization pipeline's parser selection at compose time. Removing
-/// one would silently break dialect handling for the affected model, so
-/// the tag-mutation API rejects deletions.
-pub(super) const SYSTEM_TAG_PREFIX: &str = "format:";
-
-/// Returns `true` when `tag` is a system tag that callers must not
-/// remove through the standard tag-mutation API.
-#[must_use]
-pub fn is_system_tag(tag: &str) -> bool {
-    tag.starts_with(SYSTEM_TAG_PREFIX)
-}
+use super::shard_name::gguf_stem;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model Types
@@ -58,8 +40,11 @@ pub struct Model {
     /// name one file.
     #[serde(default)]
     pub projector_path: Option<PathBuf>,
-    /// Number of parameters in the model (in billions).
-    pub param_count_b: f64,
+    /// The parameters, in billions, when they are known: the tensors'
+    /// count (`HeaderFacts::param_count_b`), or one its owner set. `None`
+    /// when neither the tensors, the labels nor the name gave one.
+    #[serde(default)]
+    pub param_count_b: Option<f64>,
     /// Model architecture (e.g., "llama", "mistral", "falcon").
     pub architecture: Option<String>,
     /// The name the uploader gave this variant (`UD-Q4_K_XL`), when it came
@@ -121,21 +106,13 @@ pub struct Model {
     /// be overridden at request time. Part of the 5-level fallback chain.
     #[serde(default)]
     pub server_defaults: Option<ServerConfig>,
-    /// Tool-call dialect spec detected at import/retag time.
-    ///
-    /// Stored as JSON in the database. `None` for rows imported before
-    /// specs existed and for models whose dialect could not be derived —
-    /// consumers fall back to the `format:*` tag mapping.
-    #[serde(default)]
-    pub dialect_spec: Option<crate::domain::dialect::DialectSpec>,
     /// llama-server's template-capability self-report (`chat_template_caps`
     /// from `GET /props`), recorded once a launch has observed it.
     ///
     /// Stored as JSON in the database. `None` means **never observed** — the
     /// third state of ADR 0007's tri-state, never to be collapsed into "not
-    /// supported". Unlike [`Self::dialect_spec`] this is not derived at
-    /// import time: it is a fact about the binary–model pair, so only a
-    /// launch can learn it.
+    /// supported". It is not derived at import time: it is a fact about the
+    /// binary–model pair, so only a launch can learn it.
     #[serde(default)]
     pub template_caps: Option<crate::domain::TemplateCaps>,
     /// Denormalised benchmark summary joined from `model_benchmark_summaries`.
@@ -169,8 +146,11 @@ pub struct NewModel {
     /// name one file.
     #[serde(default)]
     pub projector_path: Option<PathBuf>,
-    /// Number of parameters in the model (in billions).
-    pub param_count_b: f64,
+    /// The parameters, in billions, when they are known: the tensors'
+    /// count (`HeaderFacts::param_count_b`), or one its owner set. `None`
+    /// when neither the tensors, the labels nor the name gave one.
+    #[serde(default)]
+    pub param_count_b: Option<f64>,
     /// Model architecture (e.g., "llama", "mistral", "falcon").
     pub architecture: Option<String>,
     /// The name the uploader gave this variant (`UD-Q4_K_XL`), when it came
@@ -226,9 +206,6 @@ pub struct NewModel {
     /// Per-model server startup defaults.
     #[serde(default)]
     pub server_defaults: Option<ServerConfig>,
-    /// See [`Model::dialect_spec`].
-    #[serde(default)]
-    pub dialect_spec: Option<crate::domain::dialect::DialectSpec>,
     /// See [`Model::image_family`].
     #[serde(default)]
     pub image_family: Option<ImageFamily>,
@@ -256,9 +233,22 @@ pub const NO_HUB_LABEL: &str = "this model was added before gglib kept the name 
     download it again to check, repair or upgrade it";
 
 impl Model {
+    /// llama-server's own answer to "does this template call tools?", as the
+    /// last launch observed it (`supports_tool_calls`, ADR 0007); `None`
+    /// when no launch has, or the launch's caps did not say.
+    #[must_use]
+    pub fn engine_tool_answer(&self) -> Option<bool> {
+        self.template_caps.as_ref()?.supports_tool_calls
+    }
+
     /// The label this model's type is shown and named by: the uploader's
     /// variant label, else the name of the type its header states. An
     /// unknown type number has no name, so no label.
+    ///
+    /// A variant label that is only the file's own name says nothing of its
+    /// type, and the header's type is shown instead: a repository with one
+    /// file labels it by its whole name (`z_image-Q8_0`), as it has no
+    /// other name to cut a shared prefix from.
     ///
     /// For showing and naming only: a lookup on the Hub reads
     /// [`Self::variant_label`] alone (see [`NO_HUB_LABEL`]).
@@ -266,7 +256,17 @@ impl Model {
     pub fn quant_label(&self) -> Option<&str> {
         self.variant_label
             .as_deref()
+            .filter(|label| !self.is_named(label))
             .or_else(|| self.file_type.and_then(FileType::name))
+    }
+
+    /// Whether `label` is this model's file name, less the extension and a
+    /// shard's numbering, ignoring case.
+    fn is_named(&self, label: &str) -> bool {
+        self.file_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| gguf_stem(name).eq_ignore_ascii_case(label))
     }
 
     /// Whether this model reads images: it does exactly when it has a
@@ -326,7 +326,7 @@ impl NewModel {
     pub fn new(
         name: String,
         file_path: PathBuf,
-        param_count_b: f64,
+        param_count_b: Option<f64>,
         added_at: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -355,7 +355,6 @@ impl NewModel {
             inference_defaults: None,
             defaults_origin: None,
             server_defaults: None,
-            dialect_spec: None,
             image_family: None,
             components: Vec::new(),
         }
@@ -372,12 +371,12 @@ mod tests {
         let model = NewModel::new(
             "Test Model".to_string(),
             PathBuf::from("/path/to/model.gguf"),
-            7.0,
+            Some(7.0),
             Utc::now(),
         );
 
         assert_eq!(model.name, "Test Model");
-        assert!((model.param_count_b - 7.0).abs() < f64::EPSILON);
+        assert_eq!(model.param_count_b, Some(7.0));
         assert!(model.architecture.is_none());
         assert!(model.tags.is_empty());
     }
@@ -386,7 +385,7 @@ mod tests {
         let mut new = NewModel::new(
             "flux".to_owned(),
             PathBuf::from("/models/flux1-schnell-q8_0.gguf"),
-            12.0,
+            Some(12.0),
             Utc::now(),
         );
         new.image_family = Some(ImageFamily::Flux1);
@@ -443,11 +442,67 @@ mod tests {
         assert_eq!(model.quant_label(), None, "an unknown number has no name");
     }
 
+    fn labelled(path: &str, label: &str) -> Model {
+        let mut model = flux(&[]);
+        model.file_path = PathBuf::from(path);
+        model.variant_label = Some(label.to_owned());
+        model.file_type = Some(FileType(7));
+        model
+    }
+
+    #[test]
+    fn a_label_that_is_only_the_files_name_shows_the_headers_type() {
+        let one_file = labelled("/m/z_image_nsfw_v2-Q8_0.gguf", "z_image_nsfw_v2-Q8_0");
+        assert_eq!(one_file.quant_label(), Some("Q8_0"));
+        let any_case = labelled("/m/Z_Image-Q8_0.GGUF", "z_image-q8_0");
+        assert_eq!(any_case.quant_label(), Some("Q8_0"));
+        let shard = labelled("/m/big-Q8_0-00001-of-00002.gguf", "big-Q8_0");
+        assert_eq!(
+            shard.quant_label(),
+            Some("Q8_0"),
+            "a shard goes by its split's name"
+        );
+    }
+
+    #[test]
+    fn a_label_other_than_the_files_name_is_kept() {
+        let cut = labelled("/m/Qwen3.8-27B-UD-Q8_K_XL.gguf", "UD-Q8_K_XL");
+        assert_eq!(cut.quant_label(), Some("UD-Q8_K_XL"));
+        let folder = labelled(
+            "/m/UD-IQ3_XXS/Next-UD-IQ3_XXS-00001-of-00004.gguf",
+            "UD-IQ3_XXS",
+        );
+        assert_eq!(folder.quant_label(), Some("UD-IQ3_XXS"));
+    }
+
+    #[test]
+    fn only_the_files_name_is_compared_never_its_folder() {
+        // A label taken from a folder that happens to share the file's name
+        // is that name, and says no more of the type than it does.
+        let same = labelled("/m/Q8_0-x/Q8_0-x.gguf", "Q8_0-x");
+        assert_eq!(same.quant_label(), Some("Q8_0"));
+        // A label naming the folder alone is no name of the file's.
+        let folder = labelled("/m/z_image-Q8_0/weights.gguf", "z_image-Q8_0");
+        assert_eq!(folder.quant_label(), Some("z_image-Q8_0"));
+    }
+
+    #[test]
+    fn a_files_own_name_with_no_header_type_shows_no_label() {
+        let mut model = labelled("/m/z_image-Q8_0.gguf", "z_image-Q8_0");
+        model.file_type = None;
+        assert_eq!(model.quant_label(), None);
+    }
+
     #[test]
     fn a_chat_model_misses_no_component() {
         let model = Model::stored(
             1,
-            &NewModel::new("qwen".to_owned(), PathBuf::from("/m.gguf"), 7.0, Utc::now()),
+            &NewModel::new(
+                "qwen".to_owned(),
+                PathBuf::from("/m.gguf"),
+                Some(7.0),
+                Utc::now(),
+            ),
         );
         assert!(model.missing_components().is_empty());
     }

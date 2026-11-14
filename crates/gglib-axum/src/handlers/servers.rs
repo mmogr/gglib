@@ -5,26 +5,11 @@ use axum::extract::{Path, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_app_services::types::{
-    ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse,
-};
+use gglib_app_services::types::{ServerInfo, StartServerRequest, StartServerResponse};
 
 /// List all running servers.
 pub(crate) async fn list(State(state): State<AppState>) -> Json<Vec<ServerInfo>> {
     Json(state.servers.list_servers().await)
-}
-
-/// Get tool support status for a running server's model.
-///
-/// Sources `supports_tool_calls` from the model's `ModelCapabilities`
-/// bitflag in the database. `confidence` and `detected_format` are
-/// derived from the chat template stored in model metadata — no GGUF
-/// file parsing required.
-pub(crate) async fn tool_support(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-) -> Result<Json<ToolSupportResponse>, HttpError> {
-    Ok(Json(state.servers.get_server_tool_support(id).await?))
 }
 
 // ============================================================================
@@ -32,15 +17,14 @@ pub(crate) async fn tool_support(
 // Frontend sends { id, ...config } for start, { model_id } for stop.
 // ============================================================================
 
-/// Request body for starting a server via collection route.
-/// Maps frontend's `id` field to backend's `model_id`.
+/// Request body for starting a server via collection route: the model's
+/// `id` beside its launch options.
 #[derive(Debug, serde::Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct StartServerBody {
-    /// Model ID - frontend sends as `id`
+    /// The model's id.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
-    #[serde(alias = "id")]
-    pub model_id: Option<i64>,
+    pub id: Option<i64>,
     #[serde(flatten)]
     pub config: StartServerRequest,
 }
@@ -50,9 +34,9 @@ pub(crate) async fn start_body(
     State(state): State<AppState>,
     Json(body): Json<StartServerBody>,
 ) -> Result<Json<StartServerResponse>, HttpError> {
-    let model_id = body.model_id.ok_or_else(|| {
-        HttpError::BadRequest("Missing model_id (or id) in request body".to_string())
-    })?;
+    let model_id = body
+        .id
+        .ok_or_else(|| HttpError::BadRequest("Missing id in request body".to_string()))?;
     Ok(Json(state.servers.start(model_id, body.config).await?))
 }
 

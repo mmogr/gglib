@@ -21,7 +21,6 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use futures_util::StreamExt as _;
-use gglib_core::normalize::NormalizationErrorKind;
 use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
@@ -115,7 +114,7 @@ pub struct CollectedResponse {
     pub completion_tokens: Option<u32>,
     /// Whether the reply was cut off at its token limit (`finish_reason:
     /// "length"`) while it wrote a tool call: some tool-call delta came, at
-    /// any index, or a dialect parser reported a tool-call tag left open.
+    /// any index.
     /// Its calls are then dropped unassembled, and the loop ends the run,
     /// except on the words after a Draw's picture, which it answers for.
     pub call_cut: bool,
@@ -186,8 +185,7 @@ pub async fn collect_stream(
     // fatal — see `upsert_tool_call_delta`.
     let mut tool_calls_truncated: usize = 0;
     // Whether the reply started a call: a tool-call delta came, at any index
-    // (one past `MAX_TOOL_CALL_INDEX` lands in no partial), or a dialect
-    // parser found a tool-call tag the reply never closed.
+    // (one past `MAX_TOOL_CALL_INDEX` lands in no partial).
     let mut wrote_a_call = false;
     // Tracks whether at least one event was received before the stream ended.
     // Distinguishes a hard connectivity failure (zero events) from a
@@ -201,7 +199,14 @@ pub async fn collect_stream(
 
     while let Some(event) = stream.next().await {
         got_any_event = true;
-        match event? {
+        let event = event?;
+        // After `Done`, text is not the model's reply: a proxy sends its own
+        // notice as text after the finish frame of a reply that showed
+        // nothing (`gglib_proxy`'s empty and reasoning-only notices).
+        if finished.is_some() && matches!(event, LlmStreamEvent::TextDelta { .. }) {
+            continue;
+        }
+        match event {
             LlmStreamEvent::TextDelta { content } => {
                 text_buf.push_str(&content);
                 // Forward immediately; ignore send errors (client may have disconnected).
@@ -260,11 +265,6 @@ pub async fn collect_stream(
                 // Do not return yet: the trailing usage chunk arrives after
                 // Done. The decoder ends the stream right after the [DONE]
                 // sentinel, so this drains at most a few trailer events.
-            }
-
-            LlmStreamEvent::NormalizationError { kind, raw } => {
-                wrote_a_call |= matches!(kind, NormalizationErrorKind::UnclosedToolCallTag { .. });
-                handle_normalization_error(tx, &kind, &raw).await;
             }
 
             // Wire-facing telemetry; the completion count is kept so callers
@@ -364,29 +364,6 @@ fn upsert_tool_call_delta(
         p.arguments.push_str(&args);
     }
     false
-}
-
-/// Surface a non-fatal `NormalizationError` from the dialect parser.
-///
-/// The stream is **not** aborted — the parser already swallowed the
-/// offending bytes.  We log via `tracing` for operators and emit an
-/// `AgentEvent::SystemWarning` so UIs can render a non-blocking notice.
-async fn handle_normalization_error(
-    tx: &mpsc::Sender<AgentEvent>,
-    kind: &NormalizationErrorKind,
-    raw: &str,
-) {
-    warn!(
-        ?kind,
-        raw = %raw,
-        "normalization error from LLM stream parser"
-    );
-    let _ = tx
-        .send(AgentEvent::SystemWarning {
-            message: format!("LLM normalization issue: {kind:?}"),
-            suggested_action: None,
-        })
-        .await;
 }
 
 /// Build the error returned when an upstream `LlmStreamEvent::UpstreamError`

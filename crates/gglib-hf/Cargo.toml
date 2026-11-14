@@ -17,6 +17,8 @@ gglib-core.workspace = true
 # Async runtime
 tokio = { workspace = true, features = ["sync", "time"] }
 async-trait.workspace = true
+# Each search hit's files are listed a few at once
+futures-util.workspace = true
 
 # Serialization
 serde = { workspace = true }

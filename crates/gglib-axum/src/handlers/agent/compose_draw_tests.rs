@@ -198,7 +198,7 @@ async fn a_draw_run_whose_model_asks_for_no_picture_fails_and_says_so() {
         .events
         .iter()
         .filter_map(|event| match event {
-            AgentEvent::Error { message } => Some(message.as_str()),
+            AgentEvent::Error { message, .. } => Some(message.as_str()),
             _ => None,
         })
         .collect();

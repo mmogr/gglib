@@ -1,14 +1,17 @@
 /**
  * The devices line: the paired machines and phones, on every screen.
  *
- * `◎ Devices` and, at the right, what the tunnel is doing in the daemon's
- * words: the machine this one has joined with its reach (`REACH_WORDS`:
- * Connected, Away, Disconnected), else "Sharing · N paired" while this
- * machine lets devices in, else nothing. A pairing code still on offer is
- * said as "code 1:42", counting down to the code's own deadline, since it
- * outlives the page that revealed it (DV-1); it is plain text with no mark,
- * as the pairing sheet's "Expires in 1:42" is, since ▲ is for warnings
- * only. Before the first status the mark turns, as "asking the daemon" does.
+ * A `PlaceRow`: the devices icon, `Devices`, and at the right what the
+ * tunnel is doing in the daemon's words, its shape as the icon's badge. The
+ * machine this one has joined says its reach (`REACH_WORDS`: Connected,
+ * Away, Disconnected) with the machine's name under it; else sharing says
+ * the daemon's word (`status.sharing`, "Sharing") with its count under it
+ * (`status.paired_line`, "2 paired") while this machine lets devices in;
+ * else nothing. A pairing code still on offer is said as "code 1:42",
+ * counting down to the code's own deadline, since it outlives the page that
+ * revealed it (DV-1); it is plain text with no badge, as the pairing sheet's
+ * "Expires in 1:42" is, since ▲ is for warnings only. Before the first
+ * status the badge turns, as "asking the daemon" does.
  *
  * Clicking the line opens the Devices place.
  *
@@ -16,32 +19,31 @@
  */
 
 import { useNavigate } from 'react-router';
+import { MonitorSmartphone } from 'lucide-react';
 import { paths } from '../app/paths';
-import { REACH_MARK, StatusMark, type MarkKind } from '../components/status/StatusMark';
+import { REACH_MARK, type MarkKind } from '../components/status/StatusMark';
 import { REACH_WORDS } from '../components/status/words';
-import { Button } from '../components/ui/Button';
 import { clock } from '../places/devices/devices';
 import { useSecondsLeft } from '../places/devices/useSecondsLeft';
 import { pairedName, useRemoteState } from '../services/remoteRegistry';
 import type { RemoteStatus } from '../services/transport/types/remote';
-import { cn } from '../utils/cn';
-import { SPREAD } from './placement';
+import { PlaceRow } from './PlaceRow';
 
-/** What the line says at its right, from the last status and any offer; `mark` is `null` for plain text. */
-export type DevicesSaying = { mark: MarkKind | null; word: string; name?: string } | null;
+/**
+ * What the line says, from the last status and any offer: `mark` is the
+ * badge (`null` for plain text), `word` the right edge, `detail` the line
+ * under the name (empty for none).
+ */
+export type DevicesSaying = { mark: MarkKind | null; word: string; detail: string } | null;
 
 /** `codeLeft`: the seconds the code on offer has left, or `null` with none. */
 export function devicesSaying(status: RemoteStatus | null, codeLeft: number | null): DevicesSaying {
-  if (codeLeft !== null) return { mark: null, word: `code ${clock(codeLeft)}` };
-  if (status === null) return { mark: 'changing', word: '' };
+  if (codeLeft !== null) return { mark: null, word: `code ${clock(codeLeft)}`, detail: status?.paired_line ?? '' };
+  if (status === null) return { mark: 'changing', word: '', detail: '' };
   if (status.connected !== null) {
-    return { mark: REACH_MARK[status.reach], word: REACH_WORDS[status.reach], name: pairedName(status) };
+    return { mark: REACH_MARK[status.reach], word: REACH_WORDS[status.reach], detail: pairedName(status) };
   }
-  if (status.enabled) {
-    // `?? []`: a daemon from before the roster answers status without one.
-    const paired = (status.devices ?? []).length;
-    return { mark: 'on', word: `Sharing · ${paired} paired` };
-  }
+  if (status.enabled) return { mark: 'on', word: status.sharing, detail: status.paired_line };
   return null;
 }
 
@@ -51,30 +53,18 @@ export function DevicesLine({ current = false }: { current?: boolean }) {
   const codeLeft = useSecondsLeft(offer?.expiresAt ?? null);
 
   const saying = devicesSaying(status, offer === null ? null : codeLeft);
-  const said = saying === null ? '' : `, ${[saying.name, saying.word].filter(Boolean).join(' ')}`;
+  const said = saying === null ? '' : [saying.word, saying.detail].filter(Boolean).map((w) => `, ${w}`).join('');
 
   return (
-    <div className="px-sm">
-      <Button
-        variant="ghost"
-        fullWidth
-        className={cn('h-auto gap-sm px-sm py-sm', SPREAD, current && 'bg-surface-hover')}
-        onClick={() => navigate(paths.devices())}
-        aria-current={current ? 'page' : undefined}
-        aria-label={`Devices${said}`}
-      >
-        <span className="text-sm text-text">Devices</span>
-        {saying !== null && (
-          <span className="flex items-center gap-xs text-sm text-text-secondary truncate">
-            {saying.name !== undefined && <span className="truncate">{saying.name}</span>}
-            {saying.mark === null ? (
-              <span className="tabular-nums">{saying.word}</span>
-            ) : (
-              <StatusMark kind={saying.mark} word={saying.word || undefined} label={saying.word || 'Asking the daemon'} />
-            )}
-          </span>
-        )}
-      </Button>
-    </div>
+    <PlaceRow
+      name="Devices"
+      icon={MonitorSmartphone}
+      badge={saying?.mark ? { kind: saying.mark, label: saying.word || 'Asking the daemon' } : null}
+      word={saying?.word ? <span className="truncate">{saying.word}</span> : undefined}
+      under={saying?.detail ? <span className="truncate">{saying.detail}</span> : undefined}
+      current={current}
+      onClick={() => navigate(paths.devices())}
+      label={`Devices${said}`}
+    />
   );
 }

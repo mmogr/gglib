@@ -45,7 +45,7 @@ pub(super) const TOOL_ID: &str = "builtin__generate_image";
 
 /// What an invoke is told while the switch is off.
 const SWITCHED_OFF: &str = "drawing through /mcp is switched off; turn it on in Settings, or run \
-                            `gglib config settings set --mcp-drawing true`";
+                            `gglib config set mcp-drawing true`";
 
 /// The image driver to draw with, when the switch is on and drawing is
 /// available; otherwise why the tool is not offered.

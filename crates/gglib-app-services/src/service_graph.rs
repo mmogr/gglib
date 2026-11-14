@@ -30,7 +30,6 @@ use gglib_core::ports::{
     AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
     ImageGenerationPort, LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort,
     RemoteGatewayPort, Repos, ResidencyObserver, RunsPort, SystemProbePort,
-    ToolSupportDetectorPort,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use gglib_core::services::{AppCore, CatalogPortImpl};
@@ -67,10 +66,6 @@ pub struct ServiceGraphParams {
     pub hf_client: Arc<dyn HfClientPort>,
     /// GGUF parser.
     pub gguf_parser: Arc<dyn GgufParserPort>,
-    /// Tool-support detector. Supplied by the adapter for the same reason as
-    /// `gguf_parser`: the concrete implementation lives in `gglib-gguf`, which
-    /// this crate deliberately does not depend on.
-    pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
     /// MCP service.
     pub mcp: Arc<McpService>,
     /// Adapter-specific application event emitter.
@@ -154,7 +149,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         gguf_parser,
         mcp,
         emitter,
-        tool_detector,
         bench_repo,
         loop_guard_trips,
         base_port,
@@ -257,13 +251,11 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         core: Arc::clone(&core),
         proxy: Arc::clone(&proxy),
         emitter,
-        tool_detector: Arc::clone(&tool_detector),
     }));
 
     let download_ops = Arc::new(DownloadOps::new(DownloadDeps {
         downloads: Arc::clone(&downloads),
         hf: Arc::clone(&hf_client),
-        tool_detector,
         gguf_parser,
         // The daemon's download manager is handed none either: both resolve
         // the directory as they are asked.

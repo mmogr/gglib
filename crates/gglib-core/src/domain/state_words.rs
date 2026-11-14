@@ -290,19 +290,11 @@ pub enum McpState {
     Stopped,
     /// It stopped on an error, or never started.
     Failed,
-    /// Of a kind gglib cannot run: an SSE server.
-    Unsupported,
 }
 
 impl McpState {
     /// Every state, in display order.
-    pub const ALL: [Self; 5] = [
-        Self::Running,
-        Self::Starting,
-        Self::Stopped,
-        Self::Failed,
-        Self::Unsupported,
-    ];
+    pub const ALL: [Self; 4] = [Self::Running, Self::Starting, Self::Stopped, Self::Failed];
 
     /// The state a server's `status` is in.
     #[must_use]
@@ -312,7 +304,6 @@ impl McpState {
             McpServerStatus::Starting => Self::Starting,
             McpServerStatus::Stopped => Self::Stopped,
             McpServerStatus::Error(_) => Self::Failed,
-            McpServerStatus::Unsupported => Self::Unsupported,
         }
     }
 
@@ -324,7 +315,6 @@ impl McpState {
             Self::Starting => "Starting",
             Self::Stopped => "Stopped",
             Self::Failed => "Failed",
-            Self::Unsupported => "Not supported yet",
         }
     }
 }

@@ -12,10 +12,6 @@ use crate::secret::held;
 mod settings_bounds;
 pub use settings_bounds::*;
 
-#[path = "settings_loop_guard.rs"]
-mod settings_loop_guard;
-pub use settings_loop_guard::LoopGuardMode;
-
 #[path = "settings_update.rs"]
 mod settings_update;
 pub use settings_update::{SettingsError, SettingsUpdate};
@@ -72,7 +68,7 @@ pub struct Settings {
     /// `None` means the user has chosen nothing, and is the ordinary state —
     /// it is what lets the daemon size each launch rather than pinning it.
     /// A value here is read as a number the user typed and outranks that, so
-    /// nothing writes one on their behalf and `settings unset` returns it. See
+    /// nothing writes one on their behalf and `config unset` returns it. See
     /// [`crate::server_config::resolve_context_size_with_source`] for the chain
     /// and `Self::with_defaults` for why this field is the one left unset.
     pub default_context_size: Option<u64>,
@@ -210,38 +206,34 @@ pub struct Settings {
     pub trust_client_sampling: Option<bool>,
 
     // ── Proxy loop guard ────────────────────────────────────────────
-    /// What the proxy's turn-level loop/stagnation guard does on
-    /// `/v1/chat/completions` when a replayed history trips it.
+    /// Whether the proxy's loop guard scans `/v1/chat/completions` requests.
     ///
-    /// A conversation that repeats the same tool-call batch back to back and
-    /// gets the same answer back each time, or repeats the same assistant
-    /// response anywhere in the session, beyond the shared agent-path
-    /// thresholds, is answered per [`LoopGuardMode`]: `note` (absent, and the
-    /// default) forwards it with a note saying what repeated and ends the run
-    /// if it trips again after that (ADR 0021), `refuse` rejects
-    /// it with a clean HTTP 400 before admission, and `off` does not scan.
-    /// Replaying identical batches across a history does not trip it — the
-    /// batch count is back to back — and a repeat whose answer changed is not
-    /// counted at all.
+    /// The guard catches an agent that repeats the exact same tool-call batch
+    /// back to back and gets the same answer back each time, or repeats the
+    /// same assistant response, beyond the shared agent-path thresholds. The
+    /// first trip forwards the request with a note saying what repeated; if
+    /// the same run trips again, the proxy ends it with a finished assistant
+    /// message instead of forwarding it (ADR 0021). It does not catch a loop
+    /// whose calls vary, and a repeat whose answer changed is not counted.
     ///
-    /// Note the polarity: absent means the guard is **on**, because it is
-    /// protection the endpoint should not silently lose, unlike
+    /// `None` (the default) means **on**, because it is protection the
+    /// endpoint should not silently lose, unlike
     /// [`Self::trust_client_sampling`], which is authority a client must be
-    /// explicitly granted.
+    /// explicitly granted. `Some(false)` does not scan.
     ///
     /// The stagnation threshold itself comes from
     /// [`Self::max_stagnation_steps`], shared with the built-in agent loop so
     /// the two paths cannot drift.
     ///
-    /// Read through [`Self::effective_loop_guard_mode`], which supplies the
+    /// Read through [`Self::effective_loop_guard`], which supplies the
     /// default.
-    pub loop_guard_mode: Option<LoopGuardMode>,
+    pub loop_guard: Option<bool>,
 
-    /// Whether a tool call that fails schema validation is re-issued, with
-    /// `tool_choice: "required"` or as a second draw under gglib's grammar.
+    /// Whether a tool call that fails schema validation is re-issued with
+    /// `tool_choice: "required"`.
     ///
     /// `None` (the default) means **on**, the same inverse polarity as
-    /// [`Self::loop_guard_mode`] and for the same reason: it is
+    /// [`Self::loop_guard`] and for the same reason: it is
     /// protection the endpoint should not lose silently. `Some(false)`
     /// forwards every call as emitted.
     ///
@@ -262,29 +254,6 @@ pub struct Settings {
     /// so it is something a client is explicitly granted. Read through
     /// [`Self::effective_mcp_drawing`].
     pub mcp_drawing: Option<bool>,
-
-    // ── Agentic-turn sampling ───────────────────────────────────────
-    /// Whether a request carrying tools gets the agentic-turn temperature
-    /// ceiling — see
-    /// [`InferenceConfig::agentic_temperature_ceiling`](crate::domain::InferenceConfig::agentic_temperature_ceiling).
-    ///
-    /// `None`/`Some(true)` → active (the default): a turn that may emit
-    /// structured output has its temperature capped, but only over a value
-    /// nobody deliberately chose — a model's recipe nobody here reviewed —
-    /// and only on a model class that has a ceiling. Reasoning models have
-    /// none (see `agentic_temperature_ceiling`), so on them this setting
-    /// gates nothing. Anything set by a person stands. `Some(false)` disables
-    /// the cap.
-    ///
-    /// Same polarity as [`Self::loop_guard_mode`], and for the same
-    /// reason: this is a correction the endpoint should not silently lose.
-    /// A chat reads it through [`Self::effective_agentic_sampling`], which
-    /// supplies the default.
-    ///
-    /// The `tool_call_floor` alias is the name #741 gave this setting; it keeps
-    /// a config that uses that name loading.
-    #[serde(alias = "tool_call_floor")]
-    pub agentic_sampling: Option<bool>,
 
     // ── Always-on proxy (desktop app) ───────────────────────────────
     /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
@@ -326,14 +295,14 @@ pub struct Settings {
     /// here, so later sessions need only the ticket — or nothing, since the
     /// ticket is part of the record. `gglib q --remote` and
     /// `gglib chat --remote` attach the key as the bearer. Nothing writes it
-    /// by hand, and `gglib config settings show` reports the key as held or
+    /// by hand, and `gglib config show` reports the key as held or
     /// not rather than printing it;
-    /// `gglib config settings reveal remote-pairing.api-key` prints it, alone
+    /// `gglib config reveal remote-pairing.api-key` prints it, alone
     /// and only when asked, for a client that is not gglib.
     ///
-    /// A database written before the halves were bound holds
-    /// `remote_api_key` and `remote_last_ticket` as separate rows, and both
-    /// are ignored — no alias, deliberately. Neither is evidence about the
+    /// A database written before the halves were bound held
+    /// `remote_api_key` and `remote_last_ticket` as separate rows; an upgrade
+    /// deletes both — no alias, deliberately. Neither is evidence about the
     /// other, and reading the one as belonging to the other is exactly the
     /// defect this field closes; such a machine loads as never paired and
     /// pairs again, which a stale ticket already required of it.
@@ -352,7 +321,7 @@ impl Settings {
     #[must_use]
     pub const fn with_defaults() -> Self {
         Self {
-            // `None`, not the floor. This is what `gglib config settings
+            // `None`, not the floor. This is what `gglib config
             // reset` writes, and a stored value is the evidence that the user
             // chose a number — the settings modal shows an empty box when
             // unset and writes back blank. Writing 4096 here would fabricate
@@ -371,7 +340,6 @@ impl Settings {
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             max_parallel_tools: None,
             tool_timeout_ms: None,
-            agentic_sampling: None,
             default_model_id: None,
             default_image_model_id: None,
             inference_defaults: None,
@@ -384,7 +352,7 @@ impl Settings {
             proxy_cache_disk_gb: None,
             proxy_api_key: None,
             trust_client_sampling: None,
-            loop_guard_mode: None,
+            loop_guard: None,
             tool_call_repair: None,
             mcp_drawing: None,
             proxy_autostart: None,
@@ -438,27 +406,14 @@ impl Settings {
         matches!(self.proxy_cache_on_disk, Some(true))
     }
 
-    /// What the loop guard does: the stored [`Self::loop_guard_mode`], or the
-    /// default, [`LoopGuardMode::Note`], when none is stored.
+    /// Whether the loop guard scans: the stored [`Self::loop_guard`], else
+    /// on.
     ///
     /// The one place the default is supplied, so the proxy, the CLI and
     /// anything that reports the setting cannot disagree about it.
     #[must_use]
-    pub const fn effective_loop_guard_mode(&self) -> LoopGuardMode {
-        match self.loop_guard_mode {
-            Some(mode) => mode,
-            None => LoopGuardMode::Note,
-        }
-    }
-
-    /// Whether a turn with tools gets the agentic temperature ceiling: the
-    /// stored [`Self::agentic_sampling`], and on when none is stored.
-    ///
-    /// The one place the switch is read, so the page, a paired device, the
-    /// terminal and the proxy cannot disagree about it.
-    #[must_use]
-    pub const fn effective_agentic_sampling(&self) -> bool {
-        !matches!(self.agentic_sampling, Some(false))
+    pub const fn effective_loop_guard(&self) -> bool {
+        !matches!(self.loop_guard, Some(false))
     }
 
     /// Whether `/mcp` offers the drawing tool: the stored
@@ -536,11 +491,8 @@ impl Settings {
         if let Some(v) = other.mcp_drawing {
             self.mcp_drawing = v;
         }
-        if let Some(ref v) = other.loop_guard_mode {
-            self.loop_guard_mode = *v;
-        }
-        if let Some(ref v) = other.agentic_sampling {
-            self.agentic_sampling = *v;
+        if let Some(v) = other.loop_guard {
+            self.loop_guard = v;
         }
         if let Some(ref v) = other.proxy_autostart {
             self.proxy_autostart = *v;

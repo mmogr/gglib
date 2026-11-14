@@ -1,6 +1,6 @@
 //! The context a launch resolves to, and the fit it may fall back from.
 //!
-//! Split from `mod.rs`, so the admission path there stays within its size.
+//! Split from `mod.rs`, which keeps the admission path.
 
 use gglib_core::server_config::{
     ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,

@@ -64,7 +64,7 @@ const REQUIRED: [&str; 23] = [
 /// named here with its reason.
 const UNREAD_CHOICE_FIELDS: [(&str, &str); 1] = [(
     "chat completion\tchoices[].message.role",
-    "always `assistant`; the proxy forwards the stream's `delta.role`, which ggchat reads",
+    "always `assistant`; a stream says it once, in llama-server's opening `delta.role` chunk, which the proxy forwards",
 )];
 
 /// A `shape.txt` line's endpoint and key path, without its type: one field

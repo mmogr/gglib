@@ -1,6 +1,4 @@
 //! Tests for [`super::CatalogPortImpl`] and its `Model` projections.
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 use crate::domain::{ModelCapabilities, ModelSamplingDefaults, NewModel, TemplateCaps};
@@ -15,13 +13,12 @@ fn base_model() -> Model {
     Model {
         components: Vec::new(),
         image_family: None,
-        dialect_spec: None,
         id: 7,
         name: "qwen3".to_string(),
         model_key: String::new(),
         file_path: PathBuf::from("/models/qwen3.gguf"),
         projector_path: None,
-        param_count_b: 7.0,
+        param_count_b: Some(7.0),
         architecture: None,
         variant_label: None,
         file_type: None,
@@ -142,7 +139,7 @@ async fn model_reads_the_whole_row_by_id_or_name() {
 
 /// The launch spec derives what the model declares about sampling from the
 /// metadata already on the catalog row — the same trip
-/// `kv_elems_per_token` and `kv_memory_is_partial` make. Without it the
+/// `kv_shape` and `kv_memory_is_partial` make. Without it the
 /// proxy's baseline check has no way to tell a model's own recommendation
 /// from a pin bump.
 #[test]
@@ -171,13 +168,13 @@ fn a_model_with_no_sampling_metadata_declares_nothing() {
 
 /// A repo that actually holds its one model, so the read-compare-write in
 /// `record_template_caps` can be observed rather than stubbed away.
-struct RecordingRepo {
-    stored: Mutex<Model>,
+pub(super) struct RecordingRepo {
+    pub(super) stored: Mutex<Model>,
     updates: Mutex<u32>,
 }
 
 impl RecordingRepo {
-    fn with_caps(caps: Option<TemplateCaps>) -> Self {
+    pub(super) fn with_caps(caps: Option<TemplateCaps>) -> Self {
         let mut model = base_model();
         model.template_caps = caps;
         Self {
@@ -186,7 +183,7 @@ impl RecordingRepo {
         }
     }
 
-    fn update_count(&self) -> u32 {
+    pub(super) fn update_count(&self) -> u32 {
         *self.updates.lock().unwrap()
     }
 }

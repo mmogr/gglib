@@ -1,14 +1,18 @@
 //! Whether a model fits the device, as the app is told it.
 //!
 //! The verdict is gglib-core's (`domain::phone_fit::fit_verdict`), reached
-//! from a model's shape (its trained context and KV cache per token), the
-//! size of its weights and the device's budget. This module only reads the
-//! shape off what there is to read, a header's first bytes, an installed
-//! model's row or a shortlist row, and carries the verdict across.
+//! from a model's shape (its trained context and KV cache), the size of its
+//! weights and the device's budget. This module only reads the shape off
+//! what there is to read, a header's first bytes, an installed model's row
+//! or a shortlist row, and carries the verdict across.
+//!
+//! The KV cache is read as the phone's engine makes it, every sliding-window
+//! layer at the full context ([`KvShape::full_size_window`]), so a verdict
+//! is the context the model loads at.
 
 use gglib_core::domain::phone_fit::{self, fit_verdict};
 use gglib_core::domain::recommendation::ModelCandidate;
-use gglib_core::domain::{FitInputs, KvElemsPerToken, Model, estimate_kv_elems_per_token};
+use gglib_core::domain::{FitInputs, KvShape, Model, estimate_kv_shape};
 use gglib_core::ports::HeadMetadata;
 
 /// Whether a model fits the device, in the words a person reads it in.
@@ -84,7 +88,7 @@ impl From<FitInputs> for FitWhy {
     fn from(inputs: FitInputs) -> Self {
         Self {
             weights_bytes: inputs.weights_bytes,
-            kv_bytes_per_token: inputs.kv_bytes_per_token,
+            kv_bytes_per_token: inputs.kv.map(|kv| kv.per_token),
             budget_bytes: inputs.budget_bytes,
             trained_ctx: inputs.trained_ctx,
         }
@@ -96,7 +100,7 @@ impl From<FitInputs> for FitWhy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ModelShape {
     trained_ctx: Option<u64>,
-    kv: Option<KvElemsPerToken>,
+    kv: Option<KvShape>,
     /// What was read is a head that ended before the header did.
     cut_off: bool,
 }
@@ -110,7 +114,8 @@ impl ModelShape {
         let metadata = &head.metadata;
         Self {
             trained_ctx: metadata.context_length,
-            kv: estimate_kv_elems_per_token(&metadata.metadata, metadata.architecture.as_deref()),
+            kv: estimate_kv_shape(&metadata.metadata, metadata.architecture.as_deref())
+                .map(KvShape::full_size_window),
             cut_off: !head.complete,
         }
     }
@@ -120,7 +125,8 @@ impl ModelShape {
     pub(crate) fn of_model(model: &Model) -> Self {
         Self {
             trained_ctx: model.context_length,
-            kv: estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref()),
+            kv: estimate_kv_shape(&model.metadata, model.architecture.as_deref())
+                .map(KvShape::full_size_window),
             cut_off: false,
         }
     }
@@ -129,7 +135,7 @@ impl ModelShape {
     pub(crate) const fn of_candidate(candidate: &ModelCandidate) -> Self {
         Self {
             trained_ctx: Some(candidate.trained_ctx),
-            kv: Some(candidate.kv_elems_per_token),
+            kv: Some(KvShape::uniform(candidate.kv_elems_per_token)),
             cut_off: false,
         }
     }

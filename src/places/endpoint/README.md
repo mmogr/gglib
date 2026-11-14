@@ -21,8 +21,8 @@ words are `components/status/words.ts`'s.
 
 Load a model… opens a palette of this machine's models not loaded, each
 with the fit sentence of its explanation (served on `plan.fit`, the
-inspector's) and, when the launch would unload a model first, the CLI's
-unload sentence (pinned by `contracts/unloadReason.test.ts`); the
+inspector's) and, when the launch would unload a model first, the unload
+sentence `gglib model explain` prints, served on `plan.unloads`; the
 joined machine's models follow as On <machine>, loadable there as the far
 inspector allows. There is no route that explains many models, so each
 row is read on its own (`GET /api/models/:id/explain`), the highlighted
@@ -67,9 +67,9 @@ Mac.", "Every model on this Mac is loaded.", "On <machine>", "Load on
 "<machine>'s models could not be read just now.", "<machine> does not offer
 Load.", "Didn't load: <the daemon's words>" and "⏎ Load · ⌥⏎ Load with
 options…".
-The queue's wait is whole seconds, rounded down, as `gglib proxy dashboard`
-prints it ("4s", "1m 5s"); the inspector's "loaded 4m 10s" is
-`formatDuration`'s.
+The queue's wait ("4s", "1m 5s") and the inspector's "loaded 4m 10s" are
+the daemon's (`oldest_wait`, `resident_for`), as `gglib proxy dashboard`
+prints them.
 
 Connect a client's Model ID starts at the inspected model, else the pinned
 one, else the last loaded, else the default model setting, else the

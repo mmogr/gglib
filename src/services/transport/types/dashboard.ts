@@ -2,7 +2,7 @@
  * Proxy dashboard transport types.
  *
  * The frontend connects directly to an already-running proxy's own HTTP port
- * (`http://{host}:{port}/v1/proxy/status/stream`), the same way the CLI's
+ * (`http://{host}:{port}/v1/gglib/proxy/status/stream`), the same way the CLI's
  * `gglib proxy dashboard` command does (see
  * `crates/gglib-cli/src/handlers/proxy_dashboard.rs`) — a real HTTP client of
  * the JSON contract. Unknown or extra fields are ignored by TypeScript's
@@ -19,9 +19,8 @@
  * here — `Divergence`, `BaselineReport`, `EffortRung` — so the aliases keep
  * the longer spellings the components use.
  *
- * `tokensInUse` used to live here. It is behaviour rather than a declaration
- * and now sits in `../slotTokens`, so that replacing these mirrors with
- * generated types did not have to step around live logic.
+ * A slot's tokens in use are the proxy's (`SlotSnapshot.tokens_in_use`),
+ * counted where `/slots` is parsed; nothing here counts them.
  */
 
 // ============================================================================
@@ -110,16 +109,8 @@ export type { BaselineCoverage as SamplingBaselineCoverage } from '../../../type
 export type { BaselineReport as SamplingBaselineReport } from '../../../types/generated/BaselineReport';
 export type { BaselineState as SamplingBaselineState } from '../../../types/generated/BaselineState';
 
-/**
- * What one model's requests actually carried.
- *
- * Gained `effort_suppressed` — the record ADR 0007 says nothing else in the
- * system can reconstruct, because a `reasoning_effort` dropped by the template
- * gate leaves no other trace. The GUI had no way to render it.
- */
+/** What one model's requests actually carried. */
 export type { SamplingAuditSnapshot } from '../../../types/generated/SamplingAuditSnapshot';
-export type { EffortSuppressions } from '../../../types/generated/EffortSuppressions';
-export type { SuppressedEffortRecord } from '../../../types/generated/SuppressedEffortRecord';
 
 // ============================================================================
 // Reasoning readback

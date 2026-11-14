@@ -1,6 +1,4 @@
 //! Tests for [`super::apply`].
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::super::tests_support::chars;
 use super::*;

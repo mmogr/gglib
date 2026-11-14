@@ -68,7 +68,12 @@ async fn a_type_stored_while_the_file_is_read_is_kept() {
     std::fs::write(&file, b"weights").unwrap();
     let repo = SqliteModelRepository::new(pool.clone());
     let model = repo
-        .insert(&NewModel::new("zeta".to_owned(), file, 7.0, Utc::now()))
+        .insert(&NewModel::new(
+            "zeta".to_owned(),
+            file,
+            Some(7.0),
+            Utc::now(),
+        ))
         .await
         .unwrap();
     let parser = WrittenWhileRead {

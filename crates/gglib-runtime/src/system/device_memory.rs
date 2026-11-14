@@ -1,9 +1,9 @@
 //! Device memory for the GPUs `nvidia-smi` and Metal cannot answer for.
 //!
-//! A `#[path]` child of [`super`] so the probing stays inside the file budget,
-//! and because it is one decision rather than a grab-bag: *how many bytes may a
-//! model be sized against on this device*. The answer is deliberately allowed
-//! to be "we do not know" — see [`other_gpu_memory_bytes`].
+//! A `#[path]` child of [`super`] because it is one decision rather than a
+//! grab-bag: *how many bytes may a model be sized against on this device*.
+//! The answer is deliberately allowed to be "we do not know" — see
+//! [`other_gpu_memory_bytes`].
 
 use gglib_core::utils::process::cmd;
 

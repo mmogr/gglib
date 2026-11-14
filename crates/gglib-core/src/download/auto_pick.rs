@@ -21,9 +21,7 @@ use crate::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V};
 use crate::domain::FileType;
 use crate::domain::SECOND_RUNG;
 use crate::domain::gguf::{GgufMetadata, HeadMetadata};
-use crate::domain::kv_estimate::{
-    KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
-};
+use crate::domain::kv_estimate::{KvShape, estimate_kv_shape};
 use crate::domain::phone_fit::{FitVerdict, MissingInput, fit_verdict};
 use crate::domain::recommendation::{budget_covering, usable_share};
 use crate::domain::variant_fit::VariantFit;
@@ -121,10 +119,15 @@ impl MemoryFit {
     /// Whether `weights_bytes` of weights and the KV cache of all `trained`
     /// tokens, at the default KV types, fit the share of the budget a fit
     /// spends.
-    fn whole_window(self, weights_bytes: u64, trained: u64, kv: KvElemsPerToken) -> Fit {
-        let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
-        self.holds(weights_bytes.saturating_add(estimate_kv_bytes_for_context(per_token, trained)))
+    fn whole_window(self, weights_bytes: u64, trained: u64, kv: KvShape) -> Fit {
+        self.holds(whole_window_bytes(weights_bytes, trained, kv))
     }
+}
+
+/// `weights_bytes` and the KV cache of `trained` tokens at the default types.
+fn whole_window_bytes(weights_bytes: u64, trained: u64, kv: KvShape) -> u64 {
+    let kv = kv.bytes(DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+    weights_bytes.saturating_add(kv.at(trained))
 }
 
 impl MemoryFit {
@@ -146,7 +149,7 @@ impl MemoryFit {
             return self.files_only(weights_bytes);
         }
         let trained = metadata.context_length;
-        let kv = estimate_kv_elems_per_token(&metadata.metadata, metadata.architecture.as_deref());
+        let kv = estimate_kv_shape(&metadata.metadata, metadata.architecture.as_deref());
         let (verdict, _) = fit_verdict(trained, Some(weights_bytes), kv, Some(self.budget_bytes));
         match (verdict, trained, kv) {
             (FitVerdict::Fits { .. }, ..) => (Fit::Fits, verdict.into()),
@@ -197,17 +200,14 @@ impl MemoryFit {
         self,
         weights_bytes: u64,
         trained: u64,
-        kv: KvElemsPerToken,
+        kv: KvShape,
     ) -> (Fit, VariantFit) {
         let fit = self.whole_window(weights_bytes, trained, kv);
         let verdict = if fit == Fit::Fits {
             VariantFit::Fits { ctx: Some(trained) }
         } else {
-            let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
             VariantFit::TooBig {
-                need_bytes: budget_covering(
-                    weights_bytes.saturating_add(estimate_kv_bytes_for_context(per_token, trained)),
-                ),
+                need_bytes: budget_covering(whole_window_bytes(weights_bytes, trained, kv)),
                 have_bytes: self.budget_bytes,
             }
         };

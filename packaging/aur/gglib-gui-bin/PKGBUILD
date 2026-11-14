@@ -8,7 +8,7 @@
 # entry and icons already laid out under /usr. The deb does not carry the CLI
 # the app launches: it depends on gglib's own package for that, so this one
 # depends on gglib-bin of the same version, which installs /usr/bin/gglib
-# beside /usr/bin/gglib-app.
+# beside /usr/bin/gglib-gui.
 pkgname=gglib-gui-bin
 pkgver=@VERSION@
 pkgrel=1

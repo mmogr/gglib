@@ -154,28 +154,26 @@ describe('drawItem', () => {
 
 describe('toolsItem', () => {
   it('is not offered on a far chat, whose tools are its machine\'s', () => {
-    expect(toolsItem(listed(['read_file']), undefined, true, null)).toBeNull();
+    expect(toolsItem(listed(['read_file']), undefined, true)).toBeNull();
   });
 
   it("says the model can't call tools, and offers no checklist, for a model that cannot", () => {
-    const sub = toolsItem(listed(['read_file']), chat([]), false, null)!.submenu!;
+    const sub = toolsItem(listed(['read_file']), chat([]), false)!.submenu!;
     expect(sub).toEqual([{ label: "This model can't call tools", note: true }]);
     expect(CANT_CALL_TOOLS).toBe("This model can't call tools");
   });
 
-  it('is the checklist where whether it can is not yet known, and names the format where it can', () => {
-    expect(toolsItem(listed(['read_file']), chat([]), null, null)!.submenu!.map((item) => item.label)).toEqual([
+  it('is the checklist where whether it can is not yet known', () => {
+    expect(toolsItem(listed(['read_file']), chat([]), null)!.submenu!.map((item) => item.label)).toEqual([
       'Enable all',
       'Disable all',
       'Read File',
     ]);
-    expect(toolsItem(listed(['read_file']), chat([]), true, 'hermes')!.title).toBe('This model calls tools (hermes format).');
-    expect(toolsItem(listed(['read_file']), chat([]), null, 'hermes')!.title).toBeUndefined();
   });
 
   it('ticks each tool as the chat saved it, and a pick toggles it by its daemon name among every listed tool', () => {
     const saved = chat(['builtin:read_file']);
-    const [enable, disable, time, read] = toolsItem(listed(['get_current_time', 'read_file']), saved, true, null)!.submenu!;
+    const [enable, disable, time, read] = toolsItem(listed(['get_current_time', 'read_file']), saved, true)!.submenu!;
     expect([enable.disabled, disable.disabled]).toEqual([false, false]);
     expect([time.checked, read.checked, time.toggles, read.toggles]).toEqual([false, true, true, true]);
     time.onPick!();
@@ -189,18 +187,18 @@ describe('toolsItem', () => {
   });
 
   it('greys Enable all where every tool is, and Disable all where none is', () => {
-    const every = toolsItem(listed(['a', 'b']), chat(['builtin:a', 'builtin:b'], { every: true }), true, null)!.submenu!;
+    const every = toolsItem(listed(['a', 'b']), chat(['builtin:a', 'builtin:b'], { every: true }), true)!.submenu!;
     expect([every[0].disabled, every[1].disabled]).toEqual([true, false]);
-    const none = toolsItem(listed(['a', 'b']), chat([], { none: true }), true, null)!.submenu!;
+    const none = toolsItem(listed(['a', 'b']), chat([], { none: true }), true)!.submenu!;
     expect([none[0].disabled, none[1].disabled]).toEqual([false, true]);
   });
 
   it('says why there is no checklist while the tool servers are not read', () => {
-    expect(toolsItem('Asking gglib', chat([]), true, null)!.submenu).toEqual([{ label: 'Asking gglib', note: true }]);
+    expect(toolsItem('Asking gglib', chat([]), true)!.submenu).toEqual([{ label: 'Asking gglib', note: true }]);
   });
 
   it('says so where no tool is registered', () => {
-    const sub = toolsItem([], chat([]), true, null)!.submenu!;
+    const sub = toolsItem([], chat([]), true)!.submenu!;
     expect(sub).toEqual([{ label: 'No tools registered', note: true }]);
   });
 

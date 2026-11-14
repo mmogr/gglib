@@ -13,8 +13,9 @@ use serde::{Deserialize, Serialize};
 #[path = "types_hf.rs"]
 mod types_hf;
 pub use types_hf::{
-    HfCompanion, HfImagePreview, HfModelKind, HfModelSummary, HfProjector, HfQuantization,
-    HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfSortField, ToolSupportResponse,
+    HfCompanion, HfImagePreview, HfModelKind, HfModelSummary, HfPickResponse, HfProjector,
+    HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfSortField,
+    ToolSupportResponse,
 };
 #[path = "types_model_update.rs"]
 mod types_model_update;
@@ -33,7 +34,10 @@ pub struct GuiModel {
     pub id: i64,
     pub name: String,
     pub file_path: String,
-    pub param_count_b: f64,
+    /// The parameters, in billions; omitted when they are unknown.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub param_count_b: Option<f64>,
     pub architecture: Option<String>,
     /// The label the model's type is shown by: see `Model::quant_label`.
     pub quantization: Option<String>,
@@ -340,11 +344,10 @@ pub struct RetagResponse {
     pub changed: bool,
     pub added: Vec<String>,
     pub removed: Vec<String>,
-    pub spec_changed: bool,
     /// The image family read from the file for a model that had none.
     pub family_found: Option<gglib_core::domain::ImageFamily>,
-    /// Whether the type or the bits per weight the model lacked were read
-    /// from its file's header.
+    /// Whether the type, the bits per weight or the parameter count the model
+    /// lacked were read from its file's header.
     pub facts_read: bool,
 }
 
@@ -423,7 +426,6 @@ pub struct McpServerDto {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     pub name: String,
-    pub server_type: String,
     pub config: McpServerConfigDto,
     pub enabled: bool,
     /// Whether a paired device's runs are offered this server's tools. Read
@@ -470,10 +472,6 @@ pub struct McpServerConfigDto {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path_extra: Option<String>,
-    /// URL for SSE connection (required for sse)
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
 }
 
 /// An environment variable a new server is created with. Requests only:
@@ -506,8 +504,6 @@ pub enum McpServerStatusDto {
     Starting,
     Running,
     Error(String),
-    /// Of a kind gglib cannot run: an SSE server.
-    Unsupported,
 }
 
 /// MCP server info for GUI display (nested structure matching TS expectations).
@@ -543,7 +539,6 @@ impl From<McpServerStatus> for McpServerStatusDto {
             McpServerStatus::Stopped => Self::Stopped,
             McpServerStatus::Starting => Self::Starting,
             McpServerStatus::Error(msg) => Self::Error(msg),
-            McpServerStatus::Unsupported => Self::Unsupported,
         }
     }
 }
@@ -553,13 +548,11 @@ impl From<McpServerStatus> for McpServerStatusDto {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct CreateMcpServerRequest {
     pub name: String,
-    pub server_type: String,
     pub command: Option<String>,
     #[serde(default)]
     pub args: Vec<String>,
     pub working_dir: Option<String>,
     pub path_extra: Option<String>,
-    pub url: Option<String>,
     #[serde(default)]
     pub env: Vec<McpEnvEntryDto>,
     #[serde(default)]
@@ -575,7 +568,6 @@ pub struct UpdateMcpServerRequest {
     pub args: Option<Vec<String>>,
     pub working_dir: Option<String>,
     pub path_extra: Option<String>,
-    pub url: Option<String>,
     /// The whole list of variables the server keeps, when sent.
     pub env: Option<Vec<McpEnvUpdateDto>>,
     pub enabled: Option<bool>,

@@ -7,10 +7,6 @@
  * `?:` described a backend that predates those fields and no longer exists,
  * and the fixtures written against it were each describing a slightly
  * different impossible response.
- *
- * `effortSuppressed` stays genuinely optional: it carries
- * `skip_serializing_if`, so a model whose template reads `reasoning_effort`
- * really does omit the key.
  */
 import type { LaunchExplanation, SamplingExplanation } from '../../../src/types';
 import type { LaunchPlan } from '../../../src/types/generated/LaunchPlan';
@@ -42,7 +38,7 @@ export function launchExplanation(
   plan: LaunchPlan = {
     program: 'llama-server',
     args: [],
-    narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [] },
+    narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [], fit: null },
     fit: null,
   },
 ): LaunchExplanation {
@@ -67,7 +63,7 @@ export function chatPlan(overrides: Partial<LaunchPlan> = {}): LaunchPlan {
       { flag: '--cache-type-k', value: 'q8_0', decision: 'kv', source: 'gglib', reason: 'q8_0 halves the KV cache at no measured cost' },
       { flag: '--cache-type-v', value: 'q8_0', decision: 'kv', source: 'gglib', reason: 'q8_0 halves the KV cache at no measured cost' },
     ],
-    narration: { model_name: 'gemma', quantization: 'Q4_K_M', weights_bytes: 2_500_000_000, decisions: [] },
+    narration: { model_name: 'gemma', quantization: 'Q4_K_M', weights_bytes: 2_500_000_000, decisions: [], fit: null },
     // The first fit `contracts/models/fit_sentence.json` records, words and
     // all (`tests/ts/contracts/fitSentence.test.ts` holds it there).
     fit: {
@@ -77,10 +73,20 @@ export function chatPlan(overrides: Partial<LaunchPlan> = {}): LaunchPlan {
       budgetBytes: 48 * 1024 ** 3,
       weightsBytes: 2_500_000_000,
       kvBytesPerToken: 1_097_000,
+      kvBytes: 35_946_496_000,
       trainedCtx: 131072,
       unsnapped: 40005,
       sentence: 'Fits this machine with 32K context, of 128K trained.',
       note: 'fits (35.81 GiB of 43.20 GiB usable)',
+      figures: [
+        { label: 'memory', value: 'fits (35.81 GiB of 43.20 GiB usable)', source: null },
+        { label: 'device budget', value: '48.00 GiB', source: null },
+        { label: 'weights', value: '2.33 GiB', source: null },
+        { label: 'kv bytes/token', value: '1097000', source: null },
+        { label: 'kv cache', value: '33.48 GiB', source: null },
+        { label: 'trained window', value: '131072', source: null },
+        { label: 'before snapping', value: '40005', source: null },
+      ],
     },
     ...overrides,
   };

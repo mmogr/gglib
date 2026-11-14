@@ -11,15 +11,15 @@ use anyhow::Result;
 use gglib_core::paths::{llama_server_path, sd_server_path};
 
 /// What [`bootstrap`](crate::bootstrap::bootstrap) builds the adapter's
-/// context from. Where the daemon binds and the CORS policy of its router are
-/// set by [`DaemonOptions`](crate::DaemonOptions).
+/// context from. The hosts the daemon answers to are set by
+/// [`DaemonOptions`](crate::DaemonOptions).
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     /// Base port for llama-server instances, when the caller names one.
     ///
     /// `None` leaves it to the saved `llama_base_port` setting, then the
     /// compiled default — see `gglib_app_services`' `resolve_llama_base_port`.
-    /// The daemon names none, so `config settings set --llama-base-port`
+    /// The daemon names none, so `config set llama-base-port`
     /// reaches it when it next starts (#1161); tests name one to stay off the
     /// ports a running daemon uses.
     pub base_port: Option<u16>,
@@ -30,8 +30,8 @@ pub struct ServerConfig {
     /// Maximum concurrent agent loop sessions.
     ///
     /// Each agent run holds one permit until it ends. When all permits are
-    /// taken, a new turn is refused `429 agent_busy` immediately rather than
-    /// queued.
+    /// taken, this machine's own turn is refused `429 agent_busy` at once,
+    /// and a paired device's run waits in line for one (`SlotLine`).
     pub max_concurrent_agent_loops: usize,
     /// Database file to open. `None` resolves through [`database_path`](gglib_core::paths::database_path).
     ///

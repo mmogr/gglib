@@ -1,9 +1,8 @@
 //! Tests for the duplicate-enqueue guard in `enqueue_group`, which every
 //! request queues through.
 //!
-//! Kept out of `mod.rs`: the port stubs a real `DownloadManagerImpl` needs are
-//! bulky and self-contained, and that file is already well over the size
-//! ratchet's budget.
+//! Kept out of `mod.rs`: the port stubs a real `DownloadManagerImpl` needs
+//! are bulky and self-contained.
 
 use super::*;
 use async_trait::async_trait;

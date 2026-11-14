@@ -7,8 +7,8 @@
 //! that answer carries: the model's id there, the name it goes by, the
 //! context it would be served with, whether it reads images, and the
 //! profiles it can be asked for with. The sort and filter flags describe
-//! this machine's catalogue and are not applied; the far list is short and
-//! arrives sorted as that machine sorts it.
+//! this machine's catalogue, so typed beside `--remote` they are refused;
+//! the far list is short and arrives sorted as that machine sorts it.
 //!
 //! Without `--remote`, the local list ends with [`summary`]'s one line about
 //! the paired machine, which asks that machine nothing.
@@ -25,8 +25,8 @@ use crate::daemon_client::{self, DaemonHandle, DaemonProbe};
 use crate::handlers::remote::for_how_long;
 use crate::target::Target;
 
-pub(super) async fn execute(ctx: &CliContext, target: Target) -> Result<()> {
-    let paired = target.paired(ctx).await?;
+pub(super) async fn execute(target: Target) -> Result<()> {
+    let paired = target.paired().await?;
     let listed = paired.handle.paired_models().await?;
     let rows = rows(&listed.models);
     print!(
@@ -49,7 +49,6 @@ pub(super) async fn execute(ctx: &CliContext, target: Target) -> Result<()> {
 /// `None` when nothing is paired.
 pub(super) async fn summary(ctx: &CliContext) -> Option<String> {
     let daemon = Daemon {
-        ctx,
         client: gglib_proxy::loopback::client(),
     };
     summary_from(ctx, &daemon).await
@@ -66,12 +65,11 @@ trait ConnectionReport: Sync {
 }
 
 /// This machine's daemon, over loopback.
-struct Daemon<'a> {
-    ctx: &'a CliContext,
+struct Daemon {
     client: reqwest::Client,
 }
 
-impl ConnectionReport for Daemon<'_> {
+impl ConnectionReport for Daemon {
     async fn running(&self) -> bool {
         matches!(
             daemon_client::probe(&self.client).await,
@@ -80,7 +78,7 @@ impl ConnectionReport for Daemon<'_> {
     }
 
     async fn connection(&self) -> Option<RemoteConnection> {
-        let handle = DaemonHandle::new(self.ctx, self.client.clone()).await;
+        let handle = DaemonHandle::new(self.client.clone());
         handle.remote_status().await.ok().and_then(|s| s.connected)
     }
 }

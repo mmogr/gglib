@@ -4,16 +4,15 @@
  * All five — list, add, update, start, stop — answer with the nested
  * `McpServerInfo`, so a fixture standing in for any of them is `{server,
  * status, state, tools}` and not a bare row. Mocks that returned the row were
- * describing a response no handler produces; two of them also spelled
- * `server_type` as `type` and omitted `config`, `created_at` and `is_valid`,
- * which only typechecked because the mirror had those fields wrong too.
+ * describing a response no handler produces; two of them also omitted
+ * `config`, `created_at` and `is_valid`, which only typechecked because the
+ * mirror had those fields wrong too.
  */
 import type { McpServer, McpServerInfo } from '../../../src/services/transport/types/mcp';
 
 const BASE: McpServer = {
   id: 1,
   name: 'Test Server',
-  server_type: 'stdio',
   config: { command: 'echo', args: [] },
   enabled: true,
   allow_remote: false,

@@ -1,8 +1,4 @@
 //! Tests for [`super::ProxySupervisor::agent_guard_sink`] (#1091).
-//!
-//! A file of its own rather than more of `supervisor_tests.rs`, which is at
-//! 291 lines against the rust-complexity gate's 300 for a file that has never
-//! crossed it.
 
 use super::*;
 use gglib_core::domain::defects::LoopGuardTrip;

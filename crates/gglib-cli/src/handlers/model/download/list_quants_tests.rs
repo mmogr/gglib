@@ -160,3 +160,27 @@ fn a_size_is_written_to_the_nearest_tenth_of_a_mib_a_tie_upward() {
     assert_eq!(mib(MIB + 52_427), "1.0 MiB");
     assert_eq!(mib(1536 * MIB), "1536.0 MiB");
 }
+
+/// The download's pick is marked when the listing's heads marked none, and
+/// never beside a pick the listing made.
+#[test]
+fn the_downloads_pick_is_marked_when_the_listing_marked_none() {
+    let fits = || VariantFit::Tight { ctx: 4096 };
+    let mut unmarked = listing(vec![model("Q4_K_M", 1, fits()), model("Q8_0", 2, fits())]);
+    mark_pick(&mut unmarked, Some("Q8_0"));
+    let marked: Vec<&str> = unmarked
+        .quantizations
+        .iter()
+        .filter(|q| q.picked)
+        .map(|q| q.label.as_str())
+        .collect();
+    assert_eq!(marked, ["Q8_0"]);
+
+    let mut listed = listing(vec![model("Q4_K_M", 1, fits()), model("Q8_0", 2, fits())]);
+    listed.quantizations[0].picked = true;
+    mark_pick(&mut listed, Some("Q8_0"));
+    assert!(!listed.quantizations[1].picked);
+
+    mark_pick(&mut unmarked, None);
+    assert!(unmarked.quantizations[1].picked);
+}

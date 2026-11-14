@@ -1,6 +1,4 @@
 //! Tests for [`super::Settings`].
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 
@@ -135,7 +133,7 @@ fn test_validate_inference_config_reasoning_budget_below_upstream_range() {
 
 /// The guard is reachable from the settings surface, not just callable.
 ///
-/// `validate_settings` is what `gglib config settings set` and the settings
+/// `validate_settings` is what `gglib config set` and the settings
 /// service call; the global rung and every profile rung run through it. A guard
 /// that only the unit test above reaches would leave both ingress paths open.
 #[test]
@@ -343,19 +341,6 @@ fn the_effective_proxy_port_is_the_stored_one_then_the_default() {
     );
 }
 
-/// Agentic sampling is off only when it is stored off: on when stored on,
-/// and on when nothing is stored.
-#[test]
-fn agentic_sampling_is_on_unless_it_is_stored_off() {
-    let stored = |agentic_sampling| Settings {
-        agentic_sampling,
-        ..Settings::default()
-    };
-    assert!(stored(None).effective_agentic_sampling());
-    assert!(stored(Some(true)).effective_agentic_sampling());
-    assert!(!stored(Some(false)).effective_agentic_sampling());
-}
-
 // ── Inference profiles ──────────────────────────────────────────────
 
 fn profile(name: &str, temperature: f32) -> InferenceProfile {
@@ -464,7 +449,7 @@ fn test_profiles_round_trip_through_json_and_default_when_absent() {
 
 /// The property `test_default_settings`' `None` is only the shadow of.
 ///
-/// `gglib config settings reset` writes each preference as `with_defaults`
+/// `gglib config reset` writes each preference as `with_defaults`
 /// has it, so what that constructor holds decides which context rung a reset
 /// user lands on. Asserting the field is `None` says what the value is; this
 /// says why it matters, and it is the assertion that fails if someone restores

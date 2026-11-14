@@ -259,13 +259,12 @@ async fn a_chat_head_and_an_unlisted_companion_answer_no_preview() {
 #[tokio::test]
 async fn the_listing_served_carries_the_image_preview() {
     use crate::downloads::{DownloadDeps, DownloadOps};
-    use crate::test_support::{MockDownloadManager, MockToolSupportDetector};
+    use crate::test_support::MockDownloadManager;
 
     let models = tempfile::tempdir().unwrap();
     let ops = DownloadOps::new(DownloadDeps {
         downloads: Arc::new(MockDownloadManager::new()),
         hf: Arc::new(hub("flux1-schnell-q8_0.gguf")),
-        tool_detector: Arc::new(MockToolSupportDetector),
         gguf_parser: Arc::new(HeadParser),
         models_directory: Some(models.path().to_path_buf()),
     });
@@ -286,7 +285,7 @@ async fn the_listing_served_carries_the_image_preview() {
 #[tokio::test]
 async fn a_listing_without_the_companions_still_judges_an_image_model_by_its_files() {
     use crate::downloads::{DownloadDeps, DownloadOps};
-    use crate::test_support::{MockDownloadManager, MockToolSupportDetector};
+    use crate::test_support::MockDownloadManager;
     use gglib_core::domain::{MissingInput, VariantFit};
 
     let mut unlisted = hub("flux1-schnell-q8_0.gguf");
@@ -294,7 +293,6 @@ async fn a_listing_without_the_companions_still_judges_an_image_model_by_its_fil
     let ops = DownloadOps::new(DownloadDeps {
         downloads: Arc::new(MockDownloadManager::new()),
         hf: Arc::new(unlisted),
-        tool_detector: Arc::new(MockToolSupportDetector),
         gguf_parser: Arc::new(HeadParser),
         models_directory: None,
     });

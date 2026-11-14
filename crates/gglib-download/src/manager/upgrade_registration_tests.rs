@@ -40,7 +40,7 @@ fn stored(id: i64, download: &CompletedDownload) -> RegisteredDownload {
     let new = NewModel::new(
         "zeta".to_string(),
         download.primary_path.clone(),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     RegisteredDownload {

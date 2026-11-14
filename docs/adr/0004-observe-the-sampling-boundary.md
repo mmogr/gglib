@@ -1,6 +1,6 @@
 # ADR 0004 — Observe the sampling boundary
 
-- **Status:** Accepted
+- **Status:** Accepted; the shipped ceiling superseded (amended 2026-11-12)
 - **Date:** 2026-08-09 (amended 2026-08-09 — finding 1 overstated which
   launch paths pass sampler flags, and named launch flags as the only thing
   that masks `/props`; see the amendment there and finding 7. Addendum
@@ -10,7 +10,8 @@
   note under decision 3. Addendum 2026-08-29 — the A/B instrument was reporting
   a comparison it had not taken; four defects, and a follow-up above whose
   stated cause was wrong. Amended 2026-10-15 — the floor beneath the ceiling
-  is gone; see the note under "What actually ships")
+  is gone; see the note under "What actually ships". Amended 2026-11-12 — the
+  ceiling itself is deleted; see the same place)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md)
 - **Supersedes:** nothing
@@ -629,6 +630,12 @@ A temperature **ceiling** of `0.6` on `reasoning`-tagged models and `0.3`
 otherwise ([`agentic_temperature_ceiling`]), clamped *after* the fold and gated
 on provenance.
 
+> **Amended 2026-11-12 — the ceiling is deleted.** Tool turns keep the
+> temperature the ladder resolves. `agentic_temperature_ceiling`, the
+> `agentic-sampling` setting and `GGLIB_DISABLE_AGENTIC_SAMPLING` are gone
+> ([ADR 0022](0022-the-proxy-does-less.md), the amendment under Out of scope).
+> The ban on request-level task overlays stands.
+
 | | the banned overlay | the shipped ceiling |
 |---|---|---|
 | trigger | inferred from prompt content | `tools` present on the request |
@@ -736,6 +743,9 @@ is explicitly *not* touched: no non-reasoning model was measured, and this
 postscript is not a licence to generalise past its data. What would reopen
 *this* decision is the same thing that reopened the last one: a measured run,
 on the models it claims to describe.
+
+> **Amended 2026-11-12.** The `0.3` cap is deleted too, with the rest of the
+> ceiling (the amendment under "What actually ships").
 
 ## Addendum — the A/B instrument, and the first thing it measured
 

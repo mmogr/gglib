@@ -9,8 +9,7 @@
 //! An image model is placed by [`QueueState::choose_image_slot`]: it never
 //! takes an empty primary, it takes the second slot when the memory check
 //! grants it or when the primary is empty, and otherwise it swaps into an
-//! evictable primary. When every slot it may use is held by a run it is
-//! refused at once, because waiting would not help until that run ends.
+//! evictable primary.
 //!
 //! One image model is loaded at a time. While another image model is in a
 //! slot, loaded or still loading, that slot is the only one an image model
@@ -22,23 +21,22 @@
 //! only when the newcomer fits in the memory the model it replaces gives back
 //! ([`QueueState::fits_in_place_of`]); with nothing loaded beside the other
 //! image model, the newcomer replaces it whatever the budget. One too large
-//! for its place ([`QueueState::too_large_for_its_place`]) is refused at once
-//! when a run holds the model in its way; otherwise it waits without leading
-//! the line.
+//! for its place ([`QueueState::too_large_for_its_place`]) waits without
+//! leading the line.
 
 use gglib_core::domain::{
     RuntimeKind, SecondarySlotDecision, SlotFootprint, decide_secondary_slot_for,
 };
 use tokio::time::Instant;
 
-use super::{AdmissionDecision, PRIMARY_SLOT, QueueState, Resident, SLOT_COUNT, SlotState, Ticket};
+use super::{PRIMARY_SLOT, QueueState, SLOT_COUNT, SlotState};
 
 /// What a request asks the queue to place: the program that serves its
 /// model, and the caller's verdict on the second slot.
 ///
 /// Plain data, computed before the queue's lock is taken. A waiter keeps the
-/// last one it polled with, so the queue can tell a waiter that only a held
-/// slot could take from one that is merely early.
+/// last one it polled with, so the queue can tell a waiter too large for its
+/// place from one that is merely early.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Candidate {
     /// The program that serves the model.
@@ -75,46 +73,6 @@ impl From<SecondarySlotDecision> for Candidate {
     }
 }
 
-/// Why the queue refused a request outright instead of letting it wait.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Refusal {
-    /// An image model could be placed only by evicting a model a run holds.
-    HeldSlot {
-        /// The held model in the way.
-        held_model: String,
-        /// What the image model needs, when the verdict knew it.
-        needed_bytes: Option<u64>,
-        /// The free memory the verdict was judged against, when it read one.
-        free_bytes: Option<u64>,
-    },
-}
-
-impl Refusal {
-    /// The refusal in words, for a requester asking for `model`.
-    #[must_use]
-    pub fn describe(&self, model: &str) -> String {
-        match self {
-            Self::HeldSlot {
-                held_model,
-                needed_bytes,
-                free_bytes,
-            } => {
-                let needed =
-                    needed_bytes.map_or_else(String::new, |b| format!(", which needs {b} bytes"));
-                let free = free_bytes.map_or_else(
-                    || "free memory could not be read".to_owned(),
-                    |b| format!("{b} bytes are free"),
-                );
-                format!(
-                    "'{model}'{needed} does not fit beside '{held_model}' ({free}), and \
-                     '{held_model}' is held by a run, so it cannot be swapped out; retry when \
-                     the run ends"
-                )
-            }
-        }
-    }
-}
-
 impl QueueState {
     /// Whether `candidate` may ever use `slot`, leaving aside whether the slot
     /// can be had right now.
@@ -124,13 +82,7 @@ impl QueueState {
         if candidate.runtime == RuntimeKind::StableDiffusion
             && let Some(place) = self.image_slot()
         {
-            if !self.too_large_for_its_place(candidate) {
-                return slot == place;
-            }
-            // Too large for that place: it needs the memory of every other
-            // loaded model too, so each is in its way. Only the hold check
-            // reads these; `choose_image_slot` takes none of them.
-            return slot != place && self.slot(slot).is_some();
+            return slot == place;
         }
         let primary_empty = matches!(self.slots[PRIMARY_SLOT], SlotState::Empty);
         match (candidate.runtime, slot == PRIMARY_SLOT) {
@@ -213,50 +165,13 @@ impl QueueState {
             .find(|&slot| self.slots[slot].runtime() == Some(RuntimeKind::StableDiffusion))
     }
 
-    /// The held resident in `candidate`'s way, when every slot it may use is
-    /// held by a run.
-    ///
-    /// `None` when any slot it may use is free of holds, even if that slot is
-    /// busy or loading now: those end on their own, a hold ends only with its
-    /// run.
-    pub(super) fn held_only(&self, candidate: Candidate) -> Option<&Resident> {
-        let mut held = None;
-        for slot in (0..SLOT_COUNT).filter(|&slot| self.may_use(slot, candidate)) {
-            if !self.is_held(slot) {
-                return None;
-            }
-            held.get_or_insert(slot);
-        }
-        held.and_then(|slot| self.slot(slot))
-    }
-
-    /// Refuse an image model that only a held slot could take, forgetting its
-    /// ticket. `None` for any other request.
-    pub(super) fn refuse_held(
-        &mut self,
-        ticket: &Ticket,
-        candidate: Candidate,
-    ) -> Option<AdmissionDecision> {
-        if candidate.runtime != RuntimeKind::StableDiffusion {
-            return None;
-        }
-        let refusal = Refusal::HeldSlot {
-            held_model: self.held_only(candidate)?.model_name.clone(),
-            needed_bytes: candidate.secondary.footprint_bytes(),
-            free_bytes: candidate.secondary.free_bytes(),
-        };
-        self.forget(ticket);
-        Some(AdmissionDecision::Refuse(refusal))
-    }
-
     /// Whether a waiting model can take its turn at the front of the line:
-    /// false when its oldest waiter last polled with a candidate that only a
-    /// held slot could take, or an image model too large for its place
-    /// ([`Self::too_large_for_its_place`]). Such a waiter is passed over, so
-    /// it never blocks the line for others and no resident stands aside for
-    /// it; it keeps waiting until its own deadline.
+    /// false when its oldest waiter last polled as an image model too large
+    /// for its place ([`Self::too_large_for_its_place`]). Such a waiter is
+    /// passed over, so it never blocks the line for others and no resident
+    /// stands aside for it; it keeps waiting until its own deadline.
     pub(super) fn may_lead(&self, candidate: Option<Candidate>) -> bool {
-        candidate.is_none_or(|c| self.held_only(c).is_none() && !self.too_large_for_its_place(c))
+        candidate.is_none_or(|c| !self.too_large_for_its_place(c))
     }
 
     /// Pick the slot an image model launches into, if one can be had.

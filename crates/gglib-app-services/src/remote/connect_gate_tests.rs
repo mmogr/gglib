@@ -5,11 +5,9 @@
 //! asserts what is still `dial`'s, which no test inside modelpipe can: that
 //! it goes through them, and what `disconnect` may end while it does.
 //!
-//! Its own file rather than more of `connect_race_tests.rs`, which is at
-//! 229 of the 300 lines `scripts/check_file_size.sh` allows and would
-//! join the ratchet's baseline rather than pass it. The subject is a
-//! different one anyway: that file is about two commands arriving at once,
-//! this one is about the order of two steps inside one.
+//! Its own file rather than more of `connect_race_tests.rs`, because the
+//! subject is a different one: that file is about two commands arriving at
+//! once, this one is about the order of two steps inside one.
 
 use std::net::Ipv4Addr;
 use std::time::Duration;

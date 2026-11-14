@@ -20,19 +20,35 @@ use crate::handlers::agent_chat::images::TurnImages;
 use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::repl::{Session, run_repl};
 use crate::handlers::agent_chat::resume_settings::require_a_model;
-use crate::handlers::agent_chat::sampling_warning;
 use crate::handlers::agent_chat::turn::Shown;
-use crate::shared_args::SamplingArgs;
+use crate::shared_args::ChatSamplingArgs;
 use crate::target::Target;
 
-/// System prompt for the agentic question mode.
+/// System prompt for a question asked with its tools.
 const SYSTEM_PROMPT: &str = "\
 You are an expert code analyst. You have access to filesystem tools \
 (read_file, list_directory, grep_search) scoped to the user's working \
 directory. Use them to explore the codebase and answer the question \
 thoroughly. Be direct and concise.";
 
-/// Arguments for the question command.
+/// System prompt for a question asked with `--no-tools`. It names no tool
+/// and no folder: a model told of tools it was not given calls one anyway,
+/// and the call comes back as its reply.
+const SYSTEM_PROMPT_NO_TOOLS: &str = "\
+Answer the question from what you know and from any text given with it. \
+You have no tools and cannot read files. Be direct and concise.";
+
+/// The system prompt a question's chat is made with. Only a question with
+/// tools is told of them and of the directory they read.
+fn system_prompt(no_tools: bool, cwd: &std::path::Path) -> String {
+    if no_tools {
+        SYSTEM_PROMPT_NO_TOOLS.to_owned()
+    } else {
+        format!("{SYSTEM_PROMPT}\n\nWorking directory: {}", cwd.display())
+    }
+}
+
+/// Arguments for the `q` command.
 ///
 /// A bag rather than a parameter list, matching how `chat` already passes
 /// [`ChatArgs`](super::chat::ChatArgs): fifteen positional arguments made
@@ -60,7 +76,7 @@ pub(crate) struct QuestionArgs {
     pub show_prompt: bool,
     pub verbose: bool,
     pub quiet: bool,
-    pub sampling: SamplingArgs,
+    pub sampling: ChatSamplingArgs,
     /// Named sampling profile, the flag form of a `{model}:{profile}` suffix.
     pub profile: Option<String>,
 }
@@ -123,7 +139,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
                 anyhow!(
                     "No model specified and no default model set.\n\
                      Use --model <id-or-name> or set a default:\n  \
-                     gglib config default <id-or-name>"
+                     gglib config set default-model-id <id-or-name>"
                 )
             })?;
             let model = ctx
@@ -139,16 +155,11 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     let turn = target.resolve_turn(ctx, model_identifier).await?;
     require_a_model(ctx, &turn).await?;
     // The daemon answers the question: found, or started, once its model is.
-    let daemon = daemon_client::ensure_daemon(ctx).await?;
-    if !quiet {
-        for line in sampling_warning::notices(&sampling, target, &settings) {
-            eprintln!("{line}");
-        }
-    }
+    let daemon = daemon_client::ensure_daemon().await?;
 
     // The question's chat, made before it is asked: the daemon answers a
     // turn on a saved conversation, and saves the turn to it.
-    let system_prompt = format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display());
+    let system_prompt = system_prompt(no_tools, &cwd);
     let profile_name = selection
         .profile
         .as_ref()
@@ -196,7 +207,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // ── Continuation prompt ──────────────────────────────────────────────
     // Offer to continue chatting if the initial question succeeded and we
     // are in an interactive terminal.  Skip when:
-    //   - quiet mode (-Q) — script-friendly output
+    //   - quiet mode (--quiet) — script-friendly output
     //   - stdin is not a TTY (piped input) — would read garbage or hang
     let interactive = !quiet && io::stdin().is_terminal();
 

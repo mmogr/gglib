@@ -1,0 +1,17 @@
+{
+  "productName": "gglib-gui",
+  "bundle": {
+    "linux": {
+      "deb": {
+        "desktopTemplate": "linux/gglib.desktop",
+        "conflicts": ["gg-lib-gui"],
+        "replaces": ["gg-lib-gui"]
+      },
+      "rpm": {
+        "desktopTemplate": "linux/gglib.desktop",
+        "conflicts": ["gg-lib-gui"],
+        "obsoletes": ["gg-lib-gui"]
+      }
+    }
+  }
+}

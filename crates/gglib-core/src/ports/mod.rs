@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod agent;
+pub(crate) mod agent_error;
 pub(crate) mod agent_guard_sink;
 pub mod attachment_store;
 pub(crate) mod benchmark;
@@ -43,7 +44,6 @@ mod settings_fixture;
 pub(crate) mod settings_repository;
 pub(crate) mod system_probe;
 pub(crate) mod tool_executor_filter;
-pub(crate) mod tool_support;
 pub(crate) mod usage_sink;
 
 use std::sync::Arc;
@@ -53,7 +53,7 @@ use thiserror::Error;
 pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
 pub use agent_guard_sink::{AgentGuardReporter, AgentGuardSink};
 // Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
-pub use llm_completion::LlmCompletionPort;
+pub use llm_completion::{LlmCompletionPort, UpstreamRefusal};
 pub use loop_guard_trips::LoopGuardTripSink;
 // Re-export tool-executor filter decorators
 pub use tool_executor_filter::{
@@ -71,8 +71,7 @@ pub use download_manager::{DownloadManagerConfig, DownloadManagerPort};
 pub use download_manager_fixture::AskedDownloads;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use generation_gate::{
-    GateError, GateRelease, GateWait, GateWaitObserver, GenerationGate, GenerationTurn, TurnKind,
-    WaitReason,
+    GateError, GateRelease, GateWait, GateWaitObserver, GenerationGate, GenerationTurn, WaitReason,
 };
 pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, NoopGgufParser,
@@ -115,10 +114,6 @@ pub use server_health::ServerHealthStatus;
 pub use settings_fixture::InMemorySettings;
 pub use settings_repository::{SettingsChange, SettingsRepository, SettingsReset};
 pub use system_probe::SystemProbePort;
-pub use tool_support::{
-    ModelSource, ToolFormat, ToolSupportDetection, ToolSupportDetectionInput,
-    ToolSupportDetectorPort,
-};
 pub use usage_sink::UsageSink;
 
 /// Container for all repository trait objects.

@@ -2,18 +2,18 @@
 
 use super::{RUNGS, fit_context};
 use crate::cache_config::KvCacheType;
-use crate::domain::kv_estimate::KvElemsPerToken;
+use crate::domain::kv_estimate::{KvElemsPerToken, KvShape};
 use crate::settings::DEFAULT_CONTEXT_SIZE;
 
 const GIB: u64 = 1024 * 1024 * 1024;
 
 /// Qwen3-4B-shaped: 8 KV heads × 128 dims × 36 layers ≈ 36 864 elems/token,
 /// which at f16 is ~72 KiB per token of context.
-const fn kv() -> KvElemsPerToken {
-    KvElemsPerToken {
+const fn kv() -> KvShape {
+    KvShape::uniform(KvElemsPerToken {
         k: 36_864,
         v: 36_864,
-    }
+    })
 }
 
 fn fit(weights: u64, budget: u64, trained: u64) -> Option<u64> {
@@ -203,15 +203,14 @@ fn fit_refuses_when_the_weight_size_is_unknown() {
 /// round-up snap would silently break: what it returns must actually fit.
 #[test]
 fn a_fitted_context_always_fits_the_budget_it_was_given() {
-    let per_token =
-        crate::domain::kv_estimate::kv_bytes_per_token(kv(), KvCacheType::F16, KvCacheType::F16);
+    let kv = kv().bytes(KvCacheType::F16, KvCacheType::F16);
     for budget_gib in 3..=200 {
         let budget = budget_gib * GIB;
         let weights = 2 * GIB;
         let Some(fitted) = fit(weights, budget, 131_072) else {
             continue;
         };
-        let needed = weights + fitted * per_token;
+        let needed = weights + kv.at(fitted);
         // Integer arithmetic: the reserve is a tenth, and a test that casts
         // through f64 to check a cast through f64 proves nothing.
         let allowed = budget - budget / 10;

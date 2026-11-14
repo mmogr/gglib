@@ -5,7 +5,7 @@ import type { McpLifecycle } from "./McpLifecycle";
 /**
  * Request to update an MCP server.
  */
-export type UpdateMcpServerRequest = { name: string | null, command: string | null, args: Array<string> | null, working_dir: string | null, path_extra: string | null, url: string | null, 
+export type UpdateMcpServerRequest = { name: string | null, command: string | null, args: Array<string> | null, working_dir: string | null, path_extra: string | null, 
 /**
  * The whole list of variables the server keeps, when sent.
  */

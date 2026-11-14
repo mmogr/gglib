@@ -2,7 +2,7 @@
 //!
 //! `serve` uses `axum::serve(...).with_graceful_shutdown(...)`, which waits for
 //! every in-flight connection to close before returning. `GET
-//! /v1/proxy/status/stream` is an SSE response, and an SSE response does not
+//! /v1/gglib/proxy/status/stream` is an SSE response, and an SSE response does not
 //! end on its own — so unless the stream itself is bounded by the shutdown
 //! token, one subscriber is enough to stop `serve` ever returning.
 //!
@@ -40,7 +40,7 @@ async fn shutdown_completes_while_a_dashboard_stream_is_open() {
     // Hold a real SSE connection open, and read the hydration frame so the
     // stream is definitely established before shutdown is requested.
     let response = reqwest::Client::new()
-        .get(format!("{base}/v1/proxy/status/stream"))
+        .get(format!("{base}/v1/gglib/proxy/status/stream"))
         .send()
         .await
         .expect("stream connects");
@@ -95,7 +95,7 @@ async fn shutdown_completes_with_several_streams_open() {
     let mut streams = Vec::new();
     for _ in 0..3 {
         let response = client
-            .get(format!("{base}/v1/proxy/status/stream"))
+            .get(format!("{base}/v1/gglib/proxy/status/stream"))
             .send()
             .await
             .expect("stream connects");

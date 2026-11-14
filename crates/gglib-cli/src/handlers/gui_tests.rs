@@ -31,12 +31,12 @@ fn each_system_launches_its_own_artifact_from_an_install_and_from_a_checkout() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = dir.path();
     for built in [
-        "GGLib GUI.app",
-        "gglib-app",
-        "gglib-app.exe",
-        "target/release/bundle/macos/GGLib GUI.app",
-        "target/release/gglib-app",
-        "target/release/gglib-app.exe",
+        "gglib.app",
+        "gglib-gui",
+        "gglib-gui.exe",
+        "target/release/bundle/macos/gglib.app",
+        "target/release/gglib-gui",
+        "target/release/gglib-gui.exe",
     ] {
         made(root, built);
     }
@@ -51,14 +51,14 @@ fn each_system_launches_its_own_artifact_from_an_install_and_from_a_checkout() {
     for (os, installed, in_checkout) in [
         (
             Os::Mac,
-            open("GGLib GUI.app"),
-            open("target/release/bundle/macos/GGLib GUI.app"),
+            open("gglib.app"),
+            open("target/release/bundle/macos/gglib.app"),
         ),
-        (Os::Linux, run("gglib-app"), run("target/release/gglib-app")),
+        (Os::Linux, run("gglib-gui"), run("target/release/gglib-gui")),
         (
             Os::Windows,
-            run("gglib-app.exe"),
-            run("target/release/gglib-app.exe"),
+            run("gglib-gui.exe"),
+            run("target/release/gglib-gui.exe"),
         ),
     ] {
         let sibling = sibling_artifact(os, root).expect("the app is beside the binary");
@@ -84,7 +84,7 @@ fn an_install_without_the_app_has_nothing_to_launch() {
 #[test]
 fn a_linux_install_launches_the_appimage_beside_the_binary() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let appimage = made(dir.path(), "GGLib GUI_0.2.4_amd64.AppImage");
+    let appimage = made(dir.path(), "gglib-gui_0.2.4_amd64.AppImage");
 
     assert_eq!(sibling_artifact(Os::Linux, dir.path()), Some(appimage));
 }
@@ -94,9 +94,9 @@ fn linux_gui_artifact_prefers_any_appimage() {
     let dir = tempfile::tempdir().expect("tempdir");
     let appimage = made(
         dir.path(),
-        "target/release/bundle/appimage/GGLib GUI_0.2.4_amd64.AppImage",
+        "target/release/bundle/appimage/gglib-gui_0.2.4_amd64.AppImage",
     );
-    made(dir.path(), "target/release/gglib-app");
+    made(dir.path(), "target/release/gglib-gui");
 
     assert_eq!(repo_artifact(Os::Linux, dir.path()), appimage);
 }
@@ -107,19 +107,19 @@ fn linux_gui_artifact_falls_back_to_binary_when_no_appimage() {
 
     let chosen = repo_artifact(Os::Linux, dir.path());
 
-    assert_eq!(chosen, dir.path().join("target/release/gglib-app"));
+    assert_eq!(chosen, dir.path().join("target/release/gglib-gui"));
 }
 
 /// The Windows lookup must name the executable with its extension. Before
 /// this arm existed, `gglib gui` on Windows printed "Desktop GUI is not
-/// included in this release" even with `gglib-app.exe` sitting beside it,
+/// included in this release" even with `gglib-gui.exe` sitting beside it,
 /// because there was no Windows branch at all.
 #[test]
 fn windows_repo_artifact_is_the_exe() {
     let root = Path::new("C:\\repo");
     let chosen = repo_artifact(Os::Windows, root);
 
-    assert_eq!(chosen, root.join("target/release/gglib-app.exe"));
+    assert_eq!(chosen, root.join("target/release/gglib-gui.exe"));
     assert!(
         chosen.to_string_lossy().ends_with(".exe"),
         "{} should name a Windows executable",
@@ -138,15 +138,14 @@ fn a_checkout_with_nothing_built_is_told_where_the_app_was_expected() {
         told(Os::Mac),
         format!(
             "Desktop GUI not found at: {}",
-            root.join("target/release/bundle/macos/GGLib GUI.app")
-                .display()
+            root.join("target/release/bundle/macos/gglib.app").display()
         )
     );
     assert_eq!(
         told(Os::Linux),
         format!(
             "Desktop GUI not found at: {} (or any *.AppImage in {})",
-            root.join("target/release/gglib-app").display(),
+            root.join("target/release/gglib-gui").display(),
             root.join("target/release/bundle/appimage").display()
         )
     );
@@ -154,7 +153,7 @@ fn a_checkout_with_nothing_built_is_told_where_the_app_was_expected() {
         told(Os::Windows),
         format!(
             "Desktop GUI not found at: {}",
-            root.join("target/release/gglib-app.exe").display()
+            root.join("target/release/gglib-gui.exe").display()
         )
     );
 }
@@ -178,7 +177,7 @@ fn the_system_is_the_one_this_binary_was_built_for() {
 #[test]
 fn a_linux_artifact_that_is_not_executable_names_the_chmod_that_fixes_it() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let artifact = made(dir.path(), "gglib-app");
+    let artifact = made(dir.path(), "gglib-gui");
 
     let on_linux = launch(Os::Linux, &artifact).expect_err("not executable");
     let on_windows = launch(Os::Windows, &artifact).expect_err("not executable");

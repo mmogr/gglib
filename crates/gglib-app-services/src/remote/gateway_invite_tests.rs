@@ -2,8 +2,8 @@
 //! is recorded, and that it is recorded exactly once whoever takes the invite
 //! out of the slot first.
 //!
-//! Split from `gateway_tests.rs`, which is about the session and its epoch
-//! and would cross its size budget with these in it. They share its fixture.
+//! Split from `gateway_tests.rs`, which is about the session and its epoch.
+//! They share its fixture.
 
 use modelpipe::InviteOutcome;
 

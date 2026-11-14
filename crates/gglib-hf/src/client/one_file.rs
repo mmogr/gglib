@@ -4,8 +4,9 @@
 use crate::error::HfResult;
 use crate::http::HttpBackend;
 use crate::models::{HfFileEntry, HfRepoRef};
-use crate::parsing::parse_tree_entries;
+use crate::parsing::{parse_tree_entries, variants};
 use crate::url::{build_paths_info_url, build_resolve_url};
+use gglib_core::ports::huggingface::HfQuantInfo;
 
 use super::HfClient;
 
@@ -33,6 +34,21 @@ impl<B: HttpBackend> HfClient<B> {
     ) -> HfResult<Vec<u8>> {
         let url = build_resolve_url(&self.config, repo, path);
         self.backend.get_range(&url, start, max_bytes).await
+    }
+
+    /// The variants the files at `paths` on `main` make, with their sizes:
+    /// one request (`paths-info`), however many files, where a listing of
+    /// the tree asks one per folder. A path the repository does not hold is
+    /// left out.
+    pub(crate) async fn sized_variants(
+        &self,
+        repo: &HfRepoRef,
+        paths: &[String],
+    ) -> HfResult<Vec<HfQuantInfo>> {
+        let url = build_paths_info_url(&self.config, repo);
+        let form: Vec<(&str, &str)> = paths.iter().map(|path| ("paths", path.as_str())).collect();
+        let json: serde_json::Value = self.backend.post_form_json(&url, &form).await?;
+        Ok(variants(&parse_tree_entries(&json)?))
     }
 
     /// The file at `path` on `main`, or `None` when the repository holds no

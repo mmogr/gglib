@@ -20,7 +20,7 @@
 //!
 //! [`drawing_availability`] is the rule behind the Draw button's
 //! availability, at every door that asks (`GET /api/images/drawing`, the
-//! proxy's `GET /v1/images/drawing`, and a run's `draw: true`).
+//! proxy's `GET /v1/gglib/images/drawing`, and a run's `draw: true`).
 //!
 //! The reasons, in the order they are asked:
 //!
@@ -321,7 +321,7 @@ fn the_only_one(specs: Vec<ModelLaunchSpec>) -> Result<ModelLaunchSpec, ImageErr
         )),
         (_, _) => unavailable(format!(
             "this machine has {} image models that can draw ({}); name the one to draw with, \
-             or set a default with `gglib config settings set --default-image-model <name>`",
+             or set a default with `gglib config set default-image-model-id <name>`",
             complete.len(),
             names(&complete)
         )),

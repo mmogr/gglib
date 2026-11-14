@@ -39,12 +39,12 @@ export function useRetagModel({
       if (modelId == null) return;
 
       // Rebuild drops detected tags the GGUF no longer yields, hand-added ones
-      // included — and those tags decide launch flags and response parsing.
+      // included — and those tags decide launch flags.
       if (full) {
         const confirmed = await confirm({
           title: 'Rebuild detected tags?',
           description:
-            'Re-derives the capability tags and dialect spec from the GGUF. Detected tags it no ' +
+            'Re-derives the capability tags from the GGUF. Detected tags it no ' +
             'longer finds are dropped, including any you added by hand — a manual "reasoning" tag ' +
             'forcing a reasoning format would be lost. Tags outside that set are untouched.',
           confirmLabel: 'Rebuild',
@@ -62,7 +62,6 @@ export function useRetagModel({
           const parts = [
             diff.added.length > 0 ? `added ${diff.added.length}` : null,
             diff.removed.length > 0 ? `removed ${diff.removed.length}` : null,
-            diff.specChanged ? 'dialect spec re-derived' : null,
             diff.factsRead ? 'type read from its header' : null,
           ].filter(Boolean);
           // Counts, not full lists: the chips reload right below, and a

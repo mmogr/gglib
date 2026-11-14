@@ -155,7 +155,12 @@ pub(super) fn offers_nothing(body: &Value) -> bool {
 /// Add a model that can call tools to the catalogue, as `edit` leaves it.
 pub(super) async fn model(state: &AppState, edit: impl FnOnce(&mut NewModel)) -> i64 {
     let path = PathBuf::from("/models/served.gguf");
-    let mut entry = NewModel::new("catalogue-name".to_owned(), path, 7.0, chrono::Utc::now());
+    let mut entry = NewModel::new(
+        "catalogue-name".to_owned(),
+        path,
+        Some(7.0),
+        chrono::Utc::now(),
+    );
     entry.capabilities =
         ModelCapabilities::SUPPORTS_TOOL_CALLS | ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
     edit(&mut entry);
@@ -176,15 +181,6 @@ pub(super) fn stored(
 pub(super) async fn global(state: &AppState, config: InferenceConfig) {
     let update = SettingsUpdate {
         inference_defaults: Some(Some(config)),
-        ..SettingsUpdate::default()
-    };
-    state.core.settings().update(update).await.unwrap();
-}
-
-/// Store the agentic sampling switch as `stored`: on, off, or not stored.
-pub(super) async fn agentic_sampling(state: &AppState, stored: Option<bool>) {
-    let update = SettingsUpdate {
-        agentic_sampling: Some(stored),
         ..SettingsUpdate::default()
     };
     state.core.settings().update(update).await.unwrap();

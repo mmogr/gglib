@@ -38,6 +38,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
             }
         }
     } else if let Some(ident) = identifier {
+        // clap requires exactly one of the model and `--all`.
         let model = resolver::resolve_model_identifier(ctx, ident).await?;
         if model.hf_repo_id.is_some() {
             check_model_update(&ops, &model).await;
@@ -47,8 +48,6 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
                 model.name
             );
         }
-    } else {
-        println!("Please specify --identifier <id|name> or --all to check for updates.");
     }
 
     Ok(())

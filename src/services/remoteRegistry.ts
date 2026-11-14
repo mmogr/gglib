@@ -17,14 +17,14 @@ import { createEventStore } from './createEventStore';
 import type { Machine } from '../types/generated/Machine';
 import type { RemoteEvent } from './transport/types/events';
 import type { RemoteEnableResponse, RemoteStatus } from './transport/types/remote';
-import { IDLE_STATUS, INITIAL, UNNAMED_PAIRED, pairedName, type RemoteState } from './remoteRegistryState';
+import { IDLE_STATUS, INITIAL, UNNAMED_PAIRED, pairedName, sharingSentence, type RemoteState } from './remoteRegistryState';
 import { offerFrom, settleOffer, type OfferEnd } from './remoteOffer';
 
 // The shape lives in `remoteRegistryState.ts`; the registry stays the seam
 // every caller imports from, so it hands the shape, the idle status and the
 // paired machine's name on rather than making eight components learn a
 // second module name.
-export { IDLE_STATUS, UNNAMED_PAIRED, pairedName, type RemoteState };
+export { IDLE_STATUS, UNNAMED_PAIRED, pairedName, sharingSentence, type RemoteState };
 
 const store = createEventStore<RemoteState>(INITIAL);
 
@@ -183,6 +183,10 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
   // outright: the event is the redemption, whatever `paired` read before.
   const set = (next: RemoteState) =>
     commit(evt.type === 'remote_paired' ? endOffer(next, 'paired') : settle(next, prev.status));
+  // The daemon's lines an event makes wrong, emptied rather than reworded
+  // here: a surface shows the state word until the read brings new ones.
+  const sharingUnsaid = { sharing: '', paired_line: '', sharing_note: '' };
+  const reachUnsaid = { reach_line: '', reach_note: '' };
   switch (evt.type) {
     case 'remote_enabled':
       set({
@@ -198,6 +202,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
           // Invite button until the status re-read that follows every event
           // landed, and leave it disabled for good if that read failed.
           paired: false,
+          ...sharingUnsaid,
         },
       });
       break;
@@ -212,13 +217,15 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
           paired: false,
           path: null,
           peers: [],
+          ...sharingUnsaid,
         },
       });
       break;
     case 'remote_paired':
       set({
         ...prev,
-        status: { ...status, pairing_active: false, paired: true, last_peer: evt.peer },
+        // One more device is paired, so the count is unsaid until the read.
+        status: { ...status, pairing_active: false, paired: true, last_peer: evt.peer, paired_line: '' },
       });
       break;
     case 'remote_joined':
@@ -240,13 +247,14 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
           // another machine is the one this join replaced. Like the
           // connection, the name is left to the read that follows.
           paired_name: null,
+          ...reachUnsaid,
         },
       });
       break;
     case 'remote_disconnected':
       set({
         ...prev,
-        status: { ...status, connected: null, reach: 'disconnected' },
+        status: { ...status, connected: null, reach: 'disconnected', ...reachUnsaid },
       });
       break;
     // The port stays bound either way; these only change what is said
@@ -256,7 +264,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       if (status.connected) {
         set({
           ...prev,
-          status: { ...status, connected: { ...status.connected, away_for_s: 0 }, reach: 'away' },
+          status: { ...status, connected: { ...status.connected, away_for_s: 0 }, reach: 'away', ...reachUnsaid },
         });
       }
       break;
@@ -264,7 +272,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       if (status.connected) {
         set({
           ...prev,
-          status: { ...status, connected: { ...status.connected, away_for_s: null }, reach: 'connected' },
+          status: { ...status, connected: { ...status.connected, away_for_s: null }, reach: 'connected', ...reachUnsaid },
         });
       }
       break;

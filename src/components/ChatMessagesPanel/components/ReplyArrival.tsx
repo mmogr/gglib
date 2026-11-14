@@ -8,7 +8,7 @@ import { promptLines } from '../../../readings/turnFigures';
  * A reply that has no token yet, in its own place: one status line, what it
  * waits for or how far its prompt is read, and the bar under it while the
  * prompt is read. A wait is the daemon's own sentence, shown as it came
- * ("Loading Qwen3-4B… 12 s", "Waiting for an image render, step 3 of 20").
+ * ("Loading Qwen3-4B… 12 s").
  * Gone with the first token, when the fold and the text say what it is
  * doing.
  */

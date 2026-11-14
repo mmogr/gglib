@@ -4,13 +4,13 @@
 
 use std::sync::Mutex;
 
+use gglib_core::Settings;
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::domain::loop_guard_log::LoopGuardTripEvent;
 use gglib_core::ports::LoopGuardTripSink;
-use gglib_core::{LoopGuardMode, Settings};
 use serde_json::json;
 
-use super::fixtures::{MODEL, agentic_body, body, in_mode, looping, stagnating, store};
+use super::fixtures::{MODEL, agentic_body, body, looping, stagnating, store, switched_off};
 use super::{GuardObservers, GuardStep, run};
 use crate::loop_guard::{LoopGuardConfig, LoopGuardVerdict, scan_history};
 
@@ -25,7 +25,7 @@ fn verdict_of(settings: &Settings, request: &bytes::Bytes) -> LoopGuardVerdict {
 #[derive(Default)]
 struct Recorder {
     trips: Mutex<Vec<LoopGuardTripEvent>>,
-    scans: Mutex<Vec<(String, LoopGuardMode, u64)>>,
+    scans: Mutex<Vec<(String, u64)>>,
 }
 
 impl LoopGuardTripSink for Recorder {
@@ -33,11 +33,11 @@ impl LoopGuardTripSink for Recorder {
         self.trips.lock().unwrap().push(event);
     }
 
-    fn record_scan(&self, model_name: &str, mode: LoopGuardMode, at_secs: u64) {
+    fn record_scan(&self, model_name: &str, at_secs: u64) {
         self.scans
             .lock()
             .unwrap()
-            .push((model_name.to_owned(), mode, at_secs));
+            .push((model_name.to_owned(), at_secs));
     }
 }
 
@@ -59,7 +59,7 @@ fn step_into(sink: &Recorder, settings: &Settings, request: &bytes::Bytes) -> Gu
 #[test]
 fn a_guard_that_is_off_records_neither_a_scan_nor_a_trip() {
     let sink = Recorder::default();
-    step_into(&sink, &in_mode(LoopGuardMode::Off), &body(looping(3)));
+    step_into(&sink, &switched_off(), &body(looping(3)));
 
     assert!(sink.scans.lock().unwrap().is_empty());
     assert!(sink.trips.lock().unwrap().is_empty());
@@ -83,7 +83,6 @@ fn a_scan_with_no_trip_is_one_scan_and_no_decision() {
     let scans = sink.scans.lock().unwrap();
     assert_eq!(scans.len(), 1);
     assert_eq!(scans[0].0, "test-model");
-    assert_eq!(scans[0].1, LoopGuardMode::Note);
     assert!(sink.trips.lock().unwrap().is_empty());
 }
 
@@ -108,11 +107,10 @@ fn a_noted_loop_is_one_scan_and_one_noted_decision_at_the_same_moment() {
     let trips = sink.trips.lock().unwrap();
     assert_eq!((scans.len(), trips.len()), (1, 1));
     let event = &trips[0];
-    assert_eq!(event.mode(), LoopGuardMode::Note);
     assert_eq!(event.detector(), LoopGuardTrip::Loop);
     assert_eq!(event.model_name(), "test-model");
-    let expected = LoopGuardTripEvent::new(0, "other", LoopGuardTrip::Loop, LoopGuardMode::Note)
-        .with_signature(&signature);
+    let expected =
+        LoopGuardTripEvent::new(0, "other", LoopGuardTrip::Loop).with_signature(&signature);
     assert_eq!(
         event.signature_hash(),
         expected.signature_hash(),
@@ -124,7 +122,7 @@ fn a_noted_loop_is_one_scan_and_one_noted_decision_at_the_same_moment() {
         "the session id is kept, as its hash"
     );
     assert_eq!(
-        scans[0].2,
+        scans[0].1,
         event.recorded_at_secs(),
         "one moment per request, so the scan and the trip land on one day"
     );
@@ -136,14 +134,14 @@ fn a_noted_loop_is_one_scan_and_one_noted_decision_at_the_same_moment() {
     reason = "the recorder is read once the step has returned and nothing else locks it, \
               so its guards may last to the end of the test"
 )]
-fn a_refused_stagnation_is_one_refused_decision_with_its_count() {
+fn a_noted_stagnation_is_one_decision_with_its_count() {
     let sink = Recorder::default();
-    let refuse = in_mode(LoopGuardMode::Refuse);
+    let settings = Settings::with_defaults();
     let request = body(stagnating(6));
-    let step = step_into(&sink, &refuse, &request);
+    let step = step_into(&sink, &settings, &request);
 
-    assert!(matches!(step, GuardStep::Refuse(_)));
-    let LoopGuardVerdict::StagnationDetected { count, max_steps } = verdict_of(&refuse, &request)
+    assert!(matches!(step, GuardStep::Note { .. }));
+    let LoopGuardVerdict::StagnationDetected { count, max_steps } = verdict_of(&settings, &request)
     else {
         panic!("six identical replies are stagnation");
     };
@@ -153,7 +151,6 @@ fn a_refused_stagnation_is_one_refused_decision_with_its_count() {
     );
     let trips = sink.trips.lock().unwrap();
     assert_eq!(trips.len(), 1);
-    assert_eq!(trips[0].mode(), LoopGuardMode::Refuse);
     assert_eq!(trips[0].detector(), LoopGuardTrip::Stagnation);
     assert_eq!(trips[0].repeat_count(), Some(u32::try_from(count).unwrap()));
     assert_eq!(
@@ -161,7 +158,7 @@ fn a_refused_stagnation_is_one_refused_decision_with_its_count() {
         Some(u32::try_from(max_steps).unwrap())
     );
     assert_eq!(trips[0].signature_hash(), None);
-    assert_eq!(sink.scans.lock().unwrap()[0].1, LoopGuardMode::Refuse);
+    assert_eq!(sink.scans.lock().unwrap().len(), 1);
 }
 
 #[test]
@@ -180,10 +177,10 @@ fn no_sink_records_nothing_and_decides_the_same() {
     assert!(matches!(step, GuardStep::Note { .. }));
 }
 
-/// An ended run is logged as the trip it is, under `note`, like the first. The
-/// log has no column that tells the two apart; the dashboard's snapshot does.
+/// An ended run is logged as the trip it is, like the first. The log has no
+/// column that tells the two apart; the dashboard's snapshot does.
 #[test]
-fn an_ended_run_is_still_one_scan_and_one_noted_decision() {
+fn an_ended_run_is_still_one_scan_and_one_decision() {
     let sink = Recorder::default();
     let step = step_into(&sink, &Settings::with_defaults(), &agentic_body(looping(4)));
 
@@ -191,6 +188,5 @@ fn an_ended_run_is_still_one_scan_and_one_noted_decision() {
     assert_eq!(sink.scans.lock().unwrap().len(), 1);
     let trips = sink.trips.lock().unwrap().clone();
     assert_eq!(trips.len(), 1);
-    assert_eq!(trips[0].mode(), LoopGuardMode::Note);
     assert_eq!(trips[0].detector(), LoopGuardTrip::Loop);
 }

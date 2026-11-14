@@ -152,8 +152,7 @@ HEADER = """\
 # A new entry appearing here without being recorded is a failure: deleting a
 # table, or dropping the extensions from its first cells, would otherwise move
 # a README out of the checked set and print a larger skip count above a green
-# tick. Recording one is a reviewable line in a diff, which is the same
-# bargain `scripts/rust-complexity-baseline.txt` strikes.
+# tick. Recording one is a reviewable line in a diff.
 #
 # One is an exemption by design: `src/types` tabulates type names rather than
 # files. The rest describe their directory with no file table; each is a
@@ -221,8 +220,7 @@ def main() -> int:
             print(f"  skip {readme} (no file rows)")
 
     # Liveness: a walk that compared nothing prints exactly what a clean run
-    # prints, which is the shape `check_file_size.sh` guards against for
-    # the same reason.
+    # prints.
     if checked == 0:
         print("❌ no README with file-naming rows was found — nothing was compared.")
         return 1

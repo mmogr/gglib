@@ -32,7 +32,7 @@ pub(super) fn legacy_ddl(table: &str) -> String {
             expert_shared_count INTEGER, metadata TEXT, added_at TEXT NOT NULL,
             hf_repo_id TEXT, hf_commit_sha TEXT, hf_filename TEXT, download_date TEXT,
             last_update_check TEXT, tags TEXT DEFAULT '[]', model_key TEXT NOT NULL,
-            file_paths_json TEXT, capabilities INTEGER DEFAULT 0, dialect_spec TEXT,
+            file_paths_json TEXT, capabilities INTEGER DEFAULT 0,
             template_caps TEXT, image_family TEXT
         )"
     )
@@ -44,7 +44,7 @@ const LEGACY_SHARED_COLUMNS: &str = "id, name, file_path, param_count_b, archite
     context_length, inference_defaults, defaults_origin, server_defaults, expert_count, \
     expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, \
     hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, \
-    capabilities, dialect_spec, template_caps, image_family";
+    capabilities, template_caps, image_family";
 
 /// Turns today's `models` back into the legacy table, running `extra` while
 /// foreign keys are off. Every other table keeps the definition it has today,
@@ -303,7 +303,7 @@ async fn a_library_older_than_the_later_tables_is_rebuilt() {
         r#"{};
          INSERT INTO models (id, name, file_path, param_count_b, added_at, model_key, file_paths_json)
              VALUES (3, 'Old', '/m/o-1.gguf', 7.0, 'then', 'hf:old', '["/m/o-1.gguf","/m/o-2.gguf"]');
-         PRAGMA user_version = {CANONICAL_PATH_SCHEMA_VERSION};"#,
+         PRAGMA user_version = 1;"#,
         legacy_ddl("models"),
     ))
     .execute(&pool)

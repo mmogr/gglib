@@ -94,6 +94,12 @@ pub(crate) fn short_sha(sha: &str) -> &str {
     first_chars(sha, 8)
 }
 
+/// A parameter count in billions, to a tenth (`27.3B`), or `--` when it is
+/// unknown.
+pub(crate) fn format_params(param_count_b: Option<f64>) -> String {
+    param_count_b.map_or_else(|| "--".to_owned(), |params| format!("{params:.1}B"))
+}
+
 /// Format large numbers with K/M suffixes.
 #[expect(
     clippy::cast_precision_loss,

@@ -48,7 +48,7 @@ async fn a_title_request_reaches_the_server_with_its_cap_shaped_for_the_model_se
     let mut model = NewModel::new(
         "qwen".to_owned(),
         "/models/qwen.gguf".into(),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     model.inference_defaults = Some(InferenceConfig {

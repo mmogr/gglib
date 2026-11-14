@@ -7,7 +7,7 @@
 //!
 //! This ensures the Tauri GUI's webview (origin `tauri://localhost` /
 //! `http://tauri.localhost` on Windows) can call this proxy's endpoints —
-//! including opening an `EventSource` connection to `GET /v1/proxy/status/stream`
+//! including opening an `EventSource` connection to `GET /v1/gglib/proxy/status/stream`
 //! — without the browser blocking the request as cross-origin.
 //!
 //! Uses the real `gglib_proxy::serve` (not a hand-rolled router), sharing its
@@ -24,7 +24,7 @@ use fixtures::access::spawn_proxy;
 
 /// A plain GET from a Tauri-webview origin must come back with
 /// `access-control-allow-origin` set — this is exactly what an
-/// `EventSource` connection to `/v1/proxy/status/stream` needs, since
+/// `EventSource` connection to `/v1/gglib/proxy/status/stream` needs, since
 /// `EventSource` performs a simple GET (no preflight) but the browser still
 /// enforces CORS on the response.
 #[tokio::test]
@@ -32,7 +32,7 @@ async fn get_request_from_tauri_origin_receives_cors_header() {
     let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
-        .get(format!("{base_url}/v1/proxy/status"))
+        .get(format!("{base_url}/v1/gglib/proxy/status"))
         .header("Origin", "tauri://localhost")
         .send()
         .await
@@ -64,7 +64,7 @@ async fn preflight_request_to_sse_endpoint_is_allowed() {
     let resp = Client::new()
         .request(
             reqwest::Method::OPTIONS,
-            format!("{base_url}/v1/proxy/status/stream"),
+            format!("{base_url}/v1/gglib/proxy/status/stream"),
         )
         .header("Origin", "tauri://localhost")
         .header("Access-Control-Request-Method", "GET")
@@ -97,7 +97,7 @@ async fn get_request_from_vite_dev_origin_receives_cors_header() {
     let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
-        .get(format!("{base_url}/v1/proxy/status"))
+        .get(format!("{base_url}/v1/gglib/proxy/status"))
         .header("Origin", "http://localhost:5173")
         .send()
         .await
@@ -122,7 +122,7 @@ async fn get_request_from_tauri_localhost_origin_receives_cors_header() {
     let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
-        .get(format!("{base_url}/v1/proxy/status"))
+        .get(format!("{base_url}/v1/gglib/proxy/status"))
         .header("Origin", "http://tauri.localhost")
         .send()
         .await
@@ -149,7 +149,7 @@ async fn get_request_from_external_origin_is_rejected() {
     let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
-        .get(format!("{base_url}/v1/proxy/status"))
+        .get(format!("{base_url}/v1/gglib/proxy/status"))
         .header("Origin", "http://evil.com")
         .send()
         .await

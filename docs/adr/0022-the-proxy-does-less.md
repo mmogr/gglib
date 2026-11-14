@@ -1,6 +1,6 @@
 # ADR 0022 — The proxy does less: no `cache_prompt` pin, no sampling floor, and the dialect normaliser left ungated
 
-- **Status:** Accepted
+- **Status:** Accepted; decision 3 superseded (amended 2026-11-13)
 - **Date:** 2026-10-15
 - **Depends on:** [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md),
   [ADR 0004](0004-observe-the-sampling-boundary.md)
@@ -12,6 +12,22 @@
 > pin. Rechecked at `b11429`, the claims hold, but kill criterion 1's `/slots`
 > reading is 0 after every finished request, so it cannot be taken as written
 > ([log-0022](log-0022.md)).
+
+> **Amended 2026-11-13 — decision 3 is superseded.** The dialect normaliser is
+> deleted, not gated, and so are stage 6, which depended on it, and the strip
+> of stray `<think>` tags from a reply's content (stage 1's strip of prior
+> reasoning stays). gglib no longer parses tool-call markup, the #30118 case
+> included: llama-server parses what it can, and what it leaves in content
+> reaches the client as text, where the residue scanner counts it. The gate's
+> kill criterion has nothing left to reopen. Decisions 1 and 2 stand.
+
+> **Amended 2026-11-13 — the stream is forwarded.** With nothing left to
+> translate, the proxy no longer decodes llama-server's stream into events and
+> writes it again: it forwards each frame as it came. It edits only `model`
+> (the served name), a progress frame the client did not ask for (sent as a
+> `: prefill` comment), the usage frame of a client that asked for a reading,
+> and an error frame's `code`. Tool-call frames are still held while repair
+> can act.
 
 ## Context
 
@@ -57,6 +73,10 @@ and a client's `cache_prompt` passes through as any key gglib does not model
 does, `false` included. Stage 5 leaves the stage table; stage 5b keeps its
 name.
 
+> **Amended 2026-11-12.** Stage 5b has since gone too: template caps are read,
+> never used to edit the request ([ADR 0007](0007-ask-the-server-for-template-capabilities.md),
+> decision 3's amendment).
+
 ### 2. There is no sampling floor, and the `reasoning` recipe is never stored
 
 `InferenceConfig::with_hardcoded_defaults` and `reasoning_floor` are deleted,
@@ -98,6 +118,9 @@ over.
 The `reasoning` recipe's `max_tokens` is 32768.
 
 ### 3. The dialect normaliser is not gated, because the reading the gate needs does not exist
+
+> **Amended 2026-11-13.** Superseded: the normaliser and stage 6 are deleted
+> (see the amendment at the top).
 
 The gate considered was: skip gglib's dialect normalisation, and the dialect
 grammar of stage 6, when llama-server reports at launch that it parses the
@@ -199,5 +222,10 @@ release cycle with the parser bypassed, not the presence of a PEG parser.
 - Whether the agentic temperature ceiling should exist at all. Its `0.3` is
   unmeasured, as `agentic_temperature_ceiling` says; this ADR only removes the
   floor it mostly capped.
+
+  > **Amended 2026-11-12 — decided: the ceiling is deleted.** Tool turns keep
+  > the temperature the ladder resolves, the `agentic-sampling` setting and
+  > `GGLIB_DISABLE_AGENTIC_SAMPLING` are gone, and so is
+  > `agentic_temperature_ceiling` (v1 decision 4).
 - Any change to the normaliser, the residue scanner or stage 6 beyond leaving
   them as they are.

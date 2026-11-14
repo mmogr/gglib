@@ -59,7 +59,7 @@ pub(super) fn row(index: i32, name: &str, oid: &str) -> ModelFile {
 /// `dir` and which links [`PROJECTOR`] there, as the download that fetched
 /// it did.
 fn model_in(dir: &Path, quantization: &str) -> Model {
-    let mut new = NewModel::new("zeta".to_owned(), dir.join(WEIGHTS), 7.0, Utc::now());
+    let mut new = NewModel::new("zeta".to_owned(), dir.join(WEIGHTS), Some(7.0), Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
     new.hf_filename = Some(WEIGHTS.to_owned());
     new.variant_label = (!quantization.is_empty()).then(|| quantization.to_owned());

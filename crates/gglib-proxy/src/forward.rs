@@ -1,5 +1,5 @@
-//! Request forwarding to llama-server with parse → normalize → re-encode
-//! pipeline for streaming responses.
+//! Request forwarding to llama-server, and its streamed reply forwarded frame
+//! for frame.
 //!
 //! ## Request pipeline
 //!
@@ -22,9 +22,9 @@
 //! Capabilities are resolved with a **single** catalog lookup per request
 //! (via [`gglib_core::request_pipeline::resolve()`]) that yields both the
 //! `ModelCapabilities` bitfield (used for request preprocessing) and the
-//! `format:*` tags (used for response-stream parser selection).  No second
-//! lookup is made.  That resolution is shared with every non-proxy surface,
-//! so the proxy and the agent path cannot drift apart on what a model is.
+//! tags.  No second lookup is made.  That resolution is shared with every
+//! non-proxy surface, so the proxy and the agent path cannot drift apart on
+//! what a model is.
 //!
 //! That lookup happens in `chat_completions`, *before* the model is ensured
 //! running, and the resulting [`ModelContext`] arrives here on
@@ -38,25 +38,27 @@
 //!  upstream bytes
 //!        │
 //!        ▼
-//!  SseStreamDecoder          (→ typed LlmStreamEvent)
+//!  upstream_frames           (→ comments, and each frame with its JSON and events)
 //!        │
 //!        ▼
-//!  NormalizingStream         (Qwen XML → ToolCallDelta, <think> tags dropped from text)
-//!        │
-//!        ▼
-//!  SseEncoder                (→ pristine OpenAI `data:` frames)
+//!  drain_events              (→ the frames as they came, but for frame_edit's edits)
 //!        │
 //!        ▼
 //!  client
 //! ```
 //!
-//! `NormalizationError` events surfaced by the parsers are logged via
-//! `tracing::warn` and never forwarded to the wire.
+//! The drain reads each frame's events to keep its books (the dashboard, the
+//! drift alarm, the turn's counts) and to hold tool calls for repair, but
+//! sends the frame itself: llama-server's `id`, `created`, `system_fingerprint`
+//! and every other key reach the client. gglib edits only `model` (the served
+//! name), an unasked progress frame (a `: prefill` comment), the usage frame
+//! of a client that asked for a reading, and an error frame's `code`; its own
+//! frames (notices, a repair's calls) carry the reply's `id`.
 //!
-//! Non-streaming responses run through the same parser in one shot
-//! ([`gglib_core::normalize::normalize_chat_completion_body`]), so a
-//! `stream: false` client gets the same structured `tool_calls` a streaming
-//! client would.
+//! gglib does not translate tool-call dialects: llama-server parses the calls
+//! it can, and markup it leaves in `content` reaches the client as text, where
+//! the drift alarm counts it. No parser runs over a `stream: false` body
+//! either.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -72,22 +74,20 @@ use reqwest::Client;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
-use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
-    self, ContextBudget, ModelContext, SamplingDecision, SamplingLayers, SuppressedEffort,
-    TruncationError, TruncationReport,
+    self, ContextBudget, ModelContext, SamplingDecision, SamplingLayers, TruncationError,
+    TruncationReport,
 };
-use gglib_core::sse::{DONE_SENTINEL, SseEncoder};
+use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseItem};
 
 use crate::client_send::ClientSender;
 use crate::connections::ConnectionGuard;
 use crate::generation::Meter;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
-use crate::repair::{RepairContext, RepairTurn};
+use crate::repair::RepairContext;
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
-use crate::turn_dialect::TurnDialect;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
 use crate::upstream_read::{StreamBounds, UpstreamStalled, is_generated_token, prefill_comment};
 use gglib_core::cache_metrics::CacheMetricsStore;
@@ -103,8 +103,8 @@ pub(crate) enum ForwardError {
     UpstreamDead,
 }
 
-/// Outcome of draining one upstream streaming response through the
-/// normalization pipeline, returned by [`drain_events`].
+/// Outcome of draining one upstream streaming response, returned by
+/// [`drain_events`].
 ///
 /// Used by the caller to distinguish a healthy response from a degenerate one
 /// (no output at all) for upstream-health bookkeeping.
@@ -116,7 +116,7 @@ pub(crate) enum ForwardError {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct StreamOutcome {
     /// `true` if at least one *client-renderable* frame (content, tool call,
-    /// recovered normalization text, or an error frame) was emitted.
+    /// or an error frame) was emitted.
     ///
     /// Reasoning deliberately does not count. A turn whose entire output landed
     /// in `reasoning_content` renders as an empty response in every client that
@@ -163,10 +163,10 @@ pub(crate) struct StreamOutcome {
     pub tool_calls: u32,
     /// See [`ContextSnapshot::generation_ms`]. Read off the meter's
     /// [`TokenClock`](crate::generation::TokenClock), which is stamped as
-    /// events arrive from the upstream, before normalization.
+    /// events arrive from the upstream.
     pub generation_ms: Option<u64>,
-    /// First dialect marker found in the client-visible text after
-    /// normalization, if any (see `gglib_core::normalize::residue`). The
+    /// First tool-call marker found in the client-visible text, if any (see
+    /// `gglib_core::normalize::residue`). The
     /// spawning task back-patches the request's metrics snapshot with it.
     pub dialect_residue: Option<String>,
     /// The turn died on an *upstream* failure: the model server emitted an
@@ -179,13 +179,6 @@ pub(crate) struct StreamOutcome {
     /// Implies [`Self::upstream_errored`]. Unless the turn's `Done` had already
     /// gone out, the client was sent `upstream_timeout`.
     pub upstream_stalled: Option<UpstreamStalled>,
-    /// Normalization discarded a malformed dialect tool call and surfaced the
-    /// raw body as visible text instead.
-    ///
-    /// A pure model defect, and one the existing repair never sees: repair
-    /// fires on schema violations of *parsed* calls, so a call too malformed
-    /// to parse falls outside it entirely.
-    pub normalization_errored: bool,
     /// The turn's tool call could not be validated, so repair never had an
     /// opinion to act on. See [`crate::repair::Skipped::Unvalidatable`].
     pub unvalidatable_schema: bool,
@@ -273,24 +266,12 @@ pub(crate) fn should_forward_header(name: &str) -> bool {
     !HOP_BY_HOP_HEADERS.contains(&lower.as_str())
 }
 
-/// Prefix prepended to malformed / unclosed tool-call markup when it is
-/// surfaced to the client as visible assistant text instead of being silently
-/// dropped.
-///
-/// Discarding the bytes would send a turn whose entire output was an
-/// unparseable `<tool_call>` as a zero-content stream, indistinguishable from
-/// "the model returned an empty response". Surfacing the raw body (visually
-/// flagged) means the human always sees *something* and can tell the model
-/// attempted a tool call the proxy could not parse.
-pub(crate) const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call output] ";
-
 /// Prefix prepended to reasoning text that is promoted into the content
 /// channel because the turn produced no visible output of its own.
 ///
-/// Same rescue as [`NORMALIZATION_NOTICE_PREFIX`], one channel over: a model
-/// that never closes its `<think>` block leaves a complete, often correct
-/// answer stranded in `reasoning_content`, which clients that collapse
-/// reasoning render as an empty response. Promoting it makes the turn usable;
+/// A model that never closes its `<think>` block leaves a complete, often
+/// correct answer stranded in `reasoning_content`, which clients that
+/// collapse reasoning render as an empty response. Promoting it makes the turn usable;
 /// the flag keeps the underlying degradation visible instead of silently
 /// papering over it.
 const REASONING_ONLY_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: reasoning-only response] ";
@@ -379,12 +360,11 @@ const REPAIR_KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from
 /// Because `return_progress` is the proxy's own override and not the client's
 /// request, the returned flag records whether the *client* asked for progress
 /// frames. It decides whether `prompt_progress` frames are forwarded
-/// downstream or sent as SSE comments (see [`drain_events`]): the chunk
-/// carries no `choices` key, which is a llama.cpp extension and not valid
-/// `OpenAI` streaming JSON, so clients that validate chunks against the
-/// `OpenAI` schema (anything on the Vercel AI SDK — `OpenCode`, and others)
-/// abort the turn on the first one. Asking upstream for data the proxy needs
-/// must not make the proxy's own wire format non-conforming.
+/// downstream or sent as SSE comments (see [`drain_events`]): a client gets
+/// only the frames it asked for. An older llama-server's progress chunk had
+/// no `choices`, which stopped every client that validates chunks against the
+/// `OpenAI` schema (anything on the Vercel AI SDK, `OpenCode` among them) on
+/// the first one.
 ///
 /// Safety: if the body is not a JSON object the original bytes are forwarded
 /// unchanged.  No panic paths — every operation returns an `Option`/`Result`
@@ -441,8 +421,6 @@ struct ShapedRequest {
     truncation: TruncationReport,
     /// Whether any message carries an image; `false` for a body never read.
     carries_images: bool,
-    /// Whether the pipeline originated a decode-time tool-call grammar.
-    grammar_enforced: bool,
     /// What the sampling stage resolved, when it ran at all.
     ///
     /// `None` on a body that was never JSON: the pipeline did not execute, so
@@ -451,21 +429,6 @@ struct ShapedRequest {
     /// with `applied: false`, and [`crate::sampling_audit`] treats the two
     /// identically only because both mean "nothing to compare".
     sampling: Option<SamplingDecision>,
-    /// The `reasoning_effort` stage 5b threw away, if it threw one away.
-    ///
-    /// Carried separately from [`Self::sampling`] because it is not recoverable
-    /// from it: the gate clears `resolved.reasoning_effort` and overwrites the
-    /// rung in `sources` with
-    /// [`SuppressedByTemplate`](gglib_core::domain::ParamSource::SuppressedByTemplate),
-    /// so by the time a decision reaches a consumer, *which* level was dropped
-    /// and *who* asked for it are gone.
-    ///
-    /// Without it, on every request against a model whose template ignores
-    /// the variable, the pipeline would compute the record ADR 0007 exists to
-    /// preserve and the proxy would bin it. Nothing downstream could notice —
-    /// neither reasoning control is echoed by any readback (finding 7a), so
-    /// there is no wire evidence to contradict.
-    effort_suppressed: Option<SuppressedEffort>,
 }
 
 /// Run the shared request-shaping pipeline over a body held as `Bytes`.
@@ -495,20 +458,11 @@ fn shape_request_body(
             body,
             truncation: TruncationReport::default(),
             carries_images: false,
-            grammar_enforced: false,
             sampling: None,
-            // The pipeline never ran, so no stage could have suppressed
-            // anything. Distinct from `Some`-less-because-nothing-was-dropped
-            // only in that there was also no decision to drop it from.
-            effort_suppressed: None,
         });
     };
 
-    // The constrain stage never engages over a client-sent grammar, so
-    // before-absent + after-present is exactly "the pipeline originated one".
-    let grammar_before = value.get("grammar").is_some();
     let report = request_pipeline::apply(&mut value, ctx, layers, budget)?;
-    let grammar_enforced = !grammar_before && value.get("grammar").is_some();
     let carries_images = request_pipeline::has_images(&value);
 
     match serde_json::to_vec(&value) {
@@ -516,9 +470,7 @@ fn shape_request_body(
             body: Bytes::from(v),
             truncation: report.truncation,
             carries_images,
-            grammar_enforced,
             sampling: Some(report.sampling),
-            effort_suppressed: report.effort_suppressed,
         }),
         Err(e) => {
             warn!(error = %e, "failed to re-serialize request body after shaping; forwarding original");
@@ -532,17 +484,7 @@ fn shape_request_body(
                 body,
                 truncation: TruncationReport::default(),
                 carries_images,
-                grammar_enforced: false,
                 sampling: Some(sampling),
-                // Reported even though the shaped body was discarded, and
-                // unlike `applied` it is not cleared. The two say different
-                // things: `applied: false` means the resolved values never
-                // reached upstream, while a suppression is a fact about what
-                // gglib *decided*, and the original body being forwarded does
-                // not un-decide it. The level still did not reach the model —
-                // the client's own body carried no `reasoning_effort` from the
-                // ladder to begin with.
-                effort_suppressed: report.effort_suppressed,
             })
         }
     }
@@ -611,7 +553,7 @@ pub(crate) struct ForwardRequest<'a> {
     /// non-streaming response paths.
     pub cache_metrics: Arc<CacheMetricsStore>,
     /// Whether a tool call failing schema validation is re-issued, with
-    /// `tool_choice: "required"` or under gglib's own grammar.
+    /// `tool_choice: "required"`.
     ///
     /// From `Settings.tool_call_repair`, which is absent-means-on. Resolved
     /// where the settings snapshot already lives rather than read again here,
@@ -649,8 +591,7 @@ pub(crate) struct ForwardRequest<'a> {
 ///   (streaming path only). `None` when the KV cache is disabled.
 ///
 /// Returns the response from llama-server, with the streaming SSE body
-/// re-emitted through the universal normalization pipeline when
-/// `is_streaming` is true.
+/// forwarded frame for frame by [`drain_events`] when `is_streaming` is true.
 #[expect(
     clippy::too_many_lines,
     reason = "the chat forward path in order (budget, shaping, send, then the unary or \
@@ -723,10 +664,7 @@ pub(crate) async fn forward_chat_completion(
         tokens: effective_ctx as usize,
     });
 
-    // Read once, so the request's shaping and its answer's reading agree.
-    let dialect = TurnDialect::for_turn(context.dialect.clone());
-    let shaping = dialect.shaping_context(&context);
-    let shaped = match shape_request_body(body, &shaping, &sampling, budget) {
+    let shaped = match shape_request_body(body, &context, &sampling, budget) {
         Ok(shaped) => shaped,
         Err(e) => {
             // Hard abort: the conversation cannot be trimmed to fit. Record a
@@ -741,7 +679,6 @@ pub(crate) async fn forward_chat_completion(
                 payload_chars_after: 0,
                 messages_truncated: 0,
                 was_clamped: true,
-                grammar_enforced: false,
                 dialect_residue: false,
                 tool_repaired: false,
                 completion_tokens: None,
@@ -768,9 +705,7 @@ pub(crate) async fn forward_chat_completion(
         body,
         truncation: report,
         carries_images,
-        grammar_enforced,
         sampling: decision,
-        effort_suppressed,
     } = shaped;
 
     // Hand the readback this request's intent, and count what the client's own
@@ -778,14 +713,8 @@ pub(crate) async fn forward_chat_completion(
     // rides the connection guard because that is the object whose lifetime is
     // already exactly "while this request is in flight", which is also exactly
     // when a slot can report `params` for it.
-    //
-    // The suppression goes to the audit and *not* onto the connection: the
-    // connection's copy exists to be matched against a `/slots` observation,
-    // and no observation of a suppressed effort will ever arrive (ADR 0007
-    // finding 7a). Its home is the store, which is the one surface whose job is
-    // to record what gglib did when nothing downstream can corroborate it.
     if let Some(decision) = decision {
-        sampling_audit.record_intent(&decision, effort_suppressed.as_ref());
+        sampling_audit.record_intent(&decision);
         connection.record_sampling(decision);
     }
 
@@ -799,16 +728,9 @@ pub(crate) async fn forward_chat_completion(
             "history truncated: reduced payload before upstream forwarding"
         );
     }
-    if grammar_enforced {
-        info!(
-            model = model_name,
-            "tool-call grammar enforced for this request (decode-time constraint)"
-        );
-    }
     let snapshot_seq = metrics.record(ContextSnapshot {
         interventions: crate::interventions::forwarded_interventions(
             report.messages_truncated,
-            grammar_enforced,
             loop_guard_trip,
         ),
         model_name: model_name.to_owned(),
@@ -816,7 +738,6 @@ pub(crate) async fn forward_chat_completion(
         payload_chars_after: report.payload_chars_after,
         messages_truncated: report.messages_truncated,
         was_clamped: false,
-        grammar_enforced,
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,
@@ -871,7 +792,7 @@ pub(crate) async fn forward_chat_completion(
         // 3. Background task races the real send() against a 15-second timer,
         //    emitting SSE comment frames (":" ) while waiting for llama.cpp
         //    to assign a slot.  Once headers arrive the task streams the real
-        //    response through the normalization pipeline via the same channel.
+        //    response through the same channel.
 
         // Inject `stream_options.include_usage` and top-level
         // `return_progress` overrides — see `inject_streaming_body_overrides`
@@ -917,7 +838,6 @@ pub(crate) async fn forward_chat_completion(
             rx,
             connection,
             model_name_owned,
-            dialect,
             upstream_health,
             stream_bounds,
             calibration,
@@ -929,10 +849,7 @@ pub(crate) async fn forward_chat_completion(
             permit,
             config,
             session_id,
-            RepairTurn {
-                enabled: repair_enabled,
-                gglib_grammar: grammar_enforced,
-            },
+            repair_enabled,
         ));
     }
 
@@ -940,13 +857,10 @@ pub(crate) async fn forward_chat_completion(
     crate::forward_unary::forward_unary(
         req_builder,
         body,
-        &dialect,
+        model_name,
         &cache_metrics,
         (metrics.as_ref(), snapshot_seq),
-        RepairTurn {
-            enabled: repair_enabled,
-            gglib_grammar: grammar_enforced,
-        },
+        repair_enabled,
         stream_bounds.unary,
     )
     .await
@@ -1014,13 +928,48 @@ pub(crate) fn finished_turn_body(model: &str, text: &str) -> String {
 }
 
 /// The encoder for a turn the proxy writes without the upstream: a fresh id
-/// and the current time, as [`drain_events`] makes for a forwarded one.
+/// and the current time.
 fn own_turn_encoder(model: &str) -> SseEncoder {
-    let created = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
-    SseEncoder::new(id, model, created)
+    Envelope::minted().encoder(model)
+}
+
+/// The `id` and `created` gglib's own frames carry. In a forwarded reply they
+/// are those of the upstream's last frame, read as each arrives, since
+/// llama-server's `created` moves during a reply; before its first frame, and
+/// for a turn the proxy writes alone, they are minted.
+struct Envelope {
+    id: String,
+    created: u64,
+}
+
+impl Envelope {
+    /// A fresh `chatcmpl-` id and the current time.
+    fn minted() -> Self {
+        Self {
+            id: format!("chatcmpl-{}", uuid::Uuid::new_v4().simple()),
+            created: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+        }
+    }
+
+    /// Take `frame`'s `id` and `created`, each when it carries one.
+    fn read(&mut self, frame: &serde_json::Value) {
+        if let Some(id) = frame.get("id").and_then(serde_json::Value::as_str)
+            && id != self.id
+        {
+            id.clone_into(&mut self.id);
+        }
+        if let Some(created) = frame.get("created").and_then(serde_json::Value::as_u64) {
+            self.created = created;
+        }
+    }
+
+    /// An encoder that writes gglib's own frames in this envelope, naming
+    /// `model`.
+    fn encoder(&self, model: &str) -> SseEncoder {
+        SseEncoder::new(self.id.clone(), model, self.created)
+    }
 }
 
 /// [`drain_events`] over a whole upstream response, under the production idle
@@ -1030,20 +979,18 @@ fn own_turn_encoder(model: &str) -> SseEncoder {
 pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
-    dialect: TurnDialect,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
     client_wants_progress: bool,
 ) -> StreamOutcome {
-    let events = crate::upstream_read::upstream_events(
+    let frames = crate::upstream_read::upstream_frames(
         response.bytes_stream(),
         crate::upstream_read::STREAM_IDLE_TIMEOUT,
     );
     drain_events(
-        events,
+        frames,
         model_name,
-        dialect,
         ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         connection,
         repair,
@@ -1052,32 +999,45 @@ pub(crate) async fn stream_response_to_channel(
     .await
 }
 
-/// Feed the upstream's events through the normalization pipeline and send each
-/// encoded frame to `tx`.
+/// Forward the upstream's reply to `tx`, frame for frame, as llama-server
+/// wrote it but for the edits in [`crate::frame_edit`].
 ///
-/// `events` comes from [`upstream_events`](crate::upstream_read::upstream_events),
+/// `frames` comes from [`upstream_frames`](crate::upstream_read::upstream_frames),
 /// which reads the response under the idle bound. Used by the keepalive
 /// streaming path in [`forward_chat_completion`], where the `Response` has
 /// already been returned to the client before llama.cpp assigns a slot.
+///
+/// A frame is sent as the bytes that arrived unless an edit changed it: its
+/// `model` named as served, a usage reading added to `usage` for a client
+/// that asked, an upstream error's `code` given as a string. Comments, such
+/// as llama-server's keep-alive, are passed on. The upstream's `[DONE]` is
+/// not: the drain writes the one `[DONE]` itself, after everything else, and
+/// nothing stands in for a finish the upstream never sent.
 ///
 /// Taps [`LlmStreamEvent::PromptProgress`] frames as they pass through and
 /// records them on `connection` (the dashboard registry entry for this
 /// request). The frame itself is forwarded only when `told` is `Some`, i.e. the
 /// client's own body carried `return_progress: true`: the proxy forces that flag
-/// upstream for itself (see [`inject_streaming_body_overrides`]) and the chunk
-/// has no `choices`, which stops a schema-validating client. Any other client
-/// is sent a [`prefill_comment`] in its place, so a long prefill still sends it
-/// bytes. `told` is also what that client's usage frame says of its context.
+/// upstream for itself (see [`inject_streaming_body_overrides`]). Any other
+/// client is sent a [`prefill_comment`] in its place, so a long prefill still
+/// sends it bytes. `told` is also what that client's usage frame says of its
+/// context.
 ///
-/// When the events end in an [`UpstreamStalled`], the client gets any held
+/// While repair can act on the turn (`repair` is `Some`), a frame that carries
+/// a tool call is held until the finish frame, which resolves the held frames
+/// through repair and writes them, or a repair's calls in their place, ahead
+/// of itself. A stream that ends with no finish frame releases them as they
+/// were, unjudged. gglib's own frames (a notice, a repair's calls) carry the
+/// `id` and `created` of the upstream's last frame, and the served name.
+///
+/// When the frames end in an [`UpstreamStalled`], the client gets any held
 /// tool-call frames, a notice as the turn's own text, the `upstream_timeout`
-/// error frame and the one `[DONE]`. A stall after the turn's `Done` gets only
+/// error frame and the one `[DONE]`. A stall after the turn's finish gets only
 /// the `[DONE]`: the answer was complete, and only its trailer was late.
 ///
 /// Until the upstream's first generated token (tested as for
-/// [`UpstreamStalled::after_first_token`], before the normalizer can hold
-/// tokens back), the drain also waits for `tx` to close, which it does when
-/// the client closes its connection. The turn then ends at once, as
+/// [`UpstreamStalled::after_first_token`]), the drain also waits for `tx` to
+/// close, which it does when the client closes its connection. The turn then ends at once, as
 /// [`StreamOutcome::left_before_first_token`] and not as a stall. After that
 /// token a departure is seen only when a frame sent to the client fails, so a
 /// silence still ends in a stall at the idle bound, and the stall asks for the
@@ -1087,198 +1047,224 @@ pub(crate) async fn stream_response_to_channel(
 /// and a send that outlasts it ends the turn as a departure.
 #[expect(
     clippy::too_many_lines,
-    reason = "one loop over the stream's events with each kind handled in place, all of \
+    reason = "one loop over the stream's frames with each event handled in place, all of \
               them writing the one outcome the caller reads"
 )]
 pub(crate) async fn drain_events(
-    events: impl futures_util::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send + 'static,
+    frames: impl futures_util::Stream<Item = anyhow::Result<SseItem>> + Send + 'static,
     model_name: String,
-    dialect: TurnDialect,
     tx: ClientSender,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
     told: crate::usage_reading::Told,
 ) -> StreamOutcome {
-    let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
-    let created = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    let encoder = SseEncoder::new(id, model_name, created).with_reading(told);
+    let mut envelope = Envelope::minted();
 
-    // Set once a generated token comes from the upstream, seen here because
-    // the normalizer can hold tokens back from the loop below. The meter's
-    // clock is stamped here for the same reason: a call written as text is
-    // generated over many tokens and leaves the normalizer as one event.
+    // Set once a generated token comes from the upstream, seen as each frame
+    // arrives. The meter's clock is stamped here too.
     let generated = Arc::new(AtomicBool::new(false));
     let mut meter = Meter::default();
-    // Anything the upstream sends, prefill progress and markup the normalizer
-    // holds back included, is this reply still moving, which keeps the
-    // requests queued behind it from being given up as stalled. A silence
-    // sends nothing, so a wedged upstream still lets the queue's deadline run.
-    let events = events.inspect({
+    // Any frame the upstream sends, prefill progress included, is this reply
+    // still moving, which keeps the requests queued behind it from being
+    // given up as stalled. A comment is not, and a silence sends nothing, so
+    // a wedged upstream still lets the queue's deadline run.
+    let frames = frames.inspect({
         let generated = Arc::clone(&generated);
         let clock = meter.clock();
         let progress = connection.progress();
-        move |event| {
-            if event.is_ok() {
+        move |item| {
+            if let Ok(SseItem::Data { events, .. }) = item {
                 progress.report();
-            }
-            if event.as_ref().is_ok_and(is_generated_token) {
-                generated.store(true, Ordering::Relaxed);
-                clock.stamp();
+                if events.iter().any(is_generated_token) {
+                    generated.store(true, Ordering::Relaxed);
+                    clock.stamp();
+                }
             }
         }
     });
-    let parser = get_parser(dialect.parser_spec());
-    let normalized = NormalizingStream::new(Box::pin(events), parser);
-    let mut normalized = Box::pin(normalized);
+    let mut frames = Box::pin(frames);
 
-    // Drift alarm: watch the post-normalization client-visible text for
-    // dialect markup that survived. Observation only — never alters what
-    // the client receives. Error-recovery text is deliberately excluded
-    // (its ⚠-prefixed notice already flags itself), as is reasoning.
-    // It scans for the model's spec even when the parser is bypassed.
-    let mut residue = gglib_core::normalize::ResidueScanner::new(dialect.scanned_spec());
+    // Drift alarm: watch the client-visible text for tool-call markup that
+    // llama-server left unparsed. Observation only — never alters what the
+    // client receives. Reasoning is not scanned.
+    let mut residue = gglib_core::normalize::ResidueScanner::new();
 
     let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
-    // Set once the turn's `Done` has gone out: a stall after it is a late
-    // trailer, not a broken answer.
+    // Set once the turn's finish frame has gone out: a stall after it is a
+    // late trailer, not a broken answer.
     let mut turn_done = false;
     // Accumulates reasoning text for the promotion path below. Bounded in
     // practice by the request's `max_tokens`.
     let mut reasoning_buf = String::new();
 
-    // Tool-call hold-back. Frames are encoded as they arrive but withheld
-    // until the call is complete, because a repair decision cannot be made
-    // before then and bytes already sent cannot be recalled. Text and
-    // reasoning stream normally throughout — a tool call is the only part of
-    // a turn no client can consume incrementally, so it is the only part
-    // where withholding costs nothing.
+    // Tool-call hold-back. Frames are withheld until the call is complete,
+    // because a repair decision cannot be made before then and bytes already
+    // sent cannot be recalled. Text and reasoning stream normally throughout
+    // — a tool call is the only part of a turn no client can consume
+    // incrementally, so it is the only part where withholding costs nothing.
     let repairing = repair.is_some();
     let mut held_tool_frames: Vec<HeldFrame> = Vec::new();
     let mut tool_calls = crate::repair::ToolCallAccumulator::default();
     loop {
-        // The call a frame sent below belongs to, counted once it is sent.
-        let mut sending_call = None;
+        // The calls a frame sent below belongs to, counted once it is sent.
+        let mut sending_calls = Vec::new();
         // Until the first generated token, the client's departure is watched
         // alongside each read, so a client that leaves a silent prefill ends
         // the turn at once.
-        let event = tokio::select! {
+        let item = tokio::select! {
             biased;
             () = left_before_first_token(&tx, &generated) => {
                 client_connected = false;
                 outcome.client_aborted = true;
                 break;
             }
-            next = normalized.next() => match next {
-                Some(event) => event,
+            next = frames.next() => match next {
+                Some(item) => item,
                 None => break,
             },
         };
-        let frame: Option<Bytes> = match event {
-            Ok(ev) => match &ev {
-                LlmStreamEvent::PromptProgress {
-                    processed,
-                    total,
-                    cached,
-                    time_ms,
-                } => {
-                    connection.update_progress(*processed, *total, *cached, *time_ms);
-                    // A comment unless the client asked for progress: the proxy
-                    // needed the data, the client did not order the chunk.
-                    if told.is_some() {
-                        encoder.encode(&ev).map(Bytes::from)
-                    } else {
-                        Some(prefill_comment(*processed, *total))
+        let frame: Option<Bytes> = match item {
+            Ok(SseItem::Comment(line)) => Some(Bytes::from(format!("{line}\n\n"))),
+            Ok(SseItem::Done) => None,
+            Ok(SseItem::Data {
+                text,
+                mut value,
+                events,
+            }) => {
+                envelope.read(&value);
+                let mut edited = crate::frame_edit::name_served_model(&mut value, &model_name);
+                let mut calls = Vec::new();
+                let mut prefill = None;
+                let mut errored = false;
+                let mut finished = false;
+                for event in &events {
+                    match event {
+                        LlmStreamEvent::PromptProgress {
+                            processed,
+                            total,
+                            cached,
+                            time_ms,
+                        } => {
+                            connection.update_progress(*processed, *total, *cached, *time_ms);
+                            // A comment unless the client asked for progress:
+                            // the proxy needed the data, the client did not
+                            // order the frame.
+                            if told.is_none() {
+                                prefill = Some(prefill_comment(*processed, *total));
+                            }
+                        }
+                        LlmStreamEvent::ReasoningDelta { content } => {
+                            // Forwarded, but NOT counted as visible output —
+                            // clients that collapse reasoning render this as
+                            // empty. Buffered so it can be promoted if the turn
+                            // ends without ever producing content of its own.
+                            connection.mark_generating();
+                            outcome.saw_reasoning = true;
+                            meter.reasoning(content);
+                            reasoning_buf.push_str(content);
+                        }
+                        LlmStreamEvent::TextDelta { content } => {
+                            connection.mark_generating();
+                            outcome.saw_visible_output = true;
+                            residue.feed(content);
+                        }
+                        LlmStreamEvent::ToolCallDelta {
+                            index,
+                            id,
+                            name,
+                            arguments,
+                        } => {
+                            connection.mark_generating();
+                            outcome.saw_visible_output = true;
+                            if repairing {
+                                tool_calls.push(
+                                    *index,
+                                    id.as_deref(),
+                                    name.as_deref(),
+                                    arguments.as_deref(),
+                                );
+                            }
+                            calls.push(*index);
+                        }
+                        LlmStreamEvent::UpstreamError {
+                            message,
+                            error_type,
+                            code,
+                        } => {
+                            connection.mark_generating();
+                            // Renderable, so the turn does not also need the
+                            // empty-turn notice — but the opposite of healthy,
+                            // so the watchdog hears about it separately.
+                            // Folding these two facts into one flag is what let
+                            // a server dying on every request report itself as
+                            // producing output.
+                            outcome.saw_visible_output = true;
+                            outcome.upstream_errored = true;
+                            errored = true;
+                            edited |= crate::frame_edit::name_error_code(
+                                &mut value, message, error_type, code,
+                            );
+                        }
+                        LlmStreamEvent::Done { finish_reason } => {
+                            connection.mark_generating();
+                            outcome.finish_reason.clone_from(finish_reason);
+                            turn_done = true;
+                            finished = true;
+                        }
+                        LlmStreamEvent::Usage {
+                            prompt_tokens,
+                            completion_tokens,
+                            cached_tokens,
+                            ..
+                        } => {
+                            // The real prompt-token count for chars-per-token
+                            // calibration, the cached count for cache
+                            // telemetry.
+                            outcome.prompt_tokens = Some(*prompt_tokens);
+                            outcome.cached_tokens = *cached_tokens;
+                            outcome.completion_tokens = Some(*completion_tokens);
+                            if let Some(reading) = told {
+                                edited |= crate::frame_edit::add_reading(&mut value, reading);
+                            }
+                        }
+                        LlmStreamEvent::WritingTime { .. } => {}
                     }
                 }
-                LlmStreamEvent::NormalizationError { kind, raw } => {
-                    // Surface the discarded body as visible assistant text
-                    // rather than dropping it silently (which manifested as an
-                    // empty response when the whole turn was one bad tool call).
-                    warn!(?kind, raw = %raw, "proxy: surfacing normalization issue as visible content");
-                    outcome.saw_visible_output = true;
-                    outcome.normalization_errored = true;
-                    let recovered = LlmStreamEvent::TextDelta {
-                        content: format!("{NORMALIZATION_NOTICE_PREFIX}{raw}"),
-                    };
-                    encoder.encode(&recovered).map(Bytes::from)
-                }
-                LlmStreamEvent::ReasoningDelta { content } => {
-                    // Forwarded unchanged, but NOT counted as visible output —
-                    // clients that collapse reasoning render this as empty.
-                    // Buffered so it can be promoted if the turn ends without
-                    // ever producing content of its own.
-                    connection.mark_generating();
-                    outcome.saw_reasoning = true;
-                    meter.reasoning(content);
-                    reasoning_buf.push_str(content);
-                    encoder.encode(&ev).map(Bytes::from)
-                }
-                LlmStreamEvent::TextDelta { content } => {
-                    connection.mark_generating();
-                    outcome.saw_visible_output = true;
-                    residue.feed(content);
-                    encoder.encode(&ev).map(Bytes::from)
-                }
-                LlmStreamEvent::ToolCallDelta {
-                    index,
-                    id,
-                    name,
-                    arguments,
-                } if repairing => {
-                    connection.mark_generating();
-                    outcome.saw_visible_output = true;
-                    tool_calls.push(*index, id.as_deref(), name.as_deref(), arguments.as_deref());
-                    if let Some(frame) = encoder.encode(&ev) {
-                        held_tool_frames.push((*index, Bytes::from(frame)));
-                    }
-                    // Withheld, not dropped — flushed or discarded at `Done`.
-                    None
-                }
-                LlmStreamEvent::ToolCallDelta { index, .. } => {
-                    connection.mark_generating();
-                    outcome.saw_visible_output = true;
-                    sending_call = Some(*index);
-                    encoder.encode(&ev).map(Bytes::from)
-                }
-                LlmStreamEvent::UpstreamError { .. } => {
-                    connection.mark_generating();
-                    // Renderable, so the turn does not also need the empty-turn
-                    // notice — but the opposite of healthy, so the watchdog
-                    // hears about it separately. Folding these two facts into
-                    // one flag is what let a server dying on every request
-                    // report itself as producing output.
-                    outcome.saw_visible_output = true;
-                    outcome.upstream_errored = true;
-                    // This event is terminal — the decoder marks the turn done,
-                    // so the `Done` arm below never runs and the hold-back's
-                    // contents would go out with it. Release them first, ahead
-                    // of an error frame a client may read as the end of the turn.
+                let bytes = if edited {
+                    crate::frame_edit::data_block(&value)
+                } else {
+                    crate::frame_edit::verbatim(&text)
+                };
+                let holds = repairing && !calls.is_empty();
+                if prefill.is_some() {
+                    prefill
+                } else if errored {
+                    // An error frame is terminal, and a client may read it as
+                    // the end of the turn: what the hold-back has goes out
+                    // ahead of it.
                     if !emit_held_frames(&tx, &mut held_tool_frames, &mut meter).await {
                         client_connected = false;
                         outcome.client_aborted = true;
                     }
-                    encoder.encode(&ev).map(Bytes::from)
-                }
-                LlmStreamEvent::Done { finish_reason } => {
-                    connection.mark_generating();
-                    outcome.finish_reason = finish_reason.clone();
-                    turn_done = true;
-
+                    Some(bytes)
+                } else if finished {
                     // The turn's tool calls are complete exactly here, so this
                     // is the only point at which a repair can be judged. The
-                    // `Done` frame is emitted after whichever set of tool-call
+                    // finish frame is written after whichever set of tool-call
                     // frames wins, never before — a client that sees
                     // `finish_reason` first considers the turn over.
+                    if holds {
+                        held_tool_frames.push((calls, bytes.clone()));
+                    } else {
+                        sending_calls = calls;
+                    }
                     if !held_tool_frames.is_empty() {
                         let mut flush = resolve_held_tool_calls(
                             repair.as_ref(),
-                            &dialect,
                             &tool_calls,
                             std::mem::take(&mut held_tool_frames),
-                            &encoder,
+                            &envelope.encoder(&model_name),
                             &mut outcome,
                             &tx,
                         )
@@ -1288,36 +1274,37 @@ pub(crate) async fn drain_events(
                             outcome.client_aborted = true;
                         }
                     }
-                    encoder.encode(&ev).map(Bytes::from)
+                    if !holds {
+                        Some(bytes)
+                    } else if outcome.repair_succeeded
+                        && crate::frame_edit::drop_tool_calls(&mut value)
+                    {
+                        // The finish rode on a call the repair replaced.
+                        Some(crate::frame_edit::data_block(&value))
+                    } else {
+                        // It went out with the held frames.
+                        None
+                    }
+                } else if holds {
+                    // Withheld, not dropped — flushed or replaced at the finish.
+                    held_tool_frames.push((calls, bytes));
+                    None
+                } else {
+                    sending_calls = calls;
+                    Some(bytes)
                 }
-                LlmStreamEvent::Usage {
-                    prompt_tokens,
-                    completion_tokens,
-                    cached_tokens,
-                    ..
-                } => {
-                    // Trailing usage frame: the real prompt-token count for
-                    // chars-per-token calibration, the cached count for cache
-                    // telemetry. Not visible output (its `choices` is empty).
-                    outcome.prompt_tokens = Some(*prompt_tokens);
-                    outcome.cached_tokens = *cached_tokens;
-                    outcome.completion_tokens = Some(*completion_tokens);
-                    encoder.encode(&ev).map(Bytes::from)
-                }
-                LlmStreamEvent::WritingTime { .. } => None,
-            },
+            }
             Err(e) => {
                 error!("proxy stream error: {e}");
                 // The upstream byte stream broke or went silent mid-generation
                 // (a crashed llama-server, a severed connection, a wedged
-                // server) — the same turn-died-upstream fact as an explicit
-                // error event.
+                // server) — the same turn-died-upstream fact as an error frame.
                 outcome.upstream_errored = true;
                 outcome.upstream_stalled = e.downcast_ref::<UpstreamStalled>().copied();
-                // The inner stream returns without a terminating `Done`, so the
-                // flush in that arm never happens. Whatever the hold-back
-                // captured is real model output a non-repairing turn would have
-                // shown; emit it ahead of the error frame rather than lose it.
+                // The frames end with no finish, so the flush there never
+                // happens. Whatever the hold-back captured is real model
+                // output a non-repairing turn would have shown; emit it ahead
+                // of the error frame rather than lose it.
                 if !emit_held_frames(&tx, &mut held_tool_frames, &mut meter).await {
                     client_connected = false;
                     outcome.client_aborted = true;
@@ -1332,7 +1319,10 @@ pub(crate) async fn drain_events(
                         let notice = LlmStreamEvent::TextDelta {
                             content: stall.notice(),
                         };
-                        let notice = encoder.encode(&notice).unwrap_or_default();
+                        let notice = envelope
+                            .encoder(&model_name)
+                            .encode(&notice)
+                            .unwrap_or_default();
                         Some(Bytes::from(notice + &stall.error_frame()))
                     }
                     None => {
@@ -1357,22 +1347,20 @@ pub(crate) async fn drain_events(
                 outcome.client_aborted = true;
                 break;
             }
-            if let Some(index) = sending_call {
+            for index in sending_calls {
                 meter.call_sent(index);
             }
         }
     }
 
-    // Backstop for any exit that never reached `Done` — a stream that simply
-    // stopped, or a terminal condition whose own arm did not flush. The
+    // Backstop for any exit that never reached a finish — a stream that simply
+    // stopped, or one that ended in `[DONE]` with no finish frame. The
     // hold-back exists so a repair can *replace* a tool call; it must never
-    // delete one, so anything still held goes out verbatim. Withholding is
-    // engaged whenever `repair.is_some()`, including when repair is disabled,
-    // so without this a turn that repair would have left alone loses content.
+    // delete one, so anything still held goes out verbatim, unjudged.
     if client_connected && !held_tool_frames.is_empty() {
         warn!(
             frames = held_tool_frames.len(),
-            "proxy: stream ended without a terminating Done; releasing held tool-call frames"
+            "proxy: stream ended without a finish frame; releasing held tool-call frames"
         );
         if !emit_held_frames(&tx, &mut held_tool_frames, &mut meter).await {
             client_connected = false;
@@ -1402,15 +1390,15 @@ pub(crate) async fn drain_events(
             );
             format!("{EMPTY_STREAM_NOTICE} (finish_reason: {reason})")
         };
-        if let Some(s) = encoder.encode(&LlmStreamEvent::TextDelta { content: notice }) {
+        let notice = LlmStreamEvent::TextDelta { content: notice };
+        if let Some(s) = envelope.encoder(&model_name).encode(&notice) {
             tx.send(Bytes::from(s)).await;
         }
     }
     // Exactly one [DONE] sentinel, sent once the wire stream is truly
-    // exhausted -- never bundled into an individual event's encoding, since
-    // a trailing Usage event can legitimately follow Done (see
-    // `gglib_core::sse::DONE_SENTINEL` doc). Skipped if the client already
-    // disconnected -- the channel is closed, nothing to send.
+    // exhausted: the upstream's own is not forwarded, since a notice can
+    // follow it. Skipped if the client already disconnected -- the channel is
+    // closed, nothing to send.
     if client_connected {
         tx.send(Bytes::from_static(DONE_SENTINEL.as_bytes())).await;
     }
@@ -1423,7 +1411,7 @@ pub(crate) async fn drain_events(
 
 /// Resolves once the client has gone, if the upstream had sent no generated
 /// token by then; otherwise never. It checks on departure, not when the wait
-/// began, because a token the normalizer holds back arrives mid-wait.
+/// began, because the first token can arrive mid-wait.
 async fn left_before_first_token(tx: &ClientSender, generated: &AtomicBool) {
     tx.closed().await;
     if generated.load(Ordering::Relaxed) {
@@ -1466,8 +1454,9 @@ async fn send_reissue_keeping_the_wire_warm(
     }
 }
 
-/// A tool-call frame withheld from the client, and the index of its call.
-type HeldFrame = (usize, Bytes);
+/// A tool-call frame withheld from the client, and the indices of the calls
+/// it carries.
+type HeldFrame = (Vec<usize>, Bytes);
 
 /// Send withheld tool-call frames to the client verbatim, in order, telling
 /// `meter` of each call a frame was sent for.
@@ -1477,11 +1466,13 @@ type HeldFrame = (usize, Bytes);
 ///
 /// Returns `false` if the client went away mid-flush.
 async fn emit_held_frames(tx: &ClientSender, held: &mut Vec<HeldFrame>, meter: &mut Meter) -> bool {
-    for (index, frame) in std::mem::take(held) {
+    for (calls, frame) in std::mem::take(held) {
         if !tx.send(frame).await {
             return false;
         }
-        meter.call_sent(index);
+        for index in calls {
+            meter.call_sent(index);
+        }
     }
     true
 }
@@ -1494,7 +1485,6 @@ async fn emit_held_frames(tx: &ClientSender, held: &mut Vec<HeldFrame>, meter: &
 /// fail-open rule truncation and the loop guard follow.
 async fn resolve_held_tool_calls(
     repair: Option<&RepairContext>,
-    dialect: &TurnDialect,
     tool_calls: &crate::repair::ToolCallAccumulator,
     original_frames: Vec<HeldFrame>,
     encoder: &SseEncoder,
@@ -1514,7 +1504,7 @@ async fn resolve_held_tool_calls(
         return original_frames;
     };
 
-    let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.turn);
+    let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.enabled);
     // A call the validator could not judge at all leaves repair with no
     // opinion to act on. Recorded before the early return, because a client
     // whose tools all use `anyOf` gets zero repair coverage and, without
@@ -1543,7 +1533,7 @@ async fn resolve_held_tool_calls(
     let Some(sent) = send_reissue_keeping_the_wire_warm(builder.body(body), tx).await else {
         return original_frames;
     };
-    let Some(repaired) = crate::repair::read_second_draw(sent, dialect).await else {
+    let Some(repaired) = crate::repair::read_second_draw(sent).await else {
         return original_frames;
     };
 
@@ -1569,7 +1559,7 @@ async fn resolve_held_tool_calls(
             let LlmStreamEvent::ToolCallDelta { index, .. } = ev else {
                 return None;
             };
-            Some((*index, Bytes::from(encoder.encode(ev)?)))
+            Some((vec![*index], Bytes::from(encoder.encode(ev)?)))
         })
         .collect()
 }
@@ -1578,8 +1568,7 @@ async fn resolve_held_tool_calls(
 #[path = "forward_tests.rs"]
 mod forward_tests;
 
-/// Request shaping. Its own module because `forward_tests.rs` is frozen at its
-/// current size by the complexity ratchet.
+/// Request shaping.
 #[cfg(test)]
 #[path = "forward_shaping_tests.rs"]
 mod forward_shaping_tests;
@@ -1589,10 +1578,10 @@ mod forward_shaping_tests;
 #[path = "forward_progress_tests.rs"]
 mod forward_progress_tests;
 
-/// A streamed turn gglib's own grammar constrained, repaired by a second draw.
+/// A reply forwarded frame for frame, with only the edits it may take.
 #[cfg(test)]
-#[path = "forward_repair_grammar_tests.rs"]
-mod forward_repair_grammar_tests;
+#[path = "forward_frames_tests.rs"]
+mod forward_frames_tests;
 
 /// The byte streams the stall tests feed the drain, and the turn they read.
 #[cfg(test)]
@@ -1625,3 +1614,13 @@ mod forward_departure_tests;
 #[cfg(test)]
 #[path = "forward_generation_tests.rs"]
 mod forward_generation_tests;
+
+/// The turns the generation tests drain.
+#[cfg(test)]
+#[path = "forward_generation_fixtures.rs"]
+mod forward_generation_fixtures;
+
+/// What a turn a repair replaced, or tried to, is counted as generating.
+#[cfg(test)]
+#[path = "forward_generation_repair_tests.rs"]
+mod forward_generation_repair_tests;

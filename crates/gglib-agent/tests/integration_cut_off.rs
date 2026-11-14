@@ -18,7 +18,6 @@ use gglib_agent::{AgentLoop, is_cut_off_warning};
 use gglib_core::domain::agent::{
     AgentEvent, AgentMessage, FirstCall, LlmStreamEvent, ToolDefinition,
 };
-use gglib_core::normalize::NormalizationErrorKind;
 use gglib_core::ports::{AgentError, AgentRunOutput};
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -115,7 +114,7 @@ fn errors(events: &[AgentEvent]) -> Vec<&str> {
     events
         .iter()
         .filter_map(|event| match event {
-            AgentEvent::Error { message } => Some(message.as_str()),
+            AgentEvent::Error { message, .. } => Some(message.as_str()),
             _ => None,
         })
         .collect()
@@ -178,7 +177,7 @@ async fn a_call_cut_off_mid_argument_ends_the_run_as_too_long() {
     let (_, events, _) = run(&llm, false).await;
     let errors = errors(&events);
     assert!(errors[0].contains("ran too long"), "{errors:?}");
-    assert!(errors[0].contains("after 16384 tokens"), "{errors:?}");
+    assert!(errors[0].contains("after 16,384 tokens"), "{errors:?}");
 }
 
 /// A call whose arguments happen to close is still cut off: it is not run,
@@ -226,26 +225,6 @@ async fn a_cut_off_call_past_the_kept_slots_ends_the_run_as_too_long() {
         vec![
             text("Drawing it now."),
             call_delta(gglib_agent::MAX_TOOL_CALL_INDEX),
-        ],
-        900,
-    );
-    assert_too_long(reply, Some(900)).await;
-}
-
-/// A dialect model's call comes as markup, which its parser holds back: a
-/// reply cut off inside it streams no call delta, only the parser's report
-/// of a tool-call tag left open. That is still a call being written.
-#[tokio::test]
-async fn a_cut_off_dialect_call_ends_the_run_as_too_long() {
-    let reply = cut_after(
-        vec![
-            text("Sure, drawing it now: "),
-            LlmStreamEvent::NormalizationError {
-                kind: NormalizationErrorKind::UnclosedToolCallTag {
-                    partial: r#"{"name": "generate_image", "arguments": {"prompt": "a T"#.into(),
-                },
-                raw: "<tool_call>".into(),
-            },
         ],
         900,
     );
@@ -369,21 +348,6 @@ async fn words_with_text_cut_off_inside_a_call_are_answered_for() {
     assert_words_with_text_cut_in_a_call_are_answered_for(vec![
         text("Now drawing another:"),
         call_delta(0),
-    ])
-    .await;
-}
-
-/// The same for a dialect model, whose call is markup left open.
-#[tokio::test]
-async fn words_with_text_cut_off_inside_a_dialect_call_are_answered_for() {
-    assert_words_with_text_cut_in_a_call_are_answered_for(vec![
-        text("Sure, drawing it now: "),
-        LlmStreamEvent::NormalizationError {
-            kind: NormalizationErrorKind::UnclosedToolCallTag {
-                partial: r#"{"name": "generate_image", "arguments": {"prompt": "a T"#.into(),
-            },
-            raw: "<tool_call>".into(),
-        },
     ])
     .await;
 }

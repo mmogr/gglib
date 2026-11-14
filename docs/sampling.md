@@ -156,19 +156,14 @@ named there runs the session, on a new chat or one resumed with `--continue`,
 and the chat remembers it from the session's start, before its first message.
 It is written by the function the daemon's runs write it with, so the page's
 switch and a paired device read it as their own. `--thinking off` runs with a
-budget of `0`, whatever `--reasoning-budget-tokens` says, and `--thinking on`
-runs with the budget typed. With no `--thinking` the command line says
-nothing: a chat switched off runs with a budget of `0`, whatever
-`--reasoning-budget-tokens` says, and stays switched off. A resume whose
-typed budget is set aside that way says so once, in a line on stderr: the
-chat has Thinking switched off, the budget was not applied, and
-`--thinking on` switches it back. A chat the CLI starts remembers `off` only
-when `--thinking off` says it.
+budget of `0`, and `--thinking on` with the budget the hierarchy resolves.
+With no `--thinking` the command line says nothing, and a chat switched off
+stays switched off. A chat the CLI starts remembers `off` only when
+`--thinking off` says it. Neither `chat` nor `q` takes `--reasoning-effort`
+or `--reasoning-budget-tokens`.
 
 `gglib q` has no `--thinking`. It asks one question of a chat it saves only
-once the answer is in, and it saves none of its command line's sampling with
-that chat. Pass `--reasoning-budget-tokens 0` to stop the question's
-thinking, and switch the chat it saved with
+once the answer is in; switch the chat it saved with
 `gglib chat --continue <id> --thinking off`.
 
 On the chat page the choice is the **Thinking** switch in the composer,
@@ -191,44 +186,22 @@ stores the answer per model (`Model.template_caps`):
 | State | Meaning | What happens to a resolved `reasoning_effort` |
 |-------|---------|-----------------------------------------------|
 | **Yes** | the template declares it reads the variable | sent |
-| **No** | the template declares it does not | **suppressed** before the request goes out, and recorded as `suppressedByTemplate` in the provenance with the level and the rung that supplied it |
-| **Unknown** | nobody has asked yet, the read failed, the model is a passthrough, or the caps object did not carry the field | sent — a report that never arrived is never read as a negative one |
+| **No** | the template declares it does not | sent; the template ignores it |
+| **Unknown** | nobody has asked yet, the read failed, the model is a passthrough, or the caps object did not carry the field | sent |
 
-Suppression is *recorded* rather than performed quietly because it is
-otherwise unrecoverable: neither reasoning control is echoed in `/slots` or
-`/props` (finding 7a), so no readback will ever notice that a level went
-nowhere. The record is the resolved parameter's provenance
-(`SuppressedByTemplate`) plus the dropped level and the rung that supplied it.
-
-Three surfaces read it, and they answer two different questions:
-
-- **`gglib model explain`** and **`GET /api/models/:id/explain`** ask *would a
-  request against this model send the level it resolves?* They apply the same
-  predicate the pipeline does — `request_pipeline::suppress_stored_effort`, the
-  function the live gate itself calls — so an explanation cannot describe a gate
-  that differs from the one that runs. The CLI prints the row as
-  `reasoning_effort — ← suppressed by this model's template` with the level and
-  the rung on a note beneath; the DTO carries them on `effortSuppressed`. Both
-  are conditional: nothing has been sent.
-- **The proxy's sampling audit** answers *did it happen?* Every request that
-  suppressed a level increments `effort_suppressed.requests` and replaces
-  `effort_suppressed.latest`, which carry the level and the rung by name. This
-  is the unconditional twin, and the audit is its home by elimination — it is
-  an observation about gglib's own behaviour that no wire reading can
-  corroborate.
-
-Both leave the level out of `resolved` and the rung out of the provenance
-table, because that is what would be (or was) sent. `GET /api/models/:id/detail`
-carries the input to the decision rather than its output:
-`reasoningEffortSupport` is the tri-state `yes` / `no` / `unknown`, never a
-bool, so a client can grey a control out on a positive `no` without greying it
-out on every model nobody has launched.
+gglib reads the answer and never edits a request on it: a resolved level is
+always sent, and a template that does not read it ignores it (ADR 0007
+finding 7c). `GET /api/models/:id/detail` carries the answer as
+`reasoningEffortSupport`, the tri-state `yes` / `no` / `unknown`, never a
+bool, so a client can hide a control on a positive `no` without hiding it
+on every model nobody has launched. The proxy dashboard shows the running
+model's answer beside the level the last request resolved.
 
 The GUI is the client that does exactly that. Its effort control is *hidden*
-only on a measured `no`, and replaced there by a sentence saying gglib will
-remove the level — a control that vanished silently would read as a feature
-gglib does not have. On `unknown` the control is offered with a caption saying
-the template has not been observed and that the level will be sent as given;
+only on a measured `no`, and replaced there by a sentence saying the
+template does not read a level — a control that vanished silently would read
+as a feature gglib does not have. On `unknown` the control is offered with a caption saying
+the template has not been observed and that the level is sent either way;
 the model inspector's Details carry the same fact as a line of their own,
 Reasoning effort, with a Re-check beside it while the model runs (while it
 does not, an unobserved model's line says the answer is known after its
@@ -239,9 +212,9 @@ outranked it would be the defect this whole mechanism exists to remove. The
 global settings surface has no model in scope, so it hides nothing and names
 the condition in the caption instead.
 
-`reasoning_budget_tokens` is never suppressed. It does not go through the
-template at all, so template support is not a question that applies to it —
-which is why the starter profiles below set both halves.
+`reasoning_budget_tokens` does not go through the template at all, so
+template support is not a question that applies to it — which is why the
+starter profiles below set both halves.
 
 ### There is no `none`, and the absence is the decision
 
@@ -451,8 +424,9 @@ published recipe is the exception: it is stored, and the first edit replaces
 it, so clearing that model's defaults gives back the `reasoning` recipe for a
 `reasoning`-tagged model and nothing for any other.
 
-All the same flags are available on `gglib serve`, `gglib chat`, and `gglib q` as
-per-invocation overrides that sit at the top of the hierarchy.
+All the same flags are available on `gglib serve` and `gglib proxy` as
+per-invocation overrides that sit at the top of the hierarchy. `gglib chat` and
+`gglib q` take only `--max-tokens`, which the chat keeps ([chat](cli/chat.md#sampling)).
 
 ## Where a model's defaults came from
 
@@ -527,8 +501,7 @@ top_k                   20      ← global settings
 presence_penalty        —       ← unset (coupled to temperature layer)
 top_p                   —       ← unset by design (llama.cpp's own default applies)
 max_tokens              —       ← unset by design
-reasoning_effort        —       ← suppressed by this model's template
-      ! 'high' from profile 'coding'; not sent
+reasoning_effort        high    ← profile 'coding'
 reasoning_budget_tokens 16384   ← profile 'coding'
 ```
 
@@ -618,13 +591,13 @@ and this server's global settings, defeating the point of configuring either.
 
 ```bash
 # Inspect the current setting
-gglib config settings show
+gglib config show
 
 # Trust clients that expose real sampling controls to their user (e.g. OpenWebUI)
-gglib config settings set --trust-client-sampling true
+gglib config set trust-client-sampling true
 
 # Back to the default
-gglib config settings set --trust-client-sampling false
+gglib config set trust-client-sampling false
 ```
 
 `{model}:{profile}` selection is unaffected either way — that is not a client
@@ -746,16 +719,12 @@ profile that sets a temperature claims the whole trio, and a bare
 `--presence-penalty` beside it is discarded:
 
 ```bash
-gglib chat 7 --profile chat --presence-penalty 1.2
-# warning: --presence-penalty did not take effect …
+gglib serve 7 --profile chat --presence-penalty 1.2   # the penalty is discarded
 ```
 
-Pass `--temperature` as well to set them together. `gglib chat` and `gglib q`
-warn whenever a flag is passed over this way — including without a profile,
-since a model with stored `inference_defaults` naming a temperature does the
-same thing. The warning comes with the session's first message, which is when
-the hierarchy is resolved. It is suppressed under `gglib q -Q`, which promises
-silence on stderr.
+Pass `--temperature` as well to set them together. A model with stored
+`inference_defaults` naming a temperature does the same thing without a
+profile.
 
 `gglib serve` does not warn: its flags are resolved per request by the proxy,
 against a settings snapshot the CLI cannot see at launch, so any warning it
@@ -817,7 +786,7 @@ Per-model server defaults can be set via the GUI or API (`PATCH /api/models/:id`
 `serverDefaults: { contextLength: 8192 }`), cleared with `serverDefaults: null`, or
 left unchanged by omitting the field. The CLI `serve`, `chat`, and `q` commands
 automatically consume these defaults, so models with large context windows don't need
-manual `--ctx-size` flags on every invocation.
+manual `--context-size` flags on every invocation.
 
 ## DRY
 
@@ -856,101 +825,10 @@ table at the top of this document; the measured value is 64. `-1` is a legal
 *value* meaning "scan the whole context", which is probably how the two got
 confused, but it is not the default.
 
-## The agentic-turn temperature ceiling
+## Tool turns
 
-A request carrying a non-empty `tools` array may emit structured output, so its
-temperature is **capped** — at `0.3`, and only on models *not* tagged
-`reasoning`. Reasoning models have no ceiling; that is a measured decision, not
-an omission, and the measurement is below.
-
-### It is a ceiling, and it only overrules a guess
-
-The cap applies *after* resolution, and only when the temperature that won came
-from a source nobody deliberately chose: a model's recipe nobody here
-reviewed (a measured one excepted, below). Anything set by a person — request,
-profile, per-model, global, CLI — stands untouched. It never raises a
-temperature, only lowers one, and it adds none where nothing names one: there
-is no floor (ADR 0022), so an ordinary model with nothing chosen is sent no
-temperature and decodes at llama.cpp's 0.8 on a turn with tools too.
-
-That gate is the point. This shipped first as a *floor*, and a floor could never
-reach the models that needed it: every `reasoning`-tagged model has a recipe
-naming `temperature: 1.0`, and any layer outranks a floor, so the adjustment
-was inert on exactly the models used for agentic coding. A recipe nobody here
-reviewed already ranks below global settings for that reason, and a
-task-aware cap overruling it is consistent with that.
-
-### Why reasoning models have no ceiling
-
-A reasoning model does not decode its tool call in isolation. The `<think>`
-block and the call are one completion under one sampler configuration, so a cap
-imposed for structured output lands on the reasoning phase too. This section
-used to justify a `0.6` cap — inside the Qwen3 / DeepSeek-R1 recommended band —
-as the least-bad compromise. [ADR 0004]'s addendum named the evidence that
-would change it, and on 2026-08-10 that experiment ran (tune runs #12–#32:
-Qwen3.5-4B Q8_0, 20 paired runs of the full agentic suite per arm, plus a
-broken-sampling positive control):
-
-- The uncapped recipe temperature (`1.0`) beat the `0.6` cap on the paired
-  composite: 11W–4L–5T, mean +0.067, Wilcoxon one-sided p = 0.0099, bootstrap
-  95% CI [+0.017, +0.116].
-- The failure the cap existed to prevent never happened: tool-call formatting
-  tasks passed **100%** at `1.0` against 98.6% under the cap. The sampler
-  chain explains why — llama.cpp truncates (`top_k`, `top_p`, `min_p`) on the
-  *unscaled* distribution and applies temperature last, so a tight `top_k 20`
-  keeps structured tokens stable regardless of heat.
-- The failure the cap was *risking* did happen, under the cap: loop/stagnation
-  triggers were more frequent at `0.6` (29/126) than at `1.0` (22/117) —
-  cooling a thinking model manufactures the repetition its vendors warn about,
-  which the proxy's own loop guard then acts on: a 400 when this was written,
-  a forwarded note since #1052.
-
-So the reasoning-class cap is gone: a reasoning model's resolved temperature
-stands on agentic turns. The non-reasoning `0.3` cap is untouched — no
-non-reasoning model has been measured, and it keeps its old rationale until it
-gets the same treatment.
-
-[ADR 0004]: adr/0004-observe-the-sampling-boundary.md
-
-### DRY is not touched
-
-An earlier version forced `dry_multiplier` to `0` on these turns, on the grounds
-that structured output legitimately repeats tokens. That was wrong twice over.
-llama.cpp's DRY already ships sequence breakers defaulting to `\n`, `:`, `"`,
-`*` — two of which are pervasive in JSON — so the case is mitigated upstream.
-And because agentic clients send `tools` on *every* request, disabling DRY for
-them would disable it for an entire session, which is exactly the workload it
-was added for.
-
-If DRY is ever observed mangling tool calls, the lever is
-`--dry-sequence-breaker`, not switching the sampler off.
-
-### Scope
-
-It engages on tools being *present*, not on `tool_choice: "required"`: agentic
-clients send `"auto"` almost universally, so a `required`-only trigger would
-describe nearly no traffic. The corollary is that this is an *agentic-turn*
-adjustment, not a tool-emission one — it applies to prose turns in an agentic
-session too, which is why the cap is mild rather than near-greedy.
-
-Disable it with `gglib config settings set --agentic-sampling false`, or
-per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`. The setting is this
-machine's. The proxy follows it, and so does a chat with one of this machine's
-models: `gglib chat` and `gglib q` on a model in the library, and a chat in
-the app, on the chat page or from a paired device.
-
-Three callers read no stored setting and keep the cap whatever it says:
-
-- a turn sent to a paired machine's model. It is capped as it leaves here, and
-  that machine's proxy then resolves it by its own settings;
-- `gglib benchmark agentic`, in each arm that runs the pipeline;
-- `gglib benchmark tune`.
-
-The environment variable switches the cap off for every caller, these three
-included, in the process that shapes the request: the daemon, for the proxy,
-a chat in the app or from `gglib chat` and `gglib q`, and a benchmark.
-
-Two surfaces cannot report it, both by construction: `gglib model explain` and
-the GUI's sampling provenance explain *stored configuration* with no request in
-hand. The proxy's `sampling resolved` debug line carries `agentic_turn` and
-`agentic_ceiling` for the turns where it applied.
+A request carrying a non-empty `tools` array is sampled like any other: its
+temperature is the one the ladder resolved, or none when nothing names one.
+gglib once capped it at `0.3` on a turn with tools; the cap was deleted for v1.
+The measurement that first removed it for reasoning models is in
+[ADR 0004](adr/0004-observe-the-sampling-boundary.md)'s postscript.

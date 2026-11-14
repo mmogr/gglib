@@ -9,13 +9,11 @@
 //!
 //! The tests also record `contracts/models/launch_line.json`: a few plans
 //! beside the command line `LaunchPlan::command_line` makes of each, which
-//! the GUI's launch line is held to; and `contracts/models/unload_reason.json`:
-//! the unload sentence for every reason, which the GUI's Load palette is
-//! held to.
+//! the GUI's launch line is held to.
 
 use std::fmt::Write as _;
 
-use gglib_core::domain::{ContextFit, LaunchPlan, Unload, UnloadReason};
+use gglib_core::domain::{ContextFit, LaunchPlan};
 
 /// Width of the flag column: `--spec-draft-n-max` and `--reasoning-format`
 /// are 18 characters, and the column keeps one space after them.
@@ -52,26 +50,13 @@ pub(crate) fn launch_text(name: &str, id: i64, plan: &LaunchPlan) -> String {
 }
 
 /// What the launch would do to the models loaded now: unload the one named,
-/// for the reason the plan gives, or nothing worth a line (nothing loaded,
-/// or room beside what is).
+/// in the plan's own sentence (the one the GUI's Load palette shows), or
+/// nothing worth a line (nothing loaded, or room beside what is).
 #[must_use]
 pub(crate) fn displacement_text(plan: &LaunchPlan) -> Option<String> {
     plan.unloads
         .as_ref()
-        .map(|unload| format!("  {}", unload_sentence(unload)))
-}
-
-/// The sentence for a model a launch unloads first, and why. The GUI's
-/// Load palette says the same words, held to them by
-/// `contracts/models/unload_reason.json`.
-#[must_use]
-pub(crate) fn unload_sentence(unload: &Unload) -> String {
-    let because = match unload.reason {
-        UnloadReason::WouldNotFitBeside => "it would not fit beside it",
-        UnloadReason::SecondSlotFull => "the second slot is taken",
-        UnloadReason::OneImageModel => "one image model is loaded at a time",
-    };
-    format!("Unloads {} first: {because}.", unload.model)
+        .map(|unload| format!("  {}", unload.sentence))
 }
 
 /// One string per argument: the flag, its value, and `← source: reason`.
@@ -114,19 +99,16 @@ pub(crate) fn context_text(fit: &ContextFit) -> String {
         fit.source.label()
     );
     let _ = writeln!(out, "  {:<22} {}", "fitted to hardware", opt(fit.fitted));
-    if let Some(note) = &fit.note {
-        let _ = writeln!(out, "  {:<22} {note}", "  memory");
+    // Composed here from the fields, not read from `figures`: an older
+    // daemon serves a fit without them.
+    for figure in fit.figure_rows() {
+        let _ = writeln!(
+            out,
+            "  {:<22} {}",
+            format!("  {}", figure.label),
+            figure.value
+        );
     }
-    let _ = writeln!(out, "  {:<22} {}", "  device budget", gib(fit.budget_bytes));
-    let _ = writeln!(out, "  {:<22} {}", "  weights", gib(fit.weights_bytes));
-    let _ = writeln!(
-        out,
-        "  {:<22} {}",
-        "  kv bytes/token",
-        opt(fit.kv_bytes_per_token)
-    );
-    let _ = writeln!(out, "  {:<22} {}", "  trained window", opt(fit.trained_ctx));
-    let _ = writeln!(out, "  {:<22} {}", "  before snapping", opt(fit.unsnapped));
     out
 }
 
@@ -135,22 +117,12 @@ fn opt(v: Option<u64>) -> String {
     v.map_or_else(|| "unknown".to_owned(), |n| n.to_string())
 }
 
-/// Bytes as GiB, or `unknown` when the value could not be read.
-fn gib(v: Option<u64>) -> String {
-    v.map_or_else(
-        || "unknown".to_owned(),
-        |b| {
-            #[allow(clippy::cast_precision_loss)]
-            let g = b as f64 / (1024.0 * 1024.0 * 1024.0);
-            format!("{g:.2} GiB")
-        },
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::{ChoiceSource, FitInputs, LaunchArg, LaunchNarration};
+    use gglib_core::domain::{
+        ChoiceSource, FitInputs, KvBytes, LaunchArg, LaunchNarration, Unload, UnloadReason,
+    };
     use gglib_core::server_config::ContextSizeSource;
 
     fn arg(flag: &str, value: Option<&str>, source: ChoiceSource, reason: &str) -> LaunchArg {
@@ -211,10 +183,10 @@ mod tests {
             program: "llama-server".to_owned(),
             args: vec![],
             narration: LaunchNarration::new("q", None, 0),
-            unloads: Some(Unload {
-                model: "qwen3-8b".to_owned(),
-                reason: UnloadReason::WouldNotFitBeside,
-            }),
+            unloads: Some(Unload::new(
+                "qwen3-8b".to_owned(),
+                UnloadReason::WouldNotFitBeside,
+            )),
             fit: None,
         };
         assert_eq!(
@@ -224,29 +196,6 @@ mod tests {
         assert!(
             launch_text("q", 3, &base)
                 .ends_with("  Unloads qwen3-8b first: it would not fit beside it.\n")
-        );
-
-        let second = LaunchPlan {
-            unloads: Some(Unload {
-                model: "nomic".to_owned(),
-                reason: UnloadReason::SecondSlotFull,
-            }),
-            ..base.clone()
-        };
-        assert_eq!(
-            displacement_text(&second).as_deref(),
-            Some("  Unloads nomic first: the second slot is taken.")
-        );
-        let image = LaunchPlan {
-            unloads: Some(Unload {
-                model: "flux-a".to_owned(),
-                reason: UnloadReason::OneImageModel,
-            }),
-            ..base.clone()
-        };
-        assert_eq!(
-            displacement_text(&image).as_deref(),
-            Some("  Unloads flux-a first: one image model is loaded at a time.")
         );
 
         let beside = LaunchPlan {
@@ -273,7 +222,7 @@ mod tests {
         );
         assert_eq!(
             context_text(&fit),
-            "Context\n  Serves at 4K context; gglib could not fit one to this machine: the model does not say what its context costs or what it was trained for.\n  serves at              4096 (built-in default)\n  fitted to hardware     unknown\n    device budget        96.00 GiB\n    weights              3.99 GiB\n    kv bytes/token       unknown\n    trained window       unknown\n    before snapping      unknown\n"
+            "Context\n  Serves at 4K context; gglib could not fit one to this machine: the model does not say what its context costs or what it was trained for.\n  serves at              4096 (built-in default)\n  fitted to hardware     unknown\n    device budget        96.00 GiB\n    weights              3.99 GiB\n    kv bytes/token       unknown\n    kv cache             unknown\n    trained window       unknown\n    before snapping      unknown\n"
         );
     }
 
@@ -291,15 +240,23 @@ mod tests {
             &FitInputs {
                 budget_bytes: Some(48 << 30),
                 weights_bytes: Some(2_500_000_000),
-                kv_bytes_per_token: Some(1_097_000),
+                kv: Some(KvBytes::uniform(1_097_000)),
                 trained_ctx: Some(131_072),
                 unsnapped: Some(40_005),
             },
         );
         assert_eq!(
             context_text(&fit),
-            "Context\n  Fits this machine with 32K context, of 128K trained.\n  serves at              32768 (fitted to hardware)\n  fitted to hardware     32768\n    memory               fits (35.81 GiB of 43.20 GiB usable)\n    device budget        48.00 GiB\n    weights              2.33 GiB\n    kv bytes/token       1097000\n    trained window       131072\n    before snapping      40005\n"
+            "Context\n  Fits this machine with 32K context, of 128K trained.\n  serves at              32768 (fitted to hardware)\n  fitted to hardware     32768\n    memory               fits (35.81 GiB of 43.20 GiB usable)\n    device budget        48.00 GiB\n    weights              2.33 GiB\n    kv bytes/token       1097000\n    kv cache             33.48 GiB\n    trained window       131072\n    before snapping      40005\n"
         );
+
+        // A daemon older than `figures` serves a fit without them; the
+        // rows come from the fields all the same.
+        let older = ContextFit {
+            figures: Vec::new(),
+            ..fit.clone()
+        };
+        assert_eq!(context_text(&older), context_text(&fit));
     }
 
     /// The plans `contracts/models/launch_line.json` records: an ordinary
@@ -409,47 +366,6 @@ mod tests {
         assert!(
             have == want,
             "contracts/models/launch_line.json is stale; rerun with GGLIB_RECORD_CONTRACTS=1\n{want}"
-        );
-    }
-
-    /// One row of `contracts/models/unload_reason.json`: a reason, the
-    /// model it names, and the sentence the CLI prints for them.
-    #[derive(serde::Serialize)]
-    struct RecordedUnload {
-        unload: Unload,
-        sentence: String,
-    }
-
-    /// The checked-in file is the unload sentence for every reason, in
-    /// declaration order. Run with `GGLIB_RECORD_CONTRACTS=1` to rewrite it
-    /// after a deliberate change.
-    #[test]
-    fn the_checked_in_unload_sentences_are_the_clis() {
-        let recorded: Vec<RecordedUnload> = UnloadReason::ALL
-            .into_iter()
-            .map(|reason| {
-                let unload = Unload {
-                    model: "Qwen3-30B-A3B".to_owned(),
-                    reason,
-                };
-                RecordedUnload {
-                    sentence: unload_sentence(&unload),
-                    unload,
-                }
-            })
-            .collect();
-        let mut want = serde_json::to_string_pretty(&recorded).expect("serialise");
-        want.push('\n');
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../contracts/models/unload_reason.json");
-        if std::env::var_os("GGLIB_RECORD_CONTRACTS").is_some() {
-            std::fs::write(&path, &want).expect("write unload_reason.json");
-        }
-        let have =
-            std::fs::read_to_string(&path).expect("read contracts/models/unload_reason.json");
-        assert!(
-            have == want,
-            "contracts/models/unload_reason.json is stale; rerun with GGLIB_RECORD_CONTRACTS=1\n{want}"
         );
     }
 }

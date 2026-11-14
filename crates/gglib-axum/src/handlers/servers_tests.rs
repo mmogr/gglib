@@ -39,9 +39,8 @@ fn the_daemon_reads_every_key_the_cli_sends() {
         .map(|name| ((*name).to_owned(), sample_for(name)))
         .collect();
 
-    let StartServerBody { model_id, config } =
-        serde_json::from_value(serde_json::Value::Object(body))
-            .expect("the daemon must read the body the CLI sends");
+    let StartServerBody { id, config } = serde_json::from_value(serde_json::Value::Object(body))
+        .expect("the daemon must read the body the CLI sends");
     let StartServerRequest {
         context_length,
         port,
@@ -54,7 +53,7 @@ fn the_daemon_reads_every_key_the_cli_sends() {
     } = config;
 
     let read: [(&str, bool); 9] = [
-        ("id", model_id == Some(7)),
+        ("id", id == Some(7)),
         ("contextLength", context_length == Some(8192)),
         ("port", port == Some(9001)),
         ("jinja", jinja == Some(false)),

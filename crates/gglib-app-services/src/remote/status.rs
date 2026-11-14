@@ -104,7 +104,7 @@ impl RemoteOps {
                 })
                 .collect();
         }
-        status
+        status.with_lines()
     }
 }
 

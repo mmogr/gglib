@@ -163,7 +163,7 @@ async fn a_run_on_a_registered_model_writes_its_model_and_the_choice_and_keeps_b
     let model = gglib_core::domain::NewModel::new(
         "qwen".to_owned(),
         std::path::PathBuf::from("/models/qwen.gguf"),
-        8.0,
+        Some(8.0),
         chrono::Utc::now(),
     );
     let model = state.core.models().add(model).await.unwrap().id;

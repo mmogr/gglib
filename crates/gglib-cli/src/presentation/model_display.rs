@@ -57,8 +57,8 @@ pub(crate) fn display_model_summary(model: &Model, opts: &ModelSummaryOpts) {
 
 /// The lines [`display_model_summary`] prints, in order.
 ///
-/// A model that draws has no `Parameters` line: its file names no parameter
-/// count and none is asked for, so the stored zero is not a reading.
+/// A model whose parameter count is unknown has no `Parameters` line, as a
+/// model lacking any other fact has none for it.
 pub(crate) fn summary_lines(model: &Model, opts: &ModelSummaryOpts) -> Vec<String> {
     let mut lines = Vec::new();
     if let Some(title) = opts.title {
@@ -75,8 +75,9 @@ pub(crate) fn summary_lines(model: &Model, opts: &ModelSummaryOpts) -> Vec<Strin
         lines.push(format!("  File: {}", model.file_path.display()));
     }
 
-    if model.image_family.is_none() {
-        lines.push(format!("  Parameters: {:.1}B", model.param_count_b));
+    // An unknown count is left out, as every other fact the model lacks is.
+    if let Some(params) = model.param_count_b {
+        lines.push(format!("  Parameters: {params:.1}B"));
     }
 
     if let Some(arch) = &model.architecture {

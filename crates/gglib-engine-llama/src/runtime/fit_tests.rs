@@ -1,8 +1,9 @@
 use gglib_core::domain::phone_fit::{FitVerdict, fit_verdict};
+use gglib_core::domain::{KvShape, SlidingWindow};
 use gglib_core::ports::ModelRuntimeError;
 
 use super::context_within;
-use crate::runtime::test_support::{BUDGET, GIB, model};
+use crate::runtime::test_support::{BUDGET, GIB, KV, model};
 
 /// The context a model of `weights` bytes, as [`model`] makes it, gets.
 fn context(
@@ -20,6 +21,25 @@ fn a_model_gets_the_largest_rung_its_budget_fits() {
     assert_eq!(context(3 * GIB / 2, Some(BUDGET), None).unwrap(), 4096);
 }
 
+/// The engine keeps every sliding-window layer at the full context, so a
+/// model's window is sized per token here: as llama-server holds it, a
+/// fixed block, the same model would get 8192.
+#[test]
+fn a_sliding_window_is_sized_at_the_full_context() {
+    let mut windowed = model(1, "windowed", GIB);
+    windowed.kv_shape = Some(KvShape {
+        per_token: KV,
+        window: Some(SlidingWindow {
+            tokens: 1024,
+            per_cell: KV,
+        }),
+    });
+    assert_eq!(
+        context_within(&windowed, GIB, Some(BUDGET), None).unwrap(),
+        4096
+    );
+}
+
 #[test]
 fn a_context_asked_for_lowers_the_rung_and_never_raises_it() {
     assert_eq!(context(GIB, Some(BUDGET), Some(2048)).unwrap(), 2048);
@@ -33,7 +53,7 @@ fn a_model_whose_smallest_rung_does_not_fit_is_refused_with_both_budgets() {
     let (verdict, _) = fit_verdict(
         spec.context_length,
         Some(3 * GIB),
-        spec.kv_elems_per_token,
+        spec.kv_shape,
         Some(BUDGET),
     );
     let FitVerdict::TooBig { need_bytes, .. } = verdict else {
@@ -60,7 +80,7 @@ fn a_model_trained_under_the_lowest_rung_is_refused_naming_its_trained_context()
     let (verdict, _) = fit_verdict(
         short.context_length,
         Some(GIB),
-        short.kv_elems_per_token,
+        short.kv_shape,
         Some(BUDGET),
     );
     assert!(
@@ -79,7 +99,7 @@ fn a_model_trained_under_the_lowest_rung_is_refused_naming_its_trained_context()
 #[test]
 fn a_fit_that_cannot_be_judged_is_refused_naming_what_is_missing() {
     let mut shapeless = model(1, "shapeless", GIB);
-    shapeless.kv_elems_per_token = None;
+    shapeless.kv_shape = None;
     let refusals = [
         (
             context_within(&shapeless, GIB, Some(BUDGET), None),

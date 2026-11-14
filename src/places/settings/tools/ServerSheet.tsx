@@ -4,9 +4,8 @@
  * values held (ADR 0027), Use in chats, and under ▸ More the Working
  * directory, Extra PATH and Start when gglib starts.
  *
- * It offers only what can run: a stdio server. The daemon refuses an SSE
- * one, so there is no connection type to choose and no URL until it can be
- * chosen (ST-10). Edit opens it filled from the stored server, ▸ More open
+ * A server is a process gglib starts, so there is no connection type to
+ * choose and no URL. Edit opens it filled from the stored server, ▸ More open
  * when anything under it is set. A refused save is said in the sheet, in the
  * daemon's words, with what was typed kept.
  *
@@ -74,7 +73,6 @@ export function serverSent(fields: Fields): NewMcpServer {
   const args = fields.args.trim();
   return {
     name: fields.name.trim(),
-    server_type: 'stdio',
     enabled: fields.inChats,
     lifecycle: fields.atStart ? 'eager' : 'lazy',
     env: envSent(fields.env),

@@ -34,7 +34,6 @@ async fn add_server(app: &Router, name: &str) -> Value {
 fn new_server(name: &str) -> Value {
     json!({
         "name": name,
-        "server_type": "stdio",
         "command": "node",
         "args": ["server.js"],
         "env": [],
@@ -75,14 +74,7 @@ fn assert_server_envelope(entry: &Value) {
     }
 
     let server = entry.get("server").unwrap();
-    for field in [
-        "id",
-        "name",
-        "server_type",
-        "config",
-        "enabled",
-        "lifecycle",
-    ] {
+    for field in ["id", "name", "config", "enabled", "lifecycle"] {
         assert!(
             server.get(field).is_some_and(|value| !value.is_null()),
             "server.{field} should exist and be non-null, got {server}"

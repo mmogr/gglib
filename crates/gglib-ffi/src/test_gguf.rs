@@ -84,8 +84,8 @@ pub(crate) fn chat_model(arch: &str, trained_ctx: u32) -> Gguf {
 }
 
 /// The K and V elements a token of [`chat_model`]'s context holds.
-pub(crate) const CHAT_MODEL_KV: gglib_core::domain::KvElemsPerToken =
-    gglib_core::domain::KvElemsPerToken {
+pub(crate) const CHAT_MODEL_KV: gglib_core::domain::KvShape =
+    gglib_core::domain::KvShape::uniform(gglib_core::domain::KvElemsPerToken {
         k: 32 * 8 * 128,
         v: 32 * 8 * 128,
-    };
+    });

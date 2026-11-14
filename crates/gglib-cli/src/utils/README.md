@@ -9,7 +9,6 @@ stdin.
 | Function | Asks for |
 |----------|----------|
 | [`input::prompt_string`] | A line of text |
-| [`input::prompt_string_with_default`] | A line of text, or Enter for the default shown in brackets |
 | [`input::prompt_confirmation`] | Yes or no, where Enter is no |
 | [`input::prompt_confirmation_default_yes`] | Yes or no, where Enter is yes |
 | [`input::prompt_float`] | A positive number, asked again until it is one |

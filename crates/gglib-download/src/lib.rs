@@ -32,3 +32,7 @@ mod manager;
 mod test_hub;
 
 pub use manager::{DownloadManagerDeps, build_download_manager};
+pub use picked::download_pick;
+
+// The variant a download takes with none asked, for a listing to mark
+mod picked;

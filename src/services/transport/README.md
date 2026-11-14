@@ -43,6 +43,5 @@ The event half is two functions of `events/sse.ts`, `subscribe` and `onEventStre
 | `mappers.ts` | Maps frontend types to backend request DTOs (`toStartServerRequest()`, etc.) |
 | `sanitizeMessages.ts` | Strips `<think>` tags and unsupported fields before sending to llama-server |
 | `parseTitleResponse.ts` | Parses LLM title generation responses |
-| `slotTokens.ts` | Tokens in use across a proxy's inference slots |
 
 <!-- module-docs:end -->

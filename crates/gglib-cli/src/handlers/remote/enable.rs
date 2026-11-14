@@ -2,11 +2,10 @@
 
 use std::io::IsTerminal as _;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use gglib_app_services::{RemoteEnableBody, RemoteEnableResponse};
 
 use super::pairing_tui::{self, Outcome};
-use crate::bootstrap::CliContext;
 use crate::daemon_client;
 
 /// What `gglib remote enable` was asked for.
@@ -22,27 +21,13 @@ pub(crate) struct EnableArgs {
     pub invite: bool,
 }
 
-/// What `enable --allow-mcp` is answered with. The flag named the MCP servers
-/// a session opened to paired devices; each server now says so itself.
-pub(super) const ALLOW_MCP_GONE: &str = "--allow-mcp is gone: run `gglib mcp allow-remote <names>`";
-
-/// Refuse `--allow-mcp`, before the daemon is asked anything: a script that
-/// still passes it learns where the grant went, and no tunnel comes up
-/// opening less than it asked for.
-pub(super) fn refuse_allow_mcp(allow_mcp: &[String]) -> Result<()> {
-    if allow_mcp.is_empty() {
-        return Ok(());
-    }
-    bail!(ALLOW_MCP_GONE)
-}
-
 /// Execute `gglib remote enable`.
 ///
 /// Ensures the daemon is running, asks it to bring the tunnel up, and shows
 /// the pairing once — in the alternate screen when stdout is a terminal, as
 /// plain text otherwise.
-pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+pub(crate) async fn enable(args: EnableArgs) -> Result<()> {
+    let handle = daemon_client::ensure_daemon().await?;
 
     eprintln!("  Enabling remote access\u{2026} (finding a relay can take a few seconds)");
     let enabled = handle.remote_enable(&body_of(&args)).await?;

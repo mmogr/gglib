@@ -1,5 +1,5 @@
--- generation 4
--- user_version 4
+-- generation 10
+-- user_version 10
 
 CREATE INDEX idx_agentic_results_model ON benchmark_agentic_results(model_id, created_at DESC);
 
@@ -99,9 +99,8 @@ CREATE TABLE loop_guard_scans (
             day           INTEGER NOT NULL,
             model_name    TEXT    NOT NULL,
             gglib_version TEXT    NOT NULL,
-            mode          TEXT    NOT NULL,
             scanned       INTEGER NOT NULL,
-            PRIMARY KEY (day, model_name, gglib_version, mode)
+            PRIMARY KEY (day, model_name, gglib_version)
         );
 
 CREATE TABLE loop_guard_trips (
@@ -109,7 +108,6 @@ CREATE TABLE loop_guard_trips (
             recorded_at    INTEGER NOT NULL,
             model_name     TEXT    NOT NULL,
             gglib_version  TEXT    NOT NULL,
-            mode           TEXT    NOT NULL,
             detector       TEXT    NOT NULL,
             signature_hash TEXT,
             session_hash   TEXT,
@@ -129,16 +127,14 @@ CREATE TABLE mcp_server_env (
 CREATE TABLE mcp_servers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
             enabled INTEGER NOT NULL DEFAULT 1,
             allow_remote INTEGER NOT NULL DEFAULT 0,
-            lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
+            lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy')),
             command TEXT,
             resolved_path_cache TEXT,
             args TEXT NOT NULL DEFAULT '[]',
             cwd TEXT,
             path_extra TEXT,
-            url TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             last_connected_at TEXT,
             is_valid INTEGER NOT NULL DEFAULT 0,
@@ -221,7 +217,7 @@ CREATE TABLE models (
             name TEXT NOT NULL,
             file_path TEXT NOT NULL,
             projector_path TEXT,
-            param_count_b REAL NOT NULL,
+            param_count_b REAL,
             architecture TEXT,
             variant_label TEXT,
             file_type INTEGER,
@@ -244,7 +240,6 @@ CREATE TABLE models (
             model_key TEXT NOT NULL,
             file_paths_json TEXT,
             capabilities INTEGER DEFAULT 0,
-            dialect_spec TEXT,
             template_caps TEXT,
             image_family TEXT
         );

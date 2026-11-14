@@ -43,9 +43,10 @@ pub(crate) struct Prepared {
     pub(crate) far_model: Option<ModelRef>,
 }
 
-/// One slot of the agent semaphore, or `None` when every slot is taken.
+/// One slot of the agent semaphore, or `None` when every slot is taken or
+/// a paired device's run waits in line for one (`slot_line`).
 pub(crate) fn take_permit(state: &AppState) -> Option<OwnedSemaphorePermit> {
-    state.agent_semaphore.clone().try_acquire_owned().ok()
+    state.agent_line.take()
 }
 
 /// The image tool, as a tool filter names it: qualified, so it can only ever
@@ -220,7 +221,10 @@ pub(super) async fn prepare_over(
         drawing,
     );
 
-    let mut config = config_for(state, req.limits).await;
+    // The loop prunes a run's history at its model's window, where it is known.
+    let mut config = config_for(state, req.limits)
+        .await
+        .sized_to(upstream.made_by.context_size);
     // Pressing Draw is the person's explicit ask: the run's first reply
     // must be the call for the picture, offered that tool alone, and is
     // never left to the model to decide. The picture is asked for once:
@@ -277,6 +281,7 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
             tracing::error!(error = %e, "agent: failed to serialise AgentEvent; emitting fallback error");
             let typed_fallback = AgentEvent::Error {
                 message: "serialization failed".to_owned(),
+                code: None,
             };
             serde_json::to_string(&typed_fallback).unwrap_or_else(|_| {
                 r#"{"type":"error","message":"serialization failed"}"#.to_owned()

@@ -14,7 +14,6 @@ fn make_snapshot(model: &str) -> ContextSnapshot {
         payload_chars_after: 800,
         messages_truncated: 1,
         was_clamped: false,
-        grammar_enforced: false,
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,
@@ -288,32 +287,24 @@ fn repair_totals_survive_eviction() {
 // ── What was done to a request ───────────────────────────────────────────
 
 /// Each record site says what it did, in the order it was done (the note
-/// goes on the body before the pipeline trims and constrains it), and the
+/// goes on the body before the pipeline trims it), and the
 /// repair that lands later is added to the row it belongs to.
 #[test]
 fn what_was_done_to_a_request_is_said_in_words() {
     use crate::interventions::{
-        clamped_interventions, forwarded_interventions, unforwarded_interventions,
+        clamped_interventions, ended_interventions, forwarded_interventions,
     };
     let words = |done: Vec<gglib_core::domain::Intervention>| -> Vec<String> {
         done.into_iter().map(|i| i.word).collect()
     };
-    assert!(forwarded_interventions(0, false, None).is_empty());
+    assert!(forwarded_interventions(0, None).is_empty());
     assert_eq!(
-        words(forwarded_interventions(4, true, Some(LoopGuardTrip::Loop))),
-        [
-            "Noted a loop",
-            "Trimmed 4 old messages",
-            "Constrained tool calls"
-        ]
+        words(forwarded_interventions(4, Some(LoopGuardTrip::Loop))),
+        ["Noted a loop", "Trimmed 4 old messages"]
     );
     assert_eq!(
-        words(unforwarded_interventions(LoopGuardTrip::Stagnation, true)),
+        words(ended_interventions(LoopGuardTrip::Stagnation)),
         ["Stopped stagnation"]
-    );
-    assert_eq!(
-        words(unforwarded_interventions(LoopGuardTrip::Loop, false)),
-        ["Refused: a loop"]
     );
     assert_eq!(
         words(clamped_interventions(None)),

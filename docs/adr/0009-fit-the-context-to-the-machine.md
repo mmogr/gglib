@@ -102,9 +102,11 @@ preserves "a claim about the model, not a claim about last week's traffic" as
 legitimate.
 
 The arithmetic is that kind of claim. Trained context, KV shape and weight size
-are GGUF facts; device capacity is a hardware fact; the multiply is how
-llama.cpp actually allocates its unified KV cache at `--parallel 1`. Condemning
-it would also condemn `SlotFootprint`, `compute_auto_cache_ram_mb` and `up`'s own
+are GGUF facts; device capacity is a hardware fact; and the sum follows how
+llama-server allocates its KV cache at `--parallel 1`: a cell per token in the
+layers that keep every token, and, where the header says which layers slide, a
+fixed block of cells in the sliding-window layers. Condemning it would also
+condemn `SlotFootprint`, `compute_auto_cache_ram_mb` and `up`'s own
 recommendation.
 
 **The honest weakness is elsewhere and is recorded rather than argued away.**
@@ -214,6 +216,13 @@ and not fixed by this change.~~
   anything — so this is now a survey rather than a log to grep. (Amended
   2026-08-28: it was a `debug!` line emitted after a launch and collected by
   nothing, which made this criterion unreadable in practice.)
+
+  > **Amended 2026-11-13 — a launch records its fit.** The running launch's
+  > narration carries the same figures (the banner's `fit` row, `launch.fit`
+  > on `GET /v1/gglib/proxy/status`, the GUI's launch panel), so this
+  > criterion also has readings from real sessions
+  > ([#938](https://github.com/mmogr/gglib/issues/938)).
+
 - If launches fail at the fitted context on real hardware, `BUDGET_UTILISATION`
   is too generous for this duty and wants its own constant.
 - If the reservation's one measured configuration never occurs in practice, the

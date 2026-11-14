@@ -22,7 +22,9 @@ pub struct HfRepoInfo {
     pub downloads: u64,
     /// Like count
     pub likes: u64,
-    /// Parameter count in billions (if known)
+    /// Parameter count in billions (if known). A search's hit's is the
+    /// Hub's, unless its file names contradict it; then the one its largest
+    /// weights could hold ([`super::plausible_total`]).
     pub parameters_b: Option<f64>,
     /// Short description
     pub description: Option<String>,
@@ -39,6 +41,10 @@ pub struct HfRepoInfo {
     /// Model tags
     #[serde(default)]
     pub tags: Vec<String>,
+    /// The paths of the repository's files the answer named (its
+    /// `siblings`), which a search's hit is listed by without its file tree.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub file_paths: Vec<String>,
 }
 
 /// Information about a file in a `HuggingFace` repository.

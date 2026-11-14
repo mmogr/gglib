@@ -11,7 +11,6 @@ fn runs(id: &str, scores: &[f64]) -> Vec<TuneTaskResult> {
 fn settings() -> ProxyArmSettings {
     ProxyArmSettings {
         tool_call_repair: true,
-        loop_guard_mode: LoopGuardMode::Note,
     }
 }
 

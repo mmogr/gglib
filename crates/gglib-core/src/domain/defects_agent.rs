@@ -5,11 +5,8 @@
 //! [`AgentGuardSink`] implementation that lets `gglib-agent` reach it without
 //! depending on the proxy or on this module's internals.
 //!
-//! Its own file for two reasons. `defects.rs` is a page of writer methods for
-//! one caller, and folding a second caller's in would lose that; and the
-//! rust-complexity ratchet is there to stop a file's budget being retreated
-//! from, so a 282-line file carrying a stale 368-line baseline is not
-//! somewhere to put twenty more lines merely because the ratchet would let it.
+//! Its own file because `defects.rs` is a page of writer methods for one
+//! caller, and folding a second caller's in would lose that.
 
 use super::defect_counts::LoopGuardTrip;
 use super::defects::ModelDefectLedger;

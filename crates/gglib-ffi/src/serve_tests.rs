@@ -52,7 +52,7 @@ fn add_small(library: &Library, root: &TempDir, file: &str) -> i64 {
     std::fs::File::create(&weights)
         .and_then(|file| file.set_len(64 * MIB))
         .expect("the weights are written");
-    let mut small = NewModel::new("small".to_owned(), weights, 0.1, Utc::now());
+    let mut small = NewModel::new("small".to_owned(), weights, Some(0.1), Utc::now());
     small.architecture = Some("llama".to_owned());
     small.context_length = Some(32_768);
     small.metadata = HashMap::from(

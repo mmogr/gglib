@@ -5,7 +5,7 @@
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::shared_args::SamplingArgs;
+use crate::shared_args::ChatSamplingArgs;
 use crate::target::Target;
 
 /// Arguments for the chat command.
@@ -13,12 +13,12 @@ use crate::target::Target;
 pub(crate) struct ChatArgs {
     pub identifier: String,
     pub system_prompt: Option<String>,
-    pub sampling: SamplingArgs,
+    pub sampling: ChatSamplingArgs,
     /// Disable tools — run as a plain LLM chat.
     pub no_tools: bool,
     /// Which machine the turn runs on (ADR 0013).
     pub target: Target,
-    /// `--max-iterations`: saved with the chat, whose turns the daemon
+    /// `--max-tool-iterations`: saved with the chat, whose turns the daemon
     /// limits by it.
     pub max_iterations: Option<usize>,
     pub tools: Vec<String>,

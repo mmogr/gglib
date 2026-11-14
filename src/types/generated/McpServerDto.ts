@@ -5,7 +5,7 @@ import type { McpServerConfigDto } from "./McpServerConfigDto";
 /**
  * MCP server DTO for serialization.
  */
-export type McpServerDto = { id: number, name: string, server_type: string, config: McpServerConfigDto, enabled: boolean, 
+export type McpServerDto = { id: number, name: string, config: McpServerConfigDto, enabled: boolean, 
 /**
  * Whether a paired device's runs are offered this server's tools. Read
  * only: an edit never sets it, as it has a write of its own.

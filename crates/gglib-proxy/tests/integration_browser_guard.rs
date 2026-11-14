@@ -17,7 +17,7 @@ use fixtures::access::spawn_proxy;
 
 /// A route that changes nothing, and one that does.
 const READ: &str = "/health";
-const WRITE: &str = "/v1/proxy/cache/clear";
+const WRITE: &str = "/v1/gglib/proxy/cache/clear";
 
 /// A name the proxy is told it answers to, and the page it serves under it.
 const NAMED: &str = "gglib.test";

@@ -1,9 +1,8 @@
 //! Constructing an [`LlmCompletionAdapter`]: the two constructors and the
 //! `with_*` builders.
 //!
-//! Split from `mod.rs`, unchanged, when the bearer builder arrived and that
-//! file was at its budget. The struct and its request path stay there; this
-//! is only how one is assembled.
+//! Split from `mod.rs`, unchanged, when the bearer builder arrived. The
+//! struct and its request path stay there; this is only how one is assembled.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -60,12 +59,9 @@ impl LlmCompletionAdapter {
             door: None,
             attachments: None,
             sampling: None,
-            // No stored layer, and the ceiling on: a caller with no settings
-            // to follow (a benchmark arm, a tune sweep) hands over none.
-            layers: SamplingLayers {
-                agentic_adjustments: true,
-                ..SamplingLayers::default()
-            },
+            // No stored layer: a caller with no settings to follow (a
+            // benchmark arm, a tune sweep) hands over none.
+            layers: SamplingLayers::default(),
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             stream_idle_timeout: gglib_proxy::STREAM_IDLE_TIMEOUT,
             model_context: ModelContext::passthrough(),
@@ -88,8 +84,8 @@ impl LlmCompletionAdapter {
     /// refusals as the classifier renders them, which is right for a
     /// llama-server on loopback.
     ///
-    /// A send through a door is proxied: the endpoint shapes the request and
-    /// parses the model's dialect, so the adapter does neither. It still reads the images the messages name, writes
+    /// A send through a door is proxied: the endpoint shapes the request, so
+    /// the adapter does not. It still reads the images the messages name, writes
     /// the first call's `tool_choice`, and, for this machine's endpoint, the
     /// turn's limit.
     ///
@@ -138,13 +134,9 @@ impl LlmCompletionAdapter {
     /// The caller hands them over unfolded and the pipeline folds them with
     /// the model's own, once, when a request is shaped.
     ///
-    /// These replace the layers the adapter was built with, the agentic
-    /// switch among them, and [`SamplingLayers::default`] leaves that switch
-    /// off. So a caller says which it means: a chat on one of this machine's
-    /// models hands over `Settings::effective_agentic_sampling`, and a caller
-    /// with no settings to follow turns it on. The trust switch is not the
-    /// caller's to set: the adapter trusts its own typed parameters whatever
-    /// arrives here.
+    /// These replace the layers the adapter was built with. The trust switch
+    /// is not the caller's to set: the adapter trusts its own typed
+    /// parameters whatever arrives here.
     #[must_use]
     pub fn with_layers(mut self, layers: SamplingLayers) -> Self {
         self.layers = layers;
@@ -155,14 +147,12 @@ impl LlmCompletionAdapter {
     /// [`gglib_core::request_pipeline::resolve()`].
     ///
     /// This is what gives a send to llama-server, a benchmark arm's, the same
-    /// per-model handling the proxy has: capability-aware message coalescing,
-    /// the per-model layer of the sampling hierarchy, and a dialect-specific
-    /// response parser. Through a door the endpoint does all three, and the
-    /// context decides only whether the most recent drawn picture is shown
-    /// and a turn's limit. Pass [`ModelContext::passthrough`] (the default) when
-    /// the model is unknown — every transform becomes a no-op and the identity
-    /// parser is selected, which is the right choice for any model that already
-    /// speaks strict `OpenAI` tool-calling.
+    /// per-model handling the proxy has: capability-aware message coalescing
+    /// and the per-model layer of the sampling hierarchy. Through a door the
+    /// endpoint does both, and the context decides only whether the most
+    /// recent drawn picture is shown and a turn's limit. Pass
+    /// [`ModelContext::passthrough`] (the default) when the model is unknown —
+    /// every transform becomes a no-op.
     #[must_use]
     pub fn with_model_context(mut self, model_context: ModelContext) -> Self {
         self.model_context = model_context;
@@ -218,8 +208,8 @@ impl LlmCompletionAdapter {
 
     /// Write a `tool_choice` value into this run's **first** request body.
     ///
-    /// Set before the pipeline runs, so the shaping stages (including the
-    /// dialect grammar stage) read it exactly as they would a client's.
+    /// Set before the pipeline runs, so the shaping stages read it exactly as
+    /// they would a client's.
     /// Subsequent turns fall back to `build_chat_body`'s `"auto"`, letting the
     /// model finish — see [`Self::first_turn_tool_choice`] for why repeating
     /// the demand measures the harness rather than the model.

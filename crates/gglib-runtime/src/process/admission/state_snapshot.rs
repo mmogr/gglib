@@ -6,7 +6,7 @@ use tokio::time::Instant;
 
 use gglib_core::domain::{
     AdmissionSnapshot, QueuedModelSnapshot, ResidentSlotSnapshot, SecondarySlotStatus,
-    secondary_headroom,
+    format_duration_secs, secondary_headroom,
 };
 
 use super::{PRIMARY_SLOT, QueueState, SlotState};
@@ -27,10 +27,14 @@ impl QueueState {
             .waiting
             .values()
             .filter_map(|q| q.front().map(|oldest| (oldest, q.len())))
-            .map(|(oldest, waiting)| QueuedModelSnapshot {
-                model_name: oldest.model_name.clone(),
-                waiting,
-                oldest_wait_ms: now.duration_since(oldest.enqueued_at).as_millis() as u64,
+            .map(|(oldest, waiting)| {
+                let waited = now.duration_since(oldest.enqueued_at);
+                QueuedModelSnapshot {
+                    model_name: oldest.model_name.clone(),
+                    waiting,
+                    oldest_wait_ms: waited.as_millis() as u64,
+                    oldest_wait: format_duration_secs(waited.as_secs()),
+                }
             })
             .collect();
         // Longest-waiting first: the entry a user needs to see is the one that
@@ -40,17 +44,21 @@ impl QueueState {
         AdmissionSnapshot {
             slots: self
                 .residents()
-                .map(|(slot, r)| ResidentSlotSnapshot {
-                    slot,
-                    model_name: r.model_name.clone(),
-                    model_id: r.model_id,
-                    port: r.port,
-                    inflight: r.inflight,
-                    state: gglib_core::domain::ResidencyState::of_inflight(r.inflight),
-                    is_primary: slot == PRIMARY_SLOT,
-                    resident_for_secs: now.duration_since(r.resident_since).as_secs(),
-                    runtime: r.runtime,
-                    launch: Some(r.launch_facts()),
+                .map(|(slot, r)| {
+                    let resident_for_secs = now.duration_since(r.resident_since).as_secs();
+                    ResidentSlotSnapshot {
+                        slot,
+                        model_name: r.model_name.clone(),
+                        model_id: r.model_id,
+                        port: r.port,
+                        inflight: r.inflight,
+                        state: gglib_core::domain::ResidencyState::of_inflight(r.inflight),
+                        is_primary: slot == PRIMARY_SLOT,
+                        resident_for_secs,
+                        resident_for: format_duration_secs(resident_for_secs),
+                        runtime: r.runtime,
+                        launch: Some(r.launch_facts()),
+                    }
                 })
                 .collect(),
             queued,

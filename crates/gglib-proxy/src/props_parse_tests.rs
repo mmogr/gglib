@@ -1,7 +1,5 @@
 //! Tests for [`super::parse_props`] and the two halves of a
 //! [`PropsReading`](crate::template_caps_read::PropsReading).
-//!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
 use gglib_core::domain::{Support, TemplateCapsState, reasoning_effort_support};

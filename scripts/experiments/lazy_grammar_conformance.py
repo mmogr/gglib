@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Does llama.cpp already constrain tool-call arguments to the tool's JSON Schema?
 
-The answer scopes `request_pipeline::constrain` (Tier A, see docs/adr/0001):
-that stage originates a GBNF grammar for dialect models because upstream builds
-none. But upstream ships `json_schema_to_grammar` and lazily-triggered
-grammars, so the stage may already be redundant — or may be weaker than what is
-available. This harness measures it instead of arguing about it.
+The answer scoped `request_pipeline::constrain`, the stage that originated a
+GBNF grammar for dialect models. That stage and gglib's dialect parser are
+deleted (ADR 0002 and ADR 0022, amended 2026-11-13); llama-server's own
+grammar and parser are what gglib relies on now, and tool-call repair
+(docs/tool-call-repair.md) re-issues under them. This harness measures them.
 
-Run against a RAW llama-server, not through gglib, or gglib's own
-normalization and grammar origination confound every reading.
+Run against a RAW llama-server, not through gglib, or gglib's repair
+confounds every reading.
 
     llama-server -m Qwen3.5-4B.gguf --jinja --port 8081
     python3 scripts/experiments/lazy_grammar_conformance.py --port 8081
@@ -28,11 +28,12 @@ from *luck* needs three things, all of which this harness does:
    trigger vs eager grammar). A gap between them localises where enforcement
    lives, which is exactly the seam the stage sits on.
 
-## Second question: is gglib's parser still needed?
+## Second question: does upstream's parser drop calls?
 
 Independent of the grammar result. Upstream could constrain arguments
-perfectly and still drop calls on the two bugs gglib fixed in #690, so a
-second arm steers the model into generating each shape:
+perfectly and still drop calls on the two bugs gglib's own parser (since
+deleted) fixed in #690, so a second arm steers the model into generating each
+shape:
 
   R1 (#24807) a parameter value containing a literal `</parameter>`
   R2 (#20260) a reasoning model emitting prose before `<tool_call>`

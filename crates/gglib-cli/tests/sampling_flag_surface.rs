@@ -4,7 +4,7 @@
 //! Split from `cli_parity.rs`, which guards that `serve` and `proxy` agree
 //! about the rest of their flags. The two ask different questions — that one
 //! compares two commands to each other, this one compares a command to the
-//! struct it is built from — and together they were over the file budget.
+//! struct it is built from.
 //!
 //! # The expectation is derived, not transcribed
 //!
@@ -53,7 +53,7 @@ const SERVE_NON_SAMPLING: &[&str] = &[
     "api-key",
     "cache",
     "cache-disk-gb",
-    "ctx-size",
+    "context-size",
     "host",
     "jinja",
     "mlock",
@@ -67,13 +67,13 @@ const SERVE_NON_SAMPLING: &[&str] = &[
 
 /// The same for `gglib proxy`: `CacheArgs`, `AccessArgs`, and the three it
 /// declares inline. No context or MTP flags — a standalone proxy has no
-/// specific model in scope, so `--default-context` stands in for `--ctx-size`.
+/// specific model in scope, so `--default-context-size` stands in for `--context-size`.
 const PROXY_NON_SAMPLING: &[&str] = &[
     "allowed-host",
     "api-key",
     "cache",
     "cache-disk-gb",
-    "default-context",
+    "default-context-size",
     "host",
     "port",
     "slot-dir",
@@ -148,4 +148,19 @@ fn model_update_can_clear_one_stored_parameter() {
         update.contains(&"clear-inference-defaults".to_owned()),
         "the all-or-nothing form stays: {update:?}"
     );
+}
+
+/// A chat keeps one sampling flag, `--max-tokens`, and sends it with each
+/// turn as a budget; `chat` and `q` take it and no other, so a flag that
+/// would do nothing is refused where it is typed.
+#[test]
+fn chat_and_q_take_only_the_one_sampling_flag_a_chat_keeps() {
+    let kept = owned(&["max-tokens"]);
+    for command in ["chat", "q"] {
+        let taken: Vec<String> = long_flags(command)
+            .into_iter()
+            .filter(|flag| sampling_flags().contains(flag))
+            .collect();
+        assert_eq!(taken, kept, "`{command}`'s sampling flags");
+    }
 }

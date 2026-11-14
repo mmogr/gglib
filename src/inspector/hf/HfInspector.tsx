@@ -2,7 +2,7 @@
  * The Hugging Face subject: a repo, at `/get/:owner/:name`, so back,
  * forward and reload keep it. Its `owner/name` ↗ opens it on the Hub; the
  * summary is the Hub's parameter count and whether the daemon read its
- * chat template as calling tools (its confidence on hover); "Pick a size"
+ * chat template as calling tools; "Pick a size"
  * is the daemon's listing of its variants; the projector the selected
  * variant brings and an image model's companions follow; ▸ About this
  * model holds the Hub's description, tags and counts. A repo with no model
@@ -26,11 +26,11 @@ import { queueDownload } from '../../services/downloadsEvents';
 import { useDownloads } from '../../services/downloadsRegistry';
 import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
-import type { HfImagePreview, HfModelSummary, HfQuantization, ToolSupportResponse } from '../../types';
+import type { HfImagePreview, HfModelSummary, HfPickResponse, HfQuantization, ToolSupportResponse } from '../../types';
 import { formatError } from '../../utils/errors';
 import { formatNumber, formatParamCount, getHuggingFaceModelUrl } from '../../utils/format';
 import { CompanionNote } from './CompanionNote';
-import { PickASize, firstPick } from './PickASize';
+import { PickASize } from './PickASize';
 import { ProjectorNote } from './ProjectorNote';
 
 /** What a pick hands the address it navigates to, so the repo is not read twice. */
@@ -78,12 +78,19 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
     },
     (err) => ({ error: formatError(err) }),
   );
+  // Asked beside the listing, which shows at once: the download's own pick,
+  // which reads further than the listing's heads. A failure marks nothing.
+  const pick = useRead<HfPickResponse | null>(() => getTransport().getHfPick(repo), () => null);
   // Optional: a failed reading says nothing about tools.
   const tools = useRead<ToolSupportResponse>(() => getTransport().getHfToolSupport(repo), () => null);
   const [picked, setPicked] = useState<string | null>(null);
 
-  const quants = listing && 'quants' in listing ? listing.quants : [];
-  const selected = quants.find((q) => q.label === picked) ?? firstPick(quants);
+  const listed = listing && 'quants' in listing ? listing.quants : [];
+  // gglib's pick: the listing's, else the download's once it arrives.
+  const pickLabel = listed.find((q) => q.picked)?.label ?? pick?.label ?? null;
+  const quants = listed.map((q) => (q.label === pickLabel ? { ...q, picked: true } : q));
+  // The row chosen, else gglib's pick.
+  const selected = quants.find((q) => q.label === picked) ?? quants.find((q) => q.picked);
   const model = summary && 'id' in summary ? summary : null;
 
   const download = async (quant: HfQuantization) => {
@@ -94,10 +101,6 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
       showToast(formatError(err), 'error');
     }
   };
-
-  const toolsTitle = tools
-    ? `${Math.round(tools.confidence * 100)}% confident${tools.detected_format ? `, ${tools.detected_format} format` : ''}`
-    : undefined;
 
   return (
     <div className="flex flex-col gap-lg p-md">
@@ -115,7 +118,7 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
         <p className="m-0 text-xs text-text-secondary tabular-nums">
           {model?.parameters_b != null && formatParamCount(model.parameters_b)}
           {model?.parameters_b != null && tools?.supports_tool_calls && ' · '}
-          {tools?.supports_tool_calls && <span title={toolsTitle}>calls tools</span>}
+          {tools?.supports_tool_calls && <span>calls tools</span>}
         </p>
         {summary && 'error' in summary && <p className="m-0 text-xs text-text-secondary">{summary.error}</p>}
       </div>

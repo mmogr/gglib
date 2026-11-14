@@ -40,7 +40,7 @@ use fixtures::common::{
 const CHAT_MODEL: &str = "chat-model";
 const EMBED_MODEL: &str = "embed-model";
 
-/// One non-streaming completion frame, which the proxy re-emits as SSE.
+/// One streamed chunk and `[DONE]`, which the proxy forwards.
 const CHAT_STREAM: &[u8] =
     b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"index\":0}]}\n\ndata: [DONE]\n\n";
 
@@ -290,7 +290,7 @@ async fn proxy_status_reports_the_admission_snapshot() {
     let (base, _runtime, proxy_cancel, upstream_cancel) = spawn_two_model_proxy().await;
 
     let status: Value = Client::new()
-        .get(format!("{base}/v1/proxy/status"))
+        .get(format!("{base}/v1/gglib/proxy/status"))
         .send()
         .await
         .unwrap()

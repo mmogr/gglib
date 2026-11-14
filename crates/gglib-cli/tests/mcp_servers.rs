@@ -12,7 +12,7 @@
 use std::io::Write as _;
 use std::net::TcpListener;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
 
 use gglib_app_services::types::{McpServerConfigDto, McpServerDto, McpServerInfo, McpToolInfo};
@@ -22,16 +22,6 @@ use gglib_test_http::blocking;
 
 #[path = "support/data_dir.rs"]
 mod data_dir;
-
-/// What an SSE server is refused with, wherever it is refused.
-const SSE_NOT_SUPPORTED: &str = "SSE servers are not supported yet; only stdio servers can be run";
-
-/// Store an SSE server in `root`'s database, as one added while they were
-/// accepted is stored: `gglib mcp add` refuses one now.
-fn stored_sse(root: &Path, name: &str, lifecycle: McpLifecycle) {
-    let server = NewMcpServer::new_sse(name, "http://localhost:3001/sse").with_lifecycle(lifecycle);
-    data_dir::store_mcp_server(root, server);
-}
 
 /// A loopback port nothing listens on.
 fn closed_port() -> u16 {
@@ -108,91 +98,10 @@ const STAND_IN_SERVER: &str = r#"while IFS= read -r line; do
 done
 "#;
 
-/// With a URL and without one: the type is what is refused, so a missing URL
-/// is not asked for first.
-#[test]
-fn adding_an_sse_server_is_refused_with_the_reason_and_stores_nothing() {
-    let root = tempfile::tempdir().expect("temp data dir");
-    let add = ["add", "--name", "remote", "--type", "sse"];
-
-    for url in [&["--url", "http://localhost:3001/sse"][..], &[]] {
-        let refused = mcp_err(root.path(), &[&add[..], url].concat());
-
-        assert!(
-            refused.contains(&format!("Error: {SSE_NOT_SUPPORTED}")),
-            "got: {refused}"
-        );
-    }
-
-    let listed = mcp_ok(root.path(), &["list"]);
-    assert!(
-        listed.contains("No MCP servers configured."),
-        "got: {listed}"
-    );
-}
-
-#[test]
-fn the_help_for_add_says_of_sse_and_its_url_that_they_are_not_supported_yet() {
-    let root = tempfile::tempdir().expect("temp data dir");
-
-    let help = mcp_ok(root.path(), &["add", "--help"]);
-
-    let said_of = |flag: &str| {
-        help.lines()
-            .find(|line| line.trim_start().starts_with(flag))
-            .unwrap_or_else(|| panic!("no line for {flag}, got: {help}"))
-    };
-    assert!(
-        said_of("--type").contains(r#""sse" (HTTP) is not supported yet"#),
-        "got: {help}"
-    );
-    assert!(
-        said_of("--url").contains("not supported yet"),
-        "got: {help}"
-    );
-}
-
-#[test]
-fn a_stored_sse_server_is_listed_as_not_supported_yet_refused_a_run_and_an_edit_and_still_removed()
-{
-    let root = tempfile::tempdir().expect("temp data dir");
-    stored_sse(root.path(), "remote", McpLifecycle::Lazy);
-
-    let listed = mcp_ok(root.path(), &["list"]);
-    let row = listed
-        .lines()
-        .find(|line| line.contains("remote"))
-        .unwrap_or_else(|| panic!("no row for the server, got: {listed}"));
-    assert!(
-        row.contains(" sse ") && row.ends_with("Not supported yet"),
-        "the row names its type and says it is not supported, got: {row}"
-    );
-
-    for command in ["tools", "test", "enable", "disable"] {
-        let refused = mcp_err(root.path(), &[command, "remote"]);
-
-        assert!(
-            refused.contains(&format!("Error: {SSE_NOT_SUPPORTED}")),
-            "`mcp {command}` got: {refused}"
-        );
-    }
-
-    let removed = mcp_ok(root.path(), &["remove", "remote", "--yes"]);
-    assert!(
-        removed.contains("Removed MCP server 'remote'"),
-        "got: {removed}"
-    );
-    let listed = mcp_ok(root.path(), &["list"]);
-    assert!(
-        listed.contains("No MCP servers configured."),
-        "got: {listed}"
-    );
-}
-
 #[test]
 fn adding_a_server_under_a_taken_name_is_refused_by_name() {
     let root = tempfile::tempdir().expect("temp data dir");
-    let add = ["add", "--name", "files", "--type", "stdio", "--command"];
+    let add = ["add", "--name", "files", "--command"];
     mcp_ok(root.path(), &[&add[..], &["one"]].concat());
 
     let refused = mcp_err(root.path(), &[&add[..], &["two"]].concat());
@@ -217,8 +126,6 @@ fn an_add_that_fails_on_its_env_leaves_no_server() {
             "add",
             "--name",
             "half",
-            "--type",
-            "stdio",
             "--command",
             "one",
             "--env",
@@ -247,8 +154,6 @@ fn a_malformed_env_pair_is_refused_without_echoing_it() {
             "add",
             "--name",
             "x",
-            "--type",
-            "stdio",
             "--command",
             "one",
             "--env",
@@ -268,17 +173,7 @@ fn a_blank_env_value_is_refused_and_stores_nothing() {
 
     let refused = mcp_err(
         root.path(),
-        &[
-            "add",
-            "--name",
-            "x",
-            "--type",
-            "stdio",
-            "--command",
-            "one",
-            "--env",
-            "TOKEN=",
-        ],
+        &["add", "--name", "x", "--command", "one", "--env", "TOKEN="],
     );
 
     assert!(
@@ -292,18 +187,27 @@ fn a_blank_env_value_is_refused_and_stores_nothing() {
     );
 }
 
+/// A server is a process gglib starts: there is no `--type` to choose, and
+/// no `--url` for a server reached over HTTP. Both are refused as flags, and
+/// nothing is stored.
 #[test]
-fn an_unknown_type_is_refused_with_the_types_there_are() {
+fn there_is_no_type_or_url_to_name() {
     let root = tempfile::tempdir().expect("temp data dir");
 
-    let refused = mcp_err(
-        root.path(),
-        &["add", "--name", "odd", "--type", "grpc", "--url", "x"],
-    );
-
+    for (flag, value) in [("--type", "stdio"), ("--url", "http://localhost:3001/sse")] {
+        let refused = mcp_err(
+            root.path(),
+            &["add", "--name", "odd", "--command", "npx", flag, value],
+        );
+        assert!(
+            refused.contains(&format!("unexpected argument '{flag}'")),
+            "got: {refused}"
+        );
+    }
+    let listed = mcp_ok(root.path(), &["list"]);
     assert!(
-        refused.contains("Invalid --type value: unknown server type 'grpc'; expected stdio or sse"),
-        "got: {refused}"
+        listed.contains("No MCP servers configured."),
+        "got: {listed}"
     );
 }
 
@@ -319,8 +223,6 @@ fn a_manual_lifecycle_is_refused_with_the_lifecycles_there_are() {
             "add",
             "--name",
             "files",
-            "--type",
-            "stdio",
             "--command",
             "true",
             "--lifecycle",
@@ -354,8 +256,6 @@ fn testing_a_newly_added_server_resolves_its_command_and_starts_it() {
             "add",
             "--name",
             "stand-in",
-            "--type",
-            "stdio",
             "--command",
             "sh",
             "--args",
@@ -383,8 +283,6 @@ fn testing_a_server_whose_command_cannot_be_resolved_reports_the_failed_start() 
             "add",
             "--name",
             "ghost",
-            "--type",
-            "stdio",
             "--command",
             "gglib-no-such-command",
         ],
@@ -422,7 +320,7 @@ fn cell<'a>(listed: &'a str, name: &str, heading: &str) -> &'a str {
 #[test]
 fn a_server_is_opened_to_paired_devices_and_closed_again() {
     let root = tempfile::tempdir().expect("temp data dir");
-    let add = ["add", "--type", "stdio", "--command", "npx", "--name"];
+    let add = ["add", "--command", "npx", "--name"];
     mcp_ok(root.path(), &[&add[..], &["tavily"]].concat());
     mcp_ok(root.path(), &[&add[..], &["fs"]].concat());
     let listed = mcp_ok(root.path(), &["list"]);
@@ -455,7 +353,7 @@ fn a_server_is_opened_to_paired_devices_and_closed_again() {
 #[test]
 fn opening_a_disabled_server_says_it_offers_nothing_until_enabled() {
     let root = tempfile::tempdir().expect("temp data dir");
-    let add = ["add", "--type", "stdio", "--command", "npx", "--disabled"];
+    let add = ["add", "--command", "npx", "--disabled"];
     mcp_ok(root.path(), &[&add[..], &["--name", "off"]].concat());
 
     let opened = mcp_ok(root.path(), &["allow-remote", "off"]);
@@ -465,29 +363,6 @@ fn opening_a_disabled_server_says_it_offers_nothing_until_enabled() {
             && opened.contains("It is disabled, so it offers them no tools"),
         "got: {opened}"
     );
-}
-
-/// An SSE server is never opened, and is said why, before any server named
-/// beside it is opened; closing it is not refused.
-#[test]
-fn opening_an_sse_server_is_refused_with_the_reason() {
-    let root = tempfile::tempdir().expect("temp data dir");
-    stored_sse(root.path(), "remote", McpLifecycle::Lazy);
-    data_dir::store_mcp_server(
-        root.path(),
-        NewMcpServer::new_stdio("fs", "npx", vec![], None),
-    );
-
-    let refused = mcp_err(root.path(), &["allow-remote", "fs", "remote"]);
-
-    assert!(
-        refused.contains(&format!("Error: {SSE_NOT_SUPPORTED}")),
-        "got: {refused}"
-    );
-    let listed = mcp_ok(root.path(), &["list"]);
-    assert_eq!(remote_cell(&listed, "remote"), "no");
-    assert_eq!(remote_cell(&listed, "fs"), "no", "nothing changed");
-    mcp_ok(root.path(), &["deny-remote", "remote"]);
 }
 
 /// A name two servers share opens neither, and points to their ids; an id
@@ -525,33 +400,6 @@ fn a_name_two_servers_share_is_refused_and_an_id_is_asked_for() {
     assert!(
         opened.contains("✓ 'twin' is open to paired devices"),
         "got: {opened}"
-    );
-}
-
-/// `gglib remote enable --allow-mcp` is refused, pointing at where the grant
-/// went, before any daemon is asked anything: the port it is pointed at
-/// listens to nothing, and nothing is started on it.
-#[test]
-fn remote_enable_with_allow_mcp_is_refused_with_a_pointer() {
-    let root = tempfile::tempdir().expect("temp data dir");
-    let port = closed_port();
-    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
-        .args(["remote", "enable", "--allow-mcp", "t"])
-        .env("GGLIB_DATA_DIR", root.path())
-        .env("GGLIB_DAEMON_PORT", port.to_string())
-        .stdin(Stdio::null())
-        .output()
-        .expect("running `gglib remote enable`");
-
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(!out.status.success(), "stderr: {stderr}");
-    assert!(
-        stderr.contains("--allow-mcp is gone: run `gglib mcp allow-remote <names>`"),
-        "stderr: {stderr}"
-    );
-    assert!(
-        TcpListener::bind(("127.0.0.1", port)).is_ok(),
-        "no daemon was started on the port"
     );
 }
 
@@ -606,14 +454,12 @@ fn in_the_daemon(
         McpServerDto {
             id,
             name: name.to_owned(),
-            server_type: "stdio".to_owned(),
             config: McpServerConfigDto {
                 command: Some("npx".to_owned()),
                 resolved_path_cache: None,
                 args: None,
                 working_dir: None,
                 path_extra: None,
-                url: None,
             },
             enabled: true,
             allow_remote: false,
@@ -656,7 +502,7 @@ fn starting(info: &McpServerInfo) -> (String, String) {
 /// Add a stdio server named `name` to `root` with `extra` flags, and answer
 /// its id.
 fn added(root: &Path, name: &str, extra: &[&str]) -> i64 {
-    let add = ["add", "--type", "stdio", "--command", "npx", "--name", name];
+    let add = ["add", "--command", "npx", "--name", name];
     let said = mcp_ok(root, &[&add[..], extra].concat());
     said.split("(id: ")
         .nth(1)

@@ -190,6 +190,7 @@ fn a_reply_that_produced_nothing_still_says_it_stopped() {
     let got = rows(
         &[AgentEvent::Error {
             message: "LLM stream error".to_owned(),
+            code: None,
         }],
         false,
     );
@@ -323,7 +324,7 @@ fn progress_and_waiting_frames_change_no_row() {
         text("Here it is."),
     ];
     let with_progress = [
-        AgentEvent::image_render_wait(3, 20, 1),
+        AgentEvent::model_load_wait("Qwen3-4B", 3_000),
         started("c1"),
         AgentEvent::ToolProgress {
             tool_call_id: "c1".to_owned(),

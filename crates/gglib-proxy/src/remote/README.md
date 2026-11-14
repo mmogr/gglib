@@ -30,12 +30,12 @@ machine it pairs with from 0.3.1. The device name is the durable identity,
 because this side issued it.
 
 **They are restrictive, with one exception.** A local client can write these
-headers too, and on every route but `/v1/runs` and `/v1/chats` what it
+headers too, and on every route but `/v1/gglib/runs` and `/v1/gglib/chats` what it
 gains is a refusal — on `/mcp`, or from [`device_gate()`] — and a tick on a
-counter. On `/v1/runs` the device name is the caller's scope: a client that
+counter. On `/v1/gglib/runs` the device name is the caller's scope: a client that
 reaches the proxy directly and forges the markers is taken for that device
 and can read its runs, which this machine's scope is refused. On
-`/v1/chats` it reads the hub's chats, which only a named device may. The edge reaches the
+`/v1/gglib/chats` it reads the hub's chats, which only a named device may. The edge reaches the
 proxy as any client does, with the proxy's key, so nothing here can tell the
 two apart; that refusal is a courtesy of the API, not a boundary. The
 direction that matters holds: a tunnelled peer cannot make its request look
@@ -54,7 +54,7 @@ tunnel. Under `TokenPolicy::Named` everything the edge admits names a device,
 so today the gate refuses one thing: a request whose markers were forged to
 look tunnelled by a client that reached the proxy directly. It stays as the only check left that could
 refuse a credential a later modelpipe admits without naming a device, where
-a mistake would reach `POST /v1/proxy/shutdown`.
+a mistake would reach `POST /v1/gglib/proxy/shutdown`.
 
 # The `/mcp` gate
 
@@ -69,7 +69,7 @@ through its runs instead.
 
 # The drawing answer's servers
 
-`GET /v1/images/drawing` answers [`DeviceDrawing`]: the drawing answer's own
+`GET /v1/gglib/images/drawing` answers [`DeviceDrawing`]: the drawing answer's own
 fields, flattened, and `mcp_servers`, each server open to paired devices
 as `{id, name}`, by name and then by id, a name two servers share listed
 under each, read from the MCP service while the tunnel's owner says a

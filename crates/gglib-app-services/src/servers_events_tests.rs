@@ -20,7 +20,7 @@ use gglib_core::{NewModel, SettingsUpdate};
 use gglib_db::{CoreFactory, setup_test_database};
 
 use super::*;
-use crate::test_support::{MockToolSupportDetector, RecordingEmitter, test_core_and_proxy_on};
+use crate::test_support::{RecordingEmitter, test_core_and_proxy_on};
 
 const MODEL: &str = "test-model";
 
@@ -141,7 +141,7 @@ impl Fixture {
         for name in ["another-model", MODEL] {
             let path = dir.path().join(format!("{name}.gguf"));
             std::fs::write(&path, b"placeholder").expect("the model file");
-            let model = NewModel::new(name.to_owned(), path, 7.0, chrono::Utc::now());
+            let model = NewModel::new(name.to_owned(), path, Some(7.0), chrono::Utc::now());
             model_id = repos.models.insert(&model).await.expect("a model").id;
         }
 
@@ -186,7 +186,6 @@ impl Fixture {
             core,
             proxy: Arc::clone(&proxy),
             emitter: Arc::clone(&emitter) as Arc<dyn AppEventEmitter>,
-            tool_detector: Arc::new(MockToolSupportDetector),
         });
         Self {
             ops,

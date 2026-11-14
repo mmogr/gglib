@@ -79,7 +79,7 @@ pub(crate) struct AppState {
     pub(crate) host: HostFacts,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
     /// `/slots` cache, and request metrics, plus the SSE broadcaster that
-    /// pushes snapshots to `GET /v1/proxy/status/stream`.
+    /// pushes snapshots to `GET /v1/gglib/proxy/status/stream`.
     pub(crate) dashboard: Arc<DashboardState>,
     /// Application settings, snapshotted so the per-request read does not hit
     /// the database every time. See `settings_cache` module docs.
@@ -101,9 +101,9 @@ pub(crate) struct AppState {
     /// Asked whether a session is live, before a device is told the MCP
     /// servers open to it, and told when a tunnelled request arrives. `None` where no tunnel can be.
     remote: Option<Arc<dyn RemoteGatewayPort>>,
-    /// The daemon's runs, served at `/v1/runs`; `None` answers those 503.
+    /// The daemon's runs, served at `/v1/gglib/runs`; `None` answers those 503.
     pub(crate) runs: Option<Arc<dyn RunsPort>>,
-    /// The hub's chats, served at `/v1/chats`; `None` answers those 503.
+    /// The hub's chats, served at `/v1/gglib/chats`; `None` answers those 503.
     pub(crate) chats: Option<Arc<dyn HubChatsPort>>,
     /// Starts a device's turn on a hub chat; `None` answers it 503.
     pub(crate) turns: Option<Arc<dyn AgentRunStarter>>,
@@ -289,7 +289,7 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         sampling_audit,
     ));
     // Second background task: periodically recomputes and broadcasts the
-    // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
+    // unified DashboardSnapshot for GET /v1/gglib/proxy/status/stream subscribers
     // (see `dashboard` module docs), when the caller asked for it. Same
     // join-on-shutdown treatment as the slots poller above.
     let dashboard_publisher = publish_dashboard
@@ -410,7 +410,7 @@ pub(crate) async fn chat_completions(
     debug!("POST /v1/chat/completions");
     let body = match body {
         Ok(body) => body,
-        Err(rejection) => return crate::body_limit::rejected(rejection),
+        Err(rejection) => return crate::body_limit::rejected(&rejection),
     };
 
     // Canonicalize the system prompt and tool order once, up front, and
@@ -432,10 +432,9 @@ pub(crate) async fn chat_completions(
             Ok(s) => Some(s),
             Err(e) => {
                 tracing::warn!("Invalid session ID in header: {}", e);
-                return Response::builder()
-                    .status(axum::http::StatusCode::BAD_REQUEST)
-                    .body(axum::body::Body::from(format!("Invalid session ID: {e}")))
-                    .unwrap();
+                return crate::refusal::invalid(format!(
+                    "{e}: a session id is up to 64 letters, digits, - or _"
+                ));
             }
         }
     } else {
@@ -585,10 +584,9 @@ pub(crate) async fn chat_completions(
     let model_context = gglib_core::request_pipeline::ModelContext::from(&model);
 
     // The turn-level loop/stagnation guard, keyed by the model the request
-    // resolved to. Under `refuse` it answers here, after the one catalog read
-    // above but before admission or any model swap is paid for; under `note`
-    // the request goes on and carries the note and the trip with it, unless
-    // the same run already had its note, when the run is ended here. See
+    // resolved to. A first trip goes on and carries the note and the trip
+    // with it; a run that already had its note is ended here, after the one
+    // catalog read above but before admission or any model swap is paid for. See
     // `loop_guard_step` for what it records and `loop_guard` for what a
     // replayed history means.
     let mut guard_note = None;
@@ -607,7 +605,6 @@ pub(crate) async fn chat_completions(
         crate::loop_guard_step::GuardStep::End => {
             return crate::loop_guard_end::ended_response(&model.name, is_streaming);
         }
-        crate::loop_guard_step::GuardStep::Refuse(response) => return response,
     }
 
     // Watchdog: if prior requests asked for a recycle (a strike streak, or a
@@ -864,8 +861,6 @@ async fn attempt(
         profile: ctx.profile.clone(),
         global: settings.inference_defaults.clone(),
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
-        // Opt-out: absent means on. The rule every chat reads it by.
-        agentic_adjustments: settings.effective_agentic_sampling(),
     };
 
     // Build StreamConfig for this attempt (Some only when cache is enabled).
@@ -945,9 +940,8 @@ async fn attempt(
 /// something only before the calling request registers its own connection.
 /// With `--parallel 1` a request in flight owns the only slot, and a stop
 /// would kill its live generation. The `&&` leaves the request untaken when
-/// busy, for the next request that finds the upstream idle. An agent run is
-/// not in the registry; it holds the model instead, and `recycle_current`
-/// refuses while it does, so the request is re-armed for later (#1212).
+/// busy, for the next request that finds the upstream idle. A recycle the
+/// runtime refuses is re-armed for later (#1212).
 async fn recycle_if_asked_and_idle(state: &AppState) {
     if !(state.dashboard.connections.is_empty() && state.upstream_health.take_recycle_request()) {
         return;
@@ -955,8 +949,8 @@ async fn recycle_if_asked_and_idle(state: &AppState) {
     warn!("upstream watchdog: recycling degraded model before next request");
     // Taking the request already cleared the flag and zeroed the streak, so a
     // swallowed failure here spends the watchdog's entire case against a
-    // server that is still sick. Put it back instead. With gglib's runtime the
-    // failure is a run's hold: a kill that fails is logged, the slot emptied.
+    // server that is still sick. Put it back instead. gglib's own runtime
+    // never refuses: a kill that fails is logged, the slot emptied.
     if let Err(e) = state.runtime_port.recycle_current().await {
         warn!(
             error = %e,

@@ -29,9 +29,7 @@
 
 use crate::cache_config::KvCacheType;
 use crate::domain::RuntimeKind;
-use crate::domain::kv_estimate::{
-    KvElemsPerToken, estimate_kv_bytes_for_context, kv_bytes_per_token,
-};
+use crate::domain::kv_estimate::KvShape;
 
 /// Fraction of free VRAM a co-resident candidate is allowed to claim.
 ///
@@ -77,9 +75,9 @@ pub struct SlotFootprint {
 impl SlotFootprint {
     /// Assemble a footprint from a model's launch inputs.
     ///
-    /// `kv_elems_per_token` is `None` for models whose GGUF metadata does not
-    /// carry the layer/head counts (see
-    /// [`estimate_kv_elems_per_token`](crate::domain::estimate_kv_elems_per_token)).
+    /// `kv` is `None` for models whose GGUF metadata does not carry the
+    /// layer/head counts (see
+    /// [`estimate_kv_shape`](crate::domain::estimate_kv_shape)).
     /// That yields a footprint of weights alone, which understates the true
     /// cost — so [`decide_secondary_slot`] treats an unknown KV as
     /// disqualifying rather than free. See
@@ -87,21 +85,18 @@ impl SlotFootprint {
     #[must_use]
     pub const fn new(
         weights_bytes: u64,
-        kv_elems_per_token: Option<KvElemsPerToken>,
+        kv: Option<KvShape>,
         cache_type_k: KvCacheType,
         cache_type_v: KvCacheType,
         context_size: u64,
     ) -> Option<Self> {
         // `const fn` cannot use `?` on Option in a match arm position here, so
         // this is spelled out.
-        match kv_elems_per_token {
-            Some(elems) => {
-                let per_token = kv_bytes_per_token(elems, cache_type_k, cache_type_v);
-                Some(Self {
-                    weights_bytes,
-                    kv_bytes: estimate_kv_bytes_for_context(per_token, context_size),
-                })
-            }
+        match kv {
+            Some(shape) => Some(Self {
+                weights_bytes,
+                kv_bytes: shape.bytes(cache_type_k, cache_type_v).at(context_size),
+            }),
             None => None,
         }
     }
@@ -315,6 +310,7 @@ mod image_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::kv_estimate::KvElemsPerToken;
 
     const GIB: u64 = 1024 * 1024 * 1024;
     const MIB: u64 = 1024 * 1024;
@@ -474,22 +470,19 @@ mod tests {
 
     #[test]
     fn footprint_sums_weights_and_kv_at_the_launch_context() {
-        let elems = KvElemsPerToken { k: 1024, v: 1024 };
+        let shape = KvShape::uniform(KvElemsPerToken { k: 1024, v: 1024 });
         let footprint = SlotFootprint::new(
             500 * MIB,
-            Some(elems),
+            Some(shape),
             KvCacheType::Q8_0,
             KvCacheType::Q8_0,
             8192,
         )
         .expect("known KV shape yields a footprint");
 
-        let per_token = kv_bytes_per_token(elems, KvCacheType::Q8_0, KvCacheType::Q8_0);
+        let kv = shape.bytes(KvCacheType::Q8_0, KvCacheType::Q8_0);
         assert_eq!(footprint.weights_bytes, 500 * MIB);
-        assert_eq!(
-            footprint.kv_bytes,
-            estimate_kv_bytes_for_context(per_token, 8192)
-        );
+        assert_eq!(footprint.kv_bytes, kv.at(8192));
         assert_eq!(footprint.total(), 500 * MIB + footprint.kv_bytes);
     }
 
@@ -506,7 +499,7 @@ mod tests {
     /// and refuse co-loads that would have fitted.
     #[test]
     fn kv_cache_type_changes_the_footprint() {
-        let elems = KvElemsPerToken { k: 4096, v: 4096 };
+        let elems = KvShape::uniform(KvElemsPerToken { k: 4096, v: 4096 });
         let quantized =
             SlotFootprint::new(0, Some(elems), KvCacheType::Q8_0, KvCacheType::Q8_0, 32_768)
                 .unwrap();

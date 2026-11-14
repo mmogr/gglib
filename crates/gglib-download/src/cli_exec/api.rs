@@ -10,7 +10,7 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 
 /// A Hub client that sends `token`, when there is one, as a bearer token on
 /// every request.
-pub fn hub_client(token: Option<String>) -> DefaultHfClient {
+pub(crate) fn hub_client(token: Option<String>) -> DefaultHfClient {
     DefaultHfClient::new(&HfClientConfig::default().with_optional_token(token))
 }
 

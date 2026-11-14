@@ -1,17 +1,12 @@
 use super::*;
 
 /// A wait as a frame logged before `said` was added: its fields alone.
-fn unsaid(
-    reason: WaitingFor,
-    position: u32,
-    model: Option<&str>,
-    elapsed_ms: Option<u64>,
-) -> AgentEvent {
+fn unsaid(model: Option<&str>, elapsed_ms: Option<u64>) -> AgentEvent {
     AgentEvent::Waiting {
-        reason,
-        step: 3,
-        total: 20,
-        position,
+        reason: WaitingFor::ModelLoad,
+        step: 0,
+        total: 0,
+        position: 0,
         model: model.map(str::to_owned),
         elapsed_ms,
         said: None,
@@ -39,7 +34,7 @@ fn a_load_names_its_model_and_whole_seconds() {
 fn a_load_under_a_second_says_no_seconds() {
     let load = AgentEvent::model_load_wait("Qwen3-4B", 999);
     assert_eq!(said_of(&load), Some("Loading Qwen3-4B…"));
-    let untimed = unsaid(WaitingFor::ModelLoad, 0, Some("Qwen3-4B"), None);
+    let untimed = unsaid(Some("Qwen3-4B"), None);
     assert_eq!(
         untimed.waiting_sentence().as_deref(),
         Some("Loading Qwen3-4B…")
@@ -48,31 +43,10 @@ fn a_load_under_a_second_says_no_seconds() {
 
 #[test]
 fn a_load_with_no_model_named_says_the_model() {
-    let load = unsaid(WaitingFor::ModelLoad, 0, None, Some(3_000));
+    let load = unsaid(None, Some(3_000));
     assert_eq!(
         load.waiting_sentence().as_deref(),
         Some("Loading the model… 3 s")
-    );
-}
-
-#[test]
-fn a_render_says_its_step_once_it_has_one_and_its_place_when_not_next() {
-    let render = AgentEvent::image_render_wait(3, 20, 1);
-    assert_eq!(
-        said_of(&render),
-        Some("Waiting for an image render, step 3 of 20")
-    );
-    assert_eq!(
-        said_of(&AgentEvent::image_render_wait(0, 0, 1)),
-        Some("Waiting for an image render")
-    );
-    assert_eq!(
-        said_of(&AgentEvent::image_render_wait(3, 20, 2)),
-        Some("Waiting for an image render, step 3 of 20, 2 in line")
-    );
-    assert_eq!(
-        said_of(&AgentEvent::image_render_wait(0, 0, 3)),
-        Some("Waiting for an image render, 3 in line")
     );
 }
 
@@ -80,7 +54,7 @@ fn a_render_says_its_step_once_it_has_one_and_its_place_when_not_next() {
 /// daemon said, as it said it.
 #[test]
 fn a_frames_said_is_its_sentence() {
-    let mut wait = unsaid(WaitingFor::ModelLoad, 0, Some("Qwen3-4B"), Some(3_000));
+    let mut wait = unsaid(Some("Qwen3-4B"), Some(3_000));
     if let AgentEvent::Waiting { said, .. } = &mut wait {
         *said = Some("Loading Qwen3-4B… 4 s".to_owned());
     }
@@ -118,4 +92,47 @@ fn a_logged_wait_carries_its_words() {
     assert_eq!(frame["said"], "Loading Qwen3-4B… 1 s");
     let event: AgentEvent = serde_json::from_value(frame).expect("a waiting frame");
     assert_eq!(said_of(&event), Some("Loading Qwen3-4B… 1 s"));
+}
+
+#[test]
+fn a_slot_wait_says_its_place_in_line_and_whole_seconds() {
+    let wait = AgentEvent::agent_slot_wait(2, 5_400);
+    assert_eq!(
+        said_of(&wait),
+        Some("Waiting for a free agent slot, 2 in line… 5 s")
+    );
+    let next = AgentEvent::agent_slot_wait(1, 300);
+    assert_eq!(
+        next.waiting_sentence().as_deref(),
+        Some("Waiting for a free agent slot, 1 in line…")
+    );
+}
+
+/// A slot's wait names no model and has no steps: only its place and time.
+#[test]
+fn a_slot_wait_on_the_wire() {
+    let frame = serde_json::to_value(AgentEvent::agent_slot_wait(1, 2_000)).unwrap();
+    assert_eq!(
+        frame,
+        serde_json::json!({
+            "type": "waiting",
+            "reason": "agent_slot",
+            "step": 0,
+            "total": 0,
+            "position": 1,
+            "elapsed_ms": 2_000,
+            "said": "Waiting for a free agent slot, 1 in line… 2 s",
+        })
+    );
+}
+
+/// A slot's wait without `said` is worded by its reason, never as a load.
+#[test]
+fn a_slot_frame_without_said_is_worded_as_a_slot_wait() {
+    let frame = r#"{"elapsed_ms":3000,"position":2,"reason":"agent_slot","step":0,"total":0,"type":"waiting"}"#;
+    let event: AgentEvent = serde_json::from_str(frame).expect("a waiting frame");
+    assert_eq!(
+        event.waiting_sentence().as_deref(),
+        Some("Waiting for a free agent slot, 2 in line… 3 s")
+    );
 }

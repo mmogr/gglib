@@ -5,9 +5,9 @@
  * far machine is a second `FakeDaemon` (`hub`), whose chats are listed with
  * the run live in each, opened with their rows, and continued with a turn
  * of `{content, images?}` that the hub starts as its own run and saves; its
- * images go to the hub's store at `/api/remote/attachments`, and a far
- * gglib from before images (`noImages`) answers that route 404 and a turn
- * that names one `400 invalid_request`. Every other
+ * images go to the hub's store at `/api/remote/attachments`. A far gglib
+ * too old to say what it serves (`older`) has both refused by this machine's
+ * daemon, `409` with the sentence that asks for it to be updated. Every other
  * path goes to this machine's `FakeDaemon` (`here`). What the page sent to
  * the far routes is recorded in `farRequests`, as it sent it.
  *
@@ -78,6 +78,9 @@ export function farDetail(id: number, name: string, extra: Partial<ModelDetailDt
 
 const LIVE = new Set(['queued', 'in_progress']);
 
+/** What this machine's daemon says of a far gglib too old to say what it serves. */
+export const FAR_OLDER = "desk runs a gglib older than this machine's 1.0.0 — update gglib on desk";
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -98,8 +101,8 @@ export class FakeFarDaemon {
   entries: ModelInfo[] = [farEntry('qwen3', 3), farEntry('qwen3', 3, { profile: 'coding' })];
   /** How many more readings of the far models fail. */
   modelsFail = 0;
-  /** The far machine's gglib predates images. */
-  noImages = false;
+  /** The far machine's gglib is too old to say what it serves. */
+  older = false;
 
   /** How many far requests went to `method` on a path starting `prefix`. */
   farCount(method: string, prefix: string): number {
@@ -150,14 +153,12 @@ export class FakeFarDaemon {
       return json({ conversation, messages: this.hub.saved(id) });
     }
     if ((m = /^\/api\/remote\/attachments(\/[^/]+)?$/.exec(path))) {
-      if (this.noImages) return json({ error: `no route ${method} ${path}`, status: 404, type: 'not_found' }, 404);
+      if (this.older) return json({ error: FAR_OLDER, status: 409 }, 409);
       return hub(`/api/attachments${m[1] ?? ''}`);
     }
     if (method === 'PUT' && (m = /^\/api\/remote\/chats\/(\d+)\/turns\/([^/]+)$/.exec(path))) {
       const { content, images } = body as { content: string; images?: string[] };
-      if (this.noImages && images) {
-        return json({ error: 'unknown field `images`', status: 400, type: 'invalid_request' }, 400);
-      }
+      if (this.older) return json({ error: FAR_OLDER, status: 409 }, 409);
       // As the hub takes a device's turn: the history is its own record.
       const request: LocalTurn = {
         conversation_id: Number(m[1]),

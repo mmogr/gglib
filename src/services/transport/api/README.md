@@ -26,7 +26,7 @@ Axum backend (HTTP response) → typed result
 | `renew.ts` | A stream refused with a 401 renews the session's credential before it reconnects |
 | `daemonToken.ts` | The daemon's token from the link `gglib web` prints: stripped from the address bar, kept until the daemon next starts |
 | `chat.ts` | Conversations and messages, a conversation's model, tools and tool limits (`settings` on `PUT /api/conversations/{id}`, each one sent and no other), a chat's title asked of its model (`POST /api/chat`), and a picture kept beside the one it was made from (`POST /api/conversations/{id}/pictures`) |
-| `servers.ts` | llama.cpp server lifecycle, the running list, and a server's tool support |
+| `servers.ts` | llama.cpp server lifecycle and the running list |
 | `downloads.ts` | Download queue management |
 | `mcp.ts` | MCP server config, lifecycle and config test |
 | `settings.ts` | Application settings, and the starter-profile install the daemon runs |

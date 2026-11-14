@@ -11,10 +11,9 @@ use thiserror::Error;
 
 use crate::domain::ComponentRole;
 use crate::domain::DefaultsOrigin;
-use crate::domain::DialectSpec;
 use crate::domain::ImageFamily;
 use crate::domain::InferenceConfig;
-use crate::domain::KvElemsPerToken;
+use crate::domain::KvShape;
 use crate::domain::Model;
 use crate::domain::ModelCapabilities;
 use crate::domain::ModelComponent;
@@ -51,8 +50,9 @@ pub struct ModelSummary {
     /// Whether the model draws images: its weights name an image family (see
     /// [`Model::generates_images`]). Such a model is not served for chat.
     pub image_output: bool,
-    /// Parameter count as string (e.g., "7B", "13B", "70B").
-    pub param_count: String,
+    /// Parameter count as string (e.g., "7B", "13B", "70B"), when it is
+    /// known.
+    pub param_count: Option<String>,
     /// Quantization type (e.g., "`Q4_K_M`", "`Q8_0`").
     pub quantization: Option<String>,
     /// Model architecture (e.g., "llama", "mistral", "qwen2").
@@ -84,12 +84,6 @@ pub struct ModelSummary {
     pub defaults_origin: Option<DefaultsOrigin>,
     /// Per-model server defaults (`context_length`, etc.) from the database.
     pub server_defaults: Option<ServerConfig>,
-    /// Persisted tool-call dialect spec, when detection identified one.
-    ///
-    /// `None` for rows imported before specs existed and for models whose
-    /// dialect could not be derived — consumers fall back to mapping
-    /// `format:*` tags via `normalize::registry::dialect_for_tags`.
-    pub dialect: Option<DialectSpec>,
     /// llama-server's template-capability self-report, when a launch has
     /// recorded one (see [`Model::template_caps`](crate::domain::Model)).
     ///
@@ -145,15 +139,14 @@ pub struct ModelLaunchSpec {
     /// size could not be determined — callers must treat that as "unknown"
     /// rather than "free".
     pub file_size_bytes: u64,
-    /// Estimated K/V element counts consumed per token of context, derived
-    /// from the model's GGUF metadata (see
-    /// [`crate::domain::estimate_kv_elems_per_token`]). Type-agnostic —
-    /// callers convert to bytes via [`crate::domain::kv_bytes_per_token`]
-    /// once the launch's resolved K/V cache types are known.
+    /// The estimated KV cache, in elements, derived from the model's GGUF
+    /// metadata (see [`crate::domain::estimate_kv_shape`]). Type-agnostic —
+    /// callers convert to bytes via [`KvShape::bytes`] once the launch's
+    /// resolved K/V cache types are known.
     ///
     /// `None` when the metadata doesn't carry the layer/head counts needed;
     /// callers substitute a conservative allowance.
-    pub kv_elems_per_token: Option<KvElemsPerToken>,
+    pub kv_shape: Option<KvShape>,
     /// True when the model's KV memory retains only part of the token history
     /// — sliding-window, hybrid, or recurrent attention (see
     /// [`crate::domain::kv_memory_is_partial`]).
@@ -174,7 +167,7 @@ pub struct ModelLaunchSpec {
     /// bump, rather than reporting the first as the second.
     ///
     /// Derived from the metadata already on the catalog row, the same way
-    /// `kv_elems_per_token` and `kv_memory_is_partial` are.
+    /// `kv_shape` and `kv_memory_is_partial` are.
     pub model_sampling: ModelSamplingDefaults,
 }
 
@@ -198,8 +191,9 @@ impl ModelSummary {
     #[must_use]
     pub fn description(&self) -> String {
         let arch = self.architecture.as_deref().unwrap_or("unknown");
+        let params = self.param_count.as_deref().unwrap_or("unknown");
         let quant = self.quantization.as_deref().unwrap_or("unknown");
-        format!("{} - {} parameters, {}", arch, self.param_count, quant)
+        format!("{arch} - {params} parameters, {quant}")
     }
 }
 
@@ -280,7 +274,8 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
     /// `GET /props` has been read (ADR 0007: the caps are a fact about the
     /// binary–model pair, so only a launch can learn them). Implementations
     /// persist only when the stored value differs, so repeat launches of an
-    /// unchanged pair write nothing.
+    /// unchanged pair write nothing. A new or changed `supports_tool_calls`
+    /// also sets the model's stored tool flag.
     ///
     /// Defaulted to a no-op because most implementors of this port are
     /// read-only views (test doubles, the profiles catalog) with nothing to

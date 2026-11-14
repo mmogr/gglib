@@ -87,6 +87,9 @@ row has not been read (kill criterion 1).
    reads through `ModelContext.template_caps`. The proxy's own `/props` read
    feeds its dashboard, not the pipeline.
 
+   > **Amended 2026-11-12.** The effort gate is gone (ADR 0007, decision 3's
+   > amendment); stage 1 is now the one pipeline stage that reads the caps.
+
 3. **Every caller of the pipeline shares the rule.** A caller that resolves
    its model from the catalog gets the gate when the row carries caps: the
    proxy, the built-in agent on this machine (the web chat and `gglib chat`

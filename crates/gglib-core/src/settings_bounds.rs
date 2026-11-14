@@ -4,7 +4,7 @@
 //! they have to agree. [`validate_settings`](super::validate_settings) and
 //! [`validate_inference_config`](super::validate_inference_config) check
 //! against these and format what they refuse with from them; the help of
-//! `gglib config settings set` is held to them by a test beside its flags; and
+//! `gglib config set` is built from them in its key table; and
 //! `contracts/settings/bounds.json`, which the settings page's own ranges are
 //! checked against, is written from them by this module's tests. Spelling a
 //! number out separately on each is how they drift.
@@ -22,7 +22,7 @@ use std::ops::RangeInclusive;
 /// [`validate_settings`](super::validate_settings) rejects anything outside
 /// it, and so do the flags that write this setting or default it.
 ///
-/// Not every context-size flag is bounded by it: `--ctx-size` names a
+/// Not every context-size flag is bounded by it: `--context-size` names a
 /// per-launch value rather than this setting, and `CtxSizeArg::parse` accepts
 /// any `u64`. That is a separate surface with a separate contract, not an
 /// omission here.

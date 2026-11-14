@@ -9,7 +9,7 @@ export type InterventionKind = { "kind": "repaired_tool_call" } | { "kind": "tri
 /**
  * How many messages.
  */
-messages: number, } | { "kind": "constrained" } | { "kind": "noted_loop", 
+messages: number, } | { "kind": "noted_loop", 
 /**
  * The detector that tripped.
  */

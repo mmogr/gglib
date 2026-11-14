@@ -118,21 +118,10 @@ impl GgufParserPort for GgufParser {
 
 /// Extract structured metadata from raw GGUF key-value pairs.
 pub(crate) fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
-    let mut processed = HashMap::new();
-
-    // Convert metadata to string representation, skipping large arrays
-    for (key, value) in raw {
-        if key.starts_with("tokenizer.")
-            && matches!(value, GgufValue::Array(arr) if arr.len() > 100)
-        {
-            // Store just a summary for large tokenizer arrays
-            if let GgufValue::Array(arr) = value {
-                processed.insert(key.clone(), format!("Array with {} elements", arr.len()));
-            }
-        } else {
-            processed.insert(key.clone(), value.to_string());
-        }
-    }
+    let processed = raw
+        .iter()
+        .map(|(key, value)| (key.clone(), stored_text(key, value)))
+        .collect();
 
     // Extract fields
     let architecture = extract_architecture(raw);
@@ -156,6 +145,27 @@ pub(crate) fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetad
         metadata: processed,
         role: GgufFileRole::Weights,
         image_family: None,
+    }
+}
+
+/// The text a value is stored as. A tokenizer's large arrays are summarised.
+/// A number or bool array is kept whole, as `[16, 16, 4]` (JSON for ints and bools),
+/// so a per-layer list such as `{arch}.attention.head_count_kv` can be read
+/// back. Any other value is its `Display`, which summarises a long array.
+fn stored_text(key: &str, value: &GgufValue) -> String {
+    match value {
+        GgufValue::Array(items) if key.starts_with("tokenizer.") && items.len() > 100 => {
+            format!("Array with {} elements", items.len())
+        }
+        GgufValue::Array(items)
+            if items
+                .iter()
+                .all(|item| !matches!(item, GgufValue::String(_) | GgufValue::Array(_))) =>
+        {
+            let items: Vec<String> = items.iter().map(ToString::to_string).collect();
+            format!("[{}]", items.join(", "))
+        }
+        _ => value.to_string(),
     }
 }
 
@@ -253,28 +263,16 @@ fn extract_param_count(raw: &RawMetadata, file_path: &Path) -> Option<f64> {
     None
 }
 
-/// Parse parameter count from size label (e.g., "7B", "13B", "70B", "8x7B").
-/// For `MoE` models ("NxM.MB" format), returns TOTAL parameters (N × M) for VRAM estimation.
+/// The parameter count a size label states: `7B`, `13B`, `70B`.
+///
+/// A mixture of experts' label, `NxMB` (`8x7B`, `512x56B`), states none.
+/// llama.cpp's converter writes M as the shared weights and one expert's
+/// together, so the total, shared plus N experts, is not in the label, and
+/// N × M can be off by any factor: `512x56B` is 177B, not 28672B. Its count
+/// is the tensors' (`HeaderFacts::param_count_b`), or unknown.
 fn parse_param_label(size_label: &str) -> Option<f64> {
     let upper = size_label.to_uppercase();
 
-    // Handle MoE format: "8x7B", "64x2.6B", "512x2.5B" (NxM.MB)
-    // Calculate TOTAL parameters: N × M (e.g., 64 × 2.6 = 166.4B)
-    if let Some(x_pos) = upper.find('X') {
-        let before_x = &upper[..x_pos];
-        let after_x = &upper[x_pos + 1..];
-
-        if let Some(expert_size_str) = after_x.strip_suffix('B') {
-            if let (Ok(expert_count), Ok(expert_size)) =
-                (before_x.parse::<f64>(), expert_size_str.parse::<f64>())
-            {
-                // Return total: expert_count × expert_size
-                return Some(expert_count * expert_size);
-            }
-        }
-    }
-
-    // Handle regular format: "7B", "13B", "70B"
     if upper.ends_with('B') {
         let number_part = &upper[..upper.len() - 1];
         if let Ok(num) = number_part.parse::<f64>() {
@@ -307,7 +305,15 @@ fn parse_param_from_filename(filename: &str) -> Option<f64> {
             }
 
             if let Ok(num) = number_str.parse::<f64>() {
-                return Some(num);
+                // `8x7B` is a mixture of experts' label, which states no
+                // total (see `parse_param_label`).
+                let rest = before
+                    .rfind(number_str.as_str())
+                    .map_or("", |at| &before[..at]);
+                let of_experts = rest
+                    .strip_suffix('X')
+                    .is_some_and(|count| count.ends_with(|c: char| c.is_ascii_digit()));
+                return (!of_experts).then_some(num);
             }
         }
     }

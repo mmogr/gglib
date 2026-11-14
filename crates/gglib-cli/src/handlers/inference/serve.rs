@@ -35,13 +35,24 @@ use serve_far::serve_far;
 
 use super::shared::{log_inference_info, log_mlock_info};
 
+/// `--jinja` as the launch request carries it: `on` is `Some(true)`, `off`
+/// `Some(false)`, and `auto` or no flag `None`, which leaves it to the
+/// model's own default and its tags.
+fn launch_jinja(options: &ServeOptions) -> Option<bool> {
+    options
+        .jinja
+        .as_deref()
+        .map(crate::handlers::model::update::TriState::parse)
+        .and_then(crate::handlers::model::update::TriState::stored)
+}
+
 /// Execute the serve command: here, or on the paired machine.
 ///
 /// On the paired machine "serve" is what the word can mean there: have the
 /// model resident now, so the first turn does not wait. Only the name and
-/// `--ctx-size` travel; every other flag configures a proxy on *this*
+/// `--context-size` travel; every other flag configures a proxy on *this*
 /// machine, and there is no proxy of this machine's on that one to
-/// configure.
+/// configure, so the parse refuses each one typed beside `--remote`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute(
     ctx: &CliContext,
@@ -75,7 +86,7 @@ pub(crate) async fn execute(
                 )
                 .await
             },
-            async move || serve_far(ctx, target, &far_identifier, far_ctx_size.as_deref()).await,
+            async move || serve_far(target, &far_identifier, far_ctx_size.as_deref()).await,
         )
         .await
 }
@@ -128,16 +139,15 @@ async fn serve_here(
 
     // Ensure llama.cpp is installed before the daemon needs it.
     crate::handlers::config::engine::ensure_installed(
-        ctx,
         gglib_core::domain::RuntimeKind::Llama,
         false,
     )
     .await?;
     let model = found?;
 
-    // The raw `--ctx-size` flag is shape-validated at parse time, before the
+    // The raw `--context-size` flag is shape-validated at parse time, before the
     // model is known; resolving it here against the model's GGUF context
-    // length is what makes `--ctx-size max` work.
+    // length is what makes `--context-size max` work.
     let ctx_arg = parse_ctx_size_flag(context.ctx_size.as_deref())?;
 
     // The cascade itself is shared with the GUI's pinned start
@@ -150,7 +160,7 @@ async fn serve_here(
         &StartServerRequest {
             context_length: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
             port: None,
-            jinja: options.jinja.then_some(true),
+            jinja: launch_jinja(&options),
             reasoning_format: None,
             mtp_draft_n_max: mtp.mtp_draft_n_max,
             mtp_draft_p_min: mtp.mtp_draft_p_min,
@@ -162,7 +172,7 @@ async fn serve_here(
             default_ctx: None,
             proxy_port: options.port,
             // The daemon owns llama-server port allocation; a per-run value
-            // has nothing to attach to. `config settings set --llama-base-port`.
+            // has nothing to attach to. `config set llama-base-port`.
             llama_base_port: None,
             cache_enabled: cache.cache,
             slot_dir: cache.slot_dir.clone(),
@@ -176,9 +186,9 @@ async fn serve_here(
     );
     // Only what was passed, not the full resolution. The resolution printed
     // here is the five-rung stored ladder; what a request actually gets is the
-    // proxy's six-rung one, which additionally has the client's own rung and
-    // the agentic ceiling above it. Printing the former as if it were the
-    // latter states values no request is guaranteed to see.
+    // proxy's six-rung one, which additionally has the client's own rung
+    // above it. Printing the former as if it were the latter states values no
+    // request is guaranteed to see.
     let stated_sampling = sampling.into_override();
     let mtp_args = plan.mtp.clone();
     let effective_ctx = plan.effective_ctx;
@@ -192,8 +202,10 @@ async fn serve_here(
         log_inference_info(stated);
         warn_client_budgets_are_capped(stated);
     }
-    if options.jinja {
-        eprintln!("  Jinja templates: enabled");
+    match launch_jinja(&options) {
+        Some(true) => eprintln!("  Jinja templates: enabled"),
+        Some(false) => eprintln!("  Jinja templates: disabled"),
+        None => {}
     }
     if mtp_args.enabled {
         eprintln!(
@@ -222,7 +234,7 @@ async fn serve_here(
         selection.profile.as_ref().map(|p| p.name.clone()),
     );
 
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let handle = daemon_client::ensure_daemon().await?;
     let started = super::proxy::start_on(&handle, &body, &settings).await?;
     let reach = super::proxy::reached(options.host.as_deref(), &settings);
     super::proxy::attach_dashboard(ctx, reach, started.port, access.api_key).await

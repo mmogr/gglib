@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
@@ -24,8 +24,9 @@ const transport = vi.hoisted(() => ({
   listPairedModels: vi.fn(async () => null),
   browseHfModels: vi.fn(async (_r: HfSearchRequest): Promise<HfSearchResponse> => ({ models: [], next_cursor: null, total_count: null })),
   getHfModelSummary: vi.fn(async (_id: string): Promise<HfModelSummary> => hfRepo('owner/x')),
-  getHfToolSupport: vi.fn(async (_id: string) => ({ supports_tool_calls: false, confidence: 0, detected_format: null })),
+  getHfToolSupport: vi.fn(async (_id: string) => ({ supports_tool_calls: false })),
   getHfQuantizations: vi.fn(async () => new Promise(() => {})),
+  getHfPick: vi.fn(async () => new Promise(() => {})),
   queueDownload: vi.fn(async (_p: { modelId: string; quantization?: string }) => ({ id: 'q-1' })),
   addModel: vi.fn(async (_p: { filePath: string }) => ({})),
 }));
@@ -100,6 +101,7 @@ describe('the one search', () => {
     transport.addModel.mockImplementation(async () => ({}));
     platform.desktop = false;
     platform.pick.mockClear();
+    window.localStorage.clear();
   });
   afterEach(() => {
     cleanupModelEvents();
@@ -120,7 +122,7 @@ describe('the one search', () => {
 
   it('searches the Hub on Enter, and draws each repo with its params, tool calling and downloads', async () => {
     transport.browseHfModels.mockResolvedValue({ ...page([]), models: [hfRepo('owner/Qwen3-8B-GGUF', { parameters_b: 8, downloads: 1_200_000 })] });
-    transport.getHfToolSupport.mockResolvedValue({ supports_tool_calls: true, confidence: 1, detected_format: null });
+    transport.getHfToolSupport.mockResolvedValue({ supports_tool_calls: true });
     renderLibrary();
     await userEvent.setup().type(field(), 'qwen{Enter}');
 
@@ -251,7 +253,8 @@ describe('the one search', () => {
     await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(b);
     await waitFor(() => expect(at()).toBe('/get/owner/b'));
-    expect([a.tabIndex, b.tabIndex]).toEqual([-1, 0]);
+    // The pick renders a beat after the address moves.
+    await waitFor(() => expect([a.tabIndex, b.tabIndex]).toEqual([-1, 0]));
   });
 
   it('a run of keys opens the repo it ends on, read once, as one history entry', async () => {
@@ -308,7 +311,10 @@ describe('the one search', () => {
     a.focus();
     await user.keyboard('{ArrowDown}');
     await waitFor(() => expect(at()).toBe('/get/owner/b'));
-    // Pressed on the picked row: the second run replaces it.
+    // Pressed on the picked row, once it shows as picked: the second run
+    // replaces it.
+    const b = screen.getByRole('option', { name: /owner\/b/ });
+    await waitFor(() => expect(b).toHaveAttribute('aria-selected', 'true'));
     await user.keyboard('{ArrowDown}');
     await waitFor(() => expect(at()).toBe('/get/owner/c'));
     await act(() => router.navigate(-1));
@@ -362,6 +368,38 @@ describe('the one search', () => {
     expect(suggested).toHaveTextContent('The smallest model in the list that still calls tools. Needs 5.0 GiB of 16.0 GiB unified memory.');
     await userEvent.setup().click(within(suggested).getByRole('button', { name: 'Download' }));
     await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: 'owner/small-GGUF', quantization: undefined }));
+  });
+
+  it('dismisses the suggestion for good, until another repo is suggested', async () => {
+    const small = {
+      repo: 'owner/small-GGUF',
+      rationale: 'the smallest model in the list that still calls tools',
+      requiredBytes: 5 * 2 ** 30,
+      budgetBytes: 16 * 2 ** 30,
+      budgetSource: 'unifiedMemory',
+      budgetLabel: 'unified memory',
+      headroomBytes: 11 * 2 ** 30,
+      context: 32768,
+    };
+    suggestion.answer = small;
+    const user = userEvent.setup();
+    renderLibrary();
+    await user.click(field());
+    const suggested = await screen.findByRole('region', { name: 'Suggested for this Mac' });
+    await user.click(within(suggested).getByRole('button', { name: 'Dismiss suggestion' }));
+    expect(screen.queryByRole('region', { name: 'Hugging Face' })).not.toBeInTheDocument();
+    cleanup();
+
+    renderLibrary();
+    await user.click(field());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(screen.queryByRole('region', { name: 'Suggested for this Mac' })).not.toBeInTheDocument();
+    cleanup();
+
+    suggestion.answer = { ...small, repo: 'owner/newer-GGUF' };
+    renderLibrary();
+    await user.click(field());
+    expect(await screen.findByRole('region', { name: 'Suggested for this Mac' })).toHaveTextContent('owner/newer-GGUF');
   });
 
   it('says so when nothing gglib would suggest fits', async () => {

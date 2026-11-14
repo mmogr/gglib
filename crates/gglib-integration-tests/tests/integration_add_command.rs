@@ -17,7 +17,7 @@ use tempfile::tempdir;
 
 use gglib_core::{Model, ModelRepository, NewModel};
 use gglib_db::SqliteModelRepository;
-use gglib_gguf::write_string_gguf;
+use gglib_gguf::{GgufParser, GgufParserPort, GgufValue, write_gguf, write_string_gguf};
 
 #[tokio::test]
 async fn test_add_command_database_integration() {
@@ -38,7 +38,7 @@ async fn test_add_command_database_integration() {
     let mut new_model = NewModel::new(
         "Integration Test Model".to_string(),
         file_path.clone(),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     new_model.architecture = Some("llama".to_string());
@@ -64,7 +64,7 @@ async fn test_add_command_database_integration() {
     assert_eq!(added_model.name, "Integration Test Model");
     let expected_path = fs::canonicalize(&file_path).unwrap_or_else(|_| file_path.clone());
     assert_eq!(added_model.file_path, expected_path);
-    assert_eq!(added_model.param_count_b, 7.0);
+    assert_eq!(added_model.param_count_b, Some(7.0));
     assert_eq!(added_model.architecture, Some("llama".to_string()));
     assert_eq!(added_model.variant_label.as_deref(), Some("UD-Q4_K_XL"));
     assert_eq!(
@@ -87,7 +87,7 @@ async fn test_add_command_duplicate_model_handling() {
     let mut new_model1 = NewModel::new(
         "Duplicate Test".to_string(),
         file_path.clone(),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     new_model1.architecture = Some("llama".to_string());
@@ -96,14 +96,14 @@ async fn test_add_command_duplicate_model_handling() {
 
     // Add first model
     let first_model = repo.insert(&new_model1).await.unwrap();
-    assert_eq!(first_model.param_count_b, 7.0);
+    assert_eq!(first_model.param_count_b, Some(7.0));
     assert_eq!(first_model.variant_label, Some("Q4_0".to_string()));
 
     // Add second model with same file path (should update via UPSERT for sharded download support)
     let mut new_model2 = NewModel::new(
         "Duplicate Test".to_string(),
         file_path.clone(),
-        13.0,
+        Some(13.0),
         Utc::now(),
     );
     new_model2.architecture = Some("mistral".to_string());
@@ -169,7 +169,7 @@ async fn test_add_command_with_complex_metadata() {
     let mut new_model = NewModel::new(
         "Complex Metadata Model".to_string(),
         file_path.clone(),
-        7.0,
+        Some(7.0),
         Utc::now(),
     );
     new_model.architecture = Some("llama".to_string());
@@ -206,7 +206,7 @@ async fn test_add_command_with_minimal_data() {
     let new_model = NewModel::new(
         "Minimal Model".to_string(),
         file_path.clone(),
-        1.3,
+        Some(1.3),
         Utc::now(),
     );
 
@@ -219,9 +219,69 @@ async fn test_add_command_with_minimal_data() {
     let retrieved_model: Model = models.into_iter().next().unwrap();
 
     assert_eq!(retrieved_model.name, "Minimal Model");
-    assert_eq!(retrieved_model.param_count_b, 1.3);
+    assert_eq!(retrieved_model.param_count_b, Some(1.3));
     assert_eq!(retrieved_model.architecture, None);
     assert_eq!(retrieved_model.variant_label, None);
     assert_eq!(retrieved_model.context_length, None);
     assert!(retrieved_model.metadata.is_empty());
+}
+
+/// A per-layer list survives the header's parse and store whole: Gemma 4's
+/// 60-item `head_count_kv` and its sliding-window pattern read back as 60
+/// values, from a whole file and from a head of it, where a tokenizer's
+/// arrays and a long string list stay summarised.
+#[tokio::test]
+async fn a_per_layer_list_reads_back_whole_from_the_stored_header() {
+    let pool = setup_test_pool().await.unwrap();
+    let repo = SqliteModelRepository::new(pool);
+    let temp_dir = tempdir().unwrap();
+    let file_path = temp_dir.path().join("gemma4.gguf");
+    let heads: Vec<u32> = (0..60)
+        .map(|layer| if layer % 6 == 5 { 4 } else { 16 })
+        .collect();
+    let array = |items: Vec<GgufValue>| GgufValue::Array(items);
+    write_gguf(
+        &file_path,
+        &[
+            (
+                "gemma4.attention.head_count_kv",
+                array(heads.iter().map(|&h| GgufValue::U32(h)).collect()),
+            ),
+            (
+                "gemma4.attention.sliding_window_pattern",
+                array((0..60).map(|l| GgufValue::Bool(l % 6 != 5)).collect()),
+            ),
+            (
+                "tokenizer.ggml.token_type",
+                array(vec![GgufValue::I32(1); 200]),
+            ),
+            (
+                "general.tags",
+                array(vec![GgufValue::String("t".to_owned()); 11]),
+            ),
+        ],
+        &[],
+        0,
+    );
+
+    let parsed = GgufParser::new().parse(&file_path).unwrap();
+    // The head a download judges a remote file by keeps the list too.
+    let head = GgufParser::new()
+        .parse_head(&std::fs::read(&file_path).unwrap(), "gemma4.gguf")
+        .unwrap();
+    assert_eq!(head.metadata.metadata, parsed.metadata);
+    let mut new_model = NewModel::new("Gemma".to_owned(), file_path, None, Utc::now());
+    new_model.metadata = parsed.metadata;
+    let id = repo.insert(&new_model).await.unwrap().id;
+    let stored = repo.get_by_id(id).await.unwrap().metadata;
+
+    let read = |key: &str| stored.get(key).map(String::as_str).unwrap();
+    let read_heads: Vec<u32> =
+        serde_json::from_str(read("gemma4.attention.head_count_kv")).unwrap();
+    assert_eq!(read_heads, heads);
+    let pattern: Vec<bool> =
+        serde_json::from_str(read("gemma4.attention.sliding_window_pattern")).unwrap();
+    assert_eq!(pattern.iter().filter(|&&sliding| !sliding).count(), 10);
+    assert_eq!(read("tokenizer.ggml.token_type"), "Array with 200 elements");
+    assert_eq!(read("general.tags"), "[Array with 11 elements]");
 }

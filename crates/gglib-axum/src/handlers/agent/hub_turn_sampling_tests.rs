@@ -1,8 +1,7 @@
 //! What a chat saved of how it samples reaches the model through this
-//! machine's endpoint, the real proxy: its five sampling settings as a
-//! client's, which the endpoint honours only while it trusts clients'
-//! sampling; its profile on the model's id, which it applies whatever it
-//! trusts.
+//! machine's endpoint, the real proxy: its token limit as a client's
+//! budget, and its profile on the model's id, both of which the endpoint
+//! applies whatever it trusts.
 
 use gglib_core::domain::chat::{ConversationSettings, NewConversation};
 use gglib_core::domain::runs::RunStatus;
@@ -106,23 +105,20 @@ fn near(got: Option<f64>, want: f64) -> bool {
     got.is_some_and(|got| (got - want).abs() < 1e-4)
 }
 
-/// A temperature and a top-k the chat saved reach the model while the
-/// endpoint trusts clients' sampling, and not while it does not.
+/// The token limit a chat saved reaches the model whether or not the
+/// endpoint trusts clients' sampling: it is a budget.
 #[tokio::test]
-async fn a_chats_saved_sampling_reaches_the_model_only_while_the_endpoint_trusts_clients() {
+async fn a_chats_saved_token_limit_reaches_the_model_whatever_the_endpoint_trusts() {
     let saved = || ConversationSettings {
-        temperature: Some(0.3),
-        top_k: Some(17),
+        max_tokens: Some(321),
         ..ConversationSettings::default()
     };
 
     let trusted = sent(true, saved()).await;
     let untrusted = sent(false, saved()).await;
 
-    assert!(near(temperature(&trusted), 0.3), "{trusted}");
-    assert_eq!(trusted["top_k"], Value::from(17), "{trusted}");
-    assert!(!near(temperature(&untrusted), 0.3), "{untrusted}");
-    assert_ne!(untrusted["top_k"], Value::from(17), "{untrusted}");
+    assert_eq!(trusted["max_tokens"], Value::from(321), "{trusted}");
+    assert_eq!(untrusted["max_tokens"], Value::from(321), "{untrusted}");
 }
 
 /// The turn's limit is folded with the profile the endpoint applies: the

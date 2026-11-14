@@ -1,6 +1,6 @@
 $ gglib config paths
 binary = /Users/mmogr/.local/src/gglib/target/release/gglib
-version = 0.29.0-rc.4 (12c44308c253)
+version = 0.31.0-rc.8 (062c4956c712)
 data_root_source = GGLIB_DATA_DIR
 daemon_port = 9907
 data_root = /Users/mmogr/Library/Application Support/gglib
@@ -10,3 +10,7 @@ llama_server_path = /Users/mmogr/Library/Application Support/gglib/.llama/bin/ll
 sd_server_path = /Users/mmogr/Library/Application Support/gglib/.sd/bin/sd-server
 models_dir = /Users/mmogr/Library/Application Support/gglib/models
 models_source = EnvVar
+gglib_on_path_1 = /Users/mmogr/.local/src/gglib/target/release/gglib (0.31.0-rc.8, runs as `gglib`, this one)
+gglib_on_path_2 = /Users/mmogr/.cargo/bin/gglib (0.31.0-rc.7, shadowed)
+gglib_on_path_3 = /opt/homebrew/bin/gglib (0.30.1, shadowed)
+desktop_app_1 = /Applications/gglib.app (0.30.1)

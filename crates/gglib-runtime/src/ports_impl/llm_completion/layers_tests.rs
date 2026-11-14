@@ -33,12 +33,11 @@ fn model(defaults: Option<(InferenceConfig, DefaultsOrigin)>) -> ModelContext {
     }
 }
 
-/// The stored layers of a caller whose settings leave the agentic switch on.
+/// The stored layers of a caller: a profile's temperature and a global one.
 fn layers(profile: Option<f32>, global: Option<f32>) -> SamplingLayers {
     SamplingLayers {
         profile: profile.map(temperature),
         global: global.map(temperature),
-        agentic_adjustments: true,
         ..SamplingLayers::default()
     }
 }
@@ -93,19 +92,18 @@ fn the_profile_layer_outranks_the_model_and_the_callers_own_value_outranks_it() 
     assert!((sent(&typed, false) - 0.9).abs() < 1e-9);
 }
 
-/// On a turn with tools the ceiling lowers a temperature nobody chose, a
-/// recipe nobody here reviewed, and never one a person did: typed for the
-/// turn, a profile's, set on the model, or the global one. That only holds
-/// because each arrives as the layer it is. Where no rung names one, none is
-/// sent and the ceiling adds none (ADR 0022).
+/// A turn with tools is sent the temperature its ladder resolved, as a turn
+/// without them is: a recipe nobody here reviewed, typed for the turn, a
+/// profile's, set on the model, or the global one. Where no rung names one,
+/// none is sent (ADR 0022).
 #[test]
-fn a_turn_with_tools_caps_a_temperature_nobody_chose_and_no_other() {
+fn a_turn_with_tools_is_sent_the_temperature_its_ladder_resolved() {
     let bare = adapter(model(None), None);
     assert_eq!(sent_if_any(&bare, false), None);
     assert_eq!(sent_if_any(&bare, true), None);
     let guessed = model(Some((temperature(0.9), DefaultsOrigin::Published)));
     assert!((sent(&adapter(guessed.clone(), None), false) - 0.9).abs() < 1e-9);
-    assert!((sent(&adapter(guessed, None), true) - 0.3).abs() < 1e-9);
+    assert!((sent(&adapter(guessed, None), true) - 0.9).abs() < 1e-9);
 
     let typed = adapter(model(None), Some(temperature(0.9)));
     assert!((sent(&typed, true) - 0.9).abs() < 1e-9);
@@ -115,22 +113,6 @@ fn a_turn_with_tools_caps_a_temperature_nobody_chose_and_no_other() {
     assert!((sent(&adapter(set, None), true) - 0.9).abs() < 1e-9);
     let global = adapter(model(None), None).with_layers(layers(None, Some(0.9)));
     assert!((sent(&global, true) - 0.9).abs() < 1e-9);
-}
-
-/// Whether a turn with tools is capped is the caller's to say, in the layers
-/// it hands over: capped when they say so, and sent the recipe's 0.9 when
-/// they do not, as a caller whose settings store the switch off hands them.
-#[test]
-fn the_ceiling_follows_the_switch_in_the_layers_a_caller_hands_over() {
-    let handed = |agentic_adjustments| {
-        let recipe = model(Some((temperature(0.9), DefaultsOrigin::Published)));
-        adapter(recipe, None).with_layers(SamplingLayers {
-            agentic_adjustments,
-            ..SamplingLayers::default()
-        })
-    };
-    assert!((sent(&handed(true), true) - 0.3).abs() < 1e-9);
-    assert!((sent(&handed(false), true) - 0.9).abs() < 1e-9);
 }
 
 /// The sampling parameters a request carries, as the server reads them.

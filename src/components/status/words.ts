@@ -76,7 +76,6 @@ export const TOOL_SERVER_WORDS: Readonly<Record<McpState, string>> = {
   starting: 'Starting',
   stopped: 'Stopped',
   failed: 'Failed',
-  unsupported: 'Not supported yet',
 };
 
 /** Whether the download accelerator (hf_xet) is set up. */

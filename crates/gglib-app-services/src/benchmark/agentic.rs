@@ -11,20 +11,17 @@
 //! holds one across candidates: an arm measured across a model swap would
 //! be measuring the swap. Tasks whose expected outcome demands a tool call
 //! send `tool_choice: "required"` on their **opening turn** in both arms —
-//! the same request an agentic client would make — which is what lets the
-//! gglib arm's decode-time grammar stage engage while the raw arm shows what
-//! that demand achieves without it. Later turns drop back to `"auto"`: a
-//! model held at `"required"` for the whole run can never answer, so it
-//! re-emits its last batch until the loop guard stops it, and the eval ends
-//! up measuring its own harness.
+//! the same request an agentic client would make. Later turns drop back to
+//! `"auto"`: a model held at `"required"` for the whole run can never
+//! answer, so it re-emits its last batch until the loop guard stops it, and
+//! the eval ends up measuring its own harness.
 //!
 //! Neither of those arms reaches `gglib-proxy`. When the config asks for it,
 //! two more run: the proxy arm, every turn through a real proxy started
 //! in-process in front of the held model ([`super::proxy_arm`]), and its
 //! raw-auto baseline, which goes straight to llama-server. Both open with
 //! `"auto"`, under which the proxy judges every call whose schema it can
-//! judge; a `"required"` turn it judges only when gglib's own grammar
-//! constrained it.
+//! judge; a `"required"` turn it forwards unjudged.
 
 use std::sync::Arc;
 
@@ -329,12 +326,12 @@ pub(crate) async fn run_agentic_eval(
         .zip(gglib_results.unwrap_or_default())
         .filter_map(|(raw, gglib)| {
             let first = raw.first().or_else(|| gglib.first())?;
-            Some(AgenticTaskComparison {
-                task_id: first.task_id.clone(),
-                category: first.category,
+            Some(AgenticTaskComparison::new(
+                first.task_id.clone(),
+                first.category,
                 raw,
                 gglib,
-            })
+            ))
         })
         .collect();
 
@@ -362,11 +359,14 @@ pub(crate) async fn run_agentic_eval(
         raw_replicates,
         paired: None,
         proxy,
+        control_verdict: None,
+        effect_verdict: None,
     };
     let report = AgenticEvalReport {
         paired: PairedEffect::from_tasks(&report.tasks),
         ..report
-    };
+    }
+    .with_verdicts();
 
     // Said out loud, because a control that failed to move invalidates every
     // other number in the report and a reader scanning the deltas will not
@@ -562,9 +562,8 @@ fn empty_scores(weights: &ScoreWeights) -> ArmScores {
 /// The arm is the *entire* difference between the two runs:
 ///
 /// - **Raw** bypasses the pipeline (`with_raw_passthrough`) and carries a
-///   passthrough model context, so no shaping, no per-model sampling, no
-///   dialect parsing and no grammar happen — llama-server's own defaults
-///   and wire format, verbatim.
+///   passthrough model context, so no shaping and no per-model sampling
+///   happen — llama-server's own defaults and wire format, verbatim.
 /// - **Gglib** carries the catalog-resolved [`ModelContext`], which switches
 ///   on exactly what the proxy would do for this model.
 ///

@@ -219,7 +219,7 @@ fn a_search_hit_without_a_gguf_file_is_dropped() {
 
     let ids: Vec<String> = search_hits(&hits, HfModelKind::Chat)
         .into_iter()
-        .map(|h| h.model_id)
+        .map(|(id, _)| id.to_owned())
         .collect();
 
     assert_eq!(ids, ["Org/First-GGUF", "Org/Second-GGUF"]);
@@ -238,7 +238,7 @@ fn gguf_hit(id: &str, pipeline: Option<&str>) -> Value {
 fn kept(hits: &[Value], kind: HfModelKind) -> Vec<String> {
     search_hits(hits, kind)
         .into_iter()
-        .map(|h| h.model_id)
+        .map(|(id, _)| id.to_owned())
         .collect()
 }
 

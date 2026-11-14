@@ -176,13 +176,11 @@ export function toolsItem(
   listed: readonly ListedTool[] | string,
   chat: ChatTools | undefined,
   supportsToolCalls: boolean | null | undefined,
-  toolFormat: string | null | undefined,
 ): MenuItem | null {
   if (!chat) return null;
-  const title = supportsToolCalls && toolFormat ? `This model calls tools (${toolFormat} format).` : undefined;
   if (supportsToolCalls === false) return { label: 'Tools', submenu: [{ label: CANT_CALL_TOOLS, note: true }] };
-  if (typeof listed === 'string') return { label: 'Tools', title, submenu: [{ label: listed, note: true }] };
-  if (listed.length === 0) return { label: 'Tools', title, submenu: [{ label: 'No tools registered', note: true }] };
+  if (typeof listed === 'string') return { label: 'Tools', submenu: [{ label: listed, note: true }] };
+  if (listed.length === 0) return { label: 'Tools', submenu: [{ label: 'No tools registered', note: true }] };
   const names = listed.map((tool) => tool.name);
   const submenu: MenuItem[] = [
     { label: 'Enable all', toggles: true, disabled: chat.every, onPick: () => chat.all(true) },
@@ -199,5 +197,5 @@ export function toolsItem(
       };
     }),
   ];
-  return { label: 'Tools', title, submenu };
+  return { label: 'Tools', submenu };
 }

@@ -98,19 +98,19 @@ fn no_chat_flag_typed_is_nothing_to_refuse() {
 #[test]
 fn each_chat_flag_is_named() {
     assert_eq!(
-        typed(&["gglib", "serve", "flux", "--ctx-size", "4096"], false),
-        ["--ctx-size"]
+        typed(&["gglib", "serve", "flux", "--context-size", "4096"], false),
+        ["--context-size"]
     );
     assert_eq!(
         typed(&["gglib", "serve", "flux", "-c", "max"], false),
-        ["--ctx-size"]
+        ["--context-size"]
     );
     assert_eq!(
         typed(&["gglib", "serve", "flux", "--mlock"], false),
         ["--mlock"]
     );
     assert_eq!(
-        typed(&["gglib", "serve", "flux", "--jinja"], false),
+        typed(&["gglib", "serve", "flux", "--jinja", "on"], false),
         ["--jinja"]
     );
     assert_eq!(
@@ -164,7 +164,7 @@ fn counting_stand_in() -> (u16, Arc<AtomicUsize>) {
     (port, asked)
 }
 
-/// `gglib serve flux --ctx-size 4096` on a model that draws: refused by
+/// `gglib serve flux --context-size 4096` on a model that draws: refused by
 /// name, before the runtime is looked for and before the daemon is asked.
 #[tokio::test]
 async fn serve_of_an_image_model_refuses_a_context_flag_before_the_daemon_is_asked() {
@@ -173,12 +173,12 @@ async fn serve_of_an_image_model_refuses_a_context_flag_before_the_daemon_is_ask
     let mut new = NewModel::new(
         "flux".to_owned(),
         dir.path().join("flux.gguf"),
-        12.0,
+        Some(12.0),
         chrono::Utc::now(),
     );
     new.image_family = Some(ImageFamily::Flux1);
     ctx.app.models().add(new).await.expect("registered");
-    let s = serve(&["gglib", "serve", "flux", "--ctx-size", "4096"]);
+    let s = serve(&["gglib", "serve", "flux", "--context-size", "4096"]);
     let (port, asked) = counting_stand_in();
 
     let refused = STAND_IN_PORT
@@ -203,7 +203,7 @@ async fn serve_of_an_image_model_refuses_a_context_flag_before_the_daemon_is_ask
 
     assert_eq!(
         refused.to_string(),
-        "'flux' is an image model: --ctx-size set a chat model's launch and do not apply \
+        "'flux' is an image model: --context-size set a chat model's launch and do not apply \
          to it. Run 'gglib serve flux' without them."
     );
     assert_eq!(asked.load(Ordering::SeqCst), 0, "the daemon was asked");
@@ -214,7 +214,7 @@ fn flux_with_a_vae() -> Model {
     let mut new = NewModel::new(
         "flux-schnell".to_owned(),
         "/m/flux.gguf".into(),
-        12.0,
+        Some(12.0),
         chrono::Utc::now(),
     );
     new.image_family = Some(ImageFamily::Flux1);
@@ -294,7 +294,7 @@ async fn a_load_asks_for_the_model_by_its_encoded_name_and_reads_the_answer() {
     assert!(loaded.started);
     assert_eq!(
         seen.lock().unwrap().as_slice(),
-        ["POST /v1/models/flux%2Fschnell/load HTTP/1.1"]
+        ["POST /v1/gglib/models/flux%2Fschnell/load HTTP/1.1"]
     );
     assert_eq!(loaded_line(&loaded), "  \u{2705} flux/schnell is loaded");
 }
@@ -354,8 +354,8 @@ fn the_narration_reads_as_its_headline_then_each_decision() {
 #[test]
 fn the_refusal_names_every_flag_typed() {
     assert_eq!(
-        chat_flags_refusal("flux", &["--ctx-size", "--jinja"]),
-        "'flux' is an image model: --ctx-size, --jinja set a chat model's launch and do not \
+        chat_flags_refusal("flux", &["--context-size", "--jinja"]),
+        "'flux' is an image model: --context-size, --jinja set a chat model's launch and do not \
          apply to it. Run 'gglib serve flux' without them."
     );
 }

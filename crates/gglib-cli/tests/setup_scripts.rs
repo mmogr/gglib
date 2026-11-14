@@ -338,7 +338,7 @@ fn make_setup_runs_its_steps_in_order() {
         ("build --release -p gglib-cli -p gglib-app", 1),
         ("npm run tauri:bundle", 2),
         ("cp target/release/gglib", 1),
-        ("./target/release/gglib config models-dir prompt", 1),
+        ("gglib config set models-dir <path>", 1),
         ("./target/release/gglib config fast-downloads prompt", 1),
         ("Core setup complete", 1),
         ("llama-install-auto", 1),

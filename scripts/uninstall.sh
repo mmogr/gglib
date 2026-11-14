@@ -54,7 +54,11 @@ holds() {
 REPO="$(canon "$(dirname "${BASH_SOURCE[0]}")/..")"
 HOME_DIR="$(canon "$HOME")"
 INSTALLED_BIN="$HOME/.cargo/bin/gglib"
-APP_NAME="GGLib GUI"
+# The desktop app's name, which its .app bundle and login item take: gglib, or
+# gglib-gui on Linux. Releases before it was called gglib named it GGLib GUI,
+# so that name is cleaned up too.
+MAC_APP_NAMES=("gglib" "GGLib GUI")
+LINUX_APP_NAMES=("gglib-gui" "GGLib GUI")
 # The bundle identifier, then the names an unbundled build of the desktop app
 # has run under; the OS keys a webview's cache by either.
 APP_IDS="com.gglib.gui gglib-app gglib-gui gglib-tauri"
@@ -198,11 +202,15 @@ fi
 
 if [ "$(uname -s)" = "Darwin" ]; then
     if [ "$BREW_APP" = 0 ]; then
-        add DATA "/Applications/$APP_NAME.app"
-        add DATA "$HOME/Applications/$APP_NAME.app"
+        for name in "${MAC_APP_NAMES[@]}"; do
+            add DATA "/Applications/$name.app"
+            add DATA "$HOME/Applications/$name.app"
+        done
     fi
     # The login item "Start at login" registers.
-    add DATA "$HOME/Library/LaunchAgents/$APP_NAME.plist"
+    for name in "${MAC_APP_NAMES[@]}"; do
+        add DATA "$HOME/Library/LaunchAgents/$name.plist"
+    done
     add DATA "$HOME/Library/Caches/gglib"
     for id in $APP_IDS; do
         add DATA "$HOME/Library/Caches/$id"
@@ -214,7 +222,9 @@ if [ "$(uname -s)" = "Darwin" ]; then
     done
 else
     # The login item, which is written under ~/.config whatever XDG says.
-    add DATA "$HOME/.config/autostart/$APP_NAME.desktop"
+    for name in "${LINUX_APP_NAMES[@]}"; do
+        add DATA "$HOME/.config/autostart/$name.desktop"
+    done
     for id in $APP_IDS; do
         add DATA "${XDG_DATA_HOME:-$HOME/.local/share}/$id"
         add DATA "${XDG_CACHE_HOME:-$HOME/.cache}/$id"
@@ -326,7 +336,8 @@ fi
 # the folder back, so data goes only once neither is. With a binary the
 # daemon is asked to stop; with none, any gglib still running is a refusal.
 if [ "$DO_DATA" = 1 ] || [ "$DO_MODELS" = 1 ]; then
-    if pgrep -x gglib-app >/dev/null 2>&1; then
+    # gglib-gui, or gglib-app as releases before named the program.
+    if pgrep -x gglib-gui >/dev/null 2>&1 || pgrep -x gglib-app >/dev/null 2>&1; then
         echo "✗ The desktop app is running. Quit it, then run this again."
         echo "  Nothing was removed."
         exit 1

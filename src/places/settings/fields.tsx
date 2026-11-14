@@ -167,14 +167,10 @@ interface ToggleProps<K extends Key> {
   note?: string;
   /** Whether the stored value reads as on; by default only a stored `true`. */
   on?: (stored: Wire<K>) => boolean;
-  /** What ticking (or unticking) it writes; by default the box's own state. */
-  toWire?: (checked: boolean) => Wire<K>;
-  /** Said under the box while the stored value is one the box cannot show. */
-  aside?: (stored: Wire<K>) => ReactNode;
 }
 
 /** A checkbox saved the moment it is ticked or unticked. */
-export function ToggleSetting<K extends Key>({ k, id, label, children, note, on, toWire, aside }: ToggleProps<K>) {
+export function ToggleSetting<K extends Key>({ k, id, label, children, note, on }: ToggleProps<K>) {
   const stored = useStored(k);
   const save = useSettingSave(k, stored);
   const checked = on ? on(stored) : stored === true;
@@ -188,12 +184,11 @@ export function ToggleSetting<K extends Key>({ k, id, label, children, note, on,
         aria-busy={save.saving || undefined}
         onChange={(event) => {
           if (save.saving) return;
-          void save.commit(toWire ? toWire(event.target.checked) : (event.target.checked as Wire<K>));
+          void save.commit(event.target.checked as Wire<K>);
         }}
         label={<span className="font-semibold">{label}</span>}
         description={children}
       />
-      {aside?.(stored)}
       {note && <p className="m-0 text-xs text-text-muted">{note}</p>}
       <SaveLine save={save} />
     </div>

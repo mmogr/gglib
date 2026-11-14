@@ -2,7 +2,9 @@
 //! database file of the test's own: which rows it flags, which it never
 //! does, and that it runs once.
 
-use super::*;
+use sqlx::SqlitePool;
+
+use super::super::migrations::{LATEST, run, user_version};
 use crate::setup_database;
 
 /// A database as the build before this step left it: this build's schema,
@@ -16,6 +18,7 @@ async fn left_by_an_older_build(
     let pool = setup_database(path, &gglib_core::ports::NoopGgufParser)
         .await
         .expect("a fresh database");
+    super::super::mcp_servers::as_before_step_6(&pool).await;
     for (name, kind) in servers {
         sqlx::query("INSERT INTO mcp_servers (name, type) VALUES (?, ?)")
             .bind(name)
@@ -39,9 +42,9 @@ async fn left_by_an_older_build(
     pool
 }
 
-/// The flagged servers as `(name, type)`, in name order.
-async fn flagged(pool: &SqlitePool) -> Vec<(String, String)> {
-    sqlx::query_as("SELECT name, type FROM mcp_servers WHERE allow_remote = 1 ORDER BY name, id")
+/// The flagged servers' names, in name order.
+async fn flagged(pool: &SqlitePool) -> Vec<String> {
+    sqlx::query_scalar("SELECT name FROM mcp_servers WHERE allow_remote = 1 ORDER BY name, id")
         .fetch_all(pool)
         .await
         .expect("the rows")
@@ -51,8 +54,8 @@ async fn version(pool: &SqlitePool) -> i64 {
     user_version(pool).await.expect("a version")
 }
 
-fn stdio(name: &str) -> (String, String) {
-    (name.to_owned(), "stdio".to_owned())
+fn stdio(name: &str) -> String {
+    name.to_owned()
 }
 
 const ON: (&str, &str) = ("remote_enabled", "true");
@@ -67,10 +70,10 @@ async fn the_listed_server_is_flagged_and_no_other() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, [stdio("tavily")]);
-    assert_eq!(version(&pool).await, REMOTE_GRANT_SCHEMA_VERSION);
+    assert_eq!(version(&pool).await, LATEST);
 }
 
 /// A machine whose tunnel was off reset its list at its next `enable`, so
@@ -90,15 +93,19 @@ async fn a_tunnel_that_was_off_opens_nothing() {
         )
         .await;
 
-        flag_listed_servers(&pool).await.expect("the step");
+        run(&pool, LATEST).await.expect("the step");
 
-        assert_eq!(flagged(&pool).await, [], "remote_enabled {enabled:?}");
-        assert_eq!(version(&pool).await, REMOTE_GRANT_SCHEMA_VERSION);
+        assert_eq!(
+            flagged(&pool).await,
+            Vec::<String>::new(),
+            "remote_enabled {enabled:?}"
+        );
+        assert_eq!(version(&pool).await, LATEST);
     }
 }
 
 /// Two servers sharing a name opened neither under the list, and neither is
-/// flagged; an SSE server of a listed name never ran, and is not either.
+/// flagged; an SSE server of a listed name never ran, and is gone (step 6).
 #[tokio::test]
 async fn a_shared_name_and_an_sse_server_are_not_flagged() {
     let dir = tempfile::tempdir().expect("a temp dir");
@@ -117,7 +124,7 @@ async fn a_shared_name_and_an_sse_server_are_not_flagged() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, [stdio("fs")]);
 }
@@ -134,9 +141,9 @@ async fn builtin_is_not_flagged() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
-    assert_eq!(flagged(&pool).await, []);
+    assert_eq!(flagged(&pool).await, Vec::<String>::new());
 }
 
 /// A name is matched trimmed and whole: a padded entry opens its server, a
@@ -154,7 +161,7 @@ async fn a_name_is_trimmed_and_matched_whole() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, [stdio("tavily")]);
 }
@@ -182,14 +189,10 @@ async fn rows_that_cannot_be_read_open_nothing_and_are_stamped() {
         )
         .await;
 
-        flag_listed_servers(&pool).await.expect("the step");
+        run(&pool, LATEST).await.expect("the step");
 
-        assert_eq!(flagged(&pool).await, [], "case {case}");
-        assert_eq!(
-            version(&pool).await,
-            REMOTE_GRANT_SCHEMA_VERSION,
-            "case {case}"
-        );
+        assert_eq!(flagged(&pool).await, Vec::<String>::new(), "case {case}");
+        assert_eq!(version(&pool).await, LATEST, "case {case}");
     }
 }
 
@@ -209,7 +212,7 @@ async fn another_rows_bad_value_does_not_stop_the_copy() {
     )
     .await;
 
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
 
     assert_eq!(flagged(&pool).await, [stdio("tavily")]);
 }
@@ -225,15 +228,15 @@ async fn the_step_runs_once() {
         &[ON, ("remote_serve", r#"{"mcpServers":["tavily"]}"#)],
     )
     .await;
-    flag_listed_servers(&pool).await.expect("the step");
+    run(&pool, LATEST).await.expect("the step");
     sqlx::query("UPDATE mcp_servers SET allow_remote = 0")
         .execute(&pool)
         .await
         .expect("a deny");
 
-    flag_listed_servers(&pool).await.expect("a second open");
+    run(&pool, LATEST).await.expect("a second open");
 
-    assert_eq!(flagged(&pool).await, []);
+    assert_eq!(flagged(&pool).await, Vec::<String>::new());
 }
 
 /// A new database has no list and no server: it is stamped and nothing else.
@@ -247,8 +250,8 @@ async fn a_fresh_database_is_stamped_and_flags_nothing() {
     .await
     .expect("a fresh database");
 
-    assert_eq!(flagged(&pool).await, []);
-    assert_eq!(version(&pool).await, REMOTE_GRANT_SCHEMA_VERSION);
+    assert_eq!(flagged(&pool).await, Vec::<String>::new());
+    assert_eq!(version(&pool).await, LATEST);
 }
 
 /// The step as a boot runs it: an older file opened by this build has its

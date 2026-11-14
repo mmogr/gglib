@@ -26,7 +26,6 @@ use super::llama_events::{
     built_and_installed, built_in_passing, downloaded_and_installed, downloaded_in_passing,
 };
 use super::{llama_install, sd};
-use crate::bootstrap::CliContext;
 use crate::daemon_client;
 use crate::utils::input;
 
@@ -42,12 +41,7 @@ enum Telling {
 /// pinned release when what is there is missing or older, and with `force`
 /// whatever is there. `build` asks for a source build; `force` also stands
 /// for the user's yes to one.
-pub(super) async fn install(
-    ctx: &CliContext,
-    kind: RuntimeKind,
-    force: bool,
-    build: bool,
-) -> Result<()> {
+pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool) -> Result<()> {
     let state = pin_state(kind)?;
     if !force && !state.standing.wants_install() {
         for line in nothing_to_do_lines(&state, build) {
@@ -55,7 +49,7 @@ pub(super) async fn install(
         }
         return Ok(());
     }
-    if let Some(model) = serving_on_the_daemon(ctx, kind).await? {
+    if let Some(model) = serving_on_the_daemon(kind).await? {
         bail!(serving_refusal(kind, &model));
     }
     let plan = plan_install(kind, &state, force, build);
@@ -79,11 +73,11 @@ pub(super) async fn install(
 /// Without `yes`, a stdin that is not a terminal is nobody to ask, and it is
 /// not read: a pipe nobody writes to would wait forever. An update is then
 /// kept back, saying how to install it, and a missing engine is refused.
-pub(crate) async fn ensure_installed(ctx: &CliContext, kind: RuntimeKind, yes: bool) -> Result<()> {
+pub(crate) async fn ensure_installed(kind: RuntimeKind, yes: bool) -> Result<()> {
     let state = pin_state(kind)?;
     match state.standing {
         PinStanding::Missing => {}
-        PinStanding::Older => match serving_on_the_daemon(ctx, kind).await {
+        PinStanding::Older => match serving_on_the_daemon(kind).await {
             Ok(None) => {}
             Ok(Some(model)) => {
                 println!("{}", not_while_serving(kind, &state, &model));
@@ -239,14 +233,11 @@ async fn run(kind: RuntimeKind, plan: &InstallPlan, agreed: bool, telling: Telli
 /// That daemon is the one whose token is under this data root, as for
 /// `library_changes`: with no token there is no such daemon, and whatever
 /// holds the daemon's port is asked nothing.
-pub(super) async fn serving_on_the_daemon(
-    ctx: &CliContext,
-    kind: RuntimeKind,
-) -> Result<Option<String>> {
+pub(super) async fn serving_on_the_daemon(kind: RuntimeKind) -> Result<Option<String>> {
     if daemon_client::auth::daemon_token().is_none() {
         return Ok(None);
     }
-    let Ok(daemon) = daemon_client::running(ctx).await else {
+    let Ok(daemon) = daemon_client::running().await else {
         return Ok(None);
     };
     Ok(model_on(kind, &daemon.list_servers().await?))
@@ -274,13 +265,13 @@ fn serving_refusal(kind: RuntimeKind, model: &str) -> String {
 /// in its folder, asking first unless `yes`, and print what was removed. Refused while the daemon
 /// serves a model on it, as the web removal is: removing the binary and its
 /// library under a running server leaves it serving from deleted files.
-pub(super) async fn uninstall(ctx: &CliContext, kind: RuntimeKind, yes: bool) -> Result<()> {
+pub(super) async fn uninstall(kind: RuntimeKind, yes: bool) -> Result<()> {
     let product = kind.label();
     if !engine::files_present(kind)? {
         println!("{product} is not installed.");
         return Ok(());
     }
-    if let Some(model) = serving_on_the_daemon(ctx, kind).await? {
+    if let Some(model) = serving_on_the_daemon(kind).await? {
         bail!(removal_refusal(kind, &model));
     }
     if !yes

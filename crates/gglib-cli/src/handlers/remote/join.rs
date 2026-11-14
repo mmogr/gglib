@@ -7,7 +7,6 @@ use anyhow::Result;
 use gglib_app_services::{RemoteJoinBody, RemoteJoinResponse, RemoteStatus};
 use gglib_core::domain::{ReachState, UNNAMED_PAIRED};
 
-use crate::bootstrap::CliContext;
 use crate::daemon_client;
 
 /// What `gglib remote join` was asked for.
@@ -24,8 +23,8 @@ pub(crate) struct JoinArgs {
 }
 
 /// Execute `gglib remote join`.
-pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
-    let handle = daemon_client::ensure_daemon(ctx).await?;
+pub(crate) async fn join(args: JoinArgs) -> Result<()> {
+    let handle = daemon_client::ensure_daemon().await?;
 
     let first_pairing = args
         .pairing
@@ -111,8 +110,8 @@ fn joined_lines(joined: &RemoteJoinResponse) -> Vec<String> {
 }
 
 /// Execute `gglib remote disconnect`.
-pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
-    let Ok(handle) = daemon_client::running(ctx).await else {
+pub(crate) async fn disconnect() -> Result<()> {
+    let Ok(handle) = daemon_client::running().await else {
         eprintln!("  Daemon is not running \u{2014} nothing is connected.");
         return Ok(());
     };
@@ -130,7 +129,9 @@ pub(super) fn print_connection(status: &RemoteStatus) {
 }
 
 /// The connect side's line, naming the paired machine as every surface does:
-/// by its name, never its fingerprint. A function so a test can read it.
+/// by its name, never its fingerprint. While joined it is the daemon's line
+/// (`RemoteStatus::reach_line`); while not, the command that would join.
+/// A function so a test can read it.
 fn connection_line(status: &RemoteStatus) -> String {
     let machine = status.paired_shown();
     let Some(c) = &status.connected else {
@@ -149,20 +150,18 @@ fn connection_line(status: &RemoteStatus) -> String {
             ),
         };
     };
-    let reach = ReachState::of(true, c.away_for_s.is_some());
+    // The daemon's line, then what only this print has: how long the
+    // machine has been away as of now, and the address; then the daemon's
+    // note on what becomes of it.
+    let reach = &status.reach_line;
     c.away_for_s.map_or_else(
-        || {
-            format!(
-                "  Reach:     {reach} to {machine}  at {}  ({})",
-                c.base_url, c.path
-            )
-        },
+        || format!("  Reach:     {reach}  at {}", c.base_url),
         |secs| {
             format!(
-                "  Reach:     {reach} \u{2014} {machine}  at {}  has been away {}; the address \
-                 stays, and it reconnects when that machine is back",
+                "  Reach:     {reach} for {}  at {}\n             {}",
+                for_how_long(secs),
                 c.base_url,
-                for_how_long(secs)
+                status.reach_note
             )
         },
     )

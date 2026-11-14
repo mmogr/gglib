@@ -169,6 +169,13 @@ Costs, stated plainly:
 - The first run after a named lazy server stopped waits inside the run for
   it to start.
 
+> **Amended 2026-11-13 — a device's run waits for a slot.** While all four
+> slots are taken, a device's run waits in line for one, first come, first
+> served, saying so as a `waiting` event (`agent_slot`), instead of a
+> `429`. Up to 16 wait; one more is refused `429 agent_busy`, and a run that
+> waits two minutes ends `failed` `agent_busy`. The page's own turn is still
+> refused at once.
+
 ## Kill criteria
 
 1. **A client the owner means to serve needs `/mcp` itself.** The reading
@@ -188,5 +195,9 @@ Costs, stated plainly:
   the ticket and the device keys survive.
 - **A device's run waiting for a free agent-loop slot** instead of `429`
   while all four are taken, and a model's tool support in `/v1/models`.
+
+  > **Amended 2026-11-13 — the wait is done.** A device's run now waits
+  > for a slot (the amendment under the costs above). A model's tool
+  > support in `/v1/models` is still out of scope.
 - **The `/mcp` gateway's own posture for local clients**, which ADR 0012
   decision 2 has.

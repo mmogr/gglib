@@ -124,24 +124,16 @@ pub fn apply_query(mut models: Vec<Model>, query: &ModelListQuery) -> Vec<Model>
             models.sort_by(|a, b| b.name.cmp(&a.name));
         }
         (ModelSortBy::ParamCount, SortOrder::Asc) => {
-            models.sort_by(|a, b| {
-                a.param_count_b
-                    .partial_cmp(&b.param_count_b)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
+            models.sort_by(|a, b| cmp_known_asc(a.param_count_b, b.param_count_b));
         }
         (ModelSortBy::ParamCount, SortOrder::Desc) => {
-            models.sort_by(|a, b| {
-                b.param_count_b
-                    .partial_cmp(&a.param_count_b)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
+            models.sort_by(|a, b| cmp_known_desc(a.param_count_b, b.param_count_b));
         }
         (ModelSortBy::LatestTgTps, SortOrder::Asc) => {
-            models.sort_by(|a, b| cmp_tps_asc(tps(a), tps(b)));
+            models.sort_by(|a, b| cmp_known_asc(tps(a), tps(b)));
         }
         (ModelSortBy::LatestTgTps, SortOrder::Desc) => {
-            models.sort_by(|a, b| cmp_tps_desc(tps(a), tps(b)));
+            models.sort_by(|a, b| cmp_known_desc(tps(a), tps(b)));
         }
         (ModelSortBy::AddedAt, SortOrder::Asc) => {
             models.sort_by_key(|a| a.added_at);
@@ -156,14 +148,14 @@ pub fn apply_query(mut models: Vec<Model>, query: &ModelListQuery) -> Vec<Model>
 
 /// Returns `true` when `model` satisfies all active filter constraints.
 fn matches_query(m: &Model, query: &ModelListQuery) -> bool {
-    // Param range
+    // Param range: a model whose count is unknown is in no range.
     if let Some(min) = query.min_params {
-        if m.param_count_b < min {
+        if m.param_count_b.is_none_or(|params| params < min) {
             return false;
         }
     }
     if let Some(max) = query.max_params {
-        if m.param_count_b > max {
+        if m.param_count_b.is_none_or(|params| params > max) {
             return false;
         }
     }
@@ -225,8 +217,8 @@ fn tps(m: &Model) -> Option<f64> {
     m.benchmark_summary.as_ref()?.latest_tg_tps
 }
 
-/// Compare optional TPS values ascending; `None` sorts last.
-fn cmp_tps_asc(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
+/// Compare optional values ascending; an unknown (`None`) sorts last.
+fn cmp_known_asc(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
     match (a, b) {
         (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal),
         (None, None) => std::cmp::Ordering::Equal,
@@ -235,8 +227,8 @@ fn cmp_tps_asc(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
     }
 }
 
-/// Compare optional TPS values descending; `None` sorts last.
-fn cmp_tps_desc(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
+/// Compare optional values descending; an unknown (`None`) sorts last.
+fn cmp_known_desc(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
     match (a, b) {
         (Some(a), Some(b)) => b.partial_cmp(&a).unwrap_or(std::cmp::Ordering::Equal),
         (None, None) => std::cmp::Ordering::Equal,
@@ -261,7 +253,7 @@ mod tests {
         let path = PathBuf::from(format!("/models/{name}.gguf"));
         Model::stored(
             id,
-            &NewModel::new(name.to_string(), path, params, Utc::now()),
+            &NewModel::new(name.to_string(), path, Some(params), Utc::now()),
         )
     }
 

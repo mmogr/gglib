@@ -9,15 +9,14 @@
 //! determine.
 //!
 //! Ordering is fixed here rather than at each display surface so the CLI
-//! banner, `GET /v1/proxy/status`, and the GUI dashboard cannot disagree
+//! banner, `GET /v1/gglib/proxy/status`, and the GUI dashboard cannot disagree
 //! about what a launch decided.
 
 use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::{
-    LaunchDecision, LaunchNarration, RuntimeCapabilities, RuntimeFlags, RuntimeKind, SlotFootprint,
-    estimate_kv_bytes_for_context, format_gib, format_mib_as_gib, kv_bytes_per_token,
+    ContextFit, LaunchDecision, LaunchFit, LaunchNarration, RuntimeCapabilities, RuntimeFlags,
+    RuntimeKind, SlotFootprint, format_gib, format_mib_as_gib,
 };
-use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use gglib_core::ports::{JinjaMode, ModelLaunchSpec};
 use gglib_core::server_config::ContextSizeSource;
 
@@ -49,6 +48,9 @@ pub(crate) struct NarrationInputs<'a> {
     pub slot_restore: SlotRestoreResolution,
     /// The capability flags `build_server_config` resolved.
     pub capabilities: &'a ResolvedCapabilities,
+    /// The fit the context was sized by, carried as it is; `None` when the
+    /// fit was switched off.
+    pub fit: Option<&'a ContextFit>,
 }
 
 /// Build the narration for one launch.
@@ -83,7 +85,8 @@ pub(crate) fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
         n.push(flags);
     }
     n.push(sampling_decision());
-    n.push(dialect_decision(inputs));
+    // The one conversion: the same figures under the narration's keys.
+    n.fit = inputs.fit.cloned().map(LaunchFit::from);
 
     n
 }
@@ -166,18 +169,15 @@ fn kv_decision(inputs: &NarrationInputs<'_>, ctx: u64) -> LaunchDecision {
         KvCacheTypeSource::DisabledByEnv => "GGLIB_DISABLE_KV_QUANT",
     };
 
-    let Some(elems) = inputs.spec.kv_elems_per_token else {
+    let Some(shape) = inputs.spec.kv_shape else {
         return LaunchDecision::new("kv", types, source);
     };
 
-    let actual = estimate_kv_bytes_for_context(kv_bytes_per_token(elems, kv.k, kv.v), ctx);
+    let actual = shape.bytes(kv.k, kv.v).at(ctx);
     let value = if kv.k == KvCacheType::F16 && kv.v == KvCacheType::F16 {
         format!("{types} -> {}", format_gib(actual))
     } else {
-        let f16 = estimate_kv_bytes_for_context(
-            kv_bytes_per_token(elems, KvCacheType::F16, KvCacheType::F16),
-            ctx,
-        );
+        let f16 = shape.bytes(KvCacheType::F16, KvCacheType::F16).at(ctx);
         // Comma rather than parentheses: the renderer appends the provenance
         // in parens, and nesting a second pair inside it reads as a typo.
         format!(
@@ -314,33 +314,10 @@ fn flags_decision(inputs: &NarrationInputs<'_>) -> Option<LaunchDecision> {
     (!parts.is_empty()).then(|| LaunchDecision::bare("flags", parts.join(" \u{b7} ")))
 }
 
-/// Which tool-call dialect the proxy will normalize on the way out.
-///
-/// Always present, including the pass-through case: "this model's tool calls
-/// arrive as `OpenAI` JSON already" is exactly as informative as naming a
-/// parser, and its absence would read as a missing feature.
-fn dialect_decision(inputs: &NarrationInputs<'_>) -> LaunchDecision {
-    if inputs
-        .spec
-        .tags
-        .iter()
-        .any(|t| t.as_str() == FORMAT_QWEN_XML)
-    {
-        LaunchDecision::new(
-            "dialect",
-            "qwen-xml -> OpenAI tool_calls",
-            format!("{FORMAT_QWEN_XML} tag"),
-        )
-    } else {
-        LaunchDecision::new("dialect", "OpenAI tool_calls", "pass-through")
-    }
-}
-
 /// Sampling is decided per request, not at launch.
 ///
-/// Unconditional, and stated rather than omitted for the same reason
-/// `dialect_decision` is: a banner silent about sampling would read as an
-/// oversight. This says the absence of sampler flags is the decision, and
+/// Unconditional, and stated rather than omitted: a banner silent about
+/// sampling would read as an oversight. This says the absence of sampler flags is the decision, and
 /// where the real one is made. See `llama::args::sampling`.
 fn sampling_decision() -> LaunchDecision {
     LaunchDecision::new(
@@ -434,7 +411,7 @@ mod sd_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::domain::KvElemsPerToken;
+    use gglib_core::domain::{KvElemsPerToken, KvShape};
 
     use crate::llama::args::{MtpResolution, ReasoningFormatResolution, SlotRestoreSource};
 
@@ -453,7 +430,7 @@ mod tests {
             context_length: None,
             server_defaults: None,
             file_size_bytes: 18_476_297_420,
-            kv_elems_per_token: Some(KvElemsPerToken { k: 8192, v: 8192 }),
+            kv_shape: Some(KvShape::uniform(KvElemsPerToken { k: 8192, v: 8192 })),
             kv_memory_is_partial: false,
         }
     }
@@ -510,6 +487,7 @@ mod tests {
                 source: SlotRestoreSource::Supported,
             },
             capabilities: caps,
+            fit: None,
         }
     }
 
@@ -566,7 +544,7 @@ mod tests {
     #[test]
     fn kv_line_degrades_to_the_bare_types_without_an_estimate() {
         let mut s = spec(&[]);
-        s.kv_elems_per_token = None;
+        s.kv_shape = None;
         let (c, r) = (caps(), cache_ram(Some(6144), CacheRamSource::Auto));
         let n = narrate(&inputs(&s, &c, &r));
         assert_eq!(n.decision("kv").unwrap().value, "q8_0");
@@ -775,42 +753,16 @@ mod tests {
         assert!(narrate(&inputs(&s, &c, &r)).decision("flags").is_none());
     }
 
-    #[test]
-    fn dialect_line_names_the_parser_for_a_tagged_model() {
-        let (s, c, r) = (
-            spec(&[FORMAT_QWEN_XML]),
-            caps(),
-            cache_ram(Some(6144), CacheRamSource::Auto),
-        );
-        let n = narrate(&inputs(&s, &c, &r));
-        let dialect = n.decision("dialect").unwrap();
-        assert_eq!(dialect.value, "qwen-xml -> OpenAI tool_calls");
-    }
-
-    /// Pass-through is still a decision worth stating.
-    #[test]
-    fn dialect_line_states_pass_through_for_an_untagged_model() {
-        let (s, c, r) = (
-            spec(&[]),
-            caps(),
-            cache_ram(Some(6144), CacheRamSource::Auto),
-        );
-        let n = narrate(&inputs(&s, &c, &r));
-        assert_eq!(n.decision("dialect").unwrap().value, "OpenAI tool_calls");
-    }
-
     /// The mission caps the banner at ~12 lines; the decision list is what
     /// drives that, so it is asserted here rather than in the renderer.
     ///
     /// The renderer spends three lines on chrome (blank, headline, blank), so
-    /// nine decisions is the hard ceiling and this now sits exactly on it —
-    /// ADR 0003's `sampling` row took the last slot. That is deliberate: the
-    /// cap stops being notional, and the next decision anyone wants has to
-    /// displace one rather than quietly widen the banner.
+    /// nine decisions is the hard ceiling. The next decision anyone wants has
+    /// to fit under it or displace one rather than quietly widen the banner.
     #[test]
     fn narration_stays_within_the_banner_budget() {
         let (s, r) = (
-            spec(&[FORMAT_QWEN_XML]),
+            spec(&["agent", "reasoning", "mtp"]),
             cache_ram(Some(6144), CacheRamSource::Auto),
         );
         let mut c = caps();

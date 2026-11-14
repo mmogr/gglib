@@ -262,7 +262,15 @@ async fn the_command_fails_when_the_download_does_and_names_what_is_missing() {
     let (port, asked) = stand_in_daemon(vec![snapshot(None, vec![], vec![no_route])]);
     let id = model.id.to_string();
 
-    let argv = ["gglib", "model", "repair", id.as_str(), "-y", "-s", "0,2"];
+    let argv = [
+        "gglib",
+        "model",
+        "repair",
+        id.as_str(),
+        "-y",
+        "--shards",
+        "0,2",
+    ];
     let result = STAND_IN_PORT.scope(port, run(&ctx, &argv)).await;
 
     assert_eq!(

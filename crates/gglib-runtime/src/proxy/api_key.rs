@@ -1,15 +1,13 @@
 //! Settling the proxy's bearer token at bind time.
 //!
-//! Split from the supervisor for the file-size gate; the rule it encodes is
-//! the supervisor's and is documented on the function. The daemon settles the
-//! token of a management API bound off loopback with the same function, so
-//! one machine key is read, minted and stored one way.
+//! Split from the supervisor; the rule it encodes is the supervisor's and is
+//! documented on the function.
 
 use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
 use gglib_core::ports::SettingsRepository;
-use gglib_core::secret::held;
+use gglib_core::secret::held_key;
 use tracing::{info, warn};
 
 /// Settle the bearer token for a proxy about to bind `host`.
@@ -25,7 +23,7 @@ use tracing::{info, warn};
 /// A minted token is persisted rather than kept for the process: a client
 /// configured once should keep working across restarts, and a token that
 /// changed every launch would train people to turn the feature off.
-pub async fn resolve_api_key(
+pub(super) async fn resolve_api_key(
     configured: Option<String>,
     host: &str,
     settings_repo: &Arc<dyn SettingsRepository>,
@@ -42,7 +40,7 @@ pub async fn resolve_api_key(
 
     if let Some(key) = stored
         .as_ref()
-        .and_then(|s| held(s.proxy_api_key.as_deref()))
+        .and_then(|s| held_key(s.proxy_api_key.as_deref()))
     {
         return (Some(key.to_owned()), ApiKeySource::Settings);
     }
@@ -60,9 +58,8 @@ pub async fn resolve_api_key(
     //
     // A key that was not saved still guards this run. Refusing to start
     // would be worse, and an unsaved key beats an open endpoint on a
-    // network. It is `GeneratedUnsaved`: a daemon's banner prints such a key,
-    // its only copy, and a proxy prints none, so its clients need a key set
-    // by hand.
+    // network. It is `GeneratedUnsaved`, which nothing prints, so its
+    // clients need a key set by hand.
     if stored.is_none() {
         warn!("generated an API key but settings were unreadable, so it was not saved");
         return (Some(key), ApiKeySource::GeneratedUnsaved);
@@ -234,7 +231,8 @@ mod tests {
     /// loopback proxy would ignore a key the operator deliberately set.
     #[tokio::test]
     async fn a_stored_key_is_honoured_on_a_loopback_bind() {
-        let store = Recording::with_key(Some("set-by-remote-enable"));
+        // Padded, and read trimmed, as the guard reads the setting.
+        let store = Recording::with_key(Some(" set-by-remote-enable\n"));
         let (key, source) = resolve_api_key(None, "127.0.0.1", &repo(&store)).await;
 
         assert_eq!(key.as_deref(), Some("set-by-remote-enable"));

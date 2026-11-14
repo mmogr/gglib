@@ -2,7 +2,8 @@
 //!
 //! This module defines the root CLI structure with global options.
 
-use clap::Parser;
+use clap::parser::ValueSource;
+use clap::{ArgMatches, CommandFactory as _, Parser};
 
 use crate::commands::Commands;
 
@@ -34,7 +35,7 @@ mcp             Manage MCP (Model Context Protocol) tool servers\n\n\
 Inference:\n  \
 serve           Serve one pinned model behind the OpenAI-compatible proxy\n  \
 chat            Chat with a model interactively\n  \
-question        Ask a question with optional context from stdin or file\n  \
+q               Ask a question with optional context from stdin or file\n  \
 run             Start a reply the daemon finishes, and read it later\n  \
 image           Draw an image with this machine's image model, or the paired one's\n  \
 attachment      Save an image a chat stored, such as one a tool made\n\n\
@@ -57,6 +58,60 @@ pub struct Cli {
 
     #[command(subcommand)]
     pub command: Option<Commands>,
+}
+
+/// The sentence for a parent's own flags typed before its subcommand
+/// (`gglib proxy --port 8081 dashboard`), which the subcommand never
+/// receives; `None` when there are none. A global flag belongs to every
+/// level, and a value from a default or the environment was not typed.
+pub(crate) fn before_subcommand(matches: &ArgMatches) -> Option<String> {
+    let root = Cli::command();
+    let (mut command, mut here, mut path) = (&root, matches, vec!["gglib"]);
+    while let Some((name, sub)) = here.subcommand() {
+        let typed: Vec<String> = command
+            .get_arguments()
+            .filter(|arg| !arg.is_global_set())
+            .filter(|arg| {
+                here.value_source(arg.get_id().as_str()) == Some(ValueSource::CommandLine)
+            })
+            .map(|arg| {
+                // A positional is named by what was typed for it.
+                let typed_value = || {
+                    here.get_raw(arg.get_id().as_str())
+                        .into_iter()
+                        .flatten()
+                        .map(|value| format!("`{}`", value.to_string_lossy()))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                };
+                arg.get_long()
+                    .map_or_else(typed_value, |long| format!("--{long}"))
+            })
+            .collect();
+        if let Some((named, them)) = named(&typed) {
+            let parent = path.join(" ");
+            return Some(format!(
+                "`{parent} {name}` takes none of `{parent}`'s own arguments, so {named} before \
+                 `{name}` would be dropped; drop {them}, or type {them} after `{name}` if it \
+                 takes {them}"
+            ));
+        }
+        command = command.find_subcommand(name)?;
+        here = sub;
+        path.push(name);
+    }
+    None
+}
+
+/// `names` as a sentence lists them (`a`, `a and b`, `a, b and c`), and the
+/// pronoun for them; `None` when there are none.
+pub(crate) fn named(names: &[String]) -> Option<(String, &'static str)> {
+    let (last, rest) = names.split_last()?;
+    Some(if rest.is_empty() {
+        (last.clone(), "it")
+    } else {
+        (format!("{} and {last}", rest.join(", ")), "them")
+    })
 }
 
 #[cfg(test)]
@@ -92,6 +147,98 @@ mod tests {
             }
             _ => panic!("expected the Up variant"),
         }
+    }
+
+    /// `q` is the command's one name: `question` is no spelling of it.
+    #[test]
+    fn q_is_the_one_name_of_the_question_command() {
+        use clap::Parser;
+        let cli = Cli::parse_from(["gglib", "q", "hi"]);
+        assert!(matches!(
+            cli.command,
+            Some(crate::commands::Commands::Question { .. })
+        ));
+        let err = Cli::try_parse_from(["gglib", "question", "hi"]).err();
+        assert_eq!(
+            err.map(|e| e.kind()),
+            Some(clap::error::ErrorKind::InvalidSubcommand)
+        );
+    }
+
+    /// A parent's own arguments typed before its subcommand are refused by
+    /// name rather than dropped. The bare forms, flags after the subcommand
+    /// and the global `--verbose` anywhere still parse.
+    #[test]
+    fn a_parents_arguments_before_its_subcommand_are_refused() {
+        use crate::remote_flag::{Refusal, parse_from};
+        let refused = |argv: &[&str]| match parse_from(argv) {
+            Err(Refusal::Sentence(sentence)) => sentence,
+            Err(Refusal::Clap(error)) => panic!("`{}` got clap's error: {error}", argv.join(" ")),
+            Ok(_) => panic!("`{}` parsed", argv.join(" ")),
+        };
+
+        assert_eq!(
+            refused(&["gglib", "proxy", "--port", "8081", "dashboard"]),
+            "`gglib proxy dashboard` takes none of `gglib proxy`'s own arguments, so --port \
+             before `dashboard` would be dropped; drop it, or type it after `dashboard` if it \
+             takes it"
+        );
+        assert!(
+            refused(&["gglib", "chat", "m", "--no-tools", "history"])
+                .contains("so `m` and --no-tools before `history` would be dropped; drop them")
+        );
+        for argv in [
+            &["gglib", "chat", "--no-tools", "history"][..],
+            &["gglib", "chat", "--continue", "3", "history"],
+            &["gglib", "chat", "--remote", "history"],
+            &["gglib", "proxy", "--cache", "stop"],
+            &["gglib", "proxy", "--temperature", "0.5", "cache-clear"],
+        ] {
+            let text = refused(argv);
+            assert!(text.contains("would be dropped"), "{text}");
+        }
+
+        for argv in [
+            &["gglib", "proxy"][..],
+            &["gglib", "proxy", "--port", "9"],
+            &["gglib", "proxy", "dashboard", "--port", "9"],
+            &["gglib", "proxy", "-v", "dashboard"],
+            &["gglib", "chat", "m"],
+            &["gglib", "chat", "history"],
+            &["gglib", "chat", "history", "-n", "3"],
+            &["gglib", "chat", "-v", "history"],
+            &["gglib", "-v", "chat", "history"],
+        ] {
+            assert!(parse_from(argv).is_ok(), "{}", argv.join(" "));
+        }
+    }
+
+    /// `model check-updates` takes its model as every model command does, or
+    /// `--all`: exactly one, and clap refuses both or neither.
+    #[test]
+    fn check_updates_takes_a_model_or_all_and_not_both() {
+        use crate::model_commands::ModelCommand;
+        use clap::Parser;
+        use clap::error::ErrorKind;
+        let parsed = |args: &[&str]| {
+            let line = [&["gglib", "model", "check-updates"], args].concat();
+            match Cli::try_parse_from(line).map(|cli| cli.command) {
+                Ok(Some(crate::commands::Commands::Model {
+                    command: ModelCommand::CheckUpdates { identifier, all },
+                })) => Ok((identifier, all)),
+                Ok(_) => panic!("expected check-updates"),
+                Err(err) => Err(err.kind()),
+            }
+        };
+
+        assert_eq!(parsed(&["qwen"]), Ok((Some("qwen".to_owned()), false)));
+        assert_eq!(parsed(&["--all"]), Ok((None, true)));
+        assert_eq!(parsed(&["qwen", "--all"]), Err(ErrorKind::ArgumentConflict));
+        assert_eq!(parsed(&[]), Err(ErrorKind::MissingRequiredArgument));
+        assert_eq!(
+            parsed(&["--identifier", "qwen"]),
+            Err(ErrorKind::UnknownArgument)
+        );
     }
 
     /// No `--port` flag carries a default of its own. A default typed into

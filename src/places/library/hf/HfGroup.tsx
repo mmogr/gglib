@@ -4,7 +4,9 @@
  * `Sort ▾`.
  *
  * With the field empty it holds the model `gglib up` would suggest for this
- * machine, from the daemon's shortlist, with the figures it was sized by.
+ * machine, from the daemon's shortlist, with the figures it was sized by;
+ * it can be dismissed, and stays dismissed until the shortlist suggests
+ * another repo.
  * After Enter it holds the Hub's repos as rows (a pick opens the repo's
  * preview in the inspector; with the arrow keys, the repo a run of keys
  * ends on, `KEY_PICK_MS` after the last) and "More results" while the Hub has more, or
@@ -19,7 +21,10 @@
  */
 
 import { useEffect, useRef, useState, type FC, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
+import { Icon } from '../../../components/ui/Icon';
+import { IconButton } from '../../../components/ui/IconButton';
 import { Chip } from '../../../components/ui/Chip';
 import { Listbox, tabStop } from '../../../components/ui/Listbox';
 import { useToastContext } from '../../../contexts/ToastContext';
@@ -79,24 +84,55 @@ const ActionRow: FC<{ name: string; line?: string; action: ReactNode }> = ({ nam
   </div>
 );
 
-/** The suggestion for this machine, or that nothing on the shortlist fits. */
-const Suggestion: FC<{ queueFull: boolean }> = ({ queueFull }) => {
-  // `undefined` while asked; a failed read shows nothing, since it says
-  // nothing about what fits.
-  const [answer, setAnswer] = useState<RecommendationDto | null | 'failed' | undefined>(undefined);
-  const { models } = useModelLibrary();
-  const queue = useQueue();
+const DISMISSED_KEY = 'gglib.library.suggestionDismissed';
+
+/** The suggested repo this viewer dismissed, if any. */
+function dismissedRepo(): string | null {
+  try {
+    return window.localStorage.getItem(DISMISSED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The suggestion for this machine, asked each time the field empties.
+ * `undefined` while asked, and also for a failed read (it says nothing about
+ * what fits) and a dismissed suggestion: the group then draws nothing.
+ * A dismissal is remembered by repo, so a new suggestion is shown again.
+ */
+function useSuggestion(asked: boolean) {
+  const [answer, setAnswer] = useState<RecommendationDto | null | undefined>(undefined);
+  const [dismissed, setDismissed] = useState(dismissedRepo);
   useEffect(() => {
+    if (!asked) return;
     let live = true;
     getRecommendedModel()
       .then((rec) => live && setAnswer(rec))
-      .catch(() => live && setAnswer('failed'));
+      .catch(() => live && setAnswer(undefined));
     return () => {
       live = false;
     };
-  }, []);
+  }, [asked]);
+  const dismiss = (repo: string) => {
+    setDismissed(repo);
+    try {
+      window.localStorage.setItem(DISMISSED_KEY, repo);
+    } catch {
+      // A viewer without storage dismisses it until the library is left.
+    }
+  };
+  return { answer: answer && answer.repo === dismissed ? undefined : answer, dismiss };
+}
 
-  if (answer === undefined || answer === 'failed') return null;
+/** The suggestion for this machine, or that nothing on the shortlist fits. */
+const Suggestion: FC<{ answer: RecommendationDto | null; queueFull: boolean; onDismiss: (repo: string) => void }> = ({
+  answer,
+  queueFull,
+  onDismiss,
+}) => {
+  const { models } = useModelLibrary();
+  const queue = useQueue();
   if (answer === null) return <Note>Nothing gglib would suggest fits. Search for a smaller model below.</Note>;
   return (
     <section aria-label="Suggested for this Mac">
@@ -105,14 +141,19 @@ const Suggestion: FC<{ queueFull: boolean }> = ({ queueFull }) => {
         name={answer.repo}
         line={formatRecommendation(answer)}
         action={
-          <Button
-            size="sm"
-            variant={models.length === 0 ? 'primary' : 'secondary'}
-            disabled={queueFull}
-            onClick={() => void queue(answer.repo)}
-          >
-            Download
-          </Button>
+          <span className="flex shrink-0 items-center gap-xs">
+            <Button
+              size="sm"
+              variant={models.length === 0 ? 'primary' : 'secondary'}
+              disabled={queueFull}
+              onClick={() => void queue(answer.repo)}
+            >
+              Download
+            </Button>
+            <IconButton label="Dismiss suggestion" size="sm" onClick={() => onDismiss(answer.repo)}>
+              <Icon icon={X} size={14} />
+            </IconButton>
+          </span>
         }
       />
     </section>
@@ -147,6 +188,7 @@ const KEY_PICK_MS = 150;
 export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull }) => {
   const { shown, hf, openError, setQuery } = search;
   const queue = useQueue();
+  const suggestion = useSuggestion(shown?.kind === 'suggestion');
   // The key pick waiting, and whether the run it ends began on the picked repo.
   const pending = useRef<{ timer: ReturnType<typeof setTimeout>; replace: boolean } | null>(null);
   /** Forget a key pick still waiting: a click, a new search or an opened repo says where the person is now. */
@@ -166,8 +208,10 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
     }, KEY_PICK_MS);
     pending.current = { timer, replace: keep };
   };
-  // Nothing to say while a named repo is still being read.
+  // Nothing to say while a named repo is still being read, or while the
+  // suggestion is asked, failed or dismissed.
   if (shown === null || (shown.kind === 'open' && openError === null)) return null;
+  if (shown.kind === 'suggestion' && suggestion.answer === undefined) return null;
 
   // Kind and sort act on a search, so they are drawn only with one.
   const controls = shown.kind === 'search' && (
@@ -198,7 +242,7 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
   let body: ReactNode;
   switch (shown.kind) {
     case 'suggestion':
-      body = <Suggestion queueFull={queueFull} />;
+      body = <Suggestion answer={suggestion.answer ?? null} queueFull={queueFull} onDismiss={suggestion.dismiss} />;
       break;
     case 'open':
       body = <Note>{openError}</Note>;

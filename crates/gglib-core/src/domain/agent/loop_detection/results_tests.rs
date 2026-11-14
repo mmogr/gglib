@@ -1,8 +1,6 @@
 //! Tests for the results join.
 //!
-//! Split into its own file for the same reason `loop_detection/tests.rs` is:
-//! the file-size ratchet counts test code, and a module's tests should not be
-//! what pushes its implementation over the budget.
+//! Its own file, as `loop_detection/tests.rs` is.
 
 use serde_json::json;
 

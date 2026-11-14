@@ -42,7 +42,7 @@ pub(super) struct Upstream {
     pub model_context: ModelContext,
     /// The stored sampling layers the endpoint folds beneath what the turn
     /// names ([`endpoint_layers`]). For the far machine, whose proxy folds
-    /// its own, no layer, and the ceiling on.
+    /// its own, no layer.
     pub layers: SamplingLayers,
     /// What goes in the body's `model` field: the model's id at the
     /// endpoint, so the endpoint serves the model that was picked and no
@@ -169,13 +169,13 @@ pub(super) async fn endpoint(
 
 /// The stored layers the running endpoint folds the turn's request with:
 /// the sampling it was started with (`gglib serve`'s flags), a profile, this
-/// machine's global defaults and its agentic switch. The profile is the
+/// machine's global defaults. The profile is the
 /// chat's, `chat`, when the turn names one, as the endpoint routes
 /// `<id>:<profile>` to it, and otherwise the endpoint's default. Handed to
 /// the adapter for the one thing it folds through a door: whether the
 /// endpoint's ladder names a `max_tokens`, which a turn's limit would
 /// otherwise outrank. A settings read that fails leaves the global layer and
-/// the default profile out, and the switch on.
+/// the default profile out.
 async fn endpoint_layers(
     state: &AppState,
     settings: &Settings,
@@ -193,7 +193,6 @@ async fn endpoint_layers(
     SamplingLayers {
         cli_override,
         profile,
-        agentic_adjustments: settings.effective_agentic_sampling(),
         global: settings.inference_defaults.clone(),
         ..SamplingLayers::default()
     }
@@ -266,12 +265,8 @@ pub(super) async fn remote(
             image_input: detail.image_input,
             ..ModelContext::passthrough()
         },
-        // Nothing stored here applies to that machine's model, this
-        // machine's agentic switch included: the ceiling stays on.
-        layers: SamplingLayers {
-            agentic_adjustments: true,
-            ..SamplingLayers::default()
-        },
+        // Nothing stored here applies to that machine's model.
+        layers: SamplingLayers::default(),
         // The far machine counts its own guard decisions under this name, in
         // its own ledger; this one counts what it composed here.
         counted_as: detail.name.clone(),

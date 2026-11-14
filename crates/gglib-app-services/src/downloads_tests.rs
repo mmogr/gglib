@@ -4,13 +4,12 @@ use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::error::GuiError;
-use crate::test_support::{MockDownloadManager, MockHfClient, MockToolSupportDetector};
+use crate::test_support::{MockDownloadManager, MockHfClient};
 
 fn make_ops(mgr: MockDownloadManager) -> DownloadOps {
     DownloadOps::new(DownloadDeps {
         downloads: Arc::new(mgr),
         hf: Arc::new(MockHfClient),
-        tool_detector: Arc::new(MockToolSupportDetector),
         gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
         models_directory: None,
     })
@@ -137,4 +136,27 @@ fn without_device_memory_the_system_ram_is_the_budget() {
         Some(64 << 30)
     );
     assert_eq!(super::device_or_ram(None, || None), None);
+}
+
+/// A Hub repo's tool answer is core's guess from its template and repo id,
+/// and the answer carries that yes/no alone. The mock Hub serves no
+/// template, so the repo id decides.
+#[tokio::test]
+async fn a_hub_repo_calls_tools_by_cores_guess() {
+    let ops = make_ops(MockDownloadManager::new());
+
+    let hermes = ops
+        .get_hf_tool_support("NousResearch/Hermes-3-Llama-3.1-8B-GGUF")
+        .await
+        .unwrap();
+    let plain = ops
+        .get_hf_tool_support("owner/plain-chat-GGUF")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        serde_json::to_value(&hermes).unwrap(),
+        serde_json::json!({ "supports_tool_calls": true })
+    );
+    assert!(!plain.supports_tool_calls);
 }

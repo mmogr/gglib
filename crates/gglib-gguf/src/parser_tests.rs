@@ -11,10 +11,10 @@ fn test_parse_param_label() {
     assert!((parse_param_label("13B").unwrap() - 13.0).abs() < f64::EPSILON);
     assert!((parse_param_label("70B").unwrap() - 70.0).abs() < f64::EPSILON);
 
-    // MoE models - should return TOTAL parameters (N × M)
-    assert!((parse_param_label("8x7B").unwrap() - 56.0).abs() < f64::EPSILON);
-    assert!((parse_param_label("64x2.6B").unwrap() - 166.4).abs() < 0.01);
-    assert!((parse_param_label("512x2.5B").unwrap() - 1280.0).abs() < 0.01);
+    // A mixture of experts' label states no total.
+    assert!(parse_param_label("8x7B").is_none());
+    assert!(parse_param_label("64x2.6B").is_none());
+    assert!(parse_param_label("512x56B").is_none());
 
     // Invalid
     assert!(parse_param_label("invalid").is_none());
@@ -25,6 +25,7 @@ fn test_parse_param_from_filename() {
     assert!((parse_param_from_filename("llama-7b-chat.gguf").unwrap() - 7.0).abs() < f64::EPSILON);
     assert!((parse_param_from_filename("model-13B-q4.gguf").unwrap() - 13.0).abs() < f64::EPSILON);
     assert!(parse_param_from_filename("no-params.gguf").is_none());
+    assert!(parse_param_from_filename("Mixtral-8x7B-v0.1.Q4_K_M.gguf").is_none());
 }
 
 #[test]
@@ -176,6 +177,18 @@ fn a_file_with_no_tensor_data_has_no_payload() {
     assert_eq!(GgufParser::new().parse(&path).unwrap().payload, None);
 }
 
+/// A split's first file is often only metadata: it holds none of the
+/// model's tensor data, which is known, not unknown.
+#[test]
+fn a_file_that_declares_no_tensors_has_an_empty_payload() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("big-00001-of-00004.gguf");
+    crate::write_gguf(&path, &[("split.count", GgufValue::U16(4))], &[], 0);
+
+    let payload = GgufParser::new().parse(&path).unwrap().payload;
+    assert_eq!(payload, Some(gglib_core::domain::TensorPayload::default()));
+}
+
 /// The role the parser reports counts the file's tensors: Qwen 3.8's MTP
 /// block on its own is no model.
 #[test]
@@ -274,4 +287,25 @@ fn a_tensor_table_that_cannot_be_read_never_fails_the_parse() {
 
     assert_eq!(parsed.image_family, None);
     assert_eq!(parsed.architecture.as_deref(), Some("flux"));
+}
+
+/// A per-layer number list is stored whole however long; a tokenizer's long
+/// arrays are summarised, as is a long list of strings.
+#[test]
+fn a_number_list_is_stored_whole_and_a_tokenizer_list_is_summarised() {
+    let numbers = GgufValue::Array((0..60).map(|i| GgufValue::U32(i % 2)).collect());
+    let words = GgufValue::Array((0..11).map(|i| GgufValue::String(i.to_string())).collect());
+    let vocab = GgufValue::Array((0..200).map(GgufValue::U32).collect());
+
+    let stored = stored_text("gemma4.attention.head_count_kv", &numbers);
+    let back: Vec<u32> = serde_json::from_str(&stored).expect("JSON array text");
+    assert_eq!(back.len(), 60);
+    assert_eq!(
+        stored_text("tokenizer.ggml.token_type", &vocab),
+        "Array with 200 elements"
+    );
+    assert_eq!(
+        stored_text("general.tags", &words),
+        "[Array with 11 elements]"
+    );
 }

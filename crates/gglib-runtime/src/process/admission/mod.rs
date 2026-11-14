@@ -1,6 +1,5 @@
 #![doc = include_str!("README.md")]
 mod gate;
-mod hold;
 mod lease;
 #[allow(
     clippy::cast_possible_truncation,
@@ -12,7 +11,7 @@ mod timing;
 pub use gate::RENDER_STOPPED;
 pub use lease::AdmissionQueue;
 pub use state::{
-    AdmissionDecision, Candidate, PRIMARY_SLOT, Refusal, Resident, SLOT_COUNT, SlotState, Ticket,
+    AdmissionDecision, Candidate, PRIMARY_SLOT, Resident, SLOT_COUNT, SlotState, Ticket,
 };
 pub(crate) use timing::launch_timeout;
 pub use timing::{ADMISSION_DEADLINE, DRAIN_QUANTUM};
@@ -26,7 +25,8 @@ mod queue_tests;
 #[path = "state_tests.rs"]
 mod state_tests;
 
-/// Where an image model is placed, and what a held slot does to the line.
+/// Where an image model is placed, and what one too large for its place does
+/// to the line.
 #[cfg(test)]
 #[path = "state_placement_tests.rs"]
 mod state_placement_tests;

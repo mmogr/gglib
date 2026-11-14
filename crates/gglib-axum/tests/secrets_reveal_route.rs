@@ -115,7 +115,7 @@ async fn the_pairing_key_is_refused_and_not_sent() {
         "the key must not be sent: {text}"
     );
     assert!(
-        text.contains("gglib config settings reveal remote-pairing.api-key"),
+        text.contains("gglib config reveal remote-pairing.api-key"),
         "the refusal names the command that prints it: {text}"
     );
 }

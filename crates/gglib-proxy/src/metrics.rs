@@ -3,8 +3,8 @@
 //! [`ContextMetricsStore`] is a fixed-capacity ring buffer that records one
 //! [`ContextSnapshot`] per handled `/v1/chat/completions` request. It feeds
 //! the `recent_requests` field of [`crate::dashboard::DashboardSnapshot`] —
-//! the unified data contract returned by `GET /v1/proxy/status` and pushed
-//! over `GET /v1/proxy/status/stream`, consumed by both the CLI (`gglib
+//! the unified data contract returned by `GET /v1/gglib/proxy/status` and pushed
+//! over `GET /v1/gglib/proxy/status/stream`, consumed by both the CLI (`gglib
 //! proxy dashboard`) and the web GUI's Proxy Dashboard modal.
 //!
 //! A snapshot is recorded before its request is forwarded, so what is learnt
@@ -68,16 +68,13 @@ pub struct ContextSnapshot {
     /// `true` when the hard-abort budget check triggered and an HTTP 400 was
     /// returned to the client instead of forwarding the request.
     pub was_clamped: bool,
-    /// `true` when the request pipeline originated a decode-time tool-call
-    /// grammar for this request (see `request_pipeline::constrain`).
-    pub grammar_enforced: bool,
-    /// `true` when dialect residue — tool-call markup that survived
-    /// normalization — reached this request's client-visible output (see
+    /// `true` when dialect residue — tool-call markup llama-server left
+    /// unparsed — reached this request's client-visible output (see
     /// `gglib_core::normalize::residue`). Back-patched after the response
     /// streams via [`ContextMetricsStore::flag_dialect_residue`].
     pub dialect_residue: bool,
     /// `true` when this turn's tool call failed schema validation and a
-    /// re-issue, under `required` or gglib's own grammar, produced a conformant one.
+    /// re-issue under `required` produced a conformant one.
     /// Back-patched after the response streams via
     /// [`ContextMetricsStore::flag_tool_repair`].
     pub tool_repaired: bool,
@@ -102,7 +99,7 @@ pub struct ContextSnapshot {
     pub completion_tokens: Option<u32>,
     /// Characters of reasoning, counted as Unicode scalar values, not bytes.
     ///
-    /// Streamed: summed over every reasoning delta read out of normalization,
+    /// Streamed: summed over every reasoning delta read from the upstream,
     /// the first generation's only on a re-issued turn. Non-streaming: the
     /// length of the first choice's `message.reasoning_content` in the body
     /// the client is answered with. Zero when there was none.
@@ -126,11 +123,8 @@ pub struct ContextSnapshot {
     /// answered with.
     pub finish_reason: Option<String>,
     /// Milliseconds between the first and the last generated token the
-    /// upstream streamed, whatever the normalizer later made of them. A
-    /// token is a text, reasoning or tool-call delta, timed as its event is
-    /// read from the upstream and before normalization, so a call a model writes
-    /// as text is timed over all of its markup, though the normalizer makes
-    /// one event of it.
+    /// upstream streamed. A token is a text, reasoning or tool-call delta,
+    /// timed as its event is read from the upstream.
     ///
     /// Prefill progress, the usage frame, the turn's finish and an error
     /// frame are not tokens. The wait before the first token is not in the
@@ -146,11 +140,11 @@ pub struct ContextSnapshot {
     /// a turn of one token, and every non-streaming turn.
     pub tokens_per_second: Option<f64>,
     /// The detector that made the pre-dispatch loop guard act on this request
-    /// — forward it with a note, end the run, or refuse it with an HTTP 400
-    /// (see `loop_guard`) — or `None`.
+    /// — forward it with a note, or end the run (see `loop_guard`) — or
+    /// `None`.
     pub loop_guard_trip: Option<LoopGuardTrip>,
-    /// `true` when the loop guard ended this request's run itself: under
-    /// `note`, the same run tripped again after its note, so the proxy
+    /// `true` when the loop guard ended this request's run itself: the same
+    /// run tripped again after its note, so the proxy
     /// answered with a finished assistant message instead of forwarding it
     /// (ADR 0021). `loop_guard_trip` names the detector.
     pub loop_guard_ended: bool,
@@ -198,7 +192,7 @@ pub struct ContextMetricsStore {
     /// buffer — eviction must not lose the count.
     dialect_residue_total: AtomicU64,
     /// Count of turns whose tool call failed schema validation and was
-    /// re-issued, with `tool_choice: "required"` or under gglib's own grammar.
+    /// re-issued with `tool_choice: "required"`.
     ///
     /// Counted whether or not the re-issue worked. An attempt is evidence
     /// that this model's `auto` path is unconstrained — the per-model
@@ -387,13 +381,6 @@ impl ContextMetricsStore {
     pub fn flag_unvalidatable_schema(&self, seq: u64) {
         self.with_model(seq, |ledger, model| {
             ledger.record_unvalidatable_schema(model);
-        });
-    }
-
-    /// Count one turn whose normalization discarded a malformed tool call.
-    pub fn flag_normalization_error(&self, seq: u64) {
-        self.with_model(seq, |ledger, model| {
-            ledger.record_normalization_error(model);
         });
     }
 

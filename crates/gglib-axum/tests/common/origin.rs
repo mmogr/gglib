@@ -12,11 +12,11 @@ use http_body_util::BodyExt;
 use serde_json::Value;
 use tower::ServiceExt;
 
-use gglib_axum::{CorsConfig, DaemonAccess, DaemonOptions};
+use gglib_axum::{CorsConfig, DaemonAccess, daemon_cors};
 
 use super::harness::{test_state, test_token, with_test_token};
 
-/// The daemon's `Host` on its default loopback bind.
+/// The daemon's `Host` on its loopback bind.
 pub(crate) const HOST: &str = "127.0.0.1:9887";
 /// A site that is not this machine.
 pub(crate) const ELSEWHERE: &str = "https://evil.example";
@@ -42,7 +42,7 @@ pub(crate) fn authed() -> Builder {
 /// The CORS config `gglib daemon run` and the desktop app start the daemon
 /// with.
 pub(crate) fn shipped_cors() -> CorsConfig {
-    DaemonOptions::default().cors
+    daemon_cors()
 }
 
 /// The router a shipped daemon builds, over a context of its own, with

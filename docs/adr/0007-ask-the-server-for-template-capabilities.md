@@ -1,6 +1,6 @@
 # ADR 0007 — Ask the server for template capabilities
 
-- **Status:** Accepted
+- **Status:** Accepted; decision 3 superseded (amended 2026-11-12, 2026-11-14)
 - **Date:** 2026-08-17
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),
@@ -258,6 +258,30 @@ mid-request, nothing changes strategy mid-stream. It is stored on the model's
 catalog row as a tri-state: **supported / not supported / never observed**,
 never collapsed (see Consequences).
 
+> **Amended 2026-11-14 — the caps set the stored tool flag.** The caps'
+> `supports_tool_calls` is written into the model's stored tool flag
+> (`SUPPORTS_TOOL_CALLS`) when it is first read and again when it changes.
+> Unknown leaves the flag alone. The owner's own setting (`gglib model
+> capabilities --set/--unset supports-tool-calls`, or the Abilities checkbox)
+> stands until the answer changes, and a re-import keeps it. Library step 10
+> applied each already-launched model's stored answer once, which replaced a
+> flag set by hand before that upgrade. The request pipeline still drops
+> `tools` for a model whose flag is off (stage 2b), so the caps now reach the
+> request through the flag. That qualifies decision 3's 2026-11-12 "the caps
+> are read, never used to edit the request", and the Classification note's
+> "the one decision it still steers".
+>
+> The drop stays. At `b12110` llama-server hands a request's `tools` to a
+> template whose caps say `supports_tool_calls: false`. The template does not
+> read them, no tool parser is built, and the reply is parsed as plain text,
+> under `tool_choice` `auto` and `required` alike ([log-0007](log-0007.md)).
+> So the drop changes nothing such a model sees; it keeps unrendered tool
+> schemas out of the truncation measure, and keeps the owner's off meaning off
+> for every client. If llama-server starts rendering `tools` to, or parsing
+> tool calls from, a template whose caps say it calls none, the drop of
+> `tools` for a model whose tool flag is off starts changing what the model
+> sees, and is re-taken.
+
 **3. The resolved `reasoning_effort` is suppressed when — and only when — the
 observed caps positively say the template does not read the variable.** The
 suppression is recorded in sampling provenance, never silent. **Unknown never
@@ -268,6 +292,14 @@ can't" (`crates/gglib-core/src/request_pipeline/model_context.rs:55-57`), and
 an unidentified `RuntimeCapabilities` means every compensation stays on
 (`runtime_capabilities.rs:149`). Unknown ≠ unsupported, and an observation
 that fails to arrive must not masquerade as one that arrived negative.
+
+> **Amended 2026-11-12 — the caps are read, never used to edit the request**
+> (v1 decision 14). Stage 5b, `effort_gate.rs` and `SuppressedByTemplate` are
+> deleted. A resolved `reasoning_effort` is sent whatever the caps say; a
+> template that does not read it ignores it, as finding 7c saw live. The
+> `/props` read, the stored tri-state and the six levels stay: surfaces read
+> the tri-state to hide or caption the control, and stage 1 reads the caps
+> for prior reasoning ([ADR 0020](0020-prior-reasoning-is-kept-where-the-template-keeps-it.md)).
 
 **4. `"none"` is not a level gglib offers.** Finding 4 shows it delivering
 medium thinking on gpt-oss and nothing at all on most other templates, and
@@ -314,6 +346,11 @@ inherited rather than invented:
    class that rule exists to exclude).
 3. **Provenance whenever it changes an outcome** — a suppressed value is
    reported suppressed, with the observation that suppressed it.
+
+> **Amended 2026-11-12.** Nothing is suppressed any more (decision 3's
+> amendment), so this observation no longer steers `reasoning_effort`. The
+> posture and its rules stand for the one decision it still steers, stage 1's
+> prior-reasoning strip.
 
 The appendix amends ADR 0001 so the next reader of "this ADR's implementation
 gates nothing" finds the exception where the rule is stated, not three
@@ -412,3 +449,6 @@ evidence-backed, and reversible.", insert:
 > self-report used as a policy input** — and carries its rules: snapshotted
 > once per launch, provenance whenever it changes an outcome, and unknown
 > never gates.
+
+> **Amended 2026-11-12.** Applied as written; ADR 0001 now carries a second
+> note recording that the suppression is gone.

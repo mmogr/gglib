@@ -55,7 +55,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 - **`routes.rs`** — Route definitions and handler mounting
 - **`routes_remote.rs`**, **`routes_runs.rs`**, **`routes_benchmark.rs`** — The routes nested under `/api/remote`, `/api/runs` and `/api/benchmark`
 - **`access.rs`** — `DaemonAccess`: the daemon's Host allowlist, its token, and the error shape a refusal is written in; the Host and origin guards that apply it are the proxy's
-- **`trust.rs`** — The bearer guard on `/api`: the daemon token, and on a `--share-lan` daemon its API key besides
+- **`trust.rs`** — The bearer guard on `/api`: the daemon token, and nothing else
 - **`state.rs`** — `AppState`, the state every handler and router shares
 - **`proxy_watch.rs`** — Turns the proxy supervisor's exit channel into a `ProxyCrashed` event on the event stream
 - **`sse.rs`** — Server-Sent Events utilities for streaming
@@ -107,7 +107,8 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/models/downloads/reorder-full` | Reorder the whole queue |
 | `POST` | `/api/models/hf/search` | Search `HuggingFace`; `kind` is `chat` (the default) or `image` |
 | `GET` | `/api/models/hf/model/{*model_id}` | One `HuggingFace` repo's summary, by its `owner/repo` id |
-| `GET` | `/api/models/hf/quantizations/{model_id}` | The quantizations a repo offers |
+| `GET` | `/api/models/hf/quantizations/{model_id}` | The quantizations a repo offers, `picked` on the one a download takes when their heads tell it |
+| `GET` | `/api/models/hf/pick/{model_id}` | The quantization a download without one takes, as the download picks it (`label`, `null` for a repo with no model); slower than the listing |
 | `GET` | `/api/models/hf/tool-support/{model_id}` | Whether a repo's model supports tool calling |
 | `GET` | `/api/config/settings` | Get application settings |
 | `PUT` | `/api/config/settings` | Update application settings |
@@ -126,7 +127,6 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `GET` | `/api/servers` | The running model servers |
 | `POST` | `/api/servers/start` | Start llama-server (id in the body) |
 | `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |
-| `GET` | `/api/servers/{id}/tool-support` | Whether a running server's model supports tool calls, and the format its template uses |
 | `GET` | `/api/servers/{port}/logs` | A server's logs so far |
 | `GET` | `/api/servers/{port}/logs/stream` | A server's logs as they come (SSE) |
 | `GET` | `/api/builtin/tools` | The built-in tools a person can switch on |
@@ -144,7 +144,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/proxy/start` | Start the proxy; one already running with the same pin, sampling override and default profile is a success, and a different request is a 409 |
 | `POST` | `/api/proxy/start-pinned` | Start the proxy pinned to one model (the GUI's `gglib serve`) |
 | `POST` | `/api/proxy/stop` | Stop the proxy; one already stopped is a success |
-| `GET` | `/api/proxy/loop-guard-trips` | The loop guard's log, one row per UTC day, model, version and mode, newest day first |
+| `GET` | `/api/proxy/loop-guard-trips` | The loop guard's log, one row per UTC day, model and version, newest day first |
 | `POST` | `/api/daemon/shutdown` | Stop the daemon; answers 202 and tears down after the server stops accepting |
 | `GET` | `/api/events` | The event stream (SSE) every client of the daemon reads |
 | `POST` | `/api/events` | Put one event on that stream: what a `gglib` command sends for a change it made to the library in its own process |

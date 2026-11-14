@@ -29,7 +29,6 @@ fn server(id: i64, name: &str, open: bool) -> McpServer {
     serde_json::from_value(json!({
         "id": id,
         "name": new.name,
-        "server_type": new.server_type,
         "config": new.config,
         "enabled": true,
         "allow_remote": open,
@@ -112,7 +111,7 @@ async fn drawing(gateway: Option<StubGateway>, servers: Servers) -> Value {
     .await;
     let (base, cancel) = (proxy.base, proxy.cancel);
     let response = reqwest::Client::new()
-        .get(format!("{base}/v1/images/drawing"))
+        .get(format!("{base}/v1/gglib/images/drawing"))
         .bearer_auth(TOKEN)
         .send()
         .await

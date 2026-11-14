@@ -18,7 +18,7 @@ fn unified(explicit: ServerConfigOptions, globals: GlobalDefaults) -> UnifiedSer
     UnifiedServerConfig { explicit, globals }
 }
 
-/// `--ctx-size max` resolves against the model's GGUF context length,
+/// `--context-size max` resolves against the model's GGUF context length,
 /// which is only known after the model is fetched — hence the deferred
 /// parse the handler performs.
 #[test]
@@ -37,7 +37,7 @@ fn ctx_size_max_resolves_against_model_metadata() {
     assert_eq!(resolve_context_size(&cfg.resolved_options()), 131_072);
 }
 
-/// An omitted `--ctx-size` must fall through the cascade rather than
+/// An omitted `--context-size` must fall through the cascade rather than
 /// pinning the context to a hardcoded value.
 #[test]
 fn omitted_ctx_size_falls_through_to_the_global_default() {
@@ -269,4 +269,25 @@ fn serve_sends_the_host_and_cache_flags_as_typed() {
     assert_eq!(named.host.as_deref(), Some("0.0.0.0"));
     assert_eq!(named.cache, Some(true));
     assert_eq!(named.cache_disk_gb, Some(4));
+}
+
+/// `--jinja` takes `auto`, `on` or `off`, as `model update --jinja` does:
+/// `on` asks for `--jinja` as the bare switch did, `off` for `--no-jinja`,
+/// and `auto` leaves the launch to the model's own default and its tags, as
+/// leaving the flag out does. A bare `--jinja` is refused.
+#[test]
+fn jinja_takes_auto_on_or_off() {
+    let jinja = |args: &[&str]| {
+        let argv = [&["gglib", "serve", "qwen3"], args].concat();
+        let Some(Commands::Serve { options, .. }) = Cli::parse_from(argv).command else {
+            panic!("{args:?} is not `gglib serve`");
+        };
+        super::launch_jinja(&options)
+    };
+
+    assert_eq!(jinja(&["--jinja", "on"]), Some(true));
+    assert_eq!(jinja(&["--jinja", "off"]), Some(false));
+    assert_eq!(jinja(&["--jinja", "auto"]), None);
+    assert_eq!(jinja(&[]), None);
+    assert!(Cli::try_parse_from(["gglib", "serve", "qwen3", "--jinja"]).is_err());
 }

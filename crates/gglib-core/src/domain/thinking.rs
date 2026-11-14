@@ -5,9 +5,9 @@
 //! on a far machine (which arrives there as a device's), this machine's own
 //! run, and the CLI's chat, where `--thinking` is what the turn says.
 //! A turn says `off`, `default` or nothing. `off` runs it with a thinking
-//! budget of `0` and the chat remembers; `default` runs it with the
-//! request's own budget and the chat forgets; nothing runs it as the chat
-//! remembers, and a remembered `off` beats the request's own budget.
+//! budget of `0` and the chat remembers; `default` runs it with no budget of
+//! its own, so the model thinks as it would, and the chat forgets; nothing
+//! runs it as the chat remembers.
 //!
 //! Kept apart from the two reasoning controls a request carries
 //! ([`InferenceConfig::reasoning_budget_tokens`] and
@@ -53,18 +53,13 @@ pub struct Settled {
     pub remember: Remember,
 }
 
-/// Settle what a turn `said` against what its chat `remembered` and the
-/// request's `own_budget`, which a device's turn never has.
+/// Settle what a turn `said` against what its chat `remembered`.
 ///
 /// Only `off` is ever remembered, so a write is asked for only when it
 /// changes that: `off` on a chat that does not already remember it, and
 /// `default` on one that remembers anything.
 #[must_use]
-pub fn settle(
-    said: Option<Thinking>,
-    remembered: Option<Thinking>,
-    own_budget: Option<i32>,
-) -> Settled {
+pub fn settle(said: Option<Thinking>, remembered: Option<Thinking>) -> Settled {
     let off = Some(Thinking::Off);
     match said {
         Some(Thinking::Off) => Settled {
@@ -72,7 +67,7 @@ pub fn settle(
             remember: (remembered != off).then_some(off),
         },
         Some(Thinking::Default) => Settled {
-            budget: own_budget,
+            budget: None,
             remember: remembered.is_some().then_some(None),
         },
         None if remembered == off => Settled {
@@ -80,7 +75,7 @@ pub fn settle(
             remember: None,
         },
         None => Settled {
-            budget: own_budget,
+            budget: None,
             remember: None,
         },
     }

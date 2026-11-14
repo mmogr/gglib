@@ -78,10 +78,10 @@ pub(crate) const MAX_TRACKED_FIELD_NAMES: usize = 32;
 ///
 /// [`TemplateCapsState`]'s discipline carried one level up, and the reason it
 /// is a type rather than an `Option<bool>`: "the template does not read it" and
-/// "nobody has looked yet" license opposite actions. The first is what the
-/// suppression gate acts on; the second must never be, and a surface that
-/// renders them the same way has re-introduced exactly the collapse ADR 0007
-/// decision 3 forbids.
+/// "nobody has looked yet" license opposite readings. The first lets a
+/// surface say the template ignores the level; the second must never, and a
+/// surface that renders them the same way has re-introduced exactly the
+/// collapse ADR 0007 decision 3 forbids.
 ///
 /// Three distinct causes fold into [`Self::NotYetObserved`] — no read yet, a
 /// read that failed, and a caps object that did not carry the field — so each
@@ -92,8 +92,8 @@ pub(crate) const MAX_TRACKED_FIELD_NAMES: usize = 32;
 pub enum EffortSupportState {
     /// The observed template positively reads the variable.
     Supported,
-    /// The observed template positively does not read it. The one arm the
-    /// effort gate is allowed to act on.
+    /// The observed template positively does not read it, so a level sent to
+    /// it is ignored.
     NotSupported,
     /// Nothing has been observed that answers the question.
     NotYetObserved {
@@ -144,11 +144,6 @@ pub struct EffortRung {
     pub level: ReasoningEffort,
     /// The rung that supplied it — `profile`, `model`, `global`, `cli`.
     pub source: String,
-    /// Whether stage 5b then deleted it because the observed template never
-    /// reads the variable. `true` means llama-server never saw this level, and
-    /// a surface that renders the level without the marker is reporting a
-    /// control that did nothing as though it had worked.
-    pub suppressed: bool,
 }
 
 /// The `reasoning_budget_tokens` the most recent request resolved, and its rung.
@@ -171,7 +166,7 @@ pub struct BudgetRung {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ResolvedReasoning {
-    /// The resolved level, suppressed or not.
+    /// The resolved level.
     pub effort: Option<EffortRung>,
     /// The resolved budget.
     pub budget: Option<BudgetRung>,

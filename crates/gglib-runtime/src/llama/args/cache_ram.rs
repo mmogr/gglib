@@ -13,7 +13,7 @@
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::debug_switches;
 use gglib_core::domain::{
-    CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, compute_auto_cache_ram_mb, format_gib,
+    CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, KvBytes, compute_auto_cache_ram_mb, format_gib,
 };
 
 /// Indicates how the `--cache-ram` budget was resolved.
@@ -79,7 +79,7 @@ fn autosize_disabled_via_env() -> bool {
 /// * `setting` — what the caller asked for.
 /// * `total_ram_bytes` — total physical RAM.
 /// * `model_bytes` — model weights on disk, all shards.
-/// * `kv_bytes_per_token` — per-token KV estimate; `None` substitutes a
+/// * `kv` — the KV cache estimate at the launch's types; `None` substitutes a
 ///   conservative allowance.
 /// * `context_size` — the context the server will actually launch with.
 #[must_use]
@@ -87,14 +87,14 @@ pub fn resolve_cache_ram(
     setting: CacheRamSetting,
     total_ram_bytes: u64,
     model_bytes: u64,
-    kv_bytes_per_token: Option<u64>,
+    kv: Option<KvBytes>,
     context_size: u64,
 ) -> CacheRamResolution {
     resolve_cache_ram_inner(
         setting,
         total_ram_bytes,
         model_bytes,
-        kv_bytes_per_token,
+        kv,
         context_size,
         autosize_disabled_via_env(),
     )
@@ -107,13 +107,13 @@ fn resolve_cache_ram_inner(
     setting: CacheRamSetting,
     total_ram_bytes: u64,
     model_bytes: u64,
-    kv_bytes_per_token: Option<u64>,
+    kv: Option<KvBytes>,
     context_size: u64,
     autosize_suppressed: bool,
 ) -> CacheRamResolution {
-    let kv_estimated = kv_bytes_per_token.is_some();
-    let kv_bytes = kv_bytes_per_token.map_or(CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, |per_token| {
-        gglib_core::domain::estimate_kv_bytes_for_context(per_token, context_size)
+    let kv_estimated = kv.is_some();
+    let kv_bytes = kv.map_or(CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, |kv| {
+        kv.at(context_size)
     });
 
     let base = CacheRamResolution {
@@ -195,6 +195,11 @@ mod tests {
 
     const GIB: u64 = 1024 * 1024 * 1024;
 
+    /// A KV cache of `per_token` bytes a token.
+    const fn kv(per_token: u64) -> KvBytes {
+        KvBytes::uniform(per_token)
+    }
+
     /// Reference machine: 128 GiB RAM, 27 GiB weights, 131k ctx.
     /// KV: 64 KiB/token × 131072 ctx = exactly 8 GiB.
     /// budget = 128 − 27 − 8 − 16 (headroom) = 77 GiB = 78848 MiB.
@@ -203,7 +208,7 @@ mod tests {
             CacheRamSetting::Auto,
             128 * GIB,
             27 * GIB,
-            Some(65_536),
+            Some(kv(65_536)),
             131_072,
         )
     }
@@ -253,7 +258,13 @@ mod tests {
 
     #[test]
     fn auto_multiplies_kv_by_context_size() {
-        let got = resolve_cache_ram(CacheRamSetting::Auto, 64 * GIB, 10 * GIB, Some(1000), 8192);
+        let got = resolve_cache_ram(
+            CacheRamSetting::Auto,
+            64 * GIB,
+            10 * GIB,
+            Some(kv(1000)),
+            8192,
+        );
         assert!(got.kv_estimated);
         assert_eq!(got.kv_bytes, 1000 * 8192);
     }
@@ -289,7 +300,7 @@ mod tests {
 
     #[test]
     fn explain_reports_a_disabled_budget() {
-        let msg = resolve_cache_ram(CacheRamSetting::Auto, 36 * GIB, 30 * GIB, Some(0), 4096)
+        let msg = resolve_cache_ram(CacheRamSetting::Auto, 36 * GIB, 30 * GIB, Some(kv(0)), 4096)
             .explain()
             .unwrap();
         assert!(msg.contains("disabled"), "{msg}");
@@ -302,7 +313,7 @@ mod tests {
             CacheRamSetting::Auto,
             128 * GIB,
             27 * GIB,
-            Some(65_536),
+            Some(kv(65_536)),
             8192,
             true,
         );

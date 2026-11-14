@@ -3,8 +3,8 @@
 //! These types represent chat conversations and messages in the domain model,
 //! independent of any infrastructure concerns.
 //!
-//! [`ConversationSettings`] captures CLI/GUI session parameters (sampling,
-//! context, tools) so conversations can be faithfully resumed.
+//! [`ConversationSettings`] captures CLI/GUI session parameters (model,
+//! profile, token limit, context, tools) so conversations can be faithfully resumed.
 
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +13,7 @@ use super::agent::messages::AssistantContent;
 use super::agent::tool_types::ToolCall;
 use super::attachment::{AttachmentId, AttachmentInfo};
 use super::machine::{Machine, ModelRef};
+use super::settings_edit::SettingsEdit;
 use super::thinking::Thinking;
 
 /// A chat conversation.
@@ -232,17 +233,18 @@ pub struct ConversationUpdate {
     pub title: Option<String>,
     /// Use `Some(Some(prompt))` to set, `Some(None)` to clear, `None` to leave unchanged.
     pub system_prompt: Option<Option<String>>,
-    /// Use `Some(Some(settings))` to set, `Some(None)` to clear, `None` to leave unchanged.
-    pub settings: Option<Option<ConversationSettings>>,
+    /// The settings' keys to set or remove; empty leaves them unchanged.
+    pub settings: SettingsEdit,
     /// Use `Some(Some(id))` to set, `Some(None)` to clear, `None` to leave unchanged.
     pub model_id: Option<Option<i64>>,
 }
 
 /// Session parameters captured at conversation creation for resume.
 ///
-/// Stores sampling, context, and tool configuration so a CLI or GUI session
-/// can be faithfully restored. Serialized as a JSON column in the database.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+/// Stores the model, its profile and token limit, context, and tool
+/// configuration so a CLI or GUI session can be faithfully restored.
+/// Serialized as a JSON column in the database.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ConversationSettings {
     /// The name the session's model goes by, as it is shown. Resolved again
@@ -258,26 +260,10 @@ pub struct ConversationSettings {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<ModelRef>,
-    /// Sampling temperature (0.0–2.0).
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f32>,
-    /// Nucleus sampling threshold (0.0–1.0).
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
-    /// Top-K sampling limit.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_k: Option<i32>,
     /// Maximum tokens per response.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
-    /// Repetition penalty.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub repeat_penalty: Option<f32>,
     /// Name of the inference profile the session sampled with, one
     /// configured on `model`'s machine. Absent in rows saved before
     /// it was recorded.

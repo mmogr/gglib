@@ -124,21 +124,17 @@ fn all_lists_every_switch_the_tree_reads() {
 fn agreeing_switch_sets_produce_no_warning() {
     assert!(describe_mismatch(&[], &[]).is_none());
     assert!(
-        describe_mismatch(
-            &["GGLIB_DISABLE_GRAMMAR"],
-            &["GGLIB_DISABLE_GRAMMAR".to_string()]
-        )
-        .is_none()
+        describe_mismatch(&["GGLIB_DISABLE_MTP"], &["GGLIB_DISABLE_MTP".to_string()]).is_none()
     );
 }
 
 /// The case that cost an hour: set on the CLI, absent in the daemon.
 #[test]
 fn a_switch_the_daemon_never_saw_is_named_as_ignored() {
-    let msg = describe_mismatch(&["GGLIB_DISABLE_AGENTIC_SAMPLING"], &[])
+    let msg = describe_mismatch(&["GGLIB_DISABLE_TOOL_REPAIR"], &[])
         .expect("a mismatch must be reported");
 
-    assert!(msg.contains("GGLIB_DISABLE_AGENTIC_SAMPLING"), "{msg}");
+    assert!(msg.contains("GGLIB_DISABLE_TOOL_REPAIR"), "{msg}");
     assert!(msg.contains("being ignored"), "{msg}");
     assert!(msg.contains("gglib daemon stop"), "{msg}");
 }

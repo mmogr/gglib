@@ -160,7 +160,7 @@ fn a_fresh_manager_has_no_current_model() {
 }
 
 // ---------------------------------------------------------------
-// Holds, through the manager and the port
+// Recycle and stop, through the port
 // ---------------------------------------------------------------
 
 /// A manager whose primary holds model 1 at port 8001, idle.
@@ -187,67 +187,24 @@ fn manager_with_resident() -> Arc<ProcessManager> {
     manager
 }
 
-/// Whether the queue would refuse to recycle the primary, putting it back
-/// when it would not.
-fn primary_is_held(manager: &ProcessManager) -> bool {
-    use crate::process::admission::PRIMARY_SLOT;
-    let queue = manager.residency.queue();
-    let Ok(previous) = queue.evict_unheld(PRIMARY_SLOT) else {
-        return true;
-    };
-    drop(queue.install(PRIMARY_SLOT, previous.expect("a resident")));
-    false
-}
-
-#[test]
-fn the_manager_holds_a_resident_in_its_queue() {
-    let manager = manager_with_resident();
-
-    let hold = manager.hold(8001, 1).expect("model 1 is on 8001");
-    assert!(primary_is_held(&manager));
-    drop(hold);
-    assert!(!primary_is_held(&manager));
-}
-
-#[test]
-fn the_runtime_port_holds_through_the_manager() {
-    use gglib_core::ports::ModelRuntimePort as _;
-    let manager = manager_with_resident();
-    let port = crate::ports_impl::RuntimePortImpl::new(Arc::clone(&manager));
-
-    assert!(port.hold(8001, 2).is_none(), "model 2 is not on 8001");
-    let hold = port.hold(8001, 1).expect("model 1 is on 8001");
-    assert!(primary_is_held(&manager));
-    drop(hold);
-    assert!(!primary_is_held(&manager));
-}
-
-/// Automatic recovery waits for a run: `recycle_current` refuses while the
-/// primary is held and leaves it resident, and stops it once nothing holds it.
+/// The watchdog's recycle, through the port, stops the primary.
 #[tokio::test]
-async fn the_runtime_port_recycles_the_primary_only_when_no_run_holds_it() {
+async fn the_runtime_port_recycles_the_primary() {
     use gglib_core::ports::ModelRuntimePort as _;
     let manager = manager_with_resident();
     let port = crate::ports_impl::RuntimePortImpl::new(Arc::clone(&manager));
 
-    let hold = port.hold(8001, 1).expect("model 1 is on 8001");
-    let refused = port.recycle_current().await.unwrap_err();
-    assert!(matches!(refused, ModelRuntimeError::AdmissionTimeout(_)));
-    assert!(manager.current_model().is_some(), "the held model stays");
-
-    drop(hold);
     port.recycle_current().await.expect("recycled");
     assert!(manager.current_model().is_none());
 }
 
-/// A person's stop does not wait for a run.
+/// A person's stop, through the port, takes the primary.
 #[tokio::test]
-async fn a_stop_takes_the_primary_even_while_a_run_holds_it() {
+async fn a_stop_takes_the_primary() {
     use gglib_core::ports::ModelRuntimePort as _;
     let manager = manager_with_resident();
     let port = crate::ports_impl::RuntimePortImpl::new(Arc::clone(&manager));
 
-    let _hold = port.hold(8001, 1).expect("model 1 is on 8001");
     // The fixture spawned no process, so the kill reports none to stop; the
     // slot is emptied before it.
     let _ = port.stop_current().await;

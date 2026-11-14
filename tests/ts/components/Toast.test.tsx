@@ -198,3 +198,22 @@ describe('ToastItem — click target', () => {
     expect(screen.queryByText('Close button')).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Long message — wraps inside the toast (#1952)
+// ---------------------------------------------------------------------------
+
+describe('ToastItem — long message', () => {
+  it('lets a long path shrink and break, and keeps the close button', () => {
+    const { getShowToast } = renderToastSystem();
+    const message =
+      'Downloaded model to /Users/someone/.local/share/llama_models/unsloth_Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q8_K_XL.gguf';
+    act(() => getShowToast()(message, 'success', 10000));
+
+    // jsdom does no layout, so this guards the two classes that make the
+    // message wrap: without them a flex child is as wide as its longest word.
+    const messageSpan = screen.getByText(message);
+    expect(messageSpan).toHaveClass('min-w-0', '[overflow-wrap:anywhere]');
+    expect(screen.getByRole('button', { name: /dismiss notification/i })).toBeInTheDocument();
+  });
+});

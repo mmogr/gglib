@@ -35,7 +35,7 @@ fn a_model_name_is_cut_at_the_limit_on_a_character_boundary() {
 
 #[test]
 fn a_signature_is_kept_as_a_known_hash_and_never_as_itself() {
-    let event = LoopGuardTripEvent::new(7, "m", LoopGuardTrip::Loop, LoopGuardMode::Note)
+    let event = LoopGuardTripEvent::new(7, "m", LoopGuardTrip::Loop)
         .with_signature("write_file:1f2e3d4c5b6a7980");
     // The literal pins the hash function itself: a switch to a hasher whose
     // output is not stable across releases fails here, not in a year's data.
@@ -44,7 +44,7 @@ fn a_signature_is_kept_as_a_known_hash_and_never_as_itself() {
 
 #[test]
 fn no_text_the_event_was_built_from_survives_in_it() {
-    let event = LoopGuardTripEvent::new(7, "model", LoopGuardTrip::Loop, LoopGuardMode::Refuse)
+    let event = LoopGuardTripEvent::new(7, "model", LoopGuardTrip::Loop)
         .with_signature("SENTINELtool:00000000deadbeef")
         .with_session("sentinel-session");
 
@@ -58,8 +58,7 @@ fn no_text_the_event_was_built_from_survives_in_it() {
 
 #[test]
 fn repeats_are_carried_as_given() {
-    let event = LoopGuardTripEvent::new(1, "model", LoopGuardTrip::Stagnation, LoopGuardMode::Note)
-        .with_repeats(6, 5);
+    let event = LoopGuardTripEvent::new(1, "model", LoopGuardTrip::Stagnation).with_repeats(6, 5);
     assert_eq!(event.repeat_count(), Some(6));
     assert_eq!(event.threshold(), Some(5));
     assert_eq!(event.signature_hash(), None);

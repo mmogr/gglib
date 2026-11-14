@@ -56,4 +56,4 @@ pub fn remote_route_contract() -> [(&'static [&'static str], String); 2] {
 
 /// The proxy's door for a paired device, under its `/v1`: `POST` here, and
 /// `GET` with `/{id}` after it.
-pub const PROXY_ATTACHMENTS_PATH: &str = "/attachments";
+pub const PROXY_ATTACHMENTS_PATH: &str = "/gglib/attachments";

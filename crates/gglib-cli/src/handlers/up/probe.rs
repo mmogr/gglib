@@ -50,20 +50,20 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
             if !yes {
                 require_tty("installing llama.cpp")?;
             }
-            ensure_installed(ctx, RuntimeKind::Llama, yes).await?;
+            ensure_installed(RuntimeKind::Llama, yes).await?;
             println!("  {}\u{2713}{} llama.cpp ready", sgr(SUCCESS), sgr(RESET));
         }
         // An update is offered, and nobody to answer declines it: what is
         // installed already runs.
         PinStanding::Older => {
-            ensure_installed(ctx, RuntimeKind::Llama, yes).await?;
+            ensure_installed(RuntimeKind::Llama, yes).await?;
             row("chat", "llama.cpp installed", None);
         }
         PinStanding::AtPin | PinStanding::Newer | PinStanding::Unknown => {
             row("chat", "llama.cpp already installed", None);
         }
     }
-    ensure_images(ctx, yes).await;
+    ensure_images(yes).await;
 
     Ok(memory)
 }
@@ -72,7 +72,7 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
 /// GUI wizard's Engines step do. Chat does not need it, so it never stops
 /// `up`: declined, failed, or with nobody to ask, `up` says how to install it
 /// later and goes on to the model.
-async fn ensure_images(ctx: &CliContext, yes: bool) {
+async fn ensure_images(yes: bool) {
     let kind = RuntimeKind::StableDiffusion;
     let standing = match pin_state(kind) {
         Ok(state) => state.standing,
@@ -85,7 +85,7 @@ async fn ensure_images(ctx: &CliContext, yes: bool) {
         ImagesAction::SkipNobodyToAsk => {
             images_skipped("there is no terminal to ask, and --yes was not given");
         }
-        ImagesAction::Install => match ensure_installed(ctx, kind, yes).await {
+        ImagesAction::Install => match ensure_installed(kind, yes).await {
             Ok(()) => println!(
                 "  {}\u{2713}{} {} ready",
                 sgr(SUCCESS),
@@ -95,7 +95,7 @@ async fn ensure_images(ctx: &CliContext, yes: bool) {
             Err(e) => images_skipped(&format!("{e:#}")),
         },
         // As for llama.cpp, a declined or failed update keeps what is there.
-        ImagesAction::OfferUpdate => match ensure_installed(ctx, kind, yes).await {
+        ImagesAction::OfferUpdate => match ensure_installed(kind, yes).await {
             Ok(()) => row("images", &format!("{} installed", kind.label()), None),
             Err(e) => images_skipped(&format!("{e:#}")),
         },

@@ -11,9 +11,12 @@
 //! the run says it was cut off with one `system_warning`
 //! ([`is_cut_off_warning`] tells it from the others). The words after a
 //! Draw's picture are the exception: they are always answered for
-//! ([`IfWordless::Answer`]).
+//! ([`IfWordless::Answer`]). The closing reply at the step limit is kept
+//! the same way, and one left with no text ends the run on the limit
+//! ([`crate::closing`]).
 
 use gglib_core::AgentEvent;
+use gglib_core::domain::figures::tokens_words;
 use gglib_core::ports::AgentError;
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -34,10 +37,12 @@ const CUT_OFF_WARNING: &str = "The answer was cut off at its token limit";
 pub(crate) enum IfWordless {
     /// End the run: the reply has nothing to give.
     EndTheRun,
-    /// Keep it: the run's demanded call has run, its calls are never run
-    /// again, and the path answers a wordless reply with words of its own
+    /// Keep it: the reply was offered no tools and its calls are never run,
+    /// so the path decides what a wordless reply means. After a Draw's
+    /// picture the path answers it with words of its own
     /// (`FirstCall::if_wordless`), so even a reply cut off while it wrote a
-    /// call (its text dropped) does not fail a run whose work is done.
+    /// call (its text dropped) does not fail a run whose work is done. At
+    /// the step limit ([`crate::closing`]) the run ends on the limit instead.
     Answer,
 }
 
@@ -86,7 +91,9 @@ pub(crate) async fn end_on_cut_off<T>(
         ?completion_tokens,
         "the model's turn was cut off at its token limit"
     );
-    let after = completion_tokens.map_or_else(String::new, |n| format!(" after {n} tokens"));
+    let after = completion_tokens.map_or_else(String::new, |n| {
+        format!(" after {}", tokens_words(u64::from(n)))
+    });
     let message = format!(
         "The model's turn ran too long: it was cut off at its token limit{after}, \
          before it finished, so the run was stopped."
@@ -99,7 +106,9 @@ pub(crate) async fn end_on_cut_off<T>(
 /// `completion_tokens`, when the upstream reported them.
 #[must_use]
 pub fn cut_off_warning(completion_tokens: Option<u32>) -> AgentEvent {
-    let after = completion_tokens.map_or_else(String::new, |n| format!(" after {n} tokens"));
+    let after = completion_tokens.map_or_else(String::new, |n| {
+        format!(" after {}", tokens_words(u64::from(n)))
+    });
     AgentEvent::SystemWarning {
         message: format!("{CUT_OFF_WARNING}{after}, before it finished."),
         suggested_action: Some("Raise max_tokens to give it more room.".to_owned()),

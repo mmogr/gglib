@@ -21,19 +21,19 @@ use super::{CODES, Kind, PUBLISHED, render};
 /// `fn`, the code's spelling there, and where the code comes from. The last
 /// five hold a `code` of another kind, which the scan cannot tell apart.
 #[rustfmt::skip]
-const RELAYS: [(&str, &str, &str, &str); 35] = [
+const RELAYS: [(&str, &str, &str, &str); 37] = [
     ("gglib-proxy/src/models.rs", "with_code", "Some(code.into())", "`with_code`'s parameter"),
     ("gglib-proxy/src/image_refusal.rs", "refuse_images", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-proxy/src/models.rs", "image_model_cannot_chat", "refusal.code()", "`DrawsImages::code`"),
     ("gglib-proxy/src/chats/attachments.rs", "refused", "code", "`AttachmentError::code`"),
     ("gglib-proxy/src/images.rs", "refusal_body", "code", "`ImageError::code`"),
-    ("gglib-proxy/src/runs/handlers.rs", "error", "code", "`error`'s parameter"),
+    ("gglib-proxy/src/refusal.rs", "error", "code", "`error`'s parameter"),
     ("gglib-proxy/src/runs/handlers.rs", "refused", "err.code()", "`RunsError::code`"),
     ("gglib-proxy/src/chats/handlers.rs", "refused", "err.code()", "`HubChatsError::code`"),
     ("gglib-proxy/src/runs/turn.rs", "refused", "&refusal.code", "the daemon's `TurnRefused`"),
-    ("gglib-proxy/src/sse_stream.rs", "upstream_error_body", "code", "llama-server's, else `upstream_error`"),
+    ("gglib-proxy/src/sse_stream.rs", "upstream_error_body", "&code", "`relayed_error`'s: llama-server's, else `upstream_error`"),
     ("gglib-core/src/sse/encoder.rs", "upstream_error_frame", "code", "`upstream_error_frame`'s parameter"),
-    ("gglib-core/src/sse/encoder.rs", "encode", "code", "an `UpstreamError` event's"),
+    ("gglib-proxy/src/frame_edit.rs", "name_error_code", "code", "an `UpstreamError` event's: llama-server's, else `upstream_error`"),
     ("gglib-core/src/sse/parser.rs", "parse_inline_error_frame", "code", "llama-server's, else `upstream_error`"),
     ("gglib-core/src/services/drawing.rs", "drawing_refusal", r#"matcherror{ImageError::Runtime(ModelRuntimeError::ModelNotFound(_))=>"model_not_found",ImageError::Runtime(ModelRuntimeError::ImageModelIncomplete{..})=>{"image_model_incomplete"}other=>other.code().unwrap_or(UNAVAILABLE),}"#, "a named model's refusal, else `ImageError::code`, else `drawing_unavailable`"),
     ("gglib-app-services/src/runs/chat.rs", "refusal", "code", "the proxy's refusal, else `upstream_error`"),
@@ -41,6 +41,8 @@ const RELAYS: [(&str, &str, &str, &str); 35] = [
     ("gglib-app-services/src/runs/chat.rs", "run_error", "code.to_owned()", "`run_error`'s parameter"),
     ("gglib-axum/src/handlers/agent/run.rs", "coded", "code", "`coded`'s parameter"),
     ("gglib-axum/src/handlers/agent/run.rs", "run_error", "code.to_owned()", "the `AgentError` arms above it"),
+    ("gglib-axum/src/handlers/agent/run.rs", "run_error", "code.as_str()", "the endpoint's refusal, when `is_gglib_code` holds"),
+    ("gglib-agent/src/agent_loop.rs", "fail_start", "refusal.code.clone()", "the endpoint's `UpstreamRefusal`, on the `error` event as it wrote it"),
     ("gglib-axum/src/handlers/agent/transcript.rs", "coded", "code", "`coded`'s parameter"),
     ("gglib-axum/src/handlers/agent/hub_turn.rs", "refusal", "code.to_owned()", "a `Coded` refusal's"),
     ("gglib-axum/src/handlers/agent/launch.rs", "refused", "code.to_owned()", "a `Coded` refusal's, as a run's error"),

@@ -207,13 +207,20 @@ pub fn build_new_model(
 ) -> NewModel {
     let name = resolve_model_name(gguf, file_path, origin.name_source());
 
+    // The header's facts, over every shard: a download names its shards,
+    // and a local file's are found by llama.cpp's naming, so both add paths
+    // count the same tensors for the same file.
+    let shards = match origin {
+        ModelOrigin::HuggingFace(hf) => hf.file_paths,
+        ModelOrigin::LocalFile { .. } => None,
+    };
+    let facts = super::header_facts(file_path, gguf, shards, parser);
+
     let param_count_b = match origin {
         ModelOrigin::LocalFile {
             param_count_override,
-        } => param_count_override
-            .or_else(|| gguf.and_then(|g| g.param_count_b))
-            .unwrap_or(0.0),
-        ModelOrigin::HuggingFace(_) => gguf.and_then(|g| g.param_count_b).unwrap_or(0.0),
+        } => param_count_override.or(facts.param_count_b),
+        ModelOrigin::HuggingFace(_) => facts.param_count_b,
     };
 
     let gguf_caps = gguf.map(|g| parser.detect_capabilities(g));
@@ -222,18 +229,12 @@ pub fn build_new_model(
         .map_or_else(Vec::new, crate::domain::GgufCapabilities::to_tags);
 
     let mut model = NewModel::new(name, file_path.to_path_buf(), param_count_b, added_at);
-    model.dialect_spec = gguf_caps.and_then(|c| c.dialect);
     model.architecture = gguf.and_then(|g| g.architecture.clone());
     model.context_length = gguf.and_then(|g| g.context_length);
     model.expert_count = gguf.and_then(|g| g.expert_count);
     model.expert_used_count = gguf.and_then(|g| g.expert_used_count);
     model.expert_shared_count = gguf.and_then(|g| g.expert_shared_count);
     model.image_family = gguf.and_then(|g| g.image_family);
-    let shards = match origin {
-        ModelOrigin::HuggingFace(hf) => hf.file_paths,
-        ModelOrigin::LocalFile { .. } => None,
-    };
-    let facts = super::header_facts(file_path, gguf, shards, parser);
     model.file_type = facts.file_type;
     model.bits_per_weight = facts.bits_per_weight;
     if let Some(g) = gguf {
@@ -309,69 +310,6 @@ pub fn build_new_model(
 mod tests {
     use super::*;
     use crate::ports::NoopGgufParser;
-    use std::collections::HashMap;
-
-    fn gguf_with(pairs: &[(&str, &str)]) -> GgufMetadata {
-        let mut metadata = HashMap::new();
-        for (k, v) in pairs {
-            metadata.insert((*k).to_string(), (*v).to_string());
-        }
-        GgufMetadata {
-            metadata,
-            ..Default::default()
-        }
-    }
-
-    /// Stub parser whose detection reports a dialect spec.
-    struct SpecParser;
-
-    impl crate::ports::GgufParserPort for SpecParser {
-        fn parse(
-            &self,
-            _file_path: &Path,
-        ) -> std::result::Result<crate::ports::GgufMetadata, crate::ports::GgufParseError> {
-            Ok(crate::ports::GgufMetadata::default())
-        }
-
-        fn detect_capabilities(
-            &self,
-            _metadata: &crate::ports::GgufMetadata,
-        ) -> crate::ports::GgufCapabilities {
-            crate::ports::GgufCapabilities {
-                flags: crate::domain::gguf::CapabilityFlags::TOOL_CALLING,
-                extensions: std::collections::BTreeSet::new(),
-                dialect: Some(crate::domain::DialectSpec::qwen_xml()),
-            }
-        }
-
-        fn tensor_table(
-            &self,
-            _path: &std::path::Path,
-        ) -> std::result::Result<crate::ports::TensorTable, crate::ports::GgufParseError> {
-            Err(crate::ports::GgufParseError::InvalidFormat(
-                "no tensor table".to_owned(),
-            ))
-        }
-
-        fn tensor_table_of_head(
-            &self,
-            _head: &[u8],
-        ) -> std::result::Result<crate::ports::TensorTable, crate::ports::GgufParseError> {
-            Err(crate::ports::GgufParseError::InvalidFormat(
-                "no tensor table".to_owned(),
-            ))
-        }
-
-        fn parse_head(
-            &self,
-            _head: &[u8],
-            _file_name: &str,
-        ) -> std::result::Result<crate::ports::HeadMetadata, crate::ports::GgufParseError> {
-            Err(crate::ports::GgufParseError::InvalidFormat(
-                "no head is read".to_owned(),
-            ))
-        }
-    }
 
     fn hf_origin<'a>(repo_id: &'a str, hf_tags: &'a [String]) -> ModelOrigin<'a> {
         hf_origin_with(repo_id, hf_tags, None)
@@ -390,25 +328,6 @@ mod tests {
             file_paths: None,
             published_sampling,
         })
-    }
-
-    #[test]
-    fn detected_dialect_spec_lands_on_the_model() {
-        let gguf = gguf_with(&[]);
-        let origin = ModelOrigin::LocalFile {
-            param_count_override: None,
-        };
-        let model = build_new_model(
-            Path::new("/models/m.gguf"),
-            Some(&gguf),
-            &SpecParser,
-            &origin,
-            Utc::now(),
-        );
-        assert_eq!(
-            model.dialect_spec,
-            Some(crate::domain::DialectSpec::qwen_xml())
-        );
     }
 
     /// The family the header's tensor table named is the model's, by
@@ -437,22 +356,6 @@ mod tests {
         }
     }
 
-    /// An HF model whose GGUF could not be parsed has no metadata and can
-    /// never gain a spec — the permanent-fallback case retag cannot fix.
-    #[test]
-    fn missing_gguf_metadata_means_no_spec() {
-        let hf_tags: Vec<String> = vec![];
-        let origin = hf_origin("some/Repo-GGUF", &hf_tags);
-        let model = build_new_model(
-            Path::new("/models/m.gguf"),
-            None,
-            &SpecParser,
-            &origin,
-            Utc::now(),
-        );
-        assert_eq!(model.dialect_spec, None);
-    }
-
     #[test]
     fn local_param_override_beats_gguf_metadata() {
         let gguf = GgufMetadata {
@@ -469,7 +372,7 @@ mod tests {
             &origin,
             Utc::now(),
         );
-        assert_eq!(model.param_count_b, 13.0);
+        assert_eq!(model.param_count_b, Some(13.0));
     }
 
     #[test]
@@ -488,7 +391,7 @@ mod tests {
             &origin,
             Utc::now(),
         );
-        assert_eq!(model.param_count_b, 7.0);
+        assert_eq!(model.param_count_b, Some(7.0));
     }
 
     /// The quant a download asked for is the Hub's name for its files, which

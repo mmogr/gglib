@@ -116,7 +116,7 @@ impl StaticCatalog {
             projector_path: name
                 .ends_with("-vision")
                 .then(|| PathBuf::from("/models/mmproj-F16.gguf")),
-            param_count_b: 7.0,
+            param_count_b: Some(7.0),
             architecture: Some("llama".to_owned()),
             variant_label: Some(QUANTIZATION.to_owned()),
             file_type: None,
@@ -137,7 +137,6 @@ impl StaticCatalog {
             inference_defaults: None,
             defaults_origin: None,
             server_defaults: None,
-            dialect_spec: None,
             template_caps: None,
             benchmark_summary: None,
         }

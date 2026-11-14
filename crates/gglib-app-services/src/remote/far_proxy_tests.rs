@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use gglib_proxy::models::{Feature, GglibInfo};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
@@ -108,6 +109,7 @@ fn far_reading_with(base_url: &str, read_timeout: Duration) -> FarProxy {
     let bounded = super::build(gglib_proxy::loopback::client_builder()).unwrap();
     let streaming = super::build(super::streaming_builder(read_timeout)).unwrap();
     FarProxy::with_clients(base_url, &credentials(), bounded, streaming)
+        .knowing(GglibInfo::this_build(Feature::ALL))
 }
 
 /// A stream has no limit end to end: one that keeps sending lasts well past

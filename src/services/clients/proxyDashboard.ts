@@ -39,7 +39,7 @@ function proxyAuthHeaders(apiKey?: string | null): Record<string, string> {
 
 /**
  * Subscribe to a running proxy's live dashboard stream, connected to
- * `GET /v1/proxy/status/stream`.
+ * `GET /v1/gglib/proxy/status/stream`.
  *
  * Uses `createSSEStream` rather than the native `EventSource`, which cannot
  * send an `Authorization` header at all — the proxy requires one on `/v1/*`
@@ -71,7 +71,7 @@ export function subscribeProxyDashboard(
   onSnapshot: (snapshot: DashboardSnapshot) => void,
   onError?: (error: unknown) => void
 ): () => void {
-  const url = `http://${host}:${port}/v1/proxy/status/stream`;
+  const url = `http://${host}:${port}/v1/gglib/proxy/status/stream`;
   const controller = new AbortController();
 
   void (async () => {
@@ -110,7 +110,7 @@ export function subscribeProxyDashboard(
 }
 
 /**
- * Clear KV cache via `POST /v1/proxy/cache/clear`.
+ * Clear KV cache via `POST /v1/gglib/proxy/cache/clear`.
  *
  * @param host   Proxy host (typically `127.0.0.1`).
  * @param port   Proxy port.
@@ -124,7 +124,7 @@ export async function clearProxyCache(
   apiKey?: string | null,
   sessionId?: string
 ): Promise<{ status: string; message: string }> {
-  const url = `http://${host}:${port}/v1/proxy/cache/clear`;
+  const url = `http://${host}:${port}/v1/gglib/proxy/cache/clear`;
   const headers: Record<string, string> = proxyAuthHeaders(apiKey);
   if (sessionId) {
     headers['X-Gglib-Session-Id'] = sessionId;

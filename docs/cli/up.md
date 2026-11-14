@@ -43,7 +43,7 @@ $ gglib up
 
 [4/5] Endpoint
 
-  ✓ answered in 20.0s by Qwen3.8-27B
+  ✓ answered in 2.6s by Qwen3.8-27B
 
   Connect your client  Model ID Qwen3.8-27B · gglib id 3
 
@@ -75,7 +75,7 @@ $ gglib up
     Check it from another shell:
       curl http://127.0.0.1:8080/v1/models
 
-  Dashboard  http://127.0.0.1:8080/v1/proxy/status
+  Dashboard  http://127.0.0.1:8080/v1/gglib/proxy/status
 
   Ready. The endpoint keeps running in the background.
 

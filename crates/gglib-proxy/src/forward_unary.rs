@@ -1,12 +1,11 @@
 //! The non-streaming half of `/v1/chat/completions`: one request up, one
-//! body back, read whole, normalised, judged and answered.
+//! body back, read whole, judged and answered.
 //!
-//! Its own module because [`crate::forward`] sits at its complexity-ratchet
-//! ceiling, and the two paths share nothing past the request shaping: the
-//! streaming path drains frames through a channel, this one buffers a body.
-//! The shared reading of that body lives in [`crate::unary_body`], which the
-//! embeddings route uses too, and the shared reading of a repair's answer in
-//! [`crate::repair::read_second_draw`].
+//! Its own module because the two paths share nothing past the request
+//! shaping: the streaming path drains frames through a channel, this one
+//! buffers a body. The shared reading of that body lives in
+//! [`crate::unary_body`], which the embeddings route uses too, and the shared
+//! reading of a repair's answer in [`crate::repair::read_second_draw`].
 //!
 //! # Repair on this path
 //!
@@ -33,8 +32,7 @@ use crate::forward::{ForwardError, REPAIR_REISSUE_TIMEOUT};
 use crate::generation::TurnGeneration;
 use crate::metrics::ContextMetricsStore;
 use crate::models::ErrorResponse;
-use crate::repair::{Decision, RepairTurn, Skipped, choose, decide, read_second_draw};
-use crate::turn_dialect::TurnDialect;
+use crate::repair::{Decision, Skipped, choose, decide, read_second_draw};
 use crate::unary_body::{Exchange, answer_with, exchange};
 
 /// Send one shaped, non-streaming chat completion upstream and answer with
@@ -43,10 +41,12 @@ use crate::unary_body::{Exchange, answer_with, exchange};
 /// The transport failures are mapped the way the streaming path maps them: a
 /// connect failure or timeout is [`ForwardError::UpstreamDead`], so the caller
 /// can recycle the server and answer a retriable 503; any other send error is
-/// a terminal 502; and a non-2xx upstream status is passed through with its
-/// body, since llama-server's own diagnostic is the useful one. A first answer
+/// a terminal 502; and a non-2xx upstream status is kept, with llama-server's
+/// own error under the code a streamed reply names it by, since its
+/// diagnostic is the useful one. A first answer
 /// that takes longer than `total` is a 504 (see [`exchange`]); a re-issue has
-/// its own bound.
+/// its own bound. The answer names `model_name`, as a streamed one does (see
+/// [`served_as`]).
 ///
 /// # Errors
 ///
@@ -54,10 +54,10 @@ use crate::unary_body::{Exchange, answer_with, exchange};
 pub(crate) async fn forward_unary(
     req_builder: reqwest::RequestBuilder,
     body: Bytes,
-    dialect: &TurnDialect,
+    model_name: &str,
     cache_metrics: &CacheMetricsStore,
     (metrics, snapshot_seq): (&ContextMetricsStore, u64),
-    turn: RepairTurn,
+    repair_enabled: bool,
     total: Duration,
 ) -> Result<Response, ForwardError> {
     // A re-issue needs the same endpoint, headers and body the original goes
@@ -65,33 +65,46 @@ pub(crate) async fn forward_unary(
     // the builder. Nothing streams into the request, so the clone cannot
     // fail; a `None` only means the turn falls open to its first answer.
     let again = req_builder.try_clone();
-    // Read through the same dialect normalization the streaming path applies,
-    // so what is judged below is what the client would be sent.
     let request = req_builder.body(body.clone());
     let residue_sink = Some((metrics, snapshot_seq));
-    let (content_type, answer) =
-        match exchange(request, total, cache_metrics, dialect, residue_sink).await {
-            Exchange::Answered(content_type, answer) => (content_type, answer),
-            Exchange::Respond(response) => return Ok(response),
-            Exchange::SendFailed(e) if e.is_connect() || e.is_timeout() => {
-                // Connection refused or timed out — the llama-server process
-                // is dead or hung. Signal the caller so it can clear stale
-                // state and return a retriable 503 rather than a terminal 502.
-                error!("Upstream llama-server unreachable (connect/timeout): {e}");
-                return Err(ForwardError::UpstreamDead);
-            }
-            Exchange::SendFailed(e) => {
-                error!("Failed to send request to llama-server: {e}");
-                return Ok((
-                    StatusCode::BAD_GATEWAY,
-                    axum::Json(ErrorResponse::upstream_error(&e.to_string())),
-                )
-                    .into_response());
-            }
-        };
-    let answer = repair(again, &body, answer, dialect, metrics, snapshot_seq, turn).await;
+    let (content_type, answer) = match exchange(request, total, cache_metrics, residue_sink).await {
+        Exchange::Answered(content_type, answer) => (content_type, answer),
+        Exchange::Respond(response) => return Ok(response),
+        Exchange::SendFailed(e) if e.is_connect() || e.is_timeout() => {
+            // Connection refused or timed out — the llama-server process
+            // is dead or hung. Signal the caller so it can clear stale
+            // state and return a retriable 503 rather than a terminal 502.
+            error!("Upstream llama-server unreachable (connect/timeout): {e}");
+            return Err(ForwardError::UpstreamDead);
+        }
+        Exchange::SendFailed(e) => {
+            error!("Failed to send request to llama-server: {e}");
+            return Ok((
+                StatusCode::BAD_GATEWAY,
+                axum::Json(ErrorResponse::upstream_error(&e.to_string())),
+            )
+                .into_response());
+        }
+    };
+    let answer = repair(again, &body, answer, metrics, snapshot_seq, repair_enabled).await;
+    let answer = served_as(answer, model_name);
     metrics.flag_generation(snapshot_seq, TurnGeneration::of_unary_body(&answer));
     Ok(answer_with(content_type, answer))
+}
+
+/// `answer` with its `model` naming `model_name`, the model gglib serves the
+/// turn as: the edit every streamed frame takes
+/// ([`crate::frame_edit::name_served_model`]). Applied to the body the client
+/// is answered with, a second draw included. A body that is not JSON, or
+/// names no model or the served one, is answered as it came.
+fn served_as(answer: Bytes, model_name: &str) -> Bytes {
+    let Ok(mut parsed) = serde_json::from_slice::<serde_json::Value>(&answer) else {
+        return answer;
+    };
+    if !crate::frame_edit::name_served_model(&mut parsed, model_name) {
+        return answer;
+    }
+    serde_json::to_vec(&parsed).map_or(answer, Bytes::from)
 }
 
 /// Judge `answer`, and draw again when its tool call does not validate.
@@ -105,12 +118,11 @@ async fn repair(
     again: Option<reqwest::RequestBuilder>,
     request: &Bytes,
     answer: Bytes,
-    dialect: &TurnDialect,
     metrics: &ContextMetricsStore,
     snapshot_seq: u64,
-    turn: RepairTurn,
+    repair_enabled: bool,
 ) -> Bytes {
-    let decision = decide(request, &answer, turn);
+    let decision = decide(request, &answer, repair_enabled);
     // Recorded before the early return, for the reason the streaming path
     // gives: a client whose tools cannot be judged gets zero repair coverage,
     // and without this, zero evidence of it.
@@ -132,7 +144,7 @@ async fn repair(
                 .body(body)
                 .send()
                 .await;
-            match read_second_draw(sent, dialect).await {
+            match read_second_draw(sent).await {
                 // `choose` re-validates: a draw that is still wrong is discarded.
                 Some(repaired) => choose(request, answer, repaired),
                 None => (answer, false),

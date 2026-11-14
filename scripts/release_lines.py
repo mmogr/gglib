@@ -11,7 +11,8 @@
     scripts/release_lines.py --self-test
 
 Releases come from two kinds of branch. `main` carries the next minor,
-0.30.0-rc.N, and a maintenance line `release/X.Y.x`, cut from the stable
+0.30.0-rc.N, or once 1.0.0 has shipped the next major after a breaking
+change, 2.0.0-rc.N. A maintenance line `release/X.Y.x`, cut from the stable
 tag vX.Y.0, carries that line's patches, X.Y.1-rc.N and so on. Both run the
 same release PR, tag and Promote machinery; these are the checks that tell
 the two apart, in one place so each has fixtures. Each subcommand prints
@@ -23,15 +24,21 @@ is one `::error::` line on stderr and exit 1, and says what to do.
 * `choose`: the version release-please.yml makes the release PR propose.
   It reads release-please's dry run and keeps the version it proposes when
   `guard-pr` passes it, which is every run inside a cycle and every run
-  after a `Release-As:` line. release-please gets three cases wrong, and
-  each has one right answer, which this prints as `release_as` for the real
-  run to force. After a promotion it proposes the shipped version's
-  `rc.N+1`, since the stable version's commit is not on the branch: on main
-  that becomes the next minor's rc.1 after a feat or a breaking change and
-  the next patch's otherwise (the next minor's when the patch is a branched
-  line's), and on a line its next patch's. And a feat merged while main's
-  candidate is a patch makes it propose the stable `X.Y.0`, which becomes
-  `X.Y.0-rc.1`. Whatever else `guard-pr` refuses, `choose` refuses.
+  after a `Release-As:` line. Where release-please is wrong there is one
+  right answer, which this prints as `release_as` for the real run to force.
+  After a promotion it proposes the shipped version's `rc.N+1`, since the
+  stable version's commit is not on the branch: on main that becomes the
+  next minor's rc.1 after a feat or a breaking change and the next patch's
+  otherwise (the next minor's when the patch is a branched line's), and on
+  a line its next patch's. A feat merged while main's candidate is a patch
+  makes it propose the stable `X.Y.0`, which becomes `X.Y.0-rc.1`. Once
+  1.0.0 has shipped, a breaking change on main always starts the next major,
+  `(M+1).0.0-rc.1` above the newest stable M.x, whatever it proposed (a
+  `Release-As:` line included), unless main is in that major's candidates
+  already, so a breaking change never ships in a minor or a patch. Before
+  1.0.0 it starts the next minor, and 1.0.0 itself comes only from
+  `Release-As: 1.0.0-rc.1`. And a version's first candidate is rc.1:
+  release-please's major bump keeps the old rc number. Whatever else `guard-pr` refuses, `choose` refuses.
   Whether a feat or a breaking change came in is read from the dry run's
   changelog, under the feat section's heading in the config or the
   breaking-changes heading. That is release-please's own reading of the
@@ -41,7 +48,7 @@ is one `::error::` line on stderr and exit 1, and says what to do.
 * `guard-pr`: the release PR's version (release-please.yml). It must be a
   release candidate of a version that has not shipped. On a line it must
   also be that line's next patch: a feat or a breaking change cherry-picked
-  there proposes the next minor, and is refused with a word to revert it.
+  there proposes the next minor or major, and is refused with a word to revert it.
   On main it must not fall inside a line that has a branch, where that
   line's patches are cut. Each refusal names the `Release-As:` line that
   puts the release PR right. `choose` puts the common ones right itself, so
@@ -153,6 +160,12 @@ def shipped(version: Version, tags: Sequence[str]) -> bool:
     return stable_of(version) in stables(tags)
 
 
+def newest_major(tags: Sequence[str]) -> int:
+    """The newest stable version's major, 0 before one has shipped."""
+    shipped_versions = stables(tags)
+    return shipped_versions[-1][0] if shipped_versions else 0
+
+
 # --- lines ------------------------------------------------------------------
 
 Line = Optional[Tuple[int, int]]
@@ -246,20 +259,28 @@ def guard_pr(branch: str, text: str, tags: Sequence[str], branches: Sequence[str
             f"candidate meant{REWRITTEN}"
         )
     minor_hint = release_as((major, minor + 1, 0, None))
+    # From 1.0.0 on, a breaking change starts the next major instead.
+    newest = newest_major(tags)
+    major_hint = f"'Release-As: {spell(major_candidate(newest, tags))}'" if newest >= 1 else ""
     branched = lines_with_branches(branches)
     if (major, minor) in branched:
+        after_break = f" (or {major_hint} after a breaking change)" if major_hint else ""
         raise Refusal(
             f"The release PR proposes {text}, inside the {line_name((major, minor))} line, whose patches are cut on "
             f"{branch_of((major, minor))}, not on main. Merge a commit whose message ends with {minor_hint}"
-            f"{REWRITTEN}"
+            f"{after_break}{REWRITTEN}"
         )
     if shipped(version, tags):
         stable = spell(stable_of(version))
         patch_hint = release_as((major, minor, patch + 1, None))
+        if major_hint:
+            ahead = f"{major_hint} (a breaking change since {stable}), {minor_hint} (a feat)"
+        else:
+            ahead = f"{minor_hint} (a feat or a breaking change since {stable})"
         raise Refusal(
             f"The release PR proposes {text}, but {stable} has shipped: Promote tagged v{stable} from its "
             f"candidate, so from main the candidate still looks like the last release. Merge a commit whose "
-            f"message ends with {minor_hint} (a feat or a breaking change since {stable}) or {patch_hint} "
+            f"message ends with {ahead} or {patch_hint} "
             f"(fixes only; or cut release/{major}.{minor}.x from v{stable} and backport them there){REWRITTEN}"
         )
     return {"version": text, "line": ""}
@@ -278,8 +299,8 @@ def feat_heading(config: dict) -> str:
     raise Refusal("release-please-config.json has no changelog section for feat, so a feature cannot be told apart")
 
 
-def read_dry_run(text: str, feature: str) -> Optional[Tuple[str, bool]]:
-    """The version release-please's dry run proposes, and whether it carries a feat or a breaking change.
+def read_dry_run(text: str, feature: str) -> Optional[Tuple[str, str]]:
+    """The version release-please's dry run proposes, and its level: "breaking", "feat" or "other".
 
     None when it would open no pull request. Anything it cannot read is refused, so a change to
     release-please's output stops the run instead of passing a version unchecked.
@@ -296,9 +317,40 @@ def read_dry_run(text: str, feature: str) -> Optional[Tuple[str, bool]]:
     body = re.search(r"^body: (.*?)^updates: ", text, re.M | re.S)
     if not title or not body:
         raise Refusal("release-please's dry run printed no title or no body, so its proposal cannot be read")
-    headings = {f"### {feature}", f"### {BREAKING}"}
-    carries = any(line.strip() in headings for line in body.group(1).splitlines())
-    return title.group(1), carries
+    headings = {line.strip() for line in body.group(1).splitlines()}
+    if f"### {BREAKING}" in headings:
+        return title.group(1), "breaking"
+    if f"### {feature}" in headings:
+        return title.group(1), "feat"
+    return title.group(1), "other"
+
+
+def major_candidate(newest: int, tags: Sequence[str]) -> Version:
+    """The next major's next candidate: rc.1, or one above an rc of it already tagged."""
+    tagged = [v[3] for v in candidates(tags) if stable_of(v) == (newest + 1, 0, 0, None)]
+    return newest + 1, 0, 0, (tagged[-1] + 1 if tagged else 1)
+
+
+def next_major(branch: str, version: Version, tags: Sequence[str]) -> Optional[Version]:
+    """The next major's candidate, which a breaking change on main starts once 1.0.0 has shipped.
+
+    None before 1.0.0 (a breaking change starts the next minor), on a line (where `guard-pr` refuses
+    it), and inside that major's own candidates, an unshipped X.0.0-rc.N above the newest stable.
+    """
+    newest = newest_major(tags)
+    if line_of(branch) is not None or newest < 1:
+        return None
+    major, minor, patch, rc = version
+    if minor == patch == 0 and rc is not None and major > newest:
+        return None
+    return major_candidate(newest, tags)
+
+
+def first_candidate(version: Version, tags: Sequence[str]) -> Version:
+    """rc.1 when no candidate of the version is tagged: release-please's major bump keeps the old rc.N."""
+    if version[3] is not None and not any(stable_of(rc) == stable_of(version) for rc in candidates(tags)):
+        return stable_of(version)[:3] + (1,)
+    return version
 
 
 def fixes(branch: str, version: Version, feature: bool, tags: Sequence[str]) -> List[Version]:
@@ -321,16 +373,21 @@ def choose(branch: str, text: str, feature_heading: str, tags: Sequence[str], br
     proposal = read_dry_run(text, feature_heading)
     if proposal is None:
         return {"proposed": "", "release_as": ""}
-    proposed, feature = proposal
+    proposed, level = proposal
+    version = parse(proposed)
+    major = next_major(branch, version, tags) if version is not None and level == "breaking" else None
+    if major is not None:
+        guard_pr(branch, spell(major), tags, branches)
+        return {"proposed": proposed, "release_as": spell(major)}
     try:
         guard_pr(branch, proposed, tags, branches)
-        return {"proposed": proposed, "release_as": ""}
+        first = first_candidate(version, tags)
+        return {"proposed": proposed, "release_as": "" if first == version else spell(first)}
     except Refusal as refusal:
         refused = refusal
-    version = parse(proposed)
     if version is None:
         raise refused
-    for fixed in fixes(branch, version, feature, tags):
+    for fixed in fixes(branch, version, level != "other", tags):
         try:
             guard_pr(branch, spell(fixed), tags, branches)
         except Refusal as again:
@@ -482,6 +539,16 @@ INTERLEAVED = ["v0.29.0", "v0.30.0-rc.1", "v0.29.1-rc.1", "v0.29.1", "v0.30.0"]
 # main after a patch made there shipped: 0.30.1 from rc.1, nothing branched.
 SHIPPED_PATCH = LINE[:-1] + ["v0.30.1-rc.1", "v0.30.1"]
 FEATURE_HEADING = "What gglib now does"
+FIX_HEADING = "What it stopped getting wrong"
+# Across 1.0.0: main in 0.35.0's candidates, then 0.35.0 shipped, then
+# 1.0.0's candidates from a `Release-As: 1.0.0-rc.1` line, then 1.0.0 shipped.
+CYCLE_35 = ["v0.34.0-rc.1", "v0.34.0", "v0.35.0-rc.1"]
+SHIPPED_35 = CYCLE_35 + ["v0.35.0"]
+SOAK = SHIPPED_35 + ["v1.0.0-rc.1"]
+ONE = SOAK + ["v1.0.0-rc.2", "v1.0.0"]
+# After 1.0.0: in 2.0.0's candidates, or in 1.1.0's.
+CYCLE_2 = ONE + ["v2.0.0-rc.1"]
+CYCLE_1_1 = ONE + ["v1.1.0-rc.1", "v1.1.0-rc.2"]
 
 
 def dry_run(version: Optional[str], *headings: str, count: int = 1) -> str:
@@ -678,6 +745,75 @@ def self_test() -> bool:
     )
     passes("choose: the feat heading from the config", {"heading": feat_heading(json.loads(CONFIG))}, {"heading": FEATURE_HEADING})
     refuses("choose: a config without a feat section", lambda: feat_heading({"changelog-sections": []}), "no changelog section for feat")
+
+    # choose across 1.0.0
+    def breaks(name: str, proposal: str, tags: Sequence[str], want: str, *headings: str) -> None:
+        passes(name, chose("main", dry_run(proposal, *(headings or (BREAKING,))), tags), {"proposed": proposal, "release_as": want})
+
+    breaks("choose 0.x: a breaking change inside 0.35.0's cycle", "0.35.0-rc.2", CYCLE_35, "")
+    breaks("choose 0.x: a breaking change after 0.35.0 shipped", "0.35.0-rc.2", SHIPPED_35, "0.36.0-rc.1")
+    passes("pr 0.x: Release-As 1.0.0-rc.1", guard_pr("main", "1.0.0-rc.1", CYCLE_35, []), {"version": "1.0.0-rc.1", "line": ""})
+    breaks("choose 0.x: Release-As 1.0.0-rc.1 with a breaking change", "1.0.0-rc.1", CYCLE_35, "")
+    breaks("choose 0.x: Release-As 1.0.0-rc.1 after 0.35.0 shipped", "1.0.0-rc.1", SHIPPED_35, "", FIX_HEADING)
+    breaks("choose soak: a fix in 1.0.0's cycle", "1.0.0-rc.2", SOAK, "", FIX_HEADING)
+    breaks("choose soak: a breaking change in 1.0.0's cycle", "1.0.0-rc.2", SOAK, "")
+    breaks("choose 1.x: a fix after 1.0.0 shipped", "1.0.0-rc.3", ONE, "1.0.1-rc.1", FIX_HEADING)
+    breaks("choose 1.x: a feat after 1.0.0 shipped", "1.0.0-rc.3", ONE, "1.1.0-rc.1", FEATURE_HEADING)
+    breaks("choose 1.x: a feat's minor keeps the old rc", "1.1.0-rc.3", ONE, "1.1.0-rc.1", FEATURE_HEADING)
+    breaks("choose 1.x: a breaking change, the shipped rc bumped", "1.0.0-rc.3", ONE, "2.0.0-rc.1")
+    breaks(
+        "choose 1.x: a breaking change after stepping back below a tagged major",
+        "1.1.0-rc.2", ONE + ["v2.0.0-rc.1", "v1.1.0-rc.1"], "2.0.0-rc.2",
+    )
+    breaks("choose 1.x: a breaking change, the major keeps the old rc", "2.0.0-rc.2", ONE, "2.0.0-rc.1")
+    breaks("choose 1.x: a breaking change, a stable major", "2.0.0", ONE, "2.0.0-rc.1")
+    breaks("choose 1.x: a breaking change proposed as a minor", "1.1.0-rc.1", ONE, "2.0.0-rc.1")
+    breaks("choose 1.x: a breaking change beside a feat", "1.1.0-rc.1", ONE, "2.0.0-rc.1", FEATURE_HEADING, BREAKING)
+    breaks("choose 1.x: a breaking change proposed as a patch", "1.0.1-rc.1", ONE, "2.0.0-rc.1")
+    breaks("choose 1.x: a breaking change in 2.0.0's cycle", "2.0.0-rc.2", CYCLE_2, "")
+    breaks("choose 1.x: a fix in 2.0.0's cycle", "2.0.0-rc.2", CYCLE_2, "", FIX_HEADING)
+    breaks("choose 1.x: a breaking change in 1.1.0's cycle", "2.0.0-rc.2", CYCLE_1_1, "2.0.0-rc.1")
+    breaks("choose 1.x: a breaking change in 1.1.0's cycle, as its rc", "1.1.0-rc.3", CYCLE_1_1, "2.0.0-rc.1")
+    breaks("choose 1.x: a feat in 1.1.0's cycle", "1.1.0-rc.3", CYCLE_1_1, "", FEATURE_HEADING)
+    passes(
+        "choose 1.x: a line's first patch",
+        chose("release/1.0.x", dry_run("1.0.1-rc.1", FIX_HEADING), ONE, ["release/1.0.x"]),
+        {"proposed": "1.0.1-rc.1", "release_as": ""},
+    )
+    refuses(
+        "choose 1.x: a breaking change on a line",
+        lambda: chose("release/1.0.x", dry_run("2.0.0-rc.1", BREAKING), ONE, ["release/1.0.x"]),
+        "outside the 1.0.x line", "does not belong on a maintenance line", "'Release-As: 1.0.1-rc.1'",
+    )
+    refuses(
+        "choose 1.x: a breaking change on a line, a stable major",
+        lambda: chose("release/1.0.x", dry_run("2.0.0", BREAKING), ONE, ["release/1.0.x"]),
+        "outside the 1.0.x line",
+    )
+    refuses(
+        "pr 1.x: rc of a shipped version names the next major",
+        lambda: guard_pr("main", "1.0.0-rc.3", ONE, []),
+        "1.0.0 has shipped", "'Release-As: 2.0.0-rc.1' (a breaking change", "'Release-As: 1.1.0-rc.1' (a feat)",
+        "'Release-As: 1.0.1-rc.1' (fixes only", "cut release/1.0.x",
+    )
+    refuses(
+        "pr 1.x: a patch of a branched line names the next major",
+        lambda: guard_pr("main", "1.0.1-rc.1", ONE, ["release/1.0.x"]),
+        "inside the 1.0.x line", "'Release-As: 1.1.0-rc.1'", "'Release-As: 2.0.0-rc.1' after a breaking change",
+    )
+
+    # guard-tag, candidate, previous and cut across 1.0.0
+    passes("tag 0.x: 1.0.0's rc.1 on main", guard_tag("main", "1.0.0-rc.1", []), {"version": "1.0.0-rc.1", "line": ""})
+    passes("tag 1.x: 2.0.0's rc.1 beside a line", guard_tag("main", "2.0.0-rc.1", ["release/1.0.x"]), {"version": "2.0.0-rc.1", "line": ""})
+    refuses("tag 1.x: a major on a line", lambda: guard_tag("release/1.0.x", "2.0.0-rc.1", ["release/1.0.x"]), "not a version of the 1.0.x line")
+    passes("candidate: blank, 1.0.0's soak", candidate("", SOAK + ["v1.0.0-rc.2"]), {"candidate": "v1.0.0-rc.2", "stable": "1.0.0"})
+    refuses("candidate: blank, 0.35.0 and 1.0.0 both out", lambda: candidate("", CYCLE_35 + ["v1.0.0-rc.1"]), "candidates of 2 versions are out", "v0.35.0-rc.1", "v1.0.0-rc.1")
+    refuses("candidate: blank, 1.1.0 and 2.0.0 both out", lambda: candidate("", CYCLE_1_1 + ["v2.0.0-rc.1"]), "candidates of 2 versions are out")
+    passes("previous: 1.0.0 starts from 0.x's last", previous("1.0.0", SOAK + ["v1.0.0-rc.2"]), {"previous": "v0.35.0"})
+    passes("previous: 2.0.0 starts from 1.x's last", previous("2.0.0", CYCLE_2 + ["v1.0.1"]), {"previous": "v1.0.1"})
+    refuses("previous: a 0.x patch after 1.0.0", lambda: previous("0.35.1", ONE), "v1.0.0 is the newest stable", "downgrade")
+    passes("cut: release/1.0.x from v1.0.0", cut("v1.0.0", ONE, []), {"branch": "release/1.0.x", "line": "1.0.x", "label": "backport: 1.0.x"})
+    refuses("cut: a 0.x line after 1.0.0", lambda: cut("v0.35.0", ONE, []), "v1.0.0 is the newest stable", "not maintained")
 
     # guard-tag
     passes("tag main: today", guard_tag("main", "0.30.0-rc.3", []), {"version": "0.30.0-rc.3", "line": ""})

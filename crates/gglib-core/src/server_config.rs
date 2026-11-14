@@ -14,7 +14,7 @@ use crate::settings::DEFAULT_CONTEXT_SIZE;
 // CLI flag parsing (deferred resolution)
 // =============================================================================
 
-/// A parsed `--ctx-size` CLI flag, before it is resolved against model
+/// A parsed `--context-size` CLI flag, before it is resolved against model
 /// metadata.
 ///
 /// CLI argument parsing happens before the model is fetched from the
@@ -31,7 +31,7 @@ pub enum CtxSizeArg {
 }
 
 impl CtxSizeArg {
-    /// Parse a raw `--ctx-size` flag value.
+    /// Parse a raw `--context-size` flag value.
     ///
     /// Accepts a positive integer or the case-insensitive literal `max`.
     /// Anything else is a hard error — invalid input must never be
@@ -60,7 +60,7 @@ impl CtxSizeArg {
     }
 }
 
-/// Parse an optional raw `--ctx-size` flag into a [`CtxSizeArg`].
+/// Parse an optional raw `--context-size` flag into a [`CtxSizeArg`].
 ///
 /// Convenience wrapper for CLI call sites: `None` (flag omitted) stays
 /// `None`; `Some(raw)` is parsed and propagates a hard error on invalid

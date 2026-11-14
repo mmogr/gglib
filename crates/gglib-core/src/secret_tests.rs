@@ -10,8 +10,14 @@ fn a_blank_or_absent_value_holds_nothing_and_any_other_is_held_as_it_is() {
     assert_eq!(held(Some(" key ")), Some(" key "));
 }
 
+#[test]
+fn a_held_key_is_trimmed_and_a_blank_one_is_still_nothing() {
+    assert_eq!(held_key(Some(" key \n")), Some("key"));
+    assert_eq!(held_key(Some("\t\n")), None);
+}
+
 /// The command is built from the name, so the two cannot disagree, and it
-/// names the key `settings show` prints.
+/// names the key `config show` prints.
 #[test]
 fn each_reveal_command_ends_with_the_name_settings_show_prints() {
     assert_eq!(SettingSecret::ProxyApiKey.name(), "proxy-api-key");
@@ -22,7 +28,7 @@ fn each_reveal_command_ends_with_the_name_settings_show_prints() {
     for secret in SettingSecret::ALL {
         assert_eq!(
             secret.reveal_command(),
-            format!("gglib config settings reveal {}", secret.name())
+            format!("gglib config reveal {}", secret.name())
         );
     }
 }
@@ -64,6 +70,6 @@ fn a_reference_round_trips_through_its_wire_shape() {
 fn a_held_secret_reads_as_held_and_names_its_reveal() {
     assert_eq!(
         held_line(SettingSecret::ProxyApiKey),
-        "(set, not shown)  `gglib config settings reveal proxy-api-key` prints it"
+        "(set, not shown)  `gglib config reveal proxy-api-key` prints it"
     );
 }

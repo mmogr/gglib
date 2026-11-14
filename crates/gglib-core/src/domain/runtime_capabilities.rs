@@ -7,8 +7,7 @@
 //! read at install time, printed to the console, and discarded.
 //!
 //! That gap is why compensation accumulates. Every behaviour gglib applies to
-//! work around a llama.cpp limitation — dialect normalization, grammar
-//! origination, reasoning-tag stripping — is hardcoded as unconditionally on,
+//! work around a llama.cpp limitation was hardcoded as unconditionally on,
 //! because there has never been a way to ask *is this still needed?*. Upstream
 //! ships the fix, gglib keeps compensating, and nobody finds out.
 //!
@@ -60,8 +59,8 @@ use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
 /// First llama.cpp build whose PEG-native chat parser handles delimited
-/// ("constructed") tool-call dialects — the XML-style envelopes gglib's own
-/// [`DelimitedToolCallParser`] was written for — natively.
+/// ("constructed") tool-call dialects — XML-style envelopes such as Qwen's —
+/// natively.
 ///
 /// Established by the b9656 release, which threaded OpenAI-wrapper leniency
 /// through the PEG-native generator. Builds at or above this one *have* the
@@ -70,12 +69,10 @@ use serde::{Deserialize, Serialize};
 /// **Having it is not the same as being able to rely on it.** Upstream issues
 /// filed against exactly this path — a duplicate `</parameter>` dropping a
 /// whole tool call ([#24807]), a thinking model emitting prose before
-/// `<tool_call>` ([#20260]) — are failure modes gglib's parser already
-/// handles. So this flag answers "does the runtime attempt this itself?", not
-/// "should gglib stop attempting it?". The second question is settled by
-/// measurement, and until it is, nothing gates on this flag.
+/// `<tool_call>` ([#20260]) — show it can still fail. So this flag answers
+/// "does the runtime attempt this itself?", and nothing gates on it: gglib
+/// does not parse tool calls itself either way.
 ///
-/// [`DelimitedToolCallParser`]: crate::normalize::parsers::delimited::DelimitedToolCallParser
 /// [#24807]: https://github.com/ggml-org/llama.cpp/issues/24807
 /// [#20260]: https://github.com/ggml-org/llama.cpp/issues/20260
 pub(crate) const MIN_BUILD_PEG_NATIVE_TOOL_CALLS: u32 = 9656;

@@ -1,4 +1,4 @@
-//! `/v1/chats` on the real proxy: a paired device lists and opens the hub's
+//! `/v1/gglib/chats` on the real proxy: a paired device lists and opens the hub's
 //! chats, changes one (ADR 0017) and keeps a picture on one (ADR 0018), and
 //! nothing else reaches them.
 //!
@@ -6,7 +6,7 @@
 //! because what is under test is the door: who passes, the bodies and the
 //! error shape. What the list holds is the port's, tested where it lives.
 //!
-//! The door is one layer over one router group, which holds `/v1/attachments`
+//! The door is one layer over one router group, which holds `/v1/gglib/attachments`
 //! too, so the three tests of who passes run over all six routes here and
 //! nowhere else. What an upload or a fetch answers is in
 //! `integration_attachments.rs`.
@@ -28,7 +28,7 @@ use fixtures::tunnel::{DEVICE, DEVICE_KEY, PROXY_KEY, get, spawn_proxy_holding, 
 /// A change to chat `id`, as a device sends one.
 fn change(base: &str, id: &str, body: &serde_json::Value) -> RequestBuilder {
     Client::new()
-        .post(format!("{base}/v1/chats/{id}/changes"))
+        .post(format!("{base}/v1/gglib/chats/{id}/changes"))
         .json(body)
 }
 
@@ -41,8 +41,8 @@ fn regenerate(message: i64) -> serde_json::Value {
 fn chat_routes(base: &str) -> Vec<RequestBuilder> {
     let client = Client::new();
     vec![
-        client.get(format!("{base}/v1/chats")),
-        client.get(format!("{base}/v1/chats/{OPEN_ID}")),
+        client.get(format!("{base}/v1/gglib/chats")),
+        client.get(format!("{base}/v1/gglib/chats/{OPEN_ID}")),
         change(base, &OPEN_ID.to_string(), &regenerate(2)),
     ]
 }
@@ -50,14 +50,14 @@ fn chat_routes(base: &str) -> Vec<RequestBuilder> {
 /// An image, as a client sends one.
 fn upload(base: &str) -> RequestBuilder {
     Client::new()
-        .post(format!("{base}/v1/attachments"))
+        .post(format!("{base}/v1/gglib/attachments"))
         .body(png(640, 480, 0))
 }
 
 /// A picture to keep on chat `id`, as a device sends one.
 fn keep(base: &str, id: &str, body: &serde_json::Value) -> RequestBuilder {
     Client::new()
-        .post(format!("{base}/v1/chats/{id}/pictures"))
+        .post(format!("{base}/v1/gglib/chats/{id}/pictures"))
         .json(body)
 }
 
@@ -68,7 +68,7 @@ fn picture(from: &AttachmentId, image: &AttachmentId) -> serde_json::Value {
 
 /// Send `bytes` as the device and answer the id the hub stored them under.
 async fn uploaded(base: &str, bytes: Vec<u8>) -> AttachmentId {
-    let request = Client::new().post(format!("{base}/v1/attachments"));
+    let request = Client::new().post(format!("{base}/v1/gglib/attachments"));
     let (status, body) = json(from_device(request.body(bytes)).send().await.unwrap()).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     AttachmentId::parse(body["id"].as_str().unwrap()).unwrap()
@@ -82,7 +82,7 @@ fn routes(base: &str) -> Vec<RequestBuilder> {
     let open = OPEN_ID.to_string();
     routes.push(keep(base, &open, &picture(&drawn().id, &unknown)));
     routes.push(upload(base));
-    routes.push(Client::new().get(format!("{base}/v1/attachments/{unknown}")));
+    routes.push(Client::new().get(format!("{base}/v1/gglib/attachments/{unknown}")));
     routes
 }
 
@@ -90,7 +90,7 @@ fn routes(base: &str) -> Vec<RequestBuilder> {
 async fn a_named_device_lists_the_hubs_chats() {
     let chats = Arc::new(FakeChats::default());
     let (base, cancel) = serve(None, Some(Arc::clone(&chats))).await;
-    let request = from_device(Client::new().get(format!("{base}/v1/chats")));
+    let request = from_device(Client::new().get(format!("{base}/v1/gglib/chats")));
     let (status, body) = json(request.send().await.unwrap()).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body, serde_json::to_value(listed()).unwrap());
@@ -101,7 +101,7 @@ async fn a_named_device_lists_the_hubs_chats() {
 async fn a_named_device_opens_a_chat_with_its_rows() {
     let chats = Arc::new(FakeChats::default());
     let (base, cancel) = serve(None, Some(Arc::clone(&chats))).await;
-    let request = from_device(Client::new().get(format!("{base}/v1/chats/{OPEN_ID}")));
+    let request = from_device(Client::new().get(format!("{base}/v1/gglib/chats/{OPEN_ID}")));
     let (status, body) = json(request.send().await.unwrap()).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body, serde_json::to_value(opened()).unwrap());
@@ -117,7 +117,7 @@ async fn an_unknown_chat_is_404_not_found_and_echoes_nothing() {
     let chats = Arc::new(FakeChats::default());
     let (base, cancel) = serve(None, Some(Arc::clone(&chats))).await;
     for id in ["12345", "zzq-private-words"] {
-        let request = from_device(Client::new().get(format!("{base}/v1/chats/{id}")));
+        let request = from_device(Client::new().get(format!("{base}/v1/gglib/chats/{id}")));
         let (status, body) = json(request.send().await.unwrap()).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
         assert_eq!(code(&body), "not_found");
@@ -228,7 +228,7 @@ async fn a_named_device_keeps_a_picture_and_reads_it_back_last_on_its_tool_row()
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body.as_array().unwrap().len(), 3, "{body}");
 
-    let request = from_device(Client::new().get(format!("{base}/v1/chats/{open}")));
+    let request = from_device(Client::new().get(format!("{base}/v1/gglib/chats/{open}")));
     let (_, read) = json(request.send().await.unwrap()).await;
     let row = &read["messages"][1];
     assert_eq!(
@@ -333,7 +333,7 @@ async fn a_picture_that_cannot_be_kept_says_why_and_echoes_nothing() {
         assert_eq!(chats.calls() - asked, reaches_the_hub);
     }
 
-    let request = from_device(Client::new().get(format!("{base}/v1/chats/{open}")));
+    let request = from_device(Client::new().get(format!("{base}/v1/gglib/chats/{open}")));
     let (_, read) = json(request.send().await.unwrap()).await;
     assert_eq!(read, serde_json::to_value(opened()).unwrap());
     cancel.cancel();
@@ -419,7 +419,7 @@ async fn a_device_through_the_tunnel_lists_the_chats() {
     .await;
     let (serving, connected, base) = tunnel_to(&proxy_url).await;
 
-    let answer = get(&format!("{base}/chats"), Some(DEVICE_KEY)).await;
+    let answer = get(&format!("{base}/gglib/chats"), Some(DEVICE_KEY)).await;
     assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);
     assert_eq!(answer.json(), serde_json::to_value(listed()).unwrap());
 

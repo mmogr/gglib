@@ -30,7 +30,7 @@ fn image_takes_a_prompt_size_count_seed_model_and_output() {
         "a red fox",
         "--size",
         "512x768",
-        "-n",
+        "--count",
         "2",
         "--seed",
         "3",
@@ -58,8 +58,8 @@ fn image_takes_a_prompt_size_count_seed_model_and_output() {
 #[test]
 fn image_refuses_a_count_or_size_it_cannot_ask_for() {
     for argv in [
-        &["gglib", "image", "a fox", "-n", "5"][..],
-        &["gglib", "image", "a fox", "-n", "0"],
+        &["gglib", "image", "a fox", "--count", "5"][..],
+        &["gglib", "image", "a fox", "--count", "0"],
         &["gglib", "image", "a fox", "--size", "big"],
         &["gglib", "image"],
     ] {

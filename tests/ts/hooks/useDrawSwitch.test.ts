@@ -119,12 +119,12 @@ describe('useDrawSwitch, whether a message can draw', () => {
   });
 
   it('is greyed, saying why, when the question could not be asked', async () => {
-    answers.far = json({ error: 'no route GET /v1/images/drawing', status: 404, type: 'not_found' }, 404);
+    answers.far = json({ error: 'no route GET /v1/gglib/images/drawing', status: 404, type: 'not_found' }, 404);
     const hook = await mounted({ conversationId: 1, far: true });
 
     expect(hook.result.current.available).toBe(false);
     expect(hook.result.current.reason).toContain(DRAW_UNCHECKED);
-    expect(hook.result.current.reason).toContain('no route GET /v1/images/drawing');
+    expect(hook.result.current.reason).toContain('no route GET /v1/gglib/images/drawing');
     act(() => hook.result.current.toggle());
     expect(hook.result.current.forSend()).toBeUndefined();
   });

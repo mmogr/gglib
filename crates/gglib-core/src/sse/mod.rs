@@ -4,7 +4,7 @@ pub(crate) mod encoder;
 pub(crate) mod frames;
 pub mod parser;
 
-pub use decoder::SseStreamDecoder;
+pub use decoder::{SseItem, SseStreamDecoder};
 pub use encoder::{DONE_SENTINEL, SseEncoder};
 pub use frames::{DataFrames, Event};
-pub use parser::{SseParseResult, parse_sse_frame};
+pub use parser::events_of;

@@ -640,14 +640,18 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
     }
 }
 
-/// Rebuild an [`AgenticEvalReport`] from its stored JSON blob.
+/// Rebuild an [`AgenticEvalReport`] from its stored JSON blob, judged by
+/// today's rules ([`AgenticEvalReport::with_verdicts`]): a verdict stored
+/// with it is never read back.
 fn row_to_agentic_report(
     row: &sqlx::sqlite::SqliteRow,
 ) -> Result<AgenticEvalReport, RepositoryError> {
     let json: String = row
         .try_get("report_json")
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
-    serde_json::from_str(&json).map_err(|e| RepositoryError::Serialization(e.to_string()))
+    serde_json::from_str::<AgenticEvalReport>(&json)
+        .map(AgenticEvalReport::with_verdicts)
+        .map_err(|e| RepositoryError::Serialization(e.to_string()))
 }
 
 #[cfg(test)]

@@ -17,7 +17,7 @@ impl ModelSummary {
             capabilities: ModelCapabilities::empty(),
             image_input: false,
             image_output: false,
-            param_count: "7B".to_owned(),
+            param_count: Some("7B".to_owned()),
             quantization: None,
             architecture: None,
             created_at: 0,
@@ -26,7 +26,6 @@ impl ModelSummary {
             inference_defaults: None,
             defaults_origin: None,
             server_defaults: None,
-            dialect: None,
             template_caps: None,
         }
     }

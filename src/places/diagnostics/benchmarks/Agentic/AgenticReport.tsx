@@ -134,8 +134,13 @@ export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => 
         <div>
           <h2 className="m-0 text-base font-semibold text-text">{report.model_name}</h2>
           <p className="m-0 text-xs text-text-muted font-mono tabular-nums">
-            {report.param_count_b}B{report.quantization ? ` · ${report.quantization}` : ''} ·{' '}
-            {report.ctx_size.toLocaleString()} ctx
+            {[
+              report.param_count_b !== null && `${report.param_count_b}B`,
+              report.quantization,
+              `${report.ctx_size.toLocaleString()} ctx`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
         </div>
         <Button variant="secondary" size="sm" onClick={download} leftIcon={<Icon icon={Download} size={14} />}>

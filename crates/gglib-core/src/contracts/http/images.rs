@@ -28,7 +28,7 @@ pub const IMAGES_GENERATIONS_PATH: &str = "/v1/images/generations";
 
 /// The proxy's answer to whether this machine can draw:
 /// [`DrawingAvailability`].
-pub const IMAGES_DRAWING_PATH: &str = "/v1/images/drawing";
+pub const IMAGES_DRAWING_PATH: &str = "/v1/gglib/images/drawing";
 
 /// The streamed event that reports a stage, a step or a place in line.
 pub const PROGRESS_EVENT: &str = "image_generation.progress";

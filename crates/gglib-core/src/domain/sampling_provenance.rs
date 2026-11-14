@@ -30,6 +30,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::inference::DefaultsOrigin;
+
 /// Which rung of a sampling ladder supplied one resolved parameter.
 ///
 /// [`Layer`](Self::Layer) carries an index into the ladder that was resolved,
@@ -53,54 +55,9 @@ pub enum ParamSource {
     /// ever named one" are different explanations, and only the first tells a
     /// reader where to look.
     Coupled,
-    /// A layer named a value, and a later stage **suppressed** it because the
-    /// model's observed template capabilities say the template never reads the
-    /// field. Nothing was sent.
-    ///
-    /// Only `reasoning_effort` can carry this today — it is the one modelled
-    /// field delivered by a chat template reading a variable rather than by
-    /// the sampler ([ADR 0007] decision 3). The suppressed level and the rung
-    /// that supplied it are in the pipeline's own record; see
-    /// `request_pipeline::effort_gate::SuppressedEffort`.
-    ///
-    /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
-    SuppressedByTemplate,
     /// Nothing named it, so no value is sent and llama.cpp's own default
     /// applies. There is no floor beneath the ladder (ADR 0022).
     Unset,
-}
-
-impl ParamSource {
-    /// Whether a person actually chose this value.
-    ///
-    /// `auto_detected_rung` is the index of the model's recipe rung in the
-    /// ladder being asked about — a recipe nobody here reviewed is not a
-    /// choice, which is why it already ranks below global settings.
-    ///
-    /// # Why this is a method and not a `matches!` at the call site
-    ///
-    /// A `matches!` at the call site listing the variants that count as
-    /// *unchosen* fails open in the worst direction: a new `ParamSource`
-    /// variant is not in the list, so it reads as "deliberately chosen", and
-    /// the agentic temperature ceiling silently stops firing for it. No
-    /// compile error, no test failure, and the symptom is a ceiling that
-    /// quietly does nothing.
-    ///
-    /// Here the `match` is exhaustive and the arms are the *positive* case,
-    /// so a new variant breaks the build at the one place that defines what
-    /// "deliberate" means, and whoever adds it has to decide.
-    #[must_use]
-    pub const fn is_deliberate_choice(self, auto_detected_rung: usize) -> bool {
-        match self {
-            // A rung someone configured — unless it is the auto-detected
-            // recipe, which nobody reviewed.
-            Self::Layer(i) => i != auto_detected_rung,
-            // Nothing named it, the coupling rule passed over whatever did, or
-            // a template gate threw away what a rung chose. None of the three
-            // leaves a chosen value standing on *this* parameter.
-            Self::Coupled | Self::Unset | Self::SuppressedByTemplate => false,
-        }
-    }
 }
 
 /// The five rungs of the ladder
@@ -147,17 +104,46 @@ impl SamplingLayer {
             _ => None,
         }
     }
+}
 
-    /// Short human-readable label, e.g. `per-model defaults (user-set)`.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Request => "request parameters",
-            Self::Profile => "profile",
-            Self::ModelUserSet => "per-model defaults (user-set)",
-            Self::Global => "global settings",
-            Self::ModelAutoDetected => "per-model defaults (auto-detected)",
+/// Where one parameter of the five-rung ladder ([`SamplingLayer`]) came
+/// from, in a person's words: what `gglib model explain` prints beside the
+/// value, and the inspector and the sampling form show.
+///
+/// `profile` is the profile applied, which the profile rung is named by.
+/// `origin` is where the model's stored defaults came from: three recipes
+/// share the auto-detected rung (the `reasoning`-tag guess, the model
+/// author's published one and a tune sweep's), and only it tells them
+/// apart. A user-set rung reads as one whatever the origin.
+#[must_use]
+pub fn source_label(
+    source: ParamSource,
+    profile: Option<&str>,
+    origin: Option<DefaultsOrigin>,
+) -> String {
+    let layer = match source {
+        ParamSource::Layer(index) => SamplingLayer::from_index(index),
+        ParamSource::Coupled => return "unset (coupled to temperature layer)".to_owned(),
+        ParamSource::Unset => return "unset by design".to_owned(),
+    };
+    match layer {
+        Some(SamplingLayer::Request) => "request parameters".to_owned(),
+        Some(SamplingLayer::Profile) => {
+            profile.map_or_else(|| "profile".to_owned(), |name| format!("profile '{name}'"))
         }
+        Some(SamplingLayer::ModelUserSet) => "per-model defaults (user-set)".to_owned(),
+        Some(SamplingLayer::Global) => "global settings".to_owned(),
+        Some(SamplingLayer::ModelAutoDetected) => match origin {
+            Some(DefaultsOrigin::Published) => {
+                "per-model defaults (published by the model author)".to_owned()
+            }
+            Some(DefaultsOrigin::Measured) => {
+                "per-model defaults (measured by a tune sweep)".to_owned()
+            }
+            _ => "per-model defaults (auto-detected: reasoning tag)".to_owned(),
+        },
+        // A ladder longer than the five rungs, which none resolved here is.
+        None => "an unnamed layer".to_owned(),
     }
 }
 
@@ -258,7 +244,6 @@ impl FieldSources {
                     ParamSource::Layer(i) => names.get(i).copied().unwrap_or("?"),
                     ParamSource::Coupled => "coupled",
                     ParamSource::Unset => "unset",
-                    ParamSource::SuppressedByTemplate => "suppressed-by-template",
                 };
                 format!("{field}={label}")
             })

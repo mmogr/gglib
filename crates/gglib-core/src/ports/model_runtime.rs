@@ -420,26 +420,6 @@ pub enum ModelRuntimeError {
         missing: Vec<ComponentRole>,
     },
 
-    /// Retryable: an image model needs more memory than is free, and the
-    /// model it would displace is held by a run, so it cannot be swapped out
-    /// now. Refused at once rather than queued: the hold can last as long as
-    /// the run does.
-    #[error(
-        "{}",
-        image_refusal::does_not_fit(model, held_model, *needed_bytes, *free_bytes)
-    )]
-    ImageModelDoesNotFit {
-        /// The image model's name.
-        model: String,
-        /// The resident model that is held and would have to go.
-        held_model: String,
-        /// What the image model needs, its files and its family's margin,
-        /// when the verdict knew it.
-        needed_bytes: Option<u64>,
-        /// What is free beside the held model, when it can be read.
-        free_bytes: Option<u64>,
-    },
-
     /// A chat model's weights and its smallest context need more memory than
     /// the device's budget gives a model. Not retryable: the model is too big
     /// for the device, not for the moment.
@@ -470,20 +450,14 @@ impl ModelRuntimeError {
     /// where retrying may succeed.
     #[must_use]
     pub const fn is_retryable(&self) -> bool {
-        matches!(
-            self,
-            Self::ModelLoading | Self::AdmissionTimeout(_) | Self::ImageModelDoesNotFit { .. }
-        )
+        matches!(self, Self::ModelLoading | Self::AdmissionTimeout(_))
     }
 
     /// Returns a suggested HTTP status code for this error.
     #[must_use]
     pub const fn suggested_status_code(&self) -> u16 {
         match self {
-            Self::ModelLoading
-            | Self::AdmissionTimeout(_)
-            | Self::ImageModelDoesNotFit { .. }
-            | Self::ImageRuntimeNotInstalled => 503,
+            Self::ModelLoading | Self::AdmissionTimeout(_) | Self::ImageRuntimeNotInstalled => 503,
             // A pinned mismatch is 404, not 403: from the client's point of
             // view the model it asked for does not exist on this endpoint.
             Self::ModelNotFound(_)
@@ -545,9 +519,9 @@ pub struct RuntimeErrorEnvelope {
 impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
     fn from(err: &ModelRuntimeError) -> Self {
         let discriminant = match err {
-            ModelRuntimeError::ModelLoading
-            | ModelRuntimeError::AdmissionTimeout(_)
-            | ModelRuntimeError::ImageModelDoesNotFit { .. } => error_type::SERVICE_UNAVAILABLE,
+            ModelRuntimeError::ModelLoading | ModelRuntimeError::AdmissionTimeout(_) => {
+                error_type::SERVICE_UNAVAILABLE
+            }
             ModelRuntimeError::ModelNotFound(_)
             | ModelRuntimeError::ModelFileNotFound(_)
             | ModelRuntimeError::PinnedModelMismatch { .. }
@@ -710,29 +684,14 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         Vec::new()
     }
 
-    /// Keep model `model_id`, listening on `port`, resident — neither swapped
-    /// out nor recycled — until the returned lease drops.
-    ///
-    /// For a caller that talks to llama-server's port directly rather than
-    /// through [`Self::admit`] — an agent run — so a proxy request cannot take
-    /// the model from under it. It counts as one request against the model's
-    /// parallel capacity, so a proxy request for that model waits in the queue
-    /// until the lease drops, for as long as the run reports progress on it.
-    /// `None` when that model is not the one on `port`, and by default, for
-    /// runtimes with no resident set.
-    fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
-        let _ = (port, model_id);
-        None
-    }
-
-    /// Stop the current model, even one a run holds: an explicit stop (a
-    /// person's, a benchmark's), or the proxy's restart of a dead server.
+    /// Stop the current model: an explicit stop (a person's, a
+    /// benchmark's), or the proxy's restart of a dead server.
     /// An image model that is drawing is asked and waited for, as
     /// [`Self::stop_model`] does.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
 
     /// Stop model `model_id` wherever it is resident, the primary slot or the
-    /// second, even one a run holds: a person's Stop on a model they chose,
+    /// second: a person's Stop on a model they chose,
     /// which is often an image model beside a chat model.
     ///
     /// Required of every runtime, unlike [`Self::list_running`]'s default:
@@ -741,10 +700,10 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     /// which a caller reports as "not found"; `Ok(true)` once it is stopped.
     async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError>;
 
-    /// Stop it for automatic recovery, which waits for a run: refused with
-    /// [`ModelRuntimeError::AdmissionTimeout`] while one holds it (see
-    /// [`Self::hold`]). Defaults to [`Self::stop_current`], for runtimes
-    /// with no holds.
+    /// Stop it for automatic recovery: the proxy's watchdog recycling a
+    /// server that has degraded. Defaults to [`Self::stop_current`]. A
+    /// refusal (the benchmark's pinned target refuses its stop) leaves the
+    /// watchdog's request standing for the next idle moment.
     async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
         self.stop_current().await
     }

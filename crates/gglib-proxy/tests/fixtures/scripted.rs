@@ -99,7 +99,6 @@ pub(crate) async fn spawn_cached(runtime: Arc<ScriptedRuntime>, slot_dir: &Path)
         catalog_port: Arc::new(TaggedCatalog {
             name: MODEL.into(),
             tags: vec![],
-            dialect: None,
         }),
         cache_enabled: true,
         slot_dir: Some(slot_dir.to_path_buf()),

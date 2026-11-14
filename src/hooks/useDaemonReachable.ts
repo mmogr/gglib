@@ -37,9 +37,9 @@ export function useDaemonReachable(): Reachability {
   useEffect(() => {
     let cancelled = false;
 
-    // `/health`, which needs no token and no key: any answer is a daemon
-    // there, a refused token and a missing key among them. An `/api` probe
-    // read a stale token as no daemon, and ran the key prompt every poll.
+    // `/health`, which needs no token: any answer is a daemon there, a
+    // refused token among them. An `/api` probe read a stale token as no
+    // daemon.
     const probe = async () => {
       const answers = await getTransport().probeDaemon();
       if (!cancelled) setReachable(answers);

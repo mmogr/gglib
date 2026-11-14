@@ -80,6 +80,13 @@ pub fn seconds_words(seconds: f64) -> String {
     }
 }
 
+/// A count of tokens as every surface says it: "1 token", "2,100 tokens".
+#[must_use]
+pub fn tokens_words(count: u64) -> String {
+    let unit = if count == 1 { "token" } else { "tokens" };
+    format!("{} {unit}", count_words(count))
+}
+
 /// A count with `,` between its thousands: "2,100".
 #[must_use]
 pub fn count_words(count: u64) -> String {

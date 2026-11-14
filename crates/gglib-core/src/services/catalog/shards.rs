@@ -191,7 +191,7 @@ mod tests {
         let mut new = crate::NewModel::new(
             "m".to_owned(),
             weights.to_path_buf(),
-            7.0,
+            Some(7.0),
             chrono::Utc::now(),
         );
         new.projector_path = projector.map(std::path::Path::to_path_buf);

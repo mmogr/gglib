@@ -295,23 +295,23 @@ describe('ChatPlace, a render in its reply', () => {
     expect(screen.queryByRole('img', { name: /Preview of the image/ })).not.toBeInTheDocument();
   });
 
-  it('a reply queued behind a render says what the daemon said of it, as each frame says it', async () => {
+  it('a reply waiting for its model says what the daemon said of it, as each frame says it', async () => {
     const user = userEvent.setup();
     await renderPage();
     await ask(user, 'hello');
 
-    emit({ type: 'waiting', reason: 'image_render', step: 3, total: 20, position: 1, said: 'Waiting for an image render, step 3 of 20' });
-    const status = (await screen.findByText('Waiting for an image render, step 3 of 20')).closest('[role="status"]') as HTMLElement;
+    emit({ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'Qwen3-4B', elapsed_ms: 3_000, said: 'Loading Qwen3-4B… 3 s' });
+    const status = (await screen.findByText('Loading Qwen3-4B… 3 s')).closest('[role="status"]') as HTMLElement;
     const row = status.closest('[data-turn]') as HTMLElement;
 
-    emit({ type: 'waiting', reason: 'image_render', step: 9, total: 20, position: 2, said: 'Waiting for an image render, step 9 of 20, 2 in line' });
-    expect(await within(row).findByText('Waiting for an image render, step 9 of 20, 2 in line')).toBeInTheDocument();
-    expect(within(row).queryByText('Waiting for an image render, step 3 of 20')).not.toBeInTheDocument();
+    emit({ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'Qwen3-4B', elapsed_ms: 4_000, said: 'Loading Qwen3-4B… 4 s' });
+    expect(await within(row).findByText('Loading Qwen3-4B… 4 s')).toBeInTheDocument();
+    expect(within(row).queryByText('Loading Qwen3-4B… 3 s')).not.toBeInTheDocument();
 
     // The model reads the prompt: the wait is over.
     emit({ type: 'prompt_progress', processed: 10, total: 40, cached: 0, time_ms: 5 });
     await screen.findByText('Reading the prompt');
-    expect(screen.queryByText(/Waiting for an image render/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Loading Qwen3-4B/)).not.toBeInTheDocument();
   });
 
   it('a reply waiting for its model to load says the daemon\'s words, and a wait from an older daemon only that it waits', async () => {
@@ -323,9 +323,8 @@ describe('ChatPlace, a render in its reply', () => {
     const status = (await screen.findByText('Loading Qwen3-4B… 12 s')).closest('[role="status"]') as HTMLElement;
     expect(status.closest('[data-turn]')).not.toHaveTextContent(/step \d+ of/);
 
-    emit({ type: 'waiting', reason: 'image_render', step: 3, total: 20, position: 1 });
+    emit({ type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0, model: 'Qwen3-4B', elapsed_ms: 13_400 });
     expect(await screen.findByText('Waiting for the model')).toBeInTheDocument();
     expect(screen.queryByText(/Loading Qwen3-4B/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/step 3 of 20/)).not.toBeInTheDocument();
   });
 });

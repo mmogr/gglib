@@ -3,9 +3,8 @@
 //! # The gap this closes
 //!
 //! A value a caller names can fail to reach the wire: a rung above it names
-//! the same field (an operator's `--presence-penalty` over a client's), a
-//! later stage suppresses it because the template never reads it, or it is a
-//! float JSON cannot carry. A resolved config cannot show any of these — a
+//! the same field (an operator's `--presence-penalty` over a client's), or it
+//! is a float JSON cannot carry. A resolved config cannot show any of these — a
 //! discarded value and a value nobody ever named look identical once the
 //! ladder has folded. Only the provenance distinguishes them.
 //!
@@ -25,9 +24,9 @@
 //!
 //! # Why the test is "did my rung win"
 //!
-//! Which rule ran is not the question: a caller's value is just as gone when
-//! a higher rung supplied its own as when a stage suppressed it. The test is
-//! therefore "did my rung win", compared by value.
+//! Which rule ran is not the question: a caller's value is gone whenever a
+//! higher rung supplied its own. The test is therefore "did my rung win",
+//! compared by value.
 
 use crate::domain::{FieldSources, InferenceConfig, ParamSource};
 
@@ -99,8 +98,7 @@ fn non_finite_fields(c: &InferenceConfig) -> Vec<&'static str> {
 
 /// Whether the value at `rung` is the one that reached the resolution.
 ///
-/// Exhaustive rather than a `matches!`, per the argument on
-/// [`ParamSource::is_deliberate_choice`] and because
+/// Exhaustive rather than a `matches!`, because
 /// `scripts/check_param_source_exhaustive.sh` requires it: a new variant
 /// should force a decision here rather than default into "not ours".
 const fn won(source: ParamSource, rung: usize) -> bool {
@@ -109,11 +107,10 @@ const fn won(source: ParamSource, rung: usize) -> bool {
         ParamSource::Layer(index) => index == rung,
         // Everything else means this caller's value is not what runs:
         // `Coupled` — the coupling rule passed every lower rung over, this one
-        // included; `SuppressedByTemplate` — a later stage dropped it because
-        // the template never reads the field; `Unset` — nobody named it, so
-        // this caller did not either. Listed rather than wildcarded so a new
-        // variant forces a decision here.
-        ParamSource::Coupled | ParamSource::SuppressedByTemplate | ParamSource::Unset => false,
+        // included; `Unset` — nobody named it, so this caller did not either.
+        // Listed rather than wildcarded so a new variant forces a decision
+        // here.
+        ParamSource::Coupled | ParamSource::Unset => false,
     }
 }
 

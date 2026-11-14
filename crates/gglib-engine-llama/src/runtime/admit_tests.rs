@@ -265,7 +265,7 @@ async fn a_model_with_a_projector_is_fitted_on_its_weights_as_the_model_browser_
     let (browser, _) = fit_verdict(
         seer.context_length,
         Some(total_model_bytes(&seer.file_path)),
-        seer.kv_elems_per_token,
+        seer.kv_shape,
         Some(BUDGET),
     );
     assert_eq!(browser, FitVerdict::Fits { ctx: 8192 });

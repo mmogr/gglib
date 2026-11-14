@@ -75,7 +75,7 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
     let looping = gglib_core::domain::NewModel::new(
         "looping".to_owned(),
         "/nonexistent/looping.gguf".into(),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     state.core.models().add(looping).await.unwrap();
@@ -128,7 +128,6 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
         .await
         .unwrap();
     assert_eq!(days.len(), 1, "{days:?}");
-    assert_eq!(days[0].mode, gglib_core::LoopGuardMode::Note);
     assert_eq!(
         (
             days[0].scanned,

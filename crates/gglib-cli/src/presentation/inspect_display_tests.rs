@@ -116,7 +116,7 @@ fn detail(projector: Option<&str>) -> ModelDetailDto {
     let mut new = gglib_core::NewModel::new(
         "qwen".to_owned(),
         std::path::PathBuf::from("/models/qwen.gguf"),
-        7.0,
+        Some(7.0),
         chrono::Utc::now(),
     );
     new.projector_path = projector.map(std::path::PathBuf::from);
@@ -161,7 +161,7 @@ fn flux_detail(vae: &std::path::Path) -> ModelDetailDto {
     let mut new = gglib_core::NewModel::new(
         "flux".to_owned(),
         std::path::PathBuf::from("/models/flux.gguf"),
-        12.0,
+        Some(12.0),
         chrono::Utc::now(),
     );
     new.image_family = Some(ImageFamily::Flux1);

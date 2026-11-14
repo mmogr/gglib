@@ -48,7 +48,9 @@ async fn a_new_database_is_stamped_with_this_generation() {
 async fn a_database_from_a_newer_build_is_refused_and_left_as_it_was() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
-    stamped_file(&path, SCHEMA_GENERATION + 1).await;
+    crate::setup::write_newer_database(&path)
+        .await
+        .expect("a newer file");
 
     let err = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await

@@ -4,26 +4,26 @@ Settings, the engines that run models, and where everything is. Settings
 are optional and persist; a change affects what happens next, not a model or
 a download already there.
 
-<!-- snippet: config-settings-show -->
+<!-- snippet: config-show -->
 ```console
-$ gglib config settings show
+$ gglib config show
 Current application settings:
 
   General
   ────────────────────────────────────────
-  agentic-sampling         None
   close-to-tray            None
   default-context-size     None (sized per launch)
   default-image-model-id   None
   default-model-id         2 (Qwen3-4B-Instruct-2507)
   inference-profiles       None
   llama-base-port          9300
-  loop-guard-mode          None
+  loop-guard               None
   max-download-queue-size  None
   max-parallel-tools       None
   max-stagnation-steps     None
   max-tool-iterations      None
   mcp-drawing              None (off)
+  models-dir               /Users/mmogr/.local/share/gglib-demo/models (environment, Writable)
   proxy-allowed-hosts      None
   proxy-api-key            None
   proxy-autostart          None
@@ -47,22 +47,31 @@ Current application settings:
 ```
 <!-- /snippet -->
 
-## `settings`
+## `set`, `unset`, `show`
 
-Context size, ports, the download queue, the agent loop's limits, and the
-switches the desktop app offers under Settings › General
-(`--proxy-autostart`, `--close-to-tray`, `--start-at-login`).
+`show` prints every setting and the models directory, each under its key.
+`set <key> <value>` stores one; `config set --help` lists the keys it takes
+and what each takes, and names the few that are changed elsewhere. A value
+is a whole number, `true` or `false`, text, or a comma-separated list for
+`proxy-allowed-hosts`; one a setting does not allow is refused, and nothing
+is stored.
 
 ```bash
-gglib config settings set --default-context-size 131072
-gglib config settings set --proxy-port 8081 --llama-base-port 9300
-gglib config settings unset default-context-size
-gglib config settings reset   # the defaults; keeps the pairing, its devices, remote serving, the API key
-gglib config settings reveal proxy-api-key  # a stored secret, alone on stdout
+gglib config set default-context-size 131072
+gglib config set proxy-port 8081
+gglib config set default-model-id Qwen3-4B   # an id or a name
+gglib config set models-dir ~/models         # created when missing
+gglib config unset default-context-size
+gglib config reset   # the defaults; keeps the pairing, its devices, remote serving, the API key
+gglib config reveal proxy-api-key  # a stored secret, alone on stdout
 ```
 
-- `show` prints every setting and its value; a secret is shown as set or
-  not, and `reveal <name>` prints it alone on stdout, for a script.
+- A secret is shown as set or not; `reveal <name>` prints it alone on
+  stdout, for a script.
+- `default-model-id` is the model a command uses when none is named: `gglib
+  q` without `-m`, for one. `up` fills an empty default with the model it
+  served. `default-image-model-id` is the same for drawing, and is refused
+  unless the model draws.
 - `proxy-port` is where `proxy`, `serve` and `up` start the endpoint when
   they are given no `--port`, where the desktop app starts it, and where
   `proxy dashboard` and `proxy cache-clear` look for it.
@@ -81,13 +90,27 @@ gglib config settings reveal proxy-api-key  # a stored secret, alone on stdout
   agent run makes at once and how long one may take, for every daemon turn
   whose chat saved none of its own; the desktop app sets them under
   Settings › Tools › Agent limits.
+- `proxy-autostart`, `close-to-tray` and `start-at-login` are the switches
+  the desktop app offers under Settings › General.
+- `inference-profiles` is edited with `profile`, below, and
+  `inference-defaults` under Settings › Models in the app; `unset` clears
+  either. The `remote-*` keys are written by `gglib remote`.
 
-## `default`
+### `models-dir`
 
-The model a command uses when none is named: `gglib q` without `-m`, for
-one. `gglib config default` shows it, `gglib config default <model>` sets
-it, `--clear` unsets it. `up` fills an empty default with the model it
-served.
+The download folder: where `gglib model download`, `gglib up` and the app
+put the files they fetch. A model you `add` stays where it is, so the library
+need not be one folder. `show` prints the directory, where it was chosen
+(`explicit`, `environment` or `default`) and its state, the word Settings
+shows: Writable, Will be created or Not writable. `unset models-dir` removes
+the stored folder, so the default applies.
+
+- A running daemon's next download goes to the new directory; a download
+  already running finishes where it started.
+- `GGLIB_MODELS_DIR` in the daemon's own environment outranks the stored
+  directory.
+- The daemon's first start stores the default folder, so it then shows as
+  `environment`, and a later release with another default keeps using it.
 
 ## `profile`
 
@@ -95,25 +118,11 @@ Named sampling profiles, selectable per request as `<model>:<profile>`:
 `Qwen3-4B:coding` in a client's model field picks the model and the profile,
 and `--profile coding` does the same on `serve`, `chat` and `q`.
 
-- `list`, `show <name>`, `set <name> [flags]`, `rm <name>`. `set` stores
+- `list`, `show <name>`, `set <name> [flags]`, `remove <name>`. `set` stores
   only the flags you pass, merged over what the profile already holds;
   `--unset <parameter>` clears one. The rest fall through to the model's
   own defaults, then the global ones ([Sampling resolution](../sampling.md)).
 - `install-templates` creates the built-in profiles, `coding` among them.
-
-## `models-dir`
-
-The download folder: where `gglib model download`, `gglib up` and the app
-put the files they fetch. A model you `add` stays where it is, so the library
-need not be one folder. `show` prints the directory, where it was chosen
-(`explicit`, `environment` or `default`) and its state, the word Settings
-shows: Writable, Will be created or Not writable; `prompt` asks; `set <PATH>`
-stores one.
-
-- A running daemon's next download goes to the new directory; a download
-  already running finishes where it started.
-- `GGLIB_MODELS_DIR` in the daemon's own environment outranks the stored
-  directory.
 
 ## `llama` and `sd`
 
@@ -129,21 +138,21 @@ Not installed.
 $ gglib config llama status
 Status: Installed
 Binary: /Users/mmogr/Library/Application Support/gglib/.llama/bin/llama-server
-Pinned release: b11669, which is the one installed.
+Pinned release: b11960, which is the one installed.
 Health: ✓ Functional
 
 Pre-built download:
-  Version: b11669
+  Version: b11960
   Platform: macOS ARM64 (Metal)
-  Installed: 2026-10-31 06:24:56 UTC
+  Installed: 2026-11-09 10:12:02 UTC
 
-Binary version: version: 0.7.0-dev (build 11669, commit 620d2225c)
-  Build: b11669
+Binary version: version: 0.8.0-dev (build 11960, commit 8642541b2)
+  Build: b11960
   Native capabilities: RuntimeFlags(PEG_NATIVE_TOOL_CALLS)
 ```
 <!-- /snippet -->
 
-- `install` (also spelled `update`) does nothing when the pinned release,
+- `install` is how an engine is updated too. It does nothing when the pinned release,
   or a later one, is installed, or when what is there is a binary gglib has
   no record of installing or a release it cannot compare offline. When the
   install is older than the pin it installs the pin: this platform's
@@ -187,13 +196,16 @@ The optional `hf_xet` download accelerator: `status`, `enable`, `disable`,
 
 ## `paths`
 
-Every location gglib resolved, with its source.
+Every location gglib resolved, with its source, then every gglib a user
+might run here: each `gglib` on `PATH` and the desktop app, which all
+share one data folder. It never opens the library, so it answers before
+one exists and for one this build refuses.
 
 <!-- snippet: config-paths -->
 ```console
 $ gglib config paths
 binary = /Users/mmogr/.local/src/gglib/target/release/gglib
-version = 0.29.0-rc.4 (12c44308c253)
+version = 0.31.0-rc.8 (062c4956c712)
 data_root_source = GGLIB_DATA_DIR
 daemon_port = 9907
 data_root = /Users/mmogr/Library/Application Support/gglib
@@ -203,6 +215,10 @@ llama_server_path = /Users/mmogr/Library/Application Support/gglib/.llama/bin/ll
 sd_server_path = /Users/mmogr/Library/Application Support/gglib/.sd/bin/sd-server
 models_dir = /Users/mmogr/Library/Application Support/gglib/models
 models_source = EnvVar
+gglib_on_path_1 = /Users/mmogr/.local/src/gglib/target/release/gglib (0.31.0-rc.8, runs as `gglib`, this one)
+gglib_on_path_2 = /Users/mmogr/.cargo/bin/gglib (0.31.0-rc.7, shadowed)
+gglib_on_path_3 = /opt/homebrew/bin/gglib (0.30.1, shadowed)
+desktop_app_1 = /Applications/gglib.app (0.30.1)
 ```
 <!-- /snippet -->
 
@@ -211,8 +227,19 @@ models_source = EnvVar
   gglib shares it unless `GGLIB_DATA_DIR` names another. This recording
   ran with `GGLIB_DATA_DIR` and `GGLIB_MODELS_DIR` set.
 - `daemon_port` is the daemon's management port, not the endpoint's.
+- `gglib_on_path_N` lists each `gglib` on `PATH` in the order a shell
+  tries them, once each however many entries or links reach it. The first
+  is the one `gglib` runs; the rest are shadowed. `this one` marks the
+  binary that answered; when it is not on `PATH`, a `running_from` line
+  says so. Another copy's version is its `--version`, given two seconds,
+  or `version unknown`.
+- `desktop_app_N` is each desktop app installed: `gglib.app` (or the older
+  `GGLib GUI.app`) in `/Applications` or `~/Applications` on a Mac, with
+  the version its `Info.plist` gives; `gglib-gui` on `PATH` on Linux,
+  with the version of the `gglib` beside it. The app is never launched.
+  With nothing found, `gglib_on_path` or `desktop_app` says `none found`.
 
 ## Flags
 
-`gglib config <subcommand> --help` lists every flag; `gglib config settings
-set --help` lists every setting.
+`gglib config <subcommand> --help` lists every flag; `gglib config set
+--help` lists every setting.

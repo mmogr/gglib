@@ -1,13 +1,13 @@
 //! Matching an `Authorization` header against the configured bearer token.
 //!
-//! Split from `mod.rs` rather than added to it because that file is near its
-//! complexity budget, and because this is one self-contained decision: given
-//! what a client sent and what the endpoint expects, does the request get in.
+//! Split from `mod.rs` rather than added to it because this is one
+//! self-contained decision: given what a client sent and what the endpoint
+//! expects, does the request get in.
 
 use std::sync::Arc;
 
 use super::constant_time_eq;
-use crate::secret::held;
+use crate::secret::held_key;
 use crate::services::SettingsCache;
 
 /// The auth scheme this endpoint speaks, compared case-insensitively.
@@ -82,7 +82,7 @@ pub fn bearer_matches(presented: Option<&str>, expected_key: &str) -> bool {
 /// honour a key rotated afterwards nor enforce a key set afterwards, and an
 /// endpoint that started open could not be closed without a restart.
 ///
-/// Nor can it be an in-process notification. `gglib config settings set`
+/// Nor can it be an in-process notification. `gglib config set`
 /// writes the database from a **separate process**, so nothing the daemon
 /// subscribes to would ever see it — the same reasoning
 /// [`SettingsCache`] already records for every
@@ -136,25 +136,17 @@ impl BearerPolicy {
         }
     }
 
-    /// A token that can never change and is never required. For hosts with no
-    /// settings to read, such as tests and embedded servers.
-    #[must_use]
-    pub fn fixed(key: Option<&str>) -> Self {
-        Self {
-            pinned: key.map(Arc::from),
-            floor: None,
-            settings: None,
-        }
-    }
-
     /// The token a request must present right now, or `None` while this
     /// endpoint is unauthenticated.
+    ///
+    /// A stored key is read through [`held_key`], as every client of this
+    /// endpoint reads it, so a key saved with spaces around it still admits.
     pub async fn current(&self) -> Option<Arc<str>> {
         if let Some(pinned) = &self.pinned {
             return Some(Arc::clone(pinned));
         }
         let stored = match &self.settings {
-            Some(cache) => held(cache.get().await.proxy_api_key.as_deref()).map(Arc::from),
+            Some(cache) => held_key(cache.get().await.proxy_api_key.as_deref()).map(Arc::from),
             None => None,
         };
         stored.or_else(|| self.floor.clone())

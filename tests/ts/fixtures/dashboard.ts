@@ -1,5 +1,5 @@
 /**
- * Proxy dashboard pieces, as the `/v1/proxy/status/stream` frame sends them.
+ * Proxy dashboard pieces, as the `/v1/gglib/proxy/status/stream` frame sends them.
  *
  * Nothing on the dashboard contract uses `skip_serializing_if` — `gglib-proxy`
  * uses it elsewhere, on `models.rs` and the MCP types, but on nothing the
@@ -35,6 +35,7 @@ const SLOT: SlotSnapshot = {
   n_prompt_tokens_processed: null,
   n_prompt_tokens_cache: null,
   next_token: null,
+  tokens_in_use: null,
 };
 
 /** An idle slot holding nothing, with `overrides` applied. */
@@ -79,7 +80,6 @@ const DEFECTS: ModelDefectCounts = {
   reasoning_only: 0,
   dialect_residue: 0,
   unvalidatable_schemas: 0,
-  normalization_errors: 0,
   identical_result_repeats: 0,
   repeats_not_evaluated: 0,
   repeats_rescued: 0,
@@ -131,7 +131,6 @@ const AUDIT: SamplingAuditSnapshot = {
   recent_divergences: [],
   baseline: { state: 'not_yet_read' },
   published: { intents: 0, fields: [] },
-  effort_suppressed: { requests: 0, latest: null },
   reasoning: READBACK,
   client_field_names: { fields: [], untracked: 0 },
 };
@@ -209,6 +208,7 @@ export function residentSlot(id: number, name: string, overrides: Partial<Reside
     inflight: 0,
     is_primary: true,
     resident_for_secs: 60,
+    resident_for: '1m 0s',
     state: 'loaded',
     runtime: 'llama',
     launch: { state: 'loaded', context_size: 8192, weights_bytes: 1, quantization: null, narration: null, flag_line: '' },
@@ -222,7 +222,6 @@ const REQUEST: ContextSnapshot = {
   payload_chars_after: 0,
   messages_truncated: 0,
   was_clamped: false,
-  grammar_enforced: false,
   dialect_residue: false,
   tool_repaired: false,
   completion_tokens: null,

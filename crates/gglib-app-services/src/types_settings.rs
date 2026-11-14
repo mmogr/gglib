@@ -4,7 +4,6 @@
 //! `types`. `scripts/check_settings_surfaces.sh` reads this file by name for
 //! the `double_option` guard.
 
-use gglib_core::LoopGuardMode;
 use gglib_core::secret::held;
 use serde::{Deserialize, Serialize};
 
@@ -30,7 +29,7 @@ pub struct AppSettings {
     /// names none.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub tool_timeout_ms: Option<u64>,
-    /// Default model ID for quick commands (e.g., `gglib question`).
+    /// Default model ID for quick commands (e.g., `gglib q`).
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub default_model_id: Option<i64>,
     /// The image model a drawing request uses when it names none (see
@@ -58,19 +57,13 @@ pub struct AppSettings {
     pub has_proxy_api_key: bool,
     // Sampling authority (see `gglib_core::Settings`)
     pub trust_client_sampling: Option<bool>,
-    // Proxy loop guard; `None` means the default, `note` (see
-    // `gglib_core::Settings::loop_guard_mode`)
-    pub loop_guard_mode: Option<LoopGuardMode>,
-    /// Whether a tool call failing schema validation is re-issued, with
-    /// `tool_choice: "required"` or under gglib's grammar. Absent means on.
+    /// Whether the proxy's loop guard scans requests. Absent means on.
+    pub loop_guard: Option<bool>,
+    /// Whether a tool call failing schema validation is re-issued with
+    /// `tool_choice: "required"`. Absent means on.
     pub tool_call_repair: Option<bool>,
     /// Whether `/mcp` offers MCP clients the drawing tool. Absent means off.
     pub mcp_drawing: Option<bool>,
-    /// Whether structured-output turns get their temperature capped when no
-    /// human chose one. Absent means on (see `gglib_core::Settings`). Read
-    /// back here for the GUI's toggle: a toggle that saves but cannot read
-    /// back silently resets on every reopen.
-    pub agentic_sampling: Option<bool>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     pub proxy_autostart: Option<bool>,
     pub close_to_tray: Option<bool>,
@@ -115,10 +108,9 @@ impl From<gglib_core::Settings> for AppSettings {
             proxy_cache_disk_gb: settings.proxy_cache_disk_gb,
             has_proxy_api_key: held(settings.proxy_api_key.as_deref()).is_some(),
             trust_client_sampling: settings.trust_client_sampling,
-            loop_guard_mode: settings.loop_guard_mode,
+            loop_guard: settings.loop_guard,
             tool_call_repair: settings.tool_call_repair,
             mcp_drawing: settings.mcp_drawing,
-            agentic_sampling: settings.agentic_sampling,
             proxy_autostart: settings.proxy_autostart,
             close_to_tray: settings.close_to_tray,
             start_at_login: settings.start_at_login,
@@ -164,7 +156,7 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub tool_timeout_ms: Option<Option<u64>>,
-    /// Default model ID for quick commands (e.g., `gglib question`).
+    /// Default model ID for quick commands (e.g., `gglib q`).
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub default_model_id: Option<Option<i64>>,
@@ -216,18 +208,10 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub trust_client_sampling: Option<Option<bool>>,
-    // Proxy loop guard; explicit `null` restores the default, `note`
-    // (see `gglib_core::Settings::loop_guard_mode`)
-    // `as`, not `type`: a raw type override gives ts-rs no dependency to
-    // import, and the generated file then names a type it never imported. The
-    // doubled `Option` is the point — `Some(None)` is how a client clears the
-    // setting, and the generated type has to be able to say so.
-    #[cfg_attr(
-        feature = "ts-bindings",
-        ts(as = "Option<Option<LoopGuardMode>>", optional)
-    )]
+    // Proxy loop guard; explicit `null` turns it back on (see `gglib_core::Settings`)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
-    pub loop_guard_mode: Option<Option<LoopGuardMode>>,
+    pub loop_guard: Option<Option<bool>>,
     // Proxy tool-call repair; explicit `null` re-enables (see `gglib_core::Settings`)
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
@@ -236,14 +220,6 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub mcp_drawing: Option<Option<bool>>,
-    // Agentic-turn sampling; explicit `null` re-enables (see `gglib_core::Settings`)
-    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
-    #[serde(
-        default,
-        alias = "toolCallFloor",
-        with = "serde_with::rust::double_option"
-    )]
-    pub agentic_sampling: Option<Option<bool>>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
@@ -279,10 +255,9 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             proxy_cache_disk_gb: request.proxy_cache_disk_gb,
             proxy_api_key: request.proxy_api_key,
             trust_client_sampling: request.trust_client_sampling,
-            loop_guard_mode: request.loop_guard_mode,
+            loop_guard: request.loop_guard,
             tool_call_repair: request.tool_call_repair,
             mcp_drawing: request.mcp_drawing,
-            agentic_sampling: request.agentic_sampling,
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,
             start_at_login: request.start_at_login,

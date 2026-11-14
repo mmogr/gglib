@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use sqlx::SqlitePool;
 use std::path::Path;
 
-use gglib_core::domain::ImageFamily;
+use gglib_core::domain::{ImageFamily, ModelCapabilities};
 use gglib_core::utils::shard_filename::base_shard_filename;
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
@@ -98,6 +98,65 @@ impl SqliteModelRepository {
         &self.pool
     }
 }
+
+/// The statement `insert` registers a model by: an upsert on its key, so a
+/// registration can be retried. What a re-registration keeps of the row
+/// and what it replaces is said beside each column.
+const UPSERT_MODEL: &str = concat!(
+    r"INSERT INTO models (
+        id, name, file_path, projector_path, param_count_b, architecture,
+        variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count,
+        metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, image_family
+    ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(model_key) DO UPDATE SET
+        file_path = excluded.file_path,
+        -- Coalesced, not assigned. A re-registration that carries no
+        -- shard list is a local re-import, which never populates one;
+        -- assigning would erase the sibling paths a download recorded
+        -- and silently disable the sharded-duplicate lookup for that
+        -- model. A download always supplies the list, so it still
+        -- wins when there is one.
+        file_paths_json = COALESCE(excluded.file_paths_json, models.file_paths_json),
+        projector_path = COALESCE(excluded.projector_path, models.projector_path),
+        -- Coalesced as the projector is: a re-registration whose
+        -- table read no family never erases the one stored.
+        image_family = COALESCE(excluded.image_family, models.image_family),
+        variant_label = COALESCE(excluded.variant_label, models.variant_label),
+        -- The stored count first: it may be its owner's, and a
+        -- re-registration fills it only where it is unknown.
+        param_count_b = COALESCE(models.param_count_b, excluded.param_count_b),
+        file_type = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.file_type, excluded.file_type),
+        bits_per_weight = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.bits_per_weight, excluded.bits_per_weight),
+        context_length = COALESCE(excluded.context_length, models.context_length),
+        expert_count = COALESCE(excluded.expert_count, models.expert_count),
+        expert_used_count = COALESCE(excluded.expert_used_count, models.expert_used_count),
+        expert_shared_count = COALESCE(excluded.expert_shared_count, models.expert_shared_count),
+        -- Coalesced for the same reason: a local re-import sets
+        -- neither, and erasing them would make a downloaded model
+        -- read as never-downloaded and never-update-checked, which
+        -- the update-check workflow keys on.
+        download_date = COALESCE(excluded.download_date, models.download_date),
+        last_update_check = COALESCE(excluded.last_update_check, models.last_update_check),
+        -- Merged, not assigned: each key the file's header has is read
+        -- afresh, so `--reimport` refreshes it, and a key only the owner
+        -- added (`model update --metadata`) stays. An empty map, from a
+        -- download whose header the reader refused, changes nothing.
+        metadata = json_patch(COALESCE(models.metadata, '{}'), excluded.metadata),
+        tags = excluded.tags,
+        -- Re-guessed, but for the tool bit (the two binds after the
+        -- values) when the row holds llama-server's own answer,
+        -- `template_caps.supports_tool_calls` (ADR 0007): the bit is that
+        -- answer, or the owner's setting since, and a guess undoes both.
+        capabilities = IIF(",
+    holds_engine_tool_answer!(),
+    r",
+            (excluded.capabilities & ~?) | (COALESCE(models.capabilities, 0) & ?),
+            excluded.capabilities
+        ),
+        inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
+        defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
+    "
+);
 
 #[async_trait]
 impl ModelRepository for SqliteModelRepository {
@@ -233,12 +292,6 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
-        // Serialize dialect_spec if present
-        let dialect_spec_json = model
-            .dialect_spec
-            .as_ref()
-            .and_then(|spec| serde_json::to_string(spec).ok());
-
         // Compute model key for deduplication
         let model_key = compute_model_key(model, &file_path_string);
 
@@ -249,79 +302,60 @@ impl ModelRepository for SqliteModelRepository {
         // already-resolved siblings — which the download path does not.
         let file_paths_json = model.file_paths.as_deref().and_then(path_list_json);
 
+        // The bit the upsert keeps when the row holds llama-server's answer.
+        let tool_bit = i64::from(ModelCapabilities::SUPPORTS_TOOL_CALLS.bits());
+
         // Use UPSERT to make registration idempotent. The row's own id is
         // bound when it has one, so an update takes no id from the sequence.
-        let _result = sqlx::query(
-            r"INSERT INTO models (
-                id, name, file_path, projector_path, param_count_b, architecture,
-                variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count,
-                metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec, image_family
-            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(model_key) DO UPDATE SET
-                file_path = excluded.file_path,
-                -- Coalesced, not assigned. A re-registration that carries no
-                -- shard list is a local re-import, which never populates one;
-                -- assigning would erase the sibling paths a download recorded
-                -- and silently disable the sharded-duplicate lookup for that
-                -- model. A download always supplies the list, so it still
-                -- wins when there is one.
-                file_paths_json = COALESCE(excluded.file_paths_json, models.file_paths_json),
-                projector_path = COALESCE(excluded.projector_path, models.projector_path),
-                -- Coalesced as the projector is: a re-registration whose
-                -- table read no family never erases the one stored.
-                image_family = COALESCE(excluded.image_family, models.image_family),
-                variant_label = COALESCE(excluded.variant_label, models.variant_label),
-                file_type = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.file_type, excluded.file_type),
-                bits_per_weight = IIF(excluded.file_type IS NULL AND excluded.bits_per_weight IS NULL, models.bits_per_weight, excluded.bits_per_weight),
-                context_length = COALESCE(excluded.context_length, models.context_length),
-                expert_count = COALESCE(excluded.expert_count, models.expert_count),
-                expert_used_count = COALESCE(excluded.expert_used_count, models.expert_used_count),
-                expert_shared_count = COALESCE(excluded.expert_shared_count, models.expert_shared_count),
-                -- Coalesced for the same reason: a local re-import sets
-                -- neither, and erasing them would make a downloaded model
-                -- read as never-downloaded and never-update-checked, which
-                -- the update-check workflow keys on.
-                download_date = COALESCE(excluded.download_date, models.download_date),
-                last_update_check = COALESCE(excluded.last_update_check, models.last_update_check),
-                tags = excluded.tags,
-                capabilities = excluded.capabilities,
-                dialect_spec = excluded.dialect_spec,
-                inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
-                defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
-            ",
-        )
-        .bind(&model_key)
-        .bind(&model.name)
-        .bind(&file_path_string)
-        .bind(model.projector_path.as_deref().map(normalized_file_path_string))
-        .bind(model.param_count_b)
-        .bind(&model.architecture)
-        .bind(&model.variant_label)
-        .bind(model.file_type.map(|file_type| i64::from(file_type.0)))
-        .bind(model.bits_per_weight)
-        .bind(model.context_length.map(context_length_column))
-        .bind(model.expert_count.map(i64::from))
-        .bind(model.expert_used_count.map(i64::from))
-        .bind(model.expert_shared_count.map(i64::from))
-        .bind(&metadata_json)
-        .bind(model.added_at.to_string())
-        .bind(&model.hf_repo_id)
-        .bind(&model.hf_commit_sha)
-        .bind(&model.hf_filename)
-        .bind(model.download_date.as_ref().map(std::string::ToString::to_string))
-        .bind(model.last_update_check.as_ref().map(std::string::ToString::to_string))
-        .bind(&tags_json)
-        .bind(&model_key)
-        .bind(&file_paths_json)
-        .bind(i64::from(model.capabilities.bits()))
-        .bind(&inference_defaults_json)
-        .bind(&defaults_origin_str)
-        .bind(&server_defaults_json)
-        .bind(&dialect_spec_json)
-        .bind(model.image_family.map(ImageFamily::as_str))
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+        let _result = sqlx::query(UPSERT_MODEL)
+            .bind(&model_key)
+            .bind(&model.name)
+            .bind(&file_path_string)
+            .bind(
+                model
+                    .projector_path
+                    .as_deref()
+                    .map(normalized_file_path_string),
+            )
+            .bind(model.param_count_b)
+            .bind(&model.architecture)
+            .bind(&model.variant_label)
+            .bind(model.file_type.map(|file_type| i64::from(file_type.0)))
+            .bind(model.bits_per_weight)
+            .bind(model.context_length.map(context_length_column))
+            .bind(model.expert_count.map(i64::from))
+            .bind(model.expert_used_count.map(i64::from))
+            .bind(model.expert_shared_count.map(i64::from))
+            .bind(&metadata_json)
+            .bind(model.added_at.to_string())
+            .bind(&model.hf_repo_id)
+            .bind(&model.hf_commit_sha)
+            .bind(&model.hf_filename)
+            .bind(
+                model
+                    .download_date
+                    .as_ref()
+                    .map(std::string::ToString::to_string),
+            )
+            .bind(
+                model
+                    .last_update_check
+                    .as_ref()
+                    .map(std::string::ToString::to_string),
+            )
+            .bind(&tags_json)
+            .bind(&model_key)
+            .bind(&file_paths_json)
+            .bind(i64::from(model.capabilities.bits()))
+            .bind(&inference_defaults_json)
+            .bind(&defaults_origin_str)
+            .bind(&server_defaults_json)
+            .bind(model.image_family.map(ImageFamily::as_str))
+            .bind(tool_bit)
+            .bind(tool_bit)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
         // Get the model by model_key (works for both insert and update)
         let row = sqlx::query(&format!(
@@ -337,6 +371,11 @@ impl ModelRepository for SqliteModelRepository {
         self.with_components(stored).await
     }
 
+    /// The nine columns read leniently, from `tags` to `last_update_check`,
+    /// keep their stored text unless the edit changes their value, so text
+    /// this build cannot read survives an edit to another field. Clearing such
+    /// a value keeps it too; it already reads as none. `capabilities` is still
+    /// written whole, so bits this build doesn't know are dropped.
     async fn update(&self, model: &Model) -> Result<(), RepositoryError> {
         let metadata_json = serde_json::to_string(&model.metadata)
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
@@ -356,11 +395,6 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
-        let dialect_spec_json = model
-            .dialect_spec
-            .as_ref()
-            .and_then(|spec| serde_json::to_string(spec).ok());
-
         // Written by `update` only: `insert` takes a `NewModel`, which has no
         // caps to carry — the observation exists only after a launch (ADR
         // 0007), and the upsert leaves the stored column alone so a re-import
@@ -370,14 +404,17 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|caps| serde_json::to_string(caps).ok());
 
-        // The row and its components change together or not at all.
+        // The row and its components change together or not at all, and the
+        // row read here is the one written.
         let mut tx = self
             .pool
-            .begin()
+            .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
-        let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, variant_label = ?, file_type = ?, bits_per_weight = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ?, image_family = ? WHERE id = ?"
+        let held = held_row(&mut tx, model.id).await?;
+        let defaults_changed = model.inference_defaults != held.inference_defaults;
+        sqlx::query(
+            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, variant_label = ?, file_type = ?, bits_per_weight = ?, context_length = ?, metadata = IIF(?, ?, metadata), hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = IIF(?, ?, download_date), last_update_check = IIF(?, ?, last_update_check), tags = IIF(?, ?, tags), capabilities = ?, inference_defaults = IIF(?, ?, inference_defaults), defaults_origin = IIF(?, ?, defaults_origin), server_defaults = IIF(?, ?, server_defaults), template_caps = IIF(?, ?, template_caps), image_family = IIF(?, ?, image_family) WHERE id = ?"
         )
             .bind(&model.name)
             // Normalised exactly as `insert` does. `find_by_path` is a plain
@@ -393,31 +430,34 @@ impl ModelRepository for SqliteModelRepository {
             .bind(model.file_type.map(|file_type| i64::from(file_type.0)))
             .bind(model.bits_per_weight)
             .bind(model.context_length.map(context_length_column))
+            .bind(model.metadata != held.metadata)
             .bind(&metadata_json)
             .bind(&model.hf_repo_id)
             .bind(&model.hf_commit_sha)
             .bind(&model.hf_filename)
+            .bind(model.download_date != held.download_date)
             .bind(model.download_date.as_ref().map(std::string::ToString::to_string))
+            .bind(model.last_update_check != held.last_update_check)
             .bind(model.last_update_check.as_ref().map(std::string::ToString::to_string))
+            .bind(model.tags != held.tags)
             .bind(&tags_json)
             .bind(i64::from(model.capabilities.bits()))
+            .bind(defaults_changed)
             .bind(&inference_defaults_json)
+            // The origin is written with its defaults, so new defaults never
+            // sit beside an origin stored for the old ones.
+            .bind(defaults_changed || model.defaults_origin != held.defaults_origin)
             .bind(&defaults_origin_str)
+            .bind(model.server_defaults != held.server_defaults)
             .bind(&server_defaults_json)
-            .bind(&dialect_spec_json)
+            .bind(model.template_caps != held.template_caps)
             .bind(&template_caps_json)
+            .bind(model.image_family != held.image_family)
             .bind(model.image_family.map(ImageFamily::as_str))
             .bind(model.id)
             .execute(&mut *tx)
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
-
-        if result.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound(format!(
-                "Model with ID {}",
-                model.id
-            )));
-        }
 
         model_component_rows::replace(&mut tx, model.id, &model.components).await?;
         tx.commit()
@@ -440,8 +480,25 @@ impl ModelRepository for SqliteModelRepository {
     }
 }
 
+/// The stored row `update` rewrites, read on its transaction.
+async fn held_row(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: i64,
+) -> Result<Model, RepositoryError> {
+    let row = sqlx::query(&format!(
+        "SELECT {MODEL_SELECT_COLUMNS} FROM models WHERE id = ?"
+    ))
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|e| RepositoryError::Storage(e.to_string()))?
+    .ok_or_else(|| RepositoryError::NotFound(format!("Model with ID {id}")))?;
+    row_to_model(&row)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::path::PathBuf;
 
     use chrono::Utc;
@@ -459,7 +516,7 @@ mod tests {
         NewModel::new(
             name.to_string(),
             PathBuf::from(format!("/models/{name}.gguf")),
-            7.0,
+            Some(7.0),
             Utc::now(),
         )
     }
@@ -534,7 +591,7 @@ mod tests {
             .insert(&NewModel::new(
                 "Real".to_string(),
                 path.clone(),
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -589,7 +646,7 @@ mod tests {
             format!("local:{:x}", hasher.finish())
         };
 
-        let model = NewModel::new("Qwen3-8B-Q4_K_M".to_string(), path, 7.0, Utc::now());
+        let model = NewModel::new("Qwen3-8B-Q4_K_M".to_string(), path, Some(7.0), Utc::now());
         assert_eq!(
             compute_model_key(&model, &normalized_file_path_string(&model.file_path)),
             previous,
@@ -629,14 +686,19 @@ mod tests {
         assert_ne!(path, respelled, "the two spellings must differ literally");
 
         let first = repo
-            .insert(&NewModel::new("Solo".to_string(), path, 7.0, Utc::now()))
+            .insert(&NewModel::new(
+                "Solo".to_string(),
+                path,
+                Some(7.0),
+                Utc::now(),
+            ))
             .await
             .unwrap();
         let second = repo
             .insert(&NewModel::new(
                 "Solo".to_string(),
                 respelled,
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -670,7 +732,7 @@ mod tests {
             .insert(&NewModel::new(
                 "ALPHA".to_string(),
                 alpha_path.clone(),
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -679,7 +741,7 @@ mod tests {
             .insert(&NewModel::new(
                 "BETA".to_string(),
                 beta_path.clone(),
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -720,14 +782,15 @@ mod tests {
         std::fs::File::create(&first).unwrap();
         std::fs::File::create(&second).unwrap();
 
-        let mut downloaded = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        let mut downloaded =
+            NewModel::new("Sharded".to_string(), first.clone(), Some(7.0), Utc::now());
         downloaded.file_paths = Some(vec![first.clone(), second.clone()]);
         downloaded.download_date = Some(Utc::now());
         downloaded.last_update_check = Some(Utc::now());
         let original = repo.insert(&downloaded).await.unwrap();
 
         // A local re-import of the same file: no shard list, no dates.
-        let reimport = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        let reimport = NewModel::new("Sharded".to_string(), first.clone(), Some(7.0), Utc::now());
         let refreshed = repo.insert(&reimport).await.unwrap();
 
         assert_eq!(refreshed.id, original.id, "same row");
@@ -746,6 +809,34 @@ mod tests {
                 .is_some(),
             "the shard list must survive a refresh, or the sibling lookup dies with it"
         );
+    }
+
+    /// A re-registration replaces the stored header with the one it read, so
+    /// `--reimport` refreshes a row a parser stored lossily; one that read no
+    /// header (a download whose header was refused) keeps the stored one.
+    #[tokio::test]
+    async fn a_refresh_rereads_the_header_and_keeps_the_owners_keys() {
+        let repo = repo().await;
+        let header = |text: &str| HashMap::from([("k".to_owned(), text.to_owned())]);
+        let with_note = |text: &str| {
+            let mut map = header(text);
+            map.insert("note".to_owned(), "mine".to_owned());
+            map
+        };
+
+        let mut model = make_model("Header");
+        model.metadata = with_note("[Array with 60 elements]");
+        let id = repo.insert(&model).await.unwrap().id;
+
+        model.metadata = header("[16, 4]");
+        assert_eq!(
+            repo.insert(&model).await.unwrap().metadata,
+            with_note("[16, 4]")
+        );
+
+        model.metadata = HashMap::new();
+        let kept = repo.insert(&model).await.unwrap();
+        assert_eq!((kept.id, kept.metadata), (id, with_note("[16, 4]")));
     }
 
     /// Adding shard 2 of a group already registered is the same duplicate as
@@ -768,7 +859,7 @@ mod tests {
         // on macOS a tempdir sits behind `/private`, so raw and resolved
         // genuinely differ and the sibling arm would never match in
         // production.
-        let mut model = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        let mut model = NewModel::new("Sharded".to_string(), first.clone(), Some(7.0), Utc::now());
         model.file_paths = Some(vec![first.clone(), second.clone()]);
         let inserted = repo.insert(&model).await.unwrap();
 
@@ -797,7 +888,7 @@ mod tests {
             .insert(&NewModel::new(
                 "Updatable".to_string(),
                 path.clone(),
-                7.0,
+                Some(7.0),
                 Utc::now(),
             ))
             .await
@@ -871,72 +962,6 @@ mod tests {
         assert!(matches!(err, RepositoryError::NotFound(_)));
     }
 
-    #[tokio::test]
-    async fn dialect_spec_round_trips_through_insert_and_read() {
-        use gglib_core::domain::DialectSpec;
-        let repo = repo().await;
-        let mut model = make_model("Spec");
-        model.dialect_spec = Some(DialectSpec::qwen_xml());
-
-        let inserted = repo.insert(&model).await.unwrap();
-        assert_eq!(inserted.dialect_spec, Some(DialectSpec::qwen_xml()));
-
-        let fetched = repo.get_by_id(inserted.id).await.unwrap();
-        assert_eq!(fetched.dialect_spec, Some(DialectSpec::qwen_xml()));
-    }
-
-    /// Re-registering the same model overwrites the spec, like tags and
-    /// capabilities — a re-import re-derives, matching `retag --full`.
-    #[tokio::test]
-    async fn upsert_overwrites_the_dialect_spec() {
-        use gglib_core::domain::DialectSpec;
-        let repo = repo().await;
-
-        let mut first = make_model("Zeta");
-        first.dialect_spec = Some(DialectSpec::qwen_xml());
-        let inserted = repo.insert(&first).await.unwrap();
-        assert!(inserted.dialect_spec.is_some());
-
-        let second = make_model("Zeta"); // same model_key, no spec
-        let upserted = repo.insert(&second).await.unwrap();
-        assert_eq!(upserted.id, inserted.id, "same row, not a new one");
-        assert_eq!(upserted.dialect_spec, None, "spec overwritten on upsert");
-    }
-
-    /// Rows written before the column existed (or carrying garbage) read
-    /// as "no spec" — the tag fallback applies downstream.
-    #[tokio::test]
-    async fn unreadable_dialect_spec_reads_as_none() {
-        let repo = repo().await;
-        let inserted = repo.insert(&make_model("Legacy")).await.unwrap();
-        assert_eq!(inserted.dialect_spec, None);
-
-        sqlx::query("UPDATE models SET dialect_spec = 'not json' WHERE id = ?")
-            .bind(inserted.id)
-            .execute(&repo.pool)
-            .await
-            .unwrap();
-        let fetched = repo.get_by_id(inserted.id).await.unwrap();
-        assert_eq!(fetched.dialect_spec, None);
-    }
-
-    #[tokio::test]
-    async fn update_persists_the_dialect_spec() {
-        use gglib_core::domain::DialectSpec;
-        let repo = repo().await;
-        let mut model = repo.insert(&make_model("Eta")).await.unwrap();
-
-        model.dialect_spec = Some(DialectSpec::qwen_xml());
-        repo.update(&model).await.unwrap();
-        let fetched = repo.get_by_id(model.id).await.unwrap();
-        assert_eq!(fetched.dialect_spec, Some(DialectSpec::qwen_xml()));
-
-        model.dialect_spec = None;
-        repo.update(&model).await.unwrap();
-        let fetched = repo.get_by_id(model.id).await.unwrap();
-        assert_eq!(fetched.dialect_spec, None, "update can clear the spec");
-    }
-
     // ── template_caps (ADR 0007) ──────────────────────────────────────────
 
     fn measured_caps() -> gglib_core::domain::TemplateCaps {
@@ -963,23 +988,6 @@ mod tests {
         assert_eq!(fetched.template_caps, Some(measured_caps()));
     }
 
-    /// Same tolerance as `dialect_spec`: garbage in the column degrades to
-    /// "never observed" rather than failing every read of the row.
-    #[tokio::test]
-    async fn unreadable_template_caps_reads_as_none() {
-        let repo = repo().await;
-        let inserted = repo.insert(&make_model("Iota")).await.unwrap();
-
-        sqlx::query("UPDATE models SET template_caps = 'not json' WHERE id = ?")
-            .bind(inserted.id)
-            .execute(&repo.pool)
-            .await
-            .unwrap();
-
-        let fetched = repo.get_by_id(inserted.id).await.unwrap();
-        assert_eq!(fetched.template_caps, None);
-    }
-
     /// A re-import must not erase what a launch observed: `insert`'s upsert
     /// leaves the column alone, the same bargain `inference_defaults` gets.
     #[tokio::test]
@@ -995,6 +1003,31 @@ mod tests {
 
         let refetched = repo.get_by_id(inserted.id).await.unwrap();
         assert_eq!(refetched.template_caps, Some(measured_caps()));
+    }
+
+    /// A re-import fills a count the row lacks, and never replaces one it
+    /// has: a stored count may be its owner's.
+    #[tokio::test]
+    async fn upsert_fills_an_unknown_count_and_keeps_a_stored_one() {
+        let repo = repo().await;
+        let mut unknown = make_model("Iota");
+        unknown.param_count_b = None;
+        let inserted = repo.insert(&unknown).await.unwrap();
+
+        let mut counted = make_model("Iota");
+        counted.param_count_b = Some(11.9);
+        repo.insert(&counted).await.unwrap();
+        assert_eq!(
+            repo.get_by_id(inserted.id).await.unwrap().param_count_b,
+            Some(11.9)
+        );
+
+        counted.param_count_b = Some(13.0);
+        repo.insert(&counted).await.unwrap();
+        assert_eq!(
+            repo.get_by_id(inserted.id).await.unwrap().param_count_b,
+            Some(11.9)
+        );
     }
 
     #[tokio::test]
@@ -1092,3 +1125,11 @@ mod component_files_tests;
 #[cfg(test)]
 #[path = "sqlite_model_repository_header_facts_tests.rs"]
 mod header_facts_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_unreadable_tests.rs"]
+mod unreadable_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_tool_flag_tests.rs"]
+mod tool_flag_tests;

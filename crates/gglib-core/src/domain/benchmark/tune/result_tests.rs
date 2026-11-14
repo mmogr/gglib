@@ -1,7 +1,6 @@
 //! Tests for the result types in `result.rs`.
 //!
-//! Split from `result.rs` to keep that file inside the 300-LOC budget the
-//! complexity ratchet enforces — the repo's `*_tests.rs` sibling pattern.
+//! A sibling of `result.rs`, the repo's `*_tests.rs` layout.
 
 use super::*;
 use crate::domain::benchmark::tune::task::TaskCategory;

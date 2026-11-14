@@ -1,8 +1,6 @@
 //! Tests for [`super::parse_vulkaninfo`], [`super::parse_vram_sysfs`] and the
 //! budget decision.
 //!
-//! Split out via `#[path]` so the module itself stays inside the file budget.
-//!
 //! The integrated fixture is **real output**, captured from `vulkaninfo` on an
 //! AMD Radeon 840M (RADV KRACKAN1) on 2026-08-28 — the machine that
 //! prompted the three-way [`super::DeviceKind`]. Its numbers are what the

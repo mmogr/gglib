@@ -50,7 +50,7 @@ fn the_use_side_reaches_the_machine_and_everything_else_is_about_this_one() {
         &["gglib", "remote", "status"],
         &["gglib", "proxy"],
         &["gglib", "daemon", "status"],
-        &["gglib", "config", "settings", "show"],
+        &["gglib", "config", "show"],
         &["gglib", "completions", "bash"],
     ] {
         let (name, reach) = reach(&parsed(argv));
@@ -157,7 +157,7 @@ fn a_local_command_refuses_remote_with_the_one_sentence() {
         text.starts_with("`gglib model` is about this machine"),
         "{text}"
     );
-    assert!(text.contains("chat, question"), "{text}");
+    assert!(text.contains("chat, q"), "{text}");
     assert!(
         Target::Remote.admit(&parsed(&["gglib", "chat"])).is_ok(),
         "a command that uses a machine is admitted"

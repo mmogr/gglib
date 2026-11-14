@@ -506,7 +506,7 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
 
 /// KV cache persistence on the pinned (`gglib serve`) path.
 ///
-/// Issue #633 asked for CI coverage of `/v1/proxy/status` *and* KV cache
+/// Issue #633 asked for CI coverage of `/v1/gglib/proxy/status` *and* KV cache
 /// persistence on `gglib serve <model>` — `integration_pinned_models.rs`
 /// covers the dashboard and catalog filtering, and the roundtrip test above
 /// covers caching, but nothing exercised the combination. `gglib serve`

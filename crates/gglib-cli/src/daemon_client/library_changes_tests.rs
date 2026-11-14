@@ -133,10 +133,10 @@ async fn the_daemon_is_posted_each_event_once_in_order_with_its_token() {
         ctx.library_changes.emit(event.clone());
     }
 
-    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon(&ctx)).await;
+    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon()).await;
     assert_eq!(*asked.lock().unwrap(), told(&events));
 
-    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon(&ctx)).await;
+    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon()).await;
     assert_eq!(asked.lock().unwrap().len(), told(&events).len());
 }
 
@@ -148,10 +148,10 @@ async fn nothing_is_asked_of_the_port_with_no_change_to_tell_or_no_token() {
     let ctx = context(&dir).await;
     let (port, asked) = daemon("204 No Content");
 
-    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon(&ctx)).await;
+    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon()).await;
 
     ctx.library_changes.emit(renamed());
-    beside(port, None, ctx.library_changes.tell_daemon(&ctx)).await;
+    beside(port, None, ctx.library_changes.tell_daemon()).await;
 
     assert_eq!(*asked.lock().unwrap(), []);
 }
@@ -165,7 +165,7 @@ async fn a_port_another_program_holds_is_sent_no_event() {
     let ctx = context(&dir).await;
     ctx.library_changes.emit(renamed());
 
-    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon(&ctx)).await;
+    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon()).await;
 
     assert_eq!(*asked.lock().unwrap(), told(&[]));
 }
@@ -179,10 +179,10 @@ async fn with_no_daemon_running_the_events_are_dropped() {
     let ctx = context(&dir).await;
     ctx.library_changes.emit(renamed());
 
-    beside(nobody(), Some(TOKEN), ctx.library_changes.tell_daemon(&ctx)).await;
+    beside(nobody(), Some(TOKEN), ctx.library_changes.tell_daemon()).await;
 
     let (port, asked) = daemon("204 No Content");
-    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon(&ctx)).await;
+    beside(port, Some(TOKEN), ctx.library_changes.tell_daemon()).await;
     assert_eq!(*asked.lock().unwrap(), []);
 }
 
@@ -197,7 +197,7 @@ async fn a_daemon_that_refuses_an_event_is_sent_no_more() {
         ctx.library_changes.emit(renamed());
         ctx.library_changes.emit(AppEvent::model_removed(7));
 
-        beside(port, Some(TOKEN), ctx.library_changes.tell_daemon(&ctx)).await;
+        beside(port, Some(TOKEN), ctx.library_changes.tell_daemon()).await;
 
         assert_eq!(*asked.lock().unwrap(), told(&[renamed()]), "{answer}");
     }

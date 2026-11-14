@@ -10,25 +10,17 @@
 //!
 //! It never opens more. It copies only from a machine whose tunnel was on,
 //! since one that was off reset its list at its next `enable` anyway; and
-//! only a name exactly one server has, when that server is stdio, as the
-//! list's own read opened, and never `builtin`. The rows are read as raw JSON
+//! only a name exactly one server has, as the list's own read opened, and
+//! never `builtin` (an SSE server it flags is deleted by step 6). The rows are read as raw JSON
 //! and never as `Settings`, which would drop the list once that field is
 //! gone, and fail on an unrelated row it cannot read.
 
 use anyhow::Result;
 use serde_json::Value;
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Row, SqliteConnection, SqliteExecutor, SqlitePool};
+use sqlx::{Row, SqliteConnection};
 
 use crate::repositories::sqlite_settings_repository::{stored_rows, values};
-
-/// `PRAGMA user_version` once the old list's servers are flagged.
-///
-/// The fourth version this project has assigned, above
-/// [`UNSTORED_RECIPE_SCHEMA_VERSION`](super::recipes::UNSTORED_RECIPE_SCHEMA_VERSION),
-/// which goes on meaning what it meant; anything later takes a higher number
-/// still.
-pub(super) const REMOTE_GRANT_SCHEMA_VERSION: i64 = 4;
 
 /// The settings row that says whether the tunnel is on.
 const ENABLED: &str = "remote_enabled";
@@ -39,53 +31,25 @@ const SERVE: &str = "remote_serve";
 /// The name gglib keeps for its own tools, never opened to a device.
 const RESERVED: &str = "builtin";
 
-/// Migration: flag the servers the old list named, once per database.
-///
-/// Gated on `user_version` and run in one `BEGIN IMMEDIATE` transaction, as
-/// the recipes step is, and asked again once the lock is held, so of two
-/// processes the second finds the work done and a later stamp is not
-/// lowered. Stamped whatever the rows held: a list that cannot be read opens
-/// nothing and never stops the boot.
-pub(super) async fn flag_listed_servers(pool: &SqlitePool) -> Result<()> {
-    if user_version(pool).await? >= REMOTE_GRANT_SCHEMA_VERSION {
-        return Ok(());
-    }
-    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
-    if user_version(&mut *tx).await? >= REMOTE_GRANT_SCHEMA_VERSION {
-        return Ok(());
-    }
-    flag(&mut tx).await?;
-    // Not bindable as a parameter: SQLite requires a literal here.
-    sqlx::query(&format!(
-        "PRAGMA user_version = {REMOTE_GRANT_SCHEMA_VERSION}"
-    ))
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(())
-}
-
-/// Flag each listed name's one server, when it is stdio.
-async fn flag(conn: &mut SqliteConnection) -> Result<()> {
+/// Step 4: flag each listed name's one server. A list that cannot be read
+/// opens nothing and never stops the boot. An SSE server flagged here is
+/// deleted by step 6.
+pub(super) async fn flag_listed_servers(conn: &mut SqliteConnection) -> Result<()> {
     let list = listed(stored_rows(conn).await?);
     if list.is_empty() {
         return Ok(());
     }
-    let servers: Vec<(i64, String, String)> =
-        sqlx::query_as("SELECT id, name, type FROM mcp_servers")
-            .fetch_all(&mut *conn)
-            .await?;
+    let servers: Vec<(i64, String)> = sqlx::query_as("SELECT id, name FROM mcp_servers")
+        .fetch_all(&mut *conn)
+        .await?;
 
     let mut flagged = 0_u64;
     for name in &list {
-        let mut named = servers.iter().filter(|(_, has, _)| has == name);
+        let mut named = servers.iter().filter(|(_, has)| has == name);
         // Two servers sharing a name opened neither under the list.
-        let (Some((id, _, kind)), None) = (named.next(), named.next()) else {
+        let (Some((id, _)), None) = (named.next(), named.next()) else {
             continue;
         };
-        if kind != "stdio" {
-            continue;
-        }
         flagged += sqlx::query("UPDATE mcp_servers SET allow_remote = 1 WHERE id = ?")
             .bind(id)
             .execute(&mut *conn)
@@ -139,12 +103,6 @@ fn listed(rows: Vec<SqliteRow>) -> Vec<String> {
     names.sort_unstable();
     names.dedup();
     names
-}
-
-async fn user_version(conn: impl SqliteExecutor<'_>) -> sqlx::Result<i64> {
-    sqlx::query_scalar("PRAGMA user_version")
-        .fetch_one(conn)
-        .await
 }
 
 #[cfg(test)]

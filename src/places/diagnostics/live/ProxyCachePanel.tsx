@@ -24,6 +24,7 @@ import { Banner } from '../../../components/ui/Banner';
 import { Readout } from '../../../components/primitives';
 import type { CacheStatus, CacheUsage } from '../../../services/transport/types/dashboard';
 import { formatCount } from '../../../utils/format';
+import { tokensWords } from '../../../readings/turnFigures';
 
 export interface ProxyCachePanelProps {
   /** `null`/`undefined` before the first request resolves a model. */
@@ -63,8 +64,8 @@ const CacheUsageRows: FC<{ usage?: CacheUsage | null }> = ({ usage }) => {
               )}
             </div>
           )}
-          <Row label="Used from cache" value={`${formatCount(usage.cached_tokens)} tokens`} />
-          <Row label="Prompt tokens processed" value={`${formatCount(usage.prompt_tokens)} tokens`} />
+          <Row label="Used from cache" value={tokensWords(usage.cached_tokens)} />
+          <Row label="Prompt tokens processed" value={tokensWords(usage.prompt_tokens)} />
           <Row label="Requests measured" value={formatCount(usage.reporting_requests)} />
           {usage.last_cached_tokens != null && usage.last_prompt_tokens != null && (
             <Row
