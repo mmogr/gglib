@@ -10,7 +10,7 @@
  * dead while a code is live. Stop sharing drops the code on offer before it
  * asks, so the event it causes finds nothing to announce.
  *
- * Sharing is said in the daemon's words: `sharing` ("Sharing · N paired")
+ * Sharing is said in the daemon's words: `sharingSentence` ("Sharing · N paired")
  * while it is on, and `sharing_note`, the sentence for a switch on with
  * nothing bound, which Share stays live under.
  *
@@ -22,7 +22,7 @@ import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
 import { refreshRemoteStatus } from '../../services/remoteEvents';
-import { clearOffer, showOffer, useRemoteState } from '../../services/remoteRegistry';
+import { clearOffer, sharingSentence, showOffer, useRemoteState } from '../../services/remoteRegistry';
 import { useEndpointFacts } from '../../services/proxyRegistry';
 import { getTransport } from '../../services/transport';
 import type { RemoteStatus } from '../../services/transport/types/remote';
@@ -116,7 +116,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
       <div className="flex flex-col gap-sm px-md">
         {status.enabled ? (
           <div className="flex flex-wrap items-center gap-sm">
-            <StatusMark kind="on" word={status.sharing || undefined} label="Asking the daemon" className="flex-1 text-text" />
+            <StatusMark kind="on" word={sharingSentence(status) || undefined} label="Asking the daemon" className="flex-1 text-text" />
             <Button
               variant="primary"
               size="sm"

@@ -104,12 +104,17 @@ pub struct RemoteStatus {
     /// beside it.
     #[serde(default)]
     pub devices: Vec<RemoteDevice>,
-    /// Whether this machine is shared, as every surface says it: "Sharing ·
-    /// 2 paired", "Switched on, nothing bound", "Not sharing". This and the
-    /// two lines below are said by [`Self::with_lines`] where the status is
-    /// assembled and where the CLI reads one, and never read from an answer.
+    /// Whether this machine is shared, as every surface says it: "Sharing",
+    /// "Switched on, nothing bound", "Not sharing". This and the three lines
+    /// below are said by [`Self::with_lines`] where the status is assembled
+    /// and where the CLI reads one, and never read from an answer.
     #[serde(default, skip_deserializing)]
     pub sharing: String,
+    /// How many devices are paired, while sharing: "2 paired". Empty
+    /// otherwise. A surface with one line for both says
+    /// [`Self::sharing_sentence`].
+    #[serde(default, skip_deserializing)]
+    pub paired_line: String,
     /// The sentence for a switch on with nothing bound; empty otherwise.
     #[serde(default, skip_deserializing)]
     pub sharing_note: String,
@@ -125,16 +130,29 @@ pub struct RemoteStatus {
 }
 
 impl RemoteStatus {
-    /// This status with [`Self::sharing`], [`Self::sharing_note`],
-    /// [`Self::reach_line`] and [`Self::reach_note`] said from its own fields.
+    /// This status with [`Self::sharing`], [`Self::paired_line`],
+    /// [`Self::sharing_note`], [`Self::reach_line`] and [`Self::reach_note`]
+    /// said from its own fields.
     #[must_use]
     pub fn with_lines(mut self) -> Self {
         let lines = super::status_lines::remote_status_lines(&self);
         self.sharing = lines.sharing;
+        self.paired_line = lines.paired_line;
         self.sharing_note = lines.sharing_note;
         self.reach_line = lines.reach;
         self.reach_note = lines.reach_note;
         self
+    }
+
+    /// Sharing and the paired count on one line: "Sharing \u{b7} 2 paired",
+    /// or [`Self::sharing`] alone when there is no count.
+    #[must_use]
+    pub fn sharing_sentence(&self) -> String {
+        if self.paired_line.is_empty() {
+            self.sharing.clone()
+        } else {
+            format!("{} \u{b7} {}", self.sharing, self.paired_line)
+        }
     }
 
     /// What a sentence calls the paired machine: [`Self::paired_name`], or

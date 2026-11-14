@@ -207,9 +207,9 @@ export function ChatList() {
   const shown = matching(list ?? [], query);
 
   return (
-    <section aria-label="Chats" className="mt-sm flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-xs px-base">
-        <h2 className="m-0 flex-1 text-sm font-normal text-text">Chats</h2>
+    <section aria-label="Chats" className="mt-base flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-xs pl-base pr-sm">
+        <h2 className="m-0 flex-1 text-xs font-semibold uppercase tracking-wide text-text-muted">Chats</h2>
         <IconButton
           variant="ghost"
           size="sm"

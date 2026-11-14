@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
@@ -66,25 +66,29 @@ describe('what the devices line says', () => {
   });
 
   it('the joined machine and its reach, in the daemon\'s words', () => {
-    expect(devicesSaying(joined('connected'), null)).toEqual({ mark: 'on', word: 'Connected', name: 'desk' });
-    expect(devicesSaying(joined('away', 90), null)).toEqual({ mark: 'away', word: 'Away', name: 'desk' });
-    expect(devicesSaying(joined('disconnected'), null)).toEqual({ mark: 'off', word: 'Disconnected', name: 'desk' });
+    expect(devicesSaying(joined('connected'), null)).toEqual({ mark: 'on', word: 'Connected', detail: 'desk' });
+    expect(devicesSaying(joined('away', 90), null)).toEqual({ mark: 'away', word: 'Away', detail: 'desk' });
+    expect(devicesSaying(joined('disconnected'), null)).toEqual({ mark: 'off', word: 'Disconnected', detail: 'desk' });
   });
 
-  it("sharing, in the daemon's words", () => {
-    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [device, { ...device, id: 'dev-2' }], sharing: 'Sharing · 2 paired' }, null)).toEqual({
-      mark: 'on',
-      word: 'Sharing · 2 paired',
-    });
+  it("sharing, in the daemon's words: the word at the right, the count under the name", () => {
+    expect(
+      devicesSaying({ ...IDLE_STATUS, enabled: true, devices: [device, { ...device, id: 'dev-2' }], sharing: 'Sharing', paired_line: '2 paired' }, null),
+    ).toEqual({ mark: 'on', word: 'Sharing', detail: '2 paired' });
   });
 
   it('a code on offer as its time left, over everything else, in plain text: ▲ is for warnings', () => {
-    expect(devicesSaying(joined('connected'), 102)).toEqual({ mark: null, word: 'code 1:42' });
-    expect(devicesSaying(null, 9)).toEqual({ mark: null, word: 'code 0:09' });
+    expect(devicesSaying(joined('connected'), 102)).toEqual({ mark: null, word: 'code 1:42', detail: '' });
+    expect(devicesSaying({ ...IDLE_STATUS, enabled: true, sharing: 'Sharing', paired_line: '1 paired' }, 102)).toEqual({
+      mark: null,
+      word: 'code 1:42',
+      detail: '1 paired',
+    });
+    expect(devicesSaying(null, 9)).toEqual({ mark: null, word: 'code 0:09', detail: '' });
   });
 
   it('a turning mark before the daemon has answered', () => {
-    expect(devicesSaying(null, null)).toEqual({ mark: 'changing', word: '' });
+    expect(devicesSaying(null, null)).toEqual({ mark: 'changing', word: '', detail: '' });
   });
 });
 
@@ -103,9 +107,20 @@ describe('the devices line', () => {
   it('names the joined machine and its reach', () => {
     applyRemoteStatus(joined('away', 120));
     renderShell('/library');
-    expect(line()).toHaveAccessibleName('Devices, desk Away');
+    expect(line()).toHaveAccessibleName('Devices, Away, desk');
     expect(screen.getByText('desk')).toBeInTheDocument();
     expect(screen.getByText('Away')).toBeInTheDocument();
+    // The reach's shape is the badge on the icon, said as its word.
+    expect(within(line()).getByRole('img', { name: 'Away' })).toHaveAttribute('data-kind', 'away');
+  });
+
+  it('while sharing: Sharing at the right with its badge, the count under the name', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, enabled: true, remote_enabled: true, sharing: 'Sharing', paired_line: '1 paired' });
+    renderShell('/library');
+    expect(line()).toHaveAccessibleName('Devices, Sharing, 1 paired');
+    expect(within(line()).getByText('Sharing')).toBeInTheDocument();
+    expect(within(line()).getByText('1 paired')).toBeInTheDocument();
+    expect(within(line()).getByRole('img', { name: 'Sharing' })).toHaveAttribute('data-kind', 'on');
   });
 
   it("says a code on offer as its time left, counting down to the code's deadline", async () => {

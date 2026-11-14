@@ -105,12 +105,18 @@ identity_path: string | null,
  */
 devices: Array<RemoteDevice>, 
 /**
- * Whether this machine is shared, as every surface says it: "Sharing ·
- * 2 paired", "Switched on, nothing bound", "Not sharing". This and the
- * two lines below are said by [`Self::with_lines`] where the status is
- * assembled and where the CLI reads one, and never read from an answer.
+ * Whether this machine is shared, as every surface says it: "Sharing",
+ * "Switched on, nothing bound", "Not sharing". This and the three lines
+ * below are said by [`Self::with_lines`] where the status is assembled
+ * and where the CLI reads one, and never read from an answer.
  */
 sharing: string, 
+/**
+ * How many devices are paired, while sharing: "2 paired". Empty
+ * otherwise. A surface with one line for both says
+ * [`Self::sharing_sentence`].
+ */
+paired_line: string, 
 /**
  * The sentence for a switch on with nothing bound; empty otherwise.
  */

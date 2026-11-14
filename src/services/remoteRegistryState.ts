@@ -42,6 +42,7 @@ export const IDLE_STATUS: RemoteStatus = {
   identity_path: null,
   devices: [],
   sharing: '',
+  paired_line: '',
   sharing_note: '',
   reach_line: '',
   reach_note: '',
@@ -57,6 +58,15 @@ export const UNNAMED_PAIRED = 'the paired machine';
 /** The name the paired machine is shown by, from the stored pairing. */
 export function pairedName(status: RemoteStatus | null): string {
   return status?.paired_name || UNNAMED_PAIRED;
+}
+
+/**
+ * Sharing and the paired count on one line, "Sharing · 2 paired", for a
+ * surface with one line for both; the word alone when there is no count.
+ * The daemon's `sharing_sentence` joins them the same way for the CLI.
+ */
+export function sharingSentence(status: RemoteStatus): string {
+  return status.paired_line ? `${status.sharing} · ${status.paired_line}` : status.sharing;
 }
 
 export const INITIAL: RemoteState = { status: null, offer: null, ended: null };
