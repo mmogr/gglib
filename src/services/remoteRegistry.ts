@@ -224,7 +224,8 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
     case 'remote_paired':
       set({
         ...prev,
-        status: { ...status, pairing_active: false, paired: true, last_peer: evt.peer },
+        // One more device is paired, so the count is unsaid until the read.
+        status: { ...status, pairing_active: false, paired: true, last_peer: evt.peer, paired_line: '' },
       });
       break;
     case 'remote_joined':
