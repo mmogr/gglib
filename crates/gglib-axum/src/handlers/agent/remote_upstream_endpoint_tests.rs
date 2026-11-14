@@ -28,10 +28,11 @@ use crate::state::AppState;
 const PORT: u16 = 19_555;
 
 /// A runtime whose primary slot holds `primary`, by its port and id,
-/// launched at a context of 8192.
+/// launched at a context of `ctx`, or of 8192 when none is given.
 #[derive(Debug, Default)]
 struct Primary {
     primary: Option<(u16, u32)>,
+    ctx: Option<u64>,
 }
 
 #[async_trait]
@@ -52,7 +53,7 @@ impl ModelRuntimePort for Primary {
             port,
             id,
             "qwen".to_owned(),
-            8192,
+            self.ctx.unwrap_or(8192),
             false,
         ))
     }
@@ -140,6 +141,7 @@ async fn a_turn_reports_its_models_launched_context() {
     let (_dir, mut state, id) = on(&runtime).await;
     let primary = Arc::new(Primary {
         primary: Some((PORT, as_u32(id))),
+        ctx: None,
     });
     Arc::get_mut(&mut state).expect("not yet shared").runtime =
         Arc::clone(&primary) as Arc<dyn ModelRuntimePort>;
@@ -147,6 +149,36 @@ async fn a_turn_reports_its_models_launched_context() {
     let upstream = endpoint(&state, &turn(), served(id), door()).await.unwrap();
 
     assert_eq!(upstream.made_by.context_size, Some(8192));
+}
+
+/// The loop prunes a run's history at the window its model was launched
+/// with, counted as the endpoint counts it, where a fixed 180,000 characters
+/// cut a 131,072-token model's history at a third of its window (#1945). A
+/// run that does not know its window keeps the default.
+#[tokio::test]
+async fn a_runs_history_budget_is_its_models_launched_window() {
+    use super::super::compose::prepare_over;
+    use gglib_core::domain::agent::AgentConfig;
+    use gglib_core::request_pipeline::CHARS_PER_TOKEN_APPROX;
+
+    let runtime = Arc::new(Primary::default());
+    let (_dir, mut state, id) = on(&runtime).await;
+    let default = AgentConfig::default().context_budget_chars;
+    let upstream = endpoint(&state, &turn(), served(id), door()).await.unwrap();
+    let unknown = prepare_over(&state, turn(), upstream, None).await;
+    assert_eq!(unknown.config.context_budget_chars, default);
+
+    Arc::get_mut(&mut state).expect("not yet shared").runtime = Arc::new(Primary {
+        primary: Some((PORT, as_u32(id))),
+        ctx: Some(131_072),
+    });
+    let upstream = endpoint(&state, &turn(), served(id), door()).await.unwrap();
+    let launched = prepare_over(&state, turn(), upstream, None).await;
+    assert_eq!(
+        launched.config.context_budget_chars,
+        131_072 * CHARS_PER_TOKEN_APPROX
+    );
+    assert!(launched.config.context_budget_chars > default);
 }
 
 /// The primary slot's context is another model's unless both its port and
@@ -157,7 +189,8 @@ async fn another_model_in_the_primary_slot_gives_no_context() {
     let (_dir, mut state, id) = on(&runtime).await;
     let other = as_u32(id) + 1;
     for primary in [Some((PORT, other)), Some((PORT + 1, as_u32(id))), None] {
-        Arc::get_mut(&mut state).expect("not yet shared").runtime = Arc::new(Primary { primary });
+        Arc::get_mut(&mut state).expect("not yet shared").runtime =
+            Arc::new(Primary { primary, ctx: None });
 
         let upstream = endpoint(&state, &turn(), served(id), door()).await.unwrap();
 
@@ -174,6 +207,7 @@ async fn a_hub_chats_turn_saves_its_models_launched_context() {
     let (_dir, mut state, id) = on(&runtime).await;
     Arc::get_mut(&mut state).expect("not yet shared").runtime = Arc::new(Primary {
         primary: Some((PORT, as_u32(id))),
+        ctx: None,
     });
     let chat = conversation(&state).await;
     let reply = vec![

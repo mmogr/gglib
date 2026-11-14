@@ -221,7 +221,10 @@ pub(super) async fn prepare_over(
         drawing,
     );
 
-    let mut config = config_for(state, req.limits).await;
+    // The loop prunes a run's history at its model's window, where it is known.
+    let mut config = config_for(state, req.limits)
+        .await
+        .sized_to(upstream.made_by.context_size);
     // Pressing Draw is the person's explicit ask: the run's first reply
     // must be the call for the picture, offered that tool alone, and is
     // never left to the model to decide. The picture is asked for once:
