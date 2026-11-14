@@ -324,9 +324,12 @@ pub enum ModelCommand {
     ///
     /// Capabilities control how gglib preprocesses requests before they reach
     /// the model (strict-turn coalescing, system-role conversion, etc.).  They
-    /// are detected automatically at import time from the GGUF's chat template
-    /// and `general.architecture` field.  Use this command when auto-detection
-    /// produces the wrong result for a specific build.
+    /// are guessed at import time from the GGUF's chat template and
+    /// `general.architecture` field.  When llama-server launches a model on
+    /// this machine, its own answer becomes the tool flag (the first time, and
+    /// whenever it changes) until you set it, and a model whose tool flag is
+    /// off is sent no tools by any client.  Use this command when
+    /// auto-detection produces the wrong result for a specific build.
     ///
     /// Without any flag arguments the command prints the current capabilities.
     ///
