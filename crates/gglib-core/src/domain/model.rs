@@ -233,6 +233,14 @@ pub const NO_HUB_LABEL: &str = "this model was added before gglib kept the name 
     download it again to check, repair or upgrade it";
 
 impl Model {
+    /// llama-server's own answer to "does this template call tools?", as the
+    /// last launch observed it (`supports_tool_calls`, ADR 0007); `None`
+    /// when no launch has, or the launch's caps did not say.
+    #[must_use]
+    pub fn engine_tool_answer(&self) -> Option<bool> {
+        self.template_caps.as_ref()?.supports_tool_calls
+    }
+
     /// The label this model's type is shown and named by: the uploader's
     /// variant label, else the name of the type its header states. An
     /// unknown type number has no name, so no label.

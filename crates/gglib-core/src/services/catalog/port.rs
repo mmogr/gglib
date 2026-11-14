@@ -166,6 +166,14 @@ impl ModelCatalogPort for CatalogPortImpl {
     /// (ADR 0007), so every launch of an unchanged pair re-observes the same
     /// value, and echoing it into the database each time would be churn with
     /// no information in it.
+    ///
+    /// The caps' `supports_tool_calls` becomes the stored
+    /// [`ModelCapabilities::SUPPORTS_TOOL_CALLS`] when it is first read and
+    /// when it changes. An unknown answer leaves the flag, and so does the
+    /// same answer again, so an owner's own setting stands until the engine's
+    /// answer changes.
+    ///
+    /// [`ModelCapabilities::SUPPORTS_TOOL_CALLS`]: crate::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS
     async fn record_template_caps(
         &self,
         id: u32,
@@ -178,6 +186,14 @@ impl ModelCatalogPort for CatalogPortImpl {
             .map_err(|e| CatalogError::QueryFailed(e.to_string()))?;
         if model.template_caps.as_ref() == Some(&caps) {
             return Ok(());
+        }
+        let before = model.engine_tool_answer();
+        if let Some(calls) = caps.supports_tool_calls
+            && before != Some(calls)
+        {
+            model
+                .capabilities
+                .set(crate::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS, calls);
         }
         model.template_caps = Some(caps);
         self.repo
@@ -193,3 +209,6 @@ mod port_tests;
 #[cfg(test)]
 #[path = "port_projector_tests.rs"]
 mod projector_tests;
+#[cfg(test)]
+#[path = "port_tool_flag_tests.rs"]
+mod tool_flag_tests;
