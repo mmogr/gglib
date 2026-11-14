@@ -159,6 +159,20 @@
   "caps.ibm-granite-granite-4.0.supports_typed_content": {
     "value": true
   },
+  "caps.tinygemma3.supports_tool_calls": {
+    "adr": "0007",
+    "criterion": "If llama-server starts rendering `tools` to, or parsing tool calls from, a template whose caps say it calls none, the drop of `tools` for a model whose tool flag is off starts changing what the model sees, and is re-taken.",
+    "how_read": "tinygemma3 on its own template: /props chat_template_caps; one tool under tool_choice auto and required: the HTTP status, whether the message carries tool_calls, and whether prompt_tokens differs from the question without tools",
+    "if_moved": "the drop for a flag-off model now changes what the model sees: read the tool branch of common/chat-auto-parser-generator.cpp at the new pin and re-take it",
+    "value": false
+  },
+  "caps.tinygemma3.supports_tools": {
+    "adr": "0007",
+    "criterion": "If llama-server starts rendering `tools` to, or parsing tool calls from, a template whose caps say it calls none, the drop of `tools` for a model whose tool flag is off starts changing what the model sees, and is re-taken.",
+    "how_read": "tinygemma3 on its own template: /props chat_template_caps; one tool under tool_choice auto and required: the HTTP status, whether the message carries tool_calls, and whether prompt_tokens differs from the question without tools",
+    "if_moved": "the drop for a flag-off model now changes what the model sees: read the tool branch of common/chat-auto-parser-generator.cpp at the new pin and re-take it",
+    "value": false
+  },
   "effort_validated": {
     "value": false
   },
@@ -609,6 +623,48 @@
   },
   "slots_chat_format.ibm-granite-granite-4.0": {
     "value": "peg-native"
+  },
+  "toolless.tinygemma3.auto.status": {
+    "adr": "0007",
+    "criterion": "If llama-server starts rendering `tools` to, or parsing tool calls from, a template whose caps say it calls none, the drop of `tools` for a model whose tool flag is off starts changing what the model sees, and is re-taken.",
+    "how_read": "tinygemma3 on its own template: /props chat_template_caps; one tool under tool_choice auto and required: the HTTP status, whether the message carries tool_calls, and whether prompt_tokens differs from the question without tools",
+    "if_moved": "the drop for a flag-off model now changes what the model sees: read the tool branch of common/chat-auto-parser-generator.cpp at the new pin and re-take it",
+    "value": 200
+  },
+  "toolless.tinygemma3.auto.tool_calls": {
+    "adr": "0007",
+    "criterion": "If llama-server starts rendering `tools` to, or parsing tool calls from, a template whose caps say it calls none, the drop of `tools` for a model whose tool flag is off starts changing what the model sees, and is re-taken.",
+    "how_read": "tinygemma3 on its own template: /props chat_template_caps; one tool under tool_choice auto and required: the HTTP status, whether the message carries tool_calls, and whether prompt_tokens differs from the question without tools",
+    "if_moved": "the drop for a flag-off model now changes what the model sees: read the tool branch of common/chat-auto-parser-generator.cpp at the new pin and re-take it",
+    "value": false
+  },
+  "toolless.tinygemma3.auto.tools_rendered": {
+    "adr": "0007",
+    "criterion": "If llama-server starts rendering `tools` to, or parsing tool calls from, a template whose caps say it calls none, the drop of `tools` for a model whose tool flag is off starts changing what the model sees, and is re-taken.",
+    "how_read": "tinygemma3 on its own template: /props chat_template_caps; one tool under tool_choice auto and required: the HTTP status, whether the message carries tool_calls, and whether prompt_tokens differs from the question without tools",
+    "if_moved": "the drop for a flag-off model now changes what the model sees: read the tool branch of common/chat-auto-parser-generator.cpp at the new pin and re-take it",
+    "value": false
+  },
+  "toolless.tinygemma3.required.status": {
+    "adr": "0007",
+    "criterion": "If llama-server starts rendering `tools` to, or parsing tool calls from, a template whose caps say it calls none, the drop of `tools` for a model whose tool flag is off starts changing what the model sees, and is re-taken.",
+    "how_read": "tinygemma3 on its own template: /props chat_template_caps; one tool under tool_choice auto and required: the HTTP status, whether the message carries tool_calls, and whether prompt_tokens differs from the question without tools",
+    "if_moved": "the drop for a flag-off model now changes what the model sees: read the tool branch of common/chat-auto-parser-generator.cpp at the new pin and re-take it",
+    "value": 200
+  },
+  "toolless.tinygemma3.required.tool_calls": {
+    "adr": "0007",
+    "criterion": "If llama-server starts rendering `tools` to, or parsing tool calls from, a template whose caps say it calls none, the drop of `tools` for a model whose tool flag is off starts changing what the model sees, and is re-taken.",
+    "how_read": "tinygemma3 on its own template: /props chat_template_caps; one tool under tool_choice auto and required: the HTTP status, whether the message carries tool_calls, and whether prompt_tokens differs from the question without tools",
+    "if_moved": "the drop for a flag-off model now changes what the model sees: read the tool branch of common/chat-auto-parser-generator.cpp at the new pin and re-take it",
+    "value": false
+  },
+  "toolless.tinygemma3.required.tools_rendered": {
+    "adr": "0007",
+    "criterion": "If llama-server starts rendering `tools` to, or parsing tool calls from, a template whose caps say it calls none, the drop of `tools` for a model whose tool flag is off starts changing what the model sees, and is re-taken.",
+    "how_read": "tinygemma3 on its own template: /props chat_template_caps; one tool under tool_choice auto and required: the HTTP status, whether the message carries tool_calls, and whether prompt_tokens differs from the question without tools",
+    "if_moved": "the drop for a flag-off model now changes what the model sees: read the tool branch of common/chat-auto-parser-generator.cpp at the new pin and re-take it",
+    "value": false
   },
   "tools_rendered_under_none.Qwen-Qwen3-0.6B": {
     "value": true

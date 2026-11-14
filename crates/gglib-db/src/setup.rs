@@ -47,6 +47,8 @@ mod recipes;
 mod remote_grant;
 #[path = "setup_settings.rs"]
 mod settings;
+#[path = "setup_tool_flag.rs"]
+mod tool_flag;
 #[path = "setup_unknown_params.rs"]
 mod unknown_params;
 

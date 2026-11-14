@@ -168,13 +168,13 @@ fn a_model_with_no_sampling_metadata_declares_nothing() {
 
 /// A repo that actually holds its one model, so the read-compare-write in
 /// `record_template_caps` can be observed rather than stubbed away.
-struct RecordingRepo {
-    stored: Mutex<Model>,
+pub(super) struct RecordingRepo {
+    pub(super) stored: Mutex<Model>,
     updates: Mutex<u32>,
 }
 
 impl RecordingRepo {
-    fn with_caps(caps: Option<TemplateCaps>) -> Self {
+    pub(super) fn with_caps(caps: Option<TemplateCaps>) -> Self {
         let mut model = base_model();
         model.template_caps = caps;
         Self {
@@ -183,7 +183,7 @@ impl RecordingRepo {
         }
     }
 
-    fn update_count(&self) -> u32 {
+    pub(super) fn update_count(&self) -> u32 {
         *self.updates.lock().unwrap()
     }
 }

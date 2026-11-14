@@ -71,6 +71,18 @@
     },
     "readings": ["slots_chat_format.*", "auto_grammar.*", "required_grammar.*"]
   },
+  "tool-support": {
+    "engine": "llama",
+    "adr": "0007",
+    "paths": ["crates/gglib-core/src/domain/capabilities.rs", "crates/gglib-core/src/services/catalog/port.rs", "crates/gglib-core/src/request_pipeline/tools.rs"],
+    "upstream": {
+      "paths": ["common/jinja/caps.cpp", "common/jinja/caps.h", "common/chat-auto-parser-generator.cpp"],
+      "headings": [],
+      "ids": [],
+      "phrases": ["supports_tool_calls", "supports_tools", "tool support", "tool-less", "without tools"]
+    },
+    "readings": ["caps.*.supports_tool_calls", "caps.*.supports_tools", "toolless.*"]
+  },
   "mcp-gateway": {
     "engine": "llama",
     "adr": "0024",

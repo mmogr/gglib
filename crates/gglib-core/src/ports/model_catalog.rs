@@ -274,7 +274,8 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
     /// `GET /props` has been read (ADR 0007: the caps are a fact about the
     /// binary–model pair, so only a launch can learn them). Implementations
     /// persist only when the stored value differs, so repeat launches of an
-    /// unchanged pair write nothing.
+    /// unchanged pair write nothing. A new or changed `supports_tool_calls`
+    /// also sets the model's stored tool flag.
     ///
     /// Defaulted to a no-op because most implementors of this port are
     /// read-only views (test doubles, the profiles catalog) with nothing to

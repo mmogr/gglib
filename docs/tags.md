@@ -19,6 +19,10 @@ to re-derive it — see [Retagging](#retagging-an-existing-catalog).
 The proxy uses per-model capability flags to preprocess requests before they
 reach llama-server: whether the model requires strict user/assistant turn
 alternation, supports a system role, can handle tool calls, and so on.
+Flags are guessed at import. When llama-server launches a model on this
+machine, its own answer (`chat_template_caps.supports_tool_calls`) becomes the
+tool flag, the first time and whenever it changes, until you set it yourself.
+A model whose tool flag is off is sent no tools, by any client.
 
 For models whose quantized builds ship without a chat template, the
 architecture name (`general.architecture`) acts as a backstop — for example,
@@ -152,7 +156,7 @@ it touches do not all behave alike:
 
 | Column | On refresh |
 |---|---|
-| `tags`, `capabilities` | Replaced — including with nothing, so these **can** be cleared |
+| `tags`, `capabilities` | Replaced — including with nothing, so these **can** be cleared; the tool flag is kept once a launch has read llama-server's answer |
 | `quantization`, `context_length`, expert counts | Replaced only when newly detected; a stored value is never emptied |
 | `name`, parameter count, `architecture` | Untouched — a name you chose yourself survives |
 

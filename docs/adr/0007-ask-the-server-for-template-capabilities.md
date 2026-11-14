@@ -1,6 +1,6 @@
 # ADR 0007 — Ask the server for template capabilities
 
-- **Status:** Accepted; decision 3 superseded (amended 2026-11-12)
+- **Status:** Accepted; decision 3 superseded (amended 2026-11-12, 2026-11-14)
 - **Date:** 2026-08-17
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),
@@ -257,6 +257,30 @@ lifetime**, per ADR 0001's static-arbitration rule — nothing re-probes
 mid-request, nothing changes strategy mid-stream. It is stored on the model's
 catalog row as a tri-state: **supported / not supported / never observed**,
 never collapsed (see Consequences).
+
+> **Amended 2026-11-14 — the caps set the stored tool flag.** The caps'
+> `supports_tool_calls` is written into the model's stored tool flag
+> (`SUPPORTS_TOOL_CALLS`) when it is first read and again when it changes.
+> Unknown leaves the flag alone. The owner's own setting (`gglib model
+> capabilities --set/--unset supports-tool-calls`, or the Abilities checkbox)
+> stands until the answer changes, and a re-import keeps it. Library step 10
+> applied each already-launched model's stored answer once, which replaced a
+> flag set by hand before that upgrade. The request pipeline still drops
+> `tools` for a model whose flag is off (stage 2b), so the caps now reach the
+> request through the flag. That qualifies decision 3's 2026-11-12 "the caps
+> are read, never used to edit the request", and the Classification note's
+> "the one decision it still steers".
+>
+> The drop stays. At `b12110` llama-server hands a request's `tools` to a
+> template whose caps say `supports_tool_calls: false`. The template does not
+> read them, no tool parser is built, and the reply is parsed as plain text,
+> under `tool_choice` `auto` and `required` alike ([log-0007](log-0007.md)).
+> So the drop changes nothing such a model sees; it keeps unrendered tool
+> schemas out of the truncation measure, and keeps the owner's off meaning off
+> for every client. If llama-server starts rendering `tools` to, or parsing
+> tool calls from, a template whose caps say it calls none, the drop of
+> `tools` for a model whose tool flag is off starts changing what the model
+> sees, and is re-taken.
 
 **3. The resolved `reasoning_effort` is suppressed when — and only when — the
 observed caps positively say the template does not read the variable.** The
