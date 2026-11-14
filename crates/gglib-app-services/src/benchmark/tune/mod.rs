@@ -863,9 +863,12 @@ where
 
 /// Whether `event` counts into [`GeneratedOutput::system_warnings`]: a
 /// `SystemWarning` other than the one for an answer cut off at its token
-/// limit, which is no runaway, only an answer that ran long.
+/// limit, which is no runaway, only an answer that ran long, and the one for
+/// a run that used all its steps, which is told by how the run ends.
 fn counts_as_a_warning(event: &AgentEvent) -> bool {
-    matches!(event, AgentEvent::SystemWarning { .. }) && !gglib_agent::is_cut_off_warning(event)
+    matches!(event, AgentEvent::SystemWarning { .. })
+        && !gglib_agent::is_cut_off_warning(event)
+        && !gglib_agent::is_step_limit_warning(event)
 }
 
 /// Completion-token throughput across a result set: total completion tokens
@@ -1013,14 +1016,15 @@ mod tests {
 
     // ── What the warning count counts ────────────────────────────────────────
 
-    /// An answer cut off at its token limit is not a runaway warning; the
-    /// loop's other warnings still are.
+    /// An answer cut off at its token limit is not a runaway warning, nor is
+    /// a run that used all its steps; the loop's other warnings still are.
     #[test]
-    fn a_cut_off_answer_is_not_counted_as_a_warning() {
+    fn a_cut_off_answer_or_a_step_limit_is_not_counted_as_a_warning() {
         assert!(!counts_as_a_warning(&gglib_agent::cut_off_warning(Some(
             512
         ))));
         assert!(!counts_as_a_warning(&gglib_agent::cut_off_warning(None)));
+        assert!(!counts_as_a_warning(&gglib_agent::step_limit_warning(30)));
         assert!(counts_as_a_warning(&AgentEvent::SystemWarning {
             message: "Agent attempted 80 parallel tool calls (limit is 5).".to_owned(),
             suggested_action: None,

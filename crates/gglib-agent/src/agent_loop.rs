@@ -33,6 +33,8 @@
 //! calls both together, because it reads a transcript that already has them.
 //!
 //! When a final answer is reached: `AgentEvent::FinalAnswer` → `Ok(content)`.
+//! When the iterations run out, one closing request with no tools asks for
+//! the answer ([`crate::closing`]).
 //! On any guard or limit failure: `AgentEvent::Error` is emitted first, then
 //! `Err(AgentError::…)` is returned — the SSE client always sees the reason
 //! before the stream closes.
@@ -389,7 +391,7 @@ impl AgentLoop {
 
     /// Emit a `FinalAnswer` event, append the assistant reply to `messages`,
     /// and return `Ok(AgentRunOutput)`.
-    async fn finalize_answer(
+    pub(crate) async fn finalize_answer(
         messages: &mut Vec<AgentMessage>,
         content: String,
         iteration: usize,
@@ -490,9 +492,13 @@ impl AgentLoopPort for AgentLoop {
     ///
     /// - `Ok(AgentRunOutput)` — the model produced a response without
     ///   requesting further tool calls, or, in a run with
-    ///   `config.first_call`, gave the reply that follows that call.
+    ///   `config.first_call`, gave the reply that follows that call, or, having
+    ///   used all `config.max_iterations` steps, gave a reply with text to the
+    ///   closing request with no tools (the `closing` module), after a
+    ///   `SystemWarning`.
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
-    ///   without a final answer.
+    ///   and the closing request gave no reply of use, or the run had a
+    ///   `config.first_call` and made none.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated
     ///   back to back, with the same answer each time, more than
     ///   `config.max_repeated_batch_steps` times.
@@ -633,10 +639,14 @@ impl AgentLoopPort for AgentLoop {
             succeeded = all_succeeded;
         }
 
-        warn!(max = config.max_iterations, "agent loop hit max iterations");
-        let error = AgentError::MaxIterationsReached(config.max_iterations);
-        emit_error_event(&tx, &error.to_string()).await;
-        Err(error)
+        crate::closing::end_at_limit(
+            self.llm.as_ref(),
+            &mut messages,
+            &config,
+            total_completion_tokens,
+            &tx,
+        )
+        .await
     }
 }
 

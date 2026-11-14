@@ -2,6 +2,7 @@
 
 pub(crate) mod agent_loop;
 pub(crate) mod call_writing;
+pub(crate) mod closing;
 pub(crate) mod context_pruning;
 pub(crate) mod cut_off;
 pub(crate) mod guards;
@@ -11,6 +12,7 @@ pub(crate) mod turn_usage;
 pub(crate) mod util;
 
 pub use agent_loop::AgentLoop;
+pub use closing::{is_step_limit_warning, step_limit_warning};
 pub use cut_off::{cut_off_warning, is_cut_off_warning};
 
 // These symbols are public only so integration tests in `tests/` can reach
