@@ -7,6 +7,8 @@
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::request_pipeline::CHARS_PER_TOKEN_APPROX;
+
 // =============================================================================
 // Ceiling constants — shared across HTTP and CLI callers
 // =============================================================================
@@ -143,6 +145,10 @@ pub struct AgentConfig {
 
     /// Maximum total character budget across all messages before context pruning
     /// is applied.
+    ///
+    /// The default is for a run that does not know its model's window. A run
+    /// that does has it raised to that window when the window is the larger
+    /// ([`Self::sized_to`]).
     pub context_budget_chars: usize,
 
     /// Maximum number of times the same tool-call batch signature may repeat
@@ -514,6 +520,27 @@ impl AgentConfig {
         cfg.validated()
     }
 
+    /// This config with its history budget raised to the window its model is
+    /// served at: `context_tokens` tokens at [`CHARS_PER_TOKEN_APPROX`], the
+    /// rule the endpoint's own truncation reads a window by. The loop then
+    /// prunes a run only when its history has outgrown the model's whole
+    /// window, where a fixed budget pruned a model served at 131,072 tokens
+    /// at about 46,000 and dropped what it had read.
+    ///
+    /// The budget is only ever raised. A window smaller than the budget
+    /// leaves it as it was: below it a history goes to the endpoint whole,
+    /// for the endpoint to trim, and a smaller budget here would drop whole
+    /// messages first. `None`, a window this run does not know, leaves it too.
+    #[must_use]
+    pub fn sized_to(mut self, context_tokens: Option<u64>) -> Self {
+        if let Some(tokens) = context_tokens.and_then(|t| usize::try_from(t).ok()) {
+            self.context_budget_chars = self
+                .context_budget_chars
+                .max(tokens.saturating_mul(CHARS_PER_TOKEN_APPROX));
+        }
+        self
+    }
+
     /// Validate all fields that could cause the agent loop to malfunction.
     ///
     /// Call this after constructing an `AgentConfig` from untrusted input.
@@ -684,6 +711,27 @@ mod tests {
             ..Default::default()
         };
         assert!(cfg.validated().is_ok());
+    }
+
+    /// A run that knows its model's window prunes at that window, counted
+    /// as the endpoint counts it. A window smaller than the default budget,
+    /// and one the run does not know, leave the default.
+    #[test]
+    fn the_history_budget_follows_the_models_window() {
+        let default = AgentConfig::default().context_budget_chars;
+
+        let sized = AgentConfig::default().sized_to(Some(131_072));
+        assert_eq!(sized.context_budget_chars, 131_072 * CHARS_PER_TOKEN_APPROX);
+        assert!(sized.context_budget_chars > default);
+        assert!(sized.validated().is_ok());
+
+        for small in [0, 4_096, 8_192] {
+            let kept = AgentConfig::default().sized_to(Some(small));
+            assert_eq!(kept.context_budget_chars, default, "{small}");
+        }
+
+        let unknown = AgentConfig::default().sized_to(None);
+        assert_eq!(unknown.context_budget_chars, default);
     }
 
     #[test]
