@@ -38,8 +38,10 @@ use tokio::sync::mpsc;
 // =============================================================================
 
 /// **Max iterations reached**: the LLM keeps requesting tool calls without
-/// ever producing a final answer.  The loop must terminate with
-/// [`AgentError::MaxIterationsReached`] after `max_iterations` iterations.
+/// ever producing a final answer.  After `max_iterations` iterations the loop
+/// makes one closing request with no tools; the model answers it with one
+/// more tool call and no text, so the loop must terminate with
+/// [`AgentError::MaxIterationsReached`].
 #[tokio::test]
 async fn test_max_iterations_reached() {
     // Provide more responses than max_iterations so the LLM never "runs out".
@@ -54,7 +56,7 @@ async fn test_max_iterations_reached() {
         },
     );
 
-    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let agent = AgentLoop::build(Arc::clone(&llm) as _, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(128);
 
     let result = agent
@@ -85,6 +87,17 @@ async fn test_max_iterations_reached() {
 
     // No FinalAnswer should have been emitted.
     assert!(!has_final_answer(&events), "unexpected FinalAnswer");
+
+    // The fourth request is the closing one, with no tools, after a warning.
+    let asked = llm.asked().await;
+    assert_eq!(asked.len(), 4, "three steps and the closing request");
+    assert!(asked[3].0.is_empty(), "the closing request offers no tools");
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::SystemWarning { .. })),
+        "expected the step-limit warning"
+    );
 }
 
 /// The same batch, back to back, whose answer moves every time.

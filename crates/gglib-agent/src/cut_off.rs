@@ -11,7 +11,9 @@
 //! the run says it was cut off with one `system_warning`
 //! ([`is_cut_off_warning`] tells it from the others). The words after a
 //! Draw's picture are the exception: they are always answered for
-//! ([`IfWordless::Answer`]).
+//! ([`IfWordless::Answer`]). The closing reply at the step limit is kept
+//! the same way, and one left with no text ends the run on the limit
+//! ([`crate::closing`]).
 
 use gglib_core::AgentEvent;
 use gglib_core::domain::figures::tokens_words;
@@ -35,10 +37,12 @@ const CUT_OFF_WARNING: &str = "The answer was cut off at its token limit";
 pub(crate) enum IfWordless {
     /// End the run: the reply has nothing to give.
     EndTheRun,
-    /// Keep it: the run's demanded call has run, its calls are never run
-    /// again, and the path answers a wordless reply with words of its own
+    /// Keep it: the reply was offered no tools and its calls are never run,
+    /// so the path decides what a wordless reply means. After a Draw's
+    /// picture the path answers it with words of its own
     /// (`FirstCall::if_wordless`), so even a reply cut off while it wrote a
-    /// call (its text dropped) does not fail a run whose work is done.
+    /// call (its text dropped) does not fail a run whose work is done. At
+    /// the step limit ([`crate::closing`]) the run ends on the limit instead.
     Answer,
 }
 
