@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.36.0-rc.3](https://github.com/mmogr/gglib/compare/v0.36.0-rc.2...v0.36.0-rc.3) (2026-11-14)
+
+
+### What gglib now does
+
+* **core:** a model's tool flag is llama-server's own answer once it has launched ([#1941](https://github.com/mmogr/gglib/issues/1941)) ([fa464d9](https://github.com/mmogr/gglib/commit/fa464d998abe8592c3d84bce5d004aa608430510))
+
+
+### Internal
+
+* **core:** one guess says whether a model calls tools, and the tool-call format name goes ([#1939](https://github.com/mmogr/gglib/issues/1939)) ([1e97083](https://github.com/mmogr/gglib/commit/1e970837d5bb11d8da0fc844b4e64788b6f569a3))
+
 ## [0.36.0-rc.2](https://github.com/mmogr/gglib/compare/v0.36.0-rc.1...v0.36.0-rc.2) (2026-11-13)
 
 
