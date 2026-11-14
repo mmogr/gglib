@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.36.0-rc.2](https://github.com/mmogr/gglib/compare/v0.36.0-rc.1...v0.36.0-rc.2) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** the promised list promises what it means ([#1937](https://github.com/mmogr/gglib/issues/1937))
+* **cli:** a flag that would be dropped is refused by name ([#1936](https://github.com/mmogr/gglib/issues/1936))
+* **cli:** q is the one name, chat keeps no sampling flags, and gui --dev, check-updates and serve --jinja take their settled shape ([#1935](https://github.com/mmogr/gglib/issues/1935))
+* **proxy:** a non-streamed upstream error names its code as a streamed one does ([#1932](https://github.com/mmogr/gglib/issues/1932))
+
+### What gglib now does
+
+* **cli:** q is the one name, chat keeps no sampling flags, and gui --dev, check-updates and serve --jinja take their settled shape ([#1935](https://github.com/mmogr/gglib/issues/1935)) ([2e50328](https://github.com/mmogr/gglib/commit/2e503285f5ffdcd230020550ab4521feb2c0bea4))
+
+
+### What it stopped getting wrong
+
+* **cli:** a flag that would be dropped is refused by name ([#1936](https://github.com/mmogr/gglib/issues/1936)) ([92140d4](https://github.com/mmogr/gglib/commit/92140d4ac12af59b4fb248b49c950bb837b00229))
+* **cli:** config paths and install.sh find the desktop app Linux releases called gglib-app ([#1933](https://github.com/mmogr/gglib/issues/1933)) ([93f589c](https://github.com/mmogr/gglib/commit/93f589cbca2e4b1afa245d63fdca94eab4edb769))
+* **cli:** help, completions and config paths run without opening the library ([#1934](https://github.com/mmogr/gglib/issues/1934)) ([9bd2db0](https://github.com/mmogr/gglib/commit/9bd2db09588dde60edf310306756c92335eb586e))
+* **cli:** the promised list promises what it means ([#1937](https://github.com/mmogr/gglib/issues/1937)) ([0305921](https://github.com/mmogr/gglib/commit/030592126af473539e7a43a86f2927057e5bd4fb))
+* **proxy:** a non-streamed upstream error names its code as a streamed one does ([#1932](https://github.com/mmogr/gglib/issues/1932)) ([38b4e50](https://github.com/mmogr/gglib/commit/38b4e50c569795dff8992e2b1c382735f3e073d9))
+
+
+### Documentation
+
+* **adr:** a change to part of an ADR is a dated amendment, and the status lines say what the v1 arc reversed ([#1931](https://github.com/mmogr/gglib/issues/1931)) ([a50465b](https://github.com/mmogr/gglib/commit/a50465b8d3eb8626b285930038a251545ac9be2c))
+
 ## [0.36.0-rc.1](https://github.com/mmogr/gglib/compare/v0.35.0-rc.3...v0.36.0-rc.1) (2026-11-13)
 
 
