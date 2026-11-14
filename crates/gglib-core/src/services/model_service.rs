@@ -405,7 +405,9 @@ impl ModelService {
     /// Backfill capabilities for models that don't have them set.
     ///
     /// This runs on startup to handle models with unknown capabilities.
-    /// Only infers if capabilities are empty (0/unknown).
+    /// Only infers if capabilities are empty (0/unknown), and never for a
+    /// row that holds llama-server's tool answer (ADR 0007): one the engine
+    /// answered "no tools" for may rightly hold no bits.
     ///
     /// # INVARIANT
     ///
@@ -417,7 +419,7 @@ impl ModelService {
 
         for mut model in models {
             // Only infer if capabilities are unknown (empty)
-            if model.capabilities.is_empty() {
+            if model.capabilities.is_empty() && model.engine_tool_answer().is_none() {
                 let template = model.metadata.get("tokenizer.chat_template");
                 let name = model.metadata.get("general.name");
                 let arch = model.metadata.get("general.architecture");
@@ -1201,5 +1203,40 @@ mod tests {
 
         let tags = service.get_tags(created.id).await.unwrap();
         assert!(!tags.contains(&"mtp".to_string()));
+    }
+
+    /// A row the engine answered "no tools" for may hold no bits at all; it
+    /// is not re-guessed at each start. A row no launch has answered is.
+    #[tokio::test]
+    async fn bootstrap_skips_a_row_the_engine_answered() {
+        let repo = Arc::new(MockRepo::new());
+        let mut new = NewModel::new(
+            "a".to_owned(),
+            PathBuf::from("/models/a.gguf"),
+            None,
+            Utc::now(),
+        );
+        new.metadata.insert(
+            "tokenizer.chat_template".to_owned(),
+            "{% if tools %}<tool_call>{% endif %}".to_owned(),
+        );
+        let mut answered = Model::stored(1, &new);
+        answered.template_caps = Some(crate::domain::TemplateCaps {
+            supports_tool_calls: Some(false),
+            ..crate::domain::TemplateCaps::default()
+        });
+        let unanswered = Model::stored(2, &new);
+        *repo.models.lock().unwrap() = vec![answered, unanswered];
+        let service = ModelService::new(Arc::clone(&repo) as Arc<dyn ModelRepository>);
+
+        service.bootstrap_capabilities().await.unwrap();
+
+        let models = repo.models.lock().unwrap().clone();
+        assert!(
+            models[0].capabilities.is_empty(),
+            "{:?}",
+            models[0].capabilities
+        );
+        assert!(models[1].capabilities.supports_tool_calls());
     }
 }
