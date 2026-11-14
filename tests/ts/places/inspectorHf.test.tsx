@@ -1,7 +1,7 @@
 /**
  * The inspector's Hugging Face subject, at `/get/:owner/:name` through the
  * real routes: the repo read by its address (so a reload keeps it), the
- * summary with tool calling's confidence on hover, "Pick a size" with
+ * summary saying whether it calls tools, "Pick a size" with
  * gglib's pick (the daemon's) marked ★, selected and scrolled into view,
  * only the selected row carrying Download, which queues that variant; focus
  * selecting a size; the library's sizes; the daemon's fit in its own words;

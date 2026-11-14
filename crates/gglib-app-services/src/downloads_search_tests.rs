@@ -267,3 +267,22 @@ async fn a_search_the_hub_refuses_says_why() {
         "{refused:?}"
     );
 }
+
+/// A Hub repo's tool answer reads the Hub's chat template: one that names
+/// `tools` says yes under a repo id that says nothing, and the recorded
+/// hit's plain template says no.
+#[tokio::test]
+async fn a_hub_repo_calls_tools_by_its_chat_template() {
+    let mut tooled = recorded_hit();
+    tooled.model_id = "owner/tooled-GGUF".to_string();
+    tooled.chat_template = Some("{% if tools %}{{ tools | tojson }}{% endif %}".to_string());
+    let ops = ops_over(Arc::new(SearchedHub {
+        hits: vec![recorded_hit(), tooled],
+        ..SearchedHub::default()
+    }));
+
+    let plain = ops.get_hf_tool_support("unsloth/Phi-4-mini-instruct-GGUF");
+    assert!(!plain.await.expect("a lookup").supports_tool_calls);
+    let tooled = ops.get_hf_tool_support("owner/tooled-GGUF");
+    assert!(tooled.await.expect("a lookup").supports_tool_calls);
+}

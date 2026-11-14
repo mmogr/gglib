@@ -273,7 +273,8 @@ impl DownloadOps {
 
     /// Whether a `HuggingFace` model calls tools: core's guess
     /// ([`infer_from_chat_template`]) from the Hub's chat template and the
-    /// repo id, the one a model's stored flag takes at import.
+    /// repo id. Import asks the same guess of the file's own template and
+    /// declared name, so the two can differ for a repo named unlike its model.
     pub async fn get_hf_tool_support(
         &self,
         model_id: &str,

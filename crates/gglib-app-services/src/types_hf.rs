@@ -1,5 +1,5 @@
 //! The `HuggingFace` browser's DTOs: search, quantization listing and
-//! tool-support detection.
+//! whether a repo calls tools.
 //!
 //! A `#[path]` child of `types.rs`, and everything here is re-exported from
 //! `types`.
