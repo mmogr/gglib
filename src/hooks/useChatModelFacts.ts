@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
+import { CAPABILITY_FLAGS } from '../readings/capabilityFlags';
 import { getTransport } from '../services/transport';
 import { canSee } from '../utils/canSee';
 import { thinks as modelThinks } from '../utils/thinks';
 
 export interface ChatModelFacts {
-  /** null = unknown (permissive fallback - never gates tools when status is uncertain). */
+  /**
+   * Its stored tool-call flag, from its catalogue entry. null = unknown
+   * (permissive fallback - never gates tools when status is uncertain).
+   */
   supportsToolCalls: boolean | null;
-  toolFormat: string | null;
   /** The model's quantisation, from its catalogue entry; the composer says it. */
   quantization: string | null;
   /** Whether it reads images, from its catalogue entry; null = not known yet. */
@@ -18,9 +21,10 @@ export interface ChatModelFacts {
 }
 
 /**
- * What the chat page knows about the model it is talking to: whether it
- * calls tools, in which format, its quantisation, whether it reads images,
- * its context (its served default, else the file's), and whether it thinks.
+ * What the chat page knows about the model it is talking to, from its
+ * catalogue entry: whether it calls tools, its quantisation, whether it reads
+ * images, its context (its served default, else the file's), and whether it
+ * thinks.
  *
  * Fetched once per model id. A page that moves to another model is remounted
  * with the new id (the chat route keys it by the session), so the
@@ -28,30 +32,21 @@ export interface ChatModelFacts {
  */
 export function useChatModelFacts(modelId: number | undefined): ChatModelFacts {
   const [supportsToolCalls, setSupportsToolCalls] = useState<boolean | null>(null);
-  const [toolFormat, setToolFormat] = useState<string | null>(null);
   const [quantization, setQuantization] = useState<string | null>(null);
   const [sees, setSees] = useState<boolean | null>(null);
   const [contextLength, setContextLength] = useState<number | null>(null);
   const [thinks, setThinks] = useState(false);
   useEffect(() => {
     // Nothing to ask about remotely: the capability is read from this
-    // machine's server registry and the model is on the other machine.
+    // machine's catalogue and the model is on the other machine.
     // `null` is already the permissive answer, which is the right one here.
     if (modelId === undefined) return;
     let cancelled = false;
-    getTransport().getServerToolSupport(modelId)
-      .then((data) => {
-        if (!cancelled) {
-          setSupportsToolCalls(data.supports_tool_calls);
-          setToolFormat(data.detected_format ?? null);
-        }
-      })
-      .catch(() => {
-        // Permissive fallback: leave supportsToolCalls as null (unknown)
-      });
+    // A failed read leaves every answer unknown, supportsToolCalls null.
     getTransport().getModel(modelId)
       .then((model) => {
         if (cancelled || !model) return;
+        setSupportsToolCalls((model.capabilities & CAPABILITY_FLAGS.supportsToolCalls) !== 0);
         setQuantization(model.quantization ?? null);
         setSees(canSee(model));
         setContextLength(model.serverDefaults?.contextLength ?? model.contextLength ?? null);
@@ -60,5 +55,5 @@ export function useChatModelFacts(modelId: number | undefined): ChatModelFacts {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [modelId]);
-  return { supportsToolCalls, toolFormat, quantization, sees, contextLength, thinks };
+  return { supportsToolCalls, quantization, sees, contextLength, thinks };
 }

@@ -46,7 +46,7 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 
 The composer's words that are its own, not the daemon's (state words, Loading and Loaded, Away, come from `components/status/words.ts`):
 
-- `[+]` (named "Add to the message"): Add image…, Use a folder…, Draw a picture, Tools; "<server> · all its tools", "Asking gglib", "Couldn't read the tool servers: <the daemon's words>"; "This model can't call tools", "No tools registered", Enable all, Disable all, "Default (<model>)", "Model <id> (no longer listed)", "Missing: <roles>", and the titles "Let the next message draw a picture with <model>. It applies to that message only.", "This model calls tools (<format> format)."
+- `[+]` (named "Add to the message"): Add image…, Use a folder…, Draw a picture, Tools; "<server> · all its tools", "Asking gglib", "Couldn't read the tool servers: <the daemon's words>"; "This model can't call tools", "No tools registered", Enable all, Disable all, "Default (<model>)", "Model <id> (no longer listed)", "Missing: <roles>", and the title "Let the next message draw a picture with <model>. It applies to that message only."
 - chips: `Draw ×` ("Don't draw"), the folder's name × ("Clear the folder"), "Folder path"
 - Thinking (its two titles), Send, Stop, "Ask <model> anything", "Reply…"
 - the ring: "Context: 2,140 of 32,768 used"

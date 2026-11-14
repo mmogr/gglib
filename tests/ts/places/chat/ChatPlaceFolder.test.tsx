@@ -21,6 +21,7 @@ import { TransportError } from '../../../../src/services/transport/errors';
 import { FOLDER_GONE } from '../../../../src/hooks/useChatFolder';
 import { agentRun, chatTransport, conversation, plusItem, wrapper, type ChatFixture } from './chatPlaceHarness';
 import { guiModel } from '../../fixtures/model';
+import { CAPABILITY_FLAGS } from '../../../../src/readings/capabilityFlags';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../../src/services/transport', async () => {
@@ -51,7 +52,7 @@ function pageTransport() {
   let nextRow = 100;
   return {
     ...chatTransport(fixture),
-    getModel: vi.fn(async () => guiModel({ id: 7, quantization: 'Q8_0' })),
+    getModel: vi.fn(async () => guiModel({ id: 7, quantization: 'Q8_0', capabilities: CAPABILITY_FLAGS.supportsToolCalls })),
     startAgentRun: vi.fn(async (id: string, request: LocalTurn) => {
       started.push(request);
       const cid = request.conversation_id as number;

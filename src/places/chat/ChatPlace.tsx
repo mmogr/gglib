@@ -159,7 +159,7 @@ export default function ChatPlace(props: ChatPlaceProps) {
   // Tool support and quantisation for the active model. The model is fixed
   // for the lifetime of the place: a switch from the composer's picker
   // remounts it on the new model, with this conversation still open.
-  const { supportsToolCalls, toolFormat, quantization, sees, contextLength: servedContext, thinks } = useChatModelFacts(modelId);
+  const { supportsToolCalls, quantization, sees, contextLength: servedContext, thinks } = useChatModelFacts(modelId);
   const imageInput = useImageInput({ far, paired: paired?.far, sees, contextLength: servedContext });
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
@@ -268,7 +268,6 @@ export default function ChatPlace(props: ChatPlaceProps) {
           currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
           endedRun={endedRun}
           supportsToolCalls={far ? null : supportsToolCalls}
-          toolFormat={far ? null : toolFormat}
           modelName={modelName}
           modelId={far ? undefined : modelId}
           source={source}

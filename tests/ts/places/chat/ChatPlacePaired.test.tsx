@@ -36,10 +36,7 @@ globalThis.ResizeObserver ??= NoopResizeObserver as unknown as typeof ResizeObse
 Element.prototype.scrollTo ??= function scrollTo() {};
 
 const createConversation = vi.fn(async (_params: object) => 2);
-const getServerToolSupport = vi.fn(async () => ({
-  supports_tool_calls: true,
-  detected_format: null,
-}));
+const getModel = vi.fn(async () => null);
 
 /** As the daemon answers for a chat whose model is far (`drawing_availability`). */
 const FAR_MODEL_REASON =
@@ -57,7 +54,7 @@ vi.mock('../../../../src/services/transport', async () => {
   return {
     ...actual,
     getTransport: () => ({
-      getServerToolSupport,
+      getModel,
       listConversations: vi.fn(async () => [
         {
           id: 1,
@@ -115,7 +112,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 describe('ChatPlace, paired', () => {
   beforeEach(() => {
     resetChats();
-    getServerToolSupport.mockClear();
+    getModel.mockClear();
     createConversation.mockClear();
   });
 
@@ -124,8 +121,8 @@ describe('ChatPlace, paired', () => {
 
     // The composer names the model and the machine it runs on.
     await waitFor(() => expect(screen.getByText('qwen3 on desk')).toBeInTheDocument());
-    // No model id here to ask about, so the capability probe is never sent.
-    expect(getServerToolSupport).not.toHaveBeenCalled();
+    // No model id here to ask about, so its catalogue entry is never read.
+    expect(getModel).not.toHaveBeenCalled();
   });
 
   it('greys Draw with this machine\'s reason, asked by saying the model is the other machine\'s', async () => {

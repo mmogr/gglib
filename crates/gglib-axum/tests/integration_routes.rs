@@ -701,7 +701,7 @@ async fn a_path_param_route_returns_json_not_html() {
         .oneshot(
             authed()
                 .header("Host", "127.0.0.1:9887")
-                .uri("/api/servers/1/tool-support")
+                .uri("/api/servers/1/logs")
                 .body(Body::empty())
                 .unwrap(),
         )

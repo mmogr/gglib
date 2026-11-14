@@ -16,7 +16,6 @@ interface PlusMenuProps {
   /** A far chat: no folder here. */
   far: boolean;
   supportsToolCalls?: boolean | null;
-  toolFormat?: string | null;
   folder?: ChatFolder;
   /** Open the field a folder's path is typed in (web). */
   onTypeFolder: (on: boolean) => void;
@@ -58,7 +57,6 @@ function useListedTools(): { listed: ListedTool[] | string; reread: () => void }
 export const PlusMenu: FC<PlusMenuProps> = ({
   far,
   supportsToolCalls,
-  toolFormat,
   folder,
   onTypeFolder,
   draw,
@@ -72,7 +70,7 @@ export const PlusMenu: FC<PlusMenuProps> = ({
     imageItem(imageInput, addImage),
     folderItem(folder, far, () => folder && changeFolder(folder, onTypeFolder)),
     drawItem(draw),
-    toolsItem(listed, tools, supportsToolCalls, toolFormat),
+    toolsItem(listed, tools, supportsToolCalls),
   ].filter((item): item is MenuItem => item !== null);
 
   return (
