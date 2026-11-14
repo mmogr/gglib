@@ -82,7 +82,7 @@ source are under [Install](#install).
 
 Every GGUF you own in one place, with what gglib read from it: size,
 architecture, quantization, trained context, whether it sees images, and
-tags for whether it reasons and how its chat template writes tool calls.
+tags for whether it reasons and calls tools.
 Download from Hugging Face by repository name
 (`gglib model download unsloth/Qwen3-4B-GGUF`, pick a quant with `-q`),
 search and browse the hub, verify hashes, and upgrade a model when its
