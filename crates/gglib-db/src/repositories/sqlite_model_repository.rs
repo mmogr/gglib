@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use sqlx::SqlitePool;
 use std::path::Path;
 
-use gglib_core::domain::ImageFamily;
+use gglib_core::domain::{ImageFamily, ModelCapabilities};
 use gglib_core::utils::shard_filename::base_shard_filename;
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
@@ -142,7 +142,16 @@ const UPSERT_MODEL: &str = r"INSERT INTO models (
         -- download whose header the reader refused, changes nothing.
         metadata = json_patch(COALESCE(models.metadata, '{}'), excluded.metadata),
         tags = excluded.tags,
-        capabilities = excluded.capabilities,
+        -- Re-guessed, but for the tool bit (the two binds after the
+        -- values) when the row holds llama-server's own answer,
+        -- `template_caps.supports_tool_calls` (ADR 0007): the bit is that
+        -- answer, or the owner's setting since, and a guess undoes both.
+        capabilities = IIF(
+            CASE WHEN json_valid(models.template_caps)
+                THEN json_extract(models.template_caps, '$.supports_tool_calls') END IS NULL,
+            excluded.capabilities,
+            (excluded.capabilities & ~?) | (COALESCE(models.capabilities, 0) & ?)
+        ),
         inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
         defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
     ";
@@ -291,6 +300,9 @@ impl ModelRepository for SqliteModelRepository {
         // already-resolved siblings — which the download path does not.
         let file_paths_json = model.file_paths.as_deref().and_then(path_list_json);
 
+        // The bit the upsert keeps when the row holds llama-server's answer.
+        let tool_bit = i64::from(ModelCapabilities::SUPPORTS_TOOL_CALLS.bits());
+
         // Use UPSERT to make registration idempotent. The row's own id is
         // bound when it has one, so an update takes no id from the sequence.
         let _result = sqlx::query(UPSERT_MODEL)
@@ -337,6 +349,8 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&defaults_origin_str)
             .bind(&server_defaults_json)
             .bind(model.image_family.map(ImageFamily::as_str))
+            .bind(tool_bit)
+            .bind(tool_bit)
             .execute(&self.pool)
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -1113,3 +1127,7 @@ mod header_facts_tests;
 #[cfg(test)]
 #[path = "sqlite_model_repository_unreadable_tests.rs"]
 mod unreadable_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_tool_flag_tests.rs"]
+mod tool_flag_tests;

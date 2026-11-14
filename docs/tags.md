@@ -152,7 +152,7 @@ it touches do not all behave alike:
 
 | Column | On refresh |
 |---|---|
-| `tags`, `capabilities` | Replaced — including with nothing, so these **can** be cleared |
+| `tags`, `capabilities` | Replaced — including with nothing, so these **can** be cleared; the tool flag is kept once a launch has read llama-server's answer |
 | `quantization`, `context_length`, expert counts | Replaced only when newly detected; a stored value is never emptied |
 | `name`, parameter count, `architecture` | Untouched — a name you chose yourself survives |
 
