@@ -34,6 +34,7 @@ fn lines(status: RemoteStatus) -> RemoteStatusLines {
     let status = status.with_lines();
     RemoteStatusLines {
         sharing: status.sharing,
+        paired_line: status.paired_line,
         sharing_note: status.sharing_note,
         reach: status.reach_line,
         reach_note: status.reach_note,
@@ -44,6 +45,7 @@ fn lines(status: RemoteStatus) -> RemoteStatusLines {
 fn off_is_not_sharing_with_nothing_more_to_say() {
     let said = lines(RemoteStatus::default());
     assert_eq!(said.sharing, "Not sharing");
+    assert_eq!(said.paired_line, "");
     assert_eq!(said.sharing_note, "");
     assert_eq!(said.reach, "");
 }
@@ -57,22 +59,21 @@ fn switched_on_with_nothing_bound_says_so_in_full() {
         ..RemoteStatus::default()
     });
     assert_eq!(said.sharing, "Switched on, nothing bound");
+    assert_eq!(said.paired_line, "");
     assert_eq!(
         said.sharing_note,
         "Switched on, but nothing is bound \u{2014} still arming, or it could not reach a relay."
     );
 }
 
-/// Sharing counts the roster's rows, none, one or many.
+/// Sharing counts the roster's rows, none, one or many, on a line of its
+/// own; one sentence joins the two.
 #[test]
 fn sharing_says_how_many_are_paired() {
     for (devices, said) in [
-        (vec![], "Sharing \u{b7} 0 paired"),
-        (vec![device("a")], "Sharing \u{b7} 1 paired"),
-        (
-            vec![device("a"), device("b"), device("c")],
-            "Sharing \u{b7} 3 paired",
-        ),
+        (vec![], "0 paired"),
+        (vec![device("a")], "1 paired"),
+        (vec![device("a"), device("b"), device("c")], "3 paired"),
     ] {
         let status = RemoteStatus {
             enabled: true,
@@ -80,10 +81,26 @@ fn sharing_says_how_many_are_paired() {
             devices,
             ..RemoteStatus::default()
         };
+        let sentence = status.clone().with_lines().sharing_sentence();
         let got = lines(status);
-        assert_eq!(got.sharing, said);
+        assert_eq!(got.sharing, "Sharing");
+        assert_eq!(got.paired_line, said);
         assert_eq!(got.sharing_note, "");
+        assert_eq!(sentence, format!("Sharing \u{b7} {said}"));
     }
+}
+
+/// With no count the sentence is the sharing word alone, no dangling dot.
+#[test]
+fn the_sentence_without_a_count_is_the_word() {
+    let off = RemoteStatus::default().with_lines();
+    assert_eq!(off.sharing_sentence(), "Not sharing");
+    let unbound = RemoteStatus {
+        remote_enabled: true,
+        ..RemoteStatus::default()
+    }
+    .with_lines();
+    assert_eq!(unbound.sharing_sentence(), "Switched on, nothing bound");
 }
 
 /// An invite nobody took is a roster row, but no device is paired by it.
@@ -100,14 +117,14 @@ fn an_untaken_invite_is_not_counted_as_paired() {
         devices: vec![untaken.clone()],
         ..RemoteStatus::default()
     };
-    assert_eq!(lines(status).sharing, "Sharing \u{b7} 0 paired");
+    assert_eq!(lines(status).paired_line, "0 paired");
     let status = RemoteStatus {
         enabled: true,
         remote_enabled: true,
         devices: vec![device("a"), untaken],
         ..RemoteStatus::default()
     };
-    assert_eq!(lines(status).sharing, "Sharing \u{b7} 1 paired");
+    assert_eq!(lines(status).paired_line, "1 paired");
 }
 
 /// The joined machine by its name, or in words when it gave none; never by
@@ -158,6 +175,7 @@ fn lines_in_an_answer_are_said_again_not_read() {
     let json = serde_json::json!({
         "enabled": false,
         "sharing": "forged",
+        "paired_line": "forged",
         "sharing_note": "forged",
         "reach_line": "forged",
         "reach_note": "forged"
@@ -166,10 +184,11 @@ fn lines_in_an_answer_are_said_again_not_read() {
     assert_eq!(
         (
             read.sharing.as_str(),
+            read.paired_line.as_str(),
             read.sharing_note.as_str(),
             read.reach_line.as_str()
         ),
-        ("", "", "")
+        ("", "", "", "")
     );
     assert_eq!(read.with_lines().sharing, "Not sharing");
 }

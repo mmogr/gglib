@@ -362,7 +362,7 @@ describe('the tray panel', () => {
         ...DESK,
         enabled: true,
         devices: [device(), device({ id: 'dev-2' })],
-        sharing: 'Sharing · 2 paired', sharing_note: '', reach_line: 'desk · Connected · direct',
+        sharing: 'Sharing', paired_line: '2 paired', sharing_note: '', reach_line: 'desk · Connected · direct',
       }));
       await renderTray();
       const devices = await screen.findByRole('region', { name: 'Devices' });
@@ -387,7 +387,7 @@ describe('the tray panel', () => {
         ...IDLE_STATUS,
         enabled: true,
         devices: [device()],
-        sharing: 'Sharing · 1 paired', sharing_note: '', reach_line: '',
+        sharing: 'Sharing', paired_line: '1 paired', sharing_note: '', reach_line: '',
       }));
       await renderTray();
       const devices = await screen.findByRole('region', { name: 'Devices' });

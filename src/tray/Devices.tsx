@@ -1,7 +1,7 @@
 /**
  * The tray's Devices block: the machine this one has joined, with its reach
  * (`REACH_WORDS`: Connected, Away, Disconnected), only while one is; then
- * This Mac, sharing in the daemon's words (`status.sharing`: "Sharing ·
+ * This Mac, sharing in the daemon's words (`sharingSentence`: "Sharing ·
  * N paired", "Switched on, nothing bound", "Not sharing"), which is a fact
  * whatever it says. Not drawn before the first status.
  *
@@ -15,7 +15,7 @@ import type { FC } from 'react';
 import { REACH_MARK, StatusMark, type MarkKind } from '../components/status/StatusMark';
 import { REACH_WORDS } from '../components/status/words';
 import { Group } from '../places/library/Group';
-import { pairedName } from '../services/remoteRegistry';
+import { pairedName, sharingSentence } from '../services/remoteRegistry';
 import type { RemoteStatus } from '../services/transport/types/remote';
 
 /** One line of the block: what it is about, and its state. */
@@ -32,7 +32,7 @@ export function devicesLines(status: RemoteStatus | null): DeviceLine[] {
   if (status.connected !== null) {
     lines.push({ label: pairedName(status), mark: REACH_MARK[status.reach], word: REACH_WORDS[status.reach] });
   }
-  lines.push({ label: 'This Mac', mark: status.enabled ? 'on' : 'off', word: status.sharing });
+  lines.push({ label: 'This Mac', mark: status.enabled ? 'on' : 'off', word: sharingSentence(status) });
   return lines;
 }
 

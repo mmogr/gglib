@@ -90,7 +90,7 @@ fn print_status(status: &RemoteStatus) {
     if status.enabled {
         eprintln!(
             "  Serving:   {}   (ticket {})",
-            status.sharing,
+            status.sharing_sentence(),
             status.ticket_fingerprint.as_deref().unwrap_or("?")
         );
         // The ticket lasts now, so where the key lives is operational

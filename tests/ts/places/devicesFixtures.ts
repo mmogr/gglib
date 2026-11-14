@@ -55,7 +55,7 @@ export const SHARED: RemoteStatus = {
   enabled: true,
   remote_enabled: true,
   ticket_fingerprint: 'aa11bb22cc33',
-  sharing: 'Sharing · 0 paired', sharing_note: '', reach_line: '',
+  sharing: 'Sharing', paired_line: '0 paired', sharing_note: '', reach_line: '',
 };
 
 /** Joined to `desk`, reached directly. */
@@ -66,7 +66,7 @@ export const DESK: RemoteStatus = {
   stored_ticket_fingerprint: FINGERPRINT,
   paired_name: 'desk',
   has_remote_key: true,
-  sharing: 'Not sharing', sharing_note: '', reach_line: 'desk · Connected · direct',
+  sharing: 'Not sharing', paired_line: '', sharing_note: '', reach_line: 'desk · Connected · direct',
 };
 
 /** Whether the paired machine's fingerprint appears anywhere in the page: text or attribute. */

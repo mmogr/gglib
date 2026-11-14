@@ -1,6 +1,7 @@
 //! How the tunnel's state is said to a person: [`remote_status_lines`], the
-//! words in [`RemoteStatus::sharing`], [`RemoteStatus::sharing_note`],
-//! [`RemoteStatus::reach_line`] and [`RemoteStatus::reach_note`].
+//! words in [`RemoteStatus::sharing`], [`RemoteStatus::paired_line`],
+//! [`RemoteStatus::sharing_note`], [`RemoteStatus::reach_line`] and
+//! [`RemoteStatus::reach_note`].
 //!
 //! Written once here so `gglib remote status`, the Devices place, the tray and
 //! the sidebar say one thing. Each surface still adds what only it has: the
@@ -15,6 +16,7 @@ use super::wire::RemoteStatus;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct RemoteStatusLines {
     pub(super) sharing: String,
+    pub(super) paired_line: String,
     pub(super) sharing_note: String,
     pub(super) reach: String,
     pub(super) reach_note: String,
@@ -24,24 +26,34 @@ pub(super) struct RemoteStatusLines {
 pub(super) fn remote_status_lines(status: &RemoteStatus) -> RemoteStatusLines {
     RemoteStatusLines {
         sharing: sharing(status),
+        paired_line: paired_line(status),
         sharing_note: sharing_note(status),
         reach: reach(status),
         reach_note: reach_note(status),
     }
 }
 
-/// Whether this machine is shared, in a few words.
-///
-/// "Paired" counts the devices that have arrived under their key: an invite
-/// nobody took is a row, but no device is paired by it.
+/// Whether this machine is shared, in a word or a few.
 fn sharing(status: &RemoteStatus) -> String {
     if status.enabled {
-        let paired = status.devices.iter().filter(|d| d.joined).count();
-        format!("Sharing \u{b7} {paired} paired")
+        "Sharing".to_owned()
     } else if status.remote_enabled {
         "Switched on, nothing bound".to_owned()
     } else {
         "Not sharing".to_owned()
+    }
+}
+
+/// How many devices are paired, while sharing; empty otherwise.
+///
+/// "Paired" counts the devices that have arrived under their key: an invite
+/// nobody took is a row, but no device is paired by it.
+fn paired_line(status: &RemoteStatus) -> String {
+    if status.enabled {
+        let paired = status.devices.iter().filter(|d| d.joined).count();
+        format!("{paired} paired")
+    } else {
+        String::new()
     }
 }
 

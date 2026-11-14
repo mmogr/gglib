@@ -17,14 +17,14 @@ import { createEventStore } from './createEventStore';
 import type { Machine } from '../types/generated/Machine';
 import type { RemoteEvent } from './transport/types/events';
 import type { RemoteEnableResponse, RemoteStatus } from './transport/types/remote';
-import { IDLE_STATUS, INITIAL, UNNAMED_PAIRED, pairedName, type RemoteState } from './remoteRegistryState';
+import { IDLE_STATUS, INITIAL, UNNAMED_PAIRED, pairedName, sharingSentence, type RemoteState } from './remoteRegistryState';
 import { offerFrom, settleOffer, type OfferEnd } from './remoteOffer';
 
 // The shape lives in `remoteRegistryState.ts`; the registry stays the seam
 // every caller imports from, so it hands the shape, the idle status and the
 // paired machine's name on rather than making eight components learn a
 // second module name.
-export { IDLE_STATUS, UNNAMED_PAIRED, pairedName, type RemoteState };
+export { IDLE_STATUS, UNNAMED_PAIRED, pairedName, sharingSentence, type RemoteState };
 
 const store = createEventStore<RemoteState>(INITIAL);
 
@@ -185,7 +185,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
     commit(evt.type === 'remote_paired' ? endOffer(next, 'paired') : settle(next, prev.status));
   // The daemon's lines an event makes wrong, emptied rather than reworded
   // here: a surface shows the state word until the read brings new ones.
-  const sharingUnsaid = { sharing: '', sharing_note: '' };
+  const sharingUnsaid = { sharing: '', paired_line: '', sharing_note: '' };
   const reachUnsaid = { reach_line: '', reach_note: '' };
   switch (evt.type) {
     case 'remote_enabled':
