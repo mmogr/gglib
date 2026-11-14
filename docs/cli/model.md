@@ -286,7 +286,9 @@ What gglib derived from the file, and how to change it.
   user-curated tags; `--full` rebuilds the auto namespace only.
 - `capabilities <model>` shows the capability flags (system role, strict
   turns, tool calls, reasoning); `--set` and `--unset`, repeatable,
-  override them.
+  override them. When llama-server launches a model on this machine, its own
+  answer becomes the tool flag until you set it; a model whose tool flag is
+  off is sent no tools.
 
 [Tags & capability detection](../tags.md) explains each tag and flag.
 
