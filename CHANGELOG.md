@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.37.0-rc.1](https://github.com/mmogr/gglib/compare/v0.36.0-rc.3...v0.37.0-rc.1) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gui:** `/api/remote/status` `sharing` no longer carries the paired count; read `paired_line` for it.
+
+### What gglib now does
+
+* **agent:** a run that reaches its step limit gives its answer or asks for more steps ([#1951](https://github.com/mmogr/gglib/issues/1951)) ([ae13659](https://github.com/mmogr/gglib/commit/ae1365902c512bcf289212d905865a947615b640)), closes [#1944](https://github.com/mmogr/gglib/issues/1944)
+* **gui:** the library's suggestion can be dismissed ([#1953](https://github.com/mmogr/gglib/issues/1953)) ([3234552](https://github.com/mmogr/gglib/commit/3234552d55ec76378ca56b5a50d0045f6bf28cc0))
+* **gui:** the sidebar's places share one row, with an icon and a badge ([#1955](https://github.com/mmogr/gglib/issues/1955)) ([2b860d7](https://github.com/mmogr/gglib/commit/2b860d7a71f231c4645ebda2f9d99470ebe69a4d))
+
+
+### What it stopped getting wrong
+
+* **agent:** a run's history is pruned at its model's window, not at 180,000 characters ([#1949](https://github.com/mmogr/gglib/issues/1949)) ([3f03031](https://github.com/mmogr/gglib/commit/3f03031b6e54f0acc1610f6b4430c80b7515af5f)), closes [#1945](https://github.com/mmogr/gglib/issues/1945)
+* **cli:** a question asked with --no-tools is told of no tool and no folder ([#1947](https://github.com/mmogr/gglib/issues/1947)) ([b339561](https://github.com/mmogr/gglib/commit/b33956172236e5c16b2268e5670705a5b1f2e8b6)), closes [#1942](https://github.com/mmogr/gglib/issues/1942)
+* **web:** a toast with a long path wraps inside its box ([#1954](https://github.com/mmogr/gglib/issues/1954)) ([2638798](https://github.com/mmogr/gglib/commit/263879831b2c8d5a9bea8e90fb78c263fd8cd610))
+
 ## [0.36.0-rc.3](https://github.com/mmogr/gglib/compare/v0.36.0-rc.2...v0.36.0-rc.3) (2026-11-14)
 
 
