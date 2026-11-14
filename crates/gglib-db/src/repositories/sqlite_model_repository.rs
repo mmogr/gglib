@@ -102,7 +102,8 @@ impl SqliteModelRepository {
 /// The statement `insert` registers a model by: an upsert on its key, so a
 /// registration can be retried. What a re-registration keeps of the row
 /// and what it replaces is said beside each column.
-const UPSERT_MODEL: &str = r"INSERT INTO models (
+const UPSERT_MODEL: &str = concat!(
+    r"INSERT INTO models (
         id, name, file_path, projector_path, param_count_b, architecture,
         variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count,
         metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, image_family
@@ -146,15 +147,16 @@ const UPSERT_MODEL: &str = r"INSERT INTO models (
         -- values) when the row holds llama-server's own answer,
         -- `template_caps.supports_tool_calls` (ADR 0007): the bit is that
         -- answer, or the owner's setting since, and a guess undoes both.
-        capabilities = IIF(
-            CASE WHEN json_valid(models.template_caps)
-                THEN json_extract(models.template_caps, '$.supports_tool_calls') END IS NULL,
-            excluded.capabilities,
-            (excluded.capabilities & ~?) | (COALESCE(models.capabilities, 0) & ?)
+        capabilities = IIF(",
+    holds_engine_tool_answer!(),
+    r",
+            (excluded.capabilities & ~?) | (COALESCE(models.capabilities, 0) & ?),
+            excluded.capabilities
         ),
         inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
         defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
-    ";
+    "
+);
 
 #[async_trait]
 impl ModelRepository for SqliteModelRepository {

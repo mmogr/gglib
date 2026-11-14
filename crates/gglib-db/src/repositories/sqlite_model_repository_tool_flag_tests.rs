@@ -90,3 +90,14 @@ async fn a_reimport_without_an_engine_answer_takes_the_guess() {
         assert_eq!(after(&repo, TOOLS).await, TOOLS, "{caps:?}");
     }
 }
+
+/// A stored value that is not a boolean is no answer: the guess is taken.
+#[tokio::test]
+async fn a_reimport_over_a_non_boolean_answer_takes_the_guess() {
+    let repo = launched(SYSTEM, None, true).await;
+    sqlx::query("UPDATE models SET template_caps = '{\"supports_tool_calls\":\"yes\"}'")
+        .execute(repo.pool())
+        .await
+        .unwrap();
+    assert_eq!(after(&repo, REASONING).await, REASONING);
+}

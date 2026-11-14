@@ -74,8 +74,8 @@ async fn an_answered_row_takes_its_answer_and_keeps_its_other_bits() {
     assert_eq!(user_version(&pool).await.unwrap(), LATEST);
 }
 
-/// No caps, caps that did not say, text that is not JSON, and a row whose
-/// bit already agrees keep their bits.
+/// No caps, caps that did not say, a value that is not a boolean, text that
+/// is not JSON, and a row whose bit already agrees keep their bits.
 #[tokio::test]
 async fn a_row_without_an_answer_is_left_alone() {
     let pool = library().await;
@@ -87,6 +87,12 @@ async fn a_row_without_an_answer_is_left_alone() {
             Some(r#"{"supports_tool_calls":null}"#),
         ),
         ("absent", Some(TOOLS), Some(r#"{"supports_tools":false}"#)),
+        (
+            "string",
+            Some(TOOLS),
+            Some(r#"{"supports_tool_calls":"no"}"#),
+        ),
+        ("number", Some(SYSTEM), Some(r#"{"supports_tool_calls":1}"#)),
         ("garbage", Some(SYSTEM), Some("not json")),
         (
             "array",

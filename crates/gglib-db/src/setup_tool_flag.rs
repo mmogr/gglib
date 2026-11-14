@@ -5,7 +5,8 @@
 //! from this build a launch writes its `supports_tool_calls` into the tool
 //! bit of `capabilities` when the answer is new or changed. A row an older
 //! build launched already holds its answer, so no launch will write it; this
-//! step does, once. A row with no answer, or text that is not JSON, is left
+//! step does, once. A row with no answer (`holds_engine_tool_answer!`: a
+//! value that is not a boolean, or text that is not JSON, is none) is left
 //! as it is, and so are the other bits. A `NULL` `capabilities` counts as no
 //! bits. A row whose bit already agrees is not rewritten.
 
@@ -14,15 +15,16 @@ use gglib_core::domain::ModelCapabilities;
 use sqlx::SqliteConnection;
 
 /// Each answered row's tool bit (`?1`), set to its stored answer.
-const SET: &str = "UPDATE models
+const SET: &str = concat!(
+    "UPDATE models
     SET capabilities = IIF(json_extract(template_caps, '$.supports_tool_calls'),
         COALESCE(capabilities, 0) | ?1, COALESCE(capabilities, 0) & ~?1)
-    WHERE CASE WHEN json_valid(template_caps)
-        THEN CASE WHEN json_type(template_caps, '$.supports_tool_calls') IN ('true', 'false')
-            THEN (COALESCE(capabilities, 0) & ?1 != 0)
-                != json_extract(template_caps, '$.supports_tool_calls')
-            ELSE 0 END
-        ELSE 0 END";
+    WHERE CASE WHEN ",
+    holds_engine_tool_answer!(),
+    " THEN (COALESCE(capabilities, 0) & ?1 != 0)
+            != json_extract(template_caps, '$.supports_tool_calls')
+        ELSE 0 END"
+);
 
 /// Step 10: set the tool flag to the stored answer. See the module docs.
 pub(super) async fn take_the_stored_tool_answer(conn: &mut SqliteConnection) -> Result<()> {

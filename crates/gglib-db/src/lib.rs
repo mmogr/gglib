@@ -1,5 +1,18 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 
+/// SQL that is true when a `models` row holds llama-server's tool answer
+/// (ADR 0007): its `template_caps` is JSON whose `supports_tool_calls` is
+/// `true` or `false`. The re-registration upsert and library step 10 both
+/// ask it; `Model::engine_tool_answer` is the same test in Rust, since a
+/// non-boolean there reads as no caps at all.
+macro_rules! holds_engine_tool_answer {
+    () => {
+        "(CASE WHEN json_valid(models.template_caps) \
+            THEN json_type(models.template_caps, '$.supports_tool_calls') IN ('true', 'false') \
+            ELSE 0 END)"
+    };
+}
+
 mod daemon_startup;
 mod database_file;
 pub mod factory;
