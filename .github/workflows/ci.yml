@@ -570,14 +570,12 @@ jobs:
       # runs both servers with, is run here directly: sd-server's `--help`
       # does not list it.
       - name: Install the pinned engines and the test models
-        if: runner.os != 'Windows'
         id: engines
         uses: ./.github/actions/pinned-engines
         with:
           target: ${{ matrix.target }}
 
       - name: Save the engines' help and the releases' assets
-        if: runner.os != 'Windows'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -597,7 +595,6 @@ jobs:
             --json assets -q '.assets[].name' > "$assets/sd.txt"
 
       - name: Check every flag gglib passes is one the pinned engines take
-        if: runner.os != 'Windows'
         env:
           GGLIB_ENGINE_HELP_DIR: ${{ runner.temp }}/engine-help
           GGLIB_ENGINE_ASSETS_DIR: ${{ runner.temp }}/engine-assets
@@ -611,7 +608,6 @@ jobs:
       # The models variable is set on this step alone, so the ignored tests
       # above skip the recorder.
       - name: Record the pinned llama-server
-        if: runner.os != 'Windows'
         id: record
         continue-on-error: true
         env:
@@ -622,7 +618,6 @@ jobs:
         run: cargo test -p gglib-runtime --lib engine_contract -- --ignored --nocapture
 
       - name: Compare with contracts/upstream
-        if: runner.os != 'Windows'
         continue-on-error: true
         shell: bash
         env:
@@ -710,7 +705,7 @@ jobs:
           exit 1
 
       - name: Gather the recordings
-        if: runner.os != 'Windows' && always()
+        if: always()
         shell: bash
         run: |
           out="$RUNNER_TEMP/upstream-recordings"
@@ -724,7 +719,7 @@ jobs:
       # The artifact is laid out as contracts/upstream is, with the redacted
       # bodies in llama/bodies/, so committing it is unpacking it there.
       - name: Upload the recordings
-        if: runner.os != 'Windows' && always()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ${{ runner.os == 'Linux' && 'upstream-recordings' || format('upstream-recordings-{0}', matrix.target) }}
