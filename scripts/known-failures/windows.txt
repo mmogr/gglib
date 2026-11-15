@@ -6,10 +6,7 @@
 gglib-axum gglib_axum daemon::lock::tests::read_holder_reports_the_recorded_metadata
 gglib-axum gglib_axum daemon::lock::tests::refusal_message_names_pid_and_address
 gglib-axum gglib_axum daemon::lock::tests::second_acquire_fails_while_first_is_held
-gglib-cli engine_install a_later_release_is_kept
-gglib-cli engine_install the_pin_installed_is_nothing_to_install
 gglib-cli gglib_cli handlers::model::explain::tests::the_launch_is_the_runtimes_plan_through_the_one_shot_runtime
-gglib-cli sd_commands status_of_a_download_reads_its_record
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_failure_falls_back
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_success
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_in_path
