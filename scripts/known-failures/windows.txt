@@ -1,0 +1,5 @@
+# Tests that do not pass on Windows yet. CI's test-cross-os job is held to
+# this list by scripts/known_failures.py: a failure that is not here fails
+# the job, and so does a row here whose test passes. Delete a row with the
+# change that makes its test pass; never add one for a test that passed.
+# One row per test, sorted: <package> <target> <test>

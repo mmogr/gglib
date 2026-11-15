@@ -37,7 +37,8 @@ env:
 # Every job has a timeout-minutes, counted from when it starts rather than
 # from when it was queued: a ceiling for a hang, well above a cold run. The
 # cross-OS legs take theirs from the matrix: 75 minutes on macOS, where CLI
-# Check builds llama.xcframework when its cache misses, and 45 elsewhere.
+# Check builds llama.xcframework when its cache misses, and 45 elsewhere. The
+# cross-OS test legs build every test binary and take 90.
 jobs:
   fmt:
     name: Format
@@ -791,6 +792,111 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+  # The Rust suite on the two platforms `test` does not run on. Each leg
+  # builds and runs what `test` does, the whole workspace with its doctests,
+  # and is held to its OS's list of known failures,
+  # scripts/known-failures/<list>.txt, by scripts/known_failures.py: a test
+  # that fails and is not listed fails the leg, and so does a listed test
+  # that passes, so a list only shrinks.
+  #
+  # The verdict is the script's, not cargo's: `cargo test` exits non-zero
+  # for as long as a listed test fails. Its status goes to the script, which
+  # fails a run where cargo failed and no test did, and a test binary that
+  # printed no result, which crashed or was stopped by the step's time limit.
+  #
+  # As `clippy-cross-os`: when `scope` says so, and after ubuntu clippy. Main
+  # runs it when Cargo.lock or the toolchain moves, which is when its cache
+  # is saved, so the 90 minutes are for a pull request's cold build.
+  test-cross-os:
+    name: Test (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    if: needs.scope.outputs.cross_os == 'true'
+    needs: [clippy, scope]
+    # `tee` needs pipefail, as in `test`, and Windows would run pwsh.
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-26
+            list: macos
+            python: python3
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022
+            list: windows
+            python: python
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # Its own shared-key per target, and only main saves, as for
+      # `cli-cross-os`.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
+        with:
+          shared-key: "ci-test-${{ matrix.target }}"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # gglib-axum embeds `web_ui/` and its tests serve `/` from it.
+      - name: Build Web UI
+        run: |
+          npm ci
+          npm run build
+
+      # As in `test`: a compile failure stays apart from a test failure, and
+      # the JSON names each binary's package and target.
+      - name: Build test binaries
+        run: cargo test --no-run --message-format=json > cargo-test-artifacts.json
+
+      # The same run as `test`'s, and never `--all-targets`, which drops the
+      # doctests. The step passes whatever cargo says; the next one decides.
+      # Its own time limit, well inside the job's, so a test that hangs
+      # leaves its output for the next step and for the artifact.
+      - name: Run Rust tests
+        id: run
+        timeout-minutes: 30
+        run: |
+          set +e
+          cargo test --no-fail-fast 2>&1 | tee rust-test-output.txt
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # PYTHONUTF8 because Windows' Python writes a pipe in the ANSI code
+      # page, which has no check mark.
+      - name: Hold the run to the known failures
+        if: ${{ !cancelled() && steps.run.outcome != 'skipped' }}
+        env:
+          PYTHON: ${{ matrix.python }}
+          PYTHONUTF8: "1"
+          LIST: scripts/known-failures/${{ matrix.list }}.txt
+          STATUS: ${{ steps.run.outputs.status }}
+        run: |
+          "$PYTHON" --version
+          "$PYTHON" scripts/known_failures.py check --list "$LIST" ${STATUS:+--cargo-status "$STATUS"} \
+            cargo-test-artifacts.json rust-test-output.txt
+
+      # The two files known_failures.py reads, so a list can be checked or
+      # rewritten from a finished run.
+      - name: Upload the run
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-run-${{ matrix.target }}
+          path: |
+            rust-test-output.txt
+            cargo-test-artifacts.json
+          if-no-files-found: ignore
+          retention-days: 30
+
   # The crates a phone build compiles, the Makefile's PHONE_CRATES, checked
   # for aarch64-apple-ios. On macOS because ring, aws-lc-sys and the bundled
   # SQLite compile C for the target in their build scripts, which takes
@@ -1032,7 +1138,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, bindings, rustdoc, clippy, cli-cross-os, clippy-cross-os]
+    needs: [test, bindings, rustdoc, clippy, cli-cross-os, clippy-cross-os, test-cross-os]
     permissions:
       actions: write
     defaults:
@@ -1063,11 +1169,11 @@ jobs:
   # The one required check. A gated job's own `if:` reads its scope output,
   # and this holds every job to what that output says it must have done:
   #
-  #   job                            must be
-  #   cli-cross-os, clippy-cross-os  success if cross_os, else skipped
-  #   ios-check                      success if ios, else skipped
-  #   ffi-apple, phone-llama         success if apple, else skipped
-  #   every other job                success
+  #   job                                           must be
+  #   cli-cross-os, clippy-cross-os, test-cross-os  success if cross_os, else skipped
+  #   ios-check                                     success if ios, else skipped
+  #   ffi-apple, phone-llama                        success if apple, else skipped
+  #   every other job                               success
   #
   # A skip is a pass only where its gate says `false`, so a gate that comes
   # out wrong, or empty because `scope` failed, cannot turn a run green with
@@ -1082,7 +1188,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: always()
-    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
+    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, test-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
     steps:
       - name: Check every job did what its scope says
         env:
@@ -1094,6 +1200,7 @@ jobs:
           GATES = {
               "cli-cross-os": "cross_os",
               "clippy-cross-os": "cross_os",
+              "test-cross-os": "cross_os",
               "ios-check": "ios",
               "ffi-apple": "apple",
               "phone-llama": "apple",
@@ -1103,6 +1210,7 @@ jobs:
           WAITS_ON = {
               "cli-cross-os": "clippy",
               "clippy-cross-os": "clippy",
+              "test-cross-os": "clippy",
           }
           OUTPUTS = ("version_only", "rust", "ffi", "ios", "lock", "cross_os", "apple")
 

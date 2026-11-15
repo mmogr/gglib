@@ -67,11 +67,11 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # plain form, but the parity fixture is a `--verbose` capture from before this
 # change, so both have to read.
 #
-# Both patterns end at the `<name>-<hash>` and then the line ends. That
-# anchoring is what keeps `--verbose`'s thousands of rustc invocations out:
-# they carry `/deps/` too, in `--extern foo=…/deps/libfoo-<hash>.rmeta`, but
-# they do not end there.
-BINARY = r"[A-Za-z0-9_.\-]+-[0-9a-f]{8,}"
+# Both patterns end at the `<name>-<hash>`, which `.exe` follows on Windows,
+# and then the line ends. That anchoring is what keeps `--verbose`'s thousands
+# of rustc invocations out: they carry `/deps/` too, in
+# `--extern foo=…/deps/libfoo-<hash>.rmeta`, but they do not end there.
+BINARY = r"[A-Za-z0-9_.\-]+-[0-9a-f]{8,}(?:\.exe)?"
 RUNNING_PLAIN = re.compile(rf"^\s+Running\s+[^(]*\((?P<path>[^)]*[/\\]deps[/\\]{BINARY})\)\s*$")
 RUNNING_VERBOSE = re.compile(rf"^\s+Running\s+`(?P<path>[^`]*[/\\]deps[/\\]{BINARY})`\s*$")
 
@@ -99,11 +99,15 @@ def package_name(package_id: str) -> str:
     return path.rstrip("/").rpartition("/")[2]
 
 
-def build_maps(artifacts_path: str) -> tuple[dict[str, str], dict[str, str]]:
-    """Binary basename → package, and lib name → package, from the JSON stream."""
-    by_binary: dict[str, str] = {}
-    by_lib: dict[str, str] = {}
+def binary_name(path: str) -> str:
+    """A path's last part, whichever separator it is written with: a Windows
+    run's files are also read on Linux and macOS."""
+    return re.split(r"[/\\]", path)[-1]
 
+
+def artifacts(artifacts_path: str):
+    """(package, target name, target kinds, binary or None) for each artifact
+    in the JSON stream, build scripts left out."""
     with open(artifacts_path, encoding="utf-8", errors="replace") as stream:
         for line in stream:
             line = line.strip()
@@ -129,10 +133,19 @@ def build_maps(artifacts_path: str) -> tuple[dict[str, str], dict[str, str]]:
                 continue
 
             executable = message.get("executable")
-            if executable:
-                by_binary[os.path.basename(executable)] = package
-            if any(kind in ("lib", "rlib", "proc-macro") for kind in kinds):
-                by_lib[target.get("name", "")] = package
+            yield package, target.get("name", ""), kinds, binary_name(executable) if executable else None
+
+
+def build_maps(artifacts_path: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Binary basename → package, and lib name → package, from the JSON stream."""
+    by_binary: dict[str, str] = {}
+    by_lib: dict[str, str] = {}
+
+    for package, name, kinds, binary in artifacts(artifacts_path):
+        if binary:
+            by_binary[binary] = package
+        if any(kind in ("lib", "rlib", "proc-macro") for kind in kinds):
+            by_lib[name] = package
 
     by_lib.pop("", None)
     return by_binary, by_lib
@@ -155,7 +168,7 @@ def split(output_path: str, by_binary: dict[str, str], by_lib: dict[str, str]):
             doc = DOC_TESTS.match(plain)
 
             if running:
-                key = os.path.basename(running.group("path"))
+                key = binary_name(running.group("path"))
                 current = by_binary.get(key)
                 test_sections += 1
                 if current is None:
@@ -344,7 +357,7 @@ def self_test() -> int:
         for failure in failures:
             print(f"     {failure}")
         return 1
-    print(f"✅ self-test: {len(SELF_TEST_CASES)} planted runs split alike: {', '.join(c[0] for c in SELF_TEST_CASES)}")
+    print(f"✅ self-test: {len(SELF_TEST_CASES)} planted runs split alike: {'; '.join(c[0] for c in SELF_TEST_CASES)}")
     return 0
 
 

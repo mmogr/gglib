@@ -375,6 +375,9 @@ enforce: ## Run the architecture enforcement checks
 	@# prints for each test binary, and that line is spelled differently on
 	@# Windows and under --verbose. Its fixtures hold one run per spelling.
 	@./scripts/split_test_output.py --self-test
+	@# known_failures.py is the verdict of CI's macOS and Windows test job. Its
+	@# fixtures plant each way a run and its list can disagree.
+	@./scripts/known_failures.py --self-test
 	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
 	@# between the generated bindings and a new class of lie: i64 becomes a
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a

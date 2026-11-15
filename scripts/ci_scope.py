@@ -70,6 +70,11 @@ REACHES = [
     # The pinned engines, llama.xcframework and the test models the gated
     # jobs install.
     ".github/actions/**",
+    # The lists `test-cross-os` holds the macOS and Windows runs to, and the
+    # two scripts that read a run.
+    "scripts/known-failures/**",
+    "scripts/known_failures.py",
+    "scripts/split_test_output.py",
 ]
 
 # Paths that cannot reach a Rust build on macOS, Windows or iOS. A path ending
@@ -77,7 +82,8 @@ REACHES = [
 # root's Markdown only and a crate's README, its rustdoc front page, reaches.
 INERT = [
     # Nothing compiles a file here in. Two integration tests read one when
-    # they run, and only Linux's `test` runs them.
+    # they run, alike on every OS, and Linux's `test` runs them on every
+    # change.
     "docs/**",
     # The repository's own README, CHANGELOG and the rest. Each crate's front
     # page is its own README.
@@ -98,11 +104,11 @@ INERT = [
     "knip.jsonc",
     # The Homebrew and AUR templates, which release.yml renders after the
     # builds, and install.sh. gglib-cli's install_script test reads that
-    # when it runs, and only Linux's `test` runs it.
+    # when it runs, and Linux's `test` runs it on every change.
     "packaging/**",
     # Repository checks and release helpers, run on Linux. gglib-cli's
-    # setup_scripts test reads three of them when it runs, and only Linux's
-    # `test` runs it.
+    # setup_scripts test reads three of them when it runs, and Linux's `test`
+    # runs it on every change.
     "scripts/**",
     # The other workflows, Dependabot and the issue forms.
     ".github/**",
@@ -358,6 +364,11 @@ CASES = [
         "pull_request", None, False, "",
     ),
     ("clippy.toml", RC2, edit(RC2, {"clippy.toml": "too-many-arguments-threshold = 9\n"}), "pull_request", None, False, "rust ios cross_os"),
+    (
+        "a known-failures list alone",
+        RC2, edit(RC2, {"scripts/known-failures/windows.txt": "gglib-core gglib_core paths::a\n"}),
+        "pull_request", None, False, "rust ios cross_os",
+    ),
     ("scripts/llama_pin.sh", RC2, edit(RC2, {"scripts/llama_pin.sh": "#!/bin/sh\necho b2\n"}), "pull_request", None, True, "rust ffi ios cross_os apple"),
     ("ci.yml", RC2, edit(RC2, {".github/workflows/ci.yml": "name: CI\non: push\n"}), "pull_request", None, True, "rust ffi ios cross_os apple"),
     ("a crate's README", RC2, edit(RC2, {"crates/gglib-core/README.md": "# gglib-core, the core\n"}), "pull_request", None, False, "rust ios cross_os"),
@@ -409,6 +420,9 @@ PATHS = [
     ("crates/x/tsconfig.json", True),
     ("packaging/homebrew/gglib.rb", False),
     ("scripts/crate_list.py", False),
+    ("scripts/known-failures/windows.txt", True),
+    ("scripts/known_failures.py", True),
+    ("scripts/split_test_output.py", True),
     ("scripts/status_card/requirements.txt", False),
     (".github/workflows/coverage.yml", False),
     (".github/dependabot.yml", False),
