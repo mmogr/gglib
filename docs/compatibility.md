@@ -30,5 +30,5 @@ These can change in any release:
 ## Platforms
 
 - **macOS (Apple silicon) and Linux:** built and tested.
-- **Windows:** built and published, but not tested.
+- **Windows:** experimental. It's built and published, but its first test found that a new install doesn't reach a working chat without help. [#1959](https://github.com/mmogr/gglib/issues/1959) tracks the work.
 - **macOS builds aren't signed or notarized yet.** [Install](../README.md#pre-built-binaries-macos-linux-windows) says how to open them.

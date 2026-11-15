@@ -286,6 +286,11 @@ and run `./gglib up`. The binaries are not code-signed yet:
 - **Windows** SmartScreen stops the desktop app's installer with "Windows
   protected your PC". Choose **More info**, then **Run anyway**.
 
+**Windows is experimental.** Its first test found that a new install doesn't
+get from the installer to a working chat without help.
+[#1959](https://github.com/mmogr/gglib/issues/1959) lists what was found and
+tracks the fixes.
+
 Each release also carries gglib for an iOS or macOS app to link,
 `GglibFFI-<version>.xcframework.zip`, its Swift binding in
 `GglibFFI-swift-<version>.zip`, and the llama.cpp it runs models with in
