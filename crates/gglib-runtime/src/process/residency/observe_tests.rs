@@ -1,9 +1,5 @@
 //! An observed admission is told its place in line while it waits, once per
 //! place, never under the queue's lock.
-//!
-//! Unix-only for the stand-in `sd-server` file the preflight looks for.
-
-#![cfg(unix)]
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};

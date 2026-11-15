@@ -111,26 +111,19 @@ async fn an_admission_with_a_missing_projector_is_refused_before_any_spawn() {
 
 /// A stand-in for llama-server that writes its arguments, one to a line, to
 /// `args.txt` beside itself and exits.
-#[cfg(unix)]
 fn argument_recorder(dir: &tempfile::TempDir) -> (PathBuf, PathBuf) {
-    use std::os::unix::fs::PermissionsExt;
     let recorded = dir.path().join("args.txt");
-    let binary = dir.path().join("llama-server");
-    let script = format!(
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}.tmp'\nmv '{}.tmp' '{}'\n",
-        recorded.display(),
-        recorded.display(),
-        recorded.display()
+    let binary = gglib_test_proc::install(
+        dir.path(),
+        "llama-server",
+        &format!("argv {}", recorded.display()),
     );
-    std::fs::write(&binary, script).unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
     (binary, recorded)
 }
 
 /// The launch itself, as far as the spawn: the server is started with
 /// `--mmproj` and the linked file. The stand-in exits at once, so the launch
 /// then fails, which is not what this reads.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_launch_starts_the_server_with_the_models_projector() {
     gglib_core::paths::isolate_data_root();

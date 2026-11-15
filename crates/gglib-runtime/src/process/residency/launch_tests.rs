@@ -1,7 +1,4 @@
 //! Tests for the failed-launch guard in [`super`].
-//!
-//! Split out of `launch.rs`. Unix-only for the harmless binary they spawn,
-//! not for the behaviour.
 
 use super::{LIVENESS_TICK, SpawnedChild};
 use crate::process::core::GuiProcessCore;
@@ -21,8 +18,8 @@ const NO_RUNTIME_ID: u32 = 999_003;
 const CANCELLED_ID: u32 = 999_004;
 const ABA_ID: u32 = 999_005;
 
-/// A core wired to a harmless binary, plus a model file that exists so
-/// `spawn`'s own existence check passes.
+/// A core wired to a harmless binary, a stand-in that exits at once, plus a
+/// model file that exists so `spawn`'s own existence check passes.
 ///
 /// Sets this binary's own data root first: `pids_dir()` is otherwise the
 /// user's real one, which an installed daemon shares (#955).
@@ -31,9 +28,10 @@ fn spawnable(model_id: i64) -> (Arc<RwLock<GuiProcessCore>>, SpawnConfig, tempfi
     let dir = tempfile::tempdir().expect("temp dir");
     let model = dir.path().join("model.gguf");
     std::fs::write(&model, b"not really a gguf").expect("write model file");
+    let server = gglib_test_proc::install(dir.path(), "llama-server", "");
     let core = Arc::new(RwLock::new(GuiProcessCore::new(
         19080,
-        RuntimeBinaries::llama_only("/usr/bin/true"),
+        RuntimeBinaries::llama_only(server.to_string_lossy()),
     )));
     // 19080 is the *base* port to allocate from, not the port itself:
     // `ServerConfig::new` leaves `port: None`.
@@ -92,7 +90,7 @@ fn dropping_outside_a_runtime_does_not_panic() {
     let rt = tokio::runtime::Runtime::new().expect("runtime");
     let core = Arc::new(RwLock::new(GuiProcessCore::new(
         19090,
-        RuntimeBinaries::llama_only("/usr/bin/true"),
+        RuntimeBinaries::llama_only("llama-server"),
     )));
     // Armed *inside* the runtime, dropped after it is gone — the real
     // shutdown scenario, not merely a guard built on a bare thread.

@@ -1,11 +1,5 @@
 //! The manager's generation gate is the queue's, and `retire_render` stops
 //! the image model's server, then empties its slot, then ends the turn.
-//!
-//! Unix-only for the stand-in `sd-server`, a script that sleeps.
-
-#![cfg(unix)]
-
-use std::os::unix::fs::PermissionsExt;
 
 use gglib_core::domain::{CacheRamHealth, ImageFamily, ModelSamplingDefaults, RuntimeKind};
 use tokio::time::Instant;
@@ -22,9 +16,7 @@ const RENDERER_ID: u32 = 999_301;
 async fn retiring_a_render_stops_its_server_and_empties_its_slot() {
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
-    let sd = dir.path().join("sd-server");
-    std::fs::write(&sd, "#!/bin/sh\nexec sleep 60\n").unwrap();
-    std::fs::set_permissions(&sd, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let sd = gglib_test_proc::install(dir.path(), "sd-server", "sleep 60");
     let weights = dir.path().join("flux.gguf");
     std::fs::write(&weights, b"x").unwrap();
     let manager = ProcessManager::new(

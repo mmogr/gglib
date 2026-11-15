@@ -1,18 +1,13 @@
 //! Tests for the `Drop` of [`super::GuiProcessCore`], the backstop that stops
 //! whatever the core still tracks when nothing called `kill` first.
-//!
-//! Unix-only for the shell script they spawn as llama-server and the `ps`
-//! they read its state with, not for the behaviour.
 
 use super::GuiProcessCore;
 use crate::pidfile::{PidFileData, delete_pidfile, read_pidfile};
 use crate::process::{RuntimeBinaries, SpawnConfig};
 use gglib_core::ports::ServerConfig;
-use nix::sys::signal::{Signal, kill};
-use nix::unistd::Pid;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::Duration;
+use sysinfo::{ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System};
 
 /// Ids no other test in this binary uses, for the reason
 /// `residency::launch_tests` gives.
@@ -20,21 +15,17 @@ const FIRST_ID: i64 = 999_006;
 const SECOND_ID: i64 = 999_007;
 const PIDFILE_ID: i64 = 999_008;
 
-/// A core whose llama-server is a script that sleeps for 30 seconds, so a
-/// child stays running until something stops it.
-///
-/// `exec` makes the pid the core records the sleeping process itself, so a
-/// kill sent to that pid stops the sleep rather than orphaning it.
+/// A core whose llama-server is a stand-in that sleeps for 30 seconds, so a
+/// child stays running until something stops it. The pid the core records is
+/// the sleeping process itself, so a kill sent to that pid stops it.
 ///
 /// Sets this binary's own data root first, so the pidfiles `spawn` writes stay
 /// out of the user's real gglib folder (#955).
 fn core_of_sleepers(dir: &Path) -> GuiProcessCore {
     gglib_core::paths::isolate_data_root();
-    let script = dir.join("llama-server");
-    std::fs::write(&script, "#!/bin/sh\nexec sleep 30\n").expect("write script");
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let server = gglib_test_proc::install(dir, "llama-server", "sleep 30");
     std::fs::write(dir.join("model.gguf"), b"not really a gguf").expect("write model file");
-    GuiProcessCore::new(19100, RuntimeBinaries::llama_only(script.to_string_lossy()))
+    GuiProcessCore::new(19100, RuntimeBinaries::llama_only(server.to_string_lossy()))
 }
 
 fn config(dir: &Path, model_id: i64) -> SpawnConfig {
@@ -46,18 +37,27 @@ fn config(dir: &Path, model_id: i64) -> SpawnConfig {
     ))
 }
 
-/// Whether `pid` is running, as `ps` reports it.
+/// The OS's process table, read for `pid` alone.
+fn process_table(pid: sysinfo::Pid) -> System {
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing(),
+    );
+    sys
+}
+
+/// Whether `pid` is running: listed in the OS's process table, and not a
+/// zombie.
 ///
 /// A zombie counts as stopped: it has exited and waits only to be reaped,
 /// which is tokio's job for a child it spawned, so the test does not reap.
 fn is_running(pid: u32) -> bool {
-    let out = std::process::Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
-        .output()
-        .expect("run ps");
-    let stat = String::from_utf8_lossy(&out.stdout);
-    let stat = stat.trim();
-    !stat.is_empty() && !stat.starts_with('Z')
+    let pid = sysinfo::Pid::from_u32(pid);
+    process_table(pid)
+        .process(pid)
+        .is_some_and(|process| process.status() != ProcessStatus::Zombie)
 }
 
 /// Whether `pid` stops running within five seconds.
@@ -72,14 +72,14 @@ async fn stops(pid: u32) -> bool {
 }
 
 /// Leave nothing behind: `Drop` keeps the pidfile, and a failing run can
-/// leave the child running. Only a child that did not stop is signalled, so a
+/// leave the child running. Only a child that did not stop is killed, so a
 /// passing run sends nothing to a pid the OS may since have handed on.
 fn clean_up(model_id: i64, pid: u32, stopped: bool) {
     if !stopped {
-        let _ = kill(
-            Pid::from_raw(i32::try_from(pid).expect("a pid fits pid_t")),
-            Signal::SIGKILL,
-        );
+        let pid = sysinfo::Pid::from_u32(pid);
+        if let Some(process) = process_table(pid).process(pid) {
+            process.kill();
+        }
     }
     delete_pidfile(model_id).ok();
 }

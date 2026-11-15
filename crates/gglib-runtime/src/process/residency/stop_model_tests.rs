@@ -1,12 +1,7 @@
 //! A person's Stop reaches the model they chose, in whichever slot it sits:
 //! an image model beside a chat model is stopped and its slot emptied, and
 //! the chat model keeps running.
-//!
-//! Unix-only for the stand-in binaries; not for the behaviour.
 
-#![cfg(unix)]
-
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -32,10 +27,7 @@ const RENDERING_ID: u32 = 999_304;
 
 /// A stand-in server that sleeps until it is killed.
 fn sleeper(dir: &Path) -> PathBuf {
-    let binary = dir.join("server");
-    std::fs::write(&binary, "#!/bin/sh\nexec sleep 60\n").unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
-    binary
+    gglib_test_proc::install(dir, "server", "sleep 60")
 }
 
 fn resident(model_id: u32, name: &str, port: u16, runtime: RuntimeKind) -> Resident {

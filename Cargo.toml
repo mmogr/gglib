@@ -164,6 +164,7 @@ gglib-hf = { path = "crates/gglib-hf" }
 gglib-runtime = { path = "crates/gglib-runtime" }
 gglib-broadcast = { path = "crates/gglib-broadcast" }
 gglib-test-http = { path = "crates/gglib-test-http" }
+gglib-test-proc = { path = "crates/gglib-test-proc" }
 gglib-axum = { path = "crates/gglib-axum" }
 gglib-app-services = { path = "crates/gglib-app-services" }
 gglib-build-info = { path = "crates/gglib-build-info" }
