@@ -18,6 +18,16 @@ use serde_json::Value;
 use crate::command::build_command;
 use crate::server_config::{ServerConfigOptions, build_server_config};
 
+/// What an engine printed, as a recording keeps it: the binary's `path`,
+/// which `--help` prints, cut to its `name`, and every line ended with `\n`.
+/// A Windows engine ends its lines with `\r\n` when it writes to a pipe, so a
+/// recording is the same bytes whichever OS made it.
+pub(super) fn engine_text(bytes: &[u8], path: &str, name: &str) -> String {
+    String::from_utf8_lossy(bytes)
+        .replace("\r\n", "\n")
+        .replace(path, name)
+}
+
 /// The context every launch asks for, through gglib's own `-c`.
 pub(super) const CONTEXT: u64 = 2048;
 
@@ -76,8 +86,8 @@ impl Inputs {
         path
     }
 
-    /// Run an engine binary with `arg` and return its stdout and stderr,
-    /// with the binary's path, which `--help` prints, cut to its name.
+    /// Run an engine binary with `arg` and return its stdout and stderr, as
+    /// [`engine_text`] keeps them.
     pub(super) fn run(&self, binary: &Path, arg: &str) -> (String, String) {
         let out = self
             .clean(std::process::Command::new(binary))
@@ -86,7 +96,7 @@ impl Inputs {
             .unwrap_or_else(|e| panic!("{} {arg}: {e}", binary.display()));
         let path = binary.to_string_lossy();
         let name = binary.file_name().expect("a binary").to_string_lossy();
-        let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).replace(&*path, &name);
+        let text = |bytes: &[u8]| engine_text(bytes, &path, &name);
         (text(&out.stdout), text(&out.stderr))
     }
 

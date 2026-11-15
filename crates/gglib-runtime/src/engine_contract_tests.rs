@@ -49,7 +49,7 @@ mod readings;
 mod tier3;
 
 use inproc::Upstream;
-use launch::Inputs;
+use launch::{Inputs, engine_text};
 use project::{
     Recording, assert_nothing_local, help_default, line_diff, redact_stream, upstream_dir,
     write_under,
@@ -201,6 +201,18 @@ fn a_recorded_path_on_this_machine_is_refused() {
 #[should_panic(expected = "would commit")]
 fn a_recorded_path_is_refused_in_any_case() {
     assert_nothing_local("sd/help.txt", "Usage: /HOME/x/sd-server");
+}
+
+/// A Windows engine's `--help` is kept as Linux's and macOS's is, with its
+/// own path cut to the binary's name.
+#[test]
+fn an_engines_crlf_lines_and_its_path_are_kept_as_on_every_os() {
+    let path = r"D:\a\_temp/engines\.sd\bin\sd-server.exe";
+    let printed = format!("Usage: {path} [options]\r\n  --listen-port N\r\n");
+    assert_eq!(
+        engine_text(printed.as_bytes(), path, "sd-server.exe"),
+        "Usage: sd-server.exe [options]\n  --listen-port N\n"
+    );
 }
 
 #[test]

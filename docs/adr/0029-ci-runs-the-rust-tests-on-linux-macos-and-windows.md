@@ -67,6 +67,15 @@ the run's `test-run-<target>` artifacts for 30 days, and not after.
    | The pinned engines installed, and gglib's launch flags held to them | yes | yes | no |
    | The phone's crates and the Swift framework | no | yes | no |
 
+   > **Amended 2026-11-16.** The Windows leg of `cli-cross-os` installs the
+   > pinned engines and holds gglib's launch flags to them too
+   > ([#1961](https://github.com/mmogr/gglib/issues/1961)), so that row reads
+   > yes for all three platforms. Its first run installed the CPU builds of
+   > both engines, and the recorder started the Windows llama-server on the
+   > test models. The recordings matched those committed except that each
+   > line of the two engines' `--help` ended in `\r\n`; the recorder now
+   > writes `\n`.
+
 ## Consequences
 
 - A change that breaks a test on macOS or Windows fails its pull request. A
