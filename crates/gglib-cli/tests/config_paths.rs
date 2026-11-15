@@ -7,13 +7,14 @@
 //! version are the stand-ins here. On a Mac it also reads the app bundles
 //! in `/Applications`, so what the `desktop_app` lines say is not pinned.
 
+use gglib_core::utils::process::cmd;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 /// `gglib <args>` with `data` as its data root, `home` as its home and
 /// `path` as its whole `PATH`.
 fn gglib(data: &Path, home: &Path, path: &[&Path], args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_gglib"))
+    cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(args)
         .current_dir(home)
         .env("GGLIB_DATA_DIR", data)

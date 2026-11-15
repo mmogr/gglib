@@ -1,6 +1,11 @@
 //! The installed program, run as a test runs it: built by `install` on first
 //! use, under the name it was given, following its instruction file.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "gglib-test-proc has no dependencies, so it cannot take gglib_core::utils::process; a test program needs no Windows console flag"
+)]
+
 use std::process::Command;
 use std::time::{Duration, Instant};
 

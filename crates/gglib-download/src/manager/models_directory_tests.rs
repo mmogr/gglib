@@ -9,8 +9,8 @@
 //! of its own, started with the variable it needs or with none, and does its
 //! work there, under a root nothing is stored in yet.
 
+use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use gglib_core::paths::{isolate_data_root, set_models_dir};
 use gglib_core::ports::NoopEmitter;
@@ -43,7 +43,7 @@ fn started_for(test: &str, in_environment: Option<&Path>) -> bool {
     }
     let (_, module) = module_path!().split_once("::").expect("a module path");
     let home = tempfile::tempdir().expect("a home");
-    let mut again = Command::new(std::env::current_exe().expect("this test binary"));
+    let mut again = cmd(std::env::current_exe().expect("this test binary"));
     again
         .args(["--exact", &format!("{module}::{test}")])
         .env(STARTED_FOR_ONE_TEST, "1")

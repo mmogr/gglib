@@ -170,7 +170,7 @@ async fn kill_pid_windows(pid: u32) -> io::Result<()> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
-    use tokio::process::Command;
+    use gglib_core::utils::process::async_cmd;
 
     #[tokio::test]
     async fn kill_pid_handles_already_gone() {
@@ -193,7 +193,7 @@ mod tests {
     #[tokio::test]
     async fn kill_pid_terminates_process() {
         // Spawn a long-running process
-        let mut child = Command::new("sleep")
+        let mut child = async_cmd("sleep")
             .arg("60")
             .spawn()
             .expect("failed to spawn sleep");

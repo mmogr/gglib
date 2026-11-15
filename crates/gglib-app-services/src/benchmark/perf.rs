@@ -32,7 +32,7 @@
 
 use anyhow::{Context as _, Result};
 use chrono::Utc;
-use tokio::process::Command;
+use gglib_core::utils::process::async_cmd;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
@@ -167,7 +167,7 @@ async fn run_single_perf(
 ) -> Result<ModelPerfResult> {
     use std::process::Stdio;
 
-    let output = Command::new(bench_path)
+    let output = async_cmd(bench_path)
         .arg("-m")
         .arg(model.file_path.as_os_str())
         .arg("-p")

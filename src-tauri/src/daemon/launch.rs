@@ -20,6 +20,9 @@
 
 use std::path::{Path, PathBuf};
 
+use gglib_core::utils::process::cmd;
+use gglib_core::utils::process::detached::spawn_daemon;
+
 /// The `gglib` CLI's filename on this platform.
 ///
 /// `EXE_SUFFIX` is `".exe"` on Windows and empty everywhere else.
@@ -50,19 +53,9 @@ pub(super) fn spawn_external_daemon() -> Result<(), String> {
 
     let log = daemon_log_file().map_err(|e| format!("opening daemon log: {e}"))?;
 
-    let mut cmd = std::process::Command::new(program);
-    cmd.args(["daemon", "run"])
-        .stdin(std::process::Stdio::null())
-        .stdout(log.try_clone().map_err(|e| e.to_string())?)
-        .stderr(log);
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
-
-    cmd.spawn().map_err(|e| e.to_string())?;
+    let mut command = cmd(program);
+    command.args(["daemon", "run"]);
+    spawn_daemon(command, &log).map_err(|e| e.to_string())?;
     Ok(())
 }
 

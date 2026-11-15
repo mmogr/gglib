@@ -1,7 +1,7 @@
 //! The source checkout, against a local repository with tagged releases.
 
+use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use tokio::sync::mpsc;
 
@@ -12,7 +12,7 @@ use crate::llama::BuildEvent;
 /// Run git in `dir` with a throwaway identity and none of the caller's
 /// repository variables or signing; panic on failure.
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
+    let output = cmd("git")
         .env_remove("GIT_DIR")
         .env_remove("GIT_WORK_TREE")
         .env_remove("GIT_INDEX_FILE")

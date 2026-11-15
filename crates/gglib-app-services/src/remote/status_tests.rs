@@ -11,8 +11,8 @@
 //! variable only the parent sets, so an ordinary run of it checks nothing, and
 //! the parent fails on a missing marker if a rename leaves it unrun.
 
+use gglib_core::utils::process::cmd;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::Arc;
 
 use gglib_core::domain::UNNAMED_PAIRED;
@@ -33,7 +33,7 @@ const MARKER: &str = "STATUS-READ-LEFT-THE-DATA-ROOT-ALONE";
 
 #[test]
 fn a_status_read_creates_nothing_and_tightens_nothing() {
-    let out = Command::new(std::env::current_exe().expect("this test binary"))
+    let out = cmd(std::env::current_exe().expect("this test binary"))
         .args(["--exact", CHILD, "--nocapture", "--test-threads=1"])
         .env(CHILD_ENV, "1")
         .output()

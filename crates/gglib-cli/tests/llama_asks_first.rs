@@ -11,6 +11,7 @@
 #[path = "support/stub_tools.rs"]
 mod stub_tools;
 
+use gglib_core::utils::process::cmd;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
@@ -26,7 +27,7 @@ fn gglib(root: &Path, args: &[&str], typed: Option<&str>) -> Output {
 /// `gglib <args>` over `root`, run in `dir`, with `path` as its whole `PATH`
 /// and its output captured.
 fn gglib_command(path: &Path, root: &Path, dir: &Path, args: &[&str]) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_gglib"));
+    let mut command = cmd(env!("CARGO_BIN_EXE_gglib"));
     command
         .args(args)
         .current_dir(dir)

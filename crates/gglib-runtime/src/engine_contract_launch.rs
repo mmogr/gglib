@@ -90,7 +90,7 @@ impl Inputs {
     /// [`engine_text`] keeps them.
     pub(super) fn run(&self, binary: &Path, arg: &str) -> (String, String) {
         let out = self
-            .clean(std::process::Command::new(binary))
+            .clean(gglib_core::utils::process::cmd(binary))
             .arg(arg)
             .output()
             .unwrap_or_else(|e| panic!("{} {arg}: {e}", binary.display()));

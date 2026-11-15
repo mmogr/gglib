@@ -10,8 +10,8 @@
 //! parent sets, so an ordinary run of it checks nothing, and the parent fails
 //! on a missing marker if a rename leaves it unrun.
 
+use gglib_core::utils::process::cmd;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::Arc;
 
 use gglib_core::paths::default_models_dir;
@@ -39,7 +39,7 @@ async fn ops() -> SettingsOps {
 
 #[test]
 fn a_saved_models_directory_is_what_the_next_read_returns() {
-    let out = Command::new(std::env::current_exe().expect("this test binary"))
+    let out = cmd(std::env::current_exe().expect("this test binary"))
         .args(["--exact", CHILD, "--nocapture", "--test-threads=1"])
         .env(CHILD_ENV, "1")
         .env_remove("GGLIB_MODELS_DIR")

@@ -6,9 +6,10 @@
 
 #![allow(dead_code)]
 
+use gglib_core::utils::process::cmd;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 
 /// The data root `gglib` runs under for the library in `root`.
 pub(crate) fn data_root(root: &Path) -> PathBuf {
@@ -46,7 +47,7 @@ pub(crate) fn write_gguf(dir: &Path, name: &str) -> PathBuf {
 /// `gglib <args>` over the library in `root`, answered `typed` at its
 /// prompts: how it ended, and what it printed.
 pub(crate) fn run(root: &Path, args: &[&str], typed: &str) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_gglib"))
+    let mut child = cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(args)
         .env("GGLIB_DATA_DIR", data_root(root))
         .env("GGLIB_RESOURCE_DIR", resource_root(root))

@@ -9,8 +9,9 @@
 #[path = "support/stub_tools.rs"]
 mod stub_tools;
 
+use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 
 use clap::Parser;
 use stub_tools::{Machine, one_at_a_time};
@@ -48,7 +49,7 @@ fn run_engine(engine: &str, machine: &Machine) -> Output {
 /// terminal.
 fn run_with(script: &str, args: &[&str], machine: &Machine) -> Output {
     let cwd = tempfile::tempdir().expect("an empty directory to run in");
-    Command::new("/bin/bash")
+    cmd("/bin/bash")
         .arg(scripts_dir().join(script))
         .args(args)
         .current_dir(cwd.path())
@@ -296,7 +297,7 @@ fn a_missing_toolchain_fails_the_dependency_script_before_any_hand_over() {
 /// What `make <target>` would run: `make -n` prints the recipes without
 /// running them.
 fn dry_run(target: &str) -> String {
-    let out = Command::new("make")
+    let out = cmd("make")
         .args(["-n", target])
         .current_dir(scripts_dir().join(".."))
         .output()
@@ -376,7 +377,7 @@ fn make_setup_runs_its_steps_in_order() {
 #[test]
 fn make_setup_stable_traps_the_way_back_before_it_switches() {
     let head = || {
-        let out = Command::new("git")
+        let out = cmd("git")
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .current_dir(scripts_dir().join(".."))
             .output()

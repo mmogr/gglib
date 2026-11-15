@@ -11,7 +11,8 @@
 #[path = "support/stub_tools.rs"]
 mod stub_tools;
 
-use std::process::{Command, Stdio};
+use gglib_core::utils::process::cmd;
+use std::process::Stdio;
 
 use stub_tools::{Machine, one_at_a_time};
 
@@ -61,7 +62,7 @@ fn check_deps_prints_each_tool_as_it_always_has() {
     let data = tempfile::tempdir().expect("a data root");
     let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
 
-    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+    let out = cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(["config", "check-deps"])
         .current_dir(elsewhere.path())
         .env_clear()
@@ -120,7 +121,7 @@ fn check_deps_reports_a_tool_that_is_absent_or_broken_as_missing() {
     let data = tempfile::tempdir().expect("a data root");
     let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
 
-    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+    let out = cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(["config", "check-deps"])
         .current_dir(elsewhere.path())
         .env_clear()

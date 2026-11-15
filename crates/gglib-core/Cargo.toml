@@ -31,6 +31,11 @@ url = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 
+# utils::process::host, the one place Windows is called directly (ADR 0030). The version
+# tokio already resolves, so no second copy is built.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Diagnostics_Debug"] }
+
 [features]
 # Emit TypeScript for the types that cross the wire. Enabled transitively by
 # the adapter crates' own `ts-bindings`, never on its own in an ordinary build.
