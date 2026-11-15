@@ -72,6 +72,8 @@ tempfile = { workspace = true }
 gglib-core = { workspace = true, features = ["test-utils"] }
 # The connection a fake server answers on, with the request already read.
 gglib-test-http = { workspace = true }
+# The stand-in llama-server and sd-server the process tests spawn, on every OS.
+gglib-test-proc = { workspace = true }
 # The in-process engine the contract recorder asks what it asks the pinned
 # llama-server, on loopback.
 gglib-engine-llama = { workspace = true }

@@ -245,12 +245,10 @@ fn a_stable_diffusion_resident_is_reported_with_its_runtime() {
 }
 
 /// A running `sd-server` is listed with its runtime.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_running_sd_server_is_listed_with_its_runtime() {
     use crate::sd::SdServerConfig;
     use gglib_core::domain::{ImageFamily, RuntimeKind};
-    use std::os::unix::fs::PermissionsExt;
 
     // Unused by any other test in this binary, for the reason
     // `residency::launch_tests` gives.
@@ -258,9 +256,7 @@ async fn a_running_sd_server_is_listed_with_its_runtime() {
 
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().expect("temp dir");
-    let script = dir.path().join("sd-server");
-    std::fs::write(&script, "#!/bin/sh\nexec sleep 30\n").expect("write script");
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let script = gglib_test_proc::install(dir.path(), "sd-server", "sleep 30");
     let model = dir.path().join("sdxl.safetensors");
     std::fs::write(&model, b"not really a checkpoint").expect("write model file");
     let manager = ProcessManager::new(
@@ -304,11 +300,8 @@ async fn a_running_sd_server_is_listed_with_its_runtime() {
 /// The server list carries each resident's launch facts, read from the
 /// admission queue by model id, and nothing for a process the queue holds
 /// no resident for.
-#[cfg(unix)]
 #[tokio::test]
 async fn the_server_list_carries_each_residents_launch_facts() {
-    use std::os::unix::fs::PermissionsExt;
-
     use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults, RuntimeKind};
     use gglib_core::ports::ServerConfig;
     use tokio::time::Instant;
@@ -318,9 +311,7 @@ async fn the_server_list_carries_each_residents_launch_facts() {
 
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
-    let binary = dir.path().join("server");
-    std::fs::write(&binary, "#!/bin/sh\nexec sleep 60\n").unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let binary = gglib_test_proc::install(dir.path(), "server", "sleep 60");
     let manager = ProcessManager::new(
         19_640,
         RuntimeBinaries::llama_only(binary.to_str().unwrap()),

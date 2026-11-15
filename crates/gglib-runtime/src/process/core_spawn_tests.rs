@@ -1,10 +1,9 @@
 //! [`super::GuiProcessCore::spawn`] starts each runtime from its own binary.
 //!
-//! Both binaries are shell scripts that write the arguments they were given
-//! to a file of their own and then sleep, so a test reads which program ran
-//! and with what. Unix-only for the scripts, not for the behaviour.
+//! Both binaries are stand-ins that write the arguments they were given to a
+//! file of their own and then sleep, so a test reads which program ran and
+//! with what.
 
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -25,21 +24,11 @@ const LLAMA: u32 = 999_020;
 const SD: u32 = 999_021;
 const BASE_PORT: u16 = 19_520;
 
-/// A script that writes its arguments, one per line, to `<dir>/<name>.argv`
+/// A stand-in that writes its arguments, one per line, to `<dir>/<name>.argv`
 /// and then sleeps until it is stopped.
 fn recorder(dir: &Path, name: &str) -> PathBuf {
-    let script = dir.join(name);
     let argv = dir.join(format!("{name}.argv"));
-    std::fs::write(
-        &script,
-        format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nexec sleep 30\n",
-            argv.display()
-        ),
-    )
-    .expect("write script");
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
-    script
+    gglib_test_proc::install(dir, name, &format!("argv {}\nsleep 30", argv.display()))
 }
 
 /// What `<dir>/<name>.argv` holds once the script has written it; `None` if

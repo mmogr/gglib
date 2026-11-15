@@ -277,11 +277,11 @@ impl Drop for GuiProcessCore {
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "core_drop_tests.rs"]
 mod drop_tests;
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "core_spawn_tests.rs"]
 mod spawn_tests;
 

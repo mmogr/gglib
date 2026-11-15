@@ -59,13 +59,10 @@ async fn bytes_that_are_not_utf8_do_not_end_the_reader() {
 /// Two servers spawned by one core, each writing a line to both of its
 /// streams: every line is under the port of the server that wrote it.
 ///
-/// llama-server here is a script that prints its arguments, which include
-/// the port it was launched on, and exits. Unix-only for that script.
-#[cfg(unix)]
+/// llama-server here is a stand-in that prints its arguments, which include
+/// the port it was launched on, and exits.
 #[tokio::test]
 async fn a_spawned_servers_stdout_and_stderr_reach_the_log_manager_under_its_port() {
-    use std::os::unix::fs::PermissionsExt;
-
     use crate::pidfile::delete_pidfile;
     use crate::process::{GuiProcessCore, RuntimeBinaries, SpawnConfig};
     use gglib_core::ports::ServerConfig;
@@ -76,10 +73,11 @@ async fn a_spawned_servers_stdout_and_stderr_reach_the_log_manager_under_its_por
 
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().expect("temp dir");
-    let script = dir.path().join("llama-server");
-    std::fs::write(&script, "#!/bin/sh\necho \"out $*\"\necho \"err $*\" >&2\n")
-        .expect("write script");
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let script = gglib_test_proc::install(
+        dir.path(),
+        "llama-server",
+        "print out {args}\neprint err {args}",
+    );
     let model = dir.path().join("model.gguf");
     std::fs::write(&model, b"not really a gguf").expect("write model file");
     let mut core = GuiProcessCore::new(

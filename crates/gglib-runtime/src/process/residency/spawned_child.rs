@@ -119,6 +119,6 @@ impl Drop for SpawnedChild {
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "launch_tests.rs"]
 mod tests;

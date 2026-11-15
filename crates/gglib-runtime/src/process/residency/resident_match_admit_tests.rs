@@ -7,16 +7,11 @@ use std::sync::Arc;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec, ModelRuntimeError};
 use gglib_core::server_config::ServerConfigOptions;
-#[cfg(unix)]
 use tokio::sync::RwLock;
 
-#[cfg(unix)]
-use super::tests::answer_health;
-use super::tests::healthy_port;
-#[cfg(unix)]
+use super::tests::{answer_health, healthy_port};
 use crate::process::RuntimeBinaries;
 use crate::process::admission::{PRIMARY_SLOT, Resident};
-#[cfg(unix)]
 use crate::process::core::GuiProcessCore;
 use crate::process::residency::ResidentSet;
 use crate::process::residency::residency_tests::{OneModel, launch_spec};
@@ -126,22 +121,15 @@ async fn an_admission_recycles_a_resident_launched_before_its_model_was_unlinked
 }
 
 /// A model id no other test in this binary spawns; see `launch_tests`.
-#[cfg(unix)]
 const LAUNCHED_ID: u32 = 999_102;
 
 /// A stand-in for llama-server that stays up and listens on nothing.
-#[cfg(unix)]
 fn idle_server(dir: &tempfile::TempDir) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let binary = dir.path().join("llama-server");
-    std::fs::write(&binary, "#!/bin/sh\nexec sleep 30\n").unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
-    binary
+    gglib_test_proc::install(dir.path(), "llama-server", "sleep 30")
 }
 
 /// Answers `/health` on the port `core` gives the server it spawns, once it
 /// has spawned one: the stand-in cannot, and a launch waits for the answer.
-#[cfg(unix)]
 fn answer_health_for_the_spawned_server(core: &Arc<RwLock<GuiProcessCore>>) {
     let core = Arc::clone(core);
     tokio::spawn(async move {
@@ -159,7 +147,6 @@ fn answer_health_for_the_spawned_server(core: &Arc<RwLock<GuiProcessCore>>) {
 /// A launch that completes: the resident it installs carries the projector it
 /// was started with, so the next request for the same linked model is served
 /// by it and nothing is launched again.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_launched_resident_records_its_projector_and_serves_the_next_request() {
     gglib_core::paths::isolate_data_root();

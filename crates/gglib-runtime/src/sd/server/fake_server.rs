@@ -70,8 +70,6 @@ impl FakeSdServer {
 
     /// An sd-server on `port`: for a launch test whose stand-in binary only
     /// records the port it was given, so the fake answers there in its place.
-    /// Unix only, as that launch test is.
-    #[cfg(unix)]
     pub(crate) async fn serve_on(port: u16) -> Self {
         let listener = TcpListener::bind(("127.0.0.1", port))
             .await

@@ -359,6 +359,9 @@ enforce: ## Run the architecture enforcement checks
 	@# found months later by reading. The construct is the tell.
 	@./scripts/check_context_floor.sh
 	@./scripts/check_lint_inheritance.sh
+	@# A test Windows never compiles leaves the code it covers untested there,
+	@# so the count of them per crate rises only in a change that says why.
+	@./scripts/check_unix_only_tests.py
 	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
 	@# only place that case gets caught before the push.

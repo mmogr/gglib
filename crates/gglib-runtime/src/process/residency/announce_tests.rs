@@ -2,12 +2,7 @@
 //! it: a launch once its server is healthy; a stop, a recycle and a swap
 //! before the process is killed; a render's retirement once its slot is
 //! emptied. A recycle a run refuses announces nothing.
-//!
-//! Unix-only for the stand-in binaries; not for the behaviour.
 
-#![cfg(unix)]
-
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -112,14 +107,8 @@ fn file(dir: &Path, name: &str) -> PathBuf {
 /// A stand-in server at `dir/name` that writes its arguments, one to a line,
 /// to `dir/name.args`, then sleeps until it is killed.
 fn sleeper(dir: &Path, name: &str) -> (PathBuf, PathBuf) {
-    let binary = dir.join(name);
     let args = dir.join(format!("{name}.args"));
-    let script = format!(
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{a}.tmp'\nmv '{a}.tmp' '{a}'\nexec sleep 60\n",
-        a = args.display()
-    );
-    std::fs::write(&binary, script).unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let binary = gglib_test_proc::install(dir, name, &format!("argv {}\nsleep 60", args.display()));
     (binary, args)
 }
 

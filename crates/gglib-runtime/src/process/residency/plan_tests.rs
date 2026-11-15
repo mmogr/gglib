@@ -3,12 +3,7 @@
 //! slots' residents are netted out of the RAM cache as a launch into the
 //! primary nets them, and a runtime with its own cache setting plans with
 //! it.
-//!
-//! Unix-only for the stand-in server; not for the behaviour.
 
-#![cfg(unix)]
-
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -113,10 +108,7 @@ fn a_primary_launch_counts_the_other_slots_residents_but_not_itself() {
 
 /// A stand-in server that sleeps until it is killed.
 fn sleeper(dir: &Path) -> std::path::PathBuf {
-    let binary = dir.join("server");
-    std::fs::write(&binary, "#!/bin/sh\nexec sleep 60\n").unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
-    binary
+    gglib_test_proc::install(dir, "server", "sleep 60")
 }
 
 /// A resident in the second slot weighs on the RAM cache a plan sizes, as
