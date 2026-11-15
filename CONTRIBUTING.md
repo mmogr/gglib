@@ -631,6 +631,15 @@ Linux's `test` job passes every test. On macOS and Windows some tests do not pas
 
 A hand-written stand-in server in a test (one that is not `axum::serve`) takes each connection from `gglib_test_http` (`accept`, or `incoming` and then `Incoming::request`; `blocking::` for `std::net`), never from `TcpListener::accept` or `incoming` directly; `clippy.toml` refuses those, and axum's `Listener::accept`, everywhere else. The helper hands a stream over only once the request has been read whole, because an answer written first can reach hyper before hyper has sent its request, and hyper cancels it (#1553). A test about the connection itself (was it dialled, is it held open unanswered) takes an `Incoming` and holds or drops it without reading it.
 
+### A test gated to Unix
+
+A test gated to Unix (`#[cfg(unix)]`, `not(windows)`, a Unix `target_os`, a `cfg_attr(windows, ignore)`, or a module or file gated that way) needs a twin that runs on Windows, unless the code it tests is itself Unix-only: permission bits, signals, symlinks. Then its gate says so in a line. A test that needs a child process does not write a `#!/bin/sh` script or start `sh` or `sleep`: `gglib_test_proc::install(dir, "llama-server", "argv <path>\nsleep 60")` puts a program that follows those instructions at `dir/llama-server` (`.exe` on Windows), and the crate's README lists the instructions. `make enforce` runs `scripts/check_unix_only_tests.py`, which counts each crate's Unix-only tests against `scripts/unix-only-tests-baseline.txt` and fails a crate whose count rose; the script's header says what it counts. When a count falls, or rises with a test of Unix-only code, write the new count in the same change:
+
+```bash
+./scripts/check_unix_only_tests.py --list     # each file's count
+./scripts/check_unix_only_tests.py --update   # rewrite the baseline
+```
+
 ### Lockfile discipline
 
 `Cargo.lock` is committed and must stay consistent. Before anything builds, the `test` job runs `cargo metadata --locked` for the workspace and for `src-tauri`, which fails when the lock does not already satisfy every manifest. After editing a `Cargo.toml`, run `make check`, which records the change in the lock, and commit the result. To move one third-party crate, run `cargo update -p <crate> --precise <version>`, and name in the PR every version the lock diff moves. Never run `cargo generate-lockfile`: it re-resolves every dependency against whatever the registry holds that minute, so its diff carries third-party upgrades nobody reviewed.
