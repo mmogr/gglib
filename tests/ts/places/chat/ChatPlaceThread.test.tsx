@@ -121,6 +121,22 @@ describe('ChatPlace, the thread', () => {
     expect(screen.queryByText('Assistant')).not.toBeInTheDocument();
   });
 
+  // WebKit clamps the scroll position of a thread whose viewport holds a
+  // query container, and the thread stops following its reply. jsdom lays
+  // nothing out, so this pins the class alone.
+  // https://github.com/mmogr/gglib/issues/1966
+  it('puts no query container inside the scrolling viewport', async () => {
+    renderLocal();
+    const reply = turnOf(await screen.findByText(ANSWER));
+    const viewport = reply.closest('.overflow-y-auto') as HTMLElement;
+
+    expect(viewport).toContainElement(reply);
+    const containers = [...viewport.querySelectorAll('*')].filter((inside) =>
+      [...inside.classList].some((name) => name.startsWith('@container')),
+    );
+    expect(containers).toEqual([]);
+  });
+
   it('folds a reply\'s thinking and tool call into one line that opens in place, with no dialog', async () => {
     const user = userEvent.setup();
     renderLocal();

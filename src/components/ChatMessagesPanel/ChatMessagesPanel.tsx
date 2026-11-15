@@ -112,9 +112,17 @@ interface ChatMessagesPanelProps {
  * The panel's column: the head and the turns, 680 px wide at most inside
  * its gutters, the composer's width (`ComposerFooter`), so the title, the
  * turns and the composer share one left edge.
+ *
+ * Not a query container, and nothing inside the scrolling viewport may be
+ * one: with a query container inside it, WebKit clamps the scroll position
+ * when a commit swaps a row at the bottom of the thread, to the content's
+ * height with the old row gone and the new one not yet counted. The viewport
+ * reads that as the reader scrolling up and stops following the reply.
+ *
+ * @see https://github.com/mmogr/gglib/issues/1966
  */
 const NotebookColumn: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="@container mx-auto w-full max-w-[728px] px-lg pt-xl">{children}</div>
+  <div className="mx-auto w-full max-w-[728px] px-lg pt-xl">{children}</div>
 );
 
 /** The turns' column: at most 680 px, the turns 32 px apart with no lines between them. */
