@@ -371,6 +371,10 @@ enforce: ## Run the architecture enforcement checks
 	@# reason as promote.py's.
 	@./scripts/release_lines.py --self-test
 	@./scripts/doc_workspace.py --self-test
+	@# split_test_output.py divides a test run by crate from the line cargo
+	@# prints for each test binary, and that line is spelled differently on
+	@# Windows and under --verbose. Its fixtures hold one run per spelling.
+	@./scripts/split_test_output.py --self-test
 	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
 	@# between the generated bindings and a new class of lie: i64 becomes a
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a
