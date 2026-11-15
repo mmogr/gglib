@@ -305,8 +305,8 @@ gglib up
 
 That builds `main`, the development version, so its version is a release
 candidate's, `X.Y.Z-rc.N`. `make setup-stable` builds the newest stable
-release instead: it switches the checkout to the `stable` branch and runs the
-same setup there.
+release instead: it switches the checkout to the `stable` branch, runs the
+same setup there, and switches back.
 
 `make setup` installs both engines at their pinned releases, llama.cpp for
 chat and the image runtime that draws pictures, and offers faster downloads

@@ -365,24 +365,39 @@ fn make_setup_runs_its_steps_in_order() {
     );
 }
 
-/// `make setup-stable` is on the stable branch before it builds anything:
-/// it refuses over uncommitted changes, fetches the branch, switches to it
-/// and takes it forward, and only then runs `setup`, in a make of its own.
+/// `make setup-stable` builds the stable branch and comes back. Its steps, in
+/// order: it refuses over uncommitted changes, fetches the branch, makes it,
+/// notes where the checkout is, traps the way back on the shell's exit and on
+/// the signals that end it, and only then switches and runs `setup`.
+///
+/// `make -n` runs a recipe line that names the make it would start, and the
+/// line that builds also switches branches, so the dry run itself is checked
+/// to have left this checkout where it was.
 #[test]
-fn make_setup_stable_switches_to_the_branch_before_it_builds() {
+fn make_setup_stable_traps_the_way_back_before_it_switches() {
+    let head = || {
+        let out = Command::new("git")
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
+            .current_dir(scripts_dir().join(".."))
+            .output()
+            .expect("git is on this machine");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let before = head();
     let listed = dry_run("setup-stable");
+    assert_eq!(head(), before, "the dry run moved the checkout:\n{listed}");
 
     let steps = [
         "git diff --quiet || ! git diff --cached --quiet",
         "git fetch origin '+refs/heads/stable:refs/remotes/origin/stable'",
         "git branch --quiet --track stable origin/stable",
         "git branch --quiet --no-track stable origin/stable",
-        "git switch stable",
-        "git merge --ff-only origin/stable",
+        "from=$(git symbolic-ref --quiet --short HEAD)",
+        "git switch --quiet $detach \"$from\"",
+        "trap back EXIT",
+        "trap 'exit 130' INT TERM HUP",
+        "git switch --quiet stable && git merge --quiet --ff-only origin/stable &&",
         "make setup",
-        "./scripts/check-deps.sh",
-        "Core setup complete",
-        "go back with: git switch main",
     ];
     let mut from = 0;
     for step in steps {
