@@ -152,23 +152,29 @@ pub(crate) fn library_files(models: &[gglib_core::Model]) -> Vec<(std::path::Pat
         .collect()
 }
 
-/// Poll `/health` until the listener answers, or `bind_timeout` passes.
+/// Poll `/health` until the listener answers, or `bind_timeout` passes. An
+/// attempt gets at most 2 seconds and never more than is left, so the wait
+/// ends at its limit wherever a refused connection is slow to say so.
 async fn wait_for_bind(client: &reqwest::Client, root: &str, bind_timeout: Duration) -> bool {
     let deadline = Instant::now() + bind_timeout;
     let url = format!("{root}/health");
-    while Instant::now() < deadline {
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return false;
+        }
         if client
             .get(&url)
-            .timeout(Duration::from_secs(2))
+            .timeout(left.min(Duration::from_secs(2)))
             .send()
             .await
             .is_ok()
         {
             return true;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        let left = deadline.saturating_duration_since(Instant::now());
+        tokio::time::sleep(Duration::from_millis(100).min(left)).await;
     }
-    false
 }
 
 #[cfg(test)]

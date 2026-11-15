@@ -156,6 +156,38 @@ async fn a_listener_that_never_comes_is_said_within_the_bind_timeout() {
     );
 }
 
+#[tokio::test]
+async fn a_listener_that_never_answers_is_said_within_the_bind_timeout() {
+    // Bound and held, never accepted from: the connection is made and the
+    // request sent, and no answer comes, so one attempt is slow on every OS.
+    let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}/v1", held.local_addr().unwrap());
+    let begun = std::time::Instant::now();
+    let refusal = prove(
+        &gglib_proxy::loopback::client(),
+        &base,
+        "m",
+        None,
+        &[],
+        Duration::from_millis(300),
+        Duration::from_secs(1),
+    )
+    .await
+    .expect_err("no answer");
+    assert!(
+        refusal.reason.contains("did not answer /health"),
+        "{}",
+        refusal.reason
+    );
+    // An attempt gets no more than is left of the bind timeout.
+    assert!(
+        begun.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        begun.elapsed()
+    );
+    drop(held);
+}
+
 /// The answer's keys are the contract's, which the CLI's mirror is held to.
 #[test]
 fn the_answer_carries_exactly_the_fields_the_contract_names() {
