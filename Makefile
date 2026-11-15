@@ -1,7 +1,7 @@
 # Every target here is a command, not a file. The previous list named 15 of
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
-.PHONY: help setup setup-stable switch-stable install uninstall build build-dev build-gui build-all build-tauri icons \
+.PHONY: help setup setup-stable install uninstall build build-dev build-gui build-all build-tauri icons \
         test test-helper check ios-check phone-llama engine-llama-test engine-llama-clippy \
         fmt lint doc doc-check readmes dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
@@ -740,12 +740,23 @@ setup: check-deps build-tauri install ## Full setup (check deps + build + instal
 # version and reads as the next release candidate; the branch `stable` is
 # where Promote leaves each stable version (CONTRIBUTING, "Run Promote").
 #
-# `switch-stable` moves this checkout there: it refuses over uncommitted
-# changes to tracked files, fetches the branch by name (so a clone made with
-# one branch has it too), and takes it forward only by a fast-forward, which
-# every promotion is. `setup-stable` then runs `setup` in a make of its own,
-# so the Makefile it reads is the stable version's, not this one.
-switch-stable:
+# `setup-stable` builds that branch and comes back: it refuses over
+# uncommitted changes to tracked files, fetches the branch by name (so a
+# clone made with one branch has it too), switches to it, takes it forward
+# only by a fast-forward, which every promotion is, and runs `setup` in a
+# make of its own, so the Makefile read is the stable version's, not this
+# one. Then it switches back to where the checkout was, however the build
+# ended: finished, failed, interrupted or its terminal closed. The switch,
+# the build and the way back are one shell for that, with the way back
+# trapped on its exit. A kill that cannot be caught leaves the checkout on
+# `stable`, as does a way back git refuses, and that one is said.
+#
+# The make that builds is named through STABLE_MAKE, never written out in the
+# recipe: `make -n` runs any recipe line that names it, and this line
+# switches branches.
+STABLE_MAKE = $(MAKE)
+
+setup-stable: ## Build the newest stable release, then return to this branch
 	@if ! git diff --quiet || ! git diff --cached --quiet; then \
 		echo "✗ This checkout has uncommitted changes. Commit or stash them, then run this again."; \
 		exit 1; \
@@ -760,12 +771,25 @@ switch-stable:
 		git branch --quiet --track stable origin/stable 2>/dev/null \
 			|| git branch --quiet --no-track stable origin/stable; \
 	fi
-	@git switch stable
-	@git merge --ff-only origin/stable
-
-setup-stable: switch-stable ## Switch to the stable branch and run setup there
-	@$(MAKE) setup
-	@echo "✓ Built the stable release. This checkout is now on the stable branch; go back with: git switch main"
+	@if from=$$(git symbolic-ref --quiet --short HEAD); then detach=; else from=$$(git rev-parse --short HEAD); detach=--detach; fi; \
+	back() { \
+		status=$$?; \
+		trap - EXIT INT TERM HUP; \
+		if git switch --quiet $$detach "$$from"; then \
+			where="This checkout is back on $$from."; \
+		else \
+			where="This checkout is still on the stable branch; go back with: git switch $${detach:+--detach }$$from"; \
+		fi; \
+		if [ "$$status" -eq 0 ]; then \
+			echo "✓ Built the stable release. $$where"; \
+		else \
+			echo "✗ The stable build did not finish. $$where"; \
+		fi; \
+		exit "$$status"; \
+	}; \
+	trap back EXIT; \
+	trap 'exit 130' INT TERM HUP; \
+	git switch --quiet stable && git merge --quiet --ff-only origin/stable && $(STABLE_MAKE) setup
 
 # Development workflow
 dev: fmt lint test ## Format, lint and test
