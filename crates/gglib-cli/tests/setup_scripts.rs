@@ -364,3 +364,31 @@ fn make_setup_runs_its_steps_in_order() {
         "{listed}"
     );
 }
+
+/// `make setup-stable` is on the stable branch before it builds anything:
+/// it refuses over uncommitted changes, fetches the branch, switches to it
+/// and takes it forward, and only then runs `setup`, in a make of its own.
+#[test]
+fn make_setup_stable_switches_to_the_branch_before_it_builds() {
+    let listed = dry_run("setup-stable");
+
+    let steps = [
+        "git diff --quiet || ! git diff --cached --quiet",
+        "git fetch origin '+refs/heads/stable:refs/remotes/origin/stable'",
+        "git branch --quiet --track stable origin/stable",
+        "git branch --quiet --no-track stable origin/stable",
+        "git switch stable",
+        "git merge --ff-only origin/stable",
+        "make setup",
+        "./scripts/check-deps.sh",
+        "Core setup complete",
+        "go back with: git switch main",
+    ];
+    let mut from = 0;
+    for step in steps {
+        let at = listed[from..]
+            .find(step)
+            .unwrap_or_else(|| panic!("{step:?} comes next in:\n{listed}"));
+        from += at + step.len();
+    }
+}

@@ -1,7 +1,7 @@
 # Every target here is a command, not a file. The previous list named 15 of
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
-.PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri icons \
+.PHONY: help setup setup-stable switch-stable install uninstall build build-dev build-gui build-all build-tauri icons \
         test test-helper check ios-check phone-llama engine-llama-test engine-llama-clippy \
         fmt lint doc doc-check readmes dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
@@ -735,6 +735,37 @@ setup: check-deps build-tauri install ## Full setup (check deps + build + instal
 	@echo "✓ Core setup complete!"
 	@$(MAKE) llama-install-auto
 	@scripts/install-engine.sh sd || echo "○ The image runtime was not installed or updated; chat models work without it. Retry with: make sd-install"
+
+# The newest stable release, built from source. `main` is the development
+# version and reads as the next release candidate; the branch `stable` is
+# where Promote leaves each stable version (CONTRIBUTING, "Run Promote").
+#
+# `switch-stable` moves this checkout there: it refuses over uncommitted
+# changes to tracked files, fetches the branch by name (so a clone made with
+# one branch has it too), and takes it forward only by a fast-forward, which
+# every promotion is. `setup-stable` then runs `setup` in a make of its own,
+# so the Makefile it reads is the stable version's, not this one.
+switch-stable:
+	@if ! git diff --quiet || ! git diff --cached --quiet; then \
+		echo "✗ This checkout has uncommitted changes. Commit or stash them, then run this again."; \
+		exit 1; \
+	fi
+	@git fetch origin '+refs/heads/stable:refs/remotes/origin/stable'
+	@# The branch is made before the switch, not by it. A clone made with one
+	@# branch cannot track `origin/stable`, and `git switch --create --track`
+	@# there changes the files to the stable version's and then fails, still
+	@# on the old branch. `git branch` fails before it has done anything, and
+	@# the branch is then made without tracking.
+	@if ! git show-ref --verify --quiet refs/heads/stable; then \
+		git branch --quiet --track stable origin/stable 2>/dev/null \
+			|| git branch --quiet --no-track stable origin/stable; \
+	fi
+	@git switch stable
+	@git merge --ff-only origin/stable
+
+setup-stable: switch-stable ## Switch to the stable branch and run setup there
+	@$(MAKE) setup
+	@echo "✓ Built the stable release. This checkout is now on the stable branch; go back with: git switch main"
 
 # Development workflow
 dev: fmt lint test ## Format, lint and test
