@@ -559,8 +559,8 @@ jobs:
       - name: Check gglib-cli compilation
         run: cargo test -p gglib-cli --no-run
 
-      # The pinned engines themselves, on the two platforms whose builds a
-      # runner can run. The `gglib` just built installs each one as a user's
+      # The pinned engines themselves, on all three platforms. The `gglib`
+      # just built installs each one as a user's
       # machine would, into a folder of the job's own, and the action fetches
       # the recorder's tiny models; both are cached. Each engine's `--help`
       # and each pinned release's asset list then go to `gglib-runtime`'s
