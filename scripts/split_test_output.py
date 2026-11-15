@@ -38,10 +38,17 @@ What this does NOT do, so nobody reads more into a pass than is there:
 Usage:
     ./scripts/split_test_output.py <artifacts.json> <test-output.txt>
     ./scripts/split_test_output.py <artifacts.json> <test-output.txt> --out DIR
+    ./scripts/split_test_output.py --self-test
+
+`--self-test` splits one planted run per spelling cargo gives a test binary's
+line (Linux, `--verbose`, Windows) and passes when each divides into the same
+crates with the same counts.
 
 Exit codes:
-    0  every section was attributed, or the run produced no sections to split
-    1  a section mapped to no package, or the doctests went missing
+    0  every section was attributed, or the run produced no sections to split;
+       or the self-test passed
+    1  a section mapped to no package, or the doctests went missing; or the
+       self-test failed
 """
 
 from __future__ import annotations
@@ -51,6 +58,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -59,11 +67,11 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # plain form, but the parity fixture is a `--verbose` capture from before this
 # change, so both have to read.
 #
-# Both patterns end at the `<name>-<hash>` and then the line ends. That
-# anchoring is what keeps `--verbose`'s thousands of rustc invocations out:
-# they carry `/deps/` too, in `--extern foo=…/deps/libfoo-<hash>.rmeta`, but
-# they do not end there.
-BINARY = r"[A-Za-z0-9_.\-]+-[0-9a-f]{8,}"
+# Both patterns end at the `<name>-<hash>`, which `.exe` follows on Windows,
+# and then the line ends. That anchoring is what keeps `--verbose`'s thousands
+# of rustc invocations out: they carry `/deps/` too, in
+# `--extern foo=…/deps/libfoo-<hash>.rmeta`, but they do not end there.
+BINARY = r"[A-Za-z0-9_.\-]+-[0-9a-f]{8,}(?:\.exe)?"
 RUNNING_PLAIN = re.compile(rf"^\s+Running\s+[^(]*\((?P<path>[^)]*[/\\]deps[/\\]{BINARY})\)\s*$")
 RUNNING_VERBOSE = re.compile(rf"^\s+Running\s+`(?P<path>[^`]*[/\\]deps[/\\]{BINARY})`\s*$")
 
@@ -91,11 +99,15 @@ def package_name(package_id: str) -> str:
     return path.rstrip("/").rpartition("/")[2]
 
 
-def build_maps(artifacts_path: str) -> tuple[dict[str, str], dict[str, str]]:
-    """Binary basename → package, and lib name → package, from the JSON stream."""
-    by_binary: dict[str, str] = {}
-    by_lib: dict[str, str] = {}
+def binary_name(path: str) -> str:
+    """A path's last part, whichever separator it is written with: a Windows
+    run's files are also read on Linux and macOS."""
+    return re.split(r"[/\\]", path)[-1]
 
+
+def artifacts(artifacts_path: str):
+    """(package, target name, target kinds, binary or None) for each artifact
+    in the JSON stream, build scripts left out."""
     with open(artifacts_path, encoding="utf-8", errors="replace") as stream:
         for line in stream:
             line = line.strip()
@@ -121,10 +133,19 @@ def build_maps(artifacts_path: str) -> tuple[dict[str, str], dict[str, str]]:
                 continue
 
             executable = message.get("executable")
-            if executable:
-                by_binary[os.path.basename(executable)] = package
-            if any(kind in ("lib", "rlib", "proc-macro") for kind in kinds):
-                by_lib[target.get("name", "")] = package
+            yield package, target.get("name", ""), kinds, binary_name(executable) if executable else None
+
+
+def build_maps(artifacts_path: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Binary basename → package, and lib name → package, from the JSON stream."""
+    by_binary: dict[str, str] = {}
+    by_lib: dict[str, str] = {}
+
+    for package, name, kinds, binary in artifacts(artifacts_path):
+        if binary:
+            by_binary[binary] = package
+        if any(kind in ("lib", "rlib", "proc-macro") for kind in kinds):
+            by_lib[name] = package
 
     by_lib.pop("", None)
     return by_binary, by_lib
@@ -147,7 +168,7 @@ def split(output_path: str, by_binary: dict[str, str], by_lib: dict[str, str]):
             doc = DOC_TESTS.match(plain)
 
             if running:
-                key = os.path.basename(running.group("path"))
+                key = binary_name(running.group("path"))
                 current = by_binary.get(key)
                 test_sections += 1
                 if current is None:
@@ -242,5 +263,105 @@ def main() -> int:
     return 0
 
 
+# The self-test's planted run: three test binaries and one doctest set, in
+# three crates. gglib-agent's binary carries no crate name and gglib-cli's is
+# named for its `[[bin]]`, so only the JSON stream can place either.
+SELF_TEST_BINARIES = [
+    # (package id's tail, target kind, target name, binary, the source as
+    # cargo shows it, tests)
+    ("crates/gglib-core#0.37.0", "lib", "gglib_core", "gglib_core-0123456789abcdef", ("unittests ", "src", "lib.rs"), 2),
+    ("crates/gglib-agent#0.37.0", "test", "integration_guards", "integration_guards-fedcba9876543210", ("", "tests", "integration_guards.rs"), 3),
+    ("crates/gglib-cli#0.37.0", "bin", "gglib", "gglib-0011223344556677", ("unittests ", "src", "main.rs"), 1),
+]
+SELF_TEST_EXPECTED = {"gglib-core": 2 + 4, "gglib-agent": 3, "gglib-cli": 1}
+
+# One case per spelling: the checkout's root as cargo's JSON names it, the
+# path separator, the suffix of an executable, and whether the run was
+# `--verbose`.
+SELF_TEST_CASES = [
+    ("Linux", "/home/runner/work/gglib/gglib", "/", "", False),
+    ("Linux, --verbose", "/home/runner/work/gglib/gglib", "/", "", True),
+    ("Windows", "D:\\a\\gglib\\gglib", "\\", ".exe", False),
+]
+
+
+def self_test_run(root: str, sep: str, suffix: str, verbose: bool) -> tuple[str, str]:
+    """The JSON stream and the test output of one planted run."""
+    deps = sep.join([root, "target", "debug", "deps"])
+    url = "path+file://" + ("/" if not root.startswith("/") else "") + root.replace("\\", "/")
+    artifacts = [
+        # A build script, which every package with one names alike.
+        {"reason": "compiler-artifact", "package_id": f"{url}/crates/gglib-core#0.37.0",
+         "target": {"kind": ["custom-build"], "name": "build-script-build"},
+         "executable": sep.join([root, "target", "debug", "build", "gglib-core-00", "build-script-build" + suffix])},
+        {"reason": "build-finished", "success": True},
+    ]
+    output = ["   Compiling gglib-core v0.37.0", "    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.00s"]
+
+    def results(count: int) -> list[str]:
+        return (
+            ["", f"running {count} tests"]
+            + [f"test planted::case_{n} ... ok" for n in range(count)]
+            + ["", f"test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s", ""]
+        )
+
+    for tail, kind, name, binary, (label, folder, source), count in SELF_TEST_BINARIES:
+        executable = sep.join([deps, binary + suffix])
+        artifacts.append({"reason": "compiler-artifact", "package_id": f"{url}/{tail}",
+                          "target": {"kind": [kind], "name": name}, "executable": executable})
+        if verbose:
+            output.append(f"     Running `{executable}`")
+        else:
+            shown = sep.join(["target", "debug", "deps", binary + suffix])
+            output.append(f"     Running {label}{folder}{sep}{source} ({shown})")
+        output += results(count)
+    output += ["   Doc-tests gglib_core"] + results(4)
+    return "\n".join(json.dumps(message) for message in artifacts) + "\n", "\n".join(output) + "\n"
+
+
+def self_test() -> int:
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, root, sep, suffix, verbose in SELF_TEST_CASES:
+            artifacts, output = self_test_run(root, sep, suffix, verbose)
+            artifacts_path = os.path.join(tmp, "artifacts.json")
+            output_path = os.path.join(tmp, "output.txt")
+            with open(artifacts_path, "w", encoding="utf-8") as handle:
+                handle.write(artifacts)
+            with open(output_path, "w", encoding="utf-8") as handle:
+                handle.write(output)
+
+            by_binary, by_lib = build_maps(artifacts_path)
+            sections, unmapped, test_sections, doc_sections = split(output_path, by_binary, by_lib)
+            passed = {
+                package: sum(
+                    int(match.group(1))
+                    for line in lines
+                    for match in [re.search(r"test result: ok\. (\d+) passed", line)]
+                    if match
+                )
+                for package, lines in sections.items()
+            }
+            if unmapped:
+                failures.append(f"{name}: no package for {', '.join(sorted(set(unmapped)))}")
+            if (test_sections, doc_sections) != (len(SELF_TEST_BINARIES), 1):
+                failures.append(
+                    f"{name}: read {test_sections} test binaries and {doc_sections} doctest sets, "
+                    f"planted {len(SELF_TEST_BINARIES)} and 1"
+                )
+            if passed != SELF_TEST_EXPECTED:
+                failures.append(f"{name}: split into {passed}, planted {SELF_TEST_EXPECTED}")
+
+    if failures:
+        print("❌ self-test: a planted run did not split as planted:")
+        for failure in failures:
+            print(f"     {failure}")
+        return 1
+    print(f"✅ self-test: {len(SELF_TEST_CASES)} planted runs split alike: {'; '.join(c[0] for c in SELF_TEST_CASES)}")
+    return 0
+
+
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(self_test())
     sys.exit(main())
