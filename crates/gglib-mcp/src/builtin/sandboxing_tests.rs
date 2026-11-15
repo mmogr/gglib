@@ -34,7 +34,8 @@ fn absolute_path_inside_root_is_kept() {
     let child = dir.path().join("src").join("main.rs");
     fs::write(&child, "fn main() {}").unwrap();
 
-    let under = Path::new("src").join("main.rs").display().to_string();
+    // Shown with `/` on every OS, as the tools print it.
+    let under = "src/main.rs";
 
     let given = resolve_sandboxed_path(dir.path(), child.to_str().unwrap()).unwrap();
     assert_eq!(given.path, child.canonicalize().unwrap());
@@ -68,10 +69,7 @@ fn a_miss_names_the_path_under_the_root_and_the_next_step() {
     let under = Path::new("src").join("mian.rs");
     let absolute = dir.path().join(&under);
     let err = resolve_sandboxed_path(dir.path(), absolute.to_str().unwrap()).unwrap_err();
-    assert_eq!(
-        err,
-        format!("No file or folder '{}' {MISSING}", under.display())
-    );
+    assert_eq!(err, format!("No file or folder 'src/mian.rs' {MISSING}"));
 }
 
 #[test]
@@ -255,4 +253,10 @@ fn dot_resolves_to_sandbox_root() {
     let dir = tempfile::tempdir().unwrap();
     let resolved = resolve_sandboxed_path(dir.path(), ".").unwrap().path;
     assert_eq!(resolved, dir.path().canonicalize().unwrap());
+}
+
+#[test]
+fn a_path_inside_is_shown_with_forward_slashes() {
+    let rest: PathBuf = ["sub", "deeper", "nested.rs"].iter().collect();
+    assert_eq!(shown_inside(&rest), "sub/deeper/nested.rs");
 }

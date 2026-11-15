@@ -72,8 +72,6 @@ gglib-cli settings_reveal reveal_with_no_pairing_exits_1_and_prints_neither_key
 gglib-cli settings_reveal set_does_not_print_the_key_it_was_given
 gglib-cli settings_reveal show_prints_no_secret
 gglib-core gglib_core services::model_verification_remote::folder_tests::a_projector_and_a_companion_are_no_shards_and_shards_count_from_one
-gglib-mcp gglib_mcp builtin::fs_grep::tests::searches_subdirectories
-gglib-mcp gglib_mcp builtin::sandboxing::tests::absolute_path_is_rebased
 gglib-mcp gglib_mcp path::tests::test_validate_exe_path_rejects_nonexistent
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_failure_falls_back
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_success

@@ -65,25 +65,32 @@ pub(crate) fn resolve_sandboxed_path(
     let canon_root = canonical_root(sandbox_root)?;
     let raw = Path::new(user_path);
 
-    // An absolute path under the root is taken as is, and is shown by its
-    // part under the root. Any other absolute path has its root components
-    // stripped and is rebased inside sandbox_root, so that `/etc/passwd` or
-    // `C:\secret` are treated as relative paths within the sandbox.
-    let under = if raw.is_absolute() {
-        under_root(raw, sandbox_root, &canon_root)
+    // A path with a root that lies under the root is taken as is, and is
+    // shown by its part under the root. On Windows a root with no drive
+    // (`\proj\notes`) is on the folder's own drive. Any other path with a
+    // root has its root components stripped and is rebased inside
+    // sandbox_root, so that `/etc/passwd`, `C:\secret` and a driveless
+    // `\notes` are treated as relative paths within the sandbox.
+    let anchored = if raw.is_absolute() {
+        Some(raw.to_path_buf())
+    } else if raw.has_root() {
+        Some(sandbox_root.join(raw))
     } else {
         None
     };
-    let (candidate, shown) = match under {
-        Some(rest) => {
+    let under = anchored
+        .as_deref()
+        .and_then(|full| under_root(full, sandbox_root, &canon_root));
+    let (candidate, shown) = match (under, anchored) {
+        (Some(rest), Some(full)) => {
             let shown = if rest.as_os_str().is_empty() {
                 ".".to_string()
             } else {
-                rest.display().to_string()
+                shown_inside(&rest)
             };
-            (raw.to_path_buf(), shown)
+            (full, shown)
         }
-        None if raw.is_absolute() => {
+        _ if raw.has_root() => {
             use std::path::Component;
             let relative: PathBuf = raw
                 .components()
@@ -91,7 +98,7 @@ pub(crate) fn resolve_sandboxed_path(
                 .collect();
             (sandbox_root.join(relative), user_path.to_string())
         }
-        None => (sandbox_root.join(raw), user_path.to_string()),
+        _ => (sandbox_root.join(raw), user_path.to_string()),
     };
 
     // Canonicalize to resolve symlinks and `..`
@@ -111,6 +118,15 @@ pub(crate) fn resolve_sandboxed_path(
         shown,
         root: canon_root,
     })
+}
+
+/// A path inside the folder as the tools show it: its parts joined with `/`
+/// on every OS, so what a model reads from one tool it can pass to another.
+pub(crate) fn shown_inside(rest: &Path) -> String {
+    rest.components()
+        .map(|part| part.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// The part of the absolute `raw` under the root, when it lies under it:
