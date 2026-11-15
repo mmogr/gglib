@@ -13,6 +13,14 @@
 # The branch's CHANGELOG.md gets no heading for the stable version: the
 # tag's copy has it, and so does the release page.
 #
+# The branch `stable` follows the newest stable version, for a build from
+# source: `git clone --branch stable`, or `make setup-stable`. The commit a
+# promotion makes has a second parent, where `stable` was: the stable version
+# before it, unless that one never reached the branch. So `stable` only ever
+# moves forward, and a clone of it updates with `git pull`. The branch is
+# moved last, and whenever the tag was pushed, so nothing about it can stop a
+# release.
+#
 # A candidate comes from main, the next minor's or major's, or from a
 # maintenance line release/X.Y.x, that version's next patch (CONTRIBUTING,
 # "Maintenance lines"); a promotion is the same either way, and it is tag-driven, so
@@ -152,6 +160,16 @@ jobs:
       # One commit on top of the candidate's, by the App, as release-please.yml
       # commits the release PR's lockfiles. Only the files a promotion moves
       # are taken, and anything else left in the tree stops the run.
+      #
+      # The commit then gets a second parent: where `stable` is, or the
+      # previous stable tag while there is no such branch (the checkout above
+      # fetched every branch). That is the stable version before this one,
+      # unless that version never reached the branch, as one tagged without
+      # Promote would not. The tree and the first parent stay as committed, so
+      # the change it shows is still the version alone. With the branch's own
+      # tip as a parent, moving `stable` to this commit is a fast-forward
+      # whatever was tagged in between. A promotion that descends from that
+      # tip already, as a line's patch does, stays a plain commit.
       - name: Commit the promotion
         id: commit
         env:
@@ -159,6 +177,7 @@ jobs:
           SLUG: ${{ steps.app-token.outputs.app-slug }}
           RC: ${{ steps.promote.outputs.rc }}
           STABLE: ${{ steps.promote.outputs.stable }}
+          PREVIOUS: ${{ steps.candidate.outputs.previous }}
         run: |
           git add Cargo.toml package.json .release-please-manifest.json Cargo.lock package-lock.json CHANGELOG.md
           if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
@@ -167,10 +186,19 @@ jobs:
             exit 1
           fi
           id=$(gh api "users/${SLUG}[bot]" --jq .id)
-          git -c user.name="${SLUG}[bot]" -c user.email="${id}+${SLUG}[bot]@users.noreply.github.com" \
-            commit -q -m "chore(release): promote $RC to $STABLE"
+          as_app=(-c user.name="${SLUG}[bot]" -c user.email="${id}+${SLUG}[bot]@users.noreply.github.com")
+          git "${as_app[@]}" commit -q -m "chore(release): promote $RC to $STABLE"
+          before="refs/tags/$PREVIOUS"
+          if git rev-parse -q --verify refs/remotes/origin/stable > /dev/null; then
+            before=refs/remotes/origin/stable
+          fi
+          if ! git merge-base --is-ancestor "$before" HEAD; then
+            linked=$(git "${as_app[@]}" commit-tree "HEAD^{tree}" -p "HEAD^" -p "$before^{commit}" -m "chore(release): promote $RC to $STABLE")
+            git reset -q --soft "$linked"
+          fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          git show --stat --format='%H%n%an <%ae>%n%s' HEAD
+          git log -1 --format='%H%n%an <%ae>%n%s%nparents: %P' HEAD
+          git diff --stat "HEAD^1" HEAD
 
       - name: Dry run
         if: inputs.dry_run
@@ -178,6 +206,13 @@ jobs:
           CANDIDATE: ${{ steps.candidate.outputs.candidate }}
           STABLE: ${{ steps.promote.outputs.stable }}
         run: |
+          if ! git rev-parse -q --verify refs/remotes/origin/stable > /dev/null; then
+            branch="There is no stable branch yet; the promotion would create it."
+          elif git merge-base --is-ancestor refs/remotes/origin/stable HEAD; then
+            branch="The stable branch would move forward to it from $(git rev-parse --short refs/remotes/origin/stable)."
+          else
+            branch="The stable branch, at $(git rev-parse --short refs/remotes/origin/stable), would NOT fast-forward to it."
+          fi
           {
             echo "## Dry run: v$STABLE from $CANDIDATE"
             echo
@@ -186,11 +221,15 @@ jobs:
             echo '```'
             git diff --stat "$CANDIDATE" HEAD
             echo '```'
+            echo
+            echo "The commit's parents: $(git log -1 --format=%P HEAD). $branch"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::notice::dry run of v$STABLE from $CANDIDATE: nothing was tagged, released or built"
 
-      # The commit reaches the repository only as this tag.
+      # The commit reaches the repository as this tag; the stable branch
+      # follows it in the last step.
       - name: Push the tag
+        id: tag
         if: ${{ !inputs.dry_run }}
         env:
           STABLE: ${{ steps.promote.outputs.stable }}
@@ -231,3 +270,19 @@ jobs:
             echo
             echo "Tagged $SHA, released, and release.yml dispatched. Each stable channel waits for its approval there."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Last, so that nothing here can stop a release, and whenever the tag was
+      # pushed, even when the release or the dispatch after it failed: `stable`
+      # follows the tag, and a dry run pushes none. The push is a plain
+      # fast-forward, since the commit descends from where `stable` was. A
+      # refusal fails the run and names the push that finishes it by hand.
+      - name: Move the stable branch
+        if: ${{ !cancelled() && steps.tag.outcome == 'success' }}
+        env:
+          STABLE: ${{ steps.promote.outputs.stable }}
+        run: |
+          if ! git push origin HEAD:refs/heads/stable; then
+            echo "::error::v$STABLE is tagged, but the stable branch did not move. An admin moves it with: git fetch origin --tags && git push origin refs/tags/v$STABLE:refs/heads/stable"
+            exit 1
+          fi
+          echo "✓ stable is at v$STABLE"
