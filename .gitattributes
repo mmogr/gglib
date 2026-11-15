@@ -1,1 +1,6 @@
+# Text files are checked out with LF on every OS. Git for Windows would
+# otherwise write them with CRLF, and the tests that read a committed file
+# (the contracts, the schema snapshot, the recorded streams) compare it byte
+# for byte with what the code writes.
+* text=auto eol=lf
 *.sqlite binary

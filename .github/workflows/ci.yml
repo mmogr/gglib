@@ -797,7 +797,7 @@ jobs:
   # and is held to its OS's list of known failures,
   # scripts/known-failures/<list>.txt, by scripts/known_failures.py: a test
   # that fails and is not listed fails the leg, and so does a listed test
-  # that passes, so a list only shrinks.
+  # that passes, so a list only shrinks. docs/adr/0029 has the decision.
   #
   # The verdict is the script's, not cargo's: `cargo test` exits non-zero
   # for as long as a listed test fails. Its status goes to the script, which
