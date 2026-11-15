@@ -41,11 +41,13 @@ fn text(out: &Output) -> String {
 }
 
 /// A downloaded `server` of `release` under `dir` (`.llama` or `.sd`), with
-/// the record a download writes in `record`.
+/// the record a download writes in `record`. The file has the name gglib
+/// looks for on this OS, `.exe` on Windows.
 fn downloaded(root: &Path, dir: &str, server: &str, record: &str, release: &str) {
     let home = root.join(dir);
     std::fs::create_dir_all(home.join("bin")).unwrap();
-    std::fs::write(home.join("bin").join(server), "not a program").unwrap();
+    let file = format!("{server}{}", std::env::consts::EXE_SUFFIX);
+    std::fs::write(home.join("bin").join(file), "not a program").unwrap();
     std::fs::write(
         home.join(record),
         format!(

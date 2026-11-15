@@ -53,10 +53,16 @@ fn text(out: &Output) -> String {
     )
 }
 
+/// Where gglib looks for `sd-server` under `root`, `.exe` on Windows.
+fn sd_server(root: &Path) -> std::path::PathBuf {
+    let file = format!("sd-server{}", std::env::consts::EXE_SUFFIX);
+    root.join(".sd").join("bin").join(file)
+}
+
 /// An `sd-server` that is not a program, and a download's record.
 fn install(root: &Path) {
-    std::fs::create_dir_all(root.join(".sd/bin")).unwrap();
-    std::fs::write(root.join(".sd/bin/sd-server"), "not a program").unwrap();
+    std::fs::create_dir_all(root.join(".sd").join("bin")).unwrap();
+    std::fs::write(sd_server(root), "not a program").unwrap();
     std::fs::write(
         root.join(".sd/sd-config.json"),
         r#"{"install_type":"prebuilt","version":"master-948-228c707","platform":"macOS (Metal)","installed_at":"2026-10-10T01:02:03+00:00"}"#,
@@ -104,7 +110,7 @@ fn status_of_a_download_reads_its_record() {
             text(&out)
         );
     }
-    let binary = root.path().join(".sd/bin/sd-server");
+    let binary = sd_server(root.path());
     assert!(
         stdout.contains(&format!("Binary: {}", binary.display())),
         "{}",
@@ -138,7 +144,7 @@ fn uninstall_with_nobody_to_ask_removes_nothing() {
         "This will remove stable-diffusion.cpp and sd-server. Continue? (y/N): \n\
          Uninstall cancelled.\n"
     );
-    assert!(root.path().join(".sd/bin/sd-server").exists());
+    assert!(sd_server(root.path()).exists());
 }
 
 #[test]
