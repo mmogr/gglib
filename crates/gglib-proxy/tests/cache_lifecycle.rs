@@ -52,7 +52,10 @@ async fn stale_slot_file_skips_restore_and_fails_open() {
     std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
     std::fs::write(&bin_path, b"fake kv state").unwrap();
     let stale_mtime = SystemTime::now() - Duration::from_hours(1);
-    std::fs::File::open(&bin_path)
+    // Opened to write: Windows sets a file's time only through such a handle.
+    std::fs::File::options()
+        .write(true)
+        .open(&bin_path)
         .unwrap()
         .set_modified(stale_mtime)
         .unwrap();

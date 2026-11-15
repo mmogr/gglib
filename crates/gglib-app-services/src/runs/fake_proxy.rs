@@ -100,11 +100,10 @@ pub(super) struct FixedDoor(pub(super) Option<(SocketAddr, Option<String>)>);
 #[async_trait]
 impl ProxyDoor for FixedDoor {
     async fn open(&self) -> Result<Option<Door>, RunError> {
-        Ok(self.0.clone().map(|(addr, key)| Door {
-            root_url: format!("http://{addr}"),
-            key,
-            name: None,
-        }))
+        Ok(self
+            .0
+            .clone()
+            .map(|(addr, key)| crate::proxy_door::local_door(addr, key)))
     }
 }
 

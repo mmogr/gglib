@@ -95,10 +95,19 @@ async fn a_proxy_bound_to_every_interface_is_dialled_on_loopback() {
     let runs = registry_on(door(wildcard, None));
     runs.create(LOCAL, "r1", request()).unwrap();
 
-    tokio::time::timeout(Duration::from_secs(5), &mut proxy.seen)
+    let seen = tokio::time::timeout(Duration::from_secs(5), &mut proxy.seen)
         .await
         .expect("the request reached the proxy on 127.0.0.1")
         .unwrap();
+
+    // The address it asked for, since dialling 0.0.0.0 also reaches loopback
+    // on Linux and macOS.
+    let host = format!("host: 127.0.0.1:{}", proxy.addr.port());
+    assert!(
+        seen.head.to_ascii_lowercase().contains(&host),
+        "{}",
+        seen.head
+    );
 }
 
 #[tokio::test]

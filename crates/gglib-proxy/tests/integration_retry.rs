@@ -80,7 +80,10 @@ async fn a_retry_restores_saves_and_records_the_restart(streaming: bool) {
     // dated after it, so the mtime guard lets that one through and nothing
     // but a stale hot marker could skip its restore.
     next_second().await;
-    std::fs::File::open(&kept)
+    // Opened to write: Windows sets a file's time only through such a handle.
+    std::fs::File::options()
+        .write(true)
+        .open(&kept)
         .unwrap()
         .set_modified(SystemTime::now() + Duration::from_hours(1))
         .unwrap();

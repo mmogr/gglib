@@ -129,10 +129,12 @@ async fn a_repair_deletes_the_corrupt_shard_from_the_subdirectory() {
 
 #[test]
 fn a_projector_and_a_companion_are_no_shards_and_shards_count_from_one() {
+    // A companion is a row with an absolute path, on whichever OS runs this.
+    let elsewhere = std::env::temp_dir().join("other").join("vae.gguf");
     let rows = [
         row(0, "zeta.Q8_0.gguf", "w"),
         row(1, "mmproj-F16.gguf", "p"),
-        row(2, "/models/other/vae.gguf", "c"),
+        row(2, elsewhere.to_str().unwrap(), "c"),
     ];
 
     let roles = [

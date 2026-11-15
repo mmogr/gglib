@@ -251,7 +251,9 @@ pub(super) mod tests {
     use super::*;
     use crate::binary_install::{ReleaseSelector, selector_from_override};
 
-    /// llama.cpp's archive extraction, as the installer runs it.
+    /// llama.cpp's archive extraction, as the installer runs it. Unix only,
+    /// as the tests that call it are.
+    #[cfg(unix)]
     pub(super) fn extract_binaries(
         archive: &std::path::Path,
         bin_dir: &std::path::Path,
@@ -417,6 +419,10 @@ pub(super) mod tests {
     /// (e.g. `llama-b8223/llama-server`, `llama-b8223/llama-cli`), and that
     /// dangling dylib symlinks (versioned aliases present in real macOS archives)
     /// do not cause a spurious "No such file or directory" error.
+    ///
+    /// Unix only: a tar.gz is a Linux or macOS release, whose binaries have
+    /// no `.exe`. A Windows release is a zip.
+    #[cfg(unix)]
     #[test]
     fn test_extract_binaries_tar_gz_modern_layout() {
         use flate2::Compression;

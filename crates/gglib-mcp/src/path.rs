@@ -138,7 +138,9 @@ mod tests {
 
     #[test]
     fn test_validate_exe_path_rejects_nonexistent() {
-        let result = validate_exe_path("/nonexistent/path/to/exe");
+        // Absolute on every OS, and missing: a new folder holds nothing.
+        let dir = tempfile::tempdir().unwrap();
+        let result = validate_exe_path(dir.path().join("exe").to_str().unwrap());
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not found"));
     }
