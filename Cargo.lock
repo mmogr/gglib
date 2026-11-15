@@ -2853,6 +2853,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-test-proc"
+version = "0.37.0-rc.1"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "ghash"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

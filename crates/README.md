@@ -22,7 +22,7 @@ APPLICATION ──────────────────────�
 CORE ─────────────────────────────────────────────────────────────────────────
   core
 UTILITY ──────────────────────────────────────────────────────────────────────
-  broadcast          build-info         test-http
+  broadcast          build-info         test-http          test-proc
 TESTS ────────────────────────────────────────────────────────────────────────
   integration-tests
 
@@ -48,6 +48,7 @@ DEPENDS ON ───────────────────────
   broadcast          → none
   build-info         → none
   test-http          → none
+  test-proc          → none
   integration-tests  → none
 ```
 <!-- crate-graph:end -->
@@ -85,6 +86,7 @@ Each row links the crate, whose own README says what it is responsible for and h
 | [gglib-broadcast](gglib-broadcast/) | utility | Generic Server-Sent Events broadcast utility shared by gglib-axum and gglib-proxy | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-complexity.json) |
 | [gglib-build-info](gglib-build-info/) | utility | Shared build/version metadata for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-complexity.json) |
 | [gglib-test-http](gglib-test-http/) | utility | A fake HTTP server's connection for tests: the request is read whole before the test can answer it | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-complexity.json) |
+| [gglib-test-proc](gglib-test-proc/) | utility | A stand-in program for tests that runs on every OS: it follows the instructions in a file beside it | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-proc-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-proc-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-proc-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-proc-complexity.json) |
 | [gglib-integration-tests](gglib-integration-tests/) | tests | Cross-crate integration tests for gglib, gglib-proxy in front of the phone's in-process runtime among them | — |
 <!-- crate-catalog:end -->
 

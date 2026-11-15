@@ -1,0 +1,27 @@
+[package]
+name = "gglib-test-proc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A stand-in program for tests that runs on every OS: it follows the instructions in a file beside it"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "gglib_test_proc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gglib-test-proc"
+path = "src/main.rs"
+
+# Taken only from `[dev-dependencies]`, so no release build carries it. No
+# dependencies at all: `install` builds the program with cargo on first use,
+# and a build with nothing to compile but this crate takes a moment.
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

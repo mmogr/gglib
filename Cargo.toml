@@ -19,6 +19,7 @@ members = [
     "crates/gglib-engine-llama",
     "crates/gglib-broadcast",
     "crates/gglib-test-http",
+    "crates/gglib-test-proc",
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-ffi",

@@ -80,6 +80,9 @@ layer = "utility"
 [crate.gglib-test-http]
 layer = "utility"
 
+[crate.gglib-test-proc]
+layer = "utility"
+
 [crate.gglib-integration-tests]
 layer = "tests"
 badges = false
