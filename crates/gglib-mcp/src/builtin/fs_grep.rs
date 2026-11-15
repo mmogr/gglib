@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::Value;
 
-use super::sandboxing::{Resolved, is_binary, resolve_sandboxed_path};
+use super::sandboxing::{Resolved, is_binary, resolve_sandboxed_path, shown_inside};
 
 /// The folders a search never walks into, besides hidden ones.
 pub(crate) const SKIP_DIRS: &[&str] = &[
@@ -123,9 +123,7 @@ impl Walk<'_> {
 
         let relative = path
             .strip_prefix(&self.root)
-            .unwrap_or(path)
-            .display()
-            .to_string();
+            .map_or_else(|_| path.display().to_string(), shown_inside);
 
         for (line_num, line) in content.lines().enumerate() {
             if matches.len() >= self.max {

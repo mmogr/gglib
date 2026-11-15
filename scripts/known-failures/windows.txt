@@ -14,8 +14,6 @@ gglib-cli engine_install the_pin_installed_is_nothing_to_install
 gglib-cli gglib_cli handlers::model::explain::tests::the_launch_is_the_runtimes_plan_through_the_one_shot_runtime
 gglib-cli sd_commands status_of_a_download_reads_its_record
 gglib-core gglib_core services::model_verification_remote::folder_tests::a_projector_and_a_companion_are_no_shards_and_shards_count_from_one
-gglib-mcp gglib_mcp builtin::fs_grep::tests::searches_subdirectories
-gglib-mcp gglib_mcp builtin::sandboxing::tests::absolute_path_is_rebased
 gglib-mcp gglib_mcp path::tests::test_validate_exe_path_rejects_nonexistent
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_failure_falls_back
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_success
