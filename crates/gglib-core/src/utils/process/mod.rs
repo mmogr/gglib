@@ -1,12 +1,7 @@
-//! Process spawning utilities with consistent cross-platform behaviour.
-//!
-//! On Windows, every child process created with `std::process::Command::new`
-//! inherits a new console window unless `CREATE_NO_WINDOW` is explicitly set.
-//! The `windows_subsystem = "windows"` attribute on the main binary only
-//! suppresses the window for the *main* process — not any child processes.
-//!
-//! Use [`cmd`] and [`async_cmd`] instead of `Command::new` at every call site.
-//! The Windows-specific flag is applied here and nowhere else.
+#![doc = include_str!("README.md")]
+
+pub mod detached;
+pub mod host;
 
 use std::ffi::OsStr;
 
