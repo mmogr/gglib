@@ -4,28 +4,15 @@
 # change that makes its test pass; never add one for a test that passed.
 # One row per test, sorted: <package> <target> <test>
 gglib-app-services gglib_app_services proxy_prove::tests::a_listener_that_never_comes_is_said_within_the_bind_timeout
-gglib-app-services gglib_app_services runs::chat_tests::a_proxy_bound_to_every_interface_is_dialled_on_loopback
 gglib-axum gglib_axum daemon::lock::tests::read_holder_reports_the_recorded_metadata
 gglib-axum gglib_axum daemon::lock::tests::refusal_message_names_pid_and_address
 gglib-axum gglib_axum daemon::lock::tests::second_acquire_fails_while_first_is_held
-gglib-bootstrap build_error_cases build_fails_when_db_directory_does_not_exist
 gglib-cli engine_install a_later_release_is_kept
 gglib-cli engine_install the_pin_installed_is_nothing_to_install
 gglib-cli gglib_cli handlers::model::explain::tests::the_launch_is_the_runtimes_plan_through_the_one_shot_runtime
 gglib-cli sd_commands status_of_a_download_reads_its_record
-gglib-core gglib_core services::model_verification_remote::folder_tests::a_projector_and_a_companion_are_no_shards_and_shards_count_from_one
-gglib-mcp gglib_mcp path::tests::test_validate_exe_path_rejects_nonexistent
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_failure_falls_back
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_success
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_in_path
 gglib-mcp gglib_mcp resolver::search::tests::test_search_in_path_finds_executable
-gglib-proxy cache_lifecycle stale_slot_file_skips_restore_and_fails_open
-gglib-proxy gglib_proxy slot_eviction::tests::auto_budget_counts_a_reader_that_cannot_tell_as_no_free_disk
-gglib-proxy gglib_proxy slot_eviction::tests::auto_budget_with_no_free_disk_reader_evicts_nothing
-gglib-proxy gglib_proxy slot_eviction::tests::auto_budget_with_room_on_the_slot_dirs_disk_evicts_nothing
-gglib-proxy gglib_proxy slot_eviction::tests::evict_over_budget_deletes_oldest_first_to_explicit_budget
-gglib-proxy gglib_proxy slot_eviction::tests::evict_over_budget_reaps_stale_tmp_file
-gglib-proxy integration_retry a_non_streaming_retry_restores_saves_and_records_the_restart
-gglib-proxy integration_retry a_streaming_retry_restores_saves_and_records_the_restart
 gglib-runtime gglib_runtime health_monitor::health_monitor_tests::test_process_check_with_invalid_pid
-gglib-runtime gglib_runtime llama::download::tests::test_extract_binaries_tar_gz_modern_layout

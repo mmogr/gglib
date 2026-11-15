@@ -11,7 +11,8 @@ use std::time::SystemTime;
 
 fn set_mtime(path: &Path, secs_ago: u64) {
     let mtime = SystemTime::now() - Duration::from_secs(secs_ago);
-    let file = std::fs::File::open(path).unwrap();
+    // Opened to write: Windows sets a file's time only through such a handle.
+    let file = std::fs::File::options().write(true).open(path).unwrap();
     file.set_modified(mtime).unwrap();
 }
 
