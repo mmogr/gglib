@@ -290,7 +290,9 @@ and run `./gglib up`. The binaries are not code-signed yet:
   `gglib` runs in a terminal you open after it; a terminal already open
   keeps the PATH it started with. Uninstalling takes the folder off again
   if the install put it there; a folder that was on your PATH already
-  stays.
+  stays. Installing over gglib, or uninstalling it, stops gglib's service
+  first; if gglib is still running in a terminal, the installer says so
+  and stops.
 
 **Windows is experimental.** Its first test found that a new install doesn't
 get from the installer to a working chat without help.

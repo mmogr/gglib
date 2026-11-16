@@ -18,8 +18,9 @@ use tracing::warn;
 
 /// Sync every surface that displays application state.
 ///
-/// Called by `daemon::watch` whenever the daemon's state changes, and by
-/// `commands::util` when the selected model does.
+/// Called by `daemon::watch` whenever the daemon's state changes, by
+/// `commands::util` when the selected model does, and by `main` when the
+/// main window's theme does, for the tray's colour on Windows' taskbar.
 ///
 /// The snapshot is cloned out of its lock rather than read through it: both
 /// surfaces below await, and the tray's await is a D-Bus round trip on Linux.
