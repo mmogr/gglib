@@ -183,6 +183,98 @@ pub(crate) fn prompt_float_with_default(prompt: &str, default: Option<f64>) -> R
     }
 }
 
+// The rule a question is asked by (#2020), as it stands: every question
+// reads its input, whatever that input is. Nothing calls these yet.
+
+/// Whether a command's input is a terminal.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Input {
+    /// A person at a terminal.
+    Terminal,
+    /// A pipe, a file, a closed input.
+    NotTerminal,
+}
+
+/// What a question comes to when there is nobody to ask it.
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Unasked<T> {
+    /// Take the value, saying so with the line.
+    Take(T, String),
+    /// Refuse with the sentence.
+    Refuse(String),
+}
+
+/// The sentence a question nobody can answer is refused with.
+#[allow(dead_code)]
+pub(crate) fn nobody_to_ask(not_done: &str, again: &str) -> String {
+    format!("There is no terminal to ask, so {not_done}: run it again with {again}.")
+}
+
+/// Ask `ask`: today, whatever the input.
+#[allow(dead_code)]
+pub(crate) fn asked<W: Write, T>(
+    _from: Input,
+    asked_on: &mut W,
+    _unasked: Unasked<T>,
+    ask: impl FnOnce(&mut W) -> Result<T>,
+) -> Result<T> {
+    ask(asked_on)
+}
+
+/// A yes/no question: today, read whatever the input.
+#[allow(dead_code)]
+pub(crate) fn yes_no_from(
+    from: Input,
+    input: &mut impl BufRead,
+    asked_on: &mut impl Write,
+    question: &str,
+    enter: bool,
+    unasked: Unasked<bool>,
+) -> Result<bool> {
+    asked(from, asked_on, unasked, |asked_on| {
+        confirm_from(input, asked_on, question, enter)
+    })
+}
+
+/// A positive number: today, read whatever the input, and an end of input
+/// with no default asked again for ever.
+#[allow(dead_code)]
+pub(crate) fn number_from(
+    from: Input,
+    input: &mut impl BufRead,
+    asked_on: &mut impl Write,
+    question: &str,
+    unasked: Unasked<f64>,
+) -> Result<f64> {
+    let default = match &unasked {
+        Unasked::Take(value, _) => Some(*value),
+        Unasked::Refuse(_) => None,
+    };
+    asked(from, asked_on, unasked, |asked_on| {
+        loop {
+            match default {
+                Some(value) => writeln!(asked_on, "{question} [{value:.1}]: ")?,
+                None => writeln!(asked_on, "{question}: ")?,
+            }
+            let mut line = String::new();
+            input.read_line(&mut line)?;
+            let typed = line.trim();
+            if typed.is_empty()
+                && let Some(value) = default
+            {
+                return Ok(value);
+            }
+            match typed.parse::<f64>() {
+                Ok(value) if value > 0.0 => return Ok(value),
+                Ok(_) => eprintln!("Please enter a positive number."),
+                Err(_) => eprintln!("Please enter a valid number."),
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 #[path = "input_tests.rs"]
 mod tests;
