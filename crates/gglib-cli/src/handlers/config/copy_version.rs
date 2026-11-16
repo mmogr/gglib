@@ -7,12 +7,10 @@
 //! killed when its wait is up; one that fails, or prints something that is
 //! not a version, has none.
 
+use gglib_core::utils::process::bounded::run_bounded;
 use gglib_core::utils::process::cmd;
-use std::io::Read as _;
 use std::path::Path;
-use std::process::Stdio;
-use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// How long another copy has to answer `--version`.
 pub(crate) const VERSION_WAIT: Duration = Duration::from_secs(2);
@@ -22,39 +20,11 @@ pub(crate) const VERSION_WAIT: Duration = Duration::from_secs(2);
 /// as a version, or is still running when `wait` is up (it is then killed)
 /// has no version.
 pub(crate) fn read_version(bin: &Path, wait: Duration) -> Option<String> {
-    let deadline = Instant::now() + wait;
-    let mut child = cmd(bin)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let stdout = child.stdout.take()?;
-    // Read on a thread, so a child that keeps its stdout open (or leaves a
-    // process holding it) cannot keep this waiting past `wait`.
-    let (sender, receiver) = mpsc::channel();
-    std::thread::spawn(move || {
-        let mut out = Vec::new();
-        let _ = stdout.take(4096).read_to_end(&mut out);
-        let _ = sender.send(out);
-    });
-    let out = receiver.recv_timeout(wait).ok();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break None;
-            }
-        }
-    };
-    if !status?.success() {
+    let output = run_bounded(cmd(bin).arg("--version"), wait).ok()?;
+    if !output.status.success() {
         return None;
     }
-    version_word(String::from_utf8_lossy(&out?).lines().next()?)
+    version_word(String::from_utf8_lossy(&output.stdout).lines().next()?)
 }
 
 /// The version in a line such as `gglib 0.35.0 (a1b2c3d4e5f6)`: its first

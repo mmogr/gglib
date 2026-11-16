@@ -1,14 +1,18 @@
 //! The singleton lock: one daemon per machine, enforced by the OS.
 //!
-//! An exclusive advisory file lock on `<dir>/daemon.lock`. The lock is held
-//! for the owning process's lifetime and released by the kernel on any exit
-//! — clean, crashed, or `SIGKILLed` — so there is no stale state to recover
-//! from. The file's *contents* (`{"pid":…,"port":…}`) are advisory metadata
-//! for the refusal message and for `gglib daemon status`; the lock itself is
-//! what enforces exclusivity.
+//! An exclusive file lock on `<dir>/daemon.lock`. The lock is held for the
+//! owning process's lifetime and released by the kernel on any exit — clean,
+//! crashed, or `SIGKILLed` — so there is no stale state to recover from. The
+//! lock itself is what enforces exclusivity.
+//!
+//! Who holds it (`{"pid":…,"port":…}`) is written beside it, in
+//! `<dir>/daemon.json`, for the refusal message and for `gglib daemon
+//! status`. Not in the lock file: on Windows a held lock is mandatory, and no
+//! other handle can read the bytes it covers, so the holder was unknown there
+//! (#1986). The record is written once the lock is taken, through a temporary
+//! file renamed into place, so a reader never sees half of one.
 
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 /// What the lock file records about its holder.
@@ -49,7 +53,11 @@ fn holder_suffix(holder: Option<&LockInfo>) -> String {
 pub struct DaemonLock {
     file: File,
     path: PathBuf,
+    record: PathBuf,
 }
+
+/// The holder's record, beside the lock file.
+const RECORD: &str = "daemon.json";
 
 impl DaemonLock {
     /// Take the exclusive daemon lock in `dir`, recording this process's pid
@@ -64,10 +72,9 @@ impl DaemonLock {
         std::fs::create_dir_all(dir)?;
         let path = dir.join("daemon.lock");
 
-        // Read+write, no truncate: on conflict the current holder's metadata
-        // must still be readable.
-        let mut file = OpenOptions::new()
-            .read(true)
+        // No truncate: the lock file holds nothing, but a file a held lock
+        // covers cannot be truncated on Windows.
+        let file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(false)
@@ -76,10 +83,9 @@ impl DaemonLock {
         match file.try_lock() {
             Ok(()) => {}
             Err(std::fs::TryLockError::WouldBlock) => {
-                let mut contents = String::new();
-                let _ = file.read_to_string(&mut contents);
-                let holder = serde_json::from_str::<LockInfo>(contents.trim()).ok();
-                return Err(LockError::AlreadyRunning { holder });
+                return Err(LockError::AlreadyRunning {
+                    holder: Self::read_holder(dir),
+                });
             }
             Err(std::fs::TryLockError::Error(e)) => return Err(LockError::Io(e)),
         }
@@ -89,12 +95,12 @@ impl DaemonLock {
             pid: std::process::id(),
             port,
         };
-        file.set_len(0)?;
-        file.seek(SeekFrom::Start(0))?;
-        file.write_all(serde_json::to_string(&info)?.as_bytes())?;
-        file.flush()?;
+        let record = dir.join(RECORD);
+        let written = dir.join(format!("{RECORD}.part"));
+        std::fs::write(&written, serde_json::to_string(&info)?)?;
+        std::fs::rename(&written, &record)?;
 
-        Ok(Self { file, path })
+        Ok(Self { file, path, record })
     }
 
     /// Whether a daemon still holds the lock in `dir`.
@@ -119,13 +125,13 @@ impl DaemonLock {
         }
     }
 
-    /// Read a lock file's recorded holder without taking the lock.
+    /// Read the lock's recorded holder without taking the lock.
     ///
     /// For `gglib daemon status`: says who *claims* to hold the lock. `None`
-    /// when the file is absent or unparseable. The health probe, not this,
+    /// when the record is absent or unparseable. The health probe, not this,
     /// is the authority on whether a daemon is actually alive.
     pub fn read_holder(dir: &Path) -> Option<LockInfo> {
-        let contents = std::fs::read_to_string(dir.join("daemon.lock")).ok()?;
+        let contents = std::fs::read_to_string(dir.join(RECORD)).ok()?;
         serde_json::from_str(contents.trim()).ok()
     }
 }
@@ -134,6 +140,7 @@ impl Drop for DaemonLock {
     fn drop(&mut self) {
         // Best-effort tidiness only — the OS releases the lock regardless,
         // and a leftover file cannot block the next acquire.
+        let _ = std::fs::remove_file(&self.record);
         let _ = self.file.unlock();
         let _ = std::fs::remove_file(&self.path);
     }
@@ -221,6 +228,25 @@ mod tests {
         let holder = DaemonLock::read_holder(dir.path()).expect("holder should be readable");
         assert_eq!(holder.port, 1234);
         assert_eq!(holder.pid, std::process::id());
+    }
+
+    /// A record a dead holder left names the new holder once it has the lock.
+    #[test]
+    fn a_dead_holders_record_is_replaced() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(RECORD), r#"{"pid":4294967295,"port":1}"#).unwrap();
+
+        let _held = DaemonLock::acquire(dir.path(), 1234).unwrap();
+        let holder = DaemonLock::read_holder(dir.path()).expect("holder should be readable");
+        assert_eq!((holder.pid, holder.port), (std::process::id(), 1234));
+    }
+
+    /// Letting go of the lock takes its record with it.
+    #[test]
+    fn release_removes_the_record() {
+        let dir = tempfile::tempdir().unwrap();
+        drop(DaemonLock::acquire(dir.path(), 1234).unwrap());
+        assert!(DaemonLock::read_holder(dir.path()).is_none());
     }
 
     #[test]

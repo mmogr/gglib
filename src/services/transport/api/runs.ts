@@ -61,12 +61,21 @@ export function readRunEvents(
   return readRunStream(`${runPath(id)}/events?after=${after}`, signal);
 }
 
-/** A run's stream at `path` on the daemon, as `readRunEvents` reads it. */
+/**
+ * A run's stream at `path` on the daemon, as `readRunEvents` reads it;
+ * `timeoutMs` limits how long its headers may take (`timeLimit.ts`).
+ */
 export async function* readRunStream(
   path: string,
   signal: AbortSignal,
+  timeoutMs?: number,
 ): AsyncGenerator<RunStreamItem> {
-  const response = await apiFetch(path, { headers: { Accept: 'text/event-stream' }, signal });
+  const response = await apiFetch(path, {
+    headers: { Accept: 'text/event-stream' },
+    signal,
+    stream: true,
+    timeoutMs,
+  });
 
   for await (const event of readSse(response, signal)) {
     if (event.data === 'ping') continue; // a keepalive sent as data, not a frame

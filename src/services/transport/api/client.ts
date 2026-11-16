@@ -12,6 +12,7 @@ import { readData, type ReadOptions } from '../errors';
 import { appLogger } from '../../platform';
 import { isDesktop } from '../../platform/detect';
 import { isDaemonTokenRefusal, serviceRestarted, takeDaemonToken } from './daemonToken';
+import { fetchWithin, limitFor, type TimeLimitOptions } from './timeLimit';
 
 /**
  * Module-level API session context: where the daemon is and the token that
@@ -59,12 +60,21 @@ export interface HttpClient {
 }
 
 /**
+ * What a JSON call may say beside its body: that its answer is a secret, and
+ * its own time limit (`timeLimit.ts` says the defaults).
+ */
+type CallOptions = ReadOptions & Pick<TimeLimitOptions, 'timeoutMs'>;
+
+/**
  * Request options for HTTP client.
  */
-interface RequestOptions extends ReadOptions {
+interface RequestOptions extends CallOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
 }
+
+/** A refused token the desktop app reads again: the request is made once more. */
+const RETRY = Symbol('retry');
 
 /**
  * Discover embedded API info from Tauri.
@@ -136,28 +146,38 @@ function buildClient(config: HttpClientConfig): HttpClient {
     options?: RequestOptions,
     isRetry = false
   ): Promise<T> {
-    const { method = 'GET', body, sensitive } = options || {};
+    const { method = 'GET', body, sensitive, timeoutMs } = options || {};
     const hasBody = body !== undefined;
     // Include Content-Type header for POST/PUT/DELETE requests (even if body is undefined)
     // Backend may expect application/json header to parse Json<Option<T>> types
     const shouldIncludeContentType = method !== 'GET';
-    
+
     try {
-      const response = await fetch(`${baseUrl}${path}`, {
-        method,
-        headers: getHeaders(shouldIncludeContentType),
-        body: hasBody ? JSON.stringify(body) : undefined,
-      });
-      
-      // A 401 is the daemon asking for its token: its body says how to get it.
-      const refused = await isDaemonTokenRefusal(response);
-      if (refused) resetClientCache(); // the next call rereads a token minted since
-      if (refused && isDesktop()) { // the desktop rereads the file: retry once, never the sentence
+      // The limit covers the body as well: a reply whose body stalls is no answer.
+      const reply = await fetchWithin(
+        `${baseUrl}${path}`,
+        {
+          method,
+          headers: getHeaders(shouldIncludeContentType),
+          body: hasBody ? JSON.stringify(body) : undefined,
+        },
+        limitFor(method, { timeoutMs }),
+        async (response) => {
+          // A 401 is the daemon asking for its token: its body says how to get it.
+          if (await isDaemonTokenRefusal(response)) {
+            resetClientCache(); // the next call rereads a token minted since
+            if (isDesktop()) return RETRY; // the desktop rereads the file
+          }
+          return { data: await readData<T>(response, { sensitive }) };
+        },
+      );
+
+      // Retried once, outside the first request's limit; never the sentence.
+      if (reply === RETRY) {
         if (isRetry) throw serviceRestarted();
         return (await getClient()).request<T>(path, options, true);
       }
-      
-      return await readData<T>(response, { sensitive });
+      return reply.data;
     } catch (error) {
       // On network error (ECONNREFUSED, etc), clear cache and retry once
       if (!isRetry && isDesktop() && error instanceof TypeError) {
@@ -215,45 +235,46 @@ export async function getClient(): Promise<HttpClient> {
 }
 
 /**
- * Helper for GET requests.
+ * Helper for GET requests: limited to 30 s unless `options` says otherwise.
  */
-export async function get<T>(path: string): Promise<T> {
+export async function get<T>(path: string, options?: CallOptions): Promise<T> {
   const client = await getClient();
-  return client.request<T>(path);
+  return client.request<T>(path, options);
 }
 
 /**
- * Helper for POST requests; `read` marks an answer that is a secret.
+ * Helper for POST requests; `options` marks an answer that is a secret, or
+ * sets a time limit the POST otherwise lacks.
  */
-export async function post<T>(path: string, body?: unknown, read?: ReadOptions): Promise<T> {
+export async function post<T>(path: string, body?: unknown, options?: CallOptions): Promise<T> {
   const client = await getClient();
   // Some backend handlers use Json<Option<T>>; they require valid JSON even when
   // "no body" is intended. Sending `null` is valid JSON and deserializes to None.
-  return client.request<T>(path, { method: 'POST', body: body === undefined ? null : body, ...read });
+  return client.request<T>(path, { method: 'POST', body: body === undefined ? null : body, ...options });
 }
 
 /**
  * Helper for PUT requests.
  */
-export async function put<T>(path: string, body: unknown): Promise<T> {
+export async function put<T>(path: string, body: unknown, options?: CallOptions): Promise<T> {
   const client = await getClient();
-  return client.request<T>(path, { method: 'PUT', body });
+  return client.request<T>(path, { method: 'PUT', body, ...options });
 }
 
 /**
  * Helper for PATCH requests.
  */
-export async function patch<T>(path: string, body: unknown): Promise<T> {
+export async function patch<T>(path: string, body: unknown, options?: CallOptions): Promise<T> {
   const client = await getClient();
-  return client.request<T>(path, { method: 'PATCH', body });
+  return client.request<T>(path, { method: 'PATCH', body, ...options });
 }
 
 /**
  * Helper for DELETE requests.
  */
-export async function del<T>(path: string, body?: unknown): Promise<T> {
+export async function del<T>(path: string, body?: unknown, options?: CallOptions): Promise<T> {
   const client = await getClient();
-  return client.request<T>(path, { method: 'DELETE', body: body === undefined ? null : body });
+  return client.request<T>(path, { method: 'DELETE', body: body === undefined ? null : body, ...options });
 }
 
 /**
@@ -277,17 +298,24 @@ export async function healthUrl(): Promise<string> {
  * A refusal throws the `TransportError` `readData` builds from it, so the
  * response returned is one the daemon accepted. Nothing is retried: a caller
  * that reconnects renews the credential itself (`renew.ts`).
+ *
+ * The time limit (`timeLimit.ts`) ends when the headers come, since the
+ * caller reads the body: 30 s for a GET, 30 s for a reply marked `stream`,
+ * none for anything else unless `timeoutMs` sets one.
  */
 export async function apiFetch(
   path: string,
-  init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {},
+  init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } & TimeLimitOptions = {},
 ): Promise<Response> {
   await getClient();
+  const { stream, timeoutMs, ...request } = init;
   const credential: Record<string, string> = apiAuthToken ? { Authorization: `Bearer ${apiAuthToken}` } : {};
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: { ...init.headers, ...credential },
-  });
+  const response = await fetchWithin(
+    `${apiBaseUrl}${path}`,
+    { ...request, headers: { ...request.headers, ...credential } },
+    limitFor(request.method ?? 'GET', { stream, timeoutMs }),
+    async (answered) => answered,
+  );
   if (!response.ok) await readData(response);
   return response;
 }

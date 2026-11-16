@@ -6,7 +6,8 @@
  * and the window says the daemon's own sentence, not that gglib was lost; a
  * 401 that is not the token refusal is a daemon there too, however many
  * polls; no answer at `/health` is gglib gone, and the
- * window comes back when it answers; another program answering on the port
+ * window comes back when it answers; one slow answer is asked again at
+ * once, and only two in a row say gone; another program answering on the port
  * is no daemon, as Rust's probes say. The probe goes to `/health` with no
  * credential, and counts only an answer that says it is gglib's. In the
  * desktop app it asks the daemon's own address and never the tab's token.
@@ -119,6 +120,37 @@ describe("the window's gate in a browser", () => {
     expect(screen.queryByText(LOST)).not.toBeInTheDocument();
   });
 
+  it('asks again at once when /health is slow, and says lost only after two in a row', async () => {
+    await renderGate();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+
+    // One probe gets no answer inside its limit; the one asked right after it does.
+    const slow = (signal?: AbortSignal | null) =>
+      new Promise<Response>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason)));
+    let unanswered = 1;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/health') && unanswered > 0) {
+        unanswered -= 1;
+        return slow(init?.signal);
+      }
+      return String(url).endsWith('/health') ? daemon.health() : daemon.api();
+    });
+    await nextProbe();
+    // Past the probe's 1.5 s limit: asked again, answered, and never called lost.
+    await act(() => vi.advanceTimersByTimeAsync(1600));
+    expect(screen.getByText('the window')).toBeInTheDocument();
+    expect(screen.queryByText(LOST)).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(400));
+
+    // Two in a row: gglib is gone.
+    unanswered = 2;
+    await nextProbe();
+    await act(() => vi.advanceTimersByTimeAsync(1600));
+    expect(screen.queryByText(LOST)).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(1600));
+    expect(screen.getByText(LOST)).toBeInTheDocument();
+  });
+
   it('asks /health with no credential, and not from the cache', async () => {
     localStorage.setItem('gglib_daemon_token', 'held');
     await renderGate();
@@ -126,7 +158,7 @@ describe("the window's gate in a browser", () => {
 
     const [url, init] = calls('/health')[0];
     expect(url).toBe('/health');
-    expect(init).toEqual({ cache: 'no-store' });
+    expect(init).toEqual({ cache: 'no-store', signal: expect.any(AbortSignal) });
   });
 
   it('takes another program answering on the port for no daemon, as Rust does', async () => {

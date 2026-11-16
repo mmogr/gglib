@@ -52,6 +52,7 @@ name = "isolated_data_root"
 required-features = ["test-utils"]
 
 [dev-dependencies]
+gglib-test-proc = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 

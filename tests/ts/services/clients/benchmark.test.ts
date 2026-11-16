@@ -105,9 +105,9 @@ describe('benchmark streams', () => {
   describe.each(STREAMS)('%s', (_name, start, path) => {
     it('posts its config as JSON to its own route, with the session\'s token and the caller\'s signal', async () => {
       fetchMock.mockResolvedValue(stream([]));
-      const signal = new AbortController().signal;
+      const caller = new AbortController();
 
-      await start(config, vi.fn(), signal);
+      await start(config, vi.fn(), caller.signal);
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -115,7 +115,10 @@ describe('benchmark streams', () => {
       expect(init.method).toBe('POST');
       expect(init.headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer page-key' });
       expect(JSON.parse(init.body as string)).toEqual({ model_ids: [1], prompt: 'hi' });
-      expect(init.signal).toBe(signal);
+      // The request's signal is the time limit's, and the caller's fires it.
+      expect(init.signal?.aborted).toBe(false);
+      caller.abort();
+      expect(init.signal?.aborted).toBe(true);
     });
 
     it('hands over each event in order and resolves when the stream ends', async () => {

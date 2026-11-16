@@ -15,6 +15,7 @@
 //! DRY. The helpers here provide a small, typed API on top of
 //! [`gglib_core::utils::process::cmd`].
 
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
 use gglib_core::utils::process::cmd;
 
 // ============================================================================
@@ -23,13 +24,11 @@ use gglib_core::utils::process::cmd;
 
 /// Run a command and return `true` if it exits successfully.
 ///
-/// Returns `false` if the command cannot be found or exits with a non-zero
-/// status.
+/// Returns `false` if the command cannot be found, exits with a non-zero
+/// status, or is still running after [`PROBE_WAIT`] (it is then killed). The
+/// helpers below have the same limit.
 pub(crate) fn command_succeeds(program: &str, args: &[&str]) -> bool {
-    cmd(program)
-        .args(args)
-        .output()
-        .is_ok_and(|o| o.status.success())
+    run_bounded(cmd(program).args(args), PROBE_WAIT).is_ok_and(|o| o.status.success())
 }
 
 /// Run a command and return its stdout as a trimmed `String` on success.
@@ -38,7 +37,7 @@ pub(crate) fn command_succeeds(program: &str, args: &[&str]) -> bool {
 /// status, or produces non-UTF-8 output.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
-    let output = cmd(program).args(args).output().ok()?;
+    let output = run_bounded(cmd(program).args(args), PROBE_WAIT).ok()?;
     if !output.status.success() {
         return None;
     }
@@ -88,7 +87,7 @@ pub(crate) fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
 /// Read from stdout, or from stderr when stdout is empty: some tools write
 /// their banner there.
 pub(crate) fn version_line(program: &str) -> Option<String> {
-    first_line(&cmd(program).arg("--version").output().ok()?)
+    first_line(&run_bounded(cmd(program).arg("--version"), PROBE_WAIT).ok()?)
 }
 
 fn first_line(output: &std::process::Output) -> Option<String> {

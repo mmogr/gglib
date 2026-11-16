@@ -14,7 +14,9 @@ OpenAI-compatible clients hit the proxy the daemon supervises.
 
 Single ownership is enforced by [`DaemonLock`]: an exclusive OS file lock on
 `<data_root>/daemon.lock`, taken before anything else runs and released by
-the OS on any process death, so no stale-lock recovery is needed. Every gglib
+the OS on any process death, so no stale-lock recovery is needed. Its holder's
+pid and port are written beside it in `<data_root>/daemon.json`, which a
+held lock cannot hide on Windows. Every gglib
 build on a machine shares one data root, so the lock holds a packaged daemon
 and one built from a checkout to one between them. The port is the second
 line of defence — a foreign process on the port is reported, not fought.

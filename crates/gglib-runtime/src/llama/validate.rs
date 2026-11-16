@@ -1,15 +1,17 @@
 //! Binary validation and status checking for llama-server.
 
 use anyhow::{Context, Result, bail};
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
 use gglib_core::utils::process::cmd;
 use std::path::Path;
+use std::time::Duration;
 
 /// Validate that the llama-server binary is functional
 pub fn validate_llama_binary(path: &Path) -> Result<()> {
-    validate_binary(path, "llama-server")
+    validate_binary(path, "llama-server", PROBE_WAIT)
 }
 
-fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
+fn validate_binary(path: &Path, binary_name: &str, wait: Duration) -> Result<()> {
     if !path.exists() {
         bail!(
             "{} not found at: {}\n\nRun 'gglib config llama install' to install it.",
@@ -32,10 +34,14 @@ fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
         }
     }
 
-    let output = cmd(path)
-        .arg("--version")
-        .output()
-        .with_context(|| format!("Failed to execute {binary_name}"))?;
+    let output = match run_bounded(cmd(path).arg("--version"), wait) {
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => bail!(
+            "{binary_name} did not answer `--version` within {} s: {}",
+            wait.as_secs(),
+            path.display()
+        ),
+        answer => answer.with_context(|| format!("Failed to execute {binary_name}"))?,
+    };
 
     if !output.status.success() {
         bail!(
@@ -138,6 +144,27 @@ mod tests {
     #[cfg(unix)]
     use std::fs;
     use tempfile::tempdir;
+
+    /// An engine that never answers `--version` is reported within the
+    /// wait, not waited on (#1984).
+    #[test]
+    fn an_engine_that_never_answers_is_reported_within_the_wait() {
+        let dir = tempdir().unwrap();
+        let engine = gglib_test_proc::install(dir.path(), "llama-server", "sleep 60");
+        let wait = Duration::from_millis(500);
+
+        let (sent, done) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sent
+                .send(validate_binary(&engine, "llama-server", wait).map_err(|e| e.to_string()));
+        });
+        let answer = done
+            .recv_timeout(Duration::from_secs(15))
+            .expect("validate still waiting 15 s on an engine that never exits");
+
+        let refusal = answer.expect_err("an engine that never answers is not working");
+        assert!(refusal.contains("did not answer"), "{refusal}");
+    }
 
     #[test]
     fn test_validate_nonexistent() {
