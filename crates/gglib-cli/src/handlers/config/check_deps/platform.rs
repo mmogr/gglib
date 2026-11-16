@@ -1,6 +1,6 @@
 //! Platform detection utilities.
 //!
-//! The OS is `gglib_core::utils::system::HostOs`, the value the dependency
+//! The OS is `gglib_core::host::HostOs`, the value the dependency
 //! report itself is made for, so the instructions and the report cannot name
 //! different platforms.
 

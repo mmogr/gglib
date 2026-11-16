@@ -1,4 +1,5 @@
 import { FC, useEffect, useState } from 'react';
+import { fileName, useHost } from '../../services/hostRegistry';
 import { listComponentChoices } from '../../services/transport/api/models/local';
 import type { ComponentChanges } from '../../services/transport/types/models';
 import type { ComponentChoices, ComponentRole, ModelDetail } from '../../types';
@@ -34,18 +35,15 @@ interface RolePickerProps {
   onChanged: () => void;
 }
 
-function fileName(path: string): string {
-  return path.split(/[\\/]/).pop() || path;
-}
-
 /** One role's picker. Its wait and its refusal are that role's alone. */
 const RolePicker: FC<RolePickerProps> = ({ modelId, role, linked, present, offered, onUpdateModel, onChanged }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const label = componentRoleLabel(role);
+  const host = useHost();
   const known = offered ?? [];
   const options =
-    linked && !known.some((c) => c.path === linked) ? [{ path: linked, name: fileName(linked) }, ...known] : known;
+    linked && !known.some((c) => c.path === linked) ? [{ path: linked, name: fileName(linked, host) }, ...known] : known;
 
   const pick = async (value: string) => {
     setSaving(true);

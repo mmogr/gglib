@@ -28,7 +28,9 @@ hover; Templates is always drawn (Auto with no flag), the Context row adds the
 daemon's note (`plan.fit.note`, "fits (35.81 GiB of 43.20 GiB usable)"),
 Speculative too once
 the person has set it, under the launch line
-(`LaunchPlan::command_line` drawn token by token). Sampling and Reasoning
+(the daemon's `LaunchExplanation.command`, which `LaunchPlan::command_line`
+writes for the shell of the machine the service runs on, drawn token by
+token: POSIX on Linux and macOS, PowerShell on Windows). Sampling and Reasoning
 rows count the explanation's sources. Change turns a row into its control
 and saves the one field of the update it changes; a row the person set
 reads `set by you · Reset`. A token of the launch line whose decision the Load
@@ -36,7 +38,9 @@ with options sheet holds offers Change for this model…, which opens the
 sheet on that field; a token the person chose is underlined. A per-token
 override field and `+ flag` wait for a Rust surface that sets any flag.
 ⧉ beside the launch line copies the whole command as one shell line, the
-line drawn (a value quoted where a shell would read it, `$` included).
+daemon's line drawn (a value quoted where that shell would read it, `$`
+included); nothing here quotes a value. A path's file is named as the
+service's machine splits a path (`hostRegistry`'s `fileName`).
 
 ⋯ Verify files and Check for updates (the second only for a model from
 Hugging Face) start the check at once and open Details on Source, where
@@ -76,8 +80,7 @@ damaged line is `damaged_line`, served on the report's `damage`.
 | `HowItRuns.tsx` | How it runs (caption, launch line, a row per decision, the profile select ending Sampling) and, for a loaded model, How it ran from its launch's narration |
 | `Row.tsx` | One row: label, value with why on hover, `set by you · Reset`, and Change, or the control in its place |
 | `Change.tsx` | Each row's control (Context field, Templates and Speculative selects, Images and Parts file menus, the compact sampling form) and each row's Reset, saving one field of the update |
-| `LaunchLine.tsx` | The launch line in mono, each argument a button opening a note with its reason and source, and Change for this model… where the sheet holds its decision; a token the person chose underlined |
-| `commandLine.ts` | Pure: `commandLine`, `argText` and `shellToken`, the command line as `LaunchPlan::command_line` writes it |
+| `LaunchLine.tsx` | The launch line in mono, the daemon's tokens (`CommandLine`), each argument a button opening a note with its reason and source, and Change for this model… where the sheet holds its decision; a token the person chose underlined |
 | `rows.ts` | Pure: the decision labels, the rows of a plan, a row's value and hover, the caption, the Sampling and Reasoning lines, and whether the person set them |
 | `Details.tsx` | Details ▸: file, source (with the verification line and the last file check), name and quant label (click to edit), architecture, trained context, tags, abilities, reasoning support, measured speed, the loaded server's llama-server port ("port 9001, internal"), raw GGUF metadata; open or closed remembered per viewer (the far model's Details share its fold, `Item` and `When`) |
 | `LogLink.tsx` | `▸ Log` on a loaded model: the label opens `/models/:id/log`, the server's last line follows it in tertiary mono, cut with an ellipsis |

@@ -4,9 +4,10 @@
 //! called on each OS and how its version is read; this runs that, through the
 //! time-limited helpers in `llama::detect::tools` and `pkg-config`.
 
+use gglib_core::host::HostOs;
 use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
 use gglib_core::utils::process::cmd;
-use gglib_core::utils::system::{HostOs, Need, Probe};
+use gglib_core::utils::system::{Need, Probe};
 
 use crate::llama::detect::tools::{compiler_version, version_line, version_word};
 

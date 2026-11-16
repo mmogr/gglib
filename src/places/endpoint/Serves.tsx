@@ -2,8 +2,9 @@
  * Serves ▾: every model, or only one.
  *
  * The choices are Every model, then each loaded model, then the rest of
- * the library's chat models. Choosing restarts the endpoint, pinned to the
- * model or plain (`useEndpointActions().serve`). The pin is the daemon's
+ * the library's chat models, under On this Mac (the machine in the
+ * service's words, `useThisMachine`). Choosing restarts the endpoint,
+ * pinned to the model or plain (`useEndpointActions().serve`). The pin is the daemon's
  * (`ProxyStatus.pinned_model_id`, a model's catalogue id), chosen here by
  * that id.
  *
@@ -11,6 +12,7 @@
  */
 
 import type { FC } from 'react';
+import { useThisMachine } from '../../services/hostRegistry';
 import type { GgufModel } from '../../types';
 
 interface ServesProps {
@@ -24,6 +26,7 @@ interface ServesProps {
 }
 
 export const Serves: FC<ServesProps> = ({ loaded, library, pinnedId, disabled, onServe }) => {
+  const machine = useThisMachine();
   const loadedIds = new Set(loaded.map((l) => l.modelId));
   const rest = library.filter((m) => m.imageFamily === undefined && !loadedIds.has(m.id));
   const offered = pinnedId !== null && (loadedIds.has(pinnedId) || library.some((m) => m.id === pinnedId));
@@ -48,7 +51,7 @@ export const Serves: FC<ServesProps> = ({ loaded, library, pinnedId, disabled, o
           </optgroup>
         )}
         {rest.length > 0 && (
-          <optgroup label="On this Mac">
+          <optgroup label={`On ${machine.phrase}`}>
             {rest.map((m) => (
               <option key={m.id} value={m.id}>{`Only ${m.name}`}</option>
             ))}

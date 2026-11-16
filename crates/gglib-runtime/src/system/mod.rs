@@ -5,10 +5,11 @@ pub(crate) mod gpu;
 mod host;
 pub(crate) mod vulkan_devices;
 
+use gglib_core::host::HostOs;
 use gglib_core::ports::SystemProbePort;
 use gglib_core::utils::system::{
-    BuildOrigin, DependencyReport, EngineInstall, Found, GpuInfo, HostOs, LinuxDistro,
-    SystemMemoryInfo, dependency_report, needs_on, parse_os_release,
+    BuildOrigin, DependencyReport, EngineInstall, Found, GpuInfo, LinuxDistro, SystemMemoryInfo,
+    dependency_report, needs_on, parse_os_release,
 };
 
 pub use fit_memory::FitMemory;
@@ -217,7 +218,7 @@ impl SystemProbePort for DefaultSystemProbe {
     /// This is an installed copy unless the checkout it was built from is
     /// still here ([`gglib_core::paths::source_checkout`]).
     fn dependency_report(&self) -> DependencyReport {
-        let os = HostOs::this();
+        let os = HostOs::current();
         let found = Found {
             versions: needs_on(os)
                 .filter_map(|need| deps::version_of(need, os).map(|version| (need.name, version)))

@@ -6,11 +6,12 @@ mod macos;
 mod windows;
 
 use crate::handlers::config::check_deps::platform::detect_linux_distro;
-use gglib_core::utils::system::{Dependency, HostOs};
+use gglib_core::host::HostOs;
+use gglib_core::utils::system::Dependency;
 
 /// Print installation instructions for missing dependencies.
 pub(super) fn print_installation_instructions(missing: &[&Dependency]) {
-    match HostOs::this() {
+    match HostOs::current() {
         HostOs::MacOs => macos::print_instructions(missing),
         HostOs::Windows => windows::print_instructions(missing),
         HostOs::Linux => {

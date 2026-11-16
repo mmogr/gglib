@@ -3,17 +3,18 @@
 //! the model would be served at with the fit it was sized by.
 //!
 //! Format-only, like the rest of [`crate::presentation`]: every value comes
-//! from the [`LaunchPlan`] the explain call answers with, the one
-//! `GET /api/models/{id}/explain` sends, and nothing here resolves a flag,
-//! a source or a figure of its own.
+//! from the [`LaunchPlan`] and the [`CommandLine`] the explain call answers
+//! with, the ones `GET /api/models/{id}/explain` sends, and nothing here
+//! resolves a flag, a source or a figure, or quotes a line, of its own. The
+//! line is written for the shell of the machine that made the plan.
 //!
 //! The tests also record `contracts/models/launch_line.json`: a few plans
-//! beside the command line `LaunchPlan::command_line` makes of each, which
-//! the GUI's launch line is held to.
+//! beside the command line `LaunchPlan::command_line` writes of each for
+//! every shell, which the GUI's tests serve as the daemon's answer.
 
 use std::fmt::Write as _;
 
-use gglib_core::domain::{ContextFit, LaunchPlan};
+use gglib_core::domain::{CommandLine, ContextFit, LaunchPlan};
 
 /// Width of the flag column: `--spec-draft-n-max` and `--reasoning-format`
 /// are 18 characters, and the column keeps one space after them.
@@ -26,14 +27,23 @@ const VALUE_WIDTH: usize = 12;
 /// The arrow separating a value from its source, as the sampling table's.
 const ARROW: &str = "\u{2190}";
 
-/// The launch and the context as text: the command line, a row per
-/// argument, and the context section.
+/// What stands in the line's place when the running service is older than
+/// the line it would send, with the remedy the build-mismatch note names.
+pub(crate) const NO_LINE_FROM_AN_OLDER_SERVICE: &str = "(the running service is an older build \
+     and does not give its launch line: `gglib daemon stop` and re-run to respawn it from this binary)";
+
+/// The launch and the context as text: the command line as `command`
+/// writes it (or, from a service older than the line, [`NO_LINE_FROM_AN_OLDER_SERVICE`]),
+/// a row per argument, and the context section.
 #[must_use]
-pub(crate) fn launch_text(name: &str, id: i64, plan: &LaunchPlan) -> String {
-    let mut out = format!(
-        "\n  Launch for {name} (id {id})\n  {}\n\n",
-        plan.command_line()
-    );
+pub(crate) fn launch_text(
+    name: &str,
+    id: i64,
+    plan: &LaunchPlan,
+    command: Option<&CommandLine>,
+) -> String {
+    let line = command.map_or(NO_LINE_FROM_AN_OLDER_SERVICE, |c| c.line.as_str());
+    let mut out = format!("\n  Launch for {name} (id {id})\n  {line}\n\n");
     for line in argument_lines(plan) {
         let _ = writeln!(out, "  {line}");
     }
@@ -123,6 +133,7 @@ mod tests {
     use gglib_core::domain::{
         ChoiceSource, FitInputs, KvBytes, LaunchArg, LaunchNarration, Unload, UnloadReason,
     };
+    use gglib_core::host::Shell;
     use gglib_core::server_config::ContextSizeSource;
 
     fn arg(flag: &str, value: Option<&str>, source: ChoiceSource, reason: &str) -> LaunchArg {
@@ -168,11 +179,16 @@ mod tests {
                 "--spec-draft-n-max  2            \u{2190} you: set",
             ]
         );
-        assert!(launch_text("q", 3, &plan).starts_with(
+        let posix = plan.command_line(Shell::Posix);
+        assert!(launch_text("q", 3, &plan, Some(&posix)).starts_with(
             "\n  Launch for q (id 3)\n  llama-server -m /m/q.gguf --metrics --spec-draft-n-max 2\n\n"
         ));
         // Nothing loaded, or room beside it: no line about unloading.
-        assert!(!launch_text("q", 3, &plan).contains("Unload"));
+        assert!(!launch_text("q", 3, &plan, Some(&posix)).contains("Unload"));
+        // A service older than the line gives none, and the text says so.
+        assert!(launch_text("q", 3, &plan, None).starts_with(&format!(
+            "\n  Launch for q (id 3)\n  {NO_LINE_FROM_AN_OLDER_SERVICE}\n\n"
+        )));
     }
 
     /// A launch that would unload says which model goes and why, in the
@@ -194,7 +210,7 @@ mod tests {
             Some("  Unloads qwen3-8b first: it would not fit beside it.")
         );
         assert!(
-            launch_text("q", 3, &base)
+            launch_text("q", 3, &base, Some(&base.command_line(Shell::Posix)))
                 .ends_with("  Unloads qwen3-8b first: it would not fit beside it.\n")
         );
 
@@ -263,8 +279,9 @@ mod tests {
     /// The plans `contracts/models/launch_line.json` records: an ordinary
     /// llama launch, one whose values need quoting for a shell (a space, a
     /// single quote, a double quote, a tab, an empty value, a `$`, a
-    /// pattern with `\` and `*`) beside one that needs none for all its
-    /// `=,+%:@`, and an image model's.
+    /// pattern with `\` and `*`) beside one that needs none in a POSIX
+    /// shell for all its `=,+%:@`, an image model's, and one on Windows
+    /// paths.
     fn recorded_plans() -> Vec<LaunchPlan> {
         use ChoiceSource::{Gglib, ModelAuthor, You};
         let plan = |program: &str, args: Vec<LaunchArg>| LaunchPlan {
@@ -332,26 +349,47 @@ mod tests {
                     a("--steps", Some("4"), "recipe", Gglib),
                 ],
             ),
+            plan(
+                "llama-server",
+                vec![
+                    a(
+                        "-m",
+                        Some(r"C:\Users\m\AppData\Local\gglib\models\qwen3-4b.Q8_0.gguf"),
+                        "model",
+                        ModelAuthor,
+                    ),
+                    a(
+                        "--mmproj",
+                        Some(r"C:\Users\m\My Models\mmproj-F16.gguf"),
+                        "images",
+                        You,
+                    ),
+                    a("--port", Some("auto"), "port", Gglib),
+                ],
+            ),
         ]
     }
 
     /// One row of `contracts/models/launch_line.json`: a plan as the wire
-    /// sends it, and the command line made of it.
+    /// sends it, and the command line written of it for each shell.
     #[derive(serde::Serialize)]
     struct RecordedLine {
         plan: LaunchPlan,
-        line: String,
+        commands: Vec<CommandLine>,
     }
 
-    /// The checked-in file is exactly what `command_line` makes of each
-    /// plan. Run with `GGLIB_RECORD_CONTRACTS=1` to rewrite it after a
-    /// deliberate change.
+    /// The checked-in file is exactly what `command_line` writes of each
+    /// plan for each shell. Run with `GGLIB_RECORD_CONTRACTS=1` to rewrite
+    /// it after a deliberate change.
     #[test]
     fn the_checked_in_launch_lines_are_the_command_lines() {
         let recorded: Vec<RecordedLine> = recorded_plans()
             .into_iter()
             .map(|plan| RecordedLine {
-                line: plan.command_line(),
+                commands: vec![
+                    plan.command_line(Shell::Posix),
+                    plan.command_line(Shell::PowerShell),
+                ],
                 plan,
             })
             .collect();
