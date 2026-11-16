@@ -23,9 +23,15 @@ use crate::binary_install::{
 };
 pub use check::{NotWorking, validate_engine, validate_engine_at};
 pub(crate) use check::{first_line, refuse_if_known_not_working, validate_binary};
+pub use repair::{
+    Fix, FixOffer, RepairReport, RuntimeInstall, current_fix, install_visual_cpp_runtime,
+};
 
 #[path = "engine_check.rs"]
 mod check;
+
+#[path = "engine_repair.rs"]
+mod repair;
 
 /// Where an engine's install stands against its pin.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -85,7 +91,7 @@ pub fn plan_install(kind: RuntimeKind, state: &PinState, force: bool, build: boo
 
 /// [`plan_install`] with this machine's download asked of `prebuilt`, which
 /// is asked only when nothing before it has decided.
-pub(crate) fn plan_with(
+pub fn plan_with(
     state: &PinState,
     force: bool,
     build: bool,

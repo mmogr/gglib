@@ -96,6 +96,8 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 # The connection a fake server answers on, with the request already read.
 gglib-test-http = { workspace = true }
+# The stand-in engine the repair route is asked about, on every OS.
+gglib-test-proc = { workspace = true }
 
 [lints]
 workspace = true

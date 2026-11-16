@@ -10,6 +10,7 @@ mod llama_events;
 pub(crate) mod llama_install;
 pub(crate) mod path_entry;
 pub(crate) mod paths;
+pub(crate) mod repair;
 pub(crate) mod sd;
 pub(crate) mod settings;
 
